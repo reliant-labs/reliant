@@ -1,0 +1,632 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: forge
+    app.kubernetes.io/name: web
+    app.kubernetes.io/part-of: demo
+    forge.dev/env: prod
+  name: web
+  namespace: demo-prod
+spec:
+  progressDeadlineSeconds: 600
+  replicas: 3
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: web
+  strategy:
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 25%
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/managed-by: forge
+        app.kubernetes.io/name: web
+        app.kubernetes.io/part-of: demo
+        forge.dev/env: prod
+    spec:
+      automountServiceAccountToken: false
+      containers:
+      - env:
+        - name: DB
+          valueFrom:
+            secretKeyRef:
+              key: uri
+              name: orders-app
+        - name: KEY
+          valueFrom:
+            secretKeyRef:
+              key: KEY
+              name: forge-managed-secrets
+        - name: DSN
+          valueFrom:
+            secretKeyRef:
+              key: DSN
+              name: forge-managed-secrets
+              optional: true
+        image: ghcr.io/acme/app:v1
+        imagePullPolicy: IfNotPresent
+        livenessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /healthz
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 3
+        name: web
+        ports:
+        - containerPort: 8080
+          name: http
+          protocol: TCP
+        readinessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /readyz
+            port: 8080
+          periodSeconds: 5
+          timeoutSeconds: 3
+        resources:
+          limits:
+            cpu: 250m
+            memory: 1Gi
+          requests:
+            cpu: 250m
+            memory: 1Gi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+          runAsGroup: 65532
+          runAsNonRoot: true
+          runAsUser: 65532
+        volumeMounts:
+        - mountPath: /tmp
+          name: tmp
+      enableServiceLinks: false
+      initContainers:
+      - args:
+        - db
+        - migrate
+        - up
+        image: ghcr.io/acme/app:v1
+        imagePullPolicy: IfNotPresent
+        name: migrate
+        resources:
+          limits:
+            cpu: 250m
+            memory: 1Gi
+          requests:
+            cpu: 250m
+            memory: 1Gi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+          runAsGroup: 65532
+          runAsNonRoot: true
+          runAsUser: 65532
+        volumeMounts:
+        - mountPath: /tmp
+          name: tmp
+      securityContext:
+        runAsGroup: 65532
+        runAsNonRoot: true
+        runAsUser: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      serviceAccountName: web
+      terminationGracePeriodSeconds: 40
+      topologySpreadConstraints:
+      - labelSelector:
+          matchLabels:
+            app.kubernetes.io/name: web
+        maxSkew: 1
+        topologyKey: kubernetes.io/hostname
+        whenUnsatisfiable: ScheduleAnyway
+      volumes:
+      - emptyDir: {}
+        name: tmp
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: forge
+    app.kubernetes.io/name: web
+    app.kubernetes.io/part-of: demo
+    forge.dev/env: prod
+  name: web
+  namespace: demo-prod
+spec:
+  ports:
+  - name: http
+    port: 8080
+    protocol: TCP
+    targetPort: 8080
+  selector:
+    app.kubernetes.io/name: web
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: forge
+    app.kubernetes.io/name: web
+    app.kubernetes.io/part-of: demo
+    forge.dev/env: prod
+  name: web-pdb
+  namespace: demo-prod
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: web
+---
+apiVersion: v1
+automountServiceAccountToken: false
+kind: ServiceAccount
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: forge
+    app.kubernetes.io/name: web
+    app.kubernetes.io/part-of: demo
+    forge.dev/env: prod
+  name: web
+  namespace: demo-prod
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: forge
+    app.kubernetes.io/name: web
+    app.kubernetes.io/part-of: demo
+    forge.dev/env: prod
+  name: web-ingress
+  namespace: demo-prod
+spec:
+  ingress:
+  - ports:
+    - port: 8080
+      protocol: TCP
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: web
+  policyTypes:
+  - Ingress
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: forge
+    app.kubernetes.io/name: store
+    app.kubernetes.io/part-of: demo
+    forge.dev/env: prod
+  name: store
+  namespace: demo-prod
+spec:
+  progressDeadlineSeconds: 600
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: store
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/managed-by: forge
+        app.kubernetes.io/name: store
+        app.kubernetes.io/part-of: demo
+        forge.dev/env: prod
+    spec:
+      automountServiceAccountToken: false
+      containers:
+      - image: ghcr.io/acme/app:v1
+        imagePullPolicy: IfNotPresent
+        livenessProbe:
+          failureThreshold: 3
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          tcpSocket:
+            port: 8080
+          timeoutSeconds: 3
+        name: store
+        ports:
+        - containerPort: 8080
+          name: http
+          protocol: TCP
+        readinessProbe:
+          failureThreshold: 3
+          periodSeconds: 5
+          tcpSocket:
+            port: 8080
+          timeoutSeconds: 3
+        resources:
+          limits:
+            cpu: 250m
+            memory: 1Gi
+          requests:
+            cpu: 250m
+            memory: 1Gi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+          runAsGroup: 65532
+          runAsNonRoot: true
+          runAsUser: 65532
+        volumeMounts:
+        - mountPath: /tmp
+          name: tmp
+        - mountPath: /data
+          name: data
+      enableServiceLinks: false
+      initContainers:
+      - args:
+        - db
+        - migrate
+        - up
+        image: ghcr.io/acme/app:v1
+        imagePullPolicy: IfNotPresent
+        name: migrate
+        resources:
+          limits:
+            cpu: 250m
+            memory: 1Gi
+          requests:
+            cpu: 250m
+            memory: 1Gi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+          runAsGroup: 65532
+          runAsNonRoot: true
+          runAsUser: 65532
+        volumeMounts:
+        - mountPath: /tmp
+          name: tmp
+      securityContext:
+        fsGroup: 65532
+        runAsGroup: 65532
+        runAsNonRoot: true
+        runAsUser: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      serviceAccountName: store
+      terminationGracePeriodSeconds: 40
+      volumes:
+      - emptyDir: {}
+        name: tmp
+      - name: data
+        persistentVolumeClaim:
+          claimName: store-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: forge
+    app.kubernetes.io/name: store
+    app.kubernetes.io/part-of: demo
+    forge.dev/env: prod
+  name: store
+  namespace: demo-prod
+spec:
+  ports:
+  - name: http
+    port: 8080
+    protocol: TCP
+    targetPort: 8080
+  selector:
+    app.kubernetes.io/name: store
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: forge
+    app.kubernetes.io/name: store
+    app.kubernetes.io/part-of: demo
+    forge.dev/env: prod
+  name: store-data
+  namespace: demo-prod
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+---
+apiVersion: v1
+automountServiceAccountToken: false
+kind: ServiceAccount
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: forge
+    app.kubernetes.io/name: store
+    app.kubernetes.io/part-of: demo
+    forge.dev/env: prod
+  name: store
+  namespace: demo-prod
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: forge
+    app.kubernetes.io/name: store
+    app.kubernetes.io/part-of: demo
+    forge.dev/env: prod
+  name: store-ingress
+  namespace: demo-prod
+spec:
+  ingress:
+  - from:
+    - podSelector: {}
+    ports:
+    - port: 8080
+      protocol: TCP
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: store
+  policyTypes:
+  - Ingress
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: forge
+    app.kubernetes.io/name: jobs
+    app.kubernetes.io/part-of: demo
+    forge.dev/env: prod
+  name: jobs
+  namespace: demo-prod
+spec:
+  progressDeadlineSeconds: 600
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: jobs
+  strategy:
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 25%
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/managed-by: forge
+        app.kubernetes.io/name: jobs
+        app.kubernetes.io/part-of: demo
+        forge.dev/env: prod
+    spec:
+      automountServiceAccountToken: false
+      containers:
+      - args:
+        - work
+        image: ghcr.io/acme/app:v1
+        imagePullPolicy: IfNotPresent
+        name: jobs
+        resources:
+          limits:
+            cpu: 250m
+            memory: 1Gi
+          requests:
+            cpu: 250m
+            memory: 1Gi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+          runAsGroup: 65532
+          runAsNonRoot: true
+          runAsUser: 65532
+        volumeMounts:
+        - mountPath: /tmp
+          name: tmp
+      enableServiceLinks: false
+      initContainers:
+      - args:
+        - db
+        - migrate
+        - up
+        image: ghcr.io/acme/app:v1
+        imagePullPolicy: IfNotPresent
+        name: migrate
+        resources:
+          limits:
+            cpu: 250m
+            memory: 1Gi
+          requests:
+            cpu: 250m
+            memory: 1Gi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+          runAsGroup: 65532
+          runAsNonRoot: true
+          runAsUser: 65532
+        volumeMounts:
+        - mountPath: /tmp
+          name: tmp
+      securityContext:
+        runAsGroup: 65532
+        runAsNonRoot: true
+        runAsUser: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      serviceAccountName: jobs
+      terminationGracePeriodSeconds: 40
+      volumes:
+      - emptyDir: {}
+        name: tmp
+---
+apiVersion: v1
+automountServiceAccountToken: false
+kind: ServiceAccount
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: forge
+    app.kubernetes.io/name: jobs
+    app.kubernetes.io/part-of: demo
+    forge.dev/env: prod
+  name: jobs
+  namespace: demo-prod
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: forge
+    app.kubernetes.io/name: jobs
+    app.kubernetes.io/part-of: demo
+    forge.dev/env: prod
+  name: jobs-ingress
+  namespace: demo-prod
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: jobs
+  policyTypes:
+  - Ingress
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  annotations:
+    forge.dev/deploy-phase: post-rollout
+  labels:
+    app.kubernetes.io/managed-by: forge
+    app.kubernetes.io/name: report
+    app.kubernetes.io/part-of: demo
+    forge.dev/env: prod
+    forge.dev/job-name: report
+    forge.dev/spec-hash: c04dd9defb
+  name: report-c04dd9defb
+  namespace: demo-prod
+spec:
+  backoffLimit: 6
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/managed-by: forge
+        app.kubernetes.io/name: report
+        app.kubernetes.io/part-of: demo
+        forge.dev/env: prod
+        forge.dev/job-name: report
+    spec:
+      automountServiceAccountToken: false
+      containers:
+      - args:
+        - report
+        image: ghcr.io/acme/app:v1
+        imagePullPolicy: IfNotPresent
+        name: report
+        resources:
+          limits:
+            cpu: 250m
+            memory: 1Gi
+          requests:
+            cpu: 250m
+            memory: 1Gi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+          runAsGroup: 65532
+          runAsNonRoot: true
+          runAsUser: 65532
+        volumeMounts:
+        - mountPath: /tmp
+          name: tmp
+      enableServiceLinks: false
+      initContainers:
+      - args:
+        - db
+        - migrate
+        - up
+        image: ghcr.io/acme/app:v1
+        imagePullPolicy: IfNotPresent
+        name: migrate
+        resources:
+          limits:
+            cpu: 250m
+            memory: 1Gi
+          requests:
+            cpu: 250m
+            memory: 1Gi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+          runAsGroup: 65532
+          runAsNonRoot: true
+          runAsUser: 65532
+        volumeMounts:
+        - mountPath: /tmp
+          name: tmp
+      restartPolicy: OnFailure
+      securityContext:
+        runAsGroup: 65532
+        runAsNonRoot: true
+        runAsUser: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      serviceAccountName: report
+      volumes:
+      - emptyDir: {}
+        name: tmp
+---
+apiVersion: v1
+automountServiceAccountToken: false
+kind: ServiceAccount
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: forge
+    app.kubernetes.io/name: report
+    app.kubernetes.io/part-of: demo
+    forge.dev/env: prod
+  name: report
+  namespace: demo-prod
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: forge
+    app.kubernetes.io/name: report
+    app.kubernetes.io/part-of: demo
+    forge.dev/env: prod
+  name: report-ingress
+  namespace: demo-prod
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: report
+  policyTypes:
+  - Ingress

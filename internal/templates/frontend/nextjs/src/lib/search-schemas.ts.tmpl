@@ -1,0 +1,34 @@
+// src/lib/search-schemas.ts — codifies the "schema at the URL boundary" pattern.
+//
+// Use this anywhere you'd otherwise reach for `useSearchParams().get(...)` in
+// a component. The schema validates and types the search params in one shot,
+// so encoding/decoding round-trips cleanly and call sites see typed values,
+// not strings.
+//
+// Conventions (see the `frontend/state` skill):
+//   - One schema per route. Co-locate the schema with the page component.
+//   - When you add a filter, extend the schema — don't add another raw
+//     `searchParams.get(...)`.
+//   - For boolean-ish or numeric fields, use `z.coerce` so the schema absorbs
+//     the URL's string-only nature.
+//
+// Example:
+//
+//   const listSchema = z.object({
+//     q: z.string().optional().default(""),
+//     status: z.enum(["all", "active", "archived"]).optional().default("all"),
+//     page: z.coerce.number().int().min(1).optional().default(1),
+//   });
+//   const { q, status, page } = useTypedSearchParams(listSchema);
+
+"use client";
+
+import { useSearchParams } from "next/navigation";
+import { useMemo } from "react";
+
+import type { z } from "zod";
+
+export function useTypedSearchParams<S extends z.ZodTypeAny>(schema: S): z.infer<S> {
+  const sp = useSearchParams();
+  return useMemo(() => schema.parse(Object.fromEntries(sp.entries())), [sp, schema]);
+}

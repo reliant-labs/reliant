@@ -1,0 +1,228 @@
+---
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: OCIRepository
+metadata:
+  annotations:
+    deploy.reliant.dev/generation: "42"
+    fluxcd.controlplane.io/prune: disabled
+  labels:
+    app.kubernetes.io/managed-by: reliant-control-plane
+    reliant.dev/environment: env-prod
+    reliant.dev/org: acme
+    resourceset.fluxcd.controlplane.io/name: delivery.env-prod
+    resourceset.fluxcd.controlplane.io/namespace: flux-acme
+    sharding.fluxcd.io/key: shard0
+  name: acme.env.env-prod
+  namespace: flux-acme
+spec:
+  interval: 5m0s
+  layerSelector:
+    mediaType: application/vnd.forge.bundle.manifests.v1.tar+gzip
+    operation: extract
+  ref:
+    digest: sha256:1111111111111111111111111111111111111111111111111111111111111111
+  secretRef:
+    name: registry-pull
+  url: oci://registry.example.com/orgs/acme/bundle.v1/prod
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  annotations:
+    fluxcd.controlplane.io/prune: disabled
+  labels:
+    app.kubernetes.io/managed-by: reliant-control-plane
+    reliant.dev/cluster: daemon
+    reliant.dev/delivery-unit: daemon-substrate
+    reliant.dev/environment: env-prod
+    reliant.dev/org: acme
+    reliant.dev/phase: pre
+    resourceset.fluxcd.controlplane.io/name: delivery.env-prod
+    resourceset.fluxcd.controlplane.io/namespace: flux-acme
+    sharding.fluxcd.io/key: connected
+  name: acme.env.env-prod-daemon-daemon-substrate-pre
+  namespace: flux-acme
+spec:
+  deletionPolicy: Orphan
+  interval: 5m0s
+  kubeConfig:
+    secretRef:
+      key: value
+      name: daemon-kubeconfig
+  path: manifests/daemon/daemon-substrate/pre
+  prune: true
+  retryInterval: 15s
+  serviceAccountName: ""
+  sourceRef:
+    apiVersion: source.toolkit.fluxcd.io/v1
+    kind: OCIRepository
+    name: acme.env.env-prod
+  timeout: 1m30s
+  wait: false
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  annotations:
+    fluxcd.controlplane.io/prune: disabled
+  labels:
+    app.kubernetes.io/managed-by: reliant-control-plane
+    reliant.dev/cluster: daemon
+    reliant.dev/delivery-unit: daemon-substrate
+    reliant.dev/environment: env-prod
+    reliant.dev/org: acme
+    reliant.dev/phase: rollout
+    resourceset.fluxcd.controlplane.io/name: delivery.env-prod
+    resourceset.fluxcd.controlplane.io/namespace: flux-acme
+    sharding.fluxcd.io/key: connected
+  name: acme.env.env-prod-daemon-daemon-substrate-rollout
+  namespace: flux-acme
+spec:
+  deletionPolicy: Orphan
+  dependsOn:
+  - name: acme.env.env-prod-daemon-daemon-substrate-pre
+  healthChecks:
+  - apiVersion: apps/v1
+    kind: Deployment
+    name: operator
+    namespace: kata
+  interval: 5m0s
+  kubeConfig:
+    secretRef:
+      key: value
+      name: daemon-kubeconfig
+  path: manifests/daemon/daemon-substrate/rollout
+  prune: true
+  retryInterval: 15s
+  serviceAccountName: ""
+  sourceRef:
+    apiVersion: source.toolkit.fluxcd.io/v1
+    kind: OCIRepository
+    name: acme.env.env-prod
+  timeout: 1m30s
+  wait: false
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: reliant-control-plane
+    reliant.dev/cluster: hub
+    reliant.dev/delivery-unit: base
+    reliant.dev/environment: env-prod
+    reliant.dev/org: acme
+    reliant.dev/phase: post
+    resourceset.fluxcd.controlplane.io/name: delivery.env-prod
+    resourceset.fluxcd.controlplane.io/namespace: flux-acme
+    sharding.fluxcd.io/key: connected
+  name: acme.env.env-prod-hub-base-post
+  namespace: flux-acme
+spec:
+  deletionPolicy: Orphan
+  dependsOn:
+  - name: acme.env.env-prod-hub-base-rollout
+  healthChecks:
+  - apiVersion: batch/v1
+    kind: Job
+    name: seed-def456
+    namespace: app
+  interval: 5m0s
+  kubeConfig:
+    secretRef:
+      key: value
+      name: hub-kubeconfig
+  path: manifests/hub/base/post
+  prune: true
+  retryInterval: 15s
+  serviceAccountName: ""
+  sourceRef:
+    apiVersion: source.toolkit.fluxcd.io/v1
+    kind: OCIRepository
+    name: acme.env.env-prod
+  suspend: true
+  timeout: 1m30s
+  wait: false
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  annotations:
+    fluxcd.controlplane.io/prune: disabled
+  labels:
+    app.kubernetes.io/managed-by: reliant-control-plane
+    reliant.dev/cluster: hub
+    reliant.dev/delivery-unit: base
+    reliant.dev/environment: env-prod
+    reliant.dev/org: acme
+    reliant.dev/phase: pre
+    resourceset.fluxcd.controlplane.io/name: delivery.env-prod
+    resourceset.fluxcd.controlplane.io/namespace: flux-acme
+    sharding.fluxcd.io/key: connected
+  name: acme.env.env-prod-hub-base-pre
+  namespace: flux-acme
+spec:
+  deletionPolicy: Orphan
+  dependsOn:
+  - name: acme.env.env-prod-daemon-daemon-substrate-rollout
+  healthChecks:
+  - apiVersion: batch/v1
+    kind: Job
+    name: migrate-abc123
+    namespace: app
+  interval: 5m0s
+  kubeConfig:
+    secretRef:
+      key: value
+      name: hub-kubeconfig
+  path: manifests/hub/base/pre
+  prune: true
+  retryInterval: 15s
+  serviceAccountName: ""
+  sourceRef:
+    apiVersion: source.toolkit.fluxcd.io/v1
+    kind: OCIRepository
+    name: acme.env.env-prod
+  timeout: 1m30s
+  wait: false
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  annotations:
+    fluxcd.controlplane.io/prune: disabled
+  labels:
+    app.kubernetes.io/managed-by: reliant-control-plane
+    reliant.dev/cluster: hub
+    reliant.dev/delivery-unit: base
+    reliant.dev/environment: env-prod
+    reliant.dev/org: acme
+    reliant.dev/phase: rollout
+    resourceset.fluxcd.controlplane.io/name: delivery.env-prod
+    resourceset.fluxcd.controlplane.io/namespace: flux-acme
+    sharding.fluxcd.io/key: connected
+  name: acme.env.env-prod-hub-base-rollout
+  namespace: flux-acme
+spec:
+  deletionPolicy: Orphan
+  dependsOn:
+  - name: acme.env.env-prod-hub-base-pre
+  healthChecks:
+  - apiVersion: apps/v1
+    kind: Deployment
+    name: web
+    namespace: app
+  interval: 5m0s
+  kubeConfig:
+    secretRef:
+      key: value
+      name: hub-kubeconfig
+  path: manifests/hub/base/rollout
+  prune: true
+  retryInterval: 15s
+  serviceAccountName: ""
+  sourceRef:
+    apiVersion: source.toolkit.fluxcd.io/v1
+    kind: OCIRepository
+    name: acme.env.env-prod
+  timeout: 1m30s
+  wait: false
