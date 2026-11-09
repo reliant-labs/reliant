@@ -1,0 +1,505 @@
+syntax = "proto3";
+
+package controlplane.v1;
+
+import "buf/validate/validate.proto";
+import "forge/v1/forge.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/reliant-labs/control-plane/gen/services/storage_browser/v1;storage_browserv1";
+
+// === StorageBrowserService (controlplane.v1.StorageBrowserService) ===
+//
+// THE STORAGE BROWSER is the console's read-only view of an environment's
+// object storage: the forge.Buckets its recorded release shape declares
+// (MinIO, S3, GCS, or hosted), one prefix level at a time, with metadata,
+// previews and downloads. It is the file-storage twin of the data browser
+// (AppDatabaseService); docs/storage-browser.md is the design. There is no
+// upload, delete or rename: writes stay the app's own rpcs.
+//
+// READ-ONLY BY CREDENTIAL. The control plane reads with a viewer identity
+// (roles/storage.objectViewer for a hosted bucket, signing keylessly), never
+// with the workload's objectAdmin key, so a write is refused by the backend
+// and not by this service.
+//
+// ADDRESSED BY ENVIRONMENT. The request carries environment_id and no org: the
+// handler loads the environment and checks the caller against the org that owns
+// it, so a caller outside it learns nothing about whether the environment
+// exists. A bucket is named by its forge.Bucket name in the shape, never by
+// its cloud name, which the server resolves (for a hosted bucket, from
+// ManagedBucket.status.bucketName).
+//
+// POLICY comes from the environment's recorded release shape (forge.DataAccess
+// storage; unset takes the environment's db_query value, so an environment
+// that denied SQL is not silently opened to file browsing): "open" lets anyone
+// who may browse read; "audited" (the default for a real environment) needs a
+// person who holds the storage:read grant, plus confirm_env_id equal to the
+// environment and a reason on every call; "deny" refuses everyone. A machine
+// credential needs the storage:read scope and is never admitted to an audited
+// environment.
+//
+// URLS. A download or an image preview is a presigned GET minted per call and
+// never cached by the server: 5 minutes for a download, which always carries
+// Content-Disposition: attachment and response-content-type
+// application/octet-stream, so a stored text/html or image/svg+xml can never
+// render on the bucket's origin; 2 minutes for an inline image preview (png,
+// jpeg, gif or webp, never SVG). Text and JSON previews are read by the control
+// plane and returned as bytes, so the browser never navigates to the object.
+//
+// ADMISSION ORDER, each step's error:
+//   1. unknown environment: NotFound.
+//   2. not a member of its org: NotFound (existence is not revealed).
+//   3. no storage:read grant (a person) or scope (a machine credential):
+//      PermissionDenied.
+//   ListBrowsableBuckets stops here: it lists the buckets the shape declares
+//   and reads no object, so a deny environment still answers, with policy
+//   DENY, and the console can say why it shows nothing. It writes no audit
+//   row.
+//   4. data_access.storage policy: deny (or unknown), or a machine credential
+//      on an audited environment: PermissionDenied. An audited environment
+//      without confirm_env_id equal to environment_id and a reason:
+//      FailedPrecondition, reason "confirmation_required". The console asks
+//      once per tab session (the same dialog as the data browser) and sends
+//      both on every call.
+//   5. per-principal rate limit: ResourceExhausted, reason "rate_limited",
+//      with Retry-After.
+//   6. audit: one audit_log row per call (environment, bucket, prefix or key,
+//      scope, reason; for a presign or a preview also the size and the TTL),
+//      written BEFORE the backend is reached. A row that cannot be written
+//      fails the call Unavailable: nothing is read unaudited.
+// Then the call itself:
+//   7. a bucket the shape does not declare: NotFound. A bucket the control
+//      plane cannot reach (a self-managed MinIO, an S3 endpoint it cannot
+//      dial, a hosted bucket not yet converged): FailedPrecondition, reason
+//      "bucket_unreachable". Resolving the bucket after the audit step means a
+//      probe for bucket names is rate-limited and recorded.
+//   8. no such object: NotFound.
+//   9. at run time: Unavailable when the backend does not answer;
+//      DeadlineExceeded when it answers too slowly.
+//
+// ERRORS:
+//   - InvalidArgument: a bound is out of range, or a page_token that was not
+//     issued for this bucket and prefix (reason "bad_page_token").
+//   - PermissionDenied: a deny environment, a missing storage:read grant or
+//     scope, a machine credential on an audited environment.
+//   - FailedPrecondition: reason "confirmation_required" (step 4), reason
+//     "bucket_unreachable" (step 7), reason "shape_unknown" (the environment
+//     has not recorded what it deploys yet, so its buckets are not known),
+//     reason "not_previewable" (PreviewObject: not an image, text or JSON
+//     object) or reason "too_large" (PreviewObject: over the size cap).
+//   - NotFound: no such environment, bucket or object, or another org's
+//     environment.
+//   - ResourceExhausted: reason "rate_limited", with Retry-After.
+//   - DeadlineExceeded: the backend answered too slowly.
+//   - Unavailable: browsing is not configured on this server, the audit row
+//     could not be written, or the backend is unreachable.
+//
+// ACTIVITY. The feed gets one line when a person opens a bucket
+// (ListObjects with open_bucket true, verb "open_bucket") and one per download
+// (PresignObjectDownload, verb "download_object"), both with target kind
+// "bucket". Every other read is a page view: its audit_log row is the per-read
+// record. An event's detail carries the reason (and a download's size), never
+// a key or prefix: the activity feed is readable by every member of the org
+// and by their daemon tokens, a wider audience than storage:read, and an
+// app's keys can name people or carry tokens. The audit_log row holds the key,
+// as the data browser's holds the SQL its events only hash.
+service StorageBrowserService {
+  option (forge.v1.service) = {
+    name: "StorageBrowserService"
+    version: "1.0.0"
+    description: "Read-only browsing of an environment's object storage buckets"
+  };
+
+  // ListBrowsableBuckets returns every bucket the environment's recorded shape
+  // declares, the policy a read of them runs under, and whether the control
+  // plane can reach each. Reads no object and writes no audit row.
+  //
+  // Admission is steps 1 to 3. A bucket the control plane cannot reach is
+  // still listed, with reachable false and unreachable_reason saying why,
+  // because the environment declares it.
+  //
+  // ERRORS: NotFound (steps 1, 2), PermissionDenied (step 3),
+  // FailedPrecondition reason "shape_unknown", Unavailable (browsing is not
+  // configured on this server).
+  rpc ListBrowsableBuckets(ListBrowsableBucketsRequest) returns (ListBrowsableBucketsResponse) {
+    // A read: the console's hook is a query, not a mutation.
+    option idempotency_level = NO_SIDE_EFFECTS;
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {none: "reads the recorded shape's bucket names, no object; the feed's line per bucket is ListObjects' open_bucket"}
+    };
+  }
+
+  // ListObjects returns one level of a bucket under prefix: the common
+  // prefixes ("folders") and the objects directly under it, paged, in the
+  // backend's lexical order. The delimiter is always "/": a listing is never
+  // recursive. There are no counts or totals.
+  //
+  // The activity event is written only when open_bucket is true: the console
+  // sets it on its first listing of a bucket in a tab session, whatever the
+  // prefix (a deep link opens a bucket below its root), and on no other call.
+  // The handler skips the event for every other call (activity.Skip). The
+  // root-listing alternative was rejected: a deep link would never record an
+  // open, and every return to the root would record another. Either way the
+  // audit_log row, written for every call, is the per-read record.
+  //
+  // ERRORS: every admission step.
+  rpc ListObjects(ListObjectsRequest) returns (ListObjectsResponse) {
+    // A read: the console's hook is a query. Each call still writes its
+    // audit_log row, and an open its activity event, which no caller observes.
+    option idempotency_level = NO_SIDE_EFFECTS;
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {
+        verb: "open_bucket"
+        target: {
+          kind: "bucket"
+          id: "bucket"
+        }
+        env: "environment_id"
+        detail: ["reason"]
+      }
+    };
+  }
+
+  // GetObjectMetadata returns one object's metadata (a HEAD): size, content
+  // type, last-modified, ETag and user metadata, and which preview the object
+  // qualifies for.
+  //
+  // ERRORS: every admission step.
+  rpc GetObjectMetadata(GetObjectMetadataRequest) returns (GetObjectMetadataResponse) {
+    // A read: the console's hook is a query. Each call still writes its
+    // audit_log row, which no caller observes.
+    option idempotency_level = NO_SIDE_EFFECTS;
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {none: "a page view: every call writes its audit_log row (with the reason); the feed's line per bucket is ListObjects' open_bucket"}
+    };
+  }
+
+  // PresignObjectDownload mints a 5-minute presigned GET for one object, as an
+  // attachment: Content-Disposition attachment with the key's basename, and
+  // response-content-type application/octet-stream whatever the stored type.
+  // Each call is a new URL, a new audit_log row and a new activity event.
+  //
+  // ERRORS: every admission step.
+  rpc PresignObjectDownload(PresignObjectDownloadRequest) returns (PresignObjectDownloadResponse) {
+    // Deliberately NOT NO_SIDE_EFFECTS, so the console's hook is a mutation,
+    // called on a click. The bucket is unchanged, but every call mints a
+    // bearer URL to the object and records a download in the activity feed: a
+    // query hook would refetch on mount and focus, minting URLs and feed lines
+    // nobody asked for, and would cache a URL the design says is never cached.
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {
+        verb: "download_object"
+        target: {
+          kind: "bucket"
+          id: "bucket"
+        }
+        env: "environment_id"
+        detail: [
+          "reason",
+          "response.size"
+        ]
+      }
+    };
+  }
+
+  // PreviewObject returns what the console needs to show one object inline.
+  // The server stats the object first and refuses one over its cap:
+  //   - an image (png, jpeg, gif, webp; never SVG) up to 10 MiB: a 2-minute
+  //     presigned GET for an <img> tag;
+  //   - text or JSON up to 1 MiB: the bytes themselves, read by the control
+  //     plane. JSON is pretty-printed client-side; both render as text, never
+  //     as HTML.
+  // Anything else is FailedPrecondition, reason "not_previewable"; over the cap
+  // is FailedPrecondition, reason "too_large". GetObjectMetadata's preview
+  // field says in advance which applies.
+  //
+  // ERRORS: every admission step, plus the two above.
+  rpc PreviewObject(PreviewObjectRequest) returns (PreviewObjectResponse) {
+    // A read: the console's hook is a query keyed by the object. Each call
+    // still writes its audit_log row, which no caller observes.
+    option idempotency_level = NO_SIDE_EFFECTS;
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {none: "a page view: every call writes its audit_log row (with the key, size and TTL); a download, not a preview, is a feed line"}
+    };
+  }
+}
+
+message ListBrowsableBucketsRequest {
+  // The control-plane environment id (deploy_environments.id).
+  string environment_id = 1 [
+    (buf.validate.field).required = true,
+    (buf.validate.field).string.min_len = 1,
+    (buf.validate.field).string.max_len = 128
+  ];
+}
+
+message ListBrowsableBucketsResponse {
+  // Sorted by name.
+  repeated BrowsableBucket buckets = 1;
+  // The data_access.storage policy every read of this environment's buckets
+  // runs under. AUDITED means the other rpcs need confirm_env_id and a reason;
+  // DENY means they are refused.
+  StorageAccessPolicy policy = 2;
+}
+
+// BrowsableBucket is one bucket of the environment, as the storage browser's
+// bucket selector shows it.
+message BrowsableBucket {
+  // The name every other rpc takes as bucket: the forge.Bucket's name in the
+  // release shape, not its cloud name.
+  string name = 1;
+  BucketRuntimeKind runtime = 2;
+  // Every object is readable without a signature (forge.Bucket public_read).
+  bool public_read = 3;
+  // Whether the control plane can read the bucket. False: the bucket is
+  // listed but cannot be browsed, and unreachable_reason says why.
+  bool reachable = 4;
+  // Why the bucket cannot be reached, for a person: "self-managed MinIO: not
+  // reachable from the control plane", "hosted bucket not provisioned yet".
+  // Empty when reachable.
+  string unreachable_reason = 5;
+}
+
+// BucketRuntimeKind is the runtime a forge.Bucket is bound to in the
+// environment.
+enum BucketRuntimeKind {
+  BUCKET_RUNTIME_KIND_UNSPECIFIED = 0;
+  // forge.BucketOnMinIO: a MinIO forge runs beside the app.
+  BUCKET_RUNTIME_KIND_MINIO = 1;
+  // forge.BucketOnS3: an S3-compatible bucket forge does not create.
+  BUCKET_RUNTIME_KIND_S3 = 2;
+  // forge.BucketOnGCS: a GCS bucket forge does not create.
+  BUCKET_RUNTIME_KIND_GCS = 3;
+  // forge.OnHosted: a GCS bucket the platform provisions (a ManagedBucket).
+  BUCKET_RUNTIME_KIND_HOSTED = 4;
+}
+
+// StorageAccessPolicy is the environment's recorded forge.DataAccess storage
+// policy (the service header's POLICY).
+enum StorageAccessPolicy {
+  // Not recorded or not understood: refused, as DENY.
+  STORAGE_ACCESS_POLICY_UNSPECIFIED = 0;
+  // Anyone who may browse reads without a confirmation or reason.
+  STORAGE_ACCESS_POLICY_OPEN = 1;
+  // A person with the storage:read grant, plus confirm_env_id and a reason on
+  // every call.
+  STORAGE_ACCESS_POLICY_AUDITED = 2;
+  // Every read is refused.
+  STORAGE_ACCESS_POLICY_DENY = 3;
+}
+
+message ListObjectsRequest {
+  // The control-plane environment id (deploy_environments.id).
+  string environment_id = 1 [
+    (buf.validate.field).required = true,
+    (buf.validate.field).string.min_len = 1,
+    (buf.validate.field).string.max_len = 128
+  ];
+  // Which bucket of the environment: a BrowsableBucket.name.
+  string bucket = 2 [
+    (buf.validate.field).required = true,
+    (buf.validate.field).string.pattern = "^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$"
+  ];
+  // For an audited environment: must equal environment_id. It makes reading a
+  // production bucket a deliberate act.
+  optional string confirm_env_id = 3 [(buf.validate.field).string.max_len = 128];
+  // For an audited environment: why. Recorded in the audit row and, on an
+  // open, the activity feed.
+  optional string reason = 4 [(buf.validate.field).string.max_len = 500];
+  // The level to list: unset or empty for the bucket's root, otherwise a
+  // common prefix a previous listing returned, ending in "/" (any key prefix
+  // is accepted: typing a prefix narrows the listing). At most 1024 bytes, the
+  // S3 and GCS key limit.
+  optional string prefix = 5 [(buf.validate.field).string.max_bytes = 1024];
+  // The previous response's next_page_token; empty for the first page. Opaque:
+  // it is sealed with the bucket and prefix, and refused for any other.
+  string page_token = 6 [(buf.validate.field).string.max_len = 4096];
+  // Entries (prefixes plus objects) in the page, at most 1000 (the S3 and GCS
+  // maximum). 0 = 200.
+  int32 page_size = 7 [
+    (buf.validate.field).int32.gte = 0,
+    (buf.validate.field).int32.lte = 1000
+  ];
+  // This call opens the bucket: the console sets it true on its first listing
+  // of the bucket in a tab session, and leaves it unset otherwise. True
+  // records the activity event (the rpc's comment says why it is a flag); it
+  // changes nothing else.
+  optional bool open_bucket = 8;
+}
+
+message ListObjectsResponse {
+  // The common prefixes directly under the request's prefix, each a full key
+  // prefix ending in "/", in lexical order.
+  repeated string prefixes = 1;
+  // The objects directly under the request's prefix, in lexical order.
+  repeated StorageObject objects = 2;
+  // The page_token of the next page; empty when this is the last one.
+  string next_page_token = 3;
+  // The audit_log row that recorded this call.
+  string audit_id = 4;
+}
+
+// StorageObject is one object as a listing returns it. A listing does not
+// carry the content type or user metadata (S3 does not list them); read those
+// with GetObjectMetadata.
+message StorageObject {
+  // The full key.
+  string key = 1;
+  // Bytes.
+  int64 size = 2;
+  google.protobuf.Timestamp updated = 3;
+  string etag = 4;
+}
+
+message GetObjectMetadataRequest {
+  // The control-plane environment id (deploy_environments.id).
+  string environment_id = 1 [
+    (buf.validate.field).required = true,
+    (buf.validate.field).string.min_len = 1,
+    (buf.validate.field).string.max_len = 128
+  ];
+  // Which bucket of the environment: a BrowsableBucket.name.
+  string bucket = 2 [
+    (buf.validate.field).required = true,
+    (buf.validate.field).string.pattern = "^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$"
+  ];
+  // For an audited environment: must equal environment_id, as in
+  // ListObjectsRequest.
+  optional string confirm_env_id = 3 [(buf.validate.field).string.max_len = 128];
+  // For an audited environment: why. Recorded in the audit row.
+  optional string reason = 4 [(buf.validate.field).string.max_len = 500];
+  // The object's full key.
+  string key = 5 [
+    (buf.validate.field).string.min_len = 1,
+    (buf.validate.field).string.max_bytes = 1024
+  ];
+}
+
+message GetObjectMetadataResponse {
+  StorageObjectMetadata object = 1;
+  // The audit_log row that recorded this call.
+  string audit_id = 2;
+}
+
+// StorageObjectMetadata is one object's metadata, as a HEAD returns it.
+message StorageObjectMetadata {
+  // The full key.
+  string key = 1;
+  // Bytes.
+  int64 size = 2;
+  // The stored Content-Type, or empty.
+  string content_type = 3;
+  google.protobuf.Timestamp updated = 4;
+  string etag = 5;
+  // User metadata (x-amz-meta-* / x-goog-meta-*), keys without the prefix.
+  map<string, string> metadata = 6;
+  // Which PreviewObject would serve, judged from content_type and size.
+  ObjectPreviewKind preview = 7;
+}
+
+// ObjectPreviewKind is how an object can be shown inline.
+enum ObjectPreviewKind {
+  // No preview: the object is not an image, text or JSON, or is over its cap.
+  // Metadata and Download only.
+  OBJECT_PREVIEW_KIND_UNSPECIFIED = 0;
+  // png, jpeg, gif or webp up to 10 MiB, through a presigned URL.
+  OBJECT_PREVIEW_KIND_IMAGE = 1;
+  // Text up to 1 MiB, returned as bytes.
+  OBJECT_PREVIEW_KIND_TEXT = 2;
+  // JSON up to 1 MiB, returned as bytes.
+  OBJECT_PREVIEW_KIND_JSON = 3;
+}
+
+message PresignObjectDownloadRequest {
+  // The control-plane environment id (deploy_environments.id).
+  string environment_id = 1 [
+    (buf.validate.field).required = true,
+    (buf.validate.field).string.min_len = 1,
+    (buf.validate.field).string.max_len = 128
+  ];
+  // Which bucket of the environment: a BrowsableBucket.name.
+  string bucket = 2 [
+    (buf.validate.field).required = true,
+    (buf.validate.field).string.pattern = "^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$"
+  ];
+  // For an audited environment: must equal environment_id, as in
+  // ListObjectsRequest.
+  optional string confirm_env_id = 3 [(buf.validate.field).string.max_len = 128];
+  // For an audited environment: why. Recorded in the audit row and the
+  // activity feed.
+  optional string reason = 4 [(buf.validate.field).string.max_len = 500];
+  // The object's full key.
+  string key = 5 [
+    (buf.validate.field).string.min_len = 1,
+    (buf.validate.field).string.max_bytes = 1024
+  ];
+}
+
+message PresignObjectDownloadResponse {
+  // The presigned GET. It downloads as an attachment named filename, as
+  // application/octet-stream.
+  string url = 1;
+  // When url stops working: 5 minutes after it was minted.
+  google.protobuf.Timestamp expires_at = 2;
+  // The attachment's file name: the key's last path segment.
+  string filename = 3;
+  // The object's size in bytes, when the URL was minted.
+  int64 size = 4;
+  // The audit_log row that recorded this call.
+  string audit_id = 5;
+}
+
+message PreviewObjectRequest {
+  // The control-plane environment id (deploy_environments.id).
+  string environment_id = 1 [
+    (buf.validate.field).required = true,
+    (buf.validate.field).string.min_len = 1,
+    (buf.validate.field).string.max_len = 128
+  ];
+  // Which bucket of the environment: a BrowsableBucket.name.
+  string bucket = 2 [
+    (buf.validate.field).required = true,
+    (buf.validate.field).string.pattern = "^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$"
+  ];
+  // For an audited environment: must equal environment_id, as in
+  // ListObjectsRequest.
+  optional string confirm_env_id = 3 [(buf.validate.field).string.max_len = 128];
+  // For an audited environment: why. Recorded in the audit row.
+  optional string reason = 4 [(buf.validate.field).string.max_len = 500];
+  // The object's full key.
+  string key = 5 [
+    (buf.validate.field).string.min_len = 1,
+    (buf.validate.field).string.max_bytes = 1024
+  ];
+}
+
+message PreviewObjectResponse {
+  // IMAGE, TEXT or JSON: never UNSPECIFIED (that is a FailedPrecondition).
+  ObjectPreviewKind kind = 1;
+  // The stored Content-Type.
+  string content_type = 2;
+  // The object's size in bytes.
+  int64 size = 3;
+  oneof body {
+    // For IMAGE: the presigned URL to show in an <img> tag.
+    ImagePreview image = 4;
+    // For TEXT and JSON: the object's bytes, at most 1 MiB. Decoded as UTF-8
+    // (invalid sequences replaced) and shown as text, never as HTML.
+    bytes content = 5;
+  }
+  // The audit_log row that recorded this call.
+  string audit_id = 6;
+}
+
+// ImagePreview is an inline presigned GET for an image.
+message ImagePreview {
+  // The presigned GET, served inline with the image's own content type.
+  string url = 1;
+  // When url stops working: 2 minutes after it was minted.
+  google.protobuf.Timestamp expires_at = 2;
+}
