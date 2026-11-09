@@ -50,9 +50,7 @@ type Daemon struct {
 
 	// IsDefault: the owner chose this machine as their default
 	// (SetDefaultDaemon). Work that names no machine runs here first; at most
-	// one of a user's daemons carries it. The choice is the user's
-	// (user_default_daemons), so it holds when the registry deletes and
-	// recreates this machine's row.
+	// one of a user's daemons carries it.
 	IsDefault bool
 
 	// RequiresBoundToken reserves the id for daemon-bound credentials: once
