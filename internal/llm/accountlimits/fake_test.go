@@ -143,7 +143,7 @@ func (s *fakeStore) UpsertAccountLimitSnapshot(_ context.Context, st core.LimitS
 	if st.Source == SourceHeaders {
 		l.LastTrafficAt = st.ObservedAt
 	}
-	if st.Status == "allowed" {
+	if st.Status == "allowed" || st.Status == "overage" {
 		l.LimitedUntil, l.LimitedWindow, l.LimitedProbes = nil, "", 0
 	}
 	return nil

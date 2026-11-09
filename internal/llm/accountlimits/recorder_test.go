@@ -127,6 +127,21 @@ func TestRecorderDoesNotBenchOnAScopedWindow(t *testing.T) {
 	assert.Empty(t, st.benches, "Opus' weekly cap does not stop Sonnet")
 }
 
+// A response served from credits past a spent window (Codex overage) says the
+// account serves: it lifts a bench rather than setting one.
+func TestRecorderDoesNotBenchAnAccountInOverage(t *testing.T) {
+	r, st, c := newTestRecorder(t)
+	until := c.Now().Add(72 * time.Hour)
+	st.ensureRow("a1").LimitedUntil = &until
+	r.For("u1", "a1").ObserveRateLimits(context.Background(), snap(c.Now(), ratelimit.StatusOverage, 0.10, 1.0))
+	r.flush(context.Background(), false)
+	assert.Empty(t, st.benches, "credits pay for the spent weekly window")
+	l := st.limit("a1")
+	require.NotNil(t, l)
+	assert.Equal(t, "overage", l.Status)
+	assert.Nil(t, l.LimitedUntil, "a served response lifts the bench")
+}
+
 func TestRecorderObserverNeverBlocksOnASlowStore(t *testing.T) {
 	r, st, c := newTestRecorder(t)
 	st.slow = make(chan struct{})
@@ -239,11 +254,23 @@ func TestBenchWithAKnownResetResetsTheLadderAndKeepsTheLaterBench(t *testing.T) 
 
 func TestBenchSchedulesAConfirmationPollAfterTheReset(t *testing.T) {
 	r, st, c := newTestRecorder(t)
-	reset := c.Now().Add(2 * time.Hour)
+	reset := c.Now().Add(10 * time.Minute)
 	_, err := r.Bench(context.Background(), "u1", "a1", reset, "five_hour")
 	require.NoError(t, err)
 	require.Len(t, st.ensures, 1)
 	assert.True(t, st.ensures[0].Equal(reset.Add(30*time.Second)))
+}
+
+// A bench can outlive its cause (credits bought, a limit reset spent), and no
+// request reaches a benched account to say so: a long one is read again
+// within benchRecheckEvery instead of after its reset.
+func TestLongBenchSchedulesARecheckBeforeTheReset(t *testing.T) {
+	r, st, c := newTestRecorder(t)
+	reset := c.Now().Add(72 * time.Hour)
+	_, err := r.Bench(context.Background(), "u1", "a1", reset, "seven_day")
+	require.NoError(t, err)
+	require.Len(t, st.ensures, 1)
+	assert.True(t, st.ensures[0].Equal(c.Now().Add(benchRecheckEvery)))
 }
 
 func TestBenchOfAnUnknownAccountErrors(t *testing.T) {

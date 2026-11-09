@@ -129,6 +129,12 @@ export function UsageBars({ account, now, onRefresh, refreshing, refreshNote, co
         })
       )}
 
+      {account.usingCredits && (
+        <p className="text-xs text-muted-foreground" data-testid="usage-using-credits">
+          Plan limit used up · requests are now paid from credits
+        </p>
+      )}
+
       {(stale || showRefresh || refreshNote) && (
         <div className="flex items-center gap-2 text-2xs text-muted-foreground">
           {stale && <span>as of {formatAgo(account.usageObservedAt, now)}</span>}

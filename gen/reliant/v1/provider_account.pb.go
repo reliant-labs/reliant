@@ -306,7 +306,11 @@ type ProviderAccount struct {
 	// Why usage is unavailable, when the last read failed.
 	UsageError *string `protobuf:"bytes,19,opt,name=usage_error,json=usageError,proto3,oneof" json:"usage_error,omitempty"`
 	// RFC 3339 UTC.
-	CreatedAt     string `protobuf:"bytes,20,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	CreatedAt string `protobuf:"bytes,20,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	// True while one of the plan's usage windows is used up but the provider
+	// keeps serving the account, paid from credits (a ChatGPT workspace's or
+	// purchased Codex credits). The account is not limited.
+	UsingCredits  bool `protobuf:"varint,21,opt,name=using_credits,json=usingCredits,proto3" json:"using_credits,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -479,6 +483,13 @@ func (x *ProviderAccount) GetCreatedAt() string {
 		return x.CreatedAt
 	}
 	return ""
+}
+
+func (x *ProviderAccount) GetUsingCredits() bool {
+	if x != nil {
+		return x.UsingCredits
+	}
+	return false
 }
 
 type ListProviderAccountsRequest struct {
@@ -1152,7 +1163,7 @@ const file_reliant_v1_provider_account_proto_rawDesc = "" +
 	"\x0elength_seconds\x18\x05 \x01(\x03R\rlengthSecondsB\x10\n" +
 	"\x0e_used_fractionB\f\n" +
 	"\n" +
-	"_resets_at\"\xe9\a\n" +
+	"_resets_at\"\x8e\b\n" +
 	"\x0fProviderAccount\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1a\n" +
 	"\bprovider\x18\x02 \x01(\tR\bprovider\x122\n" +
@@ -1177,7 +1188,8 @@ const file_reliant_v1_provider_account_proto_rawDesc = "" +
 	"\vusage_error\x18\x13 \x01(\tH\tR\n" +
 	"usageError\x88\x01\x01\x12\x1d\n" +
 	"\n" +
-	"created_at\x18\x14 \x01(\tR\tcreatedAtB\b\n" +
+	"created_at\x18\x14 \x01(\tR\tcreatedAt\x12#\n" +
+	"\rusing_credits\x18\x15 \x01(\bR\fusingCreditsB\b\n" +
 	"\x06_emailB\x14\n" +
 	"\x12_organization_nameB\a\n" +
 	"\x05_planB\x0f\n" +

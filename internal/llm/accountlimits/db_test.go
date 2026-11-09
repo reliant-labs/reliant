@@ -121,7 +121,8 @@ func TestDBBenchReturnsTheEffectiveUntilAndSchedulesAConfirmation(t *testing.T) 
 	require.NoError(t, err)
 	assert.True(t, l[a.ID].LimitedUntil.Equal(reset))
 	require.NotNil(t, l[a.ID].UsageAPINextAt)
-	assert.True(t, l[a.ID].UsageAPINextAt.Equal(reset.Add(30*time.Second)))
+	assert.WithinDuration(t, time.Now().Add(30*time.Minute), *l[a.ID].UsageAPINextAt, 5*time.Second,
+		"a 2h bench is read again within half an hour")
 
 	// An unknown reset benches for the first probe rung.
 	b := upsert(t, repo, "u1", "codex", "carol")

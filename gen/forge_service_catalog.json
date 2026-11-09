@@ -23813,6 +23813,10 @@
             {
               "name": "created_at",
               "kind": "string"
+            },
+            {
+              "name": "using_credits",
+              "kind": "bool"
             }
           ],
           "reliant.v1.RefreshProviderAccountUsageRequest": [
@@ -29545,6 +29549,10 @@
             {
               "name": "created_at",
               "kind": "string"
+            },
+            {
+              "name": "using_credits",
+              "kind": "bool"
             }
           ],
           "reliant.v1.ProviderStatus": [
