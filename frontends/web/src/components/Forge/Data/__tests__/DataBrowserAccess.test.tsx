@@ -22,7 +22,7 @@ vi.mock("@tanstack/react-router", async (importOriginal) => ({
   useNavigate: () => vi.fn(),
 }));
 
-afterEach(() => window.sessionStorage.clear());
+afterEach(() => { window.sessionStorage.clear(); vi.unstubAllEnvs(); });
 
 const described = (api: ReturnType<typeof createDataFixtureApi>) => api.calls.filter((call) => call.method === "describeDatabase");
 
@@ -116,6 +116,14 @@ describe("Identity app data discovery", () => {
     expect(search.db).toBe("shop");
     expect(search.table).toBe("public.users");
     expect(decodeFilter(search.f![0]!)?.values).toEqual(["subject-1"]);
+    expect(browseCalls(api)).toHaveLength(0);
+  });
+  it("offers no subject links or row reads from an old URL in a contained build", async () => {
+    vi.stubEnv("VITE_IDENTITY_DATA_LINKS", "disabled");
+    const api = createDataFixtureApi({ onlyShop: true });
+    renderBrowser(api, { db: "shop", subject }, STAGING);
+    expect(await screen.findByTestId("data-identity-tables")).toHaveTextContent("crosslinks are disabled");
+    expect(within(screen.getByTestId("data-identity-tables")).queryByRole("link")).not.toBeInTheDocument();
     expect(browseCalls(api)).toHaveLength(0);
   });
   it("never probes after metadata admission is refused", async () => {

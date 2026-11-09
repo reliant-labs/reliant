@@ -4,11 +4,11 @@ import { useContext } from "react";
 import Link from "@/components/forge-ui/link";
 import { useIdentityOrg, useIdentityStatus } from "@/hooks/identity-queries";
 import { ForgeConsoleContext } from "../Console/consoleContext";
-import type { IdentityTarget } from "./identityLinks-model";
+import { identityDataLinksEnabled, type IdentityTarget } from "./identityLinks-model";
 
 export function IdentityRowLink({ env, target }: { env: { id: string; name: string }; target: IdentityTarget }) {
   const console = useContext(ForgeConsoleContext);
-  return console ? <AvailableIdentityLink env={env} target={target} href={(search) => console.href({ kind: "environment", env: env.name }, { tab: "identity", ...search })} /> : null;
+  return console && identityDataLinksEnabled() ? <AvailableIdentityLink env={env} target={target} href={(search) => console.href({ kind: "environment", env: env.name }, { tab: "identity", ...search })} /> : null;
 }
 function AvailableIdentityLink({ env, target, href }: { env: { id: string; name: string }; target: IdentityTarget; href: (target: IdentityTarget) => string }) {
   const org = useIdentityOrg();

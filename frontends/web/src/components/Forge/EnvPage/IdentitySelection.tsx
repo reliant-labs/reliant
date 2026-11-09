@@ -6,11 +6,15 @@ import Link from "@/components/forge-ui/link";
 import { useIdentityUser, useIdentityUsers } from "@/hooks/identity-queries";
 import type { IdentityUser } from "@/services/controlPlane/identity/api";
 import { ForgeConsoleContext } from "../Console/consoleContext";
-import { uniqueExactEmail, validIdentityEmail, validIdentityValue } from "../Data/identityLinks-model";
+import { identityDataLinksEnabled, uniqueExactEmail, validIdentityEmail, validIdentityId } from "../Data/identityLinks-model";
 
-export function IdentitySelection({ orgId, envId, serving }: { orgId: string; envId: string; serving: boolean }) {
+type SelectionProps = { orgId: string; envId: string; serving: boolean };
+export function IdentitySelection(props: SelectionProps) {
+  return identityDataLinksEnabled() ? <EnabledIdentitySelection {...props} /> : null;
+}
+function EnabledIdentitySelection({ orgId, envId, serving }: SelectionProps) {
   const raw = useSearch({ strict: false }) as Record<string, unknown>;
-  const userId = validIdentityValue(raw.user) ? raw.user : null;
+  const userId = validIdentityId(raw.user) ? raw.user : null;
   const email = !userId && validIdentityEmail(raw.q) ? raw.q : null;
   const user = useIdentityUser(orgId, envId, userId, serving);
   const matches = useIdentityUsers(orgId, envId, { query: email ?? "" }, serving && !!email);
@@ -27,13 +31,13 @@ export function IdentitySelection({ orgId, envId, serving }: { orgId: string; en
 export function IdentityUserLink({ envId, user }: { envId: string; user: IdentityUser }) {
   const console = useContext(ForgeConsoleContext);
   const env = console?.roster.envs.find((e) => e.live?.id === envId);
-  if (!console || !env || !validIdentityValue(user.userId)) return null;
+  if (!identityDataLinksEnabled() || !console || !env || !validIdentityId(user.userId)) return null;
   return <Link href={console.href({ kind: "environment", env: env.name }, { tab: "identity", user: user.userId })} className="text-xs text-primary-ink hover:underline">Open identity</Link>;
 }
 export function IdentityAppDataLink({ envId, user }: { envId: string; user: IdentityUser }) {
   const console = useContext(ForgeConsoleContext);
   const env = console?.roster.envs.find((e) => e.live?.id === envId);
-  if (!console || !env || !validIdentityValue(user.userId)) return null;
+  if (!identityDataLinksEnabled() || !console || !env || !validIdentityId(user.userId)) return null;
   const subject = JSON.stringify({ environmentId: envId, userId: user.userId, email: validIdentityEmail(user.email) ? user.email : "" });
   return <Link href={console.href({ kind: "data" }, { env: env.name, subject })} className="text-xs text-primary-ink hover:underline">App data</Link>;
 }

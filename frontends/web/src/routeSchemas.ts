@@ -808,7 +808,7 @@ export const forgeConsoleEnvSearchSchema = z.object({
   env: envScopeParam,
   secret: z.string().optional(),
   tab: envPageTab,
-  user: identitySubjectParam,
+  user: identitySubjectParam.refine((v) => v === undefined || v.length <= 128).catch(undefined),
   q: identitySubjectParam,
 });
 

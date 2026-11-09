@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-import { beforeEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { ForgeConsoleContext, type ForgeConsole } from "../../Console/consoleContext";
 import { IdentityRowLink } from "../IdentityRowLink";
@@ -11,6 +11,13 @@ const href = vi.fn((_page: unknown, search: unknown) => `/identity?${new URLSear
 function show() {
  return render(<ForgeConsoleContext.Provider value={{ href } as unknown as ForgeConsole}><IdentityRowLink env={{ id: "prod-id", name: "prod" }} target={{ user: "a&b/'\"" }} /></ForgeConsoleContext.Provider>);
 }
+afterEach(() => vi.unstubAllEnvs());
+it("contains optional links without a status probe", () => {
+ vi.stubEnv("VITE_IDENTITY_DATA_LINKS", "disabled");
+ show();
+ expect(screen.queryByRole("link")).not.toBeInTheDocument();
+ expect(s.status).not.toHaveBeenCalled();
+});
 it("uses actual scoped environment and exact subject, not an owner or a remembered environment", () => {
  show();
  expect(s.status).toHaveBeenCalledWith("org", "prod-id");

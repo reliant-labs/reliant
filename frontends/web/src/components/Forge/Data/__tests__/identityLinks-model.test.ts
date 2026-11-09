@@ -1,13 +1,31 @@
 // Copyright (c) 2025 Reliant Labs
-import { describe, expect, it } from "vitest";
-import { appDataTargets, identityTarget, parseAppDataSubject, uniqueExactEmail } from "../identityLinks-model";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { appDataTargets, identityDataLinksEnabled, identityTarget, parseAppDataSubject, uniqueExactEmail } from "../identityLinks-model";
 import { decodeFilter, patchSearch } from "../dataUrl-model";
 import { forgeConsoleDataSearchSchema, forgeConsoleEnvSearchSchema } from "@/routeSchemas";
 import type { DbTable } from "@/services/controlPlane/observability/appDatabaseApi";
 
 const subject = { environmentId: "prod-id", userId: `id.'",&=/#\\`, email: "Ada@example.com" };
 const table = { schema: "public", name: "members", columns: [{ name: "identity.id", identitySubject: "id" }, { name: "email", identitySubject: "email" }, { name: "external_id" }] } as DbTable;
+afterEach(() => vi.unstubAllEnvs());
 describe("explicit identity subjects", () => {
+ it("aligns ID bounds with GetUser without shrinking email search", () => {
+  const accepted = "x".repeat(128);
+  const rejected = "x".repeat(129);
+  expect(identityTarget({ identitySubject: "id" }, accepted, false)).toEqual({ user: accepted });
+  expect(identityTarget({ identitySubject: "id" }, rejected, false)).toBeNull();
+  expect(forgeConsoleEnvSearchSchema.parse({ user: accepted }).user).toBe(accepted);
+  expect(forgeConsoleEnvSearchSchema.parse({ user: rejected }).user).toBeUndefined();
+  expect(forgeConsoleEnvSearchSchema.parse({ q: "x".repeat(200) }).q).toHaveLength(200);
+ });
+ it("keeps default-on behavior and accepts only the explicit disabled containment value", () => {
+  vi.stubEnv("VITE_IDENTITY_DATA_LINKS", undefined);
+  expect(identityDataLinksEnabled()).toBe(true);
+  vi.stubEnv("VITE_IDENTITY_DATA_LINKS", "disabled");
+  expect(identityDataLinksEnabled()).toBe(false);
+  vi.stubEnv("VITE_IDENTITY_DATA_LINKS", "false");
+  expect(identityDataLinksEnabled()).toBe(true);
+ });
  it("never infers a subject from the column name or accepts partial/composite values", () => {
   expect(identityTarget(undefined, "u", false)).toBeNull();
   for (const v of [null, "", " ", "a\nb", "x".repeat(201), 123, ["a", "b"], { id: "a" }]) expect(identityTarget({ identitySubject: "id" }, v, false)).toBeNull();

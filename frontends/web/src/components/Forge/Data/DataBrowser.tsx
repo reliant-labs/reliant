@@ -33,7 +33,7 @@ import { clearAccess, isDenied, needsConfirmation, readAccess, writeAccess } fro
 import { DatabaseSelector, PolicyTag } from "./DatabaseSelector";
 import { DataGrid } from "./DataGrid";
 import { findTable } from "./dataLinks-model";
-import { appDataTargets, parseAppDataSubject } from "./identityLinks-model";
+import { appDataTargets, identityDataLinksEnabled, parseAppDataSubject } from "./identityLinks-model";
 import Link from "@/components/forge-ui/link";
 import { DataDenied, DataError, DataLoading, DataNote } from "./DataStates";
 import { patchSearch, type DataSearch } from "./dataUrl-model";
@@ -117,7 +117,7 @@ export function DataBrowser({ env, search, onNavigate, href }: DataBrowserProps)
 
   const tables = describe.data?.tables ?? [];
   const table = findTable(tables, search.table);
-  const subject = parseAppDataSubject(search.subject, env.id);
+  const subject = identityDataLinksEnabled() ? parseAppDataSubject(search.subject, env.id) : null;
   const subjectTargets = subject ? appDataTargets(tables, subject) : [];
 
   return (
@@ -202,7 +202,7 @@ export function DataBrowser({ env, search, onNavigate, href }: DataBrowserProps)
               </DataNote>
             ) : search.subject && !search.table ? (
               <DataNote testId="data-identity-tables" title="App data">
-                {!subject ? <p>This Identity link belongs to another environment or is invalid. Open Identity in this environment to choose a user.</p> : <>
+                {!identityDataLinksEnabled() ? <p>Identity crosslinks are disabled in this build. Choose a table to browse Data normally.</p> : !subject ? <p>This Identity link belongs to another environment or is invalid. Open Identity in this environment to choose a user.</p> : <>
                   <p>Direct marked columns in {selected.name}. Choose another database above to inspect it. Up to 25 links from the first 200 tables and 200 columns per table; no rows or counts are read until you open one. Use Related on a row for descendants.</p>
                   {subjectTargets.length === 0 ? <p>No explicit identity-subject columns found in this bounded description.</p> : <ul className="space-y-2">{subjectTargets.map((target) => <li key={target.label}><Link href={linkTo(target.search)} className="text-primary-ink hover:underline">{target.label}</Link></li>)}</ul>}
                 </>}
