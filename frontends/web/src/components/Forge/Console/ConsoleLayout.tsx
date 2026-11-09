@@ -46,6 +46,7 @@ import { ConsoleShell, type ConsoleNavEnv } from "./ConsoleShell";
 import { ForgeConsoleContext, type ForgeConsole } from "./consoleContext";
 import { useConsoleReliantProject, useConsoleUser } from "./consoleHost";
 import { useOptionalViews } from "./useOptionalViews";
+import { useObsNavOpen } from "./obsNavOpen";
 import { ENV_ALL, rememberedEnv, rememberEnv, resolveEnvScope, scopeOptions } from "./envScope";
 import { APPS_PATH, consolePageOf, consolePath, pinnedEnvOf, withSearch, type ConsolePage } from "./paths";
 
@@ -172,6 +173,8 @@ export function ConsoleLayout() {
     });
   }, []);
 
+  const [obsOpen, setObsOpen] = useObsNavOpen();
+
   const user = useConsoleUser();
 
   const { trafficLightPadding, dragRegionStyle } = useTitleBarChrome({ collapsedPadding: "0px" });
@@ -199,6 +202,8 @@ export function ConsoleLayout() {
       starred={starred}
       dashboardTitle={dashboardTitle}
       optionalViews={optionalViews}
+      obsOpen={obsOpen}
+      onObsOpenChange={setObsOpen}
       scope={scope}
       platformWide={platformWide}
       onEnvChange={setEnv}

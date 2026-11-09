@@ -68,6 +68,18 @@ describe("buildOrgNav", () => {
     ]);
   });
 
+  it("expands Observability by default, with the reader's remembered choice", () => {
+    const obs = buildOrgNav({ page: OVERVIEW, apps: APPS }).items[1]!;
+    expect(obs.defaultOpen).toBe(true);
+    expect(obs.open).toBeUndefined();
+    const onObsOpenChange = () => {};
+    const chosen = buildOrgNav({ page: OVERVIEW, apps: APPS, obsOpen: false, onObsOpenChange }).items[1]!;
+    expect(chosen.open).toBe(false);
+    expect(chosen.onOpenChange).toBe(onObsOpenChange);
+    // Apps stays a group that opens in place.
+    expect(buildOrgNav({ page: OVERVIEW, apps: APPS }).items[0]!.defaultOpen).toBeUndefined();
+  });
+
   it("badges Alerts with the firing count, and only when something is firing", () => {
     const alerts = (firing?: number) =>
       buildOrgNav({ page: OVERVIEW, apps: APPS, alertsFiring: firing }).items[1]!.children!.find((child) => child.label === "Alerts")!;
