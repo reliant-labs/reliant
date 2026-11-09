@@ -278,7 +278,9 @@ func codexHeaderWindow(h http.Header, prefix string, now time.Time) (Window, boo
 // codexStatus derives the verdict from the windows. A spent window refuses
 // requests unless credits pay for them: then the account is in overage, which
 // does not limit it. Credits cover the plan's own windows only, so a spent
-// window of another limit family ("codex_other.primary") still refuses.
+// window of another limit family ("codex_other.primary") still refuses. The
+// dot is that family's mark: codexWindowName gives the default family's
+// windows bare slot names and every other family's "<family>.<slot>".
 func codexStatus(ws []Window, reached, credits bool) Status {
 	if reached {
 		return StatusRejected

@@ -356,6 +356,37 @@ func TestParseCodexUsage_CreditsThatCannotPayLeaveItRejected(t *testing.T) {
 	}
 }
 
+// Credits are known to pay for the plan's windows, not an additional limit
+// family's. With one of those spent as well, the account cannot be said to be
+// served past everything, so a spent plan window stays rejected, matching the
+// header parser.
+func TestParseCodexUsage_SpentAdditionalFamilyBlocksOverage(t *testing.T) {
+	const head = `{"plan_type":"team","credits":{"has_credits":true},
+	  "rate_limit":{"allowed":false,"limit_reached":true,
+	    "secondary_window":{"used_percent":100,"limit_window_seconds":604800,"reset_at":1794415733}},`
+	for name, tc := range map[string]struct {
+		family string
+		want   ratelimit.Status
+	}{
+		"family window spent": {`"additional_rate_limits":[{"limit_name":"Spark","metered_feature":"codex_bengalfox","rate_limit":
+		  {"allowed":true,"limit_reached":false,"primary_window":{"used_percent":100,"reset_at":1794415733}}}]}`, ratelimit.StatusRejected},
+		"family says limit reached": {`"additional_rate_limits":[{"limit_name":"Spark","metered_feature":"codex_bengalfox","rate_limit":
+		  {"allowed":false,"limit_reached":true,"primary_window":{"used_percent":40,"reset_at":1794415733}}}]}`, ratelimit.StatusRejected},
+		"family with room": {`"additional_rate_limits":[{"limit_name":"Spark","metered_feature":"codex_bengalfox","rate_limit":
+		  {"allowed":true,"limit_reached":false,"primary_window":{"used_percent":40,"reset_at":1794415733}}}]}`, ratelimit.StatusOverage},
+	} {
+		t.Run(name, func(t *testing.T) {
+			s, err := ParseCodexUsage([]byte(head+tc.family), fixedNow)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if s.Status != tc.want {
+				t.Fatalf("status = %s, want %s", s.Status, tc.want)
+			}
+		})
+	}
+}
+
 func TestParseCodexUsage_AdditionalLimitDoesNotRejectSnapshot(t *testing.T) {
 	body := `{"plan_type":"plus","rate_limit":{"allowed":true,"limit_reached":false,
 	  "primary_window":{"used_percent":5,"limit_window_seconds":18000,"reset_at":1790003000}},

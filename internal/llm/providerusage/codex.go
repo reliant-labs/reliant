@@ -122,7 +122,7 @@ func (w *codexWindowJSON) window(name string, now time.Time) (ratelimit.Window, 
 // Snapshot status reflects the ordinary limit only: a model-specific cap does
 // not stop the subscription. A spent ordinary limit is StatusOverage, not
 // StatusRejected, while "credits" (and "spend_control") say credits pay for
-// the requests past it.
+// the requests past it and no additional family is spent too.
 func ParseCodexUsage(body []byte, now time.Time) (ratelimit.Snapshot, error) {
 	root, ok := jsonObject(body)
 	if !ok {
@@ -169,9 +169,16 @@ func ParseCodexUsage(body []byte, now time.Time) (ratelimit.Snapshot, error) {
 	}
 	s.Windows = append(s.Windows, base...)
 
+	// familySpent: an additional limit family is exhausted. Alone it does not
+	// stop the subscription, but credits are not known to pay for it, so it
+	// keeps a spent plan window from reading as overage.
+	familySpent := false
 	for _, a := range p.AdditionalLimits {
 		if a.RateLimit == nil {
 			continue
+		}
+		if rl := a.RateLimit; rl.LimitReached || (rl.Allowed != nil && !*rl.Allowed) {
+			familySpent = true
 		}
 		fam := slug(a.MeteredFeature)
 		if fam == "" {
@@ -180,12 +187,15 @@ func ParseCodexUsage(body []byte, now time.Time) (ratelimit.Snapshot, error) {
 		if fam == "" {
 			continue
 		}
+		var famWindows []ratelimit.Window
 		if w, ok := a.RateLimit.PrimaryWindow.window(fam+".primary", now); ok {
-			s.Windows = append(s.Windows, w)
+			famWindows = append(famWindows, w)
 		}
 		if w, ok := a.RateLimit.Secondary.window(fam+".secondary", now); ok {
-			s.Windows = append(s.Windows, w)
+			famWindows = append(famWindows, w)
 		}
+		familySpent = familySpent || anyExhausted(famWindows)
+		s.Windows = append(s.Windows, famWindows...)
 	}
 
 	switch rl := p.RateLimit; {
@@ -195,9 +205,11 @@ func ParseCodexUsage(body []byte, now time.Time) (ratelimit.Snapshot, error) {
 		// allowed / limit_reached judge the plan's windows alone: a workspace
 		// with credits reads allowed:false, limit_reached:true and is still
 		// served (verified live 2026-11-08, a Team workspace past its weekly
-		// window, while the Codex CLI kept answering).
+		// window, while the Codex CLI kept answering). Overage claims every
+		// request is served, so a spent additional family, which credits are
+		// not known to cover, leaves it rejected (as the header parser does).
 		s.Status = ratelimit.StatusRejected
-		if p.creditsPay() {
+		if p.creditsPay() && !familySpent {
 			s.Status = ratelimit.StatusOverage
 		}
 	case len(base) > 0 || (rl != nil && rl.Allowed != nil):
