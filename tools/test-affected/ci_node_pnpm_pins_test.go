@@ -356,18 +356,30 @@ var webInstallInputs = []string{
 	"sdk/ts/package.json",
 }
 
-// TestPnpmAdmitsSupportedNodeAndRefusesOthers runs the real pnpm over a copy
-// of the committed web install inputs. pnpm's node-version setting stands in
-// for the Node it checks engines against, so one machine proves every
-// version without installing them.
-func TestPnpmAdmitsSupportedNodeAndRefusesOthers(t *testing.T) {
-	testkit.Slow(t, "runs pnpm (and, through Corepack, may fetch the pinned release) over a copy of frontends/web's install inputs",
-		testkit.Inputs(append([]string{"package.json"}, webInstallInputs...)...))
-	if _, err := exec.LookPath("pnpm"); err != nil {
-		t.Skip("pnpm not on PATH")
+// requireTool skips the test when name is not on PATH, naming what is missing,
+// except in CI: every CI job that runs these tests installs Node and pnpm
+// (the setup action's node input), so there a missing tool means the setup
+// broke, and skipping would hide exactly that.
+func requireTool(t *testing.T, name string) {
+	t.Helper()
+	if _, err := exec.LookPath(name); err == nil {
+		return
 	}
-	version := rootPnpmVersion(t)
+	if os.Getenv("CI") != "" {
+		t.Fatalf("%s is not on PATH in CI: the setup action's pnpm/Node steps did not install it", name)
+	}
+	t.Skipf("%s not on PATH (CI installs it; this host lacks it)", name)
+}
 
+// copyWebInstallInputs copies webInstallInputs into a temp tree and returns
+// its root, the bytes copied (to prove an install leaves them alone), and a
+// runner for pnpm in its frontends/web. It also checks that the pnpm which
+// runs there is the one packageManager pins, whatever pnpm or Corepack shim
+// is on PATH: in CI that is the pnpm pnpm/action-setup installed from the
+// root packageManager field alone, so this proves the action's bootstrap.
+func copyWebInstallInputs(t *testing.T) (string, map[string][]byte, func(args ...string) (string, error)) {
+	t.Helper()
+	version := rootPnpmVersion(t)
 	root := t.TempDir()
 	want := map[string][]byte{}
 	for _, rel := range webInstallInputs {
@@ -389,9 +401,6 @@ func TestPnpmAdmitsSupportedNodeAndRefusesOthers(t *testing.T) {
 		out, err := cmd.CombinedOutput()
 		return string(out), err
 	}
-
-	// The pnpm that runs in frontends/web is the one packageManager pins,
-	// whatever pnpm or Corepack shim is on PATH.
 	out, err := pnpm("--version")
 	if err != nil {
 		t.Fatalf("pnpm --version in frontends/web: %v\n%s", err, out)
@@ -399,6 +408,70 @@ func TestPnpmAdmitsSupportedNodeAndRefusesOthers(t *testing.T) {
 	if lines := strings.Split(strings.TrimSpace(out), "\n"); lines[len(lines)-1] != version {
 		t.Fatalf("pnpm --version in frontends/web printed %q, want the pinned %s", out, version)
 	}
+	return root, want, pnpm
+}
+
+// TestPnpmFrozenInstallRunsItsBuildsOnThisNode is the install a contributor or
+// CI actually does: a frozen install of the committed web inputs with
+// lifecycle scripts on, under the Node running the test (24 in CI, the
+// release gate's setup action). It must admit that Node, run the allowed
+// builds (better-sqlite3's native addon among them, which is what failed on
+// Node 26), leave every committed input byte-identical, and produce an addon
+// that loads.
+//
+// The other supported Node lines are held by TestNodeEnginesAdmitSupportedNodes
+// and the engine checks above; a real install needs that Node installed, so
+// it runs only on the one this host has.
+func TestPnpmFrozenInstallRunsItsBuildsOnThisNode(t *testing.T) {
+	testkit.Slow(t, "a full pnpm install from the registry, with native builds",
+		testkit.Inputs(append([]string{"package.json"}, webInstallInputs...)...))
+	requireTool(t, "pnpm")
+	requireTool(t, "node")
+	nodeOut, err := exec.Command("node", "--version").Output()
+	if err != nil {
+		t.Fatalf("node --version: %v", err)
+	}
+	node := strings.TrimPrefix(strings.TrimSpace(string(nodeOut)), "v")
+	rng := readManifest(t, "frontends/web/package.json").Engines.Node
+	if ok, err := semverAdmits(rng, node); err != nil {
+		t.Fatal(err)
+	} else if !ok {
+		if os.Getenv("CI") != "" {
+			t.Fatalf("CI runs Node %s, which frontends/web engines.node %q refuses", node, rng)
+		}
+		t.Skipf("this host's Node %s is outside engines.node %q (the refusal is TestPnpmAdmitsSupportedNodeAndRefusesOthers'); a supported Node runs it", node, rng)
+	}
+
+	root, want, pnpm := copyWebInstallInputs(t)
+	web := filepath.Join(root, "frontends", "web")
+	if out, err := pnpm("install", "--frozen-lockfile", "--config.confirmModulesPurge=false"); err != nil {
+		t.Fatalf("frozen install on Node %s failed: %v\n%s", node, err, out)
+	}
+	for rel, b := range want {
+		got, err := os.ReadFile(filepath.Join(root, rel))
+		if err != nil || !bytes.Equal(got, b) {
+			t.Errorf("the install changed %s (err %v): a dev install must leave the tree clean", rel, err)
+		}
+	}
+
+	load := exec.Command("node", "-e", `const db = require("better-sqlite3")(":memory:");
+if (db.prepare("select 1 as one").get().one !== 1) process.exit(1);`)
+	load.Dir = web
+	if out, err := load.CombinedOutput(); err != nil {
+		t.Errorf("better-sqlite3 built by the install does not load on Node %s: %v\n%s", node, err, out)
+	}
+}
+
+// TestPnpmAdmitsSupportedNodeAndRefusesOthers runs the real pnpm over a copy
+// of the committed web install inputs. pnpm's node-version setting stands in
+// for the Node it checks engines against, so one machine proves every
+// version without installing them.
+func TestPnpmAdmitsSupportedNodeAndRefusesOthers(t *testing.T) {
+	testkit.Slow(t, "runs pnpm (and, through Corepack, may fetch the pinned release) over a copy of frontends/web's install inputs",
+		testkit.Inputs(append([]string{"package.json"}, webInstallInputs...)...))
+	requireTool(t, "pnpm")
+	root, want, pnpm := copyWebInstallInputs(t)
+	web := filepath.Join(root, "frontends", "web")
 
 	// Supported Node: the frozen install's check passes (offline, lockfile
 	// only, so it needs no store) and writes nothing.
