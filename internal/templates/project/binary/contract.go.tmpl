@@ -1,0 +1,91 @@
+// yours: scaffolded once, never touched again — forge will not overwrite this file
+// Binary contract; canonical pattern in `forge skill load binaries`.
+// Package {{.Package}} owns the runtime for the {{.Name}} binary.
+//
+// contract.go declares the public surface — Deps, Service, New —
+// in the canonical "narrow interface, validateDeps gate" shape forge
+// uses for services and packages. The implementation lives in
+// {{.Package}}.go alongside it.
+//
+// Hand-add fields to Deps as the binary grows. Mark optional fields
+// with `// forge:optional-dep` so the validateDeps gate doesn't
+// reject construction in dev mode.
+package {{.Package}}
+
+import (
+	"context"
+	"fmt"
+	"log/slog"
+
+	"{{.Module}}/pkg/config"
+)
+
+// Deps holds the dependencies for the {{.Name}} binary.
+//
+// Logger / Config are the bare-Deps set: every binary needs them.
+// Add your binary-specific deps below — DB pool, NATS connection,
+// k8s client, HTTP client, etc. Required fields should be checked
+// in validateDeps; optional fields tagged with `// forge:optional-dep`
+// stay nil-safe at construction time.
+type Deps struct {
+	Logger *slog.Logger
+	Config *config.Config
+	// Add binary-specific dependencies here.
+	//
+	// Example:
+	//   Repo Repository  // narrow DB surface, declared as a local interface
+	//   NATS *natsio.Client
+	//
+	// If a field is INTENTIONALLY optional, tag it with
+	// `// forge:optional-dep` on a comment line directly above the
+	// field declaration. validateDeps must NOT enforce optional-dep
+	// fields — the binary handles `if s.deps.X != nil { ... }` per
+	// call site as idiomatic Go.
+}
+
+// validateDeps returns an error if any required Deps field is nil.
+// Bootstrap-supplied fields (Logger, Config) are always checked.
+// Extend this list when you add a Deps field that must be set for
+// the binary to do useful work — keeping the gate at construction
+// time means runtime call sites don't need defensive nil checks.
+func (d Deps) validateDeps() error {
+	if d.Logger == nil {
+		return fmt.Errorf("{{.Name}}: Deps.Logger is required")
+	}
+	if d.Config == nil {
+		return fmt.Errorf("{{.Name}}: Deps.Config is required")
+	}
+	// Add checks for your required Deps fields here.
+	return nil
+}
+
+// Service is the narrow surface the cobra subcommand consumes. Tests
+// can satisfy this interface with fakes; production wiring uses the
+// concrete *Runner returned by New.
+type Service interface {
+	// Run blocks until ctx is cancelled or the runtime hits a fatal
+	// error. Implementations are responsible for graceful shutdown
+	// inside Run; the cobra adapter wires SIGINT/SIGTERM into ctx.
+	Run(ctx context.Context) error
+	// Name returns the binary identifier used in logs and metrics.
+	Name() string
+}
+
+// New constructs a {{.Name}} runtime with the supplied Deps.
+//
+// Returns an error when validateDeps rejects the Deps shape (any nil
+// required field). The cobra subcommand calls New once at startup so
+// the gate runs at boot rather than per-iteration of the run loop.
+//
+// The two-result `(Service, error)` shape mirrors the canonical
+// internal-package contract forge enforces (see
+// `forge skill load contracts`). It also satisfies the
+// `forgeconv-internal-package-contract-names` lint rule which
+// requires `func New(Deps) (Service, error)` so other packages can
+// instantiate the binary in tests via the same interface.
+func New(deps Deps) (Service, error) {
+	if err := deps.validateDeps(); err != nil {
+		return nil, err
+	}
+	return &Runner{deps: deps}, nil
+}

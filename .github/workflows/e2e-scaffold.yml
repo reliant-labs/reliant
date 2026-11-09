@@ -1,0 +1,345 @@
+# End-to-end smoke test for `forge project new`. Scaffolds a service project from
+# the forge binary built at this commit, then runs generate/build/lint/test
+# against the generated tree. Catches scaffold-level regressions before
+# downstream migration/porting work depends on a broken baseline.
+#
+# WHEN IT RUNS. Every push to main, nightly (nightly.yml), on demand, and on a
+# pull request only with the `ci:e2e` label — the same gate as e2e-suite.yml,
+# for the same reason: at 4 minutes on average and 12 at worst (npm install,
+# `next build`, and on a release commit a wait for the module proxy) it did
+# not fit a pull request's ~5-minute budget (ci.yml, "TWO TIERS"), and a
+# scaffold regression is cheap to bisect from the merge that caused it.
+name: E2E Scaffold
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, labeled]
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Cancel the run in progress on a pull request only; on main it always
+# finishes, and a newer push supersedes the pending one (ci.yml says why). A
+# `labeled` event for some other label gets a group of its own, so it cannot
+# cancel a `ci:e2e` run (e2e-suite.yml). nightly.yml's call shares main's ref;
+# the event keeps it out of a push run's group.
+concurrency:
+  group: e2e-scaffold-${{ github.event_name }}-${{ github.ref }}${{ github.event.action == 'labeled' && github.event.label.name != 'ci:e2e' && format('-{0}', github.run_id) || '' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  scaffold:
+    name: forge project new smoke test
+    if: ${{ github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'ci:e2e') }}
+    runs-on: ubuntu-latest
+    env:
+      # Set once so every step uses the same workspace path.
+      E2E_DIR: ${{ github.workspace }}/e2e-workspace
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: false
+      # Restore only: the -trimpath artifacts `checks` keeps warm in the
+      # tools scope (ci.yml's "Build-cache note").
+      - uses: ./.github/actions/restore-go-caches
+        with:
+          scope: tools
+
+      # A scaffolded frontend pins pnpm (package.json packageManager,
+      # templates.PnpmVersion); TestPnpmVersionIsPinnedEverywhere keeps this
+      # version equal to it.
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 12.15.0
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+
+      - name: Install buf
+        uses: ./.github/actions/install-release-tool
+        with:
+          tool: buf
+
+      # `forge generate` reads the scaffold's applied schema through an embedded
+      # postgres, and the scaffold's own `go test` boots one; both fetch it from
+      # Maven Central on a cold cache and 429 under load. See the action.
+      - uses: ./.github/actions/embedded-postgres-cache
+
+      - name: Put $HOME/go/bin on PATH
+        run: echo "$HOME/go/bin" >> "$GITHUB_PATH"
+
+      - name: Install forge from current checkout
+        run: |
+          echo "::group::install forge + contractlint"
+          if go install ./cmd/forge ./cmd/contractlint; then
+            echo "::endgroup::"
+            echo "forge: $(command -v forge)"
+            forge --version || true
+            echo "✅ install forge"
+          else
+            echo "::endgroup::"
+            echo "❌ install forge"
+            exit 1
+          fi
+
+      - name: forge tools install
+        run: |
+          if forge tools install; then
+            echo "✅ forge tools install"
+          else
+            echo "❌ forge tools install"
+            exit 1
+          fi
+
+      - name: Prepare clean workspace
+        run: |
+          rm -rf "$E2E_DIR"
+          mkdir -p "$E2E_DIR"
+          echo "✅ workspace ready at $E2E_DIR"
+
+      # The scaffold depends on @reliantlabs/forge-web-runtime by its PUBLISHED
+      # range, and a pull request that ships a new runtime raises that range
+      # to a version npm does not have until the tag is pushed after the
+      # merge. So npm fetches the @reliantlabs scope from an overlay registry
+      # serving this checkout's `npm pack` beside every published version
+      # (internal/npmoverlay): the smoke installs the runtime it ships, with
+      # the scaffold's manifest untouched. It runs until the job ends; the
+      # step fails if the pack does.
+      - name: Serve this checkout's web-runtime to npm
+        run: |
+          go build -o "$RUNNER_TEMP/npm-overlay" ./internal/npmoverlay/cmd/npm-overlay
+          env_file="$RUNNER_TEMP/npm-overlay.env"
+          nohup "$RUNNER_TEMP/npm-overlay" -pack web-runtime -env-file "$env_file" \
+            > "$RUNNER_TEMP/npm-overlay.log" 2>&1 &
+          pid=$!
+          for _ in $(seq 1 600); do
+            [ -s "$env_file" ] && break
+            if ! kill -0 "$pid" 2>/dev/null; then
+              cat "$RUNNER_TEMP/npm-overlay.log"
+              echo "❌ npm overlay exited before it was ready"
+              exit 1
+            fi
+            sleep 1
+          done
+          if [ ! -s "$env_file" ]; then
+            cat "$RUNNER_TEMP/npm-overlay.log"
+            echo "❌ npm overlay not ready after 10m"
+            exit 1
+          fi
+          cat "$env_file" >> "$GITHUB_ENV"
+          cat "$RUNNER_TEMP/npm-overlay.log"
+          echo "✅ npm overlay serving web-runtime"
+
+      - name: forge project new e2e-test
+        working-directory: ${{ env.E2E_DIR }}
+        run: |
+          # --link-forge: the forge under test is built from this checkout,
+          # so the scaffold must compile forge from it (opt-in since the
+          # bridge stopped being implicit).
+          if forge project new e2e-test \
+              --kind service \
+              --mod github.com/e2e/e2e-test \
+              --service api \
+              --frontend admin \
+              --link-forge; then
+            echo "✅ forge project new"
+          else
+            echo "❌ forge project new"
+            exit 1
+          fi
+
+      # Judge the forge under test against forge/pkg from the SAME commit.
+      # A forge built from this checkout cannot prove its commit is fetchable
+      # (on a pull request it is an ephemeral merge commit), so the scaffold
+      # pins the newest release the checkout descends from
+      # (buildinfo.PublishedFloor) and bridges to the checkout with go.work.
+      # That release predates every package added since, and `go mod tidy`
+      # ignores go.work — so tidy fell back to the retired forge/pkg module at
+      # @latest (v0.1.15) and failed for any new pkg/* import (pkg/graphkit,
+      # #923). A replace is what tidy honors. A user's forge, installed by tag
+      # or by commit, pins its own version and needs none of this.
+      - name: Bridge the scaffold to this checkout's forge module
+        working-directory: ${{ env.E2E_DIR }}/e2e-test
+        run: |
+          for mod in . gen; do
+            (cd "$mod" && go mod edit -replace "github.com/reliant-labs/forge=$GITHUB_WORKSPACE")
+          done
+          echo "✅ forge replaced with $GITHUB_WORKSPACE in go.mod and gen/go.mod"
+
+      - name: forge generate
+        working-directory: ${{ env.E2E_DIR }}/e2e-test
+        run: |
+          if forge generate; then
+            echo "✅ forge generate"
+          else
+            echo "❌ forge generate"
+            exit 1
+          fi
+
+      # A scaffold pins `require github.com/reliant-labs/forge vX.Y.Z` at the
+      # version this binary reports (internal/generator/project_pkgdep.go). On
+      # a RELEASE COMMIT that is the tag release-forge.sh pushed moments ago —
+      # and proxy.golang.org discovers tags by polling, so for several minutes
+      # it 404s for the whole world. `go mod tidy` below then fails on a
+      # release that is completely correct, which is why this lane was red on
+      # every release commit for ~6 minutes.
+      #
+      # Waiting is the honest fix: the job's own dependency genuinely is not
+      # resolvable yet. On every non-release commit the version is long since
+      # ingested, so this costs exactly one HTTP probe and no sleep. On a
+      # release commit it takes as long as the proxy needs to ingest the
+      # new tag (scripts/wait-for-go-proxy.sh sizes its window for it);
+      # release-forge.sh asks only the proxy's cache before tagging, so no 404
+      # is cached.
+      #
+      # The version is read from the GENERATED go.mod rather than from VERSION,
+      # so this tracks whatever the scaffold actually pinned instead of
+      # re-deriving it and drifting.
+      - name: Wait for the module proxy to serve the pinned forge version
+        working-directory: ${{ env.E2E_DIR }}/e2e-test
+        run: |
+          PINNED="$(awk '$1 == "github.com/reliant-labs/forge" { print $2; exit }' go.mod)"
+          if [ -z "$PINNED" ]; then
+            echo "❌ scaffolded go.mod does not require github.com/reliant-labs/forge"
+            echo "   (project_pkgdep.go must never leave the require empty — see its header)"
+            sed -n '1,40p' go.mod
+            exit 1
+          fi
+          echo "scaffold pinned forge $PINNED"
+          if "$GITHUB_WORKSPACE/scripts/wait-for-go-proxy.sh" \
+              --module github.com/reliant-labs/forge --version "$PINNED" --tag-pushed; then
+            echo "✅ forge $PINNED is resolvable"
+          else
+            echo "❌ forge $PINNED never became resolvable within the window"
+            exit 1
+          fi
+
+      - name: go mod tidy
+        working-directory: ${{ env.E2E_DIR }}/e2e-test
+        run: |
+          if go mod tidy; then
+            echo "✅ go mod tidy"
+          else
+            echo "❌ go mod tidy"
+            exit 1
+          fi
+
+      - name: go build
+        working-directory: ${{ env.E2E_DIR }}/e2e-test
+        run: |
+          if go build ./...; then
+            echo "✅ go build"
+          else
+            echo "❌ go build"
+            exit 1
+          fi
+
+      - name: forge lint
+        working-directory: ${{ env.E2E_DIR }}/e2e-test
+        run: |
+          if forge lint; then
+            echo "✅ forge lint"
+          else
+            echo "❌ forge lint"
+            exit 1
+          fi
+
+      - name: go test
+        working-directory: ${{ env.E2E_DIR }}/e2e-test
+        run: |
+          if go test ./...; then
+            echo "✅ go test"
+          else
+            echo "❌ go test"
+            exit 1
+          fi
+
+      # Frontend gate: install, TYPECHECK, BUILD, then run the scaffolded
+      # Vitest suite against the admin frontend.
+      #
+      # This step used to run an install then `npm test` and stop there.
+      # `npm test` is `vitest run` — it executes the five scaffolded unit
+      # tests and nothing else. It never compiled the generated tree, so a
+      # generated page that does not typecheck, or a route that Next cannot
+      # build, shipped green: the two failure modes that actually reach users
+      # first were the two this lane did not look at.
+      #
+      # The install is FROZEN: `forge project new` wrote pnpm-lock.yaml, and
+      # a lockfile the scaffold cannot install from is a scaffold bug.
+      #
+      # Order matters. `pnpm run typecheck` runs first, against the tsconfig
+      # as scaffolded: `next build` REWRITES tsconfig.json (it appends
+      # .next-prod/types/**/*.ts to `include`), so a typecheck after a build
+      # is a typecheck of a different project. Both are kept because they see
+      # different things — `next build` type-checks the route graph it
+      # compiles, `tsc --noEmit` covers everything in tsconfig's include,
+      # test files and unreferenced modules included.
+      - name: pnpm typecheck + build + test (frontend)
+        working-directory: ${{ env.E2E_DIR }}/e2e-test
+        run: |
+          # The scaffold above passes --frontend admin. If nothing is here,
+          # `forge project new` did not honour the flag — that is a scaffold
+          # regression and the exact thing this workflow exists to catch, so
+          # it FAILS. (It used to `exit 0` with an ℹ️, which reported this
+          # lane green for a run in which it did nothing.) A future cli/library
+          # variant of this workflow should pass its own expectation in, not
+          # inherit a step that shrugs.
+          FE_DIR="$(find frontends -mindepth 1 -maxdepth 1 -type d 2>/dev/null | head -n1 || true)"
+          if [ -z "$FE_DIR" ]; then
+            echo "❌ no frontend under frontends/ — the scaffold was invoked with --frontend admin"
+            exit 1
+          fi
+          echo "Frontend at: $FE_DIR"
+          cd "$FE_DIR"
+          if pnpm install --frozen-lockfile --prefer-offline; then
+            echo "✅ pnpm install --frozen-lockfile"
+          else
+            echo "❌ pnpm install --frozen-lockfile"
+            exit 1
+          fi
+          if pnpm run typecheck; then
+            echo "✅ pnpm run typecheck (tsc --noEmit)"
+          else
+            echo "❌ pnpm run typecheck (tsc --noEmit)"
+            exit 1
+          fi
+          if pnpm run build; then
+            echo "✅ pnpm run build (next build)"
+          else
+            echo "❌ pnpm run build (next build)"
+            exit 1
+          fi
+          # vitest exits 1 on "No test files found" (passWithNoTests is not
+          # set in the scaffold's vitest.config.ts), so this cannot pass
+          # vacuously if the scaffold ever stops emitting its unit tests.
+          if pnpm test --silent; then
+            echo "✅ pnpm test (vitest run)"
+          else
+            echo "❌ pnpm test (vitest run)"
+            exit 1
+          fi
+
+      - name: Upload generated tree on failure
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: e2e-scaffold-tree
+          path: ${{ env.E2E_DIR }}
+          # Cap retention — this is debug bait, not a release artifact.
+          retention-days: 7
+          if-no-files-found: warn
+
+      # Main only: keeps any archive this job had to fetch, so the next run
+      # does not (see embedded-postgres-cache's header).
+      - name: Save the embedded postgres archives (main only)
+        if: ${{ !cancelled() && github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+        uses: ./.github/actions/embedded-postgres-cache-save

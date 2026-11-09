@@ -1,0 +1,47 @@
+# {{.Name}}
+
+A Go library scaffolded with [Forge](https://github.com/reliant-labs/forge).
+
+## Layout
+
+```
+{{.Name}}/
+├── pkg/{{.Name}}/  # Public API (importable as {{.Module}}/pkg/{{.Name}})
+├── internal/        # Private implementation packages
+├── docs/            # Architecture Decision Records
+├── forge.yaml       # Forge project manifest (kind: library)
+├── go.mod
+└── Taskfile.yml
+```
+
+## Quick start
+
+```bash
+task deps   # go mod download
+task test   # go test -race ./...
+task lint   # golangci-lint run
+task fmt    # goimports + go mod tidy
+```
+
+## Adding code
+
+- **Public API** lives under `pkg/{{.Name}}/`. Anything you want
+  importers to use goes here.
+- **Private helpers** live under `internal/`. Use
+  `forge scaffold package <name>` to scaffold a new internal package with
+  a contract interface and a generated mock.
+- **Tests** live next to the code (`xxx_test.go`). Runnable examples
+  go into `Example*` test functions; they show up rendered in
+  generated docs and run as part of `go test`.
+
+## Versioning
+
+This module follows [Semantic Versioning](https://semver.org). Cut
+releases by tagging the repository:
+
+```bash
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+Importers will pull the tagged version via `go get {{.Module}}@v0.1.0`.

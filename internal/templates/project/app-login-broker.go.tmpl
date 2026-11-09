@@ -1,0 +1,1341 @@
+// internal/app/login_broker.go — YOURS. forge scaffolds this file once and
+// never rewrites it (there is no _gen twin and no DO-NOT-EDIT banner).
+//
+// NATIVE SIGN-IN: your app's own login form, your app's own API, and an
+// identity provider the browser never talks to.
+//
+// ── The rule this file enforces ───────────────────────────────────────
+//
+// THE BROWSER NEVER CONTACTS THE IDENTITY PROVIDER. Not /authorize, not
+// the discovery document, not the token endpoint, not a hidden iframe.
+// The browser POSTs a login name and a password to THIS server, and gets
+// back a session cookie. Everything else happens here.
+//
+//	browser  ── email + password ──▶  this server ──▶ identity provider
+//	         ◀── HttpOnly cookie ───┘                (all five OIDC steps)
+//
+// ── Why, rather than the usual browser-side PKCE flow ─────────────────
+//
+//   - THE IdP NEEDS NO PUBLIC ORIGIN. It can sit on a private network,
+//     behind a VPN, or bound to loopback. A browser flow requires every
+//     user's browser to reach it, which is what forces an operator IdP to
+//     be exposed — or to be reached through a port-forward every operator
+//     has to set up identically.
+//   - NO TOKENS IN JAVASCRIPT. The access and refresh tokens live here and
+//     travel in an HttpOnly cookie. There is nothing for an XSS to read.
+//   - NO THIRD-PARTY COOKIES. The silent-restore iframe a browser flow
+//     needs is already unreliable and is being switched off by browsers.
+//     This design has no equivalent to lose.
+//   - ONE ORIGIN. No CORS with the issuer, and no redirect-URI allowlist
+//     to keep in step with every deployment.
+//
+// ── THE ONE THING NOT TO CHANGE CARELESSLY ────────────────────────────
+//
+// The issuer treats "which credentials were checked" as the CALLER's
+// decision. A session created with a user check and NO password check is
+// valid, completes an auth request, and yields real tokens — for someone
+// who proved nothing. Such a token carries no `amr` claim at all, so a
+// downstream validator cannot even detect it.
+//
+// devidp.CreateSession refuses a credential set with no verifying factor
+// before it makes any network call, and this handler builds its request
+// from TYPED FIELDS it reads itself. Do not "simplify" either by
+// forwarding a request body straight through: that single change turns a
+// login form into an impersonation endpoint, and nothing in the response
+// would look wrong.
+package app
+
+import (
+	"context"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"log/slog"
+	"net/http"
+	"net/url"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/reliant-labs/forge/pkg/devidp"
+
+	"{{.Module}}/pkg/config"
+{{- if .MiddlewareDeclaresSessionCookie}}
+	"{{.Module}}/pkg/middleware"
+{{- end}}
+)
+
+// The routes the sign-in screen posts to. Constants because the scaffolded
+// frontend is written against these exact paths — change one and change
+// both.
+const (
+	LoginPath          = "POST /auth/login"
+	RegisterPath       = "POST /auth/register"
+	LogoutPath         = "POST /auth/logout"
+	SessionPath        = "GET /auth/session"
+	PasswordPolicyPath = "GET /auth/password-policy"
+	OptionsPath        = "GET /auth/options"
+	ForgotPath         = "POST /auth/forgot"
+	ResetPath          = "POST /auth/reset"
+)
+
+// The sign-in methods a LOGIN_POLICY document turns on (identity v2). Each is
+// mounted only when the policy offers it — see mountSignInMethods. The
+// handlers are devidp.SignInRoutes, tested in forge against a fake issuer;
+// this file decides which are served and supplies the session cookie.
+const (
+	PasskeyBeginPath          = devidp.PasskeyBeginPath
+	PasskeyFinishPath         = devidp.PasskeyFinishPath
+	PasskeyRegisterBeginPath  = devidp.PasskeyRegisterBeginPath
+	PasskeyRegisterFinishPath = devidp.PasskeyRegisterFinishPath
+	PasskeysPath              = devidp.PasskeysPath
+	MagicRequestPath          = devidp.MagicRequestPath
+	MagicConsumePath          = devidp.MagicConsumePath
+	SocialStartPath           = devidp.SocialStartPath
+	SocialCallbackPath        = devidp.SocialCallbackPath
+	InviteAcceptPath          = devidp.InviteAcceptPath
+	VerifyPath                = devidp.VerifyPath
+	VerifyResendPath          = devidp.VerifyResendPath
+)
+
+// SessionCookieName holds the access token.
+//
+// A COOKIE, not a JSON field, and that is the load-bearing decision: it is
+// HttpOnly, so no script can read it, which is what keeps the token out of
+// reach of an XSS. Returning it in a response body would hand it straight
+// back to JavaScript and forfeit the main reason this flow exists.
+//
+{{- if .MiddlewareDeclaresSessionCookie}}
+//
+// Declared in pkg/middleware, whose auth interceptor reads it on every RPC:
+// the cookie this file sets and the cookie the server accepts are one name,
+// so they cannot drift apart into a sign-in that succeeds and an API that
+// still answers 401.
+const SessionCookieName = middleware.SessionCookieName
+{{- if .MiddlewareDeclaresSecureSessionCookie}}
+
+// SecureSessionCookieName is the name the cookie has when it is Secure: the
+// __Host- prefix keeps a sibling site from planting or overwriting it (see
+// pkg/middleware). The interceptor reads it first.
+const SecureSessionCookieName = middleware.SecureSessionCookieName
+{{- else}}
+
+// Your pkg/middleware reads only the plain name, so the cookie keeps it even
+// when Secure. Declare `SecureSessionCookieName = "__Host-" + SessionCookieName`
+// there and read it first (`forge skill load migrations/v1.1.0/identity-v2`),
+// then point this at it: until then a sibling site under a shared parent
+// domain can plant a session cookie.
+const SecureSessionCookieName = SessionCookieName
+{{- end}}
+{{- else}}
+//
+// Your pkg/middleware predates the session-cookie channel, so its auth
+// interceptor reads only the Authorization header and every RPC after
+// sign-in answers 401. Declare this name there and read it (`forge upgrade
+// list` names the playbook), then point this constant at it.
+const SessionCookieName = "{{.Name}}_session"
+
+// SecureSessionCookieName: see the note above; there is no prefixed name to
+// read until pkg/middleware reads the cookie at all.
+const SecureSessionCookieName = SessionCookieName
+{{- end}}
+
+// sessionCookie is the session cookie's name as this deployment sets it:
+// __Host- prefixed wherever it is Secure, so it is host-only and no sibling
+// site can set one the browser would send here.
+func (b *loginBroker) sessionCookie() string {
+	if b.secureCookie {
+		return SecureSessionCookieName
+	}
+	return SessionCookieName
+}
+
+// RegisterLoginBroker mounts the native sign-in API.
+func RegisterLoginBroker(appMux *http.ServeMux, cfg *config.{{or .ConfigType "Config"}}, logger *slog.Logger) {
+	// ── Every route below refuses a cross-site request ───────────────────
+	//
+	// A page on another site can POST to these routes from the victim's
+	// browser — as text/plain, which needs no CORS preflight — and create an
+	// account, request mail, or sign the browser into the attacker's
+	// account. devidp.GuardMux mounts each handler behind net/http's
+	// CrossOriginProtection (Sec-Fetch-Site, else Origin against Host),
+	// trusting this app's own public origin (from idp_login_uri) for a
+	// frontend served from another origin than this API. Mount new auth
+	// routes through `mux` too.
+	mux := devidp.GuardMux(appMux, appBaseFrom(cfg.IdpLoginUri))
+	// ── Which sign-in methods and sign-up mode: the LOGIN_POLICY ─────────
+	//
+	// Delivered by the identity converge into idp_login_policy. ABSENT is
+	// the legacy policy, today's exact behaviour: password only, sign-up as
+	// development and auth_self_signup decide. PRESENT, it is the only
+	// source. PRESENT BUT UNUSABLE (malformed, a version this forge does not
+	// know, or methods this broker cannot serve) fails CLOSED, logged at
+	// ERROR: password sign-in only, NO sign-up, and a verified address for
+	// every session, whatever development and auth_self_signup say. What the
+	// document restricted is unknown, so nothing it might have restricted is
+	// opened.
+{{- if .LoginPolicyField}}
+	policy, policyErr := devidp.ParseLoginPolicy(cfg.IdpLoginPolicy)
+	if policyErr != nil {
+		logger.Error("idp_login_policy is unusable; sign-up is OFF and every session needs a verified address until it is fixed", "error", policyErr)
+	}
+{{- else}}
+	//
+	// Your config declares no idp_login_policy, so this broker always
+	// serves the legacy policy. Declare `string idp_login_policy` (sensitive)
+	// on it and parse it here with devidp.ParseLoginPolicy — `forge upgrade
+	// list` names the identity-v2 playbook.
+	policy := devidp.LegacyLoginPolicy()
+{{- end}}
+
+	broker := &loginBroker{
+		client: &devidp.Client{
+			Base: cfg.IdpBase,
+			Host: cfg.IdpHost,
+			// The file wins while it yields a token, and is re-read on use,
+			// so a control plane can rotate the credential without a
+			// restart; idp_broker_token is the fallback.
+			Token:     cfg.IdpBrokerToken,
+			TokenFile: cfg.IdpBrokerTokenFile,
+		},
+		flow: devidp.FlowConfig{
+			ClientID:    cfg.OidcClientId,
+			RedirectURI: cfg.OidcRedirectUri,
+			// No session for an unverified address, when the policy says so
+			// or when a delivered policy could not be read.
+			RequireVerifiedEmail: policy.RequireVerifiedEmail{{if .LoginPolicyField}} || policyErr != nil{{end}},
+		},
+		policy: policy,
+		logger: logger,
+{{- if .TrustedProxyHopsField}}
+		// Rate limits key on the client address the outermost trusted
+		// proxy saw (trusted_proxy_hops; 0 is the connection's peer).
+		proxyHops: int(cfg.TrustedProxyHops),
+{{- end}}
+		// Marks a new account's address verified without a mail round trip.
+		// A dev stack has no mail server, so an unverified address strands
+		// the account behind a step nothing can deliver.
+		devMode: cfg.Environment == "development",
+		// Public sign-up: on in local development, OFF in every deployed
+		// environment unless its config opts in. See the RegisterPath mount
+		// below before turning it on.
+{{- if .SelfSignupField}}
+		legacySelfSignup: cfg.Environment == "development" || cfg.AuthSelfSignup,
+{{- else}}
+		//
+		// Your config declares no auth_self_signup, so sign-up is
+		// development-only. To let a deployed environment opt in, declare
+		// `bool auth_self_signup` on it and OR its value in here.
+		legacySelfSignup: cfg.Environment == "development",
+{{- end}}
+		// Secure cookies everywhere except local development, where the
+		// dev server is plain http and a Secure cookie would be dropped.
+		secureCookie: cfg.Environment != "development",
+		appBase:      appBaseFrom(cfg.IdpLoginUri),
+
+		forgotByAddress: newAttemptLimiter(3, time.Hour),
+		forgotByIP:      newAttemptLimiter(10, time.Hour),
+		resetByUser:     newAttemptLimiter(5, time.Hour),
+	}
+	// With a policy, it alone decides sign-up (open or domain, and only
+	// where the form can end in a session). An unusable one allows none.
+	broker.selfSignup = broker.legacySelfSignup
+{{- if .LoginPolicyField}}
+	if policyErr != nil {
+		broker.selfSignup = false
+	}
+{{- end}}
+	if policy.Present {
+		broker.selfSignup = policy.RegisterServed()
+{{- if .SelfSignupField}}
+		if cfg.AuthSelfSignup {
+			logger.Warn("auth_self_signup is ignored: idp_login_policy decides sign-up (forge.ManagedIdentity.signup)")
+		}
+{{- end}}
+	}
+	broker.mountSignInMethods(mux, cfg)
+	mux.Handle(LoginPath, http.HandlerFunc(broker.handleLogin))
+	mux.Handle(LogoutPath, http.HandlerFunc(broker.handleLogout))
+	mux.Handle(SessionPath, http.HandlerFunc(broker.handleSession))
+	// What a password must contain, so the sign-up and reset forms can say
+	// so BEFORE the person types one. Public by design — see handlePasswordPolicy.
+	mux.Handle(PasswordPolicyPath, http.HandlerFunc(broker.handlePasswordPolicy))
+
+	// ── Sign-up: OFF OUTSIDE DEVELOPMENT UNLESS auth_self_signup ──────────
+	//
+	// With RegisterPath mounted, anyone who can reach the app can create an
+	// account and is signed straight in — under an address they TYPED and
+	// nobody has proven they own (outside development the issuer records it
+	// unverified; see handleRegister). That is the right default for a
+	// product anyone may join, provided nothing in it trusts an address it
+	// did not see verified, and the wrong one for an invite-only product.
+	//
+	// BEFORE SETTING auth_self_signup: true, check every place the app binds
+	// something to a user BY EMAIL — an invitation, a tenant membership, a
+	// pre-created record. Each must first require the address verified
+	// (devidp.Client.FindUserByID(ctx, claims.Subject) → User.EmailVerified),
+	// or registering someone else's address claims whatever was waiting for
+	// them. `forge skill load auth/authorization` has the check.
+	//
+	// `forge lint` warns about a broker that mounts RegisterPath without a
+	// condition. GET /auth/options tells the sign-in screen whether to offer
+	// "Create an account", so the screen follows this one switch.
+	//
+	// INVITE-ONLY IS THEREFORE THE DEPLOYED DEFAULT. The issuer still creates
+	// accounts — the control plane's invitation action and the identity's
+	// declared owners do — just not from a public form.
+	//
+	// WITH A LOGIN_POLICY (forge.ManagedIdentity.signup / methods), the
+	// policy decides instead: `signup = "open"` or `"domain"` serves this
+	// route, which then creates the account UNVERIFIED, mails a verification
+	// link and issues no session until the address is proven; invitations
+	// arrive by mail and land on /auth/invite (InviteAcceptPath).
+	//
+	// Under the legacy policy an invitation does not email anyone unless
+	// the environment's identity declares `smtp` (forge.ManagedIdentity.smtp)
+	// or the platform delivers its mail. To hand one over yourself, create
+	// the account (`forge cloud identity invite`), give the person a code
+	// from devidp.MintPasswordResetCode and send them
+	// <your app>/auth/reset?userID=<id>&code=<code> by a channel you control.
+	// `forge skill load deploy/managed-identity` has the sketch.
+	if broker.selfSignup {
+		mux.Handle(RegisterPath, http.HandlerFunc(broker.handleRegister))
+	}
+	// Which optional routes and sign-in methods this deployment serves.
+	// Public by design — see handleOptions.
+	mux.Handle(OptionsPath, http.HandlerFunc(broker.handleOptions))
+
+	// ── Self-serve password reset ─────────────────────────────────────────
+	//
+	// /auth/forgot asks the issuer to EMAIL the person a link to /auth/reset;
+	// /auth/reset redeems the code in that link. Delete both lines (and the
+	// forgot/reset pages) for an app that never lets people reset their own
+	// password.
+	//
+	// WHETHER THAT EMAIL ARRIVES IS NOT UP TO THIS FILE. The issuer sends
+	// mail only when its instance has an SMTP provider, and a customer
+	// instance has none unless the environment declares `smtp`
+	// (forge.ManagedIdentity.smtp). Without it /auth/forgot succeeds, says so
+	// truthfully ("if that address has an account…"), and nothing is
+	// delivered — the issuer has no way to tell this handler. See
+	// handleForgot for delivering the code another way.
+	mux.Handle(ForgotPath, http.HandlerFunc(broker.handleForgot))
+	mux.Handle(ResetPath, http.HandlerFunc(broker.handleReset))
+}
+
+type loginBroker struct {
+	client       *devidp.Client
+	flow         devidp.FlowConfig
+	logger       *slog.Logger
+	devMode      bool
+	secureCookie bool
+	// selfSignup is whether RegisterPath is served at all: the policy's
+	// signup mode when a policy is present, else legacySelfSignup
+	// (development, or auth_self_signup).
+	selfSignup       bool
+	legacySelfSignup bool
+
+	// policy is the LOGIN_POLICY in force (legacy when none was delivered),
+	// and methods the handlers for what it turns on; nil under the legacy
+	// policy.
+	policy  devidp.LoginPolicy
+	methods *devidp.SignInRoutes
+
+	// proxyHops is how many trusted reverse proxies append to
+	// X-Forwarded-For (devidp.ClientIP). 0 keys rate limits on the
+	// connection's peer, which behind a proxy makes every per-IP budget a
+	// global one: safe, if blunt.
+	proxyHops int
+
+	// appBase is the app's public origin plus any base path, with no trailing
+	// slash — the prefix of every link this app emails. Derived from
+	// idp_login_uri (the converged "<app>/auth/sign-in"), never from a request
+	// header: a Host or Origin the caller controls would let anyone mail a
+	// victim a reset link that lands on a site they own.
+	appBase string
+
+	passwordRules policyCache
+
+	// identities caches who each session is, for GET /auth/session (see
+	// sessionIdentity).
+	identities identityCache
+
+	// Reset-flow limits. In process: with N replicas the budgets are N times
+	// larger, which is still small (see attemptLimiter).
+	forgotByAddress *attemptLimiter
+	forgotByIP      *attemptLimiter
+	resetByUser     *attemptLimiter
+}
+
+// credentials is what the sign-in form posts.
+//
+// EXPLICIT FIELDS, not a passthrough map. This struct is the reason a
+// caller cannot choose which factors get checked — see the file header.
+type credentials struct {
+	Email    string `json:"email"`
+	Password string `json:"password"`
+	// TOTP is optional, and only meaningful for an account with TOTP
+	// enrolled. It ADDS to the password check rather than replacing it.
+	TOTP string `json:"totp,omitempty"`
+}
+
+// registration is what the sign-up form posts. Names are optional: the
+// issuer needs something for its required profile fields, and asking for a
+// surname before someone has signed up is a question most products do not
+// want on that form.
+type registration struct {
+	Email      string `json:"email"`
+	Password   string `json:"password"`
+	GivenName  string `json:"givenName,omitempty"`
+	FamilyName string `json:"familyName,omitempty"`
+}
+
+// mountSignInMethods mounts the routes the LOGIN_POLICY turns on, each only
+// when it is offered: a declaration this broker did not converge is never
+// half-served. Under the legacy policy it mounts nothing.
+//
+// Drop a line to stop serving a method; wrap a handler to add to it. The
+// handlers follow one rule worth keeping if you replace one: every privileged
+// call follows a proof (an emailed code, a passkey assertion, a provider
+// intent, a validated session) for the same user in the same request.
+func (b *loginBroker) mountSignInMethods(mux *devidp.GuardedMux, cfg *config.{{or .ConfigType "Config"}}) {
+	if !b.policy.Present {
+		return
+	}
+	methods, err := devidp.NewSignInRoutes(devidp.SignInRoutesConfig{
+		Client:  b.client,
+		Flow:    b.flow,
+		Policy:  b.policy,
+		AppBase: b.appBase,
+{{- if .AudienceField}}
+		// The identity project, which a signup_role is granted on.
+		ProjectID: cfg.JwtAudience,
+{{- end}}
+		CookiePrefix:     "{{.Name}}",
+		SecureCookie:     b.secureCookie,
+		Logger:           b.logger,
+		TrustedProxyHops: b.proxyHops,
+		SignedIn: func(w http.ResponseWriter, tokens devidp.Tokens) any {
+			b.setSession(w, tokens)
+			return identityFrom(tokens.IDToken)
+		},
+		SessionToken: func(r *http.Request) string {
+			if c, err := r.Cookie(b.sessionCookie()); err == nil {
+				return c.Value
+			}
+			return ""
+		},
+		PasswordPolicy: b.passwordPolicy,
+		RejectPassword: b.writePasswordRejection,
+	})
+	if err != nil {
+		// Fail CLOSED rather than serve half a policy: password sign-in
+		// only, no sign-up, and the verified-email gate kept on. Never the
+		// legacy switches — they would open sign-up an invite-only policy
+		// closed, and drop the gate a verified-email policy set.
+		b.logger.Error("the LOGIN_POLICY sign-in methods are OFF: sign-up is OFF and every session needs a verified address until the policy is fixed", "error", err)
+		b.policy, b.selfSignup = devidp.LegacyLoginPolicy(), false
+		b.flow.RequireVerifiedEmail = true
+		return
+	}
+	b.methods = methods
+	if b.policy.Offers(devidp.MethodPasskey) {
+		mux.Handle(PasskeyBeginPath, http.HandlerFunc(methods.HandlePasskeyBegin))
+		mux.Handle(PasskeyFinishPath, http.HandlerFunc(methods.HandlePasskeyFinish))
+		mux.Handle(PasskeyRegisterBeginPath, http.HandlerFunc(methods.HandlePasskeyRegisterBegin))
+		mux.Handle(PasskeyRegisterFinishPath, http.HandlerFunc(methods.HandlePasskeyRegisterFinish))
+		mux.Handle(PasskeysPath, http.HandlerFunc(methods.HandlePasskeys))
+	}
+	if b.policy.Offers(devidp.MethodMagicLink) {
+		mux.Handle(MagicRequestPath, http.HandlerFunc(methods.HandleMagicRequest))
+		mux.Handle(MagicConsumePath, http.HandlerFunc(methods.HandleMagicConsume))
+	}
+	if len(b.policy.Social) > 0 {
+		mux.Handle(SocialStartPath, http.HandlerFunc(methods.HandleSocialStart))
+		mux.Handle(SocialCallbackPath, http.HandlerFunc(methods.HandleSocialCallback))
+	}
+	// Invitations (owners, declared members, `forge cloud identity invite`)
+	// and address verification work under every signup mode.
+	mux.Handle(InviteAcceptPath, http.HandlerFunc(methods.HandleInviteAccept))
+	mux.Handle(VerifyPath, http.HandlerFunc(methods.HandleVerify))
+	mux.Handle(VerifyResendPath, http.HandlerFunc(methods.HandleVerifyResend))
+}
+
+// identity is the ONLY thing the browser learns about the session: who is
+// signed in, for rendering. Never a token.
+//
+// Name is the best display name the issuer has: `name`, else given and
+// family name, else `preferred_username` when it is not just the address
+// again. Picture is the `picture` claim, http(s) only. The header's user
+// menu renders Name and Email and falls back to Subject only when both are
+// empty.
+type identity struct {
+	Authenticated bool   `json:"authenticated"`
+	Email         string `json:"email,omitempty"`
+	Name          string `json:"name,omitempty"`
+	Picture       string `json:"picture,omitempty"`
+	Subject       string `json:"subject,omitempty"`
+}
+
+func (b *loginBroker) handleLogin(w http.ResponseWriter, r *http.Request) {
+	var req credentials
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 8<<10)).Decode(&req); err != nil {
+		writeAuthError(w, http.StatusBadRequest, "malformed request")
+		return
+	}
+	// A LOGIN_POLICY that does not offer passwords refuses them here, not
+	// only in the UI: an account that has a password must not sign in with
+	// the method the policy excluded. The legacy policy offers passwords.
+	if b.refusePassword(w) {
+		return
+	}
+
+	tokens, err := b.client.SignIn(r.Context(), b.flow, devidp.Credentials{
+		LoginName: strings.TrimSpace(req.Email),
+		Password:  req.Password,
+		TOTP:      strings.TrimSpace(req.TOTP),
+	})
+	if errors.Is(err, devidp.ErrEmailUnverified) {
+		// The password was RIGHT, so saying so leaks nothing: only someone
+		// holding it gets here. The screen offers to resend the link.
+		writeAuthJSON(w, http.StatusForbidden, map[string]string{
+			"error": "Confirm your email address first: use the link we sent, or ask for a new one.",
+			"code":  "email_unverified",
+		})
+		return
+	}
+	if err != nil {
+		// The issuer's message names precisely what it rejected — a bad
+		// password, a locked account, a missing second factor — and is
+		// logged in full. The BROWSER gets a generic answer: a login form
+		// that distinguishes "no such user" from "wrong password" is a
+		// user-enumeration oracle.
+		b.logger.WarnContext(r.Context(), "sign-in rejected", "email", req.Email, "error", err)
+		writeAuthError(w, http.StatusUnauthorized, "Those credentials were not accepted.")
+		return
+	}
+
+	b.setSession(w, tokens)
+	writeAuthJSON(w, http.StatusOK, identityFrom(tokens.IDToken))
+}
+
+// refusePassword answers 403 method_not_offered, and reports true, when the
+// LOGIN_POLICY in force excludes passwords. Every route that authenticates
+// with a password, or sets one, calls it: /auth/login, and /auth/forgot and
+// /auth/reset, whose reset signs the person in with the password it just set.
+// Guarding only /auth/login would leave reset as a password sign-in the
+// policy excluded. The legacy policy offers passwords.
+func (b *loginBroker) refusePassword(w http.ResponseWriter) bool {
+	if !b.policy.Present || b.policy.Offers(devidp.MethodPassword) {
+		return false
+	}
+	writeAuthJSON(w, http.StatusForbidden, map[string]string{
+		"error": "That sign-in method is not offered here.",
+		"code":  devidp.CodeMethodNotOffered,
+	})
+	return true
+}
+
+// handleOptions reports which optional sign-in routes are served, so the
+// screen offers only what will work rather than a button that answers 404.
+//
+// UNAUTHENTICATED, like the password policy: whether sign-up is open is
+// something anyone could learn by trying it.
+//
+// It also lists the sign-in methods, social buttons and whether mail is
+// delivered, so the screen offers passkeys, "email me a link" and "continue
+// with Google" only where they work.
+func (b *loginBroker) handleOptions(w http.ResponseWriter, _ *http.Request) {
+	opts := devidp.OptionsFor(b.policy, b.selfSignup)
+	opts.SelfSignup = b.selfSignup
+	writeAuthJSON(w, http.StatusOK, opts)
+}
+
+// handleRegister creates an account and signs it in. Mounted only when
+// selfSignup is set — see RegisterLoginBroker.
+//
+// The new address is UNVERIFIED outside development: the person typed it,
+// and nothing has proven it is theirs. The session this hands back is
+// therefore proof of a password, not of an address.
+//
+// Under a LOGIN_POLICY (open or domain sign-up) the policy's handler answers
+// instead: the account is created unverified, a verification link is mailed,
+// and NO session is issued until the address is proven.
+func (b *loginBroker) handleRegister(w http.ResponseWriter, r *http.Request) {
+	if b.methods != nil {
+		b.methods.HandleRegister(w, r)
+		return
+	}
+	var req registration
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 8<<10)).Decode(&req); err != nil {
+		writeAuthError(w, http.StatusBadRequest, "malformed request")
+		return
+	}
+
+	tokens, err := b.client.SignUp(r.Context(), b.flow, devidp.Registration{
+		Email:         strings.TrimSpace(req.Email),
+		Password:      req.Password,
+		GivenName:     req.GivenName,
+		FamilyName:    req.FamilyName,
+		EmailVerified: b.devMode,
+	})
+	if err != nil {
+		// Unlike sign-in, the reason IS surfaced: "that address is already
+		// registered" and "the password needs a symbol" are things the
+		// person filling in the form must read to fix it, and neither
+		// leaks anything a sign-up form does not already reveal by
+		// accepting or rejecting the address.
+		b.logger.WarnContext(r.Context(), "registration rejected", "email", req.Email, "error", err)
+		var policyErr *devidp.PasswordPolicyError
+		if errors.As(err, &policyErr) {
+			b.writePasswordRejection(r.Context(), w, req.Password, policyErr)
+			return
+		}
+		writeAuthError(w, http.StatusBadRequest, registrationMessage(err))
+		return
+	}
+	b.logger.InfoContext(r.Context(), "account created", "email", req.Email)
+
+	b.setSession(w, tokens)
+	writeAuthJSON(w, http.StatusOK, identityFrom(tokens.IDToken))
+}
+
+// handleSession reports whether this browser has a session, for rendering.
+//
+// It exists so the app can decide what to show without reading a cookie it
+// deliberately cannot read. The answer is an identity, never a token.
+func (b *loginBroker) handleSession(w http.ResponseWriter, r *http.Request) {
+	cookie, err := r.Cookie(b.sessionCookie())
+	if err != nil || cookie.Value == "" {
+		writeAuthJSON(w, http.StatusOK, identity{Authenticated: false})
+		return
+	}
+	writeAuthJSON(w, http.StatusOK, b.sessionIdentity(r.Context(), cookie.Value))
+}
+
+// sessionIdentity is who the session's access token belongs to, with the
+// name and address filled from the issuer's userinfo endpoint when the token
+// does not carry them.
+//
+// ── Why the lookup ─────────────────────────────────────────────────────
+//
+// The cookie holds the ACCESS token, and Zitadel's access tokens carry a
+// subject, an audience and roles but no `email` or `name`: those are profile
+// claims, served at userinfo. Decoding the cookie alone gives the UI nothing
+// but a numeric subject id to show.
+//
+// ── Why it is safe ─────────────────────────────────────────────────────
+//
+// Userinfo is asked WITH the token, so the issuer validates it and answers
+// for the token's own holder; a forged or expired cookie gets an error and
+// keeps the decoded claims it brought, exactly what it got before. The answer
+// is cached under a hash of the whole token, never under the subject, so a
+// forged token naming someone else's subject never reads their entry. A
+// failed lookup is remembered for identityRetry, so an unreachable issuer
+// costs one request per session per interval, not one per page load.
+func (b *loginBroker) sessionIdentity(ctx context.Context, token string) identity {
+	claims, ok := presentationClaimsFrom(token)
+	if !ok {
+		return identity{Authenticated: false}
+	}
+	id := claims.identity()
+	if id.Email != "" && id.Name != "" {
+		return id
+	}
+	now := time.Now()
+	expires := now.Add(identityTTL)
+	if claims.Exp > 0 {
+		exp := time.Unix(claims.Exp, 0)
+		if !now.Before(exp) {
+			// Expired: the next RPC is a 401 whatever this says.
+			return id
+		}
+		if exp.Before(expires) {
+			expires = exp
+		}
+	}
+	key := sha256.Sum256([]byte(token))
+	if cached, ok := b.identities.get(key, now); ok {
+		return cached
+	}
+
+	lookupCtx, cancel := context.WithTimeout(ctx, identityLookupTimeout)
+	defer cancel()
+	info, err := b.client.UserInfo(lookupCtx, token)
+	if err == nil && info.Subject != claims.Sub {
+		err = errors.New("userinfo answered for a different subject")
+	}
+	if err != nil {
+		b.logger.DebugContext(ctx, "userinfo lookup failed; the session shows the token's own claims", "error", err)
+		b.identities.put(key, id, now.Add(identityRetry))
+		return id
+	}
+	id = presentationClaims{
+		Sub:               claims.Sub,
+		Email:             firstNonEmpty(claims.Email, info.Email),
+		Name:              firstNonEmpty(claims.Name, info.Name),
+		GivenName:         firstNonEmpty(claims.GivenName, info.GivenName),
+		FamilyName:        firstNonEmpty(claims.FamilyName, info.FamilyName),
+		PreferredUsername: firstNonEmpty(claims.PreferredUsername, info.PreferredUsername),
+		Picture:           firstNonEmpty(claims.Picture, info.Picture),
+	}.identity()
+	b.identities.put(key, id, expires)
+	return id
+}
+
+const (
+	// identityTTL is how long a session's userinfo answer is reused: a
+	// renamed account shows its new name within this long.
+	identityTTL = 5 * time.Minute
+	// identityRetry is how long a failed lookup is remembered.
+	identityRetry = 30 * time.Second
+	// identityLookupTimeout bounds one userinfo request.
+	identityLookupTimeout = 3 * time.Second
+	// identityMaxEntries bounds the cache; past it the cache starts over.
+	identityMaxEntries = 10000
+)
+
+// identityCache holds userinfo answers, keyed by a hash of the access token.
+type identityCache struct {
+	mu      sync.Mutex
+	entries map[[sha256.Size]byte]identityEntry
+}
+
+type identityEntry struct {
+	id      identity
+	expires time.Time
+}
+
+func (c *identityCache) get(key [sha256.Size]byte, now time.Time) (identity, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	e, ok := c.entries[key]
+	if !ok || !now.Before(e.expires) {
+		return identity{}, false
+	}
+	return e.id, true
+}
+
+func (c *identityCache) put(key [sha256.Size]byte, id identity, expires time.Time) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.entries == nil || len(c.entries) >= identityMaxEntries {
+		c.entries = map[[sha256.Size]byte]identityEntry{}
+	}
+	c.entries[key] = identityEntry{id: id, expires: expires}
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, v := range values {
+		if v = strings.TrimSpace(v); v != "" {
+			return v
+		}
+	}
+	return ""
+}
+
+func (b *loginBroker) handleLogout(w http.ResponseWriter, _ *http.Request) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     b.sessionCookie(),
+		Value:    "",
+		Path:     "/",
+		MaxAge:   -1,
+		HttpOnly: true,
+		Secure:   b.secureCookie,
+		SameSite: http.SameSiteLaxMode,
+	})
+	writeAuthJSON(w, http.StatusOK, identity{Authenticated: false})
+}
+
+// setSession stores the access token in an HttpOnly cookie.
+//
+// SCAFFOLD-GRADE ON PURPOSE, and worth understanding before shipping: the
+// access token IS the cookie here, which keeps this file short and
+// stateless. It means the cookie expires exactly when the token does, and
+// that the refresh token is discarded rather than used.
+//
+// For a longer-lived product, keep a server-side session store keyed by an
+// opaque id, put the ID in this cookie, and hold both tokens there — then
+// a refresh renews the session without the user noticing, and revoking a
+// session is a delete rather than a wait.
+func (b *loginBroker) setSession(w http.ResponseWriter, tokens devidp.Tokens) {
+	maxAge := tokens.ExpiresIn
+	if maxAge <= 0 {
+		maxAge = int(time.Hour.Seconds())
+	}
+	http.SetCookie(w, &http.Cookie{
+		// Host-only: no Domain, ever, so the cookie goes to this host
+		// alone; __Host- prefixed when Secure (sessionCookie).
+		Name:  b.sessionCookie(),
+		Value: tokens.AccessToken,
+		Path:  "/",
+		// HttpOnly is the whole point — see SessionCookieName.
+		HttpOnly: true,
+		Secure:   b.secureCookie,
+		// Lax, not Strict: Strict withholds the cookie on a top-level
+		// navigation FROM another site, so following a link into the app
+		// would show a signed-out page to a signed-in user.
+		SameSite: http.SameSiteLaxMode,
+		MaxAge:   maxAge,
+	})
+}
+
+// identityFrom decodes the claims a UI needs from a JWT.
+//
+// PRESENTATION ONLY, and NOT signature-verified here. That is safe because
+// this value decides what to SHOW, never what is ALLOWED: every RPC still
+// validates the same token's signature against the issuer's JWKS. The
+// token was also just received from the issuer over TLS by this process,
+// not supplied by a caller.
+func identityFrom(token string) identity {
+	claims, ok := presentationClaimsFrom(token)
+	if !ok {
+		return identity{Authenticated: false}
+	}
+	return claims.identity()
+}
+
+// presentationClaims are the claims an identity is built from, as a JWT or
+// the userinfo endpoint spells them.
+type presentationClaims struct {
+	Sub               string `json:"sub"`
+	Email             string `json:"email"`
+	Name              string `json:"name"`
+	GivenName         string `json:"given_name"`
+	FamilyName        string `json:"family_name"`
+	PreferredUsername string `json:"preferred_username"`
+	Picture           string `json:"picture"`
+	Exp               int64  `json:"exp"`
+}
+
+// presentationClaimsFrom decodes a JWT's claims WITHOUT verifying it — see
+// identityFrom for why that is safe here.
+func presentationClaimsFrom(token string) (presentationClaims, bool) {
+	parts := strings.Split(token, ".")
+	if len(parts) < 2 {
+		return presentationClaims{}, false
+	}
+	raw, err := decodeSegment(parts[1])
+	if err != nil {
+		return presentationClaims{}, false
+	}
+	var claims presentationClaims
+	if err := json.Unmarshal(raw, &claims); err != nil {
+		return presentationClaims{}, false
+	}
+	return claims, true
+}
+
+func (c presentationClaims) identity() identity {
+	email := strings.TrimSpace(c.Email)
+	name := firstNonEmpty(c.Name, strings.TrimSpace(c.GivenName)+" "+strings.TrimSpace(c.FamilyName))
+	if name == "" && !strings.EqualFold(strings.TrimSpace(c.PreferredUsername), email) {
+		// Zitadel's preferred_username is the login name, usually the
+		// address itself; only a different one is worth showing as a name.
+		name = strings.TrimSpace(c.PreferredUsername)
+	}
+	return identity{
+		Authenticated: true,
+		Email:         email,
+		Name:          name,
+		Picture:       pictureURL(c.Picture),
+		Subject:       c.Sub,
+	}
+}
+
+// pictureURL keeps a `picture` claim only when it is an absolute http(s) URL:
+// it lands in an <img src>, and nothing else belongs there.
+func pictureURL(raw string) string {
+	u, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" {
+		return ""
+	}
+	return u.String()
+}
+
+func writeAuthJSON(w http.ResponseWriter, status int, body any) {
+	w.Header().Set("Content-Type", "application/json")
+	// No caching, ever: these responses describe a session.
+	w.Header().Set("Cache-Control", "no-store")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(body)
+}
+
+func writeAuthError(w http.ResponseWriter, status int, message string) {
+	writeAuthJSON(w, status, map[string]string{"error": message})
+}
+
+// registrationMessage turns a non-password rejection into something a person
+// can act on. A rejected PASSWORD never reaches here: the caller answers it
+// with writePasswordRejection, which names the unmet rules.
+func registrationMessage(err error) string {
+	msg := err.Error()
+	switch {
+	case strings.Contains(msg, "already exists"), strings.Contains(msg, "AlreadyExists"):
+		return "That email address is already registered."
+	default:
+		return "That account could not be created."
+	}
+}
+
+// passwordRejection is the body of a 400 caused by the password alone.
+//
+// `unmet` is the machine-readable half the forms render as a checklist;
+// `error` is the same thing as a sentence for a client that only reads that.
+// Both come from the ISSUER's policy, which stays the authority — the
+// browser's own checks while typing are guidance.
+type passwordRejection struct {
+	Error string                `json:"error"`
+	Code  string                `json:"code"`
+	Unmet []devidp.PasswordRule `json:"unmet"`
+	Rules devidp.PasswordPolicy `json:"policy"`
+}
+
+// writePasswordRejection answers a password the issuer refused, naming every
+// rule it breaks.
+//
+// The issuer reports only the FIRST broken rule ("Password is too short"). The
+// policy is read and evaluated here so the person learns all of them at once,
+// rather than fixing one and meeting the next. If the policy cannot be read,
+// or the password breaks none of the rules this file knows (a rule a newer
+// issuer added), the issuer's own reason is the answer: still specific, just
+// not a checklist.
+func (b *loginBroker) writePasswordRejection(ctx context.Context, w http.ResponseWriter, password string, rejected *devidp.PasswordPolicyError) {
+	policy, perr := b.passwordPolicy(ctx)
+	var unmet []devidp.PasswordRule
+	if perr == nil {
+		unmet = policy.Unmet(password)
+	}
+	if len(unmet) == 0 && rejected.Rule != "" {
+		unmet = []devidp.PasswordRule{rejected.Rule}
+	}
+
+	message := "That password was not accepted: " + rejected.Reason + "."
+	if perr == nil && len(unmet) > 0 {
+		message = "That password needs " + policy.Describe(unmet) + "."
+	}
+	writeAuthJSON(w, http.StatusBadRequest, passwordRejection{
+		Error: message, Code: "password_policy", Unmet: unmet, Rules: policy,
+	})
+}
+
+// ── Password policy ────────────────────────────────────────────────────
+
+// policyTTL is how long the issuer's password policy is reused. Short enough
+// that an operator changing the policy is reflected within a minute, long
+// enough that a public, unauthenticated endpoint cannot be turned into a
+// stream of calls to the issuer.
+const policyTTL = time.Minute
+
+// policyCache holds the last policy read and when it expires. A failed read
+// is not cached, so the next request retries. An issuer that does not serve
+// its policy at all (unavailable) is cached like a policy: asking again within
+// the minute would get the same 404.
+type policyCache struct {
+	mu          sync.Mutex
+	policy      devidp.PasswordPolicy
+	unavailable bool
+	expires     time.Time
+}
+
+// passwordPolicy returns the issuer's password-complexity policy, cached for
+// policyTTL. Concurrent callers on a cold cache each wait on the one lock
+// rather than each calling the issuer.
+//
+// The LOGIN_POLICY's password rules come first: a hosted instance's gateway
+// does not route the Settings API, and the delivered document carries the
+// rules as last converged. Without them the Settings API is asked (the dev
+// IdP serves it), and without that the answer is "unavailable" (204).
+func (b *loginBroker) passwordPolicy(ctx context.Context) (devidp.PasswordPolicy, error) {
+	if p, ok := b.policy.PasswordPolicy(); ok {
+		return p, nil
+	}
+	b.passwordRules.mu.Lock()
+	defer b.passwordRules.mu.Unlock()
+	if time.Now().Before(b.passwordRules.expires) {
+		if b.passwordRules.unavailable {
+			return devidp.PasswordPolicy{}, devidp.ErrPasswordPolicyUnavailable
+		}
+		return b.passwordRules.policy, nil
+	}
+	p, err := b.client.PasswordPolicy(ctx)
+	if errors.Is(err, devidp.ErrPasswordPolicyUnavailable) {
+		b.passwordRules.policy, b.passwordRules.unavailable, b.passwordRules.expires = devidp.PasswordPolicy{}, true, time.Now().Add(policyTTL)
+		return devidp.PasswordPolicy{}, err
+	}
+	if err != nil {
+		return devidp.PasswordPolicy{}, err
+	}
+	b.passwordRules.policy, b.passwordRules.unavailable, b.passwordRules.expires = p, false, time.Now().Add(policyTTL)
+	return p, nil
+}
+
+// handlePasswordPolicy serves what a password must contain.
+//
+// UNAUTHENTICATED, because the sign-up form needs it before anyone has an
+// account. It discloses nothing a failed sign-up would not: the same rules
+// come back in the rejection. It is cacheable by the browser for the length of
+// the server's own cache, and it is GUIDANCE — the issuer enforces the policy
+// when the password is set.
+//
+// 204 means "no checklist": the issuer does not serve its policy (a hosted
+// identity instance's gateway routes only the sign-in APIs and answers 404 for
+// the Settings API). That is how a hosted instance is built, not a fault, so it
+// logs at DEBUG; the forms work without the checklist and the issuer still
+// enforces its rules. A read that FAILED is a 502, logged as a warning: the
+// forms still work, so nothing is broken for the person signing up.
+func (b *loginBroker) handlePasswordPolicy(w http.ResponseWriter, r *http.Request) {
+	policy, err := b.passwordPolicy(r.Context())
+	switch {
+	case errors.Is(err, devidp.ErrPasswordPolicyUnavailable):
+		b.logger.DebugContext(r.Context(), "password policy not served by the identity provider; no checklist", "error", err)
+		w.Header().Set("Cache-Control", fmt.Sprintf("public, max-age=%d", int(policyTTL.Seconds())))
+		w.WriteHeader(http.StatusNoContent)
+		return
+	case err != nil:
+		b.logger.WarnContext(r.Context(), "password policy could not be read", "error", err)
+		writeAuthError(w, http.StatusBadGateway, "The password requirements could not be loaded right now.")
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", fmt.Sprintf("public, max-age=%d", int(policyTTL.Seconds())))
+	_ = json.NewEncoder(w).Encode(policy)
+}
+
+// ── Self-serve password reset ──────────────────────────────────────────
+
+// forgotRequest is what the "forgot password" form posts. Just an address.
+type forgotRequest struct {
+	Email string `json:"email"`
+}
+
+// resetRequest is what the reset form posts. Typed fields, never a forwarded
+// body: this is one dropped field away from "set anyone's password" — see
+// devidp.ResetPassword.
+type resetRequest struct {
+	UserID   string `json:"userID"`
+	Code     string `json:"code"`
+	Password string `json:"password"`
+}
+
+// What the browser is told after a reset request. The same sentence whether or
+// not the address has an account, and whether or not the issuer can mail: a
+// reset form that answers differently is an account-enumeration oracle.
+const (
+	forgotAccepted = "If that address has an account, a reset link is on its way."
+	forgotBusy     = "Too many reset requests. Please wait a while before trying again."
+
+	resetFieldsRequired = "A reset link, a code and a new password are all required."
+	resetCodeRejected   = "That reset link is not valid. Reset links are single-use and expire; request a new one."
+	resetTooMany        = "Too many attempts with that reset link. Please wait an hour, or request a new one."
+	resetUnavailable    = "The password could not be reset right now. Please try again."
+)
+
+// handleForgot requests a password-reset email.
+//
+// ── WHEN NO EMAIL ARRIVES ───────────────────────────────────────────────
+//
+// This asks the issuer to mail the link. The issuer mails only when its
+// instance has an SMTP provider, which a customer instance has only if the
+// environment declares `smtp` (forge.ManagedIdentity.smtp). Without it this
+// handler still answers "if that address has an account, a link is on its
+// way", because that is all it can truthfully say: the issuer accepts the
+// request and delivers nothing, and does not report that to the caller.
+//
+// To deliver the code WITHOUT the issuer's mail — your own mailer, an SMS, a
+// support console — replace the SendPasswordResetLink call below with
+//
+//	code, err := b.client.MintPasswordResetCode(ctx, user.ID)
+//	// …send b.appBase+"/auth/reset?userID="+user.ID+"&code="+code to the
+//	// ADDRESS ON FILE, through a channel only its owner can read.
+//
+// and NEVER put the code in this response. It is the credential: returning it
+// to whoever typed the address turns "forgot password" into "take over any
+// account". The rate limits below still apply, and still matter more: a
+// handler that mints codes on request lets anyone make the account owner's
+// inbox their problem.
+//
+// ── Limits ──────────────────────────────────────────────────────────────
+//
+// Per address AND per client IP, in process. The per-address budget stops one
+// person's inbox being flooded; the per-IP budget stops one client sweeping
+// addresses. Both are charged BEFORE the account lookup and whether or not the
+// address exists, so exhausting a budget tells a guesser nothing.
+func (b *loginBroker) handleForgot(w http.ResponseWriter, r *http.Request) {
+	// No password to reset under a policy that excludes them: the same
+	// answer for every address, so it says nothing about any account.
+	if b.refusePassword(w) {
+		return
+	}
+	var req forgotRequest
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 8<<10)).Decode(&req); err != nil {
+		writeAuthError(w, http.StatusBadRequest, "malformed request")
+		return
+	}
+	email := strings.ToLower(strings.TrimSpace(req.Email))
+	if email == "" || !strings.Contains(email, "@") {
+		writeAuthError(w, http.StatusBadRequest, "Enter the email address of your account.")
+		return
+	}
+
+	ctx := r.Context()
+	if !b.forgotByIP.reserve(devidp.ClientKey(r, b.proxyHops)) || !b.forgotByAddress.reserve(email) {
+		b.logger.WarnContext(ctx, "password reset request refused: rate limited")
+		writeAuthError(w, http.StatusTooManyRequests, forgotBusy)
+		return
+	}
+
+	// Everything past this point answers the same way. The address is never
+	// logged — it is personal data; the user id identifies an account that
+	// exists.
+	user, err := b.client.FindUserByEmail(ctx, email)
+	switch {
+	case errors.Is(err, devidp.ErrUserNotFound):
+		b.logger.InfoContext(ctx, "password reset requested for an address with no single account")
+	case err != nil:
+		b.logger.ErrorContext(ctx, "password reset: user lookup failed", "error", err)
+	default:
+		// The link points at THIS app's reset page. {{"{{"}}.UserID}}, {{"{{"}}.Code}} and
+		// {{"{{"}}.OrgID}} are the issuer's placeholders, filled when it sends.
+		template := ""
+		if b.appBase != "" {
+			template = b.appBase + "/auth/reset?userID={{"{{"}}.UserID}}&code={{"{{"}}.Code}}&orgID={{"{{"}}.OrgID}}"
+		}
+		if b.devMode {
+			// A dev stack has no mail server, so asking the issuer to send
+			// would deliver nothing and leave the flow untestable. Mint the
+			// code instead and put the link in THIS PROCESS'S LOG — never in
+			// the response. Production never takes this branch.
+			code, err := b.client.MintPasswordResetCode(ctx, user.ID)
+			if err != nil {
+				b.logger.ErrorContext(ctx, "password reset: could not mint a dev code", "user_id", user.ID, "error", err)
+			} else {
+				b.logger.InfoContext(ctx, "DEV ONLY: password reset link (no mail server in development)",
+					"user_id", user.ID, "link", fmt.Sprintf("%s/auth/reset?userID=%s&code=%s", b.appBase, user.ID, code))
+			}
+		} else if err := b.client.SendPasswordResetLink(ctx, user.ID, template); err != nil {
+			b.logger.ErrorContext(ctx, "password reset: the issuer refused the request", "user_id", user.ID, "error", err)
+		} else {
+			b.logger.InfoContext(ctx, "password reset link requested", "user_id", user.ID)
+		}
+	}
+	writeAuthJSON(w, http.StatusAccepted, map[string]string{"message": forgotAccepted})
+}
+
+// handleReset redeems a reset code for a new password and signs the person in.
+//
+// ── THE ONE THING NOT TO CHANGE CARELESSLY ──────────────────────────────
+//
+// The broker's credential can set ANY user's password with no code at all, so
+// this handler is one dropped field away from "set anyone's password":
+//
+//  1. An empty code is refused here, and again in devidp.ResetPassword,
+//     before any call reaches the issuer.
+//  2. The request is built from typed fields, never a forwarded body.
+//  3. The issuer never burns a code on failed guesses, so a six-character code
+//     is a brute-force target. resetByUser caps guesses per account; once
+//     spent, even the right code is refused until the window passes.
+//  4. A wrong, expired and used code are one indistinguishable answer.
+func (b *loginBroker) handleReset(w http.ResponseWriter, r *http.Request) {
+	// A reset sets a password and signs in with it, so a policy that
+	// excludes passwords refuses it before the code is judged or charged.
+	if b.refusePassword(w) {
+		return
+	}
+	var req resetRequest
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 8<<10)).Decode(&req); err != nil {
+		writeAuthError(w, http.StatusBadRequest, "malformed request")
+		return
+	}
+	userID := strings.TrimSpace(req.UserID)
+	code := strings.TrimSpace(req.Code)
+	if userID == "" || code == "" || req.Password == "" {
+		writeAuthError(w, http.StatusBadRequest, resetFieldsRequired)
+		return
+	}
+
+	ctx := r.Context()
+	if !b.resetByUser.reserve(userID) {
+		b.logger.WarnContext(ctx, "password reset refused: attempt budget spent", "user_id", userID)
+		writeAuthError(w, http.StatusTooManyRequests, resetTooMany)
+		return
+	}
+
+	err := b.client.ResetPassword(ctx, devidp.PasswordReset{UserID: userID, Code: code, NewPassword: req.Password})
+	var policyErr *devidp.PasswordPolicyError
+	switch {
+	case err == nil:
+		b.resetByUser.forget(userID)
+	case errors.As(err, &policyErr):
+		// The code was RIGHT — only the password was refused, and the code
+		// stays valid (verified). That attempt tested nothing an attacker
+		// could use, so it is handed back.
+		b.resetByUser.refund(userID)
+		b.writePasswordRejection(ctx, w, req.Password, policyErr)
+		return
+	case errors.Is(err, devidp.ErrInvalidResetCode):
+		b.logger.WarnContext(ctx, "password reset rejected: bad code", "user_id", userID, "error", err)
+		if b.resetByUser.spent(userID) {
+			writeAuthError(w, http.StatusTooManyRequests, resetTooMany)
+			return
+		}
+		writeAuthError(w, http.StatusUnauthorized, resetCodeRejected)
+		return
+	default:
+		// The issuer or the broker's credential failed; the code was never
+		// judged, so the attempt is not charged.
+		b.resetByUser.refund(userID)
+		b.logger.ErrorContext(ctx, "password reset failed at the issuer", "user_id", userID, "error", err)
+		writeAuthError(w, http.StatusBadGateway, resetUnavailable)
+		return
+	}
+	b.logger.InfoContext(ctx, "password reset", "user_id", userID)
+
+	// They just proved the code AND chose the password; retyping it is pure
+	// friction. If the follow-up sign-in fails the password is still set —
+	// say so with authenticated:false and let the form send them to sign in.
+	user, err := b.client.FindUserByID(ctx, userID)
+	if err == nil {
+		var tokens devidp.Tokens
+		tokens, err = b.client.SignIn(ctx, b.flow, devidp.Credentials{LoginName: user.LoginName, Password: req.Password})
+		if err == nil {
+			b.setSession(w, tokens)
+			writeAuthJSON(w, http.StatusOK, identityFrom(tokens.IDToken))
+			return
+		}
+	}
+	b.logger.WarnContext(ctx, "password reset: password set, but the follow-up sign-in failed", "user_id", userID, "error", err)
+	writeAuthJSON(w, http.StatusOK, identity{Authenticated: false})
+}
+
+// appBaseFrom derives the app's public origin (plus base path) from the
+// converged sign-in URI: "https://app.example.com/base/auth/sign-in" becomes
+// "https://app.example.com/base". Empty when it is not an absolute http(s)
+// URL, in which case the issuer's own default link is used.
+func appBaseFrom(loginURI string) string {
+	u, err := url.Parse(strings.TrimSpace(loginURI))
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+		return ""
+	}
+	path := strings.TrimSuffix(strings.TrimRight(u.Path, "/"), "/auth/sign-in")
+	return u.Scheme + "://" + u.Host + strings.TrimRight(path, "/")
+}
+
+
+// attemptLimiter is a fixed-window budget of attempts per key, in memory.
+//
+// IN MEMORY, PER PROCESS, and that is enough for what it guards: with N
+// replicas an attacker gets N times the budget per window, which against a
+// code space of billions is still negligible and against an inbox is a few
+// extra emails. A restart resets it the same way. A shared store would buy
+// precision nobody needs at the cost of a dependency on the sign-in path.
+//
+// Memory is bounded: an expired window is dropped whenever the table grows
+// past attemptLimiterMaxKeys, so an attacker typing endless addresses cannot
+// grow it without limit.
+type attemptLimiter struct {
+	mu      sync.Mutex
+	max     int
+	window  time.Duration
+	now     func() time.Time
+	entries map[string]*attemptEntry
+}
+
+type attemptEntry struct {
+	used  int
+	since time.Time
+}
+
+const attemptLimiterMaxKeys = 10_000
+
+func newAttemptLimiter(max int, window time.Duration) *attemptLimiter {
+	return &attemptLimiter{max: max, window: window, now: time.Now, entries: map[string]*attemptEntry{}}
+}
+
+// reserve claims one attempt; false when the budget is already spent.
+func (l *attemptLimiter) reserve(key string) bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	now := l.now()
+	e := l.entries[key]
+	if e == nil || now.Sub(e.since) > l.window {
+		if len(l.entries) >= attemptLimiterMaxKeys {
+			l.sweep(now)
+		}
+		if len(l.entries) >= attemptLimiterMaxKeys {
+			// Every window is live: refuse rather than grow. Reached only
+			// under a flood of distinct keys.
+			return false
+		}
+		e = &attemptEntry{since: now}
+		l.entries[key] = e
+	}
+	if e.used >= l.max {
+		return false
+	}
+	e.used++
+	return true
+}
+
+// sweep drops every expired window.
+func (l *attemptLimiter) sweep(now time.Time) {
+	for k, e := range l.entries {
+		if now.Sub(e.since) > l.window {
+			delete(l.entries, k)
+		}
+	}
+}
+
+// spent reports whether no attempts remain.
+func (l *attemptLimiter) spent(key string) bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	e := l.entries[key]
+	return e != nil && e.used >= l.max
+}
+
+// refund returns an attempt that did not test anything.
+func (l *attemptLimiter) refund(key string) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if e := l.entries[key]; e != nil && e.used > 0 {
+		e.used--
+	}
+}
+
+// forget clears the budget after a success.
+func (l *attemptLimiter) forget(key string) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	delete(l.entries, key)
+}
+
+// errLoginNotConfigured names what is missing, and how to get it.
+var errLoginNotConfigured = errors.New(
+	"native sign-in needs idp_broker_token (or idp_broker_token_file) and oidc_client_id; " +
+		"declare a forge.ManagedIdentity in deploy/kcl/<env>/main.k and run `forge env up` to converge it (see `forge skill load deploy/managed-identity`)")
+
+// LoginBrokerConfigured reports whether this deployment can serve sign-in.
+// Check it at boot: an app that renders its own login form but cannot reach
+// the issuer fails at the first attempt, which is a much worse place to
+// discover it.
+func LoginBrokerConfigured(cfg *config.{{or .ConfigType "Config"}}) error {
+	hasToken := strings.TrimSpace(cfg.IdpBrokerToken) != ""
+	if !hasToken && cfg.IdpBrokerTokenFile != "" {
+		hasToken = (&devidp.Client{TokenFile: cfg.IdpBrokerTokenFile}).HasBrokerToken()
+	}
+	if !hasToken || strings.TrimSpace(cfg.OidcClientId) == "" {
+		return errLoginNotConfigured
+	}
+	return nil
+}
+
+// decodeSegment decodes a JWT segment, which is base64url WITHOUT padding.
+func decodeSegment(seg string) ([]byte, error) {
+	if m := len(seg) % 4; m != 0 {
+		seg += strings.Repeat("=", 4-m)
+	}
+	return base64.URLEncoding.DecodeString(seg)
+}

@@ -1,0 +1,184 @@
+[dry-run] would connect "prod-us" for env "prod"
+  auth         scoped ServiceAccount token, minted in your cluster
+  address      https://34.1.2.3
+  caPem        9 bytes
+  token        minted on apply, sent write-only, never printed
+  issuer       none sent: not read: --live-from reviews offline
+  selector     app.kubernetes.io/managed-by=forge,forge.dev/connected-cluster=prod-us,forge.dev/binding-env=prod
+
+Grant diff  forge-connect-prod-us-prod  on context gke_acme_us-central1_prod
+scope      namespace:acme-prod  (1 namespace Role(s) of 5 rule(s) over 4 rendered object(s), plus a name-pinned ClusterRole (1 Namespace object(s)))
+subject    ServiceAccount forge-system/forge-connect-prod-us-prod (this binding's own token identity)
+live       capture <live>
+
+= ClusterRole forge-connect-prod-us-prod  unchanged
+= ClusterRoleBinding forge-connect-prod-us-prod  unchanged
+= Role acme-prod/forge-connect-prod-us-prod  unchanged
+= RoleBinding acme-prod/forge-connect-prod-us-prod  unchanged
+
+newly granted permissions (0):
+  none: this run grants nothing the cluster does not already grant
+summary    +0 new  ~0 changed  -0 removed  =4 unchanged
+
+[dry-run] would apply to gke_acme_us-central1_prod:
+
+    apiVersion: v1
+    kind: Namespace
+    metadata:
+      labels:
+        app.kubernetes.io/managed-by: forge
+        forge.dev/binding-env: prod
+        forge.dev/connect-grant: identity
+        forge.dev/connected-cluster: prod-us
+      name: forge-system
+    ---
+    apiVersion: v1
+    kind: ServiceAccount
+    metadata:
+      labels:
+        app.kubernetes.io/managed-by: forge
+        forge.dev/binding-env: prod
+        forge.dev/connect-grant: identity
+        forge.dev/connected-cluster: prod-us
+      name: forge-connect-prod-us-prod
+      namespace: forge-system
+    ---
+    apiVersion: v1
+    kind: Secret
+    metadata:
+      annotations:
+        kubernetes.io/service-account.name: forge-connect-prod-us-prod
+      labels:
+        app.kubernetes.io/managed-by: forge
+        forge.dev/binding-env: prod
+        forge.dev/connect-grant: identity
+        forge.dev/connected-cluster: prod-us
+      name: forge-connect-prod-us-prod-token
+      namespace: forge-system
+    type: kubernetes.io/service-account-token
+    ---
+    apiVersion: rbac.authorization.k8s.io/v1
+    kind: ClusterRole
+    metadata:
+      labels:
+        app.kubernetes.io/managed-by: forge
+        forge.dev/binding-env: prod
+        forge.dev/connect-grant: apply
+        forge.dev/connected-cluster: prod-us
+      name: forge-connect-prod-us-prod
+    rules:
+    - apiGroups:
+      - ""
+      resourceNames:
+      - acme-prod
+      resources:
+      - namespaces
+      verbs:
+      - get
+      - patch
+      - update
+    - nonResourceURLs:
+      - /openid/v1/jwks
+      verbs:
+      - get
+    ---
+    apiVersion: rbac.authorization.k8s.io/v1
+    kind: ClusterRoleBinding
+    metadata:
+      labels:
+        app.kubernetes.io/managed-by: forge
+        forge.dev/binding-env: prod
+        forge.dev/connect-grant: apply
+        forge.dev/connected-cluster: prod-us
+      name: forge-connect-prod-us-prod
+    roleRef:
+      apiGroup: rbac.authorization.k8s.io
+      kind: ClusterRole
+      name: forge-connect-prod-us-prod
+    subjects:
+    - kind: ServiceAccount
+      name: forge-connect-prod-us-prod
+      namespace: forge-system
+    ---
+    apiVersion: rbac.authorization.k8s.io/v1
+    kind: Role
+    metadata:
+      labels:
+        app.kubernetes.io/managed-by: forge
+        forge.dev/binding-env: prod
+        forge.dev/connect-grant: apply
+        forge.dev/connected-cluster: prod-us
+      name: forge-connect-prod-us-prod
+      namespace: acme-prod
+    rules:
+    - apiGroups:
+      - apps
+      resources:
+      - deployments
+      verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+    - apiGroups:
+      - apps
+      resources:
+      - replicasets
+      verbs:
+      - get
+      - list
+      - watch
+    - apiGroups:
+      - ""
+      resources:
+      - configmaps
+      verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+    - apiGroups:
+      - ""
+      resources:
+      - pods
+      verbs:
+      - get
+      - list
+      - watch
+    - apiGroups:
+      - ""
+      resources:
+      - services
+      verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+    ---
+    apiVersion: rbac.authorization.k8s.io/v1
+    kind: RoleBinding
+    metadata:
+      labels:
+        app.kubernetes.io/managed-by: forge
+        forge.dev/binding-env: prod
+        forge.dev/connect-grant: apply
+        forge.dev/connected-cluster: prod-us
+      name: forge-connect-prod-us-prod
+      namespace: acme-prod
+    roleRef:
+      apiGroup: rbac.authorization.k8s.io
+      kind: Role
+      name: forge-connect-prod-us-prod
+    subjects:
+    - kind: ServiceAccount
+      name: forge-connect-prod-us-prod
+      namespace: forge-system

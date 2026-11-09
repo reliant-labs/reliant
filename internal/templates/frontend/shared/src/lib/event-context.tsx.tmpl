@@ -1,0 +1,20 @@
+{{if eq .Platform "nextjs"}}"use client";
+
+{{end}}import { initEventBus } from "./events";
+import { EventBusContext } from "./use-event";
+
+import type { ReactNode } from "react";
+
+// Supplies the app's event bus. Read it with useEvent / useEventBus from
+// ./use-event, which keeps this file to one component export so React Fast
+// Refresh can hot-swap it.
+export function EventBusProvider({
+  devMode,
+  children,
+}: {
+  devMode?: boolean;
+  children: ReactNode;
+}) {
+  const bus = initEventBus(devMode);
+  return <EventBusContext.Provider value={bus}>{children}</EventBusContext.Provider>;
+}
