@@ -8,5 +8,10 @@
 // module pins. A panel the builder makes that forge would refuse fails here,
 // before it can fail a save.
 //
+// It also holds the generated product-usage dashboard this repository ships
+// (deploy/observability/spec/project_gen.json) to the viewer's scope: every
+// panel reads only the org's own product_events, narrowed by the environment
+// and service scope that forge's sql-panel compiler binds.
+//
 // It has no code of its own: the test is the contract.
 package dashspeccontract
