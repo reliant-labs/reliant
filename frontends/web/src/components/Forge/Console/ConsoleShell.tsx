@@ -31,7 +31,9 @@
  *
  * Every row is the same style (forge-ui SidebarLayout, the Cloudflare
  * pattern); a parent navigates to its own overview and expands its children
- * inline, and the group holding the current page stays open.
+ * inline, and the group holding the current page stays open. Observability
+ * is the exception: it is expanded on every page, and its chevron collapses
+ * it — a choice remembered per user (obsNavOpen.ts).
  */
 
 import type { ReactNode } from "react";
@@ -75,6 +77,12 @@ export interface ConsoleNavInput {
   /** Omitted/unknown keeps useful views visible; false means a definite empty read. Sessions is always listed. */
   optionalViews?: { profiles: boolean };
   /**
+   * Whether Observability is expanded — the reader's remembered choice
+   * (obsNavOpen.ts). Omitted, it starts expanded and toggles for the visit.
+   */
+  obsOpen?: boolean;
+  onObsOpenChange?: (open: boolean) => void;
+  /**
    * Where a row (and a crumb) links. Default: the page's console path,
    * carrying the scope. The forge demo (Forge/Demo) keeps every link on its
    * own route.
@@ -94,7 +102,7 @@ export const NAV_STARRED_MAX = 3;
 const icon = (Icon: typeof Home) => <Icon className="h-4 w-4" aria-hidden="true" />;
 
 /** The nav rows for `page` — pure, so the IA is testable without rendering. */
-export function buildConsoleNav({ project, page, env, envs, alertsFiring = 0, starred = [], optionalViews, linkTo }: ConsoleNavInput): {
+export function buildConsoleNav({ project, page, env, envs, alertsFiring = 0, starred = [], optionalViews, obsOpen, onObsOpenChange, linkTo }: ConsoleNavInput): {
   items: SidebarNavItem[];
   footer: SidebarNavItem[];
 } {
@@ -120,6 +128,10 @@ export function buildConsoleNav({ project, page, env, envs, alertsFiring = 0, st
       row("Releases", { kind: "releases" }, icon(TagIcon), { active: is("releases") || is("release") }),
       row("Observability", { kind: "obs-view", view: OBS_NAV_VIEWS[0] }, icon(Gauge), {
         active: false,
+        // Its views are the console's most-visited pages: listed on every page, until the reader collapses them.
+        defaultExpanded: true,
+        open: obsOpen,
+        onOpenChange: onObsOpenChange,
         children: OBS_NAV_VIEWS.filter((view) =>
           view !== "profiles" || optionalViews?.[view] !== false || (page.kind === "obs-view" && page.view === view)
         ).map((view) => {
