@@ -394,6 +394,12 @@ func (req *ToolRequest) toolContextMap() map[string]interface{} {
 	}
 	if req.RunStep {
 		contextMap[RunStepContextKey] = true
+		// A run step's WorkingDir is the directory its command starts in (the
+		// node's work_dir, else its checkout): the shell tool honours it for a
+		// run step only (rctx.ToolContext.RunWorkDir).
+		if req.WorkingDir != "" {
+			contextMap[RunWorkDirContextKey] = req.WorkingDir
+		}
 	}
 	if len(req.BoundParams) > 0 {
 		contextMap[BoundParamsContextKey] = append([]string(nil), req.BoundParams...)
@@ -403,6 +409,12 @@ func (req *ToolRequest) toolContextMap() map[string]interface{} {
 	}
 	return contextMap
 }
+
+// RunWorkDirContextKey is the context-map key carrying a run step's working
+// directory (ToolRequest.WorkingDir, when RunStep) to the executing tool
+// (rctx.ToolContext.RunWorkDir). Server-built, never from tool input; a daemon
+// older than the key ignores it and starts the command in the checkout.
+const RunWorkDirContextKey = "run_work_dir"
 
 // RunMachineContextKey is the context-map key carrying the run's daemon
 // selector (its id or name) to the executing tool (rctx.ToolContext.RunMachine),

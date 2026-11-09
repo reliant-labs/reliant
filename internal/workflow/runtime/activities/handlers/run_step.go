@@ -46,6 +46,10 @@ type ExecuteRunStepInput struct {
 	// WritableCheckouts is the node's `writable_checkouts`: the shared
 	// checkouts a credentials-none command may write (credsandbox.Wrap).
 	WritableCheckouts []string `json:"writable_checkouts,omitempty"`
+	// WorkDir is the node's `work_dir`, resolved: the directory the command
+	// starts in. A relative one is relative to the run's checkout; empty is
+	// the checkout itself.
+	WorkDir string `json:"work_dir,omitempty"`
 	// SaveMessage delegates the run node's save_message to the ActivityWrapper
 	// (see types.SaveMessageRequest). The handler never reads it.
 	SaveMessage *activitytypes.SaveMessageRequest `json:"save_message,omitempty" reliant:"-"`
@@ -276,13 +280,16 @@ func (a *ExecuteRunStepActivity) execute(ctx context.Context, input ExecuteRunSt
 			Duration: time.Since(startTime).Milliseconds()}, nil
 	}
 
-	// Determine working directory
+	// Determine working directory: the run's checkout, where its log file is
+	// resolved, and the directory the command starts in, the node's work_dir
+	// when it names one (relative to the checkout).
 	workingDir := execCtx.ProjectPath
 	worktreeID := execCtx.WorktreeID
 	worktreePath := execCtx.WorktreePath
 	if worktreePath != "" {
 		workingDir = worktreePath
 	}
+	commandDir := runCommandDir(workingDir, input.WorkDir)
 
 	// Pick executor: test override or remote via daemon
 	executor := a.runExecutor
@@ -315,7 +322,7 @@ func (a *ExecuteRunStepActivity) execute(ctx context.Context, input ExecuteRunSt
 			"exit_code", result.ExitCode, "error", err)
 	} else {
 		observe := a.observeMachine(execCtx)
-		result, err = executeUntilDelivered(withRunRequestID(ctx, requestID), executor, wait, observe, input.Command, workingDir, timeout)
+		result, err = executeUntilDelivered(withRunRequestID(ctx, requestID), executor, wait, observe, input.Command, commandDir, timeout)
 	}
 	stdout, stderr, exitCode, interrupted := result.Stdout, result.Stderr, result.ExitCode, result.Interrupted
 	if err != nil {
@@ -738,4 +745,20 @@ func runStepTransportFailure(transportErr *toolexec.TransportError) error {
 // shellQuote wraps a string in single quotes, escaping any embedded single quotes.
 func shellQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", "'\"'\"'") + "'"
+}
+
+// runCommandDir is the directory a run node's command starts in: workDir (the
+// node's resolved `work_dir`) when it names one, joined onto checkout when it
+// is relative; else checkout. A directory that does not exist fails the
+// command on its machine, saying so, rather than running it elsewhere.
+func runCommandDir(checkout, workDir string) string {
+	workDir = strings.TrimSpace(workDir)
+	switch {
+	case workDir == "":
+		return checkout
+	case filepath.IsAbs(workDir) || checkout == "":
+		return filepath.Clean(workDir)
+	default:
+		return filepath.Join(checkout, workDir)
+	}
 }
