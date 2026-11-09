@@ -2,6 +2,7 @@
 import { useState, type ReactNode } from "react";
 import { DataBrowserApiProvider } from "@/services/controlPlane/observability/DataBrowserApiContext";
 import { StorageBrowserApiProvider } from "@/services/controlPlane/storageBrowser/StorageBrowserApiContext";
+import { IdentityApiProvider } from "@/services/controlPlane/identity/IdentityApiContext";
 import { createFixtureReader, FixtureReaderProvider } from "../AuditedAccess/readerSession";
 import { createDemoBrowserApis } from "./demoData/browserApis";
 
@@ -9,5 +10,5 @@ import { createDemoBrowserApis } from "./demoData/browserApis";
 export function DemoBrowserProviders({ children }: { children: ReactNode }) {
   const [apis] = useState(createDemoBrowserApis);
   const [reader] = useState(createFixtureReader);
-  return <FixtureReaderProvider reader={reader}><DataBrowserApiProvider api={apis.data}><StorageBrowserApiProvider api={apis.storage}>{children}</StorageBrowserApiProvider></DataBrowserApiProvider></FixtureReaderProvider>;
+  return <FixtureReaderProvider reader={reader}><DataBrowserApiProvider api={apis.data}><StorageBrowserApiProvider api={apis.storage}><IdentityApiProvider api={apis.identity}>{children}</IdentityApiProvider></StorageBrowserApiProvider></DataBrowserApiProvider></FixtureReaderProvider>;
 }

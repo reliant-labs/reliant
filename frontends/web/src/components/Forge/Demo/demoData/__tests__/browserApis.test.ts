@@ -8,7 +8,13 @@ describe("isolated demo browser clients", () => {
   it("uses typed synthetic reads without any network, auth or live control-plane client", async () => {
     const fetch = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("network forbidden"));
     try {
-      const { data, storage } = createDemoBrowserApis();
+      const { data, storage, identity } = createDemoBrowserApis();
+      expect(await identity.currentOrgId()).toBe("demo-org");
+      expect((await identity.listUsers("demo-org", "env-staging", {}, "")).users[0]?.email).toBe("maya@example.com");
+      expect((await identity.getUser("demo-org", "env-staging", "subject-maya"))?.userId).toBe("subject-maya");
+      await expect(identity.listUsers("foreign-org", "env-staging", {}, "")).rejects.toMatchObject({ code: Code.NotFound });
+      await expect(identity.getStatus("demo-org", "foreign-env")).rejects.toMatchObject({ code: Code.NotFound });
+      await expect(identity.deleteUser("demo-org", "env-staging", "subject-maya")).rejects.toMatchObject({ code: Code.PermissionDenied });
       expect((await data.describeDatabase(request)).tables.map((table) => table.name)).toContain("users");
       expect((await data.browseTable(request)).rows.flat()).toContain("maya@example.com");
       expect((await storage.listBrowsableBuckets("env-staging")).buckets[0]?.name).toBe("uploads");
