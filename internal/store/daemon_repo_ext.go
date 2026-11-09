@@ -122,13 +122,7 @@ func GetDaemon(ctx context.Context, db orm.Context, id string) (*core.Daemon, er
 	if err != nil {
 		return nil, err
 	}
-	choice, err := userDefaultDaemon(ctx, db, row.UserID)
-	if err != nil {
-		return nil, err
-	}
-	d := daemonToCore(row)
-	d.IsDefault = choice.isDefault(row)
-	return d, nil
+	return daemonToCore(row), nil
 }
 
 // ListDaemonsByUserID returns the user's daemons, most recently updated
@@ -142,45 +136,11 @@ func ListDaemonsByUserID(ctx context.Context, db orm.Context, userID string) ([]
 	if err != nil {
 		return nil, err
 	}
-	choice, err := userDefaultDaemon(ctx, db, userID)
-	if err != nil {
-		return nil, err
-	}
 	out := make([]*core.Daemon, len(rows))
 	for i, row := range rows {
 		out[i] = daemonToCore(row)
-		out[i].IsDefault = choice.isDefault(row)
 	}
 	return out, nil
-}
-
-// defaultChoice is a user's recorded default machine (user_default_daemons).
-type defaultChoice struct {
-	daemonID string
-	recorded bool
-}
-
-// isDefault reports whether row is the user's default machine. A recorded
-// choice decides, whether or not its machine still has a row; with none, the
-// row's own is_default does, which only a previous release (still serving
-// during a rolling deploy) writes without recording a choice.
-func (c defaultChoice) isDefault(row *Daemon) bool {
-	if c.recorded {
-		return row.ID == c.daemonID
-	}
-	return row.IsDefault
-}
-
-// userDefaultDaemon reads the machine userID chose as their default.
-func userDefaultDaemon(ctx context.Context, db orm.Context, userID string) (defaultChoice, error) {
-	var ids []string
-	if err := db.Bun().NewRaw(`SELECT daemon_id FROM user_default_daemons WHERE user_id = ?`, userID).Scan(ctx, &ids); err != nil {
-		return defaultChoice{}, fmt.Errorf("reading default daemon of user %s: %w", userID, err)
-	}
-	if len(ids) == 0 {
-		return defaultChoice{}, nil
-	}
-	return defaultChoice{daemonID: ids[0], recorded: true}, nil
 }
 
 // ApplyDaemonLifecycle mirrors one control-plane lifecycle event onto an
@@ -392,11 +352,12 @@ func daemonToCore(row *Daemon) *core.Daemon {
 // the user's default when daemonID is "". It reports false, writing nothing,
 // when daemonID is not one of the user's machines.
 //
-// The choice is recorded in user_default_daemons, which outlives the daemons
-// row: the registry deletes a row the control plane's set omits and the
-// machine's next connect recreates it, and the default must survive that.
-// daemons.is_default is still written, for a previous release that reads
-// only it.
+// daemons.is_default is what every reader reads, in this release and the
+// previous one, so the two always agree. The schema keeps it durable
+// (migration 20261109190012_user_default_daemons): a trigger records each
+// change of the column in user_default_daemons, from any release, and
+// restores the column when the registry recreates a deleted machine's row
+// under the same id — which used to lose the default across every sleep.
 //
 // It must run in a transaction: the user's rows are locked first, so two
 // concurrent sets for one user serialize instead of colliding on
@@ -411,15 +372,12 @@ func SetDefaultDaemon(ctx context.Context, db orm.Context, userID, daemonID stri
 		return false, nil
 	}
 	if daemonID == "" {
+		// The column triggers cover a default whose row exists; this also
+		// forgets one whose machine has no row right now, so it is not
+		// restored when that machine reconnects.
 		if _, err := db.Bun().NewRaw(`DELETE FROM user_default_daemons WHERE user_id = ?`, userID).Exec(ctx); err != nil {
-			return false, fmt.Errorf("clearing default daemon choice of user %s: %w", userID, err)
+			return false, fmt.Errorf("forgetting default daemon of user %s: %w", userID, err)
 		}
-	} else if _, err := db.Bun().NewRaw(`
-		INSERT INTO user_default_daemons (user_id, daemon_id, chosen_at) VALUES (?, ?, CURRENT_TIMESTAMP)
-		ON CONFLICT (user_id) DO UPDATE SET daemon_id = excluded.daemon_id, chosen_at = excluded.chosen_at`,
-		userID, daemonID,
-	).Exec(ctx); err != nil {
-		return false, fmt.Errorf("recording default daemon %s of user %s: %w", daemonID, userID, err)
 	}
 	if _, err := db.Bun().NewRaw(
 		`UPDATE daemons SET is_default = false WHERE user_id = ? AND is_default AND id <> ?`, userID, daemonID,

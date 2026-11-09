@@ -3,6 +3,8 @@ package db
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"testing"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
@@ -110,38 +112,127 @@ func TestSetDefaultDaemon_OnePerUserOwnedOnlyAndSurvivesTheRowBeingRecreated(t *
 	}
 }
 
-// A default set by the previous release, which writes only daemons.is_default
-// (the rolling deploy), still reads as the default until a choice is recorded.
-func TestSetDefaultDaemon_PreviousReleaseColumnReadsUntilAChoiceIsRecorded(t *testing.T) {
+// The previous release, still serving during a rolling deploy or again after a
+// rollback, writes only daemons.is_default, with exactly these statements (its
+// store.SetDefaultDaemon).
+func previousReleaseSetDefault(t *testing.T, rawDB *sql.DB, userID, daemonID string) {
+	t.Helper()
+	if _, err := rawDB.Exec(`UPDATE daemons SET is_default = false WHERE user_id = $1 AND is_default AND id <> $2`, userID, daemonID); err != nil {
+		t.Fatalf("previous release clear: %v", err)
+	}
+	if daemonID == "" {
+		return
+	}
+	if _, err := rawDB.Exec(`UPDATE daemons SET is_default = true WHERE id = $1 AND user_id = $2 AND NOT is_default`, daemonID, userID); err != nil {
+		t.Fatalf("previous release set: %v", err)
+	}
+}
+
+// recordedDefault is the user's durable choice (user_default_daemons), "" for none.
+func recordedDefault(t *testing.T, rawDB *sql.DB, userID string) string {
+	t.Helper()
+	var id string
+	err := rawDB.QueryRow(`SELECT daemon_id FROM user_default_daemons WHERE user_id = $1`, userID).Scan(&id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ""
+	}
+	if err != nil {
+		t.Fatalf("reading recorded default: %v", err)
+	}
+	return id
+}
+
+// recreate deletes a machine's row and registers it again under the same id,
+// as the registry snapshot and the machine's next connect do.
+func recreate(t *testing.T, repo *Repo, id, userID string) {
+	t.Helper()
+	if _, _, err := repo.RemoveDaemon(context.Background(), id); err != nil {
+		t.Fatalf("RemoveDaemon(%s): %v", id, err)
+	}
+	seedLifecycleDaemon(t, repo, id, userID)
+}
+
+// A user whose choice is already recorded (backfilled, or set by this
+// release) changes or clears it on the previous release: both releases read
+// the new answer, and the durable choice follows, so a row the registry
+// recreates afterwards comes back as what the user chose last.
+func TestSetDefaultDaemon_PreviousReleaseWritesKeepBothReleasesInStep(t *testing.T) {
 	t.Parallel()
 
 	repo, rawDB, cleanup := SetupTestDBWithRawDB(t)
 	defer cleanup()
 	ctx := context.Background()
 
-	const userID = "default-legacy-user"
+	const userID = "default-mixed-user"
 	t.Cleanup(func() {
 		_, _ = rawDB.Exec(`DELETE FROM daemons WHERE user_id = $1`, userID)
 		_, _ = rawDB.Exec(`DELETE FROM user_default_daemons WHERE user_id = $1`, userID)
 	})
-	seedLifecycleDaemon(t, repo, "legacy-a", userID)
-	seedLifecycleDaemon(t, repo, "legacy-b", userID)
+	seedLifecycleDaemon(t, repo, "mixed-a", userID)
+	seedLifecycleDaemon(t, repo, "mixed-b", userID)
 
-	if _, err := rawDB.Exec(`UPDATE daemons SET is_default = true WHERE id = 'legacy-a'`); err != nil {
-		t.Fatalf("seed legacy default: %v", err)
+	if err := repo.SetDefaultDaemon(ctx, userID, "mixed-a"); err != nil {
+		t.Fatalf("SetDefaultDaemon a: %v", err)
 	}
-	if got := defaultDaemonIDs(t, repo, userID); len(got) != 1 || got[0] != "legacy-a" {
-		t.Fatalf("default = %v, want the column's [legacy-a]", got)
+	if got := recordedDefault(t, rawDB, userID); got != "mixed-a" {
+		t.Fatalf("recorded default = %q, want mixed-a", got)
 	}
 
-	if err := repo.SetDefaultDaemon(ctx, userID, "legacy-b"); err != nil {
+	// The previous release moves it to b.
+	previousReleaseSetDefault(t, rawDB, userID, "mixed-b")
+	if got := defaultDaemonIDs(t, repo, userID); len(got) != 1 || got[0] != "mixed-b" {
+		t.Fatalf("default after the previous release set b = %v, want [mixed-b]", got)
+	}
+	if got := recordedDefault(t, rawDB, userID); got != "mixed-b" {
+		t.Fatalf("recorded default after the previous release set b = %q, want mixed-b", got)
+	}
+	recreate(t, repo, "mixed-a", userID)
+	recreate(t, repo, "mixed-b", userID)
+	if got := defaultDaemonIDs(t, repo, userID); len(got) != 1 || got[0] != "mixed-b" {
+		t.Fatalf("default after both rows were recreated = %v, want [mixed-b]", got)
+	}
+
+	// The previous release clears it.
+	previousReleaseSetDefault(t, rawDB, userID, "")
+	if got := defaultDaemonIDs(t, repo, userID); len(got) != 0 {
+		t.Fatalf("default after the previous release cleared it = %v, want none", got)
+	}
+	if got := recordedDefault(t, rawDB, userID); got != "" {
+		t.Fatalf("recorded default after the previous release cleared it = %q, want none", got)
+	}
+	recreate(t, repo, "mixed-b", userID)
+	if got := defaultDaemonIDs(t, repo, userID); len(got) != 0 {
+		t.Fatalf("a cleared default came back with its row: %v", got)
+	}
+}
+
+// Clearing on this release also forgets a default whose machine has no row
+// right now, so it does not come back when that machine reconnects.
+func TestSetDefaultDaemon_ClearForgetsADefaultWhoseRowIsGone(t *testing.T) {
+	t.Parallel()
+
+	repo, rawDB, cleanup := SetupTestDBWithRawDB(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	const userID = "default-gone-user"
+	t.Cleanup(func() {
+		_, _ = rawDB.Exec(`DELETE FROM daemons WHERE user_id = $1`, userID)
+		_, _ = rawDB.Exec(`DELETE FROM user_default_daemons WHERE user_id = $1`, userID)
+	})
+	seedLifecycleDaemon(t, repo, "gone-a", userID)
+	seedLifecycleDaemon(t, repo, "gone-b", userID)
+	if err := repo.SetDefaultDaemon(ctx, userID, "gone-a"); err != nil {
 		t.Fatalf("SetDefaultDaemon: %v", err)
 	}
-	if got := defaultDaemonIDs(t, repo, userID); len(got) != 1 || got[0] != "legacy-b" {
-		t.Fatalf("default = %v, want the recorded [legacy-b]", got)
+	if _, _, err := repo.RemoveDaemon(ctx, "gone-a"); err != nil {
+		t.Fatalf("RemoveDaemon: %v", err)
 	}
-	var column string
-	if err := rawDB.QueryRow(`SELECT id FROM daemons WHERE user_id = $1 AND is_default`, userID).Scan(&column); err != nil || column != "legacy-b" {
-		t.Fatalf("daemons.is_default = %q, %v; the previous release must read the same choice", column, err)
+	if err := repo.SetDefaultDaemon(ctx, userID, ""); err != nil {
+		t.Fatalf("clear: %v", err)
+	}
+	seedLifecycleDaemon(t, repo, "gone-a", userID)
+	if got := defaultDaemonIDs(t, repo, userID); len(got) != 0 {
+		t.Fatalf("a cleared default came back with its row: %v", got)
 	}
 }
