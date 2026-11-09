@@ -97,12 +97,12 @@ describe("buildConsoleNav", () => {
   it("expands Observability on every page, not only its own", () => {
     for (const page of [{ kind: "overview" }, { kind: "secrets" }, { kind: "obs-view", view: "logs" }] as const) {
       const obs = buildConsoleNav({ project: "shop", page, env: "prod", envs: ENVS }).items.find((item) => item.label === "Observability")!;
-      expect(obs.defaultOpen).toBe(true);
+      expect(obs.defaultExpanded).toBe(true);
       expect(obs.open).toBeUndefined();
     }
     // Every other group stays an accordion.
     const environments = buildConsoleNav({ project: "shop", page: { kind: "overview" }, env: "prod", envs: ENVS }).items.find((item) => item.label === "Environments")!;
-    expect(environments.defaultOpen).toBeUndefined();
+    expect(environments.defaultExpanded).toBeUndefined();
   });
 
   it("hands Observability the reader's remembered choice", () => {

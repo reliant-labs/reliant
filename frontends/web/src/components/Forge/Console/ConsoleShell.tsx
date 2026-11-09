@@ -128,7 +128,7 @@ export function buildConsoleNav({ project, page, env, envs, alertsFiring = 0, st
       row("Observability", { kind: "obs-view", view: OBS_NAV_VIEWS[0] }, icon(Gauge), {
         active: false,
         // Its views are the console's most-visited pages: listed on every page, until the reader collapses them.
-        defaultOpen: true,
+        defaultExpanded: true,
         open: obsOpen,
         onOpenChange: onObsOpenChange,
         children: OBS_NAV_VIEWS.filter((view) =>

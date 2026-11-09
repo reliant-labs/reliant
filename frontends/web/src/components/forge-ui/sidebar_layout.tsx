@@ -38,7 +38,7 @@ export interface SidebarNavItem {
    * NAVIGATES to its own overview (`href`) and its children expand inline
    * under it. The group holding the current route stays open and every other
    * group closes (an accordion) — so open/closed is derived from `active`,
-   * never stored (unless `defaultOpen`, below). A sub-page may carry a short list of its own (starred
+   * never stored (unless `defaultExpanded`, below). A sub-page may carry a short list of its own (starred
    * dashboards under Dashboards), shown indented and muted whenever its
    * group is open.
    */
@@ -49,10 +49,10 @@ export interface SidebarNavItem {
    * own that collapses it (the row still navigates, and reopens it). Hidden,
    * its current sub-page is marked on the parent, as on the rail.
    */
-  defaultOpen?: boolean;
-  /** Controlled `defaultOpen`: the reader's choice, kept by the caller (to remember it). */
+  defaultExpanded?: boolean;
+  /** Controlled `defaultExpanded` (forge#2011's API): the reader's choice, kept by the caller (to remember it). */
   open?: boolean;
-  /** Called when the reader expands or collapses a `defaultOpen`/`open` group. */
+  /** Called when the reader expands or collapses a `defaultExpanded`/`open` group. */
   onOpenChange?: (open: boolean) => void;
 }
 
@@ -293,7 +293,7 @@ export default function SidebarLayout({
   }, [drawerShown]);
   const handleToggle = onToggle ?? (() => setInternalCollapsed((prev) => !prev));
   // A parent with children but no href of its own cannot open by navigating,
-  // so it toggles locally instead — as does an uncontrolled `defaultOpen` group.
+  // so it toggles locally instead — as does an uncontrolled `defaultExpanded` group.
   const [openLocal, setOpenLocal] = useState<Record<string, boolean>>({});
 
   const sections: { label: string; items: SidebarNavItem[] }[] = [];
@@ -346,9 +346,9 @@ export default function SidebarLayout({
     const key = itemKey(item, i);
     const hasChildren = !!item.children && item.children.length > 0;
     // A standing group is open by the reader's choice, whatever the route.
-    const standing = hasChildren && (item.defaultOpen !== undefined || item.open !== undefined);
+    const standing = hasChildren && (item.defaultExpanded !== undefined || item.open !== undefined);
     const open = standing
-      ? (item.open ?? openLocal[key] ?? (!!item.defaultOpen || containsActive(item)))
+      ? (item.open ?? openLocal[key] ?? (!!item.defaultExpanded || containsActive(item)))
       : hasChildren && (containsActive(item) || (!item.href && !!openLocal[key]));
     const setOpen = (next: boolean) => {
       setOpenLocal((prev) => ({ ...prev, [key]: next }));
@@ -547,8 +547,11 @@ export default function SidebarLayout({
         </div>
       </aside>
 
-      {/* Main */}
-      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+      {/* Main — inert under the open drawer: it is `aria-modal`, so Tab must
+          not walk out of it into the page behind the scrim. The attribute
+          leaves in the same commit that closes the drawer, before the effect
+          above hands focus back to the menu button. */}
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden" inert={drawerShown}>
         {/* Top bar — omitted when there is nothing to put in it, so a page
             that owns its own header does not sit under an empty bar. */}
         {(headerContent || narrow) && (

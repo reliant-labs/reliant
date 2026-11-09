@@ -76,7 +76,7 @@ export function buildOrgNav({ page, apps, alertsFiring = 0, search = {}, obsOpen
         icon: icon(Gauge),
         active: page.kind === "observability",
         // As in the app console: expanded until the reader collapses it.
-        defaultOpen: true,
+        defaultExpanded: true,
         open: obsOpen,
         onOpenChange: onObsOpenChange,
         children: OBS_NAV_VIEWS.map((view) => ({
