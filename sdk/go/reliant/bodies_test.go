@@ -81,6 +81,33 @@ func TestContentBlockBodiesRefusesToLoopAndNeedsASession(t *testing.T) {
 	}
 }
 
+// A server that settles the other ids but defers one on every response (and
+// names an id nobody asked for) cannot keep the loop alive: once the deferred
+// id is all that is left, a response that answers none of it fails.
+func TestContentBlockBodiesEndsWhenOneIDIsAlwaysDeferred(t *testing.T) {
+	var mu sync.Mutex
+	calls := 0
+	f := &fake{getContentBlockBodies: func(r *reliantv1.GetContentBlockBodiesRequest) (*reliantv1.GetContentBlockBodiesResponse, error) {
+		mu.Lock()
+		calls++
+		mu.Unlock()
+		resp := &reliantv1.GetContentBlockBodiesResponse{Deferred: []string{"x"}}
+		for _, id := range append(r.GetBlockIds(), "unasked") {
+			if id != "x" {
+				resp.Bodies = append(resp.Bodies, &reliantv1.ContentBlockBody{BlockId: id})
+			}
+		}
+		return resp, nil
+	}}
+	c, _ := f.start(t)
+	if _, err := c.Runs.ContentBlockBodies(context.Background(), "s-1", []string{"a", "x", "b"}, ContentBlockBodiesOptions{}); !errors.Is(err, ErrUnavailable) {
+		t.Errorf("err = %v, want ErrUnavailable rather than a loop", err)
+	}
+	if calls != 2 {
+		t.Errorf("made %d requests, want 2", calls)
+	}
+}
+
 // The generated client carries tool_bodies on GetChatUpdates for a caller
 // that reads a session's feed itself.
 func TestGetChatUpdatesCarriesToolBodies(t *testing.T) {

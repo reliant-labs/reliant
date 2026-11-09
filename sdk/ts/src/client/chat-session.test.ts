@@ -509,6 +509,20 @@ describe("fetchContentBlockBodies", () => {
     await expect(fetchContentBlockBodies(stuck, CHAT, ["a"])).rejects.toThrow(/answered none/);
   });
 
+  it("ends when the server answers other ids but defers one on every response", async () => {
+    let calls = 0;
+    const stubborn: ContentBlockBodiesClient = {
+      async getContentBlockBodies(request) {
+        calls++;
+        // Answer every id but "x" (and an id nobody asked for); always defer "x".
+        const others = request.blockIds.filter((id) => id !== "x");
+        return { bodies: [...others, "unasked"].map(body), notFound: [], deferred: ["x"] };
+      },
+    };
+    await expect(fetchContentBlockBodies(stubborn, CHAT, ["a", "x", "b"])).rejects.toThrow(/answered none/);
+    expect(calls).toBe(2);
+  });
+
   it("is a ChatSession method over the session's own ChatService client", async () => {
     server = scriptedServer({
       GetContentBlockBodies: (r) => ({

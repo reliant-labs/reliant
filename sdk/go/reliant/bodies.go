@@ -88,17 +88,29 @@ func (r *RunsClient) ContentBlockBodies(ctx context.Context, sessionID string, b
 		if err != nil {
 			return nil, r.c.wrap(op, err)
 		}
+		// Only ids this request named count as answered: an id the server
+		// names that was not asked (or was answered before) is not progress.
+		pending := make(map[string]bool, len(asked))
+		for _, id := range asked {
+			pending[id] = true
+		}
 		answered := map[string]bool{}
 		for _, b := range resp.Msg.GetBodies() {
-			out.Bodies[b.GetBlockId()] = b
-			answered[b.GetBlockId()] = true
+			if id := b.GetBlockId(); pending[id] && !answered[id] {
+				out.Bodies[id] = b
+				answered[id] = true
+			}
 		}
 		for _, id := range resp.Msg.GetNotFound() {
-			out.NotFound = append(out.NotFound, id)
-			answered[id] = true
+			if pending[id] && !answered[id] {
+				out.NotFound = append(out.NotFound, id)
+				answered[id] = true
+			}
 		}
-		// The server answers at least one id per response; one that answered
-		// none would make asking again loop forever.
+		// The server answers at least one asked id per response, so every
+		// round removes at least one id from the queue and the loop ends: a
+		// server that keeps deferring an id still settles the others, and once
+		// that id is the only one left, a response that answers nothing fails.
 		if len(answered) == 0 {
 			return nil, r.c.fail(op, ErrUnavailable, "the server answered none of the %d block ids it was asked for", len(asked))
 		}

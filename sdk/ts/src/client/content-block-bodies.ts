@@ -70,17 +70,24 @@ export async function fetchContentBlockBodies(
       { chatId, blockIds: asked, full: options.full ? true : undefined },
       { signal: options.signal },
     );
+    // Only ids this request named count as answered: an id the server names
+    // that was not asked (or was answered before) is not progress.
+    const pending = new Set(asked);
     const answered = new Set<string>();
     for (const body of response.bodies) {
+      if (!pending.has(body.blockId) || answered.has(body.blockId)) continue;
       result.bodies[body.blockId] = body;
       answered.add(body.blockId);
     }
     for (const id of response.notFound) {
+      if (!pending.has(id) || answered.has(id)) continue;
       result.notFound.push(id);
       answered.add(id);
     }
-    // The server always answers at least one id, so deferral makes progress.
-    // If it did not, asking the same ids again would loop forever.
+    // The server always answers at least one asked id, so every round removes
+    // at least one id from the queue and the loop ends: a server that keeps
+    // deferring an id still settles the others, and once that id is the only
+    // one left, a response that answers nothing is thrown, not retried.
     if (answered.size === 0) {
       throw new Error(`GetContentBlockBodies answered none of the ${asked.length} ids it was asked for`);
     }
