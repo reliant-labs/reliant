@@ -84,6 +84,59 @@ func tmpAliases(t *testing.T, path string) []string {
 	return out
 }
 
+// aliasedFixtureDir makes, and removes when the test ends, a directory on a
+// disk this machine mounts at a second path (a cloud machine's
+// /mnt/workspace-disk) and outside the private /tmp and /var/tmp: they cover
+// every path they have, so nothing there has another view inside the sandbox
+// to test. Under this checkout (the TestMain guard fails the run if it is ever
+// left behind), or else under the user's cache or home directory, when the
+// checkout is in /tmp; the test skips when none has a second view. Call it
+// before wrapHome, which moves HOME.
+func aliasedFixtureDir(t *testing.T) string {
+	t.Helper()
+	mounts, err := readMounts()
+	require.NoError(t, err)
+	var private []string
+	for _, d := range privateTmpTargets(mounts) {
+		private = append(private, d.targets...)
+	}
+	var candidates []string
+	if wd, err := os.Getwd(); err == nil {
+		candidates = append(candidates, wd)
+	}
+	if cache, err := os.UserCacheDir(); err == nil {
+		candidates = append(candidates, cache)
+	}
+	if home, err := os.UserHomeDir(); err == nil {
+		candidates = append(candidates, home)
+	}
+	// Every other view must be one this user can write through outside the
+	// sandbox (a view through root's 0710 /mnt/workspace-disk/docker is not),
+	// or the writes the test expects to work there fail for that reason.
+	viewable := func(c string) bool {
+		aliases := tmpAliases(t, c)
+		for _, a := range aliases {
+			if unix.Access(a, unix.W_OK) != nil {
+				return false
+			}
+		}
+		return len(aliases) > 0
+	}
+	for _, c := range candidates {
+		if under(c, private...) || under(canonicalDir(c), private...) || !viewable(c) {
+			continue
+		}
+		root, err := os.MkdirTemp(c, ".credsandbox-alias-")
+		if err != nil {
+			continue
+		}
+		t.Cleanup(func() { _ = os.RemoveAll(root) })
+		return root
+	}
+	t.Skipf("needs a directory outside /tmp and /var/tmp on a disk mounted twice (a cloud machine's /mnt/workspace-disk); tried %v", candidates)
+	return ""
+}
+
 func TestWrap_OnlyCredentialedCommandsGetTheSignal(t *testing.T) {
 	testkit.Slow(t, "probes and builds real user, mount and PID namespaces")
 	requireSandbox(t)
@@ -319,24 +372,15 @@ echo evil > '`+shared+`/a' 2>/dev/null || echo SHARED-DENIED`)
 func TestSandbox_AnOverlaidCacheIsReadOnlyUnderItsOtherPaths(t *testing.T) {
 	testkit.Slow(t, "builds real user, mount and PID namespaces")
 	requireSandbox(t)
+	root := aliasedFixtureDir(t) // before wrapHome, which moves HOME
 	home := wrapHome(t)
-	// Under this checkout, not /tmp: the private /tmp covers every path /tmp
-	// has, so only a directory elsewhere on the disk has views to test. The
-	// TestMain guard fails the run if it is ever left behind.
-	root, err := os.MkdirTemp(".", ".credsandbox-alias-")
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = os.RemoveAll(root) })
-	root, err = filepath.Abs(root)
-	require.NoError(t, err)
 	modcache, beside := filepath.Join(root, "mod"), filepath.Join(root, "beside")
 	for _, d := range []string{modcache, beside} {
 		require.NoError(t, os.Mkdir(d, 0o755))
 	}
 	require.NoError(t, os.WriteFile(filepath.Join(modcache, "mod.zip"), []byte("trusted"), 0o644))
 	aliases := tmpAliases(t, modcache)
-	if len(aliases) == 0 {
-		t.Skip("needs a second mount of this checkout's disk (a cloud machine's /mnt/workspace-disk); this host mounts it once")
-	}
+	require.NotEmpty(t, aliases, "aliasedFixtureDir chose %s for its second view", root)
 	var sh strings.Builder
 	sh.WriteString(`echo poisoned > '` + filepath.Join(modcache, "mod.zip") + `' && echo PRIVATE-OK` + "\n")
 	for _, a := range aliases {
