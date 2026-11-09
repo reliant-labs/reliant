@@ -8,7 +8,7 @@
  */
 
 import { describe, expect, it, vi } from "vitest";
-import { fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Code } from "@connectrpc/connect";
 
@@ -57,6 +57,50 @@ describe("databases and tables", () => {
 });
 
 describe("the grid", () => {
+  it("never shows another database's rows when switching between cached descriptions of the same table", async () => {
+    const fixture = createDataFixtureApi({ onlyShop: true });
+    let release: (() => void) | undefined;
+    const pending = new Promise<void>((resolve) => { release = resolve; });
+    const browse = vi.fn(async (input: Parameters<typeof fixture.browseTable>[0]) => {
+      if (input.database === "archive") await pending;
+      const page = await fixture.browseTable({ ...input, database: "shop" });
+      return { ...page, database: input.database };
+    });
+    const describe = vi.fn(async (input: Parameters<typeof fixture.describeDatabase>[0]) => ({
+      ...await fixture.describeDatabase({ ...input, database: "shop" }),
+      database: input.database,
+    }));
+    const api = {
+      ...fixture,
+      listBrowsableDatabases: async () => {
+        const [shop] = await fixture.listBrowsableDatabases("env-staging");
+        return [shop!, { ...shop!, name: "archive" }];
+      },
+      describeDatabase: describe,
+      browseTable: browse,
+    };
+    // Cache archive's description without reading its rows, then load shop's grid.
+    const view = renderBrowser(api, { db: "archive" });
+    await screen.findByTestId("data-pick-table");
+    view.go({ db: "shop", table: "public.orders" });
+    await gridReady();
+    expect(screen.getAllByTestId("data-row")).toHaveLength(50);
+    expect(describe.mock.calls.map(([input]) => input.database)).toEqual(["archive", "shop"]);
+
+    view.go({ db: "archive", table: "public.orders" });
+    await waitFor(() => expect(browse.mock.calls.at(-1)?.[0].database).toBe("archive"));
+    // Both descriptions stay cached: the mounted grid's observer retains shop's page.
+    expect(describe).toHaveBeenCalledTimes(2);
+    expect(screen.getByTestId("data-browser")).toHaveAttribute("data-db", "archive");
+    expect(screen.queryAllByTestId("data-row")).toHaveLength(0);
+    expect(screen.queryByTestId("data-pager")).not.toBeInTheDocument();
+    expect(screen.getByTestId("data-grid-loading")).toBeInTheDocument();
+
+    await act(async () => release!());
+    await gridReady();
+    expect(screen.getAllByTestId("data-row")).toHaveLength(50);
+  });
+
   it("shows the columns from Describe, the first page in key order, NULL as a mark and the estimated total", async () => {
     const api = createDataFixtureApi({ onlyShop: true });
     renderBrowser(api, { db: "shop", table: "public.orders" });

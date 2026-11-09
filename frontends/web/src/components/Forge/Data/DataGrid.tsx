@@ -79,8 +79,8 @@ export function DataGrid({ env, database, table, tables, search, access, onSearc
     [search, table, env.id, database, count, access]
   );
   const query = useBrowseTable(request, { keepPrevious: true });
-  // A placeholder from another table is not this table's rows.
-  const page = query.data && query.data.table === name ? query.data : undefined;
+  // Paging may retain rows, but another database's identically named table is not this one.
+  const page = query.data && query.data.database === database && query.data.table === name ? query.data : undefined;
 
   useEffect(() => {
     if (query.error && dataBrowserErrorKind(query.error) === "confirmation") onConfirmationLost();
