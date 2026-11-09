@@ -90,7 +90,10 @@ type RunResumeResult struct {
 // RunMessenger delivers a message to a run that is already going. It must
 // never start a run: a run that is not live reports Delivered=false.
 type RunMessenger interface {
-	DeliverToRun(ctx context.Context, userID, chatID, message string, from RunSender) (RunDelivery, error)
+	// thread names the run's thread the message is for (its id, or the node
+	// of an agent running in it); "" lets the run choose its one running
+	// agent, and refuses, listing them, when several run in parallel.
+	DeliverToRun(ctx context.Context, userID, chatID, thread, message string, from RunSender) (RunDelivery, error)
 }
 
 // RunSender names the run a delivered message comes from, so the target
@@ -112,6 +115,10 @@ type RunDelivery struct {
 	// is the queued mailbox row the thread's next turn delivers, not yet a
 	// row of its history.
 	MessageID string
+	// NotDeliveredReason says why a live run did not take the message
+	// (errreason.RunNoListeningAgent: no agent is running in it). "" when it
+	// was delivered, or the run was not live.
+	NotDeliveredReason string
 }
 
 // Limits on agents starting agents. An agent that can start a run that can

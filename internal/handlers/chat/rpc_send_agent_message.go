@@ -2,6 +2,7 @@ package chat
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -205,6 +206,27 @@ func (s *Service) SendAgentMessage(
 		}), nil
 	}
 
+	// The composer queues to the MAIN thread from a run's main view. Input to
+	// a live run goes to the thread an agent of it reads (run_recipient.go):
+	// the main thread of an agent chat, the one running agent of a graph run,
+	// and never a guess among several.
+	toThread := req.Msg.ThreadId
+	routedToGraphAgent := false
+	if isMainThread && !restartMainRun && !resumeStoppedAgent {
+		recipient, err := s.resolveRunRecipient(ctx, chat, chat.MainThreadID(), chat.MainThreadID(), "")
+		if err != nil {
+			if errors.Is(err, core.ErrRunNoListeningAgent) || errors.Is(err, core.ErrRunRecipientAmbiguous) {
+				return connect.NewResponse(&reliantv1.SendAgentMessageResponse{Success: false, Message: err.Error()}), nil
+			}
+			return nil, err
+		}
+		if recipient.thread != req.Msg.ThreadId {
+			toThread = recipient.thread
+			isMainThread = false
+			routedToGraphAgent = recipient.routed && !recipient.rootReads
+		}
+	}
+
 	// The ended run left the thread terminal, and a terminal thread with
 	// queued mail whose run Temporal reports closed is exactly what the
 	// reconciler's orphaned-mailbox sweep marks undelivered. Revive it before
@@ -228,7 +250,7 @@ func (s *Service) SendAgentMessage(
 		// so FromThreadID here is not read as a sender label for this kind.
 		FromThreadID: chat.MainThreadID(),
 		ChatID:       req.Msg.ChatId,
-		ToThreadID:   req.Msg.ThreadId,
+		ToThreadID:   toThread,
 		Kind:         core.AgentMessageKindHumanMessage,
 		Body:         req.Msg.Message,
 		Attachments:  req.Msg.Attachments,
@@ -260,15 +282,29 @@ func (s *Service) SendAgentMessage(
 	// A paused chat takes no turn until it is resumed, and the doorbell below
 	// does not resume it. A message is the user asking the chat to go on, so
 	// it resumes the run first, as SendMessage does.
-	if refused, err := s.resumePausedRunForMessage(ctx, userID, chat, req.Msg.ThreadId, msg.ID); refused != nil || err != nil {
+	if refused, err := s.resumePausedRunForMessage(ctx, userID, chat, toThread, msg.ID); refused != nil || err != nil {
 		return refused, err
 	}
 
 	switch {
 	case resumeStoppedAgent:
 		return s.resumeStoppedAgent(ctx, userID, chat, req.Msg.ThreadId, msg.ID, resumability)
+	case routedToGraphAgent:
+		// A graph run that closed before the wake is never restarted for a
+		// message (reliant #2394): withdraw the row and say so, and the
+		// composer keeps the text.
+		if s.wakeLiveRun(ctx, chat, toThread, threadwake.ReasonMailbox) {
+			if _, err := s.deps.Repo.CancelQueuedAgentMessage(ctx, msg.ID, chat.ID); err != nil {
+				logging.WarnContext(ctx, "Could not withdraw a message whose run ended before it was read",
+					"error", err, "chatID", chat.ID, "messageID", msg.ID)
+			}
+			return connect.NewResponse(&reliantv1.SendAgentMessageResponse{
+				Success: false,
+				Message: "Not delivered: the run ended before its agent read the message.",
+			}), nil
+		}
 	case !isMainThread:
-		_ = s.notifyThreadWake(ctx, chat, req.Msg.ThreadId, threadwake.ReasonMailbox)
+		_ = s.notifyThreadWake(ctx, chat, toThread, threadwake.ReasonMailbox)
 	case restartMainRun && owningWorkflow.Status.StopReason == core.StopReasonCancelled:
 		// A stopped run exits without reading its doorbell, even while
 		// Temporal still has it open, so a wake would strand the row. Start

@@ -29,6 +29,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/errreason"
 	"github.com/reliant-labs/reliant/internal/launch"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 )
@@ -166,10 +167,14 @@ func (r *Runs) CancelRun(ctx context.Context, userID, chatID string) error {
 	return err
 }
 
-// DeliverToRun saves a message to a live run's root thread and wakes it, with
+// DeliverToRun saves a message for a live run and wakes it, with
 // RunService.SignalRun's semantics: only a live run receives anything, and a
 // run that is not live reports Delivered=false rather than being started.
-func (r *Runs) DeliverToRun(ctx context.Context, userID, chatID, message string, from tools.RunSender) (tools.RunDelivery, error) {
+// thread names the run's thread the message is for; "" lets the run choose
+// the thread its one running agent reads. A live run with no agent running
+// reports Delivered=false with NotDeliveredReason; one with several running
+// in parallel and no thread named is an error that lists them.
+func (r *Runs) DeliverToRun(ctx context.Context, userID, chatID, thread, message string, from tools.RunSender) (tools.RunDelivery, error) {
 	if r.api == nil {
 		return tools.RunDelivery{}, errors.New("no run service is configured")
 	}
@@ -182,7 +187,8 @@ func (r *Runs) DeliverToRun(ctx context.Context, userID, chatID, message string,
 		Subject:  from.Subject,
 	})
 	resp, err := r.api.SignalRun(ctx, connect.NewRequest(&reliantv1.SignalRunRequest{
-		RunId: chatID,
+		RunId:  chatID,
+		Thread: thread,
 		Messages: []*reliantv1.InputMessage{{
 			Role:    reliantv1.MessageRole_MESSAGE_ROLE_USER,
 			Content: message,
@@ -192,6 +198,9 @@ func (r *Runs) DeliverToRun(ctx context.Context, userID, chatID, message string,
 		return tools.RunDelivery{}, err
 	}
 	delivery := tools.RunDelivery{Delivered: resp.Msg.Delivered}
+	if !resp.Msg.Delivered {
+		delivery.NotDeliveredReason = resp.Header().Get(errreason.NotDeliveredHeader)
+	}
 	if len(resp.Msg.MessageIds) > 0 {
 		delivery.MessageID = resp.Msg.MessageIds[0]
 	}

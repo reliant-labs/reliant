@@ -37,6 +37,7 @@ import { toast } from "../../lib/toast-manager";
 import { isDaemonConnectingError } from "../../lib/daemon-errors";
 import { sendWithDaemonWait } from "../../lib/daemon-retry";
 import { newClientMessageId } from "../../lib/pendingSends";
+import { runRecipientRefusal } from "../../lib/runRecipient";
 
 import type { Approval } from "../../gen/reliant/v1/approval_pb";
 
@@ -238,8 +239,10 @@ export function ChatContainer({
             new Error("Your machine didn't come online, so the message wasn't sent."),
           );
         } else {
-          // Show error toast to user
-          toast.error(error);
+          // A run with several agents running (open one's thread to message
+          // it), or none, refuses the message: nothing was queued.
+          const refusal = runRecipientRefusal(error);
+          toast.error(refusal ? new Error(refusal) : error);
         }
         throw error;
       }

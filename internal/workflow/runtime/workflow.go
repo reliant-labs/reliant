@@ -353,6 +353,12 @@ type ChildWorkflowTracker struct {
 	// on a hint rather than on known input — see setSpeculativeTurn.
 	speculativeTurns map[string]bool
 
+	// agentLoops is the run's agent-loop registry: the threads an agent loop
+	// driven by the graph runs on now (agent_loop_threads.go).
+	agentLoops map[string]*agentLoop
+	// rootRanAgentLoop records that an agent loop ran on the root thread in
+	// this execution, so a wake on that thread is input a turn can read.
+	rootRanAgentLoop bool
 	// resumeTurns marks the threads whose next call_llm turn is the first of
 	// a loop resumed mid-work — see markResumeTurn.
 	resumeTurns map[string]bool
@@ -1298,6 +1304,15 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to set thread liveness query handler: %w", err)
+	}
+
+	// Which threads an agent is reading now, for routing input addressed to
+	// the run (agent_loop_threads.go).
+	err = workflow.SetQueryHandler(ctx, AgentLoopThreadsQuery, func() ([]AgentLoopThread, error) {
+		return childTracker.agentLoopThreads(), nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to set agent loop threads query handler: %w", err)
 	}
 
 	// Register workflow inputs query handler (for checking if params actually changed)
