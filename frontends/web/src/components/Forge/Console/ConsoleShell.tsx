@@ -277,7 +277,8 @@ export function ConsoleShell({
      * edge to 3:1 so filters and toggles read as controls beside the charts
      * (controlStyles.ts).
      */
-    // data-tour: the forge journey spotlights the nav (`[data-tour='forge-console'] #sidebar-layout-nav`).
+    // data-tour: the forge journey spotlights the nav (`[data-tour='forge-console'] aside`, SidebarLayout's one
+    // <aside>; its id comes from useId since forge 0a3a89d5, so the tour cannot name it).
     <div className="forge-ui forge-console h-dvh w-full" data-testid="forge-shell" data-tour="forge-console">
       <SidebarLayout
         navLabel={nav.project}
