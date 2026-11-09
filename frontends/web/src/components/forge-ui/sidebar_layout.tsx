@@ -121,6 +121,24 @@ function useNarrow(): boolean {
   return narrow;
 }
 
+// Resolve on each keypress: collapsing a group changes the drawer's tab stops.
+// CSS-hidden desktop controls must not become the mobile trap's last stop.
+function drawerTabStops(panel: HTMLElement): HTMLElement[] {
+  return Array.from(
+    panel.querySelectorAll<HTMLElement>(
+      'a[href], button, input, select, textarea, [tabindex], [contenteditable="true"]',
+    ),
+  ).filter((element) => {
+    if (element.tabIndex < 0 || element.matches(":disabled") || element.closest("[inert], [hidden]")) return false;
+    for (let ancestor: HTMLElement | null = element; ancestor; ancestor = ancestor.parentElement) {
+      const style = window.getComputedStyle(ancestor);
+      if (style.display === "none" || style.visibility === "hidden") return false;
+      if (ancestor === panel) break;
+    }
+    return true;
+  });
+}
+
 function itemKey(item: SidebarNavItem, i: number): string {
   return `${item.href ?? item.label}:${i}`;
 }
@@ -272,8 +290,8 @@ export default function SidebarLayout({
   // it closes, so a keyboard or screen-reader user is never left behind it.
   const wasShown = useRef(false);
   useEffect(() => {
-    if (drawerShown) {
-      navRef.current?.querySelector<HTMLElement>("a[href], button:not([disabled])")?.focus();
+    if (drawerShown && navRef.current) {
+      (drawerTabStops(navRef.current)[0] ?? navRef.current).focus();
     } else if (wasShown.current) {
       menuButtonRef.current?.focus();
     }
@@ -282,11 +300,27 @@ export default function SidebarLayout({
   useEffect(() => {
     if (!drawerShown) return;
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      // The open drawer is `aria-modal`, so a page-level Escape binding that
-      // defers to open dialogs (a console's "leave") steps aside for it.
-      event.preventDefault();
-      setDrawerOpen(false);
+      const panel = navRef.current;
+      if (!panel) return;
+      // A nested modal (including a portalled one) owns its own keyboard cycle.
+      const active = document.activeElement;
+      const owner = active instanceof Element ? active.closest('[aria-modal="true"]') : null;
+      if (owner && owner !== panel) return;
+      if (event.key === "Escape") {
+        // Page-level Escape bindings defer to this open modal.
+        event.preventDefault();
+        setDrawerOpen(false);
+      } else if (event.key === "Tab") {
+        const stops = drawerTabStops(panel);
+        const first = stops[0];
+        const last = stops[stops.length - 1];
+        // Also recover focus from page siblings/portals outside the inert column.
+        const outside = !panel.contains(active) || active === panel;
+        if (!first || outside || (event.shiftKey ? active === first : active === last)) {
+          event.preventDefault();
+          (event.shiftKey ? last ?? panel : first ?? panel).focus();
+        }
+      }
     };
     window.addEventListener("keydown", onKeyDown, true);
     return () => window.removeEventListener("keydown", onKeyDown, true);
@@ -459,6 +493,7 @@ export default function SidebarLayout({
         role={drawerShown ? "dialog" : undefined}
         aria-modal={drawerShown ? true : undefined}
         aria-label={drawerShown ? (navLabel ?? "Navigation") : undefined}
+        tabIndex={drawerShown ? -1 : undefined}
         className={`flex shrink-0 flex-col border-r border-border bg-surface transition-[width] duration-200 motion-reduce:transition-none ${
           collapsed ? "w-14" : "w-60"
         } max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:z-50 max-md:w-[min(18rem,85vw)] max-md:pb-[env(safe-area-inset-bottom)] max-md:pt-[env(safe-area-inset-top)] max-md:transition-transform ${
@@ -547,10 +582,7 @@ export default function SidebarLayout({
         </div>
       </aside>
 
-      {/* Main — inert under the open drawer: it is `aria-modal`, so Tab must
-          not walk out of it into the page behind the scrim. The attribute
-          leaves in the same commit that closes the drawer, before the effect
-          above hands focus back to the menu button. */}
+      {/* Inert clears in the closing commit, before focus returns to the trigger. */}
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden" inert={drawerShown}>
         {/* Top bar — omitted when there is nothing to put in it, so a page
             that owns its own header does not sit under an empty bar. */}

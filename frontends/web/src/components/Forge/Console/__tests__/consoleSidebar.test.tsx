@@ -8,8 +8,9 @@
  * wires it (useObsNavOpen).
  */
 
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { fireEvent, render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 
 import SidebarLayout from "@/components/forge-ui/sidebar_layout";
 
@@ -48,6 +49,15 @@ beforeEach(() => {
   window.localStorage.clear();
   navigate.mockClear();
 });
+afterEach(() => vi.unstubAllGlobals());
+
+function mobileViewport() {
+  vi.stubGlobal("matchMedia", vi.fn(() => ({
+    matches: true,
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+  })));
+}
 
 describe("the console sidebar's Observability group", () => {
   it("is expanded on a page outside it", () => {
@@ -99,6 +109,69 @@ describe("the console sidebar's Observability group", () => {
     fireEvent.click(obsToggle());
     expect(logsLink()).not.toBeInTheDocument();
     expect(window.localStorage.getItem(OBS_NAV_OPEN_KEY)).toBeNull();
+  });
+
+  it("cycles mobile keyboard focus inside the live nav, not the page or external portals", async () => {
+    mobileViewport();
+    const user = userEvent.setup();
+    render(<><button>Outside shell</button><Sidebar page={{ kind: "overview" }} /></>);
+    const trigger = screen.getByRole("button", { name: "Open navigation" });
+    await user.click(trigger);
+    const drawer = screen.getByRole("dialog");
+    const first = within(drawer).getAllByRole("link")[0];
+    const last = within(drawer).getByRole("link", { name: "Activity" });
+    // jsdom has no Tailwind layout. Model the desktop-only collapse button's CSS.
+    within(drawer).getByRole("button", { name: "Collapse sidebar" }).style.display = "none";
+    expect(first).toHaveFocus();
+    last.focus();
+    await user.tab();
+    expect(first).toHaveFocus();
+    await user.tab({ shift: true });
+    expect(last).toHaveFocus();
+    expect(trigger.closest("[inert]")).not.toBeNull();
+    await user.click(obsToggle());
+    expect(logsLink()).not.toBeInTheDocument();
+    last.focus();
+    await user.tab();
+    expect(first).toHaveFocus();
+    screen.getByRole("button", { name: "Outside shell" }).focus();
+    await user.tab();
+    expect(first).toHaveFocus();
+    screen.getByRole("button", { name: "Outside shell" }).focus();
+    await user.tab({ shift: true });
+    expect(last).toHaveFocus();
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(trigger.closest("[inert]")).toBeNull();
+    expect(trigger).toHaveFocus();
+  });
+
+  it("keeps an empty mobile drawer focusable and restores its trigger on scrim close", async () => {
+    mobileViewport();
+    const user = userEvent.setup();
+    render(<SidebarLayout brand="shop" navItems={[]}>page</SidebarLayout>);
+    const trigger = screen.getByRole("button", { name: "Open navigation" });
+    await user.click(trigger);
+    const drawer = screen.getByRole("dialog");
+    within(drawer).getByRole("button", { name: "Collapse sidebar" }).style.display = "none";
+    drawer.focus();
+    await user.tab();
+    expect(drawer).toHaveFocus();
+    await user.tab({ shift: true });
+    expect(drawer).toHaveFocus();
+    fireEvent.click(screen.getByRole("presentation"));
+    expect(trigger).toHaveFocus();
+    expect(trigger.closest("[inert]")).toBeNull();
+  });
+
+  it("does not contain desktop keyboard focus", async () => {
+    const user = userEvent.setup();
+    render(<><Sidebar page={{ kind: "overview" }} /><button>Outside shell</button></>);
+    const last = screen.getByRole("button", { name: "Collapse sidebar" });
+    last.focus();
+    await user.tab();
+    expect(screen.getByRole("button", { name: "Outside shell" })).toHaveFocus();
+    expect(document.querySelector("[inert]")).toBeNull();
   });
 
   it("leaves the icon rail as it was: no sub-pages, no chevron", () => {

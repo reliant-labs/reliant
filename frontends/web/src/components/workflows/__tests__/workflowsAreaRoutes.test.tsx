@@ -252,7 +252,7 @@ describe("Workflows area routes render inside the shell with the right tab", () 
     expect(exit.compareDocumentPosition(breadcrumb) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Open navigation" }));
     expect(screen.getByRole("dialog", { name: "Workflows" })).toBeInTheDocument();
-    // The drawer is aria-modal: the page behind it (header included) is inert, so Tab cannot leave it.
+    // The page behind the modal, including its header, is inert.
     expect(header.closest("[inert]")).not.toBeNull();
     fireEvent.keyDown(document.body, { key: "Escape" });
     expect(screen.queryByRole("dialog", { name: "Workflows" })).toBeNull();
