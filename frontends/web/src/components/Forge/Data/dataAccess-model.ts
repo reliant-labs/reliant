@@ -9,10 +9,9 @@
  * with that reason in the audit log and the Activity feed. The browser asks
  * once, in a dialog naming the environment, and then sends both on every read.
  *
- * The answer is kept in sessionStorage, per environment id: it lasts as long
- * as the tab (a reload keeps it, a new tab asks again) and never outlives the
- * session the person confirmed in. A reason is about one piece of work; a
- * permanent one would turn every later read into a misleading audit row.
+ * The answer is kept per environment, reader and in-memory auth epoch through
+ * AuditedAccess. Reload and account changes discard it; a legacy environment-
+ * only reason is never migrated as authority. Data and Storage stay separate.
  *
  * Nothing else here: no policy is decided client-side. The server decides
  * from the recorded release shape, and a `confirmation_required` refusal

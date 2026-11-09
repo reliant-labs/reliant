@@ -51,6 +51,10 @@ import { FIXTURE_ENVS, FIXTURE_PROJECT } from "../Observability/__fixtures__/fix
 import { ObsReadOnlyProvider, type ObsReadOnly } from "../Observability/obsReadOnly";
 import { createDemoApi } from "./demoData/demoApi";
 import { DemoBrowserProviders } from "./DemoBrowserProviders";
+import { DataBrowser } from "../Data/DataBrowser";
+import type { DataSearch } from "../Data/dataUrl-model";
+import { StorageBrowser } from "../Storage/StorageBrowser";
+import type { StorageSearch } from "../Storage/storageUrl-model";
 import { DemoBanner } from "./DemoBanner";
 import { DemoWelcome } from "./DemoWelcome";
 import { DEMO_SECTION_BUILT, FORGE_DEMO_PATH } from "./demoPath";
@@ -83,6 +87,7 @@ const READ_ONLY: ObsReadOnly = { readOnly: true, reason: "Read-only demo" };
 function demoLink(target: ConsolePage): string {
   // The demo site mounts the real console (/forge/p/shop/…): every nav row goes to its page.
   if (isDemoShell()) return consolePath(FIXTURE_PROJECT, target);
+  if (target.kind === "data" || target.kind === "storage") return withSearch(FORGE_DEMO_PATH, { browser: target.kind, envs: ["staging"] });
   if (target.kind === "obs-view" && (OBS_VIEWS as readonly string[]).includes(target.view)) {
     return withSearch(FORGE_DEMO_PATH, { view: target.view });
   }
@@ -102,7 +107,7 @@ export interface DemoConsoleProps {
 export function DemoConsole({ shell: shellProp }: DemoConsoleProps = {}) {
   const shell = shellProp ?? getTourShell();
   const navigate = useNavigate();
-  const search = useSearch({ strict: false }) as ObsSearch & { tour?: string; section?: string };
+  const search = useSearch({ strict: false }) as ObsSearch & DataSearch & StorageSearch & { tour?: string; section?: string; browser?: "data" | "storage" };
   const [collapsed, setCollapsed] = useState(false);
   // Its own client and API: nothing here shares a cache entry with a real project's console.
   const [queryClient] = useState(() => new QueryClient({ defaultOptions: { queries: { retry: false, refetchOnWindowFocus: false } } }));
@@ -111,7 +116,12 @@ export function DemoConsole({ shell: shellProp }: DemoConsoleProps = {}) {
   const api = useMemo(() => createDemoApi(), []);
 
   const view = viewOf(search.view);
-  const env = search.envs?.length === 1 ? search.envs[0] : ENV_ALL;
+  const env = search.envs?.length === 1 ? search.envs[0] : search.browser ? "staging" : ENV_ALL;
+  const browserEnv = FIXTURE_ENVS.find((candidate) => candidate.name === env);
+  const browserHref = (next: DataSearch | StorageSearch) => withSearch(FORGE_DEMO_PATH, { browser: search.browser, envs: [env], ...next });
+  const navigateBrowser = (next: DataSearch | StorageSearch, options?: { replace?: boolean }) => void navigate({
+    to: ".", search: { browser: search.browser, envs: [env], ...next }, replace: options?.replace,
+  } as never);
 
   // The panel's navigation, onto this route's search (`tour` rides along: the route retains it).
   const navigateObs = useCallback<ObsNavigate>(
@@ -144,7 +154,7 @@ export function DemoConsole({ shell: shellProp }: DemoConsoleProps = {}) {
             <ObservabilityBillingApiContext.Provider value={legacyBillingApi}>
               <ConsoleShell
                 project={FIXTURE_PROJECT}
-                page={pageOf(view)}
+                page={search.browser ? { kind: search.browser } : pageOf(view)}
                 env={env}
                 envs={NAV_ENVS}
                 alertsFiring={1}
@@ -169,6 +179,15 @@ export function DemoConsole({ shell: shellProp }: DemoConsoleProps = {}) {
                       <Suspense fallback={<p className="text-sm text-ink-muted">Loading the recorded run…</p>}>
                         <HowThisAppWasBuilt onBack={isDemoShell() ? undefined : leaveBuilt} autoPlay={false} leadWithRecording={isDemoShell()} />
                       </Suspense>
+                    </>
+                  ) : search.browser ? (
+                    <>
+                      <PageHeader density="compact" title={search.browser === "data" ? "Data" : "Storage"} className="mb-0" />
+                      {!browserEnv ? <p role="alert">Choose a sample environment: dev, staging or prod.</p> : search.browser === "data" ? (
+                        <DataBrowser env={browserEnv} search={search} onNavigate={navigateBrowser} href={browserHref} />
+                      ) : (
+                        <StorageBrowser env={browserEnv} search={search} onNavigate={navigateBrowser} href={browserHref} />
+                      )}
                     </>
                   ) : (
                     <>
