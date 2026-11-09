@@ -16,7 +16,7 @@ import { cn } from "../../lib/utils";
 import { tabSwitchProfiler } from "../../lib/tabSwitchProfiler";
 import { ToolExecution, type ToolResultData } from "./ToolExecution";
 import { ToolExecutionGroup } from "./ToolExecutionGroup";
-import { fetchFullToolResult } from "../../hooks/tool-result-queries";
+import { fetchFullToolBodies } from "../../hooks/tool-result-queries";
 import { ToolExecutionCollapsibleGroup } from "./ToolExecutionCollapsibleGroup";
 import { isReadOnlyTool, isRequestMachineTool } from "../../lib/toolFormatters";
 import { RequestMachineCard, requestMachineReason } from "./tool-renderers/RequestMachineToolRenderer";
@@ -45,6 +45,7 @@ import { useSurface, useCapability } from "../../lib/surfaceContext";
 
 // import { useChatNavigationStore } from "../../store/chatNavigationStore";
 import { logger } from "../../lib/logger";
+import { toast } from "../../lib/toast-manager";
 import {
   getProcessedMessage,
   type ToolCallData,
@@ -56,6 +57,64 @@ import { isQuietToolRun } from "./thread-views/transcriptPresentation";
 import type { MessageSlice } from "./thread-views/simplifiedTurns";
 
 export type ChatTimelineVariant = "compact" | "card" | "minimal";
+
+type CopiedExecution = {
+  call: Pick<ToolCallData, "id" | "input" | "inputElided" | "content_block_id">;
+  result?: Pick<ProcessedToolResultData, "content" | "truncated" | "elided" | "block_id">;
+};
+
+function parseCopiedInput(raw: string | undefined): ToolCallData["input"] {
+  if (!raw) return undefined;
+  try {
+    return JSON.parse(raw) as Record<string, unknown>;
+  } catch {
+    return raw;
+  }
+}
+
+/**
+ * Each execution's input and result as a copy writes them: the bodies a stub
+ * read elided and the results a read previewed, fetched whole in one batch
+ * (fetchFullToolBodies). Throws rather than copy a skeleton or a stub.
+ */
+async function fullBodiesOfExecutions(
+  chatId: string | null | undefined,
+  executions: CopiedExecution[],
+): Promise<{ inputs: ToolCallData["input"][]; results: (string | undefined)[] }> {
+  const elidedBlockIds: string[] = [];
+  const truncatedCallIds: string[] = [];
+  for (const { call, result } of executions) {
+    if (call.inputElided) {
+      if (!call.content_block_id) throw new Error("A tool call's input was left out and cannot be read");
+      elidedBlockIds.push(call.content_block_id);
+    }
+    if (result?.elided) {
+      if (!result.block_id) throw new Error("A tool result was left out and cannot be read");
+      elidedBlockIds.push(result.block_id);
+    } else if (result?.truncated) {
+      truncatedCallIds.push(call.id);
+    }
+  }
+  const needsFetch = elidedBlockIds.length > 0 || truncatedCallIds.length > 0;
+  if (needsFetch && !chatId) throw new Error("Tool bodies cannot be read without the chat");
+  const full = needsFetch && chatId
+    ? await fetchFullToolBodies(chatId, { elidedBlockIds, truncatedCallIds })
+    : { bodies: {}, fullResults: new Map<string, string>() };
+  return {
+    inputs: executions.map(({ call }) =>
+      call.inputElided && call.content_block_id
+        ? parseCopiedInput(full.bodies[call.content_block_id]?.input)
+        : call.input,
+    ),
+    results: executions.map(({ call, result }) =>
+      result?.elided && result.block_id
+        ? full.bodies[result.block_id]?.content
+        : result?.truncated
+          ? full.fullResults.get(call.id)
+          : result?.content,
+    ),
+  };
+}
 
 /**
  * User-message bubble heights.
@@ -319,23 +378,21 @@ function ChatMessageComponent({
       }
 
       if (!slice && parsed.toolExecutions && parsed.toolExecutions.length > 0) {
-        // A large result is held as a preview: copy the full output instead.
-        const resultContents = await Promise.all(
-          parsed.toolExecutions.map((execution) =>
-            execution.result?.truncated && chatId
-              ? fetchFullToolResult(chatId, execution.call.id)
-              : Promise.resolve(execution.result?.content),
-          ),
-        );
-        parsed.toolExecutions.forEach((execution, index) => {
+        // The transcript may hold a call's input as a skeleton, its result as
+        // a stub (both elided by a stub read) or a large result as a preview:
+        // copy the bodies, read whole in one batch, never what labelled the row.
+        const executions = parsed.toolExecutions;
+        const { inputs, results } = await fullBodiesOfExecutions(chatId, executions);
+        executions.forEach((execution, index) => {
+          const input = inputs[index];
           // Format tool call with parameters like Claude does
           let toolCallText = `Tool: ${execution.call.name}`;
           if (
-            execution.call.input &&
-            typeof execution.call.input === "object" &&
-            execution.call.input !== null
+            input &&
+            typeof input === "object" &&
+            input !== null
           ) {
-            const params = Object.entries(execution.call.input)
+            const params = Object.entries(input)
               .map(([key, value]) => {
                 if (typeof value === "string") {
                   return `${key}: ${value}`;
@@ -349,10 +406,10 @@ function ChatMessageComponent({
 
             // Check if the formatted parameters would be too long or cluttered
             const totalLength = params.length;
-            const hasLongStrings = Object.values(execution.call.input).some(
+            const hasLongStrings = Object.values(input).some(
               (val) => typeof val === "string" && val.length > 50,
             );
-            const hasComplexObjects = Object.values(execution.call.input).some(
+            const hasComplexObjects = Object.values(input).some(
               (val) =>
                 typeof val === "object" &&
                 val !== null &&
@@ -370,13 +427,13 @@ function ChatMessageComponent({
           }
 
           contentToCopy += `${toolCallText}\n`;
-          const resultContent = resultContents[index];
+          const resultContent = results[index];
           if (resultContent) {
             contentToCopy += resultContent + "\n";
           } else {
             contentToCopy += "No output available\n";
           }
-          if (index < parsed.toolExecutions!.length - 1) {
+          if (index < executions.length - 1) {
             contentToCopy += "\n";
           }
         });
@@ -395,6 +452,8 @@ function ChatMessageComponent({
       setTimeout(() => setCopied(false), 2000);
     } catch (error) {
       logger.error("Failed to copy message:", error);
+      // A copy that would need a body it could not read copies nothing.
+      void toast.error(error);
     }
   };
 

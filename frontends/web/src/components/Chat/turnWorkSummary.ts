@@ -22,6 +22,8 @@ export interface TurnWorkCall {
   /** When the call finished, from the tool_calls row; ends the turn's elapsed time. */
   durableCompletedAt?: string;
   childWorkflowId?: string;
+  /** Set when `input` is a skeleton (a stub read): the stored input's byte length. */
+  inputSize?: number;
 }
 
 export interface TurnWorkExecution {
@@ -118,7 +120,9 @@ function countKeyFor(toolName: string): TurnWorkCountKey {
 
 function stepLabel(call: TurnWorkCall, max: number, phase: "live" | "done"): string {
   const formatted =
-    call.input === undefined ? undefined : formatToolParams(call.name, call.input as ToolInput);
+    call.input === undefined
+      ? undefined
+      : formatToolParams(call.name, call.input as ToolInput, { inputSize: call.inputSize });
   const preview = formatted?.summary?.trim();
   const verb = toolActionVerb(call.name, phase, call.input);
   // A shell call's description is already an action ("Run cart tests").
