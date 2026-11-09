@@ -251,6 +251,20 @@ message IssueScope {
   // Control-plane environment ids (deploy_environments.id). Empty = every
   // environment of the org (of the project, when project_id is set).
   repeated string env_ids = 6 [(buf.validate.field).repeated.max_items = 50];
+  // QueryScope.instance_ids: only the issues of these dev instances' events.
+  // The response's instance_scope says it was applied.
+  repeated string instance_ids = 9 [
+    (buf.validate.field).repeated.max_items = 50,
+    (buf.validate.field).repeated.items.string.min_len = 1,
+    (buf.validate.field).repeated.items.string.max_len = 128
+  ];
+  // QueryScope.instance_users: the instances of these people, by email; an
+  // email that names no member matches nothing.
+  repeated string instance_users = 10 [
+    (buf.validate.field).repeated.max_items = 50,
+    (buf.validate.field).repeated.items.string.min_len = 1,
+    (buf.validate.field).repeated.items.string.max_len = 320
+  ];
 }
 
 enum IssueSort {
@@ -359,6 +373,10 @@ message ListIssuesResponse {
   repeated Issue issues = 1;
   // Empty on the last page.
   string next_page_token = 2;
+  // The instance narrowing this answer applied: scope.instance_ids and
+  // instance_users, echoed exactly. Unset when the request named none, or
+  // when this read could not apply it (controlplane.v1.InstanceScope).
+  controlplane.v1.InstanceScope instance_scope = 3;
 }
 
 message GetIssueRequest {
@@ -370,6 +388,21 @@ message GetIssueRequest {
   int32 incident_window_seconds = 3 [
     (buf.validate.field).int32.gte = 0,
     (buf.validate.field).int32.lte = 3600
+  ];
+  // Narrow the counts, trend, versions and latest event to these dev
+  // instances' events (IssueScope.instance_ids). The response's
+  // instance_scope says it was applied.
+  repeated string instance_ids = 4 [
+    (buf.validate.field).repeated.max_items = 50,
+    (buf.validate.field).repeated.items.string.min_len = 1,
+    (buf.validate.field).repeated.items.string.max_len = 128
+  ];
+  // IssueScope.instance_users: the instances of these people, by email; an
+  // email that names no member matches nothing.
+  repeated string instance_users = 5 [
+    (buf.validate.field).repeated.max_items = 50,
+    (buf.validate.field).repeated.items.string.min_len = 1,
+    (buf.validate.field).repeated.items.string.max_len = 320
   ];
 }
 
@@ -391,6 +424,10 @@ message GetIssueResponse {
   // cause, first seen close in time, in any service. Empty when it is part of
   // none.
   repeated string incident_issue_ids = 7;
+  // The instance narrowing this answer applied: the request's instance_ids
+  // and instance_users, echoed exactly. Unset when the request named none
+  // (controlplane.v1.InstanceScope).
+  controlplane.v1.InstanceScope instance_scope = 8;
 }
 
 // IssueEvent is one occurrence of an issue.
@@ -482,12 +519,30 @@ message ListIssueEventsRequest {
     (buf.validate.field).string.min_len = 1,
     (buf.validate.field).string.max_len = 256
   ];
+  // Only the events of these dev instances (IssueScope.instance_ids). The response's
+  // instance_scope says it was applied.
+  repeated string instance_ids = 9 [
+    (buf.validate.field).repeated.max_items = 50,
+    (buf.validate.field).repeated.items.string.min_len = 1,
+    (buf.validate.field).repeated.items.string.max_len = 128
+  ];
+  // IssueScope.instance_users: the instances of these people, by email; an
+  // email that names no member matches nothing.
+  repeated string instance_users = 10 [
+    (buf.validate.field).repeated.max_items = 50,
+    (buf.validate.field).repeated.items.string.min_len = 1,
+    (buf.validate.field).repeated.items.string.max_len = 320
+  ];
 }
 
 message ListIssueEventsResponse {
   // Newest first.
   repeated IssueEvent events = 1;
   string next_page_token = 2;
+  // The instance narrowing this answer applied: the request's instance_ids
+  // and instance_users, echoed exactly. Unset when the request named none
+  // (controlplane.v1.InstanceScope).
+  controlplane.v1.InstanceScope instance_scope = 3;
 }
 
 // IssueStatusChange is what a caller may set. The other IssueStatus values are

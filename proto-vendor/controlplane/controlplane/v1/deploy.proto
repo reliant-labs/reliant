@@ -2083,6 +2083,17 @@ message DeployLocalSession {
   // Set when the client reported `state = stopped`. A clean exit, as distinct
   // from a session that simply went quiet.
   google.protobuf.Timestamp stopped_at = 8;
+  // The dev instance this session's telemetry is stamped with
+  // (reliant.instance.id, the dev token's `sid`): the telemetry grant
+  // DeployService.MintLocalTelemetryToken holds for the session and its
+  // reporter (owner). What `forge obs --instance <label>` resolves a label of
+  // another machine's stack to, and QueryScope.instance_ids takes. Empty when
+  // the session has no grant: it never minted a dev token, so it sent no
+  // telemetry to the hosted store.
+  string instance_id = 9;
+  // The email of the person whose `forge env up` reported the session last.
+  // Empty when that user is gone.
+  string owner = 10;
 }
 
 // DeployPlan is what a deploy WOULD do, computed before anyone approves it.

@@ -66,6 +66,21 @@ describe("organization dashboard routes without deployments", () => {
     expect(refetch).toHaveBeenCalledTimes(1);
   });
 
+  // A project's standard built-in reads its environments: unlike an
+  // organization view, it waits behind the roster like a release dashboard.
+  it("opens a project's standard built-in in the project, behind the roster", async () => {
+    route.params = { kind: "builtin", key: "usage" };
+    try {
+      const api = createFixtureApi();
+      api.getDashboard = vi.fn().mockRejectedValue(new Error("not reached"));
+      renderWithApi(api, <DashboardPage />);
+      expect(await screen.findByTestId("observability-no-envs")).toBeInTheDocument();
+      expect(api.getDashboard).not.toHaveBeenCalled();
+    } finally {
+      route.params = { kind: "builtin", key: "org-costs" };
+    }
+  });
+
   it("claims nothing about environments while the roster is still loading", async () => {
     consoleState.roster = { ...EMPTY_ROSTER, isLoading: true };
     const api = createFixtureApi();
