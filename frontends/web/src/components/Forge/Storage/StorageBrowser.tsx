@@ -91,12 +91,12 @@ function ReaderStorageBrowser({ env, search, onNavigate, href, onDownloadUrl = n
     }
   }, [listed.data, selected, search, onNavigate]);
 
-  const [access, setAccess] = useState<AccessConfirmation | null>(() => readStorageAccess(env.id));
+  const [access, setAccess] = useState<AccessConfirmation | null>(() => readStorageAccess(env.id, reader));
   const [asking, setAsking] = useState(false);
   const [confirmationRequired, setConfirmationRequired] = useState(false);
   const confirmationLost = useCallback(() => {
     if (!isCurrentReader(reader)) return;
-    clearStorageAccess(env.id);
+    clearStorageAccess(env.id, reader);
     setAccess(null);
     setConfirmationRequired(true);
     setAsking(true);
@@ -178,7 +178,7 @@ function ReaderStorageBrowser({ env, search, onNavigate, href, onDownloadUrl = n
           initialReason={access?.reason ?? ""}
           onConfirm={(reason) => {
             if (!isCurrentReader(reader)) return;
-            setAccess(writeStorageAccess(env.id, reason));
+            setAccess(writeStorageAccess(env.id, reason, reader));
             setAsking(false);
           }}
           onCancel={() => setAsking(false)}

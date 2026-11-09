@@ -1,4 +1,4 @@
-import { useSyncExternalStore } from "react";
+import { createContext, createElement, useContext, useEffect, useSyncExternalStore, type ReactNode } from "react";
 
 /** No credentials or PII: an authenticated reader and one in-memory auth epoch.
  * Reload deliberately starts a fresh epoch and asks for confirmation again. */
@@ -18,7 +18,19 @@ function discardConfirmations() {
 // A reload has no confirmed reader yet; discard all older epochs and legacy keys.
 discardConfirmations();
 export const getReaderSession = () => current;
-export const isCurrentReader = (reader: ReaderSession) => !!reader.principalId && reader === current;
+// Synthetic readers belong to an isolated fixture subtree, never the global auth store.
+const fixtureReaders = new WeakSet<ReaderSession>();
+const ReaderContext = createContext<ReaderSession | null>(null);
+export function FixtureReaderProvider({ reader, children }: { reader: ReaderSession; children: ReactNode }) {
+  useEffect(() => { fixtureReaders.add(reader); return () => { fixtureReaders.delete(reader); }; }, [reader]);
+  return createElement(ReaderContext.Provider, { value: reader }, children);
+}
+export function createFixtureReader(): ReaderSession {
+  const reader = { principalId: "synthetic-console-demo", epoch: crypto.randomUUID() };
+  fixtureReaders.add(reader);
+  return reader;
+}
+export const isCurrentReader = (reader: ReaderSession) => !!reader.principalId && (reader === current || fixtureReaders.has(reader));
 export function setReaderPrincipal(principalId: string | null, force = false): void {
   if (!force && current.principalId === principalId) return;
   discardConfirmations(); // Never migrate a legacy/unscoped reason into a new identity.
@@ -30,7 +42,9 @@ export function subscribeReaderSession(listener: () => void) {
   return () => { listeners.delete(listener); };
 }
 export function useReaderSession(): ReaderSession {
-  return useSyncExternalStore(subscribeReaderSession, getReaderSession, getReaderSession);
+  const fixture = useContext(ReaderContext);
+  const authenticated = useSyncExternalStore(subscribeReaderSession, getReaderSession, getReaderSession);
+  return fixture ?? authenticated;
 }
 /** Reject before issuing a request AND after awaiting it, even if it ignored abort. */
 export function requireCurrentReader(reader: ReaderSession): void {

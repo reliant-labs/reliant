@@ -20,40 +20,22 @@
  */
 
 import type { DataAccessConfirmation, DataAccessPolicyName } from "@/services/controlPlane/observability/appDatabaseApi";
+import * as session from "../AuditedAccess/accessSession-model";
+import { getReaderSession } from "../AuditedAccess/readerSession";
 
 /** The server's bound on reason (DescribeDatabaseRequest.reason max_len). */
 export const REASON_MAX = 500;
 
-const storageKey = (environmentId: string) => `forge.data.access.${environmentId}`;
-
-export function readAccess(environmentId: string): DataAccessConfirmation | null {
-  try {
-    const raw = window.sessionStorage.getItem(storageKey(environmentId));
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as { reason?: unknown };
-    const reason = typeof parsed.reason === "string" ? parsed.reason.trim() : "";
-    return reason ? { confirmEnvId: environmentId, reason } : null;
-  } catch {
-    return null;
-  }
+export function readAccess(environmentId: string, reader = getReaderSession()): DataAccessConfirmation | null {
+  return session.readAccess("data", environmentId, reader);
 }
 
-export function writeAccess(environmentId: string, reason: string): DataAccessConfirmation {
-  const trimmed = reason.trim().slice(0, REASON_MAX);
-  try {
-    window.sessionStorage.setItem(storageKey(environmentId), JSON.stringify({ reason: trimmed }));
-  } catch {
-    // Storage disabled: the confirmation holds for this page only.
-  }
-  return { confirmEnvId: environmentId, reason: trimmed };
+export function writeAccess(environmentId: string, reason: string, reader = getReaderSession()): DataAccessConfirmation {
+  return session.writeAccess("data", environmentId, reason, reader);
 }
 
-export function clearAccess(environmentId: string): void {
-  try {
-    window.sessionStorage.removeItem(storageKey(environmentId));
-  } catch {
-    // Nothing kept.
-  }
+export function clearAccess(environmentId: string, reader = getReaderSession()): void {
+  session.clearAccess("data", environmentId, reader);
 }
 
 /** Whether a read under `policy` must carry a confirmation. */
