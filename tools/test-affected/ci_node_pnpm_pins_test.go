@@ -377,7 +377,10 @@ func requireTool(t *testing.T, name string) {
 // runs there is the one packageManager pins, whatever pnpm or Corepack shim
 // is on PATH: in CI that is the pnpm pnpm/action-setup installed from the
 // root packageManager field alone, so this proves the action's bootstrap.
-func copyWebInstallInputs(t *testing.T) (string, map[string][]byte, func(args ...string) (string, error)) {
+//
+// nodeBin, when set, is put first on PATH, so pnpm's engine check, every
+// lifecycle script and anything else that runs `node` use that Node.
+func copyWebInstallInputs(t *testing.T, nodeBin string) (string, map[string][]byte, func(args ...string) (string, error)) {
 	t.Helper()
 	version := rootPnpmVersion(t)
 	root := t.TempDir()
@@ -397,7 +400,7 @@ func copyWebInstallInputs(t *testing.T) (string, map[string][]byte, func(args ..
 	pnpm := func(args ...string) (string, error) {
 		cmd := exec.Command("pnpm", args...)
 		cmd.Dir = web
-		cmd.Env = append(os.Environ(), "COREPACK_ENABLE_AUTO_PIN=0")
+		cmd.Env = withNodeFirst(append(os.Environ(), "COREPACK_ENABLE_AUTO_PIN=0"), nodeBin)
 		out, err := cmd.CombinedOutput()
 		return string(out), err
 	}
@@ -411,54 +414,101 @@ func copyWebInstallInputs(t *testing.T) (string, map[string][]byte, func(args ..
 	return root, want, pnpm
 }
 
-// TestPnpmFrozenInstallRunsItsBuildsOnThisNode is the install a contributor or
-// CI actually does: a frozen install of the committed web inputs with
-// lifecycle scripts on, under the Node running the test (24 in CI, the
-// release gate's setup action). It must admit that Node, run the allowed
-// builds (better-sqlite3's native addon among them, which is what failed on
-// Node 26), leave every committed input byte-identical, and produce an addon
-// that loads.
-//
-// The other supported Node lines are held by TestNodeEnginesAdmitSupportedNodes
-// and the engine checks above; a real install needs that Node installed, so
-// it runs only on the one this host has.
-func TestPnpmFrozenInstallRunsItsBuildsOnThisNode(t *testing.T) {
-	testkit.Slow(t, "a full pnpm install from the registry, with native builds",
-		testkit.Inputs(append([]string{"package.json"}, webInstallInputs...)...))
-	requireTool(t, "pnpm")
-	requireTool(t, "node")
-	nodeOut, err := exec.Command("node", "--version").Output()
-	if err != nil {
-		t.Fatalf("node --version: %v", err)
+// withNodeFirst returns env with nodeBin prepended to PATH ("" leaves it).
+func withNodeFirst(env []string, nodeBin string) []string {
+	if nodeBin == "" {
+		return env
 	}
-	node := strings.TrimPrefix(strings.TrimSpace(string(nodeOut)), "v")
-	rng := readManifest(t, "frontends/web/package.json").Engines.Node
-	if ok, err := semverAdmits(rng, node); err != nil {
+	out := make([]string, 0, len(env)+1)
+	path := nodeBin
+	for _, kv := range env {
+		if v, ok := strings.CutPrefix(kv, "PATH="); ok {
+			path = nodeBin + string(os.PathListSeparator) + v
+			continue
+		}
+		out = append(out, kv)
+	}
+	return append(out, "PATH="+path)
+}
+
+// fetchNode installs Node `spec` (an exact version or a major) into a temp
+// project with pnpm's runtime dependency (`node@runtime:<spec>`), and returns
+// the directory holding its node binary and the version it resolved to. It
+// touches nothing outside the temp directory: no global Node, no nvm.
+func fetchNode(t *testing.T, spec string) (bin, version string) {
+	t.Helper()
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "package.json"), []byte(`{"name":"node-runtime","private":true}`), 0o644); err != nil {
 		t.Fatal(err)
-	} else if !ok {
-		if os.Getenv("CI") != "" {
-			t.Fatalf("CI runs Node %s, which frontends/web engines.node %q refuses", node, rng)
-		}
-		t.Skipf("this host's Node %s is outside engines.node %q (the refusal is TestPnpmAdmitsSupportedNodeAndRefusesOthers'); a supported Node runs it", node, rng)
 	}
+	cmd := exec.Command("pnpm", "add", "node@runtime:"+spec)
+	cmd.Dir = dir
+	cmd.Env = append(os.Environ(), "COREPACK_ENABLE_AUTO_PIN=0")
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("fetch Node %s (pnpm add node@runtime:%s): %v\n%s", spec, spec, err, out)
+	}
+	bin = filepath.Join(dir, "node_modules", "node", "bin")
+	out, err := exec.Command(filepath.Join(bin, "node"), "--version").Output()
+	if err != nil {
+		t.Fatalf("Node %s fetched to %s does not run: %v", spec, bin, err)
+	}
+	return bin, strings.TrimPrefix(strings.TrimSpace(string(out)), "v")
+}
 
-	root, want, pnpm := copyWebInstallInputs(t)
-	web := filepath.Join(root, "frontends", "web")
-	if out, err := pnpm("install", "--frozen-lockfile", "--config.confirmModulesPurge=false"); err != nil {
-		t.Fatalf("frozen install on Node %s failed: %v\n%s", node, err, out)
-	}
-	for rel, b := range want {
-		got, err := os.ReadFile(filepath.Join(root, rel))
-		if err != nil || !bytes.Equal(got, b) {
-			t.Errorf("the install changed %s (err %v): a dev install must leave the tree clean", rel, err)
-		}
-	}
+// TestPnpmFrozenInstallRunsItsBuildsOnSupportedNodes is the install a
+// contributor or CI actually does, under a real runtime of every supported
+// Node line: the oldest engines.node admits (22.12.0) and each major CI,
+// .nvmrc and release.yml name (24, at its latest patch, as setup-node
+// resolves it). Each runtime is fetched for the test (fetchNode), so it does
+// not depend on the host's Node.
+//
+// Under each one, a frozen install of the committed web inputs with lifecycle
+// scripts on must pass engineStrict, run the allowed builds (better-sqlite3's
+// native addon among them: what failed on Node 26), leave every committed
+// input byte-identical, and produce an addon that loads on that Node. The
+// load is ABI-specific, so an addon built for, or reused from, another Node
+// fails it.
+//
+// Each install uses a store of its own: a shared store's side-effects cache
+// would let one runtime's build stand in for another's.
+func TestPnpmFrozenInstallRunsItsBuildsOnSupportedNodes(t *testing.T) {
+	testkit.Slow(t, "fetches Node runtimes and does full pnpm installs from the registry, with native builds",
+		testkit.Inputs(append([]string{"package.json", ".nvmrc", "frontends/web/.nvmrc", setupDir + "/action.yml", ".github/workflows/release.yml"},
+			webInstallInputs...)...))
+	requireTool(t, "pnpm")
 
-	load := exec.Command("node", "-e", `const db = require("better-sqlite3")(":memory:");
+	specs := map[string]string{"22.12.0": "the oldest supported Node"}
+	for major, where := range ciNodeMajors(t) {
+		specs[major] = where
+	}
+	rng := readManifest(t, "frontends/web/package.json").Engines.Node
+	for spec, why := range specs {
+		t.Run("node "+spec, func(t *testing.T) {
+			bin, node := fetchNode(t, spec)
+			if ok, err := semverAdmits(rng, node); err != nil || !ok {
+				t.Fatalf("Node %s (%s, resolved from %q) is outside frontends/web engines.node %q (%v)", node, why, spec, rng, err)
+			}
+
+			root, want, pnpm := copyWebInstallInputs(t, bin)
+			web := filepath.Join(root, "frontends", "web")
+			out, err := pnpm("install", "--frozen-lockfile", "--store-dir", t.TempDir(), "--config.confirmModulesPurge=false")
+			if err != nil {
+				t.Fatalf("frozen install on Node %s failed: %v\n%s", node, err, out)
+			}
+			for rel, b := range want {
+				got, err := os.ReadFile(filepath.Join(root, rel))
+				if err != nil || !bytes.Equal(got, b) {
+					t.Errorf("the install on Node %s changed %s (err %v): a dev install must leave the tree clean", node, rel, err)
+				}
+			}
+
+			load := exec.Command(filepath.Join(bin, "node"), "-e", `const db = require("better-sqlite3")(":memory:");
 if (db.prepare("select 1 as one").get().one !== 1) process.exit(1);`)
-	load.Dir = web
-	if out, err := load.CombinedOutput(); err != nil {
-		t.Errorf("better-sqlite3 built by the install does not load on Node %s: %v\n%s", node, err, out)
+			load.Dir = web
+			if out, err := load.CombinedOutput(); err != nil {
+				t.Errorf("better-sqlite3 built by the install does not load on Node %s: %v\n%s", node, err, out)
+			}
+		})
 	}
 }
 
@@ -470,7 +520,7 @@ func TestPnpmAdmitsSupportedNodeAndRefusesOthers(t *testing.T) {
 	testkit.Slow(t, "runs pnpm (and, through Corepack, may fetch the pinned release) over a copy of frontends/web's install inputs",
 		testkit.Inputs(append([]string{"package.json"}, webInstallInputs...)...))
 	requireTool(t, "pnpm")
-	root, want, pnpm := copyWebInstallInputs(t)
+	root, want, pnpm := copyWebInstallInputs(t, "")
 	web := filepath.Join(root, "frontends", "web")
 
 	// Supported Node: the frozen install's check passes (offline, lockfile
