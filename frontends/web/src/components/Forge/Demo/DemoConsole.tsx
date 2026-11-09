@@ -50,6 +50,7 @@ import { FIXTURE_DECLARED } from "../Observability/__fixtures__/fixtureAlerting"
 import { FIXTURE_ENVS, FIXTURE_PROJECT } from "../Observability/__fixtures__/fixtureApi";
 import { ObsReadOnlyProvider, type ObsReadOnly } from "../Observability/obsReadOnly";
 import { createDemoApi } from "./demoData/demoApi";
+import { DemoBrowserProviders } from "./DemoBrowserProviders";
 import { DemoBanner } from "./DemoBanner";
 import { DemoWelcome } from "./DemoWelcome";
 import { DEMO_SECTION_BUILT, FORGE_DEMO_PATH } from "./demoPath";
@@ -138,6 +139,7 @@ export function DemoConsole({ shell: shellProp }: DemoConsoleProps = {}) {
     <AskAgentModeProvider mode="handoff" cli={shell === "forge" ? "forge" : "reliant forge"} demo>
       <ObsReadOnlyProvider value={READ_ONLY}>
         <QueryClientProvider client={queryClient}>
+          <DemoBrowserProviders>
           <ObservabilityApiProvider api={api}>
             <ObservabilityBillingApiContext.Provider value={legacyBillingApi}>
               <ConsoleShell
@@ -181,6 +183,7 @@ export function DemoConsole({ shell: shellProp }: DemoConsoleProps = {}) {
               </ConsoleShell>
             </ObservabilityBillingApiContext.Provider>
           </ObservabilityApiProvider>
+          </DemoBrowserProviders>
         </QueryClientProvider>
       </ObsReadOnlyProvider>
     </AskAgentModeProvider>
