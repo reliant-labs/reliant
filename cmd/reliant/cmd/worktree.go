@@ -44,8 +44,8 @@ refs/reliant/reclaimed/<key>/<time>, and checks that ref against the files
 immediately before deleting them.
 
 A clean worktree whose HEAD is on a remote is reclaimed after a day idle.
-One with work only it holds is never reclaimed on its own: after about five
-days idle it is proposed, and reclaimed only when a person approves it.
+One with work only it holds is never reclaimed: after about five days idle
+it is proposed in the report, for a person to free by hand.
 
 RELIANT_WORKTREE_RECLAIM sets the mode: off, dry-run (report only) or on.`,
 	}
@@ -141,15 +141,23 @@ func newWorktreeDecideCmd(decision worktreereclaim.Decision) *cobra.Command {
 		Long: `Record a person's decision about worktrees the last report proposes
 (class needs_approval), by key. The decision binds to the worktree's
 fingerprint in that report: one that changes after it (a commit, an edit, a
-new file) is proposed again. The daemon acts on an approval within a minute:
-it captures the worktree, verifies the capture, and deletes it.
+new file) is proposed again.
 
-This is a person's decision, made in their own terminal. An agent's shell
-is refused outright: nothing it could name (a question or answer id it
-cannot prove is the user's) would show that a person approved these
-worktrees, so an agent asks the user to run the command themselves.`,
+Approving is not available yet: nothing can show that an approval came from
+a person rather than an agent running as the same user, so the daemon never
+deletes a proposed worktree, and approve refuses. Free one yourself, after
+checking its work, with ` + "`git worktree remove`" + `. Decline records that a
+proposed worktree is to be kept; an agent's shell is refused that too.`,
 		Args: cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if decision == worktreereclaim.DecisionApprove {
+				// Refused whoever runs it: any check made here (an environment
+				// marker, a tty) is one an agent's shell can defeat, and the
+				// approvals file it would write is one an agent can write
+				// directly. The sweep does not act on approvals for the same
+				// reason (SweepOptions.ApprovalsVerified).
+				return fmt.Errorf("approving a reclaim is not available: nothing can verify the approval is a person's, so the daemon never deletes a proposed worktree; to free one, check its work and run `git worktree remove` yourself (keys: %s)", strings.Join(args, " "))
+			}
 			agent := os.Getenv(daemonpolicy.AgentShellEnv) != "" //nolint:forbidigo // the marker the daemon sets on agent shells (daemonpolicy.AgentShellEnv), a process signal, not configuration
 			if agent {
 				return fmt.Errorf("an agent cannot %s reclaiming a worktree: this is the user's decision, so ask them to run `reliant worktree reclaim %s %s` in their own terminal", verb, verb, strings.Join(args, " "))

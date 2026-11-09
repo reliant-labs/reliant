@@ -6,6 +6,7 @@ package worktreereclaim
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -177,6 +178,43 @@ func TestSweepOnReclaimsAutoSafeAfterCapture(t *testing.T) {
 	}
 }
 
+// An edit behind skip-worktree or assume-unchanged is invisible to `git add
+// -A`, so a capture would silently omit it: such a checkout is never
+// captured, a flag set after a capture fails its verification, and the sweep
+// holds the checkout instead of proposing it.
+func TestHiddenIndexEntriesAreNeverCaptured(t *testing.T) {
+	t.Parallel()
+	heavyUnderShort(t, "~60 git processes")
+	for _, flag := range []string{"--skip-worktree", "--assume-unchanged"} {
+		t.Run(flag, func(t *testing.T) {
+			t.Parallel()
+			s := newSweepFixture(t)
+			ctx := context.Background()
+			path := s.plain(filepath.Join(s.tmp, "hidden"), "agent/hidden")
+			write(t, filepath.Join(path, "untracked.txt"), "work only this checkout holds\n")
+			c, err := captureCheckout(ctx, path, CaptureKey(path), CaptureMeta{Path: path}, CaptureLimits{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			run(t, path, "update-index", flag, "a.txt")
+			write(t, filepath.Join(path, "a.txt"), "a local override\n")
+			if err := verifyCapture(ctx, path, c); !errors.Is(err, errCaptureMismatch) {
+				t.Fatalf("a flag set after the capture: verify = %v, want a mismatch", err)
+			}
+			if _, err := captureCheckout(ctx, path, CaptureKey(path), CaptureMeta{Path: path}, CaptureLimits{}); !errors.Is(err, errHiddenEntries) {
+				t.Fatalf("capture = %v, want errHiddenEntries", err)
+			}
+			rep := s.r.SweepMachine(ctx, s.opts(SweepOn))
+			if e := entryFor(t, rep, path); e.Class != ClassHeld || e.Reason != ReasonDirty || !strings.Contains(e.Detail, "hidden") {
+				t.Fatalf("%+v, want held for its hidden entries", e)
+			}
+			if got := readFile(t, filepath.Join(path, "a.txt")); got != "a local override\n" {
+				t.Fatalf("a.txt = %q, want the override kept", got)
+			}
+		})
+	}
+}
+
 // A worktree with work only it holds is never deleted without a person's
 // approval of that exact state: on its own it is only proposed; approved, it
 // is captured and reclaimed; changed after the approval, it is proposed
@@ -218,6 +256,16 @@ func TestSweepNeverAutoDeletesNeedsApproval(t *testing.T) {
 
 	opts := s.opts(SweepOn)
 	opts.ApprovedOnly = true
+	// An approval nothing verifies as a person's (the daemon's case: any
+	// process running as the user can write approvals.json) deletes nothing.
+	unverified := s.r.SweepMachine(ctx, opts)
+	if e := entryFor(t, unverified, dirty); e.Outcome != OutcomeAwaiting || !exists(filepath.Join(dirty, "a.txt")) {
+		t.Fatalf("unverified approval: %+v, want still awaiting and kept", e)
+	}
+	if refs := captureRefs(t, s.project); refs != "" {
+		t.Fatalf("captured on an unverified approval: %s", refs)
+	}
+	opts.ApprovalsVerified = true
 	pass := s.r.SweepMachine(ctx, opts)
 	e := entryFor(t, pass, dirty)
 	if e.Outcome != OutcomeReclaimed || e.CaptureRef == "" || exists(dirty) {

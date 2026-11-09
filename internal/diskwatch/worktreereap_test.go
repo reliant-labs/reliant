@@ -36,6 +36,22 @@ func initRepo(t *testing.T, dir string) string {
 	return real
 }
 
+// fakeLinkedWorktree lays out, without running git, what worktreeRepos reads
+// of a linked worktree: a .git file at wt naming an admin dir under repo's
+// .git/worktrees. For tests that need a worktree to be found, not a real one.
+func fakeLinkedWorktree(t *testing.T, repo, wt string) {
+	t.Helper()
+	admin := filepath.Join(repo, ".git", "worktrees", filepath.Base(wt))
+	for _, d := range []string{admin, wt} {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(wt, ".git"), []byte("gitdir: "+admin+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
 // worktreeMachine is a home whose Reliant worktree root holds a Reliant
 // workspace of repo A, an agent's plain `git worktree add` of repo B straight
 // under the root and a worktree nested in a workspace; plus a clone and a
@@ -127,8 +143,7 @@ func TestWorktreeReap_SweepReplacesForgesReaperOnlyInModeOn(t *testing.T) {
 		t.Run("mode="+tc.mode, func(t *testing.T) {
 			home := t.TempDir()
 			root := filepath.Join(home, ".reliant", "worktrees")
-			repo := initRepo(t, filepath.Join(home, "projects", "a"))
-			gitT(t, repo, "worktree", "add", "-q", "-b", "ws", filepath.Join(root, "proj", "ws-1", "a"))
+			fakeLinkedWorktree(t, filepath.Join(home, "projects", "a"), filepath.Join(root, "proj", "ws-1", "a"))
 			fs := &fakeFS{
 				mounts: map[string]fsStat{home: {Dev: 8, Bsize: 4096, Blocks: 1 << 20, Bfree: 1 << 19, Bavail: 1 << 19, Files: 1000, Ffree: 900}},
 				exists: map[string]bool{home: true},

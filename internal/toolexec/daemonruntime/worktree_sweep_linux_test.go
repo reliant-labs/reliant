@@ -69,7 +69,7 @@ func TestSweepReclaimedWorkspaceIsRestoredWithItsCaptureByEnsure(t *testing.T) {
 	if _, err := worktreereclaim.RecordDecisions(ctx, state, worktreereclaim.DecisionApprove, []string{entry.Key}, "test"); err != nil {
 		t.Fatal(err)
 	}
-	opts.ApprovedOnly = true
+	opts.ApprovedOnly, opts.ApprovalsVerified = true, true
 	pass := r.SweepMachine(ctx, opts)
 	if len(pass.Entries) != 1 || pass.Entries[0].Outcome != worktreereclaim.OutcomeReclaimed {
 		t.Fatalf("approved pass %+v, want the workspace reclaimed", pass.Entries)

@@ -31,7 +31,10 @@ func worktreeSweep(cfg worktreereclaim.SweepConfig) diskwatch.WorktreeSweep {
 			})
 			logSweep(ctx, rep)
 		},
-		ApprovalsSince: func(since time.Time) bool { return worktreereclaim.PendingApprovals("", since) },
+		// No ApprovalsSince: an approval in approvals.json is not verified as
+		// a person's (any process running as the user can write it), so the
+		// sweep never acts on one (SweepOptions.ApprovalsVerified stays
+		// false) and an approved-only pass would do nothing.
 	}
 }
 

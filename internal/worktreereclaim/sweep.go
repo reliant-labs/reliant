@@ -34,7 +34,12 @@ import (
 //     with uncommitted, unpushed or reflog-only work that has been idle
 //     ApprovalIdle (about 5 days: no commit, no file change) NEEDS APPROVAL: it
 //     is only ever proposed, and reclaimed only after a person approves that
-//     exact state (Approvals). Everything else is held, with a reason.
+//     exact state (Approvals) and the caller verifies the approval is that
+//     person's (SweepOptions.ApprovalsVerified, which no caller sets yet, so
+//     today such a checkout is only proposed). A checkout with index entries
+//     marked skip-worktree or assume-unchanged is held, never proposed: git
+//     cannot see the edits those flags hide, so no capture could keep them.
+//     Everything else is held, with a reason.
 //   - A Reliant workspace's checkout is restored automatically, capture
 //     included, the next time its chat runs a tool (worktree.ensure).
 //
@@ -101,6 +106,13 @@ type SweepOptions struct {
 	// ApprovedOnly evaluates only the worktrees with a pending approval:
 	// the daemon's prompt response to a decision, between scheduled passes.
 	ApprovedOnly bool
+	// ApprovalsVerified says the caller has proven that the approvals in
+	// the state directory are a person's. Nothing proves that yet:
+	// approvals.json is a file any process running as the user can write,
+	// an agent's shell included, so the daemon leaves this false and a
+	// needs-approval worktree is only ever proposed, never deleted. An
+	// approval it finds is reported (awaiting, "approved, not verified").
+	ApprovalsVerified bool
 	// Version is the daemon's, recorded in captures and the journal.
 	Version string
 }
@@ -584,6 +596,13 @@ func (r *Reclaimer) evaluateDeep(ctx context.Context, e *SweepEntry, opts SweepO
 		}
 		return
 	}
+	// Edits behind skip-worktree or assume-unchanged are invisible to git
+	// status and git add, so neither the fingerprint nor a capture could
+	// hold them: such a checkout is held, whatever else it holds.
+	if hidden := hiddenFlags(ctx, e.Path); hidden != "" {
+		e.hold(ReasonDirty, hidden+"; never proposed, a capture cannot see edits behind these flags")
+		return
+	}
 	e.Base = defaultBase(ctx, e.Path)
 	v := classifyCheckout(ctx, e.Path, e.Base, nil, e.RowID, r.sweepProbe(opts))
 	switch v.Reason {
@@ -632,6 +651,8 @@ func (r *Reclaimer) decide(ctx context.Context, e *SweepEntry, opts SweepOptions
 			e.Outcome = OutcomeAwaiting
 		case d.Decision == DecisionDecline:
 			e.Outcome = OutcomeDeclined
+		case !opts.ApprovalsVerified:
+			e.Outcome, e.Detail = OutcomeAwaiting, "approved, but nothing verifies the approval is a person's, so it is not reclaimed; "+e.Detail
 		case opts.Mode != SweepOn:
 			e.Outcome, e.Detail = OutcomeWouldReclaim, "approved; "+e.Detail
 		default:

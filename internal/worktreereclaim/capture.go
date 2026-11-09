@@ -120,6 +120,11 @@ func captureRefDir(key string) string { return CaptureRefRoot + sanitizeRefCompo
 
 var errCaptureEnvelope = errors.New("outside the capture envelope")
 
+// errHiddenEntries refuses a capture of a checkout whose index marks entries
+// skip-worktree or assume-unchanged: `git add -A` does not see the edits
+// those flags hide, so the capture's disk tree would silently omit them.
+var errHiddenEntries = errors.New("index entries hide edits from git")
+
 // untrackedEnvelope measures the untracked, non-ignored content of a
 // checkout and refuses what a capture must not take: more than the limits, or
 // anything that is not a regular file or a symlink (git cannot record it).
@@ -239,6 +244,9 @@ func captureCheckout(ctx context.Context, checkout, key string, meta CaptureMeta
 	if err != nil {
 		return Capture{}, err
 	}
+	if hidden := hiddenFlags(ctx, checkout); hidden != "" {
+		return Capture{}, fmt.Errorf("%w: %s", errHiddenEntries, hidden)
+	}
 	ub, uf, err := untrackedEnvelope(ctx, checkout, limits)
 	if err != nil {
 		return Capture{}, err
@@ -312,6 +320,9 @@ func verifyCapture(ctx context.Context, checkout string, c Capture) error {
 	}
 	if head != c.Head {
 		return fmt.Errorf("%w: HEAD is %s, captured %s", errCaptureMismatch, short(head), short(c.Head))
+	}
+	if hidden := hiddenFlags(ctx, checkout); hidden != "" {
+		return fmt.Errorf("%w: %s", errCaptureMismatch, hidden)
 	}
 	if saved, err := git(ctx, checkout, nil, "rev-parse", "--verify", c.Ref+"^{tree}"); err != nil || saved != c.DiskTree {
 		return fmt.Errorf("%w: capture ref %s is unreadable or moved", errCaptureMismatch, c.Ref)

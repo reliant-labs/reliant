@@ -57,37 +57,46 @@ func TestWorktreeReclaimConfig_DefaultsToDryRun(t *testing.T) {
 	assert.Equal(t, worktreereclaim.SweepOff, worktreeReclaimFor(t, map[string]string{"RELIANT_WORKTREE_RECLAIM": "off"}).Mode)
 }
 
-// Approving a reclaim is a person's decision: an agent's shell is refused,
-// whatever answer or approval id it names, and nothing is recorded.
-func TestWorktreeApproveRefusesAnAgentShell(t *testing.T) {
-	t.Setenv(daemonpolicy.AgentShellEnv, "1")
-	for _, decide := range []string{"approve", "decline"} {
+// Approving a reclaim is refused to everyone: no check this command could
+// make tells a person from an agent running as the same user, so an agent
+// that clears the agent-shell marker is refused exactly as one that keeps
+// it, and nothing is recorded. Declining (which only ever keeps a worktree)
+// is refused to an agent's shell.
+func TestWorktreeApproveIsRefusedEvenWithoutTheAgentMarker(t *testing.T) {
+	decide := func(t *testing.T, args ...string) ([]os.DirEntry, error) {
+		t.Helper()
+		state := t.TempDir()
+		root := NewRootCmd()
+		var out bytes.Buffer
+		root.SetOut(&out)
+		root.SetErr(&out)
+		root.SetArgs(append(append([]string{"worktree", "reclaim"}, args...), "--state-dir", state))
+		err := root.Execute()
+		entries, rerr := os.ReadDir(state)
+		require.NoError(t, rerr)
+		return entries, err
+	}
+	for _, marker := range []string{"1", ""} {
+		t.Setenv(daemonpolicy.AgentShellEnv, marker)
 		for _, extra := range [][]string{nil, {"--answer", "q-1"}} {
-			state := t.TempDir()
-			root := NewRootCmd()
-			var out bytes.Buffer
-			root.SetOut(&out)
-			root.SetErr(&out)
-			root.SetArgs(append([]string{"worktree", "reclaim", decide, "p-0123456789abcdef", "--state-dir", state}, extra...))
-			err := root.Execute()
-			require.Error(t, err, "%s %v", decide, extra)
+			entries, err := decide(t, append([]string{"approve", "p-0123456789abcdef"}, extra...)...)
+			require.Error(t, err, "marker %q %v", marker, extra)
 			if extra == nil {
-				assert.Contains(t, err.Error(), "an agent cannot "+decide)
+				assert.Contains(t, err.Error(), "approving a reclaim is not available")
 			}
-			entries, rerr := os.ReadDir(state)
-			require.NoError(t, rerr)
-			assert.Empty(t, entries, "a refused decision wrote state")
+			assert.Empty(t, entries, "a refused approval wrote state")
 		}
 	}
 
+	t.Setenv(daemonpolicy.AgentShellEnv, "1")
+	entries, err := decide(t, "decline", "p-0123456789abcdef")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "an agent cannot decline")
+	assert.Empty(t, entries, "a refused decision wrote state")
+
 	// A person's shell gets as far as the report, which does not exist here.
 	t.Setenv(daemonpolicy.AgentShellEnv, "")
-	root := NewRootCmd()
-	var out bytes.Buffer
-	root.SetOut(&out)
-	root.SetErr(&out)
-	root.SetArgs([]string{"worktree", "reclaim", "approve", "p-0123456789abcdef", "--state-dir", t.TempDir()})
-	err := root.Execute()
+	_, err = decide(t, "decline", "p-0123456789abcdef")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no sweep report")
 }
