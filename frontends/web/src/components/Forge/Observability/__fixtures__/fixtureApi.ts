@@ -526,6 +526,58 @@ export function fixtureDayGrainedDashboard(): Dashboard {
 }
 
 /**
+ * forge's generated Product usage shape: sections with headings, headline
+ * figures that open beside their change (defaultCompare) with a trendSql
+ * sparkline each, palette colours, and retention as a heatmap. Opt-in
+ * (`dashboardsHeadline`).
+ */
+export function fixtureHeadlineDashboard(): Dashboard {
+  const figure = (id: string, title: string, color: string): Dashboard["panels"][number] => ({
+    id,
+    section: "glance",
+    title,
+    kind: "sql",
+    signal: "",
+    series: [],
+    sql: `SELECT uniqExact(UserId) AS "${title}" FROM product_events WHERE Timestamp >= {from:DateTime64(9)} AND Timestamp < {to:DateTime64(9)}`,
+    trendSql: `SELECT toDate(Timestamp) AS day, uniqExact(UserId) AS "${title}" FROM product_events WHERE Timestamp >= {from:DateTime64(9)} AND Timestamp < {to:DateTime64(9)} GROUP BY day ORDER BY day`,
+    unit: "count",
+    display: { color },
+    width: 6,
+    height: 4,
+  });
+  return {
+    id: "usage",
+    title: "shop: product usage",
+    filters: [],
+    annotations: [],
+    defaultRange: "7d",
+    defaultCompare: "period",
+    sections: [
+      { id: "glance", title: "At a glance", description: "The headline figures, each beside its change against the previous period." },
+      { id: "retention", title: "Retention", description: "Whether people come back." },
+    ],
+    panels: [
+      {
+        id: "weekly-retention",
+        section: "retention",
+        title: "Weekly retention by cohort",
+        kind: "sql",
+        signal: "",
+        series: [],
+        sql: "SELECT concat(toString(cohort), ' · ', toString(count()), ' users') AS \"Cohort (week of)\", 0.5 AS \"W1\" FROM cohorts GROUP BY cohort ORDER BY cohort",
+        unit: "percent",
+        display: { style: "heatmap", color: "violet" },
+        width: 24,
+        height: 10,
+      },
+      figure("dau", "Daily active users", "blue"),
+      figure("wau", "Weekly active users", "cyan"),
+    ],
+  };
+}
+
+/**
  * A sql panel answered the way control-plane answers it: a Date first column is
  * one point per UTC calendar day whose start falls in the window (its time is
  * that date's midnight UTC), tagged as UTC days; a {step} statement is one
@@ -534,6 +586,26 @@ export function fixtureDayGrainedDashboard(): Dashboard {
 function fixtureSqlPanel(panel: Panel, window: TimeWindow): PanelResult {
   const base = { kind: "sql", unit: panel.unit ?? "", truncated: false, columns: [] as string[], rows: [] as PanelResult["rows"], ...NO_BROWSER_ROWS, ...NO_METRIC_EXTRAS, window };
   const DAY = 86_400_000;
+  // One row of figures (no GROUP BY), named by its alias: 42 today, 36 the period before.
+  if (!/GROUP BY/i.test(panel.sql ?? "")) {
+    const alias = /AS "([^"]+)"/.exec(panel.sql ?? "")?.[1] ?? "value";
+    const earlier = window.endMs < Date.now() - DAY;
+    return { ...base, stepSeconds: 0, series: [], columns: [alias], rows: [{ group: {}, values: [earlier ? 36 : 42] }] };
+  }
+  // A retention table: a row per weekly cohort, its size in its name, a share per later week.
+  if (/cohort/.test(panel.sql ?? "")) {
+    return {
+      ...base,
+      stepSeconds: 0,
+      series: [],
+      columns: ["W1", "W2", "W3"],
+      rows: [
+        { group: { "Cohort (week of)": "2026-10-05 · 40 users" }, values: [0.5, 0.25, 0.1] },
+        { group: { "Cohort (week of)": "2026-10-12 · 32 users" }, values: [0.4, 0.2, null] },
+        { group: { "Cohort (week of)": "2026-10-19 · 12 users" }, values: [0.3, null, null] },
+      ],
+    };
+  }
   if (/toDate\(/.test(panel.sql ?? "")) {
     const first = Math.floor(window.startMs / DAY) * DAY;
     const days: number[] = [];
@@ -542,6 +614,11 @@ function fixtureSqlPanel(panel: Panel, window: TimeWindow): PanelResult {
     const failed = [0, 0, 1, 3439, 5479, 17, 2];
     const at = (i: number, from: number[]) => from[from.length - days.length + i] ?? from[0]!;
     const timestamps = days.map((d) => d / 1000);
+    // A figure's trend: one line, named by the figure's alias.
+    const alias = /AS "([^"]+)"/.exec(panel.sql ?? "")?.[1];
+    if (alias) {
+      return { ...base, stepSeconds: 3600, bucketSeconds: 86_400, bucketTimezone: "UTC", series: [{ label: alias, group: {}, timestamps, values: days.map((_, i) => 30 + ((i * 5) % 13)), value: null }] };
+    }
     return {
       ...base,
       stepSeconds: 3600,

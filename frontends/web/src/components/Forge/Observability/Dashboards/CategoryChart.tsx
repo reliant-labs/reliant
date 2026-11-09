@@ -27,7 +27,7 @@ import { cn } from "@/lib/utils";
 import { formatPercent, formatValue } from "../format";
 import { groupLabel } from "../obsFilters";
 import { pointOf, type OnDrill } from "./SeriesChart";
-import { CHART_PALETTE, DANGER_PALETTE, dealColors, foldTopN, intentOf, isErrorSeries, isErrorWord, OTHER_TOKEN, tokenColor, topNOf } from "./seriesModel";
+import { CHART_PALETTE, DANGER_PALETTE, dealColors, foldTopN, intentOf, isErrorSeries, isErrorWord, namedToken, OTHER_TOKEN, tokenColor, topNOf } from "./seriesModel";
 import { Swatch } from "./SeriesLegend";
 
 interface Props {
@@ -55,13 +55,16 @@ function BarChart({ panel, data, unit, keys, onDrill, height, compact }: Props) 
   const columns = data.columns;
   const stack = !!panel.display?.stack && columns.length > 1;
   const horizontal = !!panel.display?.horizontal;
-  // One series: one colour, a failure group in danger. Several: a colour per series.
+  // One series: one colour (the panel's, or the group's named one), a failure
+  // group in danger. Several: a colour per series, named ones first.
   const seriesColors = useMemo(
-    () => dealColors(columns, (label) => isErrorSeries({ label, group: {} }, intentOf({ label }, panel))),
+    () => dealColors(columns, (label) => isErrorSeries({ label, group: {} }, intentOf({ label }, panel)), (label) => namedToken(panel.display, [label])),
     [columns, panel]
   );
   const colorOf = (row: Row, column: number): string => {
     if (columns.length > 1) return seriesColors[column]?.token ?? CHART_PALETTE[0];
+    const named = namedToken(panel.display, [groupLabel(row.group, keys), ...Object.values(row.group), columns[0]], true);
+    if (named) return named;
     return Object.values(row.group).some(isErrorWord) ? DANGER_PALETTE[0] : CHART_PALETTE[0];
   };
   const scale = Math.max(
@@ -181,7 +184,7 @@ export function pieSlices(panel: Pick<Panel, "display">, data: Pick<PanelResult,
     .map((row, index) => ({ key: String(index), label: groupLabel(row.group, keys) || "—", value: positive(row.values[0]), group: row.group }))
     .filter((s) => s.value > 0)
     .sort((a, b) => b.value - a.value);
-  const colors = dealColors(base, (s) => isErrorSeries({ label: "", group: s.group }));
+  const colors = dealColors(base, (s) => isErrorSeries({ label: "", group: s.group }), (s) => namedToken(panel.display, [s.label, ...Object.values(s.group)]));
   const coloured = base.map((s, index) => ({ ...s, token: colors[index].token }));
   const { shown, rest } = foldTopN(coloured, topNOf(panel));
   if (rest.length === 0) return shown;
