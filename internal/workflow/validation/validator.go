@@ -484,6 +484,9 @@ func extractCELRefsFromNode(node *reliantv1.Node, extract func(string)) {
 		args := node.GetRun()
 		extract(model.CelStringRaw(args.GetCommand()))
 		extract(model.CelStringRaw(args.GetWorkDir()))
+		for _, w := range args.GetWritableCheckouts() {
+			extract(w)
+		}
 	case node.GetWorkflow() != nil:
 		args := node.GetWorkflow()
 		extract(model.CelStringRaw(args.GetRef()))

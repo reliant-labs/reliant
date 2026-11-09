@@ -198,6 +198,33 @@ func TestShellTool_OnlyARunStepNamesWritableCheckouts(t *testing.T) {
 	}
 }
 
+// A run step starts in its node's work_dir (rctx.RunWorkDir, server-set); a
+// model's call, or a run step with none, starts in the workspace.
+func TestShellTool_ARunStepStartsInItsWorkDir(t *testing.T) {
+	run := func(t *testing.T, runStep bool, workDir string) string {
+		t.Helper()
+		d := &timingOutDaemon{}
+		tc := &rctx.ToolContext{Context: context.Background(), ChatID: "chat-1",
+			Project: &rctx.Project{ID: "p", Checkout: "/work/p"}, Daemon: d, RunStep: runStep, RunWorkDir: workDir}
+		if _, err := NewShellTool(ShellPlatformUnix).Run(tc, ToolCall{ID: "call-1", Name: ShellToolName, Input: `{"command":"ls"}`}); err != nil {
+			t.Fatalf("Run: %v", err)
+		}
+		if len(d.reqs) != 1 {
+			t.Fatalf("daemon got %d requests, want 1", len(d.reqs))
+		}
+		return d.reqs[0].WorkingDir
+	}
+	if got := run(t, true, "/var/cache/x/run-1"); got != "/var/cache/x/run-1" {
+		t.Errorf("run step with a work_dir starts in %q, want /var/cache/x/run-1", got)
+	}
+	if got := run(t, true, ""); got != "/work/p" {
+		t.Errorf("run step with no work_dir starts in %q, want the checkout", got)
+	}
+	if got := run(t, false, "/var/cache/x/run-1"); got != "/work/p" {
+		t.Errorf("a model's call starts in %q, want the checkout: only a run step has a work_dir", got)
+	}
+}
+
 // A workflow that binds writable_checkouts on an agent's shell (tool_params)
 // gives the model's commands that directory, scoped to cache hand-offs: the
 // server says the parameter was bound (rctx.ToolContext.BoundParams), and
