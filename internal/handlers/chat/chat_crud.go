@@ -161,7 +161,7 @@ func (s *Service) startChat(
 	// A new chat's org is fixed here and never changes; an existing chat
 	// keeps its own.
 	if msg.GetChatId() == "" {
-		if spec.OrgID, spec.DefaultOrgID, err = s.newChatOrgs(ctx, userID, msg.GetOrgId()); err != nil {
+		if spec.OrgID, spec.DefaultOrgID, err = s.newChatOrgs(ctx, userID, msg.ProjectId, msg.GetOrgId()); err != nil {
 			return nil, err
 		}
 	}

@@ -260,3 +260,21 @@ func reasonOf(err error) string {
 	}
 	return ce.Meta().Get(svcerr.ReasonHeader)
 }
+
+// A machine credential lists only its own org, named or not: omitting org_id
+// must not widen it to the acting user's other orgs.
+func TestListScopeMachineCredentialIsItsOrg(t *testing.T) {
+	r, _ := newResolver(newFake())
+	ctx := auth.WithMachineToken(context.Background(), &fat.Principal{OrgID: "acme", ActingUserID: "alice"})
+	scope, err := r.ListScope(ctx, "alice", "", nil)
+	if err != nil || scope == nil || scope.OrgID != "acme" || scope.IncludeUnassigned {
+		t.Fatalf("unnamed: %+v, %v; want the credential's org (not the default) only", scope, err)
+	}
+	ctx = auth.WithMachineToken(context.Background(), &fat.Principal{OrgID: "home", ActingUserID: "alice"})
+	if scope, err := r.ListScope(ctx, "alice", "", nil); err != nil || scope == nil || scope.OrgID != "home" || !scope.IncludeUnassigned {
+		t.Fatalf("a credential of the default org: %+v, %v; want home with unassigned rows", scope, err)
+	}
+	if _, err := r.ListScope(ctx, "alice", "acme", nil); svcerr.Code(err) != connect.CodePermissionDenied || reasonOf(err) != ReasonOrgMismatch {
+		t.Fatalf("another org: %v, want PermissionDenied %s", err, ReasonOrgMismatch)
+	}
+}

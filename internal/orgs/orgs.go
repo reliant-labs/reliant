@@ -229,9 +229,13 @@ func (r *Resolver) ActingOrg(ctx context.Context, userID, requested string) (str
 // org). *db.Repo's AssignUnassignedOrg is one.
 type Backfill func(ctx context.Context, userID, orgID string) error
 
-// ListScope is the org filter of a list request. nil, no filter, when the
-// request names no org (every client before orgs) or the deployment has none:
-// the list stays "everything the caller owns".
+// ListScope is the org filter of a list request. nil, no filter, when an
+// interactive request names no org (every client before orgs) or the
+// deployment has none: the list stays "everything the caller owns".
+//
+// A machine credential acts in exactly one org, so its list is always that
+// org's, named or not: omitting org_id never widens it to the acting user's
+// other orgs, and naming another org is PermissionDenied (ReasonOrgMismatch).
 //
 // A named org must be one the caller is a live member of (PermissionDenied
 // otherwise), and an outage is Unavailable: the list fails closed rather than
@@ -241,15 +245,21 @@ type Backfill func(ctx context.Context, userID, orgID string) error
 // the IncludeUnassigned predicate already lists those rows.
 func (r *Resolver) ListScope(ctx context.Context, userID, requested string, stamp Backfill) (*core.OrgScope, error) {
 	requested = strings.TrimSpace(requested)
-	if r == nil || requested == "" {
+	if r == nil {
 		return nil, nil
 	}
 	if p, ok := auth.MachineTokenFromContext(ctx); ok && p != nil && p.OrgID != "" {
+		if requested == "" {
+			requested = p.OrgID
+		}
 		if requested != p.OrgID {
 			return nil, svcerr.WithReason(svcerr.PermissionDenied(
 				"this credential acts in organization "+p.OrgID+" only; it cannot list "+requested), ReasonOrgMismatch)
 		}
 	} else {
+		if requested == "" {
+			return nil, nil
+		}
 		member, ok, err := r.IsMember(ctx, userID, requested)
 		if err != nil {
 			return nil, svcerr.WithCause(svcerr.Unavailable("could not verify the organization; try again"), err)
