@@ -140,6 +140,7 @@ func TestRemoveFailedCreate_RemovesTheLeftoverAndTheRetrySucceeds(t *testing.T) 
 
 	resp := removeFailed(t, []string{l.repo}, l.create())
 	require.Empty(t, resp.Unchecked)
+	require.Equal(t, []string{l.repo}, resp.Checked, "the repository listed is reported checked")
 	require.Len(t, resp.Checkouts, 1)
 	require.True(t, resp.Checkouts[0].Removed, "kept: %s", resp.Checkouts[0].Kept)
 
@@ -315,7 +316,18 @@ func TestRemoveFailedCreate_ReportsAnUnreadableRepositoryUnchecked(t *testing.T)
 	missing := filepath.Join(t.TempDir(), "gone")
 	resp := removeFailed(t, []string{missing}, failedCreate{WorktreeID: uuid.NewString(), Branch: "b"})
 	require.Equal(t, []string{missing}, resp.Unchecked)
+	require.Empty(t, resp.Checked)
 	require.Empty(t, resp.Checkouts)
+}
+
+// A path the daemon will not look in (relative, or empty) is reported
+// unchecked too, never silently dropped: the server must not read its
+// silence as "nothing there".
+func TestRemoveFailedCreate_ReportsASkippedPathUnchecked(t *testing.T) {
+	t.Parallel()
+	resp := removeFailed(t, []string{"relative/repo", ""}, failedCreate{WorktreeID: uuid.NewString(), Branch: "b"})
+	require.Equal(t, []string{"relative/repo", ""}, resp.Unchecked)
+	require.Empty(t, resp.Checked)
 }
 
 func revParseIn(t *testing.T, dir string, args ...string) string {

@@ -34,8 +34,10 @@ type diskMachine struct {
 	keep string
 	// noCommand makes remove_failed_create fail as an older daemon's does.
 	noCommand bool
-	removes   []removeFailedCreatePayload
-	creates   int
+	// omitChecked answers as a daemon that does not report what it listed.
+	omitChecked bool
+	removes     []removeFailedCreatePayload
+	creates     int
 }
 
 func (d *diskMachine) Send(_ context.Context, cmd string, payload, resp any, _ int32) error {
@@ -76,6 +78,9 @@ func (d *diskMachine) Send(_ context.Context, cmd string, payload, resp any, _ i
 		_ = json.Unmarshal(b, &p)
 		d.removes = append(d.removes, p)
 		out := resp.(*removeFailedCreateResult)
+		if !d.omitChecked {
+			out.Checked = append(out.Checked, p.RepoPaths...)
+		}
 		for _, repo := range p.RepoPaths {
 			for _, c := range p.Creates {
 				key := repo + "\x00" + c.Branch
@@ -279,10 +284,43 @@ func TestRemoveFailedCreatesOnConnectWithAnOlderDaemonRecordsNothing(t *testing.
 // Repositories the daemon could not read settle nothing: what is in them is
 // unknown.
 func TestSettledNeedsEveryRepositoryRead(t *testing.T) {
-	res := removeFailedCreateResult{Unchecked: []string{"/proj/x"}}
-	assert.Empty(t, res.settled([]string{"a"}))
-	res = removeFailedCreateResult{Checkouts: []removeFailedCreateCheckout{
+	res := removeFailedCreateResult{Checked: []string{"/proj/y"}, Unchecked: []string{"/proj/x"}}
+	assert.Empty(t, res.settled([]string{"a"}, []string{"/proj/x", "/proj/y"}))
+	res = removeFailedCreateResult{Checked: []string{"/proj/x"}, Checkouts: []removeFailedCreateCheckout{
 		{WorktreeID: "a", Removed: true}, {WorktreeID: "b", Kept: "dirty"},
 	}}
-	assert.Equal(t, []string{"a", "c"}, res.settled([]string{"a", "b", "c"}))
+	assert.Equal(t, []string{"a", "c"}, res.settled([]string{"a", "b", "c"}, []string{"/proj/x"}))
+}
+
+// [B1]: a row is settled only from a complete look. A repository the daemon
+// does not report listing, a daemon that reports none, or no repositories
+// at all settle nothing.
+func TestSettledNeedsEveryRepositoryConfirmedListed(t *testing.T) {
+	res := removeFailedCreateResult{Checked: []string{"/proj/x"}}
+	assert.Empty(t, res.settled([]string{"a"}, []string{"/proj/x", "/proj/y"}), "a repository the daemon did not list")
+	assert.Empty(t, removeFailedCreateResult{}.settled([]string{"a"}, []string{"/proj/x"}), "a daemon that reports nothing listed")
+	assert.Empty(t, res.settled([]string{"a"}, nil), "no repositories to look in")
+	assert.Equal(t, []string{"a"}, res.settled([]string{"a"}, []string{"/proj/x"}))
+}
+
+// [B1]: a project with no repositories on record, or a daemon that does not
+// confirm what it listed, leaves every failed row pending for a later connect.
+func TestRemoveFailedCreatesOnConnectNeedsACompleteLook(t *testing.T) {
+	ctx := context.Background()
+	st := &failedStore{
+		rows:     []*db.Worktree{failedRow("w", "p1", "a")},
+		installs: []*core.ProjectDaemon{{ProjectID: "p1", DaemonID: "d1", Path: "/proj"}},
+		repos:    map[string][]*core.Repo{},
+	}
+	m := &diskMachine{}
+	assert.Equal(t, 0, RemoveFailedCreatesOn(ctx, st, m, "d1"))
+	assert.Empty(t, m.removes, "no repositories on record: nothing to look in")
+	assert.Empty(t, st.marked)
+
+	st.repos = map[string][]*core.Repo{"p1": {{RelativePath: "."}}}
+	assert.Equal(t, 0, RemoveFailedCreatesOn(ctx, st, &diskMachine{omitChecked: true}, "d1"))
+	assert.Empty(t, st.marked, "a daemon that does not confirm what it listed settles nothing")
+
+	assert.Equal(t, 0, RemoveFailedCreatesOn(ctx, st, &diskMachine{}, "d1"))
+	assert.Equal(t, []string{"w"}, st.marked)
 }

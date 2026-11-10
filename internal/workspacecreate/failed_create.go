@@ -69,7 +69,10 @@ type removeFailedCreateCheckout struct {
 
 type removeFailedCreateResult struct {
 	Checkouts []removeFailedCreateCheckout `json:"checkouts"`
-	Unchecked []string                     `json:"unchecked,omitempty"`
+	// Checked are the repositories the daemon listed; a daemon older than
+	// the field reports none, and so settles nothing.
+	Checked   []string `json:"checked,omitempty"`
+	Unchecked []string `json:"unchecked,omitempty"`
 }
 
 // removed reports whether any checkout was removed.
@@ -84,10 +87,22 @@ func (r removeFailedCreateResult) removed() bool {
 
 // settled returns the ids, of those asked about, that have nothing left
 // behind: every checkout locked for them was removed, or none was found, in
-// repositories that could all be read.
-func (r removeFailedCreateResult) settled(ids []string) []string {
-	if len(r.Unchecked) > 0 {
+// repoPaths — which must be non-empty, and which the daemon must report it
+// listed, every one. Anything less (a repository it skipped or could not
+// read, an older daemon that does not say what it listed) settles nothing,
+// and the next connect asks again.
+func (r removeFailedCreateResult) settled(ids, repoPaths []string) []string {
+	if len(r.Unchecked) > 0 || len(repoPaths) == 0 {
 		return nil
+	}
+	checked := make(map[string]bool, len(r.Checked))
+	for _, p := range r.Checked {
+		checked[p] = true
+	}
+	for _, p := range repoPaths {
+		if !checked[p] {
+			return nil
+		}
 	}
 	kept := map[string]bool{}
 	for _, c := range r.Checkouts {
@@ -220,11 +235,19 @@ func RemoveFailedCreatesOn(ctx context.Context, store FailedCreateStore, m Machi
 			logging.WarnContext(ctx, "failed-create cleanup: could not list the project's repositories", "error", err, "projectID", projectID)
 			continue
 		}
+		// The project's repositories are where its creates checked out:
+		// with none on record there is nowhere to look, and nothing is
+		// concluded.
 		repoPaths := make([]string, 0, len(repos))
 		for _, r := range repos {
+			if r == nil {
+				continue
+			}
 			repoPaths = append(repoPaths, filepath.Join(checkout, r.RelativePath))
 		}
 		if len(repoPaths) == 0 {
+			logging.InfoContext(ctx, "failed-create cleanup: the project has no repositories on record; its failed workspaces stay pending",
+				"projectID", projectID, "daemonID", daemonID)
 			continue
 		}
 		failed := byProject[projectID]
@@ -245,7 +268,7 @@ func RemoveFailedCreatesOn(ctx context.Context, store FailedCreateStore, m Machi
 		for i, w := range failed {
 			ids[i] = w.ID
 		}
-		for _, id := range res.settled(ids) {
+		for _, id := range res.settled(ids, repoPaths) {
 			if err := store.MergeWorktreeCleanupMetadata(ctx, id, func(meta *db.CleanupMetadata, _ bool) bool {
 				if meta.DirectoryDeleted {
 					return false

@@ -82,6 +82,12 @@ type failedCreateCheckout struct {
 
 type removeFailedCreateResponse struct {
 	Checkouts []failedCreateCheckout `json:"checkouts"`
+	// Checked are the repositories whose worktrees were listed: every
+	// checkout locked for a named id in them is in Checkouts. The server
+	// concludes a row has nothing left only from repositories named here, so
+	// a path this daemon skipped, or an older daemon that does not report
+	// it, settles nothing.
+	Checked []string `json:"checked,omitempty"`
 	// Unchecked are the repositories whose worktrees could not be listed:
 	// nothing can be concluded about them.
 	Unchecked []string `json:"unchecked,omitempty"`
@@ -135,19 +141,31 @@ func removeFailedCreates(ctx context.Context, root string, req removeFailedCreat
 		create failedCreate
 	}
 	var found []candidate
-	seenRepo := map[string]bool{}
+	// listed is, per repository already looked at, whether its worktrees
+	// were listed: a repeated path is reported as its first was.
+	listed := map[string]bool{}
 	for _, repo := range req.RepoPaths {
-		if repo == "" || !filepath.IsAbs(repo) || seenRepo[comparablePath(repo)] {
+		if repo == "" || !filepath.IsAbs(repo) {
+			resp.Unchecked = append(resp.Unchecked, repo)
 			continue
 		}
-		seenRepo[comparablePath(repo)] = true
+		if ok, seen := listed[comparablePath(repo)]; seen {
+			if ok {
+				resp.Checked = append(resp.Checked, repo)
+			} else {
+				resp.Unchecked = append(resp.Unchecked, repo)
+			}
+			continue
+		}
 		entries, err := listLockedWorktrees(ctx, repo)
+		listed[comparablePath(repo)] = err == nil
 		if err != nil {
 			logging.WarnContext(ctx, "worktree.remove_failed_create: could not list the repository's worktrees",
 				"repo_path", repo, "error", err)
 			resp.Unchecked = append(resp.Unchecked, repo)
 			continue
 		}
+		resp.Checked = append(resp.Checked, repo)
 		for _, e := range entries {
 			if c, ok := byReason[e.LockReason]; ok && e.Locked {
 				found = append(found, candidate{repo: repo, entry: e, create: c})
