@@ -76,6 +76,7 @@ package authz
 
 import (
 	"context"
+	"sync"
 	"sync/atomic"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -146,6 +147,14 @@ type defaultOrgs interface {
 
 type credentialOrgKey struct{}
 
+// credentialBinding is the org a credential is bound to, and the first other
+// org it was refused on this request (see CredentialRefusal).
+type credentialBinding struct {
+	org     string
+	mu      sync.Mutex
+	refused string
+}
+
 // WithCredentialOrg returns ctx acting through a credential bound to orgID:
 // every decision on it refuses another org's resources. auth.WithMachineToken
 // installs it with the token's org; "" binds nothing.
@@ -153,13 +162,41 @@ func WithCredentialOrg(ctx context.Context, orgID string) context.Context {
 	if orgID == "" {
 		return ctx
 	}
-	return context.WithValue(ctx, credentialOrgKey{}, orgID)
+	return context.WithValue(ctx, credentialOrgKey{}, &credentialBinding{org: orgID})
 }
 
 // boundOrg is the org ctx's credential is bound to, if any.
 func boundOrg(ctx context.Context) (string, bool) {
-	org, ok := ctx.Value(credentialOrgKey{}).(string)
-	return org, ok && org != ""
+	b, ok := ctx.Value(credentialOrgKey{}).(*credentialBinding)
+	if !ok || b == nil {
+		return "", false
+	}
+	return b.org, true
+}
+
+// CredentialRefusal reports whether a decision on ctx refused its credential
+// a resource of another org: the org the credential is bound to and the org
+// it was refused. The call site answers such a refusal as it answers any
+// (NotFound); the edge that installed the credential reads this to tell the
+// caller why, and how to act in the other org (interceptors.AuthInterceptor).
+func CredentialRefusal(ctx context.Context) (bound, refused string, ok bool) {
+	b, isBound := ctx.Value(credentialOrgKey{}).(*credentialBinding)
+	if !isBound || b == nil {
+		return "", "", false
+	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.org, b.refused, b.refused != ""
+}
+
+func recordCredentialRefusal(ctx context.Context, org string) {
+	if b, ok := ctx.Value(credentialOrgKey{}).(*credentialBinding); ok && b != nil {
+		b.mu.Lock()
+		if b.refused == "" {
+			b.refused = org
+		}
+		b.mu.Unlock()
+	}
 }
 
 // chatRecord is either read of a chat: the activity view (core.Chat) or the
@@ -239,6 +276,7 @@ func credentialReaches(ctx context.Context, userID, bound, org string) bool {
 	}
 	if org != bound {
 		logging.InfoContext(ctx, "[authz] a credential bound to another org; denying", "user_id", userID, "credential_org", bound, "org_id", org)
+		recordCredentialRefusal(ctx, org)
 		return false
 	}
 	return true
