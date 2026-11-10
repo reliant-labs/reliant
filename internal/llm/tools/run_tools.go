@@ -8,6 +8,7 @@ import (
 	"time"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/rctx"
@@ -219,7 +220,7 @@ func resolveOwnedRun(rctx *rctx.ToolContext, repo runCallerStore, caller *runCal
 		resp := NewTextErrorResponse("Could not look up the run: " + err.Error())
 		return nil, &resp
 	}
-	if chat == nil || chat.UserID != caller.userID {
+	if !authz.CanWriteChat(rctx.Context, caller.userID, chat) {
 		return notFound()
 	}
 	return chat, nil

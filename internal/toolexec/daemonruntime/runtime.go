@@ -34,6 +34,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/diskguard"
 	"github.com/reliant-labs/reliant/internal/diskwatch"
 	"github.com/reliant-labs/reliant/internal/egresslimit"
+	"github.com/reliant-labs/reliant/internal/ghshim"
 	"github.com/reliant-labs/reliant/internal/heavyjob"
 	"github.com/reliant-labs/reliant/internal/instanceid"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
@@ -585,6 +586,15 @@ func newDaemonClient(bootCfg bootstrap.DaemonBootstrapConfig, host Host, guards 
 		logging.Info(logPrefix + " " + heavyGate.String())
 	}
 	SetHeavyGate(heavyGate)
+
+	// `gh pr create` in a chat's shell names the chat in the pull request
+	// body, so automations reacting to the pull request later reach that
+	// chat first (internal/ghshim). Without it gh runs as is.
+	if shim, err := ghshim.InstallDefault(); err != nil {
+		logging.Info(logPrefix+" gh pr create runs unmarked", "reason", err)
+	} else {
+		logging.Info(logPrefix + " " + shim.String())
+	}
 
 	// Every command an agent runs gets a thread limit of its own where the
 	// machine allows (a delegated cgroup: pids.max per command, sized to the

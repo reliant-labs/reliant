@@ -2079,7 +2079,7 @@ func (r *Runner) registerActivities(
 			nodePath, _ := in["node_path"].(string)
 			rec.recordStepError(nodePath, msg)
 			// Non-retryable, as the real handler is (handlers.FailStepActivity).
-			return nil, temporal.NewNonRetryableApplicationError(fmt.Sprintf("workflow validation failed: %s", msg), "", nil)
+			return nil, temporal.NewNonRetryableApplicationError(handlers.FailStepMessagePrefix+msg, "", nil)
 		},
 		activity.RegisterOptions{Name: "FailStep"},
 	)

@@ -6,6 +6,7 @@ import { getAppURL } from '@/lib/constants'
 import { setTelemetryUserId } from '@/lib/telemetry'
 import { trackEvent } from '@/lib/analytics'
 import { queryClient } from '@/lib/query-client'
+import { setReaderPrincipal } from '@/components/Forge/AuditedAccess/readerSession'
 import {
   startOAuthSignIn,
   oauthCallbackTransport,
@@ -411,7 +412,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   signOut: async () => {
-    set({ loading: true })
+    // Stop reader authority before any network/cleanup awaits, even if logout fails.
+    set({ user: null, session: null, loading: true })
     try {
       // Clear API key if present
       localStorage.removeItem('reliant-api-key')
@@ -854,6 +856,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   setApiKeySession: (apiKey: string) => {
+    // API-key sessions share a synthetic id: explicit replacement must still
+    // invalidate reader authority without putting the credential in a key.
+    if (get().session?.access_token !== apiKey) setReaderPrincipal(null, true)
     localStorage.setItem('reliant-api-key', apiKey)
     set({
       user: {
@@ -983,3 +988,18 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
   },
 }))
+
+// One synchronous boundary covers every writer: explicit sign-in/out, adoptSession,
+// auth events, restoration, refresh failure and setUser. Token refresh for the same
+// identity is NOT a new reader. The neutral consumer never imports real auth.
+const readerId = (state: Pick<AuthState, 'user' | 'session'>) => {
+  // Split setter writes may temporarily disagree: fail closed until user and
+  // session are aligned, rather than reading with A's view and B's credential.
+  if (!state.session) return null
+  if (state.session.user?.id && state.session.user.id !== state.user?.id) return null
+  return state.user?.is_anonymous ? null : state.user?.id ?? null
+}
+setReaderPrincipal(readerId(useAuthStore.getState()))
+useAuthStore.subscribe((state, previous) => {
+  if (readerId(state) !== readerId(previous) || readerId(state) === 'apikey-user') setReaderPrincipal(readerId(state))
+})

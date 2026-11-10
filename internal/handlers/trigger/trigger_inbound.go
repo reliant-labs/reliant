@@ -13,6 +13,7 @@ import (
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -147,7 +148,7 @@ func (s *Service) resolveTriggerConnection(ctx context.Context, userID, integrat
 	if err != nil && !svcerr.IsNotFound(err) {
 		return "", svcerr.WrapOr(err, svcerr.Internal("failed to get connection"))
 	}
-	if err != nil || conn == nil || conn.UserID != userID {
+	if err != nil || conn == nil || !authz.CanAccessPersonal(userID, conn.UserID) {
 		if requested == nil || *requested == "" {
 			msg := fmt.Sprintf("connect %s first: an integration trigger listens through one of your connections", integration)
 			return "", tools.RefuseActivation(msg, svcerr.FailedPrecondition(msg))
@@ -180,7 +181,7 @@ func (s *Service) resolveOptionalTriggerConnection(ctx context.Context, userID, 
 		return nil, nil
 	}
 	conn, err := store.DefaultConnection(ctx, userID, integration)
-	if err != nil || conn == nil || conn.UserID != userID || conn.Status == core.ConnectionStatusRevoked {
+	if err != nil || conn == nil || !authz.CanAccessPersonal(userID, conn.UserID) || conn.Status == core.ConnectionStatusRevoked {
 		return nil, nil
 	}
 	return &conn.ID, nil

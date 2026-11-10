@@ -17,6 +17,7 @@ import (
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/daemonerr"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/diskwatch"
@@ -113,7 +114,7 @@ func (s *Service) GetDaemon(
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get daemon"))
 	}
-	if daemon.UserID != userID {
+	if !authz.CanReadMachine(ctx, userID, daemon) {
 		return nil, svcerr.NotFound("daemon")
 	}
 
@@ -218,7 +219,7 @@ func (s *Service) ownedOnlineDaemon(ctx context.Context, daemonID string) (userI
 	if err != nil {
 		return "", nil, svcerr.WrapOr(err, svcerr.Internal("failed to get daemon"))
 	}
-	if daemon == nil || daemon.UserID != userID {
+	if !authz.CanWriteMachine(ctx, userID, daemon) {
 		return "", nil, svcerr.NotFound("daemon")
 	}
 	attached, err := s.attachedDaemonSet(ctx, userID)
@@ -374,7 +375,7 @@ func (s *Service) ResumeDaemon(
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get daemon"))
 	}
-	if daemon.UserID != userID {
+	if !authz.CanWriteMachine(ctx, userID, daemon) {
 		return nil, svcerr.NotFound("daemon")
 	}
 

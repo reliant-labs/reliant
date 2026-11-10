@@ -420,6 +420,17 @@ jobs:
   # Plain -trimpath package compiles only: what a PR can reuse is the compile of
   # everything its change does not reach. Test binaries, -race variants and
   # linked tools would be dead weight that evicts this from the 10 GB budget.
+  #
+  # TRIMMED TO ONE COMMIT'S COMPILES before it is saved (reliant#2061). The job
+  # restores the previous entry, recompiles what changed, and used to save the
+  # union, so every superseded compile of every package stayed in it: 3.26 GB
+  # compressed on 2026-11-09, 3.83 GB a day later, against ~3.5 GB UNcompressed
+  # for a cold compile of one commit. Every Go job restores this entry first
+  # (the merge queue's setup spent 52-147s extracting it, most of its
+  # five-minute budget), and at that size the repository's 10 GB budget evicted
+  # it outright. Go refreshes the mtime of an entry it uses that is over an
+  # hour old, so after the builds everything older than the restore (minus an
+  # hour and five minutes of slack) is a compile this commit did not use.
   go-cache:
     name: Go package cache (main only)
     needs: lanes
@@ -428,6 +439,8 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v6
+      - name: Note when the Go build cache was restored
+        run: echo "GOCACHE_RESTORED_AT=$(date +%s)" >> "$GITHUB_ENV"
       # golangci: its cached binary is saved here, on main, for the merge
       # queue's golangci job to restore.
       - uses: ./.github/actions/setup
@@ -440,6 +453,34 @@ jobs:
       # finds their executables in this cache instead of compiling them.
       - name: task deps:go-protoc-plugins
         run: task deps:go-protoc-plugins
+      # After every build above, right before the save (the header says why).
+      #
+      # CHECKING IT AFTER THE MERGE. (1) The first push to main: this step's
+      # "Go build cache: <before> -> <after>" line; expect <after> near 3.5 GB
+      # (one commit's compiles, uncompressed). (2) Its `Save Go build cache`
+      # "Cache Size": ~0.7-0.8 GB, against 3.3-3.8 GB before. (3) The next
+      # merge-queue runs (merge-queue.yml, `CI result`): the go-build-trimpath
+      # restore's "Cache Size" matches (2), the setup step falls from ~170s to
+      # ~70s, and the gate's `build` phase in the merge-gate summary takes no
+      # longer than it did on comparable groups before (a longer one means the
+      # gate is compiling what the old cache held).
+      #
+      # ROLLING IT BACK, when (1) shows <after> under ~2 GB (the trim dropped
+      # compiles this commit used), or (3) shows the `build` phase or
+      # `task ci:merge` slower on comparable groups: revert the commit that
+      # added this step and the "Note when ..." step above. The next push to
+      # main then saves the untrimmed union again. If a bad trimmed entry is
+      # what the jobs keep restoring, also delete it so that push starts cold
+      # and saves a whole one: `gh cache list -R reliant-labs/reliant --key
+      # go-build-trimpath-` and `gh cache delete <key>` for each listed key.
+      - name: Trim the Go build cache to this commit's compiles
+        run: |
+          set -euo pipefail
+          dir="$(go env GOCACHE)"
+          before="$(du -sh "${dir}" | cut -f1)"
+          stale_minutes=$(( ($(date +%s) - GOCACHE_RESTORED_AT) / 60 + 65 ))
+          find "${dir}" -type f -mmin +"${stale_minutes}" -delete
+          echo "Go build cache: ${before} -> $(du -sh "${dir}" | cut -f1) (dropped entries unused for ${stale_minutes}+ minutes)"
       - name: Save Go build cache
         uses: actions/cache/save@v4
         with:
@@ -560,19 +601,61 @@ jobs:
           path: ~/.cache/ms-playwright
           # Per suite: the desktop job installs Chromium only.
           key: playwright-${{ matrix.suite }}-${{ runner.os }}-${{ hashFiles('frontends/web/pnpm-lock.yaml') }}
+      # The browsers' system packages (WebKit's GStreamer/GTK set is ~114 MB),
+      # as the .deb files a main run downloaded. On 2026-11-09 the runner's
+      # Ubuntu mirror served ~100 KB/s and the responsive job was cancelled at
+      # its timeout still inside `playwright install --with-deps` (reliant
+      # main 74127457b, control-plane main-red #2372). Keyed on the exact
+      # runner image: the cached set is the packages THAT image lacks, and
+      # scripts/playwright-os-deps.sh installs it with dpkg, no mirror. No
+      # restore-keys: another image's set could downgrade its libraries.
+      # Rollback and rollout checks: dev-docs/responsive-ui-standards.md,
+      # "System-package cache". Repository variable PLAYWRIGHT_OS_DEPS_CACHE=off
+      # turns the cache off (back to --with-deps); PLAYWRIGHT_OS_DEPS_CACHE_VERSION
+      # moves every run off a bad entry.
+      - name: Read the runner image
+        id: runner-image
+        if: ${{ vars.PLAYWRIGHT_OS_DEPS_CACHE != 'off' }}
+        run: echo "image=${ImageOS:-unknown}-${ImageVersion:-unknown}" >> "$GITHUB_OUTPUT"
+      - name: Restore Playwright system packages
+        id: os-deps
+        if: ${{ vars.PLAYWRIGHT_OS_DEPS_CACHE != 'off' }}
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.cache/playwright-os-deps
+          key: playwright-os-deps-${{ vars.PLAYWRIGHT_OS_DEPS_CACHE_VERSION || 'v1' }}-${{ matrix.suite }}-${{ steps.runner-image.outputs.image }}-${{ hashFiles('frontends/web/pnpm-lock.yaml') }}
       - name: task deps:web
         run: task deps:web
       # desktop: the Chromium suite (which also runs the responsive journeys
       # with mouse input). responsive: the required production-route
       # assertions in Chromium touch and WebKit phone/tablet.
       - name: Browser guardrails (${{ matrix.suite }})
-        run: task test:web:e2e:${{ matrix.suite }} PLAYWRIGHT_DEPS=--with-deps
+        env:
+          OS_DEPS_CACHE: ${{ vars.PLAYWRIGHT_OS_DEPS_CACHE }}
+        run: |
+          if [ "$OS_DEPS_CACHE" = off ]; then
+            task test:web:e2e:${{ matrix.suite }} PLAYWRIGHT_DEPS=--with-deps
+          else
+            task test:web:e2e:${{ matrix.suite }} PLAYWRIGHT_DEPS_CACHE="$HOME/.cache/playwright-os-deps"
+          fi
       - name: Save Playwright browsers (main only)
         if: ${{ !cancelled() && github.ref == 'refs/heads/main' && steps.browsers.outputs.cache-hit != 'true' }}
         uses: actions/cache/save@v4
         with:
           path: ~/.cache/ms-playwright
           key: ${{ steps.browsers.outputs.cache-primary-key }}
+      # The script writes the cache only after the packages installed, so a
+      # failed install leaves nothing to save. (hashFiles cannot see ~.)
+      - name: Were the system packages recorded
+        id: os-deps-recorded
+        if: ${{ !cancelled() && vars.PLAYWRIGHT_OS_DEPS_CACHE != 'off' && github.ref == 'refs/heads/main' && steps.os-deps.outputs.cache-hit != 'true' }}
+        run: if [ -f "$HOME/.cache/playwright-os-deps/browsers" ]; then echo "yes=true" >> "$GITHUB_OUTPUT"; fi
+      - name: Save Playwright system packages (main only)
+        if: ${{ !cancelled() && steps.os-deps-recorded.outputs.yes == 'true' }}
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.cache/playwright-os-deps
+          key: ${{ steps.os-deps.outputs.cache-primary-key }}
       - if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:

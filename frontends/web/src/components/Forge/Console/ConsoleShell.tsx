@@ -13,6 +13,8 @@
  *   Observability ›               Errors · Logs · Traces · Metrics · Dashboards · Alerts
  *                                 Sessions / Profiles when data is available (or unknown)
  *                                 (up to three starred dashboards nested under Dashboards)
+ *   Data                          the scoped environment's databases, read-only
+ *   Storage                       the scoped environment's buckets, read-only
  *   Configure
  *     Environments ›              one entry per long-lived environment, previews as one
  *     Secrets · Domains
@@ -29,11 +31,13 @@
  *
  * Every row is the same style (forge-ui SidebarLayout, the Cloudflare
  * pattern); a parent navigates to its own overview and expands its children
- * inline, and the group holding the current page stays open.
+ * inline, and the group holding the current page stays open. Observability
+ * is the exception: it is expanded on every page, and its chevron collapses
+ * it — a choice remembered per user (obsNavOpen.ts).
  */
 
 import type { ReactNode } from "react";
-import { Activity, Gauge, Globe, Home, KeyRound, Layers, Tag as TagIcon } from "lucide-react";
+import { Activity, Database, Gauge, Globe, HardDrive, Home, KeyRound, Layers, Tag as TagIcon } from "lucide-react";
 
 import SidebarLayout, { type SidebarNavItem, type SidebarUserInfo } from "@/components/forge-ui/sidebar_layout";
 import Link from "@/components/forge-ui/link";
@@ -73,6 +77,12 @@ export interface ConsoleNavInput {
   /** Omitted/unknown keeps useful views visible; false means a definite empty read. Sessions is always listed. */
   optionalViews?: { profiles: boolean };
   /**
+   * Whether Observability is expanded — the reader's remembered choice
+   * (obsNavOpen.ts). Omitted, it starts expanded and toggles for the visit.
+   */
+  obsOpen?: boolean;
+  onObsOpenChange?: (open: boolean) => void;
+  /**
    * Where a row (and a crumb) links. Default: the page's console path,
    * carrying the scope. The forge demo (Forge/Demo) keeps every link on its
    * own route.
@@ -92,7 +102,7 @@ export const NAV_STARRED_MAX = 3;
 const icon = (Icon: typeof Home) => <Icon className="h-4 w-4" aria-hidden="true" />;
 
 /** The nav rows for `page` — pure, so the IA is testable without rendering. */
-export function buildConsoleNav({ project, page, env, envs, alertsFiring = 0, starred = [], optionalViews, linkTo }: ConsoleNavInput): {
+export function buildConsoleNav({ project, page, env, envs, alertsFiring = 0, starred = [], optionalViews, obsOpen, onObsOpenChange, linkTo }: ConsoleNavInput): {
   items: SidebarNavItem[];
   footer: SidebarNavItem[];
 } {
@@ -118,6 +128,10 @@ export function buildConsoleNav({ project, page, env, envs, alertsFiring = 0, st
       row("Releases", { kind: "releases" }, icon(TagIcon), { active: is("releases") || is("release") }),
       row("Observability", { kind: "obs-view", view: OBS_NAV_VIEWS[0] }, icon(Gauge), {
         active: false,
+        // Its views are the console's most-visited pages: listed on every page, until the reader collapses them.
+        defaultExpanded: true,
+        open: obsOpen,
+        onOpenChange: onObsOpenChange,
         children: OBS_NAV_VIEWS.filter((view) =>
           view !== "profiles" || optionalViews?.[view] !== false || (page.kind === "obs-view" && page.view === view)
         ).map((view) => {
@@ -146,6 +160,8 @@ export function buildConsoleNav({ project, page, env, envs, alertsFiring = 0, st
           };
         }),
       }),
+      row("Data", { kind: "data" }, icon(Database)),
+      row("Storage", { kind: "storage" }, icon(HardDrive)),
       row("Environments", { kind: "environments" }, icon(Layers), {
         section: "Configure",
         children: [
@@ -201,6 +217,10 @@ export function consoleCrumbs(
         { label: "Dashboards", href: href({ kind: "obs-view", view: "dashboards" }) },
         { label: dashboardTitle || page.key },
       ];
+    case "storage":
+      return [{ label: "Storage" }];
+    case "data":
+      return [{ label: "Data" }];
     case "environments":
       return [{ label: "Environments" }];
     case "environment":
@@ -261,7 +281,8 @@ export function ConsoleShell({
      * edge to 3:1 so filters and toggles read as controls beside the charts
      * (controlStyles.ts).
      */
-    // data-tour: the forge journey spotlights the nav (`[data-tour='forge-console'] #sidebar-layout-nav`).
+    // data-tour: the forge journey spotlights the nav (`[data-tour='forge-console'] aside`, SidebarLayout's one
+    // <aside>; its id comes from useId since forge 0a3a89d5, so the tour cannot name it).
     <div className="forge-ui forge-console h-dvh w-full" data-testid="forge-shell" data-tour="forge-console">
       <SidebarLayout
         navLabel={nav.project}

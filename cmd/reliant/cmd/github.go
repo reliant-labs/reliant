@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/spf13/cobra"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -72,6 +73,13 @@ func fetchGitHubToken(ctx context.Context, cmd *cobra.Command, pin forgecred.Pin
 	if len(sessions) == 0 {
 		return githubBotToken{}, errors.New("no Reliant daemon session on this machine: run this in a Reliant agent's shell or on a signed-in daemon's machine")
 	}
+	return fetchBotTokenFromSessions(ctx, sessions, req)
+}
+
+// fetchBotTokenFromSessions asks each daemon session in turn for the bot
+// token, stopping at the first that gets one or at a refusal no other session
+// could change.
+func fetchBotTokenFromSessions(ctx context.Context, sessions []forgecred.Session, req githubTokenRequest) (githubBotToken, error) {
 	var last error
 	for _, s := range sessions {
 		// No per-request timeout: ctx's githubTokenTimeout is the whole
@@ -101,12 +109,37 @@ func fetchGitHubToken(ctx context.Context, cmd *cobra.Command, pin forgecred.Pin
 			// Out of time: the next session would start with none left.
 			return githubBotToken{}, errors.New(deadlineMessage(githubTokenTimeout))
 		default:
-			// A refusal (not installed, not connected, bad name) is the same
-			// from every session: report it rather than try the next one.
+			if refusedForAccount(err) {
+				// This session's account has no usable GitHub connection;
+				// another session on this machine may be another account.
+				last = errors.New(connectMessage(err))
+				continue
+			}
+			// A refusal of the repository or the request (not installed,
+			// bad name) is the same from every session: report it rather
+			// than try the next one.
 			return githubBotToken{}, errors.New(connectMessage(err))
 		}
 	}
 	return githubBotToken{}, last
+}
+
+// accountRefusalReasons are the bot-token refusals that belong to the
+// session's Reliant account rather than to the repository (the server's
+// internal/handlers/token reasons). A machine can hold daemon sessions of
+// several accounts — every account ever signed in on it — and a stale one
+// without GitHub connected was tried first and ended the search, so the
+// account that is connected was never asked.
+var accountRefusalReasons = map[string]bool{
+	"git_credential_not_connected":   true,
+	"git_credential_needs_reconnect": true,
+}
+
+// refusedForAccount reports whether err refused the session's account, so
+// another session's account may still succeed.
+func refusedForAccount(err error) bool {
+	var ce *connect.Error
+	return errors.As(err, &ce) && accountRefusalReasons[ce.Meta().Get(svcerr.ReasonHeader)]
 }
 
 // connectMessage is a Connect error's message without the code prefix.

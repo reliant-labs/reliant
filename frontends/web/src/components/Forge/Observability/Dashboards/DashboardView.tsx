@@ -37,7 +37,7 @@
 import { useCallback, useEffect, useMemo, useState, type ComponentProps, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { ConnectError, Code } from "@connectrpc/connect";
-import { ArrowLeft, ArrowRight, GripVertical, History, LayoutDashboard, LayoutGrid, Maximize2, MoreHorizontal, Plus, RefreshCw, Share2, Trash2, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, ChevronDown, ChevronRight, GripVertical, History, LayoutDashboard, LayoutGrid, Maximize2, MoreHorizontal, Plus, RefreshCw, Share2, Trash2, X } from "lucide-react";
 
 import Card from "@/components/forge-ui/card";
 import ConfirmationDialog from "@/components/forge-ui/confirmation_dialog";
@@ -56,7 +56,7 @@ import { useAlertHistory, useObservabilityOrg, usePanelQuery, useReleases, useSe
 import { useEscapeLayer } from "@/hooks/useEscapeLayer";
 import { useObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
 import type { DashboardRef, DashboardSummary } from "@/services/controlPlane/observability/dashboardTypes";
-import type { Dashboard, ObsScope, Panel } from "@/services/controlPlane/observability/types";
+import type { Dashboard, DashboardSection, ObsScope, Panel } from "@/services/controlPlane/observability/types";
 import { bucketLabel, dashboardDefaultRange, RANGE_LABELS, RANGE_PRESETS, rangeForBucket, type RangePreset } from "@/services/controlPlane/observability/window";
 import { cn } from "@/lib/utils";
 
@@ -74,7 +74,7 @@ import { OrganizationUsageView } from "./OrganizationUsageView";
 import { OrganizationBillingView } from "./OrganizationBillingView";
 import { LLMUsageView } from "./LLMUsageView";
 import { useNearViewport } from "./useNearViewport";
-import { visiblePanel, viewerQuery } from "./viewerModel";
+import { drawsSqlFigures, panelGroups, sqlTrendPanel, toggledHidden, visiblePanel, viewerQuery } from "./viewerModel";
 import {
   alertBands,
   COMPARE_LABELS,
@@ -84,6 +84,7 @@ import {
   resizePanel,
   COMPARE_MODES,
   compareTarget,
+  dashboardDefaultCompare,
   marksReleases,
   rangeMs,
   refreshMs,
@@ -109,8 +110,12 @@ import { PanelDrawer, type DrawerMode } from "./PanelDrawer";
 import { PanelErrorBoundary } from "./PanelErrorBoundary";
 import { BUTTON_PRIMARY, BUTTON_SECONDARY, BUTTON_SMALL, ICON_BUTTON, INK_LINK, Menu, PointMenu, Segmented, SourceTag, StarButton, VariableSelect, type MenuEntry } from "./parts";
 import { useObsReadOnly } from "../obsReadOnly";
+import { DataPanelBody, type PanelDataContext } from "./DataPanel";
+import { browseParams } from "./dataPanelModel";
+import type { DataSearch } from "../../Data/dataUrl-model";
 
 export interface DashboardHrefs extends ExploreHrefs {
+  data?: (search: DataSearch) => string;
   list: string;
   release: (version: string) => string;
   trace: (traceId: string) => string;
@@ -153,7 +158,6 @@ export function DashboardView({ project, dashRef, env: consoleEnv, environments:
   const orgId = org.orgId;
   const api = useObservabilityApi();
   const queryClient = useQueryClient();
-  const compare: CompareMode = search.compare ?? "off";
   const refresh: RefreshInterval = search.refresh ?? "off";
   const consoleExplore = useExploreHref();
 
@@ -169,6 +173,16 @@ export function DashboardView({ project, dashRef, env: consoleEnv, environments:
   // declares "7d" and so never opens on a window that holds a single bucket.
   const defaultRange = dashboardDefaultRange(spec?.defaultRange);
   const range: RangePreset = search.range ?? defaultRange;
+  // Its own comparison when the URL names none: a dashboard of headline
+  // figures declares "period", so each opens beside its change.
+  const defaultCompare = dashboardDefaultCompare(spec?.defaultCompare);
+  const compare: CompareMode = search.compare ?? defaultCompare;
+  // Data reads never poll implicitly. Keep bound time stable through telemetry
+  // polling/re-renders; changing the range creates a new structured question.
+  const browseWindow = useMemo(() => {
+    const endMs = Date.now();
+    return { startMs: endMs - rangeMs(range), endMs };
+  }, [range]);
 
   // A platform dashboard's signals belong to no environment: it reads them
   // platform-wide whatever environment the top bar names.
@@ -231,7 +245,10 @@ export function DashboardView({ project, dashRef, env: consoleEnv, environments:
   );
   const now = Date.now();
   const releaseCompare = platform ? PLATFORM_NO_RELEASE : compareTarget("release", range, promotions.data?.promotions ?? [], envId, now);
-  const target = platform && compare === "release" ? PLATFORM_NO_RELEASE : compareTarget(compare, range, promotions.data?.promotions ?? [], envId, now);
+  const asked = platform && compare === "release" ? PLATFORM_NO_RELEASE : compareTarget(compare, range, promotions.data?.promotions ?? [], envId, now);
+  // A default the scope cannot honour (a release comparison over every
+  // environment) opens without one, quietly: the viewer asked for nothing.
+  const target: CompareTarget = asked.mode === "unavailable" && search.compare === undefined ? { mode: "off" } : asked;
 
   // ── Drill-down ──
   const [drill, setDrill] = useState<{ target: DrillTarget; panel: Panel; at: { x: number; y: number } } | null>(null);
@@ -324,10 +341,7 @@ export function DashboardView({ project, dashRef, env: consoleEnv, environments:
     },
   };
 
-  const grid = (
-    <ObsChartMarkersProvider markers={marks ? releases.markers : NO_MARKERS}>
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4" data-testid="dashboard-grid" data-editing={layout ? "true" : undefined}>
-        {shown.panels.filter((panel) => !!layout || visiblePanel(panel, search)).map((panel, index) => (
+  const card = (panel: Panel, index: number) => (
           // One panel's bad definition stops at its own cell (PanelErrorBoundary).
           <PanelErrorBoundary
             key={panel.id}
@@ -380,6 +394,10 @@ export function DashboardView({ project, dashRef, env: consoleEnv, environments:
                 : []),
             ]}
             scope={scope}
+            dataContext={!platform && !orgScoped && envId && hrefs.data && scope ? {
+              env: { id: envId, name: env }, href: hrefs.data,
+              params: browseParams(spec, search, browseWindow),
+            } : undefined}
             range={range}
             services={viewerQuery(spec, panel, search).services}
             refreshEvery={refreshEvery}
@@ -389,7 +407,30 @@ export function DashboardView({ project, dashRef, env: consoleEnv, environments:
           />
           )}
           </PanelErrorBoundary>
-        ))}
+  );
+
+  // Viewing a dashboard with sections draws each under its heading (forge
+  // dashspec Section); editing the layout moves panels in their saved order,
+  // so it lays them out flat.
+  const sectioned = !layout && !!shown.sections?.length;
+  const grid = (
+    <ObsChartMarkersProvider markers={marks ? releases.markers : NO_MARKERS}>
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4" data-testid="dashboard-grid" data-editing={layout ? "true" : undefined}>
+        {sectioned
+          ? panelGroups(shown, search).flatMap((group) => [
+              ...(group.section
+                ? [
+                    <SectionHeading
+                      key={`section:${group.section.id}`}
+                      section={group.section}
+                      hidden={group.hidden}
+                      onToggle={() => onSearch({ hiddenSections: toggledHidden(search.hiddenSections, group.section!.id) })}
+                    />,
+                  ]
+                : []),
+              ...group.panels.map((panel, index) => card(panel, index)),
+            ])
+          : shown.panels.filter((panel) => !!layout || visiblePanel(panel, search)).map((panel, index) => card(panel, index))}
       </div>
       {!layout && shown.panels.every((panel) => !visiblePanel(panel, search)) && (
         <p className="rounded-lg border border-dashed border-border bg-surface-sunken p-4 text-sm text-ink-muted" role="status">
@@ -408,7 +449,8 @@ export function DashboardView({ project, dashRef, env: consoleEnv, environments:
       defaultRange={defaultRange}
       service={search.service}
       hasProcessFilter={spec.filters.some((filter) => filter.field === "service.name")}
-      compare={compare}
+      compare={target.mode === "off" ? "off" : compare}
+      defaultCompare={defaultCompare}
       target={target}
       releaseCompare={releaseCompare}
       refresh={refresh}
@@ -868,6 +910,7 @@ function VariablesBar({
   service,
   hasProcessFilter,
   compare,
+  defaultCompare,
   target,
   releaseCompare,
   refresh,
@@ -884,6 +927,8 @@ function VariablesBar({
   service: string | undefined;
   hasProcessFilter: boolean;
   compare: CompareMode;
+  /** The dashboard's own comparison: choosing it clears the URL's. */
+  defaultCompare: CompareMode;
   target: CompareTarget;
   releaseCompare: CompareTarget;
   refresh: RefreshInterval;
@@ -945,7 +990,7 @@ function VariablesBar({
         label="Compare"
         value={compare}
         options={COMPARE_MODES.map((mode) => ({ value: mode, label: COMPARE_LABELS[mode] }))}
-        onChange={(mode) => onSearch({ compare: mode === "off" ? undefined : mode })}
+        onChange={(mode) => onSearch({ compare: mode === defaultCompare ? undefined : mode })}
         disabledReason={releaseCompare.mode === "unavailable" ? { release: releaseCompare.reason } : undefined}
         testId="dashboard-compare"
       />
@@ -1008,6 +1053,30 @@ function formatSpan(ms: number): string {
 
 // ── Panels ──────────────────────────────────────────────────────────────────
 
+/** A section's heading across the grid: its title, its description, and the toggle that hides or shows its panels. */
+function SectionHeading({ section, hidden, onToggle }: { section: DashboardSection; hidden: boolean; onToggle: () => void }) {
+  const Chevron = hidden ? ChevronRight : ChevronDown;
+  return (
+    <div className="col-span-full flex items-end justify-between gap-3 border-b border-border pb-1.5 pt-2 first:pt-0" data-testid={`dashboard-section-${section.id}`} data-hidden={hidden ? "true" : undefined}>
+      <div className="min-w-0">
+        <h2 className="text-base font-semibold tracking-tight text-ink">{section.title}</h2>
+        {section.description && <p className="text-xs text-ink-muted">{section.description}</p>}
+      </div>
+      <button
+        type="button"
+        className={cn(BUTTON_SMALL, "shrink-0")}
+        onClick={onToggle}
+        aria-expanded={!hidden}
+        aria-label={`${hidden ? "Show" : "Hide"} ${section.title}`}
+        data-testid={`dashboard-section-toggle-${section.id}`}
+      >
+        <Chevron className="h-3 w-3" aria-hidden="true" />
+        {hidden ? "Show" : "Hide"}
+      </button>
+    </div>
+  );
+}
+
 interface PanelLayoutControls {
   index: number;
   count: number;
@@ -1024,6 +1093,7 @@ function DashboardPanelCard({
   panel,
   queryPanel,
   scope,
+  dataContext,
   range: rangeOfCard,
   services,
   refreshEvery,
@@ -1036,6 +1106,7 @@ function DashboardPanelCard({
   panel: Panel;
   queryPanel: Panel;
   scope: ObsScope | null;
+  dataContext?: PanelDataContext;
   range: RangePreset;
   services: string[];
   refreshEvery: number | false;
@@ -1057,7 +1128,12 @@ function DashboardPanelCard({
   const rawQuery = usePanelQuery(scope, range, queryPanel, services, [], { refetchInterval: refreshEvery, enabled: near });
   // Not yet near is "not loaded yet", not "no data".
   const query = near || !panelRunsQuery(queryPanel.kind) ? rawQuery : { ...rawQuery, isLoading: true };
-  const comparable = (panel.kind === "line" || panel.kind === "number") && (target.mode === "period" || target.mode === "release");
+  // A sql panel compares only the figures it draws: its statement's windows
+  // (cohorts, rolling days) need not shift with the range the way a series'
+  // buckets do, so its charts are not overlaid. It asks once the figures came.
+  const comparable =
+    (panel.kind === "line" || panel.kind === "number" || (panel.kind === "sql" && drawsSqlFigures(queryPanel, rawQuery.data))) &&
+    (target.mode === "period" || target.mode === "release");
   const offsetKey = target.mode === "release" ? `release:${target.promotion.promotionId}` : target.mode === "period" ? `period:${range}` : "";
   const compareQuery = usePanelQuery(scope, range, queryPanel, services, [], {
     offsetKey,
@@ -1065,6 +1141,12 @@ function DashboardPanelCard({
       target.mode === "release" ? () => Math.max(0, Date.now() - target.promotion.promotedAtMs) : target.mode === "period" ? () => rangeMs(range) : undefined,
     refetchInterval: refreshEvery,
     enabled: comparable && near,
+  });
+  // A sql figure's sparkline: its trendSql, over the same window.
+  const trendPanel = useMemo(() => sqlTrendPanel(queryPanel), [queryPanel]);
+  const trendQuery = usePanelQuery(scope, range, trendPanel ?? queryPanel, services, [], {
+    refetchInterval: refreshEvery,
+    enabled: !!trendPanel && near && drawsSqlFigures(queryPanel, rawQuery.data),
   });
   const span = spanOf(panel);
   const offsetSec = target.mode === "release" || target.mode === "period" ? Math.round(target.offsetMs / 1000) : 0;
@@ -1143,10 +1225,12 @@ function DashboardPanelCard({
         )}
       </div>
       <div ref={bodyRef} className="px-4 pb-4 pt-2">
-        <PanelBody
+        <DataPanelBody
+          context={near ? dataContext : undefined}
           panel={queryPanel}
           query={query}
           compare={comparable && offsetSec ? { query: compareQuery, label: target.mode === "release" ? target.label : "previous period", offsetSec } : undefined}
+          trend={trendPanel ? trendQuery : undefined}
           bands={panel.kind === "line" ? bands : undefined}
           links={links}
         />

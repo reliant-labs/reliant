@@ -194,6 +194,56 @@ func (DatabaseTableKind) EnumDescriptor() ([]byte, []int) {
 	return file_services_app_database_v1_app_database_proto_rawDescGZIP(), []int{2}
 }
 
+// IdentitySubjectKind describes an explicitly marked managed-identity subject.
+type IdentitySubjectKind int32
+
+const (
+	IdentitySubjectKind_IDENTITY_SUBJECT_KIND_UNSPECIFIED IdentitySubjectKind = 0
+	IdentitySubjectKind_IDENTITY_SUBJECT_KIND_ID          IdentitySubjectKind = 1
+	IdentitySubjectKind_IDENTITY_SUBJECT_KIND_EMAIL       IdentitySubjectKind = 2
+)
+
+// Enum value maps for IdentitySubjectKind.
+var (
+	IdentitySubjectKind_name = map[int32]string{
+		0: "IDENTITY_SUBJECT_KIND_UNSPECIFIED",
+		1: "IDENTITY_SUBJECT_KIND_ID",
+		2: "IDENTITY_SUBJECT_KIND_EMAIL",
+	}
+	IdentitySubjectKind_value = map[string]int32{
+		"IDENTITY_SUBJECT_KIND_UNSPECIFIED": 0,
+		"IDENTITY_SUBJECT_KIND_ID":          1,
+		"IDENTITY_SUBJECT_KIND_EMAIL":       2,
+	}
+)
+
+func (x IdentitySubjectKind) Enum() *IdentitySubjectKind {
+	p := new(IdentitySubjectKind)
+	*p = x
+	return p
+}
+
+func (x IdentitySubjectKind) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (IdentitySubjectKind) Descriptor() protoreflect.EnumDescriptor {
+	return file_services_app_database_v1_app_database_proto_enumTypes[3].Descriptor()
+}
+
+func (IdentitySubjectKind) Type() protoreflect.EnumType {
+	return &file_services_app_database_v1_app_database_proto_enumTypes[3]
+}
+
+func (x IdentitySubjectKind) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use IdentitySubjectKind.Descriptor instead.
+func (IdentitySubjectKind) EnumDescriptor() ([]byte, []int) {
+	return file_services_app_database_v1_app_database_proto_rawDescGZIP(), []int{3}
+}
+
 // BrowseFilterOp is a BrowseFilter's comparison.
 type BrowseFilterOp int32
 
@@ -264,11 +314,11 @@ func (x BrowseFilterOp) String() string {
 }
 
 func (BrowseFilterOp) Descriptor() protoreflect.EnumDescriptor {
-	return file_services_app_database_v1_app_database_proto_enumTypes[3].Descriptor()
+	return file_services_app_database_v1_app_database_proto_enumTypes[4].Descriptor()
 }
 
 func (BrowseFilterOp) Type() protoreflect.EnumType {
-	return &file_services_app_database_v1_app_database_proto_enumTypes[3]
+	return &file_services_app_database_v1_app_database_proto_enumTypes[4]
 }
 
 func (x BrowseFilterOp) Number() protoreflect.EnumNumber {
@@ -277,7 +327,7 @@ func (x BrowseFilterOp) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use BrowseFilterOp.Descriptor instead.
 func (BrowseFilterOp) EnumDescriptor() ([]byte, []int) {
-	return file_services_app_database_v1_app_database_proto_rawDescGZIP(), []int{3}
+	return file_services_app_database_v1_app_database_proto_rawDescGZIP(), []int{4}
 }
 
 // BrowseCount is whether BrowseTable counts the matching rows.
@@ -323,11 +373,11 @@ func (x BrowseCount) String() string {
 }
 
 func (BrowseCount) Descriptor() protoreflect.EnumDescriptor {
-	return file_services_app_database_v1_app_database_proto_enumTypes[4].Descriptor()
+	return file_services_app_database_v1_app_database_proto_enumTypes[5].Descriptor()
 }
 
 func (BrowseCount) Type() protoreflect.EnumType {
-	return &file_services_app_database_v1_app_database_proto_enumTypes[4]
+	return &file_services_app_database_v1_app_database_proto_enumTypes[5]
 }
 
 func (x BrowseCount) Number() protoreflect.EnumNumber {
@@ -336,7 +386,7 @@ func (x BrowseCount) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use BrowseCount.Descriptor instead.
 func (BrowseCount) EnumDescriptor() ([]byte, []int) {
-	return file_services_app_database_v1_app_database_proto_rawDescGZIP(), []int{4}
+	return file_services_app_database_v1_app_database_proto_rawDescGZIP(), []int{5}
 }
 
 type QueryDatabaseRequest struct {
@@ -1774,9 +1824,12 @@ type DatabaseTableColumn struct {
 	// COMMENT ON COLUMN, or empty.
 	Comment string `protobuf:"bytes,4,opt,name=comment,proto3" json:"comment,omitempty"`
 	// The column is part of the table's primary key.
-	IsPrimaryKey  bool `protobuf:"varint,5,opt,name=is_primary_key,json=isPrimaryKey,proto3" json:"is_primary_key,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	IsPrimaryKey bool `protobuf:"varint,5,opt,name=is_primary_key,json=isPrimaryKey,proto3" json:"is_primary_key,omitempty"`
+	// Explicit forge:identity-subject marker on this role-visible column.
+	// Invalid or conflicting markers are UNSPECIFIED; names are never inferred.
+	IdentitySubject IdentitySubjectKind `protobuf:"varint,6,opt,name=identity_subject,json=identitySubject,proto3,enum=controlplane.v1.IdentitySubjectKind" json:"identity_subject,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *DatabaseTableColumn) Reset() {
@@ -1842,6 +1895,13 @@ func (x *DatabaseTableColumn) GetIsPrimaryKey() bool {
 		return x.IsPrimaryKey
 	}
 	return false
+}
+
+func (x *DatabaseTableColumn) GetIdentitySubject() IdentitySubjectKind {
+	if x != nil {
+		return x.IdentitySubject
+	}
+	return IdentitySubjectKind_IDENTITY_SUBJECT_KIND_UNSPECIFIED
 }
 
 // DatabaseForeignKey is one foreign-key constraint, always written from the
@@ -2485,13 +2545,14 @@ const file_services_app_database_v1_app_database_proto_rawDesc = "" +
 	"\vprimary_key\x18\a \x03(\tR\n" +
 	"primaryKey\x12F\n" +
 	"\fforeign_keys\x18\b \x03(\v2#.controlplane.v1.DatabaseForeignKeyR\vforeignKeys\x12H\n" +
-	"\rreferenced_by\x18\t \x03(\v2#.controlplane.v1.DatabaseForeignKeyR\freferencedBy\"\x9e\x01\n" +
+	"\rreferenced_by\x18\t \x03(\v2#.controlplane.v1.DatabaseForeignKeyR\freferencedBy\"\xef\x01\n" +
 	"\x13DatabaseTableColumn\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x17\n" +
 	"\apg_type\x18\x02 \x01(\tR\x06pgType\x12\x1a\n" +
 	"\bnullable\x18\x03 \x01(\bR\bnullable\x12\x18\n" +
 	"\acomment\x18\x04 \x01(\tR\acomment\x12$\n" +
-	"\x0eis_primary_key\x18\x05 \x01(\bR\fisPrimaryKey\"\xd9\x01\n" +
+	"\x0eis_primary_key\x18\x05 \x01(\bR\fisPrimaryKey\x12O\n" +
+	"\x10identity_subject\x18\x06 \x01(\x0e2$.controlplane.v1.IdentitySubjectKindR\x0fidentitySubject\"\xd9\x01\n" +
 	"\x12DatabaseForeignKey\x12\x1e\n" +
 	"\n" +
 	"constraint\x18\x01 \x01(\tR\n" +
@@ -2559,7 +2620,11 @@ const file_services_app_database_v1_app_database_proto_rawDesc = "" +
 	"\x19DATABASE_TABLE_KIND_TABLE\x10\x01\x12\x1c\n" +
 	"\x18DATABASE_TABLE_KIND_VIEW\x10\x02\x12)\n" +
 	"%DATABASE_TABLE_KIND_MATERIALIZED_VIEW\x10\x03\x12%\n" +
-	"!DATABASE_TABLE_KIND_FOREIGN_TABLE\x10\x04*\xd8\x02\n" +
+	"!DATABASE_TABLE_KIND_FOREIGN_TABLE\x10\x04*{\n" +
+	"\x13IdentitySubjectKind\x12%\n" +
+	"!IDENTITY_SUBJECT_KIND_UNSPECIFIED\x10\x00\x12\x1c\n" +
+	"\x18IDENTITY_SUBJECT_KIND_ID\x10\x01\x12\x1f\n" +
+	"\x1bIDENTITY_SUBJECT_KIND_EMAIL\x10\x02*\xd8\x02\n" +
 	"\x0eBrowseFilterOp\x12 \n" +
 	"\x1cBROWSE_FILTER_OP_UNSPECIFIED\x10\x00\x12\x17\n" +
 	"\x13BROWSE_FILTER_OP_EQ\x10\x01\x12\x18\n" +
@@ -2600,89 +2665,91 @@ func file_services_app_database_v1_app_database_proto_rawDescGZIP() []byte {
 	return file_services_app_database_v1_app_database_proto_rawDescData
 }
 
-var file_services_app_database_v1_app_database_proto_enumTypes = make([]protoimpl.EnumInfo, 5)
+var file_services_app_database_v1_app_database_proto_enumTypes = make([]protoimpl.EnumInfo, 6)
 var file_services_app_database_v1_app_database_proto_msgTypes = make([]protoimpl.MessageInfo, 23)
 var file_services_app_database_v1_app_database_proto_goTypes = []any{
 	(BrowsableDatabaseKind)(0),             // 0: controlplane.v1.BrowsableDatabaseKind
 	(DataAccessPolicy)(0),                  // 1: controlplane.v1.DataAccessPolicy
 	(DatabaseTableKind)(0),                 // 2: controlplane.v1.DatabaseTableKind
-	(BrowseFilterOp)(0),                    // 3: controlplane.v1.BrowseFilterOp
-	(BrowseCount)(0),                       // 4: controlplane.v1.BrowseCount
-	(*QueryDatabaseRequest)(nil),           // 5: controlplane.v1.QueryDatabaseRequest
-	(*QueryDatabaseResponse)(nil),          // 6: controlplane.v1.QueryDatabaseResponse
-	(*DatabaseColumn)(nil),                 // 7: controlplane.v1.DatabaseColumn
-	(*DatabaseRow)(nil),                    // 8: controlplane.v1.DatabaseRow
-	(*QueryDatabasePanelRequest)(nil),      // 9: controlplane.v1.QueryDatabasePanelRequest
-	(*QueryDatabasePanelResponse)(nil),     // 10: controlplane.v1.QueryDatabasePanelResponse
-	(*ListDashboardDatabasesRequest)(nil),  // 11: controlplane.v1.ListDashboardDatabasesRequest
-	(*ListDashboardDatabasesResponse)(nil), // 12: controlplane.v1.ListDashboardDatabasesResponse
-	(*DashboardDatabase)(nil),              // 13: controlplane.v1.DashboardDatabase
-	(*DashboardTable)(nil),                 // 14: controlplane.v1.DashboardTable
-	(*DashboardColumn)(nil),                // 15: controlplane.v1.DashboardColumn
-	(*ListBrowsableDatabasesRequest)(nil),  // 16: controlplane.v1.ListBrowsableDatabasesRequest
-	(*ListBrowsableDatabasesResponse)(nil), // 17: controlplane.v1.ListBrowsableDatabasesResponse
-	(*BrowsableDatabase)(nil),              // 18: controlplane.v1.BrowsableDatabase
-	(*DescribeDatabaseRequest)(nil),        // 19: controlplane.v1.DescribeDatabaseRequest
-	(*DescribeDatabaseResponse)(nil),       // 20: controlplane.v1.DescribeDatabaseResponse
-	(*DatabaseTable)(nil),                  // 21: controlplane.v1.DatabaseTable
-	(*DatabaseTableColumn)(nil),            // 22: controlplane.v1.DatabaseTableColumn
-	(*DatabaseForeignKey)(nil),             // 23: controlplane.v1.DatabaseForeignKey
-	(*BrowseTableRequest)(nil),             // 24: controlplane.v1.BrowseTableRequest
-	(*BrowseFilter)(nil),                   // 25: controlplane.v1.BrowseFilter
-	(*BrowseSort)(nil),                     // 26: controlplane.v1.BrowseSort
-	(*BrowseTableResponse)(nil),            // 27: controlplane.v1.BrowseTableResponse
-	(*structpb.Value)(nil),                 // 28: google.protobuf.Value
-	(*timestamppb.Timestamp)(nil),          // 29: google.protobuf.Timestamp
-	(*v1.PanelResultColumn)(nil),           // 30: controlplane.v1.PanelResultColumn
-	(*v1.PanelResultSeries)(nil),           // 31: controlplane.v1.PanelResultSeries
-	(*v1.PanelResultRow)(nil),              // 32: controlplane.v1.PanelResultRow
+	(IdentitySubjectKind)(0),               // 3: controlplane.v1.IdentitySubjectKind
+	(BrowseFilterOp)(0),                    // 4: controlplane.v1.BrowseFilterOp
+	(BrowseCount)(0),                       // 5: controlplane.v1.BrowseCount
+	(*QueryDatabaseRequest)(nil),           // 6: controlplane.v1.QueryDatabaseRequest
+	(*QueryDatabaseResponse)(nil),          // 7: controlplane.v1.QueryDatabaseResponse
+	(*DatabaseColumn)(nil),                 // 8: controlplane.v1.DatabaseColumn
+	(*DatabaseRow)(nil),                    // 9: controlplane.v1.DatabaseRow
+	(*QueryDatabasePanelRequest)(nil),      // 10: controlplane.v1.QueryDatabasePanelRequest
+	(*QueryDatabasePanelResponse)(nil),     // 11: controlplane.v1.QueryDatabasePanelResponse
+	(*ListDashboardDatabasesRequest)(nil),  // 12: controlplane.v1.ListDashboardDatabasesRequest
+	(*ListDashboardDatabasesResponse)(nil), // 13: controlplane.v1.ListDashboardDatabasesResponse
+	(*DashboardDatabase)(nil),              // 14: controlplane.v1.DashboardDatabase
+	(*DashboardTable)(nil),                 // 15: controlplane.v1.DashboardTable
+	(*DashboardColumn)(nil),                // 16: controlplane.v1.DashboardColumn
+	(*ListBrowsableDatabasesRequest)(nil),  // 17: controlplane.v1.ListBrowsableDatabasesRequest
+	(*ListBrowsableDatabasesResponse)(nil), // 18: controlplane.v1.ListBrowsableDatabasesResponse
+	(*BrowsableDatabase)(nil),              // 19: controlplane.v1.BrowsableDatabase
+	(*DescribeDatabaseRequest)(nil),        // 20: controlplane.v1.DescribeDatabaseRequest
+	(*DescribeDatabaseResponse)(nil),       // 21: controlplane.v1.DescribeDatabaseResponse
+	(*DatabaseTable)(nil),                  // 22: controlplane.v1.DatabaseTable
+	(*DatabaseTableColumn)(nil),            // 23: controlplane.v1.DatabaseTableColumn
+	(*DatabaseForeignKey)(nil),             // 24: controlplane.v1.DatabaseForeignKey
+	(*BrowseTableRequest)(nil),             // 25: controlplane.v1.BrowseTableRequest
+	(*BrowseFilter)(nil),                   // 26: controlplane.v1.BrowseFilter
+	(*BrowseSort)(nil),                     // 27: controlplane.v1.BrowseSort
+	(*BrowseTableResponse)(nil),            // 28: controlplane.v1.BrowseTableResponse
+	(*structpb.Value)(nil),                 // 29: google.protobuf.Value
+	(*timestamppb.Timestamp)(nil),          // 30: google.protobuf.Timestamp
+	(*v1.PanelResultColumn)(nil),           // 31: controlplane.v1.PanelResultColumn
+	(*v1.PanelResultSeries)(nil),           // 32: controlplane.v1.PanelResultSeries
+	(*v1.PanelResultRow)(nil),              // 33: controlplane.v1.PanelResultRow
 }
 var file_services_app_database_v1_app_database_proto_depIdxs = []int32{
-	7,  // 0: controlplane.v1.QueryDatabaseResponse.columns:type_name -> controlplane.v1.DatabaseColumn
-	8,  // 1: controlplane.v1.QueryDatabaseResponse.rows:type_name -> controlplane.v1.DatabaseRow
-	28, // 2: controlplane.v1.DatabaseRow.values:type_name -> google.protobuf.Value
-	29, // 3: controlplane.v1.QueryDatabasePanelRequest.from:type_name -> google.protobuf.Timestamp
-	29, // 4: controlplane.v1.QueryDatabasePanelRequest.to:type_name -> google.protobuf.Timestamp
-	30, // 5: controlplane.v1.QueryDatabasePanelResponse.sql_columns:type_name -> controlplane.v1.PanelResultColumn
-	31, // 6: controlplane.v1.QueryDatabasePanelResponse.series:type_name -> controlplane.v1.PanelResultSeries
-	32, // 7: controlplane.v1.QueryDatabasePanelResponse.rows:type_name -> controlplane.v1.PanelResultRow
-	29, // 8: controlplane.v1.QueryDatabasePanelResponse.as_of:type_name -> google.protobuf.Timestamp
-	29, // 9: controlplane.v1.QueryDatabasePanelResponse.from:type_name -> google.protobuf.Timestamp
-	29, // 10: controlplane.v1.QueryDatabasePanelResponse.to:type_name -> google.protobuf.Timestamp
-	13, // 11: controlplane.v1.ListDashboardDatabasesResponse.databases:type_name -> controlplane.v1.DashboardDatabase
-	14, // 12: controlplane.v1.DashboardDatabase.tables:type_name -> controlplane.v1.DashboardTable
-	15, // 13: controlplane.v1.DashboardTable.columns:type_name -> controlplane.v1.DashboardColumn
-	18, // 14: controlplane.v1.ListBrowsableDatabasesResponse.databases:type_name -> controlplane.v1.BrowsableDatabase
+	8,  // 0: controlplane.v1.QueryDatabaseResponse.columns:type_name -> controlplane.v1.DatabaseColumn
+	9,  // 1: controlplane.v1.QueryDatabaseResponse.rows:type_name -> controlplane.v1.DatabaseRow
+	29, // 2: controlplane.v1.DatabaseRow.values:type_name -> google.protobuf.Value
+	30, // 3: controlplane.v1.QueryDatabasePanelRequest.from:type_name -> google.protobuf.Timestamp
+	30, // 4: controlplane.v1.QueryDatabasePanelRequest.to:type_name -> google.protobuf.Timestamp
+	31, // 5: controlplane.v1.QueryDatabasePanelResponse.sql_columns:type_name -> controlplane.v1.PanelResultColumn
+	32, // 6: controlplane.v1.QueryDatabasePanelResponse.series:type_name -> controlplane.v1.PanelResultSeries
+	33, // 7: controlplane.v1.QueryDatabasePanelResponse.rows:type_name -> controlplane.v1.PanelResultRow
+	30, // 8: controlplane.v1.QueryDatabasePanelResponse.as_of:type_name -> google.protobuf.Timestamp
+	30, // 9: controlplane.v1.QueryDatabasePanelResponse.from:type_name -> google.protobuf.Timestamp
+	30, // 10: controlplane.v1.QueryDatabasePanelResponse.to:type_name -> google.protobuf.Timestamp
+	14, // 11: controlplane.v1.ListDashboardDatabasesResponse.databases:type_name -> controlplane.v1.DashboardDatabase
+	15, // 12: controlplane.v1.DashboardDatabase.tables:type_name -> controlplane.v1.DashboardTable
+	16, // 13: controlplane.v1.DashboardTable.columns:type_name -> controlplane.v1.DashboardColumn
+	19, // 14: controlplane.v1.ListBrowsableDatabasesResponse.databases:type_name -> controlplane.v1.BrowsableDatabase
 	0,  // 15: controlplane.v1.BrowsableDatabase.kind:type_name -> controlplane.v1.BrowsableDatabaseKind
 	1,  // 16: controlplane.v1.BrowsableDatabase.policy:type_name -> controlplane.v1.DataAccessPolicy
-	21, // 17: controlplane.v1.DescribeDatabaseResponse.tables:type_name -> controlplane.v1.DatabaseTable
+	22, // 17: controlplane.v1.DescribeDatabaseResponse.tables:type_name -> controlplane.v1.DatabaseTable
 	2,  // 18: controlplane.v1.DatabaseTable.kind:type_name -> controlplane.v1.DatabaseTableKind
-	22, // 19: controlplane.v1.DatabaseTable.columns:type_name -> controlplane.v1.DatabaseTableColumn
-	23, // 20: controlplane.v1.DatabaseTable.foreign_keys:type_name -> controlplane.v1.DatabaseForeignKey
-	23, // 21: controlplane.v1.DatabaseTable.referenced_by:type_name -> controlplane.v1.DatabaseForeignKey
-	25, // 22: controlplane.v1.BrowseTableRequest.filters:type_name -> controlplane.v1.BrowseFilter
-	26, // 23: controlplane.v1.BrowseTableRequest.sort:type_name -> controlplane.v1.BrowseSort
-	4,  // 24: controlplane.v1.BrowseTableRequest.count:type_name -> controlplane.v1.BrowseCount
-	3,  // 25: controlplane.v1.BrowseFilter.op:type_name -> controlplane.v1.BrowseFilterOp
-	7,  // 26: controlplane.v1.BrowseTableResponse.columns:type_name -> controlplane.v1.DatabaseColumn
-	8,  // 27: controlplane.v1.BrowseTableResponse.rows:type_name -> controlplane.v1.DatabaseRow
-	5,  // 28: controlplane.v1.AppDatabaseService.QueryDatabase:input_type -> controlplane.v1.QueryDatabaseRequest
-	9,  // 29: controlplane.v1.AppDatabaseService.QueryDatabasePanel:input_type -> controlplane.v1.QueryDatabasePanelRequest
-	11, // 30: controlplane.v1.AppDatabaseService.ListDashboardDatabases:input_type -> controlplane.v1.ListDashboardDatabasesRequest
-	16, // 31: controlplane.v1.AppDatabaseService.ListBrowsableDatabases:input_type -> controlplane.v1.ListBrowsableDatabasesRequest
-	19, // 32: controlplane.v1.AppDatabaseService.DescribeDatabase:input_type -> controlplane.v1.DescribeDatabaseRequest
-	24, // 33: controlplane.v1.AppDatabaseService.BrowseTable:input_type -> controlplane.v1.BrowseTableRequest
-	6,  // 34: controlplane.v1.AppDatabaseService.QueryDatabase:output_type -> controlplane.v1.QueryDatabaseResponse
-	10, // 35: controlplane.v1.AppDatabaseService.QueryDatabasePanel:output_type -> controlplane.v1.QueryDatabasePanelResponse
-	12, // 36: controlplane.v1.AppDatabaseService.ListDashboardDatabases:output_type -> controlplane.v1.ListDashboardDatabasesResponse
-	17, // 37: controlplane.v1.AppDatabaseService.ListBrowsableDatabases:output_type -> controlplane.v1.ListBrowsableDatabasesResponse
-	20, // 38: controlplane.v1.AppDatabaseService.DescribeDatabase:output_type -> controlplane.v1.DescribeDatabaseResponse
-	27, // 39: controlplane.v1.AppDatabaseService.BrowseTable:output_type -> controlplane.v1.BrowseTableResponse
-	34, // [34:40] is the sub-list for method output_type
-	28, // [28:34] is the sub-list for method input_type
-	28, // [28:28] is the sub-list for extension type_name
-	28, // [28:28] is the sub-list for extension extendee
-	0,  // [0:28] is the sub-list for field type_name
+	23, // 19: controlplane.v1.DatabaseTable.columns:type_name -> controlplane.v1.DatabaseTableColumn
+	24, // 20: controlplane.v1.DatabaseTable.foreign_keys:type_name -> controlplane.v1.DatabaseForeignKey
+	24, // 21: controlplane.v1.DatabaseTable.referenced_by:type_name -> controlplane.v1.DatabaseForeignKey
+	3,  // 22: controlplane.v1.DatabaseTableColumn.identity_subject:type_name -> controlplane.v1.IdentitySubjectKind
+	26, // 23: controlplane.v1.BrowseTableRequest.filters:type_name -> controlplane.v1.BrowseFilter
+	27, // 24: controlplane.v1.BrowseTableRequest.sort:type_name -> controlplane.v1.BrowseSort
+	5,  // 25: controlplane.v1.BrowseTableRequest.count:type_name -> controlplane.v1.BrowseCount
+	4,  // 26: controlplane.v1.BrowseFilter.op:type_name -> controlplane.v1.BrowseFilterOp
+	8,  // 27: controlplane.v1.BrowseTableResponse.columns:type_name -> controlplane.v1.DatabaseColumn
+	9,  // 28: controlplane.v1.BrowseTableResponse.rows:type_name -> controlplane.v1.DatabaseRow
+	6,  // 29: controlplane.v1.AppDatabaseService.QueryDatabase:input_type -> controlplane.v1.QueryDatabaseRequest
+	10, // 30: controlplane.v1.AppDatabaseService.QueryDatabasePanel:input_type -> controlplane.v1.QueryDatabasePanelRequest
+	12, // 31: controlplane.v1.AppDatabaseService.ListDashboardDatabases:input_type -> controlplane.v1.ListDashboardDatabasesRequest
+	17, // 32: controlplane.v1.AppDatabaseService.ListBrowsableDatabases:input_type -> controlplane.v1.ListBrowsableDatabasesRequest
+	20, // 33: controlplane.v1.AppDatabaseService.DescribeDatabase:input_type -> controlplane.v1.DescribeDatabaseRequest
+	25, // 34: controlplane.v1.AppDatabaseService.BrowseTable:input_type -> controlplane.v1.BrowseTableRequest
+	7,  // 35: controlplane.v1.AppDatabaseService.QueryDatabase:output_type -> controlplane.v1.QueryDatabaseResponse
+	11, // 36: controlplane.v1.AppDatabaseService.QueryDatabasePanel:output_type -> controlplane.v1.QueryDatabasePanelResponse
+	13, // 37: controlplane.v1.AppDatabaseService.ListDashboardDatabases:output_type -> controlplane.v1.ListDashboardDatabasesResponse
+	18, // 38: controlplane.v1.AppDatabaseService.ListBrowsableDatabases:output_type -> controlplane.v1.ListBrowsableDatabasesResponse
+	21, // 39: controlplane.v1.AppDatabaseService.DescribeDatabase:output_type -> controlplane.v1.DescribeDatabaseResponse
+	28, // 40: controlplane.v1.AppDatabaseService.BrowseTable:output_type -> controlplane.v1.BrowseTableResponse
+	35, // [35:41] is the sub-list for method output_type
+	29, // [29:35] is the sub-list for method input_type
+	29, // [29:29] is the sub-list for extension type_name
+	29, // [29:29] is the sub-list for extension extendee
+	0,  // [0:29] is the sub-list for field type_name
 }
 
 func init() { file_services_app_database_v1_app_database_proto_init() }
@@ -2699,7 +2766,7 @@ func file_services_app_database_v1_app_database_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_services_app_database_v1_app_database_proto_rawDesc), len(file_services_app_database_v1_app_database_proto_rawDesc)),
-			NumEnums:      5,
+			NumEnums:      6,
 			NumMessages:   23,
 			NumExtensions: 0,
 			NumServices:   1,

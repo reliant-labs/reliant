@@ -10,6 +10,7 @@ import (
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
+	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 )
@@ -82,7 +83,7 @@ func WorkspaceDaemon(ctx context.Context, r WorkspaceReader, userID, projectID, 
 		return Workspace{}, fmt.Errorf("load chat %s: %w", chatID, err)
 	case chat == nil:
 		return Workspace{DaemonID: owner}, nil
-	case chat.UserID != userID:
+	case !authz.CanWriteChat(ctx, userID, chat):
 		return Workspace{}, ErrForeignChat
 	case projectID != "" && chat.ProjectID != projectID:
 		return Workspace{DaemonID: owner}, nil
@@ -128,7 +129,7 @@ func workspaceOwner(ctx context.Context, r WorkspaceReader, userID, projectID, w
 	if err != nil && !errors.Is(err, svcerr.ErrNotFound) {
 		return "", fmt.Errorf("load project %s: %w", wt.ProjectID, err)
 	}
-	if project == nil || project.UserID != userID {
+	if !authz.CanWriteProject(ctx, userID, project) {
 		return "", ErrForeignWorkspace
 	}
 	return WorktreeOwner(wt), nil

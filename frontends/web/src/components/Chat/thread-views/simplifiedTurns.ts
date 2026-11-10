@@ -67,11 +67,14 @@ const NEVER_SURFACED: SurfacedExecutionPredicate = () => false;
 /** One folded run of work: tool segments and the agent mail between them. */
 export interface TurnWork {
   /**
-   * `work-<message id>-<segment index>` of the run's first tool segment
-   * (`…:<call id>` when the run opens after a surfaced call of that segment),
-   * or `work-<message id>` when the run opens on mail. Stable while the run grows
-   * at its end — the virtualizer re-finds rows by key, so a key that changed
-   * as messages arrived would remount the fold and jump the scroll.
+   * Named on first render for where the run opened: `work-<message id>-<segment
+   * index>` of its first tool segment (`…:<call id>` when the run opens after a
+   * surfaced call of that segment), or `work-<message id>` when it opens on
+   * mail. Then kept for as long as the run holds any call or mail it held
+   * before (see FoldKeys), whichever edge moves. The virtualizer re-finds the
+   * reader's row by key: a fold whose key changed as messages arrived would
+   * remount and jump the scroll, and one renamed by a scroll-back page is not
+   * compensated at all.
    */
   key: string;
   thread: string;
@@ -118,6 +121,30 @@ const EMPTY_APPROVALS: Approval[] = [];
 /** A SegmentReader backed by getProcessedMessage's per-message memo. */
 export function createSegmentReader(): SegmentReader {
   return (message) => getProcessedMessage(message, EMPTY_RESULTS, EMPTY_APPROVALS).segments;
+}
+
+/**
+ * The key each piece of folded work was last rendered under, kept across
+ * rebuilds: a tool call by `<message id>:<call id>`, a mail message by its id.
+ * Per call, not per message: one message can feed several folds.
+ *
+ * Neither edge of a run is a stable name for it. Streaming moves its end, and
+ * a scroll-back page moves its START: the page boundary usually cuts the run at
+ * the top in half, so the older page brings the run's earlier calls and the
+ * fold named for its first loaded call would be renamed for an older one. That
+ * fold is the row at the top of the viewport when the page lands — the row the
+ * virtualizer re-finds by key to hold the reader in place. Renamed, it is not
+ * found, the prepend is not compensated, the reader stays at scrollTop 0, and
+ * the next page loads; then the next, until the whole history has loaded with
+ * the reader pinned to the top.
+ *
+ * So a fold inherits the key of any call or mail it already held, and only a
+ * fold of entirely new work is named afresh. Create one per timeline.
+ */
+export type FoldKeys = Map<string, string>;
+
+export function createFoldKeys(): FoldKeys {
+  return new Map();
 }
 
 const NO_INDEXES: readonly number[] = [];
@@ -192,10 +219,16 @@ export function buildSimplifiedTimeline<I extends SimplifiableItem, W>(
      * SurfacedExecutionPredicate). Default: none.
      */
     isSurfaced?: SurfacedExecutionPredicate;
+    /** Fold keys from earlier builds of this timeline; omitted, none carry over. */
+    foldKeys?: FoldKeys;
   },
 ): Array<SlicedMessageItem<I> | WorkItem<W>> {
-  const { segmentsOf, workflowOf, isSurfaced = NEVER_SURFACED } = opts;
+  const { segmentsOf, workflowOf, isSurfaced = NEVER_SURFACED, foldKeys = createFoldKeys() } = opts;
   const out: Array<SlicedMessageItem<I> | WorkItem<W>> = [];
+  // Keys already given out in this build. A run that split in two (an error
+  // spliced in mid-run) has two folds remembering one key; only the first
+  // keeps it, because two rows sharing a key breaks the virtualizer.
+  const usedKeys = new Set<string>();
 
   type Part = {
     message: Message;
@@ -205,19 +238,36 @@ export function buildSimplifiedTimeline<I extends SimplifiableItem, W>(
   };
   type Event = { type: "message"; message: Message; afterPart: number };
   type Run = {
-    key: string;
+    /** The key the run is named if none of its work was rendered before. */
+    fresh: string;
     thread: string;
     workflow: W;
     parts: Part[];
     events: Event[];
     eventItems: I[];
     tools: number;
+    /** FoldKeys ids of the run's calls and mail, in render order. */
+    members: string[];
   };
   // The open run. Nothing is pushed to `out` while it is open — whatever would
   // be closes it first — so the run's row is pushed, in place, on close.
   // (Cast, not annotated: the helpers below reassign it, which TypeScript's
   // narrowing-by-assignment would not see.)
   let run = null as Run | null;
+
+  // The first remembered key of the run's work that this build has not given
+  // out yet; else its fresh key, suffixed if a remembered one took it. Then
+  // every member remembers the key it was rendered under.
+  const keyOf = (r: Run): string => {
+    let key = r.members.map((m) => foldKeys.get(m)).find((k) => k !== undefined && !usedKeys.has(k));
+    if (key === undefined) {
+      key = r.fresh;
+      for (let n = 2; usedKeys.has(key); n++) key = `${r.fresh}~${n}`;
+    }
+    usedKeys.add(key);
+    for (const m of r.members) foldKeys.set(m, key);
+    return key;
+  };
 
   const close = () => {
     if (!run) return;
@@ -227,7 +277,7 @@ export function buildSimplifiedTimeline<I extends SimplifiableItem, W>(
       out.push({
         type: "work",
         work: {
-          key: r.key,
+          key: keyOf(r),
           thread: r.thread,
           parts: r.parts.map(toTurnWorkPart),
           ...(r.events.length ? { events: r.events } : {}),
@@ -241,8 +291,17 @@ export function buildSimplifiedTimeline<I extends SimplifiableItem, W>(
     for (const item of r.eventItems) out.push(item);
   };
 
-  const open = (key: string, thread: string, item: I & { type: "message" }): Run => {
-    const opened: Run = { key, thread, workflow: workflowOf(item), parts: [], events: [], eventItems: [], tools: 0 };
+  const open = (fresh: string, thread: string, item: I & { type: "message" }): Run => {
+    const opened: Run = {
+      fresh,
+      thread,
+      workflow: workflowOf(item),
+      parts: [],
+      events: [],
+      eventItems: [],
+      tools: 0,
+      members: [],
+    };
     run = opened;
     return opened;
   };
@@ -272,6 +331,7 @@ export function buildSimplifiedTimeline<I extends SimplifiableItem, W>(
     if (last.segmentIndexes[last.segmentIndexes.length - 1] !== s) last.segmentIndexes.push(s);
     if (callId !== undefined) {
       last.callIds.push(callId);
+      run.members.push(`${message.id}:${callId}`);
       run.tools += 1;
     }
   };
@@ -298,6 +358,7 @@ export function buildSimplifiedTimeline<I extends SimplifiableItem, W>(
         const r = run ?? open(`work-${message.id}`, thread, messageItem);
         r.events.push({ type: "message", message, afterPart: r.parts.length });
         r.eventItems.push(item);
+        r.members.push(message.id);
         continue;
       }
       close();

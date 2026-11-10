@@ -20,6 +20,7 @@ import (
 	_ "golang.org/x/image/webp" // register the WebP decoder for image.DecodeConfig
 
 	"github.com/reliant-labs/reliant/internal/attachment"
+	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/models/message"
@@ -98,7 +99,7 @@ func (a *ExecuteToolsActivity) persistToolMedia(ctx context.Context, tec *toolEx
 	shown := make(map[string]string, len(attachmentIDs)+len(parts))
 	for _, id := range attachmentIDs {
 		att, err := a.repo.GetAttachment(ctx, id)
-		if err != nil || att == nil || userID == "" || att.UserID != userID {
+		if err != nil || att == nil || !authz.CanAccessPersonal(userID, att.UserID) {
 			logging.WarnContext(ctx, "[ExecuteTools] Dropping a tool-reported attachment id the chat's user does not own",
 				"chat_id", tec.getChatID(), "tool", tec.toolName, "tool_call_id", tec.toolCallID,
 				"attachment_id", id, "error", err)

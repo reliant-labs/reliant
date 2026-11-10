@@ -21,21 +21,23 @@ export const textCounts = (text: string) => ({
  * attachments open editable (Save replaces the attachment, Insert puts the
  * text back in the message), a sent message's open read-only.
  *
- * The text comes from the local blob URL when this session uploaded it, and
- * from the server otherwise (a sent attachment, or a draft restored after a
- * reload).
+ * The text comes from the local file when this session uploaded it, and from
+ * the server otherwise (a sent attachment, or a draft restored after a
+ * reload) or when the local file can no longer be read (a dropped file since
+ * deleted from disk). The local file is read directly, never fetched through a
+ * blob URL: the built app's CSP connect-src does not admit `blob:`.
  */
 export function TextAttachmentModal({
   attachmentId,
   filename,
-  blobUrl,
+  localFile,
   onClose,
   onSave,
   onInsert,
 }: {
   attachmentId: string;
   filename: string;
-  blobUrl?: string;
+  localFile?: Blob;
   onClose: () => void;
   /** Present: the text is editable and Save calls this. Rejecting keeps the dialog open. */
   onSave?: (text: string) => Promise<void>;
@@ -51,9 +53,8 @@ export function TextAttachmentModal({
     let cancelled = false;
     setOriginal(null);
     setLoadError(false);
-    const load = blobUrl
-      ? fetch(blobUrl).then((response) => response.text())
-      : fetchAttachmentBlob(attachmentId).then((blob) => blob.text());
+    const fromServer = () => fetchAttachmentBlob(attachmentId).then((blob) => blob.text());
+    const load = localFile ? localFile.text().catch(fromServer) : fromServer();
     load.then(
       (content) => {
         if (cancelled) return;
@@ -67,7 +68,7 @@ export function TextAttachmentModal({
     return () => {
       cancelled = true;
     };
-  }, [attachmentId, blobUrl]);
+  }, [attachmentId, localFile]);
 
   const editable = Boolean(onSave);
   const loaded = original !== null;

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"sync"
 
 	"connectrpc.com/connect"
 
@@ -57,6 +58,10 @@ func (d Deps) validateDeps() error {
 type Service struct {
 	reliantv1connect.UnimplementedProjectServiceHandler
 	deps Deps
+	// failedCreateCleanups holds the daemon ids whose connect-time
+	// failed-create cleanup is running (failed_create_cleanup.go), so a
+	// machine that reconnects in a loop runs one at a time.
+	failedCreateCleanups sync.Map
 }
 
 // New creates a new project service instance with the supplied Deps.

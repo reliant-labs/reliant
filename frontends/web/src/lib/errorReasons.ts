@@ -95,6 +95,16 @@ export const ERROR_REASONS = [
   "obs_query_quota_soft",
   /** A console user already has the server's cap of observability reads running; the RetryInfo detail says when to try again. */
   "in_flight_limit",
+  // ── control-plane: audited Data and Storage reads ──
+  "confirmation_required",
+  "shape_unknown",
+  "rate_limited",
+  "datasource_unreachable",
+  "query_in_flight",
+  "bucket_unreachable",
+  "bad_page_token",
+  "not_previewable",
+  "too_large",
   // ── control-plane: git credentials (internal/gitcredential; reliant token_git.go) ──
   /** No git provider account is connected for the user. */
   "git_credential_not_connected",

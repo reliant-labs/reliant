@@ -33,7 +33,7 @@ vi.mock("@/forgeConsolePages", async () => {
     const { readOnly, reason } = useObsReadOnly();
     return <main data-testid={`console-${name}`} data-read-only={readOnly} data-read-only-reason={reason} />;
   };
-  const names = ["overview", "workload", "releases", "release", "observabilityView", "dashboards", "dashboard", "environments", "environment", "secrets", "domains", "activity", "orgObservability", "landing", "legacyEnv", "legacyDomains", "legacyCommand"];
+  const names = ["overview", "workload", "releases", "release", "observabilityView", "dashboards", "dashboard", "environments", "environment", "secrets", "domains", "activity", "data", "storage", "orgObservability", "landing", "legacyEnv", "legacyDomains", "legacyCommand"];
   return { forgeConsolePages: { layout: Outlet, console: Outlet, orgLayout: Outlet, ...Object.fromEntries(names.map((n) => [n, page(n)])) } };
 });
 vi.mock("@/demoBundle/DemoConsoleProviders", () => ({ DemoConsoleProviders: ({ children }: { children: React.ReactNode }) => children }));
@@ -111,6 +111,8 @@ describe("the demo shell's routes", () => {
     ["/forge/p/shop/secrets", "console-secrets"],
     ["/forge/p/shop/domains", "console-domains"],
     ["/forge/p/shop/activity", "console-activity"],
+    ["/forge/p/shop/data", "console-data"],
+    ["/forge/p/shop/storage", "console-storage"],
     ["/forge/p/shop/observability/traces", "console-observabilityView"],
     ["/forge/p/shop/observability/dashboards", "console-dashboards"],
   ])("mounts the console page at %s", async (path, testId) => {

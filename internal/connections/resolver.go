@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/vault"
 )
@@ -349,7 +350,7 @@ func (r *Resolver) lookup(ctx context.Context, owner string, ref Ref) (*usableCo
 		}
 		return nil, mapStoreErr(err)
 	}
-	if conn.OwnerKind != core.ConnectionOwnerUser || conn.UserID != owner {
+	if conn.OwnerKind != core.ConnectionOwnerUser || !authz.CanAccessPersonal(owner, conn.UserID) {
 		return nil, noConnection(ref)
 	}
 	if ref.IntegrationID != "" && conn.IntegrationID != ref.IntegrationID {

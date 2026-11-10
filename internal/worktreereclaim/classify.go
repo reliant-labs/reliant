@@ -140,7 +140,39 @@ func classifyCheckout(ctx context.Context, checkout, baseBranch string, nested [
 	if hidden := hiddenFlags(ctx, checkout); hidden != "" {
 		return verdict{ReasonDirty, hidden}
 	}
+	return classifyHistory(ctx, checkout, baseBranch, worktreeID, probe)
+}
 
+// classifyDisposing is classifyCheckout for a parked checkout whose disposal
+// stopped part-way: the only change git may report is a tracked file deleted
+// from the working tree (" D"), which is what an unlink of a clean checkout
+// leaves and what HEAD, already proven pushed, still holds. Anything else (an
+// edit, a staged change, an untracked file) is work written after the disposal
+// began, and holds it.
+func classifyDisposing(ctx context.Context, checkout, baseBranch, worktreeID string, probe mergeProbe) verdict {
+	out, err := gitRaw(ctx, checkout, nil, "status", "--porcelain=v1", "-z", "--untracked-files=all", "--no-renames")
+	if err != nil {
+		return verdict{ReasonUnverified, err.Error()}
+	}
+	var changed []string
+	for _, e := range strings.Split(string(out), "\x00") {
+		if len(e) > 3 && e[:2] != " D" {
+			changed = append(changed, e[3:])
+		}
+	}
+	if len(changed) > 0 {
+		return verdict{ReasonDirty, "changed after its disposal began: " + changedSummary(strings.Join(changed, "\n"))}
+	}
+	if hidden := hiddenFlags(ctx, checkout); hidden != "" {
+		return verdict{ReasonDirty, hidden}
+	}
+	return classifyHistory(ctx, checkout, baseBranch, worktreeID, probe)
+}
+
+// classifyHistory is the half of classifyCheckout that judges commits, not
+// files: HEAD on a remote or in the base branch, and no tip only this worktree
+// reaches.
+func classifyHistory(ctx context.Context, checkout, baseBranch, worktreeID string, probe mergeProbe) verdict {
 	head, err := git(ctx, checkout, nil, "rev-parse", "--verify", "HEAD^{commit}")
 	if err != nil {
 		return verdict{ReasonUnverified, err.Error()}
