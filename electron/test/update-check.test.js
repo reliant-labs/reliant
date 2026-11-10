@@ -3,6 +3,7 @@ const assert = require("node:assert/strict");
 const {
   canCheckForUpdates,
   classifyCheckResult,
+  createDownloadRunner,
   createMenuUpdateCheck,
   isUpdatePending,
   nextUpdateState,
@@ -34,6 +35,66 @@ test("canCheckForUpdates stands down while a download is in flight or done", () 
   assert.equal(canCheckForUpdates({ type: "not-available" }), true);
   assert.equal(canCheckForUpdates({ type: "download-progress" }), false);
   assert.equal(canCheckForUpdates({ type: "downloaded" }), false);
+  // Asked for, no progress reported yet: the status still says "available".
+  assert.equal(canCheckForUpdates({ type: "available" }, true), false);
+});
+
+// Drives the state the way main.js does: every status goes through
+// nextUpdateState, and the runner's onFailure broadcasts an "error".
+function downloadHarness(download) {
+  let state = { type: "available", version: "1.14.0" };
+  const apply = (status) => (state = nextUpdateState(state, status));
+  const runner = createDownloadRunner({
+    download: () => download(apply),
+    onFailure: (error) => apply({ type: "error", error }),
+  });
+  return { runner, state: () => state };
+}
+
+test("a download that fails after progress, reported only by its return value, can be retried", async () => {
+  const { runner, state } = downloadHarness(async (apply) => {
+    apply({ type: "download-progress", version: "1.14.0", progress: { percent: 40 } });
+    return { error: "Chunked download failed" };
+  });
+
+  assert.deepEqual(await runner.run(), { error: "Chunked download failed" });
+  assert.deepEqual(state(), { type: "available", version: "1.14.0" });
+  assert.equal(canCheckForUpdates(state(), runner.isInFlight()), true);
+});
+
+test("a download that throws after progress is reported and can be retried", async () => {
+  const { runner, state } = downloadHarness(async (apply) => {
+    apply({ type: "download-progress", version: "1.14.0", progress: { percent: 40 } });
+    throw new Error("socket hang up");
+  });
+
+  assert.deepEqual(await runner.run(), { error: "socket hang up" });
+  assert.equal(state().type, "available");
+  assert.equal(runner.isInFlight(), false);
+});
+
+test("a download in flight holds off checks, and a second request joins it", async () => {
+  let finish;
+  let calls = 0;
+  const { runner, state } = downloadHarness((apply) => {
+    calls += 1;
+    return new Promise((resolve) => {
+      finish = () => {
+        apply({ type: "downloaded", version: "1.14.0" });
+        resolve({ success: true });
+      };
+    });
+  });
+
+  const first = runner.run();
+  assert.equal(runner.run(), first);
+  assert.equal(runner.isInFlight(), true);
+  assert.equal(canCheckForUpdates(state(), runner.isInFlight()), false);
+
+  finish();
+  assert.deepEqual(await first, { success: true });
+  assert.equal(calls, 1);
+  assert.equal(state().type, "downloaded");
 });
 
 test("isUpdatePending covers found, downloading and downloaded", () => {
@@ -61,11 +122,12 @@ test("nextUpdateState keeps what was found through a check and a failed download
   assert.equal(nextUpdateState(null, { type: "error", error: "offline" }), null);
 });
 
-function menuCheck({ status = null, check }) {
+function menuCheck({ status = null, downloading = false, check }) {
   const calls = { reveal: [], messages: [], checks: 0 };
   let current = status;
   const run = createMenuUpdateCheck({
     getStatus: () => current,
+    isDownloading: () => downloading,
     check: async () => {
       calls.checks += 1;
       const result = await check();
@@ -121,6 +183,14 @@ test("menu check shows a downloaded update instead of re-checking", async () => 
   assert.equal(await run(), "revealed");
   assert.equal(calls.checks, 0);
   assert.deepEqual(calls.reveal, [downloaded]);
+});
+
+test("menu check does not check over a download that has not reported progress yet", async () => {
+  const available = { type: "available", version: "1.14.0" };
+  const { run, calls } = menuCheck({ status: available, downloading: true, check: async () => AVAILABLE });
+  assert.equal(await run(), "revealed");
+  assert.equal(calls.checks, 0);
+  assert.deepEqual(calls.reveal, [available]);
 });
 
 test("a second menu click joins the running check", async () => {

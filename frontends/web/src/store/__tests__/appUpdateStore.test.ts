@@ -105,6 +105,26 @@ describe("appUpdateStore", () => {
     disconnect();
   });
 
+  it("leaves a download that failed after progress retryable", async () => {
+    const { listeners } = fakeElectron({
+      downloadUpdate: vi.fn(async () => {
+        listeners.status?.({ type: "download-progress", version: "1.14.0", progress: { percent: 40, transferred: 4, total: 10, bytesPerSecond: 1 } });
+        // Main reports only through the return value here.
+        return { error: "Chunked download failed" };
+      }),
+    });
+    const disconnect = connectAppUpdates();
+    useAppUpdateStore.getState().receiveStatus({ type: "available", version: "1.14.0" });
+
+    await useAppUpdateStore.getState().downloadUpdate();
+
+    const state = useAppUpdateStore.getState();
+    expect(state.pending).toEqual({ type: "available", version: "1.14.0" });
+    expect(state.isDownloading).toBe(false);
+    expect(state.status).toEqual({ type: "error", error: "Chunked download failed" });
+    disconnect();
+  });
+
   it("opens the dialog when a user's check finds an update, and stays quiet when up to date", async () => {
     const checkForUpdates = vi
       .fn()

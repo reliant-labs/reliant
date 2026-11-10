@@ -129,14 +129,17 @@ export const useAppUpdateStore = create<AppUpdateState>()((set, get) => ({
     const api = window.electronAPI;
     if (!api) return;
     set({ isDownloading: true });
+    // A failure goes through receiveStatus, so a download that had reported
+    // progress falls back to a retryable "available" (nextPendingUpdate)
+    // instead of leaving the sidebar on a dead "Downloading…".
     try {
       const result = await api.downloadUpdate();
       if (result.error) {
-        set({ status: { type: "error", error: result.error }, isDownloading: false });
+        get().receiveStatus({ type: "error", error: result.error });
       }
     } catch (error) {
       logger.error("[appUpdate] update download failed", error);
-      set({ status: { type: "error", error: errorText(error) }, isDownloading: false });
+      get().receiveStatus({ type: "error", error: errorText(error) });
     }
   },
 

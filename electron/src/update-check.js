@@ -19,8 +19,54 @@ function isUpdatePending(status) {
 // download that installUpdate needs), and electron-updater re-announces a
 // downloaded version as merely "available". So the startup, periodic and
 // manual checks all stand down while a download is in flight or done.
-function canCheckForUpdates(status) {
+// `downloadInFlight` covers the stretch the status cannot: a download that has
+// been asked for but has not reported progress yet.
+function canCheckForUpdates(status, downloadInFlight = false) {
+  if (downloadInFlight) return false;
   return !status || (status.type !== "download-progress" && status.type !== "downloaded");
+}
+
+/**
+ * Runs the download-update IPC's work so that its outcome always reaches the
+ * update state, and so a second request joins the first instead of starting
+ * a second download.
+ *
+ * The download can fail after progress events without electron-updater
+ * emitting `error` (the chunked fallback failing, or retries running out); it
+ * only returns `{ error }` to the caller. Unreported, that left the state at
+ * "download-progress" for the rest of the session: every check stood down,
+ * and the sidebar showed a dead download with no way to retry. `onFailure`
+ * reports it (main.js broadcasts an "error" status, which nextUpdateState
+ * turns back into a retryable "available").
+ *
+ * @param {object} deps
+ * @param {() => Promise<{success?: boolean, error?: string}>} deps.download
+ * @param {(message: string) => void} deps.onFailure
+ */
+function createDownloadRunner({ download, onFailure }) {
+  let inFlight = null;
+
+  function run() {
+    if (!inFlight) {
+      inFlight = (async () => {
+        try {
+          return await download();
+        } catch (error) {
+          return { error: errorMessage(error) };
+        }
+      })()
+        .then((result) => {
+          if (result && result.error) onFailure(result.error);
+          return result;
+        })
+        .finally(() => {
+          inFlight = null;
+        });
+    }
+    return inFlight;
+  }
+
+  return { run, isInFlight: () => inFlight !== null };
 }
 
 /**
@@ -73,18 +119,19 @@ function errorMessage(error) {
  *
  * @param {object} deps
  * @param {() => object|null} deps.getStatus   the updater's current state (nextUpdateState)
+ * @param {() => boolean} [deps.isDownloading]   a download has been asked for and not finished
  * @param {() => Promise<object|null>} deps.check   autoUpdater.checkForUpdates
  * @param {(status: object) => void} deps.reveal   shows the update dialog with `status`
  * @param {(options: object) => Promise<unknown>} deps.showMessage   a native message box
  * @param {() => string} deps.currentVersion
  */
-function createMenuUpdateCheck({ getStatus, check, reveal, showMessage, currentVersion }) {
+function createMenuUpdateCheck({ getStatus, isDownloading = () => false, check, reveal, showMessage, currentVersion }) {
   let inFlight = null;
 
   async function run() {
     // A download in flight or done: show it rather than re-check.
     const before = getStatus();
-    if (!canCheckForUpdates(before)) {
+    if (!canCheckForUpdates(before, isDownloading())) {
       reveal(before);
       return "revealed";
     }
@@ -142,6 +189,7 @@ function createMenuUpdateCheck({ getStatus, check, reveal, showMessage, currentV
 module.exports = {
   canCheckForUpdates,
   classifyCheckResult,
+  createDownloadRunner,
   createMenuUpdateCheck,
   isUpdatePending,
   nextUpdateState,

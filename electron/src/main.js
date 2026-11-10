@@ -104,6 +104,7 @@ const ChunkedDownloader = require("./chunked-downloader");
 const {
   canCheckForUpdates,
   classifyCheckResult,
+  createDownloadRunner,
   createMenuUpdateCheck,
   nextUpdateState,
 } = require("./update-check");
@@ -2653,8 +2654,8 @@ function broadcastUpdateStatus(status) {
 // in flight or done (see canCheckForUpdates).
 function runBackgroundUpdateCheck(source) {
   if (!app.isPackaged || isInstallingUpdate) return;
-  if (!canCheckForUpdates(lastUpdateStatus)) {
-    log.info(`[AutoUpdater] Skipping ${source} check: an update is ${lastUpdateStatus.type}`);
+  if (!canCheckForUpdates(lastUpdateStatus, downloadRunner.isInFlight())) {
+    log.info(`[AutoUpdater] Skipping ${source} check: an update is downloading or downloaded`);
     return;
   }
   autoUpdater.checkForUpdates().then((result) => {
@@ -2674,6 +2675,7 @@ function startPeriodicUpdateChecks() {
 // The app menu's "Check for Updates…" (update-check.js).
 const checkForUpdatesFromMenu = createMenuUpdateCheck({
   getStatus: () => lastUpdateStatus,
+  isDownloading: () => downloadRunner.isInFlight(),
   check: () => autoUpdater.checkForUpdates(),
   reveal: (status) => sendToSurfacedWindow("update-reveal", status),
   showMessage: (options) => dialog.showMessageBox({ ...options, buttons: ["OK"] }),
@@ -2793,8 +2795,8 @@ ipcMain.handle("check-for-updates", async () => {
 
   // A download in flight or done: report it rather than re-check, which
   // would discard it (see canCheckForUpdates).
-  if (!canCheckForUpdates(lastUpdateStatus)) {
-    log.info(`[AutoUpdater] Manual check skipped: an update is ${lastUpdateStatus.type}`);
+  if (!canCheckForUpdates(lastUpdateStatus, downloadRunner.isInFlight())) {
+    log.info("[AutoUpdater] Manual check skipped: an update is downloading or downloaded");
     return { success: true, updateAvailable: true, status: lastUpdateStatus };
   }
 
@@ -2964,7 +2966,9 @@ async function downloadWithChunkedFallback() {
   return { success: true };
 }
 
-ipcMain.handle("download-update", async () => {
+// The download-update IPC. Runs through downloadRunner (below), which reports
+// every failure to the update state and joins a repeated request.
+async function downloadAvailableUpdate() {
   if (!app.isPackaged) {
     log.info("[AutoUpdater] Skipping download in development");
     return { error: "Updates not available in development" };
@@ -3090,7 +3094,17 @@ ipcMain.handle("download-update", async () => {
   return {
     error: lastError?.message || "Download failed after multiple attempts. Please check your network connection and try again."
   };
+}
+
+const downloadRunner = createDownloadRunner({
+  download: downloadAvailableUpdate,
+  // Returned-only failures never emit autoUpdater "error"; without this the
+  // state would stay "download-progress" and every later check would stand
+  // down (update-check.js createDownloadRunner).
+  onFailure: (message) => broadcastUpdateStatus({ type: "error", error: message }),
 });
+
+ipcMain.handle("download-update", () => downloadRunner.run());
 
 ipcMain.handle("install-update", async () => {
   if (!app.isPackaged) {
