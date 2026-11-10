@@ -4,6 +4,7 @@ package chat
 
 import (
 	"context"
+	"strings"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -23,6 +24,9 @@ func (s *Service) newChatOrgs(ctx context.Context, userID, projectID, requested 
 	if s.deps.Orgs == nil {
 		return "", "", nil
 	}
+	// Named trims what it is given, so " " names no org: normalize first, or
+	// a blank org_id would skip the project's org and its membership check.
+	requested = strings.TrimSpace(requested)
 	if requested == "" && projectID != "" {
 		project, err := s.deps.Repo.GetProjectWithUserCheck(ctx, projectID, userID)
 		if err == nil && project.OrgID != nil {
