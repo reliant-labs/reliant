@@ -40,7 +40,7 @@ func stepConfigFailure(ctx workflow.Context, activityName, stepID string, err er
 	if workflow.GetVersion(ctx, stepConfigFailedChangeID, workflow.DefaultVersion, 1) == workflow.DefaultVersion {
 		return nil
 	}
-	// The activity's message ("workflow validation failed: CEL evaluation
+	// The activity's message ("step cannot run as configured: CEL evaluation
 	// failed for step b: …"), without Temporal's "activity error (type: …)"
 	// envelope around it.
 	msg := err.Error()
