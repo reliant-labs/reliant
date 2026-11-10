@@ -15,6 +15,7 @@ import (
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/daemonchoice"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -261,7 +262,7 @@ func (s *Service) validateBuilderTest(ctx context.Context, userID string, msg *r
 	if err != nil {
 		return svcerr.WrapOr(err, svcerr.Internal("failed to look up workflow draft"))
 	}
-	if draft == nil || draft.UserID != userID {
+	if !authz.CanReadWorkflow(ctx, userID, draft) {
 		return svcerr.WithMessage(svcerr.ErrNotFound, fmt.Sprintf("builder_test requires a saved workflow draft you own: %q", msg.Workflow))
 	}
 	return nil
@@ -340,7 +341,7 @@ func (s *Service) GetChat(
 	}
 
 	// Verify user owns the chat
-	if chat.UserID != userID {
+	if !authz.CanReadChat(ctx, userID, chat) {
 		return nil, svcerr.NotFound("chat")
 	}
 
@@ -415,7 +416,7 @@ func (s *Service) UpdateChat(
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}
 
-	if chat.UserID != userID {
+	if !authz.CanWriteChat(ctx, userID, chat) {
 		return nil, svcerr.NotFound("chat")
 	}
 
@@ -796,7 +797,7 @@ func (s *Service) ListChatPlans(
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}
-	if chat.UserID != userID {
+	if !authz.CanReadChat(ctx, userID, chat) {
 		return nil, svcerr.NotFound("chat")
 	}
 

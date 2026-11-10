@@ -16,6 +16,7 @@ import (
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -70,7 +71,7 @@ func (s *Service) StreamChatUpdates(
 	if err != nil {
 		return svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}
-	if chat == nil || chat.UserID != userID {
+	if !authz.CanReadChat(ctx, userID, chat) {
 		return svcerr.NotFound("chat")
 	}
 

@@ -13,6 +13,7 @@ import (
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/gitcredentialclient"
@@ -82,7 +83,7 @@ func (s *Service) restoreRecovery(ctx context.Context, req *pb.RestoreWorktreeRe
 		return nil, svcerr.Wrap(err)
 	}
 	target, err := s.deps.Repo.GetDaemon(ctx, req.TargetDaemonId)
-	if err != nil || target == nil || target.UserID != userID {
+	if err != nil || !authz.CanWriteMachine(ctx, userID, target) {
 		return nil, svcerr.NotFound("destination machine")
 	}
 	project, err := s.deps.Repo.GetProjectWithUserCheck(ctx, row.ProjectID, userID)
