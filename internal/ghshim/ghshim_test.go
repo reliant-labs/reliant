@@ -121,6 +121,8 @@ func TestPlanCreateLeavesTheCommandAloneWhenItShould(t *testing.T) {
 		{"not pr create", []string{"pr", "edit", "1", "--body", "x"}, chatEnv()},
 		{"unknown flag", []string{"pr", "create", "--title", "t", "--body", "x", "--new-flag"}, chatEnv()},
 		{"positional", []string{"pr", "create", "--title", "t", "--body", "x", "extra"}, chatEnv()},
+		{"flags after --", []string{"pr", "create", "--", "--body", "x"}, chatEnv()},
+		{"body after --", []string{"pr", "create", "--title", "t", "--", "--body", "x"}, chatEnv()},
 		{"both bodies", []string{"pr", "create", "--title", "t", "--body", "x", "--body-file", "marked.md"}, chatEnv()},
 		{"missing body file", []string{"pr", "create", "--title", "t", "--body-file", "nope.md"}, chatEnv()},
 		{"body in a cluster", []string{"pr", "create", "--title", "t", "-db", "x"}, chatEnv()},
@@ -137,6 +139,30 @@ func TestPlanCreateLeavesTheCommandAloneWhenItShould(t *testing.T) {
 			defer p.cleanup()
 			if p.fillAfter || p.tmp != "" || !slices.Equal(p.args, tc.args) {
 				t.Fatalf("plan = %+v, want the arguments unchanged", p)
+			}
+		})
+	}
+}
+
+func TestPlanCreateKeepsTheEndOfOptionsLast(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		args  []string
+		stdin string
+		flag  string
+	}{
+		{"--body", []string{"pr", "create", "--title", "t", "--body", "x", "--"}, "", "--body-file"},
+		{"--body-file -", []string{"pr", "create", "--title", "t", "-F", "-", "--"}, "Body.\n" + marker, "--body"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			p := planCreate(tc.args, chatEnv(), t.TempDir(), strings.NewReader(tc.stdin))
+			defer p.cleanup()
+			n := len(p.args)
+			if n < 3 || p.args[n-1] != "--" || p.args[n-3] != tc.flag {
+				t.Fatalf("the body flag must come before the trailing --, which stays last: %q", p.args)
+			}
+			if !slices.Equal(p.args[:4], []string{"pr", "create", "--title", "t"}) {
+				t.Fatalf("the other flags must be kept: %q", p.args)
 			}
 		})
 	}

@@ -137,7 +137,7 @@ func planCreate(args, env []string, cwd string, stdin io.Reader) plan {
 	if markerRe.MatchString(text) {
 		if fromStdin {
 			// Already read: hand gh the text it would have read.
-			return plan{args: append(cmdline(args, fl.without("body", "body-file")), "--body", text)}
+			return plan{args: rewrite(args, fl, "--body", text)}
 		}
 		return unchanged
 	}
@@ -152,20 +152,31 @@ func planCreate(args, env []string, cwd string, stdin io.Reader) plan {
 			dir = filepath.Dir(resolve(cwd, file))
 		}
 	}
-	rest := cmdline(args, fl.without("body", "body-file"))
 	tmp, err := writeTemp(dir, stamped)
 	if err != nil {
 		if fromStdin {
-			return plan{args: append(rest, "--body", stamped)}
+			return plan{args: rewrite(args, fl, "--body", stamped)}
 		}
 		return unchanged
 	}
-	return plan{args: append(rest, "--body-file", tmp), tmp: tmp}
+	return plan{args: rewrite(args, fl, "--body-file", tmp), tmp: tmp}
 }
 
-// cmdline is args' subcommand (`pr create` or `pr new`) followed by flags.
-func cmdline(args, flags []string) []string {
-	return append([]string{args[0], args[1]}, flags...)
+// rewrite is args' subcommand (`pr create` or `pr new`) followed by its flags
+// minus every body flag, then body (the replacement body flag and its value),
+// then the end-of-options `--` when the command ended with one: after it gh
+// would read body as positional arguments, not a flag.
+func rewrite(args []string, fl createFlags, body ...string) []string {
+	flags := fl.without("body", "body-file")
+	if fl.terminated {
+		flags = flags[:len(flags)-1]
+	}
+	out := append([]string{args[0], args[1]}, flags...)
+	out = append(out, body...)
+	if fl.terminated {
+		out = append(out, "--")
+	}
+	return out
 }
 
 // markAfter appends chat's marker to the body of the pull request at url,
@@ -262,6 +273,8 @@ type occurrence struct {
 type createFlags struct {
 	args []string
 	occ  []occurrence
+	// terminated: args end with the end-of-options `--`.
+	terminated bool
 }
 
 // parseCreateFlags reads args the way gh's flag parser (pflag) does. It
@@ -284,7 +297,10 @@ func parseCreateFlags(args []string) (createFlags, bool) {
 		a := args[i]
 		switch {
 		case a == "--":
-			return fl, len(args) == i+1 // gh pr create takes no positional arguments
+			// Everything after it is positional, and gh pr create takes no
+			// positional arguments: only a trailing `--` is understood.
+			fl.terminated = true
+			return fl, len(args) == i+1
 		case strings.HasPrefix(a, "--"):
 			name, value, hasValue := strings.Cut(a[2:], "=")
 			if _, ok := createValueFlags[name]; ok {
