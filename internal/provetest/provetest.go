@@ -106,6 +106,11 @@ type Options struct {
 	// outside it — through "..", an absolute path or a symlinked directory —
 	// is refused.
 	Workspace string
+	// Repos are the absolute checkouts of the workspace's repositories. A
+	// file outside Workspace is still admitted when it lies in another git
+	// worktree of one of them (a branch worktree made beside the project).
+	// Empty means the workspace is the only repository.
+	Repos []string
 	// Dir is what relative Files resolve against. Defaults to Workspace.
 	Dir string
 	// Files are the implementation files whose changes constitute the fix.
@@ -223,7 +228,7 @@ func Prove(ctx context.Context, opts Options) (report *Report, err error) {
 		baseline = "HEAD"
 	}
 
-	files, err := resolveFiles(opts.Workspace, opts.Dir, opts.Files)
+	files, err := resolveFiles(ctx, opts.Workspace, opts.Dir, opts.Repos, opts.Files)
 	if err != nil {
 		return nil, err
 	}
