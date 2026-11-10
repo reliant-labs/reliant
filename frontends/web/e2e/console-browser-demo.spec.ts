@@ -36,6 +36,23 @@ test.describe('demo Data and Storage browser routes', () => {
       await page.getByTestId('storage-access-reason').fill('Inspect synthetic demo files');
       await page.getByTestId('storage-access-confirm').click();
       await expect(page.getByTestId('storage-preview-text')).toContainText('demo-order-001');
+      await page.goto('/forge/p/shop/environments/staging?tab=identity');
+      await expect(page.getByText('maya@example.com', { exact: true })).toBeVisible();
+      if (width < 768) {
+        const trigger = page.getByRole('button', { name: 'Open navigation' });
+        await trigger.click();
+        const drawer = page.getByRole('dialog');
+        await expect(drawer).toHaveCount(1);
+        const first = drawer.getByRole('link').first();
+        await expect(first).toBeFocused();
+        const links = drawer.getByRole('link');
+        await links.last().focus();
+        await page.keyboard.press('Tab');
+        await expect(first).toBeFocused();
+        await page.keyboard.press('Escape');
+        await expect(drawer).toHaveCount(0);
+        await expect(trigger).toBeFocused();
+      }
       expect(errors).toEqual([]);
       expect(requests.filter((url) => !url.startsWith(baseURL!) && !/otel|telemetry|analytics/.test(url))).toEqual([]);
       expect(requests.filter((url) => /controlplane\.v1|supabase|auth\/token/.test(url))).toEqual([]);
