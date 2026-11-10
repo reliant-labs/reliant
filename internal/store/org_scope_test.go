@@ -3,6 +3,7 @@ package store_test
 
 import (
 	"context"
+	"fmt"
 	"sort"
 	"testing"
 	"time"
@@ -132,5 +133,61 @@ func TestOrgScopedListsAndBackfill(t *testing.T) {
 	if err := store.InsertChat(ctx, env.ORM, &core.Chat{ID: "c-blank", ProjectID: "p-legacy", UserID: user, OrgID: orgp(""),
 		Title: "x", CreatedAt: at, UpdatedAt: at, LastActive: at}); err == nil {
 		t.Fatal("a blank org_id was stored")
+	}
+}
+
+// The backfill stamps in bounded batches, each resuming after the last id the
+// previous one stamped, until nothing of the user's is left unassigned; a
+// chat takes its project's org whichever batch either was stamped in.
+func TestAssignUnassignedOrg_SpansBatches(t *testing.T) {
+	env := storetest.New(t)
+	ctx := context.Background()
+	at := time.Date(2026, 1, 15, 12, 0, 0, 0, time.UTC)
+	user := storetest.SeedUserID
+
+	// Seven projects with no org and one of acme; two chats in each.
+	projects := map[string]*string{"p-acme": orgp("acme")}
+	for i := range 7 {
+		projects[fmt.Sprintf("p-legacy-%d", i)] = nil
+	}
+	for id, org := range projects {
+		if err := env.Repo.CreateProject(ctx, &core.Project{ID: id, UserID: user, Name: id, Path: "/srv/" + id, OrgID: org,
+			CreatedAt: at, UpdatedAt: at, LastActive: at}); err != nil {
+			t.Fatalf("CreateProject(%s): %v", id, err)
+		}
+		for j := range 2 {
+			c := &core.Chat{ID: fmt.Sprintf("c-%s-%d", id, j), ProjectID: id, UserID: user, Title: "x",
+				CreatedAt: at, UpdatedAt: at, LastActive: at}
+			if err := store.InsertChat(ctx, env.ORM, c); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+
+	// A batch of 3: seven projects take three batches, sixteen chats six.
+	if err := store.AssignUnassignedOrgInBatches(ctx, env.ORM, user, "home", 3); err != nil {
+		t.Fatalf("AssignUnassignedOrg: %v", err)
+	}
+	for id, org := range projects {
+		want := "home"
+		if org != nil {
+			want = *org
+		}
+		got, err := env.Repo.GetProject(ctx, id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got.OrgID == nil || *got.OrgID != want {
+			t.Fatalf("project %s org = %v, want %s", id, got.OrgID, want)
+		}
+		for j := range 2 {
+			chat, err := env.Repo.GetChatRow(ctx, fmt.Sprintf("c-%s-%d", id, j))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if chat.OrgID == nil || *chat.OrgID != want {
+				t.Fatalf("chat of %s org = %v, want its project's %s", id, chat.OrgID, want)
+			}
+		}
 	}
 }

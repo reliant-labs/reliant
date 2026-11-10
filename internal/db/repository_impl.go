@@ -1071,12 +1071,10 @@ func (r *Repo) GetProjectWithUserCheck(ctx context.Context, id string, userID st
 }
 
 // AssignUnassignedOrg gives userID's projects and chats that have no org yet
-// orgID (their default org), in one transaction: the lazy backfill of rows
-// written before orgs (internal/orgs ListScope).
+// orgID (their default org), in bounded batches, each its own transaction:
+// the lazy backfill of rows written before orgs (internal/orgs ListScope).
 func (r *Repo) AssignUnassignedOrg(ctx context.Context, userID, orgID string) error {
-	return r.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
-		return store.AssignUnassignedOrg(ctx, r.ORM(), userID, orgID)
-	})
+	return store.AssignUnassignedOrg(ctx, r.ORM(), userID, orgID)
 }
 
 func (r *Repo) ListProjects(ctx context.Context, filters ProjectFilters) ([]*Project, error) {
