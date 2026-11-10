@@ -184,6 +184,13 @@ type Limiter struct {
 
 	mu  sync.Mutex
 	seq uint64
+	// held is the command cgroups of the trees prepared and not yet
+	// released, which the sweep of this process's empty command cgroups
+	// leaves alone: a tree's cgroup is empty from Prepare until its command
+	// starts in it, and a start into a removed cgroup fails ENOENT, which
+	// os/exec reports as "fork/exec <path>: no such file or directory"
+	// (reliant #2416). Guarded by mu.
+	held map[string]struct{}
 }
 
 // Config is the limiter's policy. The zero value detects everything.
