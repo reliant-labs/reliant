@@ -20,7 +20,12 @@ type UninspectableProcessError struct {
 	Comm string
 	// What is the state that could not be read: "cwd", "exe", "fd 3", "maps".
 	What string
-	// Started is when the process started; zero when unknown.
+	// StartTicks is the process's start time from /proc/<pid>/stat (clock
+	// ticks after boot): with PID it names one process, whatever the clock.
+	// Zero when stat could not be read.
+	StartTicks uint64
+	// Started is StartTicks on the wall clock, for display only; zero when
+	// the boot time is unknown.
 	Started time.Time
 	Err     error
 }
@@ -47,10 +52,10 @@ type ReclaimBlocker struct {
 	LastSeen   time.Time `json:"last_seen"`
 	// Worktrees is how many distinct workspaces it has held since FirstSeen.
 	Worktrees int `json:"worktrees"`
-	// Unidentified marks one observation of a process whose start time could
-	// not be read. Without it a pid does not name one process (pids are
-	// reused), so such observations are never aggregated: each is its own
-	// entry, holding the one workspace it was met on.
+	// Unidentified marks observations of a pid whose start time (stat) could
+	// not be read. A pid alone does not name one process (pids are reused),
+	// so they aggregate only while they keep coming: each within
+	// unidentifiedWindow of the last. A gap starts a new entry.
 	Unidentified bool `json:"unidentified,omitempty"`
 }
 
@@ -59,9 +64,9 @@ func (b ReclaimBlocker) String() string {
 	who := "pid " + strconv.Itoa(b.PID)
 	switch {
 	case b.Unidentified:
-		return fmt.Sprintf("%s (identity unreadable; one observation at %s) blocked worktree reclaim of 1 worktree; its %s cannot be read, so nothing proves it is not using it",
-			who, b.LastSeen.UTC().Format(time.RFC3339), b.Unreadable)
-	case b.Comm != "" && !b.StartedAt.IsZero():
+		return fmt.Sprintf("%s (identity unreadable; seen continuously %s to %s) blocks worktree reclaim: %d worktree(s) held; its %s cannot be read, so nothing proves it is not using them",
+			who, b.FirstSeen.UTC().Format(time.RFC3339), b.LastSeen.UTC().Format(time.RFC3339), b.Worktrees, b.Unreadable)
+	case b.Comm != "" && !b.StartedAt.IsZero() && !b.LastSeen.Before(b.StartedAt):
 		who += fmt.Sprintf(" (%s, up %s)", b.Comm, b.LastSeen.Sub(b.StartedAt).Round(time.Minute))
 	case b.Comm != "":
 		who += " (" + b.Comm + ")"
@@ -81,12 +86,20 @@ const blockerWarnEvery = time.Hour
 // old observation, never part of a count.
 const maxUnidentified = 64
 
-// blockerKey names one process: its pid and start time. An observation with
-// no start time is keyed by its own sequence number instead (Unidentified).
+// unidentifiedWindow is how close together observations of a pid with no
+// readable start time must come to count as one process. A pid is reused only
+// after the kernel wraps pid_max, so one that keeps being met within this
+// window is the same process in every practical case; a gap starts a new entry.
+const unidentifiedWindow = 2 * time.Minute
+
+// blockerKey names one process: its pid and its start time in clock ticks
+// after boot, which the kernel never reuses for the pid while it lives. An
+// observation without a start time is keyed by a sequence number instead
+// (Unidentified).
 type blockerKey struct {
-	pid     int
-	started time.Time
-	seq     uint64
+	pid        int
+	startTicks uint64
+	seq        uint64
 }
 
 type blockerState struct {
@@ -122,15 +135,14 @@ func (s *blockerSet) note(e *UninspectableProcessError, roots []string) {
 		s.m = map[blockerKey]*blockerState{}
 	}
 	s.expireLocked(now)
-	k := blockerKey{pid: e.PID, started: e.Started}
-	if e.Started.IsZero() {
-		s.seq++
-		k.seq = s.seq
-		s.dropOldestUnidentifiedLocked()
+	unidentified := e.StartTicks == 0
+	k := blockerKey{pid: e.PID, startTicks: e.StartTicks}
+	if unidentified {
+		k = s.unidentifiedKeyLocked(e.PID, now)
 	}
 	b := s.m[k]
 	if b == nil {
-		b = &blockerState{ReclaimBlocker: ReclaimBlocker{PID: e.PID, StartedAt: e.Started, FirstSeen: now, Unidentified: e.Started.IsZero()}, roots: map[uint64]struct{}{}}
+		b = &blockerState{ReclaimBlocker: ReclaimBlocker{PID: e.PID, StartedAt: e.Started, FirstSeen: now, Unidentified: unidentified}, roots: map[uint64]struct{}{}}
 		s.m[k] = b
 	}
 	b.LastSeen, b.Unreadable = now, e.What
@@ -154,8 +166,26 @@ func (s *blockerSet) note(e *UninspectableProcessError, roots []string) {
 	}
 }
 
-// dropOldestUnidentifiedLocked makes room for one more unidentified
-// observation.
+// unidentifiedKeyLocked is the key for an observation of pid with no start
+// time: the pid's unidentified entry last seen within unidentifiedWindow, or a
+// new one (making room for it under maxUnidentified).
+func (s *blockerSet) unidentifiedKeyLocked(pid int, now time.Time) blockerKey {
+	var best *blockerKey
+	for k, b := range s.m {
+		if b.Unidentified && k.pid == pid && now.Sub(b.LastSeen) <= unidentifiedWindow && (best == nil || k.seq > best.seq) {
+			kk := k
+			best = &kk
+		}
+	}
+	if best != nil {
+		return *best
+	}
+	s.dropOldestUnidentifiedLocked()
+	s.seq++
+	return blockerKey{pid: pid, seq: s.seq}
+}
+
+// dropOldestUnidentifiedLocked makes room for one more unidentified entry.
 func (s *blockerSet) dropOldestUnidentifiedLocked() {
 	var oldest *blockerKey
 	n := 0

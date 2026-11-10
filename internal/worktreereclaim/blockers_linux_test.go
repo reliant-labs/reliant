@@ -39,7 +39,7 @@ func TestUninspectable_HoldNamesItsProcessOncePerWorkspace(t *testing.T) {
 		if !errors.As(err, &u) {
 			t.Fatalf("an uninspectable process must hold, naming itself: %v", err)
 		}
-		if u.PID != pid || u.Comm != "slot-holder" || u.What != "maps" || u.Started.IsZero() {
+		if u.PID != pid || u.Comm != "slot-holder" || u.What != "maps" || u.StartTicks != 777 {
 			t.Fatalf("hold does not identify the process: %+v", u)
 		}
 		if !strings.Contains(err.Error(), "process "+strconv.Itoa(pid)+" (slot-holder) maps unreadable") {
@@ -105,57 +105,121 @@ func TestBlockersExpire(t *testing.T) {
 	}
 }
 
-// A pid alone does not name a process (pids are reused): observations without
-// a start time are never merged into one blocker, while one with a start time
-// aggregates, and the same pid with another start time is another process.
-func TestBlockersNeverMergeUnidentifiedObservationsByPID(t *testing.T) {
-	now := time.Unix(1_800_000_000, 0)
-	s := &blockerSet{now: func() time.Time { return now }}
-	started := now.Add(-time.Hour)
-	s.note(&UninspectableProcessError{PID: 9, What: "cwd", Err: os.ErrPermission}, []string{"/a"})
-	s.note(&UninspectableProcessError{PID: 9, What: "fd 3", Err: os.ErrPermission}, []string{"/b"})
-	s.note(&UninspectableProcessError{PID: 9, Comm: "x", What: "cwd", Started: started, Err: os.ErrPermission}, []string{"/a"})
-	s.note(&UninspectableProcessError{PID: 9, Comm: "x", What: "cwd", Started: started, Err: os.ErrPermission}, []string{"/b"})
-	s.note(&UninspectableProcessError{PID: 9, Comm: "y", What: "cwd", Started: started.Add(time.Minute), Err: os.ErrPermission}, []string{"/c"})
-	var unidentified, identified []ReclaimBlocker
-	for _, b := range s.list() {
+// identified is an observation of pid with a readable stat start time and no
+// boot time: Started (display only) stays zero.
+func identified(pid int, ticks uint64, what string) *UninspectableProcessError {
+	return &UninspectableProcessError{PID: pid, Comm: "x", What: what, StartTicks: ticks, Err: os.ErrPermission}
+}
+
+func unidentifiedObs(pid int) *UninspectableProcessError {
+	return &UninspectableProcessError{PID: pid, What: "cwd", Err: os.ErrPermission}
+}
+
+func split(bs []ReclaimBlocker) (ids, unids []ReclaimBlocker) {
+	for _, b := range bs {
 		if b.Unidentified {
-			unidentified = append(unidentified, b)
+			unids = append(unids, b)
 		} else {
-			identified = append(identified, b)
+			ids = append(ids, b)
 		}
 	}
-	if len(unidentified) != 2 || unidentified[0].Worktrees != 1 || unidentified[1].Worktrees != 1 {
-		t.Fatalf("unidentified observations merged by pid: %+v", unidentified)
+	return ids, unids
+}
+
+// Identity is (pid, stat start ticks), with or without the boot time: a live
+// process met on every sweep is one blocker even when /proc/stat has no btime,
+// and the same pid with other start ticks (a reused pid) is another process.
+func TestBlockersIdentifyByStartTicksWithoutBootTime(t *testing.T) {
+	now := time.Unix(1_800_000_000, 0)
+	s := &blockerSet{now: func() time.Time { return now }}
+	for range 200 { // 200 sweeps, 10 minutes apart, 3 worktrees each
+		now = now.Add(10 * time.Minute)
+		for w := range 3 {
+			s.note(identified(9, 777, "cwd"), []string{"/w" + strconv.Itoa(w)})
+		}
 	}
-	if !strings.Contains(unidentified[0].String(), "identity unreadable; one observation") {
-		t.Fatalf("an unidentified observation must not read as a process: %s", unidentified[0])
+	s.note(identified(9, 999, "fd 3"), []string{"/w0"}) // pid 9 reused
+	ids, unids := split(s.list())
+	if len(unids) != 0 || len(ids) != 2 {
+		t.Fatalf("want two identified processes, got identified=%+v unidentified=%+v", ids, unids)
 	}
-	if len(identified) != 2 || identified[0].Comm != "x" || identified[0].Worktrees != 2 || identified[1].Comm != "y" || identified[1].Worktrees != 1 {
-		t.Fatalf("identified processes: %+v", identified)
+	if ids[0].Worktrees != 3 || ids[1].Worktrees != 1 || ids[1].Unreadable != "fd 3" {
+		t.Fatalf("a reused pid merged into, or split from, the live process: %+v", ids)
+	}
+	if strings.Contains(ids[0].String(), "up ") {
+		t.Fatalf("no boot time, so no age to show: %s", ids[0])
 	}
 }
 
-// Unidentified observations are bounded, oldest dropped first.
-func TestBlockersUnidentifiedAreBounded(t *testing.T) {
+// With no start time at all, a pid's observations aggregate only while they
+// keep coming within unidentifiedWindow; a gap is a new entry (the pid may
+// have been reused), and pids never merge with each other.
+func TestBlockersUnidentifiedCollapseOnlyWithinTheWindow(t *testing.T) {
 	now := time.Unix(1_800_000_000, 0)
 	s := &blockerSet{now: func() time.Time { return now }}
-	for i := range maxUnidentified + 5 {
+	for i := range 100 { // one live process met every 30s, on 2 worktrees
+		now = now.Add(30 * time.Second)
+		s.note(unidentifiedObs(9), []string{"/w" + strconv.Itoa(i%2)})
+	}
+	s.note(unidentifiedObs(10), []string{"/w0"})
+	now = now.Add(unidentifiedWindow + time.Second)
+	s.note(unidentifiedObs(9), []string{"/w5"})
+	_, unids := split(s.list())
+	if len(unids) != 3 {
+		t.Fatalf("want pid 9 before the gap, pid 10, and pid 9 after it: %+v", unids)
+	}
+	byPID := map[int][]int{}
+	for _, b := range unids {
+		byPID[b.PID] = append(byPID[b.PID], b.Worktrees)
+	}
+	if w := byPID[9]; len(w) != 2 || w[0]+w[1] != 3 || (w[0] != 2 && w[1] != 2) {
+		t.Fatalf("pid 9: %v", w)
+	}
+	if w := byPID[10]; len(w) != 1 || w[0] != 1 {
+		t.Fatalf("pid 10 merged with pid 9: %v", w)
+	}
+	if !strings.Contains(unids[0].String(), "identity unreadable; seen continuously") {
+		t.Fatalf("an unidentified entry must say how it was grouped: %s", unids[0])
+	}
+}
+
+// A repeatedly met unidentified process takes one of the 64 slots, so it
+// cannot evict other reports; distinct unidentified entries beyond the bound
+// drop the oldest first, and never an identified blocker.
+func TestBlockersUnidentifiedAreBoundedAndDoNotEvictByRepetition(t *testing.T) {
+	now := time.Unix(1_800_000_000, 0)
+	s := &blockerSet{now: func() time.Time { return now }}
+	s.note(identified(1, 777, "cwd"), []string{"/kept"})
+	for pid := 100; pid < 100+maxUnidentified-1; pid++ {
+		s.note(unidentifiedObs(pid), []string{"/w"})
+	}
+	for range 500 { // one live unidentified process met 500 times
 		now = now.Add(time.Second)
-		s.note(&UninspectableProcessError{PID: 9, What: "cwd", Err: os.ErrPermission}, []string{"/w" + strconv.Itoa(i)})
+		s.note(unidentifiedObs(9), []string{"/w"})
 	}
-	got := s.list()
-	if len(got) != maxUnidentified {
-		t.Fatalf("%d unidentified observations kept, want %d", len(got), maxUnidentified)
+	ids, unids := split(s.list())
+	if len(ids) != 1 || len(unids) != maxUnidentified {
+		t.Fatalf("repetition evicted reports: identified=%d unidentified=%d", len(ids), len(unids))
 	}
-	oldest := got[0].FirstSeen
-	for _, b := range got {
-		if b.FirstSeen.Before(oldest) {
-			oldest = b.FirstSeen
+	for pid := 200; pid < 205; pid++ { // five more distinct ones
+		now = now.Add(time.Second)
+		s.note(unidentifiedObs(pid), []string{"/w"})
+	}
+	ids, unids = split(s.list())
+	if len(ids) != 1 || len(unids) != maxUnidentified {
+		t.Fatalf("bound not kept: identified=%d unidentified=%d", len(ids), len(unids))
+	}
+	seen := map[int]bool{}
+	for _, b := range unids {
+		seen[b.PID] = true
+	}
+	for pid := 100; pid < 105; pid++ {
+		if seen[pid] {
+			t.Fatalf("pid %d, among the oldest, should have been dropped first", pid)
 		}
 	}
-	if want := time.Unix(1_800_000_000, 0).Add(6 * time.Second); !oldest.Equal(want) {
-		t.Fatalf("oldest kept %v, want %v (the five oldest dropped)", oldest, want)
+	if !seen[9] || !seen[204] {
+		t.Fatal("the newest entries must be kept")
 	}
 }
 
@@ -164,7 +228,7 @@ func TestBlockersUnidentifiedAreBounded(t *testing.T) {
 func TestBlockersCountEveryWorkspaceExactly(t *testing.T) {
 	now := time.Unix(1_800_000_000, 0)
 	s := &blockerSet{now: func() time.Time { return now }}
-	e := &UninspectableProcessError{PID: 9, Comm: "x", What: "cwd", Started: now.Add(-time.Hour), Err: os.ErrPermission}
+	e := identified(9, 777, "cwd")
 	const n = 20_001
 	for i := range n {
 		s.note(e, []string{"/home/u/.reliant/worktrees/p/w-" + strconv.Itoa(i), "/home/u/.reliant/worktrees/.reclaim/" + strconv.Itoa(i)})
@@ -172,6 +236,16 @@ func TestBlockersCountEveryWorkspaceExactly(t *testing.T) {
 	s.note(e, []string{"/home/u/.reliant/worktrees/p/w-0"})
 	if got := s.list(); len(got) != 1 || got[0].Worktrees != n {
 		t.Fatalf("got %+v, want one blocker holding %d worktrees", got, n)
+	}
+}
+
+// An age is shown only when the clocks allow one: a start time after the
+// last sighting (the wall clock stepped back) shows none, never a negative.
+func TestBlockerAgeIsNeverNegative(t *testing.T) {
+	seen := time.Unix(1_800_000_000, 0)
+	b := ReclaimBlocker{PID: 9, Comm: "x", Unreadable: "cwd", StartedAt: seen.Add(time.Hour), FirstSeen: seen, LastSeen: seen, Worktrees: 1}
+	if line := b.String(); strings.Contains(line, "up ") || !strings.Contains(line, "pid 9 (x) blocks") {
+		t.Fatalf("got %q", line)
 	}
 }
 
@@ -186,7 +260,7 @@ func TestUninspectable_StatusUnreadableStillNamesTheProcess(t *testing.T) {
 	for _, root := range []string{t.TempDir(), t.TempDir()} {
 		err := checkProcessUseAt(context.Background(), proc, os.Geteuid(), []string{root})
 		var u *UninspectableProcessError
-		if !errors.As(err, &u) || u.Started.IsZero() || u.Comm != "slot-holder" {
+		if !errors.As(err, &u) || u.StartTicks != 777 || u.Comm != "slot-holder" {
 			t.Fatalf("an unreadable status must still hold, naming the process by its stat: %v", err)
 		}
 	}

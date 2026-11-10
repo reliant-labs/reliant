@@ -188,11 +188,11 @@ func judgeUninspectable(ctx context.Context, base, pid, what string, roots []str
 		// failed, the start time still names this one process.
 		e := &UninspectableProcessError{PID: n, What: what, Err: cause}
 		if id.start != 0 {
-			e.Comm, e.Started = id.comm, procStarted(id.start)
+			e.Comm, e.StartTicks, e.Started = id.comm, id.start, procStarted(id.start)
 		}
 		return held(e)
 	}
-	hold := &UninspectableProcessError{PID: n, Comm: id.comm, What: what, Started: procStarted(id.start), Err: cause}
+	hold := &UninspectableProcessError{PID: n, Comm: id.comm, What: what, StartTicks: id.start, Started: procStarted(id.start), Err: cause}
 	if p, ok := procledger.Lookup(n); ok && p.Pgid == id.pgrp && p.Start == id.start {
 		for _, path := range p.Paths {
 			if processPathUses(path, roots) {
@@ -235,7 +235,9 @@ var bootTime = sync.OnceValue(func() time.Time {
 })
 
 // procStarted is when a process started, from stat's start time in clock
-// ticks after boot; zero when the boot time is unknown.
+// ticks after boot; zero when the boot time is unknown. It is for display:
+// a blocker's identity is the ticks themselves (blockerKey), which need no
+// boot time.
 func procStarted(ticks uint64) time.Time {
 	boot := bootTime()
 	if boot.IsZero() {
