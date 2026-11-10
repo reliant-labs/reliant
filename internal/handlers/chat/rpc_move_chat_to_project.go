@@ -70,7 +70,7 @@ func crossesOrgs(from, to *string, def string) bool {
 // caller's default org when the decision needed it, and whether the target
 // project belongs to another org.
 type moveOrgs struct {
-	org     string // "" when neither side has an org yet: nothing to stamp
+	org     string // "": neither side has an org yet, which the move statement re-checks
 	def     string
 	crosses bool
 }
