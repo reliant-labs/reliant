@@ -3,6 +3,7 @@ package token
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"testing"
@@ -30,6 +31,14 @@ import (
 //     inside a daemon's policy; it refuses a non-member, and refuses a mint
 //     left holding nothing ("permission_denied", as the real client reports).
 //     The child keeps the requested binding.
+//   - Introspect refuses a token that resolves to nothing, as the production
+//     decoder does (accesstokenclient.ErrNoRecognisedScope): never
+//     authenticated as nothing.
+//   - MintForUser refuses ("failed_precondition") a ceiling for a token not
+//     bound to an environment made only of scopes held on specific
+//     environments, which would resolve to nothing (control-plane #2400,
+//     orggrants.CarriesNothingOrgWide); predates2400 mints it anyway, as an
+//     older control plane did.
 //   - spendsOn is the per-use check (control-plane accesstoken.ScopesOn): the
 //     child's ceiling, for a live member, clipped to org-wide ∪ bound-to-env
 //     grants and the daemon's policy.
@@ -45,6 +54,9 @@ type controlPlaneMintContract struct {
 	policies map[string]fat.Set            // daemon → policy (absent: inherit)
 	tokens   map[string]*contractToken     // plaintext → token
 	seq      int
+	// predates2400 is a control plane without #2400's refusal of an
+	// environment-only ceiling.
+	predates2400 bool
 }
 
 type contractToken struct {
@@ -133,9 +145,13 @@ func (c *controlPlaneMintContract) Introspect(_ context.Context, token string) (
 	if !ok || t.revoked {
 		return nil, tokenauthority.ErrInactive
 	}
+	scopes := c.clip(t.user, t.all, t.ceiling, t.resource, "")
+	if len(scopes) == 0 {
+		return nil, fmt.Errorf("accesstokenclient: token %s: %w", t.id, accesstokenclient.ErrNoRecognisedScope)
+	}
 	return &fat.Principal{
 		TokenID: t.id, OrgID: c.org, ActingUserID: t.user,
-		Scopes: c.clip(t.user, t.all, t.ceiling, t.resource, ""), AllScopes: t.all, Resource: t.resource,
+		Scopes: scopes, AllScopes: t.all, Resource: t.resource,
 	}, nil
 }
 
@@ -152,6 +168,9 @@ func (c *controlPlaneMintContract) MintForUser(_ context.Context, req tokenautho
 	ceiling := c.clip(req.UserID, false, fat.SetOf(req.Scopes...), req.Resource, view)
 	if len(ceiling) == 0 {
 		return tokenauthority.Minted{}, &accesstokenclient.RPCError{Code: "permission_denied", Message: "your organization permissions do not include them"}
+	}
+	if view == "*" && !c.predates2400 && len(c.clip(req.UserID, false, ceiling, req.Resource, "")) == 0 {
+		return tokenauthority.Minted{}, &accesstokenclient.RPCError{Code: "failed_precondition", Message: "this token would authorize nothing outside an environment"}
 	}
 	plaintext := c.store(req.UserID, false, ceiling, req.Resource)
 	return tokenauthority.Minted{TokenID: c.tokens[plaintext].id, Plaintext: plaintext, Scopes: ceiling.Strings()}, nil
@@ -276,5 +295,107 @@ func TestExchangeToken_CallerChain_EnvironmentBoundGrant(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+// An exchange asking ONLY for a scope its person holds on specific
+// environments would mint a child that resolves to nothing, and the
+// production decoder refuses such a child (accesstokenclient.ErrNoRecognisedScope),
+// so it could never authenticate. It is refused as FailedPrecondition, never a
+// revoked child reported as an outage: by the control plane's own refusal
+// (#2400), passed through with nothing minted; and when an older control
+// plane mints it anyway, after confirmOrg finds it resolves to nothing, with
+// the child revoked. Asked
+// beside an org-wide scope, as forge asks, it is minted, spends on prod and
+// not on staging, and stops when the person leaves.
+func TestExchangeToken_EnvironmentOnlyScopeIsRefusedNotAnOutage(t *testing.T) {
+	const org, user, prod, staging = "org-1", "user-1", "env-prod", "env-staging"
+	query := fat.ScopeDBQuery
+	for _, parent := range []struct {
+		name     string
+		resource *fat.Resource
+	}{
+		{"daemon-bound parent", &fat.Resource{Kind: fat.ResourceDaemon, ID: "daemon-1"}},
+		{"unbound login parent", nil},
+	} {
+		for _, tc := range []struct {
+			name         string
+			ask          []string
+			predates2400 bool
+			minted       bool
+		}{
+			{name: "db:query alone", ask: []string{string(query)}},
+			{name: "db:query alone, older control plane", ask: []string{string(query)}, predates2400: true},
+			{name: "beside deploy:read", ask: []string{string(fat.ScopeDeployRead), string(query)}, minted: true},
+		} {
+			t.Run(parent.name+"/"+tc.name, func(t *testing.T) {
+				cp := newControlPlaneMintContract(org)
+				cp.predates2400 = tc.predates2400
+				cp.member[user] = true
+				cp.orgWide[user] = fat.SetOf(fat.ScopeDeployRead)
+				cp.byEnv[user] = map[string]fat.Set{prod: fat.SetOf(query)}
+				parentToken := cp.issue(user, true, fat.SetOf(fat.ScopeDaemonConnect), parent.resource)
+				before := len(cp.tokens)
+
+				svc := newTokenService(t, cp, TokenControlPlane{Issuer: testControlPlane})
+				resp, err := svc.ExchangeToken(context.Background(), exchangeReq(parentToken, &reliantv1.ExchangeTokenRequest{
+					Audience: testControlPlane, Scopes: tc.ask,
+				}))
+				if !tc.minted {
+					if svcerr.Code(err) != connect.CodeFailedPrecondition {
+						t.Fatalf("ExchangeToken: %v, want FailedPrecondition", err)
+					}
+					for _, tok := range cp.tokens {
+						if tok.id != "tok-1" && !tok.revoked {
+							t.Fatalf("a live child %s survived the refusal", tok.id)
+						}
+					}
+					if !tc.predates2400 && len(cp.tokens) != before {
+						t.Fatal("a child was minted before the refusal")
+					}
+					return
+				}
+				if err != nil {
+					t.Fatalf("ExchangeToken: %v", err)
+				}
+				child := resp.Msg.GetToken()
+				if _, err := cp.Introspect(context.Background(), child); err != nil {
+					t.Fatalf("the child does not authenticate: %v", err)
+				}
+				if !cp.spendsOn(child, prod, query) || cp.spendsOn(child, staging, query) {
+					t.Fatal("the child must query prod and not staging")
+				}
+				cp.mu.Lock()
+				cp.member[user] = false
+				cp.mu.Unlock()
+				if cp.spendsOn(child, prod, query) {
+					t.Fatal("the child still queries prod after its person left the org")
+				}
+			})
+		}
+	}
+}
+
+// confirmOrg, given a child an older control plane minted that resolves to
+// nothing (possible when the exchange names another org, which ExchangeToken
+// cannot judge itself), revokes it and reports FailedPrecondition through the
+// production decoder's sentinel, never Unavailable.
+func TestConfirmOrg_AChildThatResolvesToNothingIsRevokedAndExplained(t *testing.T) {
+	cp := newControlPlaneMintContract("org-1")
+	cp.predates2400 = true
+	cp.member["user-1"] = true
+	cp.byEnv["user-1"] = map[string]fat.Set{"env-prod": fat.SetOf(fat.ScopeDBQuery)}
+	minted, err := cp.MintForUser(context.Background(), tokenauthority.MintRequest{
+		UserID: "user-1", Scopes: []fat.Scope{fat.ScopeDBQuery}, OrgID: "org-1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	svc := newTokenService(t, cp, TokenControlPlane{Issuer: testControlPlane})
+	err = svc.confirmOrg(context.Background(), "user-1", minted, "org-1")
+	if svcerr.Code(err) != connect.CodeFailedPrecondition {
+		t.Fatalf("confirmOrg: %v, want FailedPrecondition", err)
+	}
+	if _, err := cp.Introspect(context.Background(), minted.Plaintext); !errors.Is(err, tokenauthority.ErrInactive) {
+		t.Fatalf("the child was not revoked: %v", err)
 	}
 }

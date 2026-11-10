@@ -138,6 +138,23 @@ func exchangeCeiling(subject *fat.Principal) fat.Set {
 	return out
 }
 
+// environmentOnlyExchange is the refusal of an exchange whose child would
+// carry only scopes held on specific environments: it would resolve to its
+// person's org-wide grants, which is nothing, and never authenticate. The
+// control plane refuses such a mint itself (control-plane #2400,
+// "failed_precondition", passed through above); an older one mints it, and
+// confirmOrg then finds it resolves to nothing. granted, when known, is named.
+func environmentOnlyExchange(granted []fat.Scope) error {
+	what := "the requested permissions"
+	if len(granted) > 0 {
+		what = fat.JoinScopes(granted)
+	}
+	return svcerr.FailedPrecondition(fmt.Sprintf(
+		"this exchange would authorize nothing: you hold %s only on specific environments, and an exchanged "+
+			"credential carries only what you hold across the organization; ask for it together with a permission "+
+			"you hold across the organization (forge asks for deploy:read), or ask an organization admin for one", what))
+}
+
 // TokenControlPlane is what TokenService knows about the deployment's control
 // plane.
 type TokenControlPlane struct {
@@ -244,6 +261,12 @@ func (s *Service) ExchangeToken(
 		if errors.As(err, &refused) && refused.Code == "permission_denied" {
 			return nil, svcerr.WithReason(svcerr.PermissionDenied(refused.Message), refused.Reason)
 		}
+		// The control plane's refusal of a ceiling that would authorize
+		// nothing (control-plane #2400) is the caller's to act on, not an
+		// outage.
+		if errors.As(err, &refused) && refused.Code == "failed_precondition" {
+			return nil, svcerr.WithReason(svcerr.FailedPrecondition(refused.Message), refused.Reason)
+		}
 		return nil, authorityError("exchange", err)
 	}
 
@@ -305,6 +328,12 @@ func (s *Service) confirmOrg(ctx context.Context, userID string, minted tokenaut
 	if revokeErr := s.deps.Authority.RevokeForUser(ctx, userID, minted.TokenID); revokeErr != nil {
 		logging.ErrorContext(ctx, "could not revoke a mis-scoped exchanged token", "token_id", minted.TokenID,
 			"error", tokenauthority.Describe(revokeErr))
+	}
+	if errors.Is(err, accesstokenclient.ErrNoRecognisedScope) {
+		// An older control plane minted a child that resolves to nothing:
+		// every scope it kept is held only on specific environments.
+		// Revoked above; say why rather than report an outage.
+		return environmentOnlyExchange(nil)
 	}
 	if err != nil {
 		return svcerr.WithCause(svcerr.Unavailable("token service unavailable"), err)
