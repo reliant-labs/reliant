@@ -6,6 +6,8 @@ import (
 	"fmt"
 
 	fat "github.com/reliant-labs/forge/pkg/accesstoken"
+
+	"github.com/reliant-labs/reliant/internal/authz"
 )
 
 // Machine credentials are `rlat_` access tokens (forge/pkg/accesstoken),
@@ -52,8 +54,16 @@ type AccessTokenAccountIntrospector interface {
 type machineTokenKey struct{}
 
 // WithMachineToken records that ctx is authenticated by the access token p.
+//
+// The token's org binds every authz decision on ctx to that org
+// (authz.WithCredentialOrg): a credential of one org never reaches another's
+// resources, whichever path decides.
 func WithMachineToken(ctx context.Context, p *fat.Principal) context.Context {
-	return context.WithValue(ctx, machineTokenKey{}, p)
+	ctx = context.WithValue(ctx, machineTokenKey{}, p)
+	if p != nil {
+		ctx = authz.WithCredentialOrg(ctx, p.OrgID)
+	}
+	return ctx
 }
 
 // MachineTokenFromContext returns the access-token principal authenticating
