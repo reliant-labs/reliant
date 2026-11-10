@@ -49,11 +49,34 @@ import (
 // moveCheckoutPurpose finishes projectcheckout's "… to <purpose>".
 const moveCheckoutPurpose = "move this chat there"
 
-// crossesOrgs reports whether a chat of org from moving to a project of org to
-// would change its org. A side with no org yet (written before orgs) crosses
-// nothing: it belongs to its owner's default org until stamped.
-func crossesOrgs(from, to *string) bool {
-	return from != nil && to != nil && *from != *to
+// moveOrg is the org a move happens in: the chat's and the target project's,
+// which must be one. A side with no org yet (written before orgs) is its
+// owner's default org, the org the lazy backfill would stamp it with, so it is
+// compared as that, and the move stamps it so (store.MoveChatToProject): a
+// legacy chat cannot reach another org by moving into its project before the
+// backfill, nor an org chat land in a project later stamped with another. nil
+// when neither side has an org and the caller has no default (no orgs here).
+func (s *Service) moveOrg(ctx context.Context, userID string, chat *db.Chat, target *db.Project) (*string, error) {
+	from, to := stringOrEmpty(chat.OrgID), stringOrEmpty(target.OrgID)
+	if (from == "" || to == "") && s.deps.Orgs != nil {
+		def, err := s.deps.Orgs.DefaultOrg(ctx, userID)
+		if err != nil {
+			return nil, svcerr.WithCause(svcerr.Unavailable("could not resolve your default organization; try again"), err)
+		}
+		if from == "" {
+			from = def
+		}
+		if to == "" {
+			to = def
+		}
+	}
+	if from != to {
+		return nil, svcerr.FailedPrecondition("that project belongs to another organization; a chat stays in its organization")
+	}
+	if from == "" {
+		return nil, nil
+	}
+	return &from, nil
 }
 
 // MoveChatToProject moves an idle chat to another of the caller's projects.
@@ -89,8 +112,9 @@ func (s *Service) MoveChatToProject(
 	}
 	// Nothing moves between orgs (owner decision, 2026-10-26): a chat that
 	// belongs to an org may move only to a project of the same org.
-	if crossesOrgs(chat.OrgID, target.OrgID) {
-		return nil, svcerr.FailedPrecondition("that project belongs to another organization; a chat stays in its organization")
+	orgID, err := s.moveOrg(ctx, userID, chat, target)
+	if err != nil {
+		return nil, err
 	}
 	source, err := s.ownedProject(ctx, userID, chat.ProjectID)
 	if err != nil {
@@ -136,6 +160,7 @@ func (s *Service) MoveChatToProject(
 			ToProjectID:   target.ID,
 			WorktreeID:    *worktreeID,
 			DaemonID:      to.daemonID,
+			OrgID:         orgID,
 		})
 		if err != nil || !moved {
 			return err
@@ -170,7 +195,7 @@ func (s *Service) MoveChatToProject(
 	if !moved {
 		// The chat changed between the read and the write: a run started,
 		// or another move took it elsewhere.
-		return nil, svcerr.FailedPrecondition("the chat changed while it was being moved (a run started, or it was moved elsewhere); try again once it is idle")
+		return nil, svcerr.FailedPrecondition("the chat changed while it was being moved (a run started, it was moved elsewhere, or it or the project was given an organization); try again once it is idle")
 	}
 	logging.InfoContext(ctx, "[MoveChatToProject] moved chat to another project",
 		"chatID", chat.ID, "fromProjectID", source.ID, "toProjectID", target.ID,

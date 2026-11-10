@@ -227,6 +227,11 @@ type ChatMove struct {
 	// DaemonID pins the chat's machine; nil clears the pin. Pinning one puts a
 	// no-machine chat on a machine, as UpdateChatActiveDaemon does.
 	DaemonID *string
+	// OrgID is the org the move happens in: the chat and ToProjectID must
+	// both be in it, or have no org yet, and whichever has none is stamped
+	// with it in the same transaction, so a later backfill cannot give one of
+	// them another. nil (no orgs) checks and stamps nothing.
+	OrgID *string
 }
 
 // Chat activities (reliantv1.ChatActivity) a chat may be moved in: IDLE and
@@ -249,14 +254,24 @@ UPDATE chats SET
     worktree_id = ?1,
     active_daemon_id = ?2,
     no_machine = no_machine AND ?2::text IS NULL,
+    org_id = COALESCE(org_id, ?7::text),
     updated_at = NOW()
 WHERE id = ?3
   AND project_id = ?4
+  AND (?7::text IS NULL OR (
+      COALESCE(org_id, ?7::text) = ?7::text
+      AND EXISTS (SELECT 1 FROM projects p WHERE p.id = ?0 AND p.org_id = ?7::text)
+  ))
   AND EXISTS (
       SELECT 1 FROM chats_with_activity v
       WHERE v.id = ?3 AND v.activity IN (?5, ?6)
   )
 RETURNING id`
+
+// stampMoveTargetOrgSQL gives the target project the move's org when it has
+// none yet, before the chat's statement checks it: an org, once set, never
+// changes, so the check that follows reads a settled value.
+const stampMoveTargetOrgSQL = `UPDATE projects SET org_id = ?0 WHERE id = ?1 AND org_id IS NULL`
 
 // moveChatPlansSQL moves the chat's plans with it: plans.project_id cascades
 // on the project's deletion, so a plan left behind would vanish with the old
@@ -268,14 +283,20 @@ WHERE project_id = ?1
 
 // MoveChatToProject moves the chat and its plans to m.ToProjectID. moved is
 // false, and nothing is written, when the chat is gone, is no longer in
-// m.FromProjectID, or is not idle (or stopped on an error).
+// m.FromProjectID, is not idle (or stopped on an error), or it or the target
+// project belongs to an org other than m.OrgID.
 func MoveChatToProject(ctx context.Context, db orm.Context, m ChatMove) (moved bool, err error) {
 	worktreeID := m.WorktreeID
 	err = withChatWorktreeAdmission(ctx, db, m.ChatID, &worktreeID, func(ctx context.Context) error {
+		if m.OrgID != nil {
+			if _, err := db.Bun().NewRaw(stampMoveTargetOrgSQL, *m.OrgID, m.ToProjectID).Exec(ctx); err != nil {
+				return fmt.Errorf("failed to stamp the target project's org: %w", err)
+			}
+		}
 		var ids []string
 		if err := db.Bun().NewRaw(moveChatToProjectSQL,
 			m.ToProjectID, m.WorktreeID, m.DaemonID, m.ChatID, m.FromProjectID,
-			chatActivityIdle, chatActivityError,
+			chatActivityIdle, chatActivityError, m.OrgID,
 		).Scan(ctx, &ids); err != nil && !errors.Is(err, sql.ErrNoRows) {
 			return fmt.Errorf("failed to move chat: %w", recoveryAdmissionError(err))
 		}

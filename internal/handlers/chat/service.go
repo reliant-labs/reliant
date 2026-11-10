@@ -149,8 +149,11 @@ func New(deps Deps) (*Service, error) {
 // disagree.
 func (s *Service) launcher() *launch.Launcher {
 	s.launcherOnce.Do(func() {
-		s.launcherImpl = launch.NewLauncher(s.deps.Repo, threads.NewService(s.deps.Repo), s.deps.Temporal, s.runs, workflow.SharedTaskQueue,
-			launch.WithChatPinner(s.chatPinner()))
+		opts := []launch.LauncherOption{launch.WithChatPinner(s.chatPinner())}
+		if s.deps.Orgs != nil {
+			opts = append(opts, launch.WithOrgAuthority(s.deps.Orgs))
+		}
+		s.launcherImpl = launch.NewLauncher(s.deps.Repo, threads.NewService(s.deps.Repo), s.deps.Temporal, s.runs, workflow.SharedTaskQueue, opts...)
 	})
 	return s.launcherImpl
 }

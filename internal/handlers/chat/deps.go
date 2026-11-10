@@ -29,6 +29,9 @@ import (
 type OrgResolver interface {
 	Named(ctx context.Context, userID, requested string) (string, error)
 	DefaultOrg(ctx context.Context, userID string) (string, error)
+	// Authorize verifies the caller may act in an org a resource already
+	// belongs to (a new chat's project).
+	Authorize(ctx context.Context, userID, orgID string) error
 	ListScope(ctx context.Context, userID, requested string, stamp orgs.Backfill) (*core.OrgScope, error)
 }
 

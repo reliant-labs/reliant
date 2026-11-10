@@ -24,7 +24,7 @@ import (
 )
 
 // forge:section MockOrgResolver
-// forge:hash=f7b30d0bfd2b48e7db3c459a812575aef33cd97ff14c5aca6ece8f8560312beb
+// forge:hash=ab46acaa414a44f68e794e0c971548820a7e978842eb431605c09b8c9525b38e
 
 // MockOrgResolver is a test mock for the OrgResolver interface.
 //
@@ -36,6 +36,7 @@ type MockOrgResolver struct {
 	contractkit.Recorder
 	NamedFunc      func(context.Context, string, string) (string, error)
 	DefaultOrgFunc func(context.Context, string) (string, error)
+	AuthorizeFunc  func(context.Context, string, string) error
 	ListScopeFunc  func(context.Context, string, string, orgs.Backfill) (*core.OrgScope, error)
 }
 
@@ -55,6 +56,15 @@ func (m *MockOrgResolver) DefaultOrg(ctx context.Context, userID string) (string
 		return m.DefaultOrgFunc(ctx, userID)
 	}
 	return "", contractkit.MockNotSet("MockOrgResolver", "DefaultOrg")
+}
+
+// Authorize records the call and delegates to AuthorizeFunc when set.
+func (m *MockOrgResolver) Authorize(ctx context.Context, userID string, orgID string) error {
+	m.Recorder.Record("Authorize", ctx, userID, orgID)
+	if m.AuthorizeFunc != nil {
+		return m.AuthorizeFunc(ctx, userID, orgID)
+	}
+	return contractkit.MockNotSet("MockOrgResolver", "Authorize")
 }
 
 // ListScope records the call and delegates to ListScopeFunc when set.

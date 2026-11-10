@@ -34,9 +34,19 @@ func whereOrg(column string, scope *core.OrgScope) orm.QueryOption {
 //
 // Called with the ctx of a transaction it joins it; the caller runs both
 // statements in one, so a chat is never stamped against a project that was not.
+// Chats are stamped before projects, the order a chat's move takes their locks
+// in (store.MoveChatToProject), so the two never deadlock. The result is the
+// same as projects first: a chat whose project has no org yet takes orgID,
+// which is what that project is stamped with next.
 func AssignUnassignedOrg(ctx context.Context, db orm.Context, userID, orgID string) error {
 	if userID == "" || orgID == "" {
 		return fmt.Errorf("assign unassigned org: user and org are required")
+	}
+	if _, err := db.Bun().NewRaw(`
+		UPDATE chats c
+		SET org_id = COALESCE((SELECT p.org_id FROM projects p WHERE p.id = c.project_id), ?)
+		WHERE c.user_id = ? AND c.org_id IS NULL`, orgID, userID).Exec(ctx); err != nil {
+		return fmt.Errorf("assign unassigned org to chats: %w", err)
 	}
 	if _, err := db.Bun().NewUpdate().Model((*Project)(nil)).
 		Set("org_id = ?", orgID).
@@ -44,12 +54,6 @@ func AssignUnassignedOrg(ctx context.Context, db orm.Context, userID, orgID stri
 		Where("org_id IS NULL").
 		Exec(ctx); err != nil {
 		return fmt.Errorf("assign unassigned org to projects: %w", err)
-	}
-	if _, err := db.Bun().NewRaw(`
-		UPDATE chats c
-		SET org_id = COALESCE((SELECT p.org_id FROM projects p WHERE p.id = c.project_id), ?)
-		WHERE c.user_id = ? AND c.org_id IS NULL`, orgID, userID).Exec(ctx); err != nil {
-		return fmt.Errorf("assign unassigned org to chats: %w", err)
 	}
 	return nil
 }

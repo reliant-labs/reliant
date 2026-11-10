@@ -228,6 +228,60 @@ func TestListScope(t *testing.T) {
 	}
 }
 
+// A machine credential lists its own org whether or not the request names it:
+// omitting org_id never widens it to everything its acting user owns.
+func TestListScopeMachineCredentialListsItsOrg(t *testing.T) {
+	r, _ := newResolver(newFake())
+	ctx := auth.WithMachineToken(context.Background(), &fat.Principal{OrgID: "acme", ActingUserID: "alice"})
+	for _, requested := range []string{"", "acme"} {
+		scope, err := r.ListScope(ctx, "alice", requested, nil)
+		if err != nil || scope == nil || scope.OrgID != "acme" || scope.IncludeUnassigned {
+			t.Fatalf("requested %q: %+v, %v; want acme only", requested, scope, err)
+		}
+	}
+	if _, err := r.ListScope(ctx, "alice", "home", nil); svcerr.Code(err) != connect.CodePermissionDenied || reasonOf(err) != ReasonOrgMismatch {
+		t.Fatalf("another org: %v, want PermissionDenied %s", err, ReasonOrgMismatch)
+	}
+	// Bound to the acting user's default org: the rows with no org yet are
+	// that org's, so they list with it.
+	home := auth.WithMachineToken(context.Background(), &fat.Principal{OrgID: "home", ActingUserID: "alice"})
+	if scope, err := r.ListScope(home, "alice", "", nil); err != nil || scope == nil || scope.OrgID != "home" || !scope.IncludeUnassigned {
+		t.Fatalf("default-org credential: %+v, %v", scope, err)
+	}
+}
+
+// Authorize is live authority in an org a resource already belongs to:
+// owning the resource is not membership.
+func TestAuthorize(t *testing.T) {
+	ctx := context.Background()
+	src := newFake()
+	r, _ := newResolver(src)
+	if err := r.Authorize(ctx, "alice", "acme"); err != nil {
+		t.Fatalf("member: %v", err)
+	}
+	if err := r.Authorize(ctx, "bob", "acme"); svcerr.Code(err) != connect.CodePermissionDenied || reasonOf(err) != ReasonNotOrgMember {
+		t.Fatalf("removed member: %v, want PermissionDenied %s", err, ReasonNotOrgMember)
+	}
+	if err := r.Authorize(ctx, "alice", ""); err != nil {
+		t.Fatalf("no org: %v", err)
+	}
+	machine := auth.WithMachineToken(ctx, &fat.Principal{OrgID: "home", ActingUserID: "alice"})
+	if err := r.Authorize(machine, "alice", "acme"); svcerr.Code(err) != connect.CodePermissionDenied || reasonOf(err) != ReasonOrgMismatch {
+		t.Fatalf("credential bound to another org: %v, want PermissionDenied %s", err, ReasonOrgMismatch)
+	}
+	if err := r.Authorize(machine, "alice", "home"); err != nil {
+		t.Fatalf("credential's own org: %v", err)
+	}
+	down, _ := newResolver(&fakeSource{err: errors.New("down")})
+	if err := down.Authorize(ctx, "alice", "acme"); svcerr.Code(err) != connect.CodeUnavailable {
+		t.Fatalf("outage: %v, want Unavailable (fail closed)", err)
+	}
+	var none *Resolver
+	if err := none.Authorize(ctx, "alice", "acme"); err != nil {
+		t.Fatalf("no orgs: %v", err)
+	}
+}
+
 // A failed stamp is retried by the next list, not remembered as done.
 func TestListScopeRetriesAFailedStamp(t *testing.T) {
 	ctx := context.Background()

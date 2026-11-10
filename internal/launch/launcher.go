@@ -57,6 +57,21 @@ type Launcher struct {
 	threads   ThreadCreator
 	taskQueue string
 	pinner    ChatPinner
+	orgs      OrgAuthority
+}
+
+// OrgAuthority verifies the caller's live authority in an org a new chat
+// inherits from its project: membership, and a machine credential's org.
+// *orgs.Resolver implements it.
+type OrgAuthority interface {
+	Authorize(ctx context.Context, userID, orgID string) error
+}
+
+// WithOrgAuthority makes a new chat that takes its project's org verify the
+// caller may act in that org first. Without it (a deployment with no orgs) the
+// project's org is inherited on ownership alone.
+func WithOrgAuthority(a OrgAuthority) LauncherOption {
+	return func(l *Launcher) { l.orgs = a }
 }
 
 // ChatPinner decides which machine a chat that names none runs on, so the
@@ -273,6 +288,9 @@ func (l *Launcher) launchNew(ctx context.Context, ev Event, spec Spec, seed seed
 	}
 	orgID, err := chatOrg(spec, project)
 	if err != nil {
+		return nil, err
+	}
+	if err := l.authorizeInheritedOrg(ctx, userID, spec, orgID); err != nil {
 		return nil, err
 	}
 
@@ -1087,8 +1105,6 @@ func seedFingerprint(messages []SeedMessage, attachments []string) string {
 	return hex.EncodeToString(hash.Sum(nil))
 }
 
-// projectLookupError separates a project that is not there (final) from a
-// store failure (worth retrying).
 // chatOrg is the organization a new chat belongs to: its project's, when the
 // project has one (a chat and its project are in one org, so a request naming
 // another is refused), else the org the request named, else the creator's
@@ -1110,6 +1126,20 @@ func chatOrg(spec Spec, project *db.Project) (*string, error) {
 	return nil, nil
 }
 
+// authorizeInheritedOrg verifies the caller may act in orgID when it came
+// from the chat's project rather than from the request (spec.OrgID is already
+// verified, orgs.Named): owning a project is not membership of its org, so a
+// member removed from it, or a credential bound to another org, cannot start
+// a chat there by naming no org.
+func (l *Launcher) authorizeInheritedOrg(ctx context.Context, userID string, spec Spec, orgID *string) error {
+	if l.orgs == nil || orgID == nil || *orgID == spec.OrgID {
+		return nil
+	}
+	return l.orgs.Authorize(ctx, userID, *orgID)
+}
+
+// projectLookupError separates a project that is not there (final) from a
+// store failure (worth retrying).
 func projectLookupError(err error) error {
 	if errors.Is(err, core.ErrProjectNotFound) {
 		return &NotFoundError{Reason: "project not found", Err: err}
