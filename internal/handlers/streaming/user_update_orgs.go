@@ -3,6 +3,7 @@ package streaming
 
 import (
 	"context"
+	"encoding/json"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
@@ -18,18 +19,22 @@ const maxOrgGateEntries = 4096
 // orgGate decides whether a user stream may deliver an update about an org's
 // resource: the chat it names, else its project, else the saved workflow it
 // is about. The user log holds the caller's own updates, so the decision is
-// the org half of authz (CanReadOwn): a row of an org they have left is not
-// delivered, on replay or live, whether or not the stream names a project.
-// Membership is asked per update (cached by the resolver, orgs.CacheTTL), so
-// a removal stops delivery on an open stream within that bound. An update
-// about nothing of an org (personal: a daemon signal, a connection) passes.
+// the org half of authz (CanReadOwn): an update about an org they have left
+// is not delivered, on replay or live, whether or not the stream names a
+// project. Membership is asked per update (cached by the resolver,
+// orgs.CacheTTL), so a removal stops delivery on an open stream within that
+// bound. An update about nothing of an org (personal: a daemon signal, a
+// connection) passes.
 //
-// A resource's org is read once per stream once it has one (it never
-// changes); a resource with none yet is re-read, since a backfill may stamp
-// it. A resource that no longer exists passes: its removal must reach the
-// client, and the update names nothing it could still read. A failed read
-// withholds the update (authz fails closed); the cursor moves past it either
-// way, as for every filtered update.
+// The org decided on is the one the update was stored with
+// (user_updates.org_id, stamped on insert), so a deleted resource's history
+// keeps its org. An update with none (written before orgs, or a live update
+// not read back) falls back to the resource's current org, read once per
+// stream once it has one. When neither establishes an org (the resource is
+// gone, or a read failed), the update is withheld (authz fails closed),
+// except that a deletion still reaches the client as a bare marker, its id
+// and kind and nothing else, so the client can drop the item. The cursor
+// moves past a withheld update either way, as for every filtered one.
 type orgGate struct {
 	repo   Repository
 	userID string
@@ -40,9 +45,14 @@ func newOrgGate(repo Repository, userID string) *orgGate {
 	return &orgGate{repo: repo, userID: userID, orgs: map[string]string{}}
 }
 
+// allows reports whether update may be delivered, stripping it to a
+// deletion marker in place when only that may.
 func (g *orgGate) allows(ctx context.Context, update *db.UserUpdate) bool {
 	if g == nil {
 		return true
+	}
+	if update.OrgID != nil && *update.OrgID != "" {
+		return authz.CanReadOwn(ctx, g.userID, update.OrgID)
 	}
 	var key string
 	var read func() (*string, error)
@@ -85,12 +95,12 @@ func (g *orgGate) allows(ctx context.Context, update *db.UserUpdate) bool {
 	if !cached {
 		got, err := read()
 		switch {
-		case svcerr.IsNotFound(err):
-			return true
 		case err != nil:
-			logging.WarnContext(ctx, LOG_PREFIX_STREAM_USER+" Could not read the org of an update's resource; withholding it",
-				"userID", g.userID, "resource", key, "error", err)
-			return false
+			if !svcerr.IsNotFound(err) {
+				logging.WarnContext(ctx, LOG_PREFIX_STREAM_USER+" Could not read the org of an update's resource; withholding it",
+					"userID", g.userID, "resource", key, "error", err)
+			}
+			return deletionMarker(update)
 		case got == nil || *got == "":
 			return true
 		}
@@ -101,4 +111,29 @@ func (g *orgGate) allows(ctx context.Context, update *db.UserUpdate) bool {
 		g.orgs[key] = org
 	}
 	return authz.CanReadOwn(ctx, g.userID, &org)
+}
+
+// deletionMarker reports whether update announces a deletion, and if so
+// strips it, in place, to what lets a client drop the item: its id and kind,
+// and nothing of what it was.
+func deletionMarker(update *db.UserUpdate) bool {
+	switch update.UpdateType {
+	case db.UserUpdateChatDeleted, db.UserUpdateProjectDeleted, db.UserUpdateWorktreeDeleted:
+		update.Data = json.RawMessage(`{}`)
+	case db.UserUpdateWorkflowDraftUpdated:
+		var payload struct {
+			Deleted bool `json:"deleted"`
+		}
+		if json.Unmarshal(update.Data, &payload) != nil || !payload.Deleted {
+			return false
+		}
+		marker, err := json.Marshal(map[string]any{"draft_id": update.EntityID, "deleted": true})
+		if err != nil {
+			return false
+		}
+		update.Data = marker
+	default:
+		return false
+	}
+	return true
 }

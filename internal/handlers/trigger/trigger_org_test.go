@@ -222,3 +222,33 @@ func TestUpdateTrigger_ActsInTheTriggersOrg(t *testing.T) {
 		unchanged()
 	}
 }
+
+// The trigger list shows what GetTrigger would: a removed member's acme
+// triggers are not listed even when the request names no org, while home's
+// and the unassigned ones are; and a credential bound to acme, whose acting
+// user has left acme, lists nothing of it.
+func TestListTriggers_LeavesOutALeftOrgsTriggers(t *testing.T) {
+	t.Parallel()
+	env := setupTriggerTest(t).withOrgs(t)
+	acme, home := "acme", "home"
+	acmeTrigger, err := env.createIn(env.ctx, env.orgProject(t, &acme), nil)
+	require.NoError(t, err)
+	homeTrigger, err := env.createIn(env.ctx, env.orgProject(t, &home), nil)
+	require.NoError(t, err)
+
+	removed := orgs.New(leftAcmeSource{})
+	env.configure(t, func(d *Deps) { d.Orgs = removed })
+	ctx := authz.WithMembership(context.WithValue(context.Background(), auth.UserIDContextKey, env.userID), removed)
+	listed, err := env.svc.ListTriggers(ctx, connect.NewRequest(&reliantv1.ListTriggersRequest{}))
+	require.NoError(t, err)
+	var ids []string
+	for _, tr := range listed.Msg.GetTriggers() {
+		ids = append(ids, tr.GetId())
+	}
+	require.Contains(t, ids, homeTrigger.GetId())
+	require.NotContains(t, ids, acmeTrigger.GetId(), "a left org's trigger, no org_id named")
+
+	machine := auth.WithMachineToken(ctx, &fat.Principal{OrgID: acme, ActingUserID: env.userID})
+	_, err = env.svc.ListTriggers(machine, connect.NewRequest(&reliantv1.ListTriggersRequest{}))
+	requireDenied(t, err, connect.CodePermissionDenied, orgs.ReasonNotOrgMember)
+}

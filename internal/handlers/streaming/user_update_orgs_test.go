@@ -2,8 +2,10 @@ package streaming
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -56,6 +58,9 @@ func (orgUpdatesRepo) GetProject(_ context.Context, id string) (*db.Project, err
 }
 
 func (orgUpdatesRepo) GetWorkflowDraft(_ context.Context, id string) (*db.WorkflowDraft, error) {
+	if strings.HasPrefix(id, "gone") {
+		return nil, svcerr.NotFound("workflow draft")
+	}
 	return &db.WorkflowDraft{ID: id, UserID: raceTestUserID, OrgID: orgRow(id)}, nil
 }
 
@@ -171,4 +176,36 @@ func TestStreamUserUpdates_RemovalWhileOpenWithholdsTheOrgsUpdates(t *testing.T)
 	send(update(5, "d:home-draft"))
 	ids, _ = nextBatch(t, events)
 	require.Equal(t, []string{"d:home-draft"}, ids, "an org the caller is still in")
+}
+
+// A deleted saved workflow's history keeps the org it was stored with: a
+// member who has left that org replays none of it, and at most the deletion,
+// stripped to the draft's id. An update written before orgs about a resource
+// that is gone is withheld too, unless it is a deletion.
+func TestStreamUserUpdates_ReplayOfADeletedOrgDraft(t *testing.T) {
+	acme := "acme"
+	stamped := func(u db.UserUpdate, org *string, data string) db.UserUpdate {
+		u.OrgID, u.Data = org, json.RawMessage(data)
+		u.UpdateType = db.UserUpdateWorkflowDraftUpdated
+		return u
+	}
+	repo := orgUpdatesRepo{log: []db.UserUpdate{
+		stamped(update(1, "d:gone-draft"), &acme, `{"draft_id":"gone-draft","slug":"secret-flow","version":1}`),
+		stamped(update(2, "d:gone-draft"), &acme, `{"draft_id":"gone-draft","slug":"secret-flow","version":2}`),
+		// The deletion is written after the row is gone: no org to stamp.
+		stamped(update(3, "d:gone-draft"), nil, `{"draft_id":"gone-draft","slug":"secret-flow","version":2,"deleted":true}`),
+		// Written before orgs, about a draft that is gone: no org to decide on.
+		stamped(update(4, "d:gone-legacy"), nil, `{"draft_id":"gone-legacy","slug":"old-flow","version":5}`),
+		update(5, "personal"),
+	}}
+	events := orgUserStream(t, repo, nil, &orgMembers{orgs: map[string]bool{"home": true}})
+
+	nextEvent(t, events, "sync", func(ev *reliantv1.UserStreamEvent) bool { return ev.GetSync() != nil })
+	batch := nextEvent(t, events, "an update batch", func(ev *reliantv1.UserStreamEvent) bool { return ev.GetUpdates() != nil }).GetUpdates()
+	require.Equal(t, int64(5), batch.GetLatestSequence())
+	require.Len(t, batch.GetUpdates(), 2, "the deletion marker and the personal update only: %v", batch.GetUpdates())
+	marker := batch.GetUpdates()[0]
+	require.Equal(t, int64(3), marker.GetSequenceNumber())
+	require.JSONEq(t, `{"draft_id":"gone-draft","deleted":true}`, marker.GetDataJson(), "the marker carries nothing of the draft")
+	require.Equal(t, "personal", batch.GetUpdates()[1].GetId())
 }

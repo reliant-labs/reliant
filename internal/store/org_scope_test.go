@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/store/storetest"
@@ -482,5 +483,48 @@ func TestAssignUnassignedOrg_TriggersWaitForTheirProject(t *testing.T) {
 	}
 	if got := triggerOrg(); got == nil || project.OrgID == nil || *got != *project.OrgID {
 		t.Fatalf("trigger org %v, project org %v: want them equal", got, project.OrgID)
+	}
+}
+
+// A user update is stored with the org of what it is about (its chat's, else
+// its project's), stamped on insert whatever the writer, so it keeps that org
+// after the resource is gone; one about nothing of an org has none.
+func TestUserUpdatesAreStampedWithTheirOrg(t *testing.T) {
+	env := storetest.New(t)
+	ctx := context.Background()
+	at := time.Date(2026, 1, 15, 12, 0, 0, 0, time.UTC)
+	user := storetest.SeedUserID
+	if err := env.Repo.CreateProject(ctx, &core.Project{ID: "p-acme-u", UserID: user, Name: "acme", Path: "/srv/acme-u", OrgID: orgp("acme"),
+		CreatedAt: at, UpdatedAt: at, LastActive: at}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.InsertChat(ctx, env.ORM, &core.Chat{ID: "c-acme-u", ProjectID: "p-acme-u", UserID: user, OrgID: orgp("acme"),
+		Title: "x", CreatedAt: at, UpdatedAt: at, LastActive: at}); err != nil {
+		t.Fatal(err)
+	}
+	chat, project := "c-acme-u", "p-acme-u"
+	for _, u := range []*core.UserUpdate{
+		{UserID: user, ChatID: &chat, EntityType: reliantv1.EntityType_ENTITY_TYPE_CHAT, EntityID: chat, Data: []byte(`{}`)},
+		{UserID: user, ProjectID: &project, EntityType: reliantv1.EntityType_ENTITY_TYPE_PROJECT, EntityID: project, Data: []byte(`{}`)},
+		{UserID: user, EntityType: reliantv1.EntityType_ENTITY_TYPE_SYSTEM, EntityID: "sys", Data: []byte(`{}`)},
+	} {
+		if err := env.Repo.CreateUserUpdate(ctx, u); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got, err := store.UserUpdatesSince(ctx, env.ORM, user, 0, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var orgs []string
+	for _, u := range got {
+		if u.OrgID == nil {
+			orgs = append(orgs, "")
+		} else {
+			orgs = append(orgs, *u.OrgID)
+		}
+	}
+	if len(orgs) != 3 || orgs[0] != "acme" || orgs[1] != "acme" || orgs[2] != "" {
+		t.Fatalf("stored orgs %q, want [acme acme \"\"]", orgs)
 	}
 }

@@ -6,12 +6,14 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
+	fat "github.com/reliant-labs/forge/pkg/accesstoken"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/require"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 
 	"github.com/reliant-labs/reliant/internal/accesstokenclient"
+	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/db"
 	run "github.com/reliant-labs/reliant/internal/handlers/run"
@@ -124,6 +126,14 @@ func TestListRuns_LeavesOutARemovedMembersOrgRows(t *testing.T) {
 	require.Empty(t, got.Msg.GetRuns())
 	require.Empty(t, got.Msg.GetUnlaunchedEvents())
 	require.NotEmpty(t, got.Msg.GetNextPageToken(), "a page of denied rows is not the end of the log")
+
+	// A credential bound to globex, whose acting user is not (or no longer) a
+	// member of it, lists nothing of it.
+	machine := auth.WithMachineToken(ctx, &fat.Principal{OrgID: globex, ActingUserID: "test-user"})
+	_, err = svc.ListRuns(machine, connect.NewRequest(&pb.ListRunsRequest{}))
+	if svcerr.Code(err) != connect.CodePermissionDenied {
+		t.Fatalf("a credential of an org its user left: %v, want PermissionDenied", err)
+	}
 }
 
 func ptrBool(b bool) *bool { return &b }
