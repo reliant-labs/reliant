@@ -94,7 +94,7 @@ func TestMoveChatToProject_BothUnassignedIsCheckedToo(t *testing.T) {
 	to, toMain := f.orgProject("legacy-b", nil)
 	chatID := f.chat(from, fromMain, nil)
 	// The decision with nothing assigned: no org, no default needed.
-	decided := db.ChatMove{ChatID: chatID, FromProjectID: from, ToProjectID: to, WorktreeID: toMain}
+	decided := db.ChatMove{UserID: moveUser, ChatID: chatID, FromProjectID: from, ToProjectID: to, WorktreeID: toMain}
 
 	_, err := f.repo.ORM().Bun().NewRaw(`UPDATE projects SET org_id = 'acme' WHERE id = ?`, from).Exec(f.ctx)
 	require.NoError(t, err)
@@ -129,7 +129,7 @@ func TestMoveChatToProject_StampBetweenReadAndWriteWins(t *testing.T) {
 	// The handler decided "home": no org, no project org, so the default.
 	decided := func(id string) db.ChatMove {
 		return db.ChatMove{
-			ChatID: id, FromProjectID: from, ToProjectID: to, WorktreeID: toMain,
+			UserID: moveUser, ChatID: id, FromProjectID: from, ToProjectID: to, WorktreeID: toMain,
 			OrgID: &home, DefaultOrgID: &home,
 		}
 	}

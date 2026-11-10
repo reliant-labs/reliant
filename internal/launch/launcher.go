@@ -498,6 +498,12 @@ func (l *Launcher) launchNew(ctx context.Context, ev Event, spec Spec, seed seed
 	var attemptAt time.Time
 	if err := l.repo.RunTx(ctx, launchTx, func(txCtx context.Context) error {
 		attemptAt = time.Now()
+		// The owner's org lock first, before the guard's or any other row
+		// lock: the chat's org was decided from its project's, which no
+		// backfill may stamp between that decision and this insert.
+		if err := l.repo.LockUserOrgs(txCtx, userID, db.OrgRead{Table: "projects", ID: project.ID, Org: project.OrgID}); err != nil {
+			return err
+		}
 		if spec.Guard != nil {
 			reason, err := spec.Guard(txCtx)
 			if err != nil {
@@ -582,6 +588,9 @@ func (l *Launcher) launchNew(ctx context.Context, ev Event, spec Spec, seed seed
 		}
 		if errors.Is(err, ErrClientMessageReused) {
 			return nil, ErrClientMessageReused
+		}
+		if errors.Is(err, db.ErrOrgChanged) {
+			return nil, &ValidationError{Kind: ValidationFailedPrecondition, Reason: "the project's organization changed while the chat was being started; try again"}
 		}
 		logging.ErrorContext(ctx, "Failed to create chat", "error", err, "chatID", chatID)
 		return nil, &InternalError{Reason: "failed to create chat", Err: err}

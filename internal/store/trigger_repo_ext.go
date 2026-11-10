@@ -46,7 +46,6 @@ import (
 	"github.com/reliant-labs/forge/pkg/crud"
 	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/reliant-labs/forge/pkg/svcerr"
-	"github.com/uptrace/bun"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
 )
@@ -190,7 +189,8 @@ var triggerDefinitionColumns = []string{
 // ReplaceTrigger rewrites a trigger's definition and stamps updated_at, or
 // returns core.ErrTriggerNotFound. A trigger's org is fixed, so it is not a
 // definition column: t.OrgID only fills one the trigger does not have yet
-// (an update that moved it decided its org, see the trigger handler).
+// (an update that moved it decided its org, see the trigger handler). It
+// writes an org, so its caller holds the owner's org lock (LockUserOrgs).
 func ReplaceTrigger(ctx context.Context, db orm.Context, t *core.Trigger) error {
 	row, err := triggerFromCore(t)
 	if err != nil {
@@ -204,84 +204,6 @@ func ReplaceTrigger(ctx context.Context, db orm.Context, t *core.Trigger) error 
 	}
 	if _, err := db.Bun().NewRaw(`UPDATE triggers SET org_id = ? WHERE id = ? AND org_id IS NULL`, *t.OrgID, t.ID).Exec(ctx); err != nil {
 		return fmt.Errorf("stamp the trigger's org: %w", err)
-	}
-	return nil
-}
-
-// TriggerOrgDecision is the org an update of a trigger was decided in: the
-// trigger's own org, else its project's, else DefaultOrg (as the backfill
-// would stamp it). Org "" decides nothing: the deployment has no orgs, or
-// neither side had one.
-type TriggerOrgDecision struct {
-	Org string
-	// DefaultOrg is the caller's default org, what a side with no org
-	// resolves to; "" when the decision did not need it.
-	DefaultOrg string
-	// TargetProjectID is the project the update moves the trigger to; ""
-	// when it stays where it is.
-	TargetProjectID string
-}
-
-// ErrTriggerOrgChanged refuses an update whose org decision no longer holds:
-// a backfill stamped the trigger or a project it names with another org
-// between the decision and the write.
-var ErrTriggerOrgChanged = svcerr.FailedPrecondition("the trigger's organization changed while it was being updated; try again")
-
-// CheckTriggerOrg re-decides d against the trigger's current row and the
-// projects it names, share-locking those projects for the rest of the
-// surrounding transaction so the backfill cannot stamp them before it
-// commits (the backfill skips locked rows). It runs after LockTrigger, which
-// holds the trigger row the same way. A trigger or a project that resolves
-// to another org than d.Org is ErrTriggerOrgChanged; a target project that is
-// gone is core.ErrProjectNotFound.
-func CheckTriggerOrg(ctx context.Context, db orm.Context, id string, d TriggerOrgDecision) error {
-	if d.Org == "" {
-		return nil
-	}
-	var trigger struct {
-		ProjectID string  `bun:"project_id"`
-		OrgID     *string `bun:"org_id"`
-	}
-	if err := db.Bun().NewRaw(`SELECT project_id, org_id FROM triggers WHERE id = ?`, id).Scan(ctx, &trigger); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return core.ErrTriggerNotFound
-		}
-		return fmt.Errorf("re-read the trigger's org: %w", err)
-	}
-	ids := []string{trigger.ProjectID}
-	if d.TargetProjectID != "" && d.TargetProjectID != trigger.ProjectID {
-		ids = append(ids, d.TargetProjectID)
-	}
-	var projects []struct {
-		ID    string  `bun:"id"`
-		OrgID *string `bun:"org_id"`
-	}
-	if err := db.Bun().NewRaw(`SELECT id, org_id FROM projects WHERE id IN (?) ORDER BY id FOR SHARE`, bun.List(ids)).Scan(ctx, &projects); err != nil && !errors.Is(err, sql.ErrNoRows) {
-		return fmt.Errorf("re-read the trigger's projects' orgs: %w", err)
-	}
-	orgOf := map[string]*string{}
-	for _, p := range projects {
-		orgOf[p.ID] = p.OrgID
-	}
-	effective := func(orgs ...*string) string {
-		for _, o := range orgs {
-			if o != nil && *o != "" {
-				return *o
-			}
-		}
-		return d.DefaultOrg
-	}
-	if effective(trigger.OrgID, orgOf[trigger.ProjectID]) != d.Org {
-		return ErrTriggerOrgChanged
-	}
-	if d.TargetProjectID != "" {
-		target, ok := orgOf[d.TargetProjectID]
-		if !ok {
-			return core.ErrProjectNotFound
-		}
-		if effective(target) != d.Org {
-			return ErrTriggerOrgChanged
-		}
 	}
 	return nil
 }

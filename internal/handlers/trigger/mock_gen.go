@@ -76,7 +76,7 @@ func (m *MockOrgResolver) ListScope(ctx context.Context, userID string, requeste
 var _ OrgResolver = (*MockOrgResolver)(nil)
 
 // forge:section MockRepository
-// forge:hash=6168bade6b8e5fda116ce3acd12d13c442cdc45b64fa3e870cd4d0042f4b1e7a
+// forge:hash=4bc4c9540f41e5952751af2709b77c4cfafae27bc497181ab7f5f1234d9d3c50
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -95,7 +95,8 @@ type MockRepository struct {
 	GetTriggerFunc                     func(context.Context, string) (*core.Trigger, error)
 	ListTriggerChangesFunc             func(context.Context, string, string) ([]core.TriggerChange, error)
 	UpdateTriggerFunc                  func(context.Context, *core.Trigger) error
-	UpdateTriggerInOrgFunc             func(context.Context, *core.Trigger, db.TriggerOrgDecision) error
+	CreateTriggerInOrgFunc             func(context.Context, *core.Trigger, ...db.OrgRead) error
+	UpdateTriggerInOrgFunc             func(context.Context, *core.Trigger, ...db.OrgRead) error
 	DeleteTriggerFunc                  func(context.Context, string) error
 	SetTriggerEnabledFunc              func(context.Context, string, bool) error
 	SetTriggerWebhookSecretFunc        func(context.Context, string, []byte) error
@@ -207,11 +208,20 @@ func (m *MockRepository) UpdateTrigger(ctx context.Context, t *core.Trigger) err
 	return contractkit.MockNotSet("MockRepository", "UpdateTrigger")
 }
 
+// CreateTriggerInOrg records the call and delegates to CreateTriggerInOrgFunc when set.
+func (m *MockRepository) CreateTriggerInOrg(ctx context.Context, t *core.Trigger, reads ...db.OrgRead) error {
+	m.Recorder.Record("CreateTriggerInOrg", ctx, t, reads)
+	if m.CreateTriggerInOrgFunc != nil {
+		return m.CreateTriggerInOrgFunc(ctx, t, reads...)
+	}
+	return contractkit.MockNotSet("MockRepository", "CreateTriggerInOrg")
+}
+
 // UpdateTriggerInOrg records the call and delegates to UpdateTriggerInOrgFunc when set.
-func (m *MockRepository) UpdateTriggerInOrg(ctx context.Context, t *core.Trigger, decided db.TriggerOrgDecision) error {
-	m.Recorder.Record("UpdateTriggerInOrg", ctx, t, decided)
+func (m *MockRepository) UpdateTriggerInOrg(ctx context.Context, t *core.Trigger, reads ...db.OrgRead) error {
+	m.Recorder.Record("UpdateTriggerInOrg", ctx, t, reads)
 	if m.UpdateTriggerInOrgFunc != nil {
-		return m.UpdateTriggerInOrgFunc(ctx, t, decided)
+		return m.UpdateTriggerInOrgFunc(ctx, t, reads...)
 	}
 	return contractkit.MockNotSet("MockRepository", "UpdateTriggerInOrg")
 }

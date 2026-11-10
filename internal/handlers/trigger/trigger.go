@@ -107,7 +107,9 @@ func (s *Service) CreateTrigger(
 		return nil, err
 	}
 
-	if err := s.deps.Repo.CreateTrigger(ctx, trigger); err != nil {
+	// Under the owner's org lock, only while the project's org this decision
+	// read still holds.
+	if err := s.deps.Repo.CreateTriggerInOrg(ctx, trigger, db.OrgRead{Table: "projects", ID: project.ID, Org: project.OrgID}); err != nil {
 		return nil, triggerDBError("create trigger", err)
 	}
 
@@ -287,9 +289,16 @@ func (s *Service) UpdateTrigger(
 			return nil, triggerDBError("get project", err)
 		}
 	}
-	var decided db.TriggerOrgDecision
-	if updated.OrgID, decided, err = s.updatedTriggerOrg(ctx, existing.UserID, existing, source, target); err != nil {
+	if updated.OrgID, err = s.updatedTriggerOrg(ctx, existing.UserID, existing, source, target); err != nil {
 		return nil, err
+	}
+	// The write re-reads, under the owner's org lock, every org this
+	// decision read: a backfill between here and there refuses it.
+	reads := []db.OrgRead{{Table: "triggers", ID: existing.ID, Org: existing.OrgID}}
+	for _, p := range []*core.Project{source, target} {
+		if p != nil {
+			reads = append(reads, db.OrgRead{Table: "projects", ID: p.ID, Org: p.OrgID})
+		}
 	}
 	// nil enabled on update means "leave it as it is": an update of the
 	// schedule should not silently resume a trigger the owner paused.
@@ -301,7 +310,7 @@ func (s *Service) UpdateTrigger(
 		return nil, err
 	}
 
-	if err := s.deps.Repo.UpdateTriggerInOrg(ctx, updated, decided); err != nil {
+	if err := s.deps.Repo.UpdateTriggerInOrg(ctx, updated, reads...); err != nil {
 		return nil, triggerDBError("update trigger", err)
 	}
 

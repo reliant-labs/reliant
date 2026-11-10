@@ -187,6 +187,7 @@ func (s *Service) MoveChatToProject(
 	var moved bool
 	if err := s.deps.Repo.RunTx(ctx, orm.ReadCommitted, func(txCtx context.Context) error {
 		moved, err = s.deps.Repo.MoveChatToProject(txCtx, db.ChatMove{
+			UserID:        userID,
 			ChatID:        chat.ID,
 			FromProjectID: source.ID,
 			ToProjectID:   target.ID,

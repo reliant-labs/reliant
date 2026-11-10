@@ -220,6 +220,9 @@ func UpdateChatActiveDaemon(ctx context.Context, db orm.Context, chatID string, 
 // ChatMove is a chat's move to another project: the worktree (the new
 // project's main checkout) and the machine it runs on there.
 type ChatMove struct {
+	// UserID owns the chat: the move takes their org lock first
+	// (LockUserOrgs), so no backfill stamps between its decision and commit.
+	UserID        string
 	ChatID        string
 	FromProjectID string
 	ToProjectID   string
@@ -298,6 +301,9 @@ WHERE project_id = ?1
 func MoveChatToProject(ctx context.Context, db orm.Context, m ChatMove) (moved bool, err error) {
 	worktreeID := m.WorktreeID
 	err = withChatWorktreeAdmission(ctx, db, m.ChatID, &worktreeID, func(ctx context.Context) error {
+		// The statement below re-decides the org IS NOT DISTINCT FROM under
+		// the owner's org lock, which is taken before the chat's row lock
+		// (org_lock.go) by the caller's transaction (db.MoveChatToProject).
 		var ids []string
 		if err := db.Bun().NewRaw(moveChatToProjectSQL,
 			m.ToProjectID, m.WorktreeID, m.DaemonID, m.ChatID, m.FromProjectID,

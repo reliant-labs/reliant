@@ -70,7 +70,7 @@ func (m *MockOrgResolver) ListScope(ctx context.Context, userID string, requeste
 var _ OrgResolver = (*MockOrgResolver)(nil)
 
 // forge:section MockRepository
-// forge:hash=6da11b2eff8be070ed2050bce341e8633e930c99a775adc716dabf366053d6d0
+// forge:hash=e5d6feda809aa26331764d5e5c32b708037baeb30ab2e11fc276274c8bc38f10
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -222,6 +222,7 @@ type MockRepository struct {
 	GetWorktreeFunc                                          func(context.Context, string) (*db.Worktree, error)
 	ListProjectDaemonsForProjectFunc                         func(context.Context, string) ([]*core.ProjectDaemon, error)
 	ListWorktreesFunc                                        func(context.Context, db.WorktreeFilters) ([]*db.Worktree, error)
+	LockUserOrgsFunc                                         func(context.Context, string, ...db.OrgRead) error
 	MarkWorkflowStartFailedFunc                              func(context.Context, string) (bool, error)
 	MutateChatSelectionFunc                                  func(context.Context, string, func(current *chatselection.Selection) (*chatselection.Selection, error)) (*chatselection.Selection, error)
 	SaveMessageToThreadFunc                                  func(context.Context, string, string, int32, string, *string, []string, *int32) (*db.Message, error)
@@ -1512,6 +1513,15 @@ func (m *MockRepository) ListWorktrees(ctx context.Context, filters db.WorktreeF
 		return m.ListWorktreesFunc(ctx, filters)
 	}
 	return nil, contractkit.MockNotSet("MockRepository", "ListWorktrees")
+}
+
+// LockUserOrgs records the call and delegates to LockUserOrgsFunc when set.
+func (m *MockRepository) LockUserOrgs(ctx context.Context, userID string, reads ...db.OrgRead) error {
+	m.Recorder.Record("LockUserOrgs", ctx, userID, reads)
+	if m.LockUserOrgsFunc != nil {
+		return m.LockUserOrgsFunc(ctx, userID, reads...)
+	}
+	return contractkit.MockNotSet("MockRepository", "LockUserOrgs")
 }
 
 // MarkWorkflowStartFailed records the call and delegates to MarkWorkflowStartFailedFunc when set.

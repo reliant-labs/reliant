@@ -261,13 +261,25 @@ type backfillBeforeWrite struct {
 	repo   *db.Repo
 	userID string
 	org    string
+	// creates backfills before a create too; otherwise only updates.
+	creates bool
 }
 
-func (r backfillBeforeWrite) UpdateTriggerInOrg(ctx context.Context, t *core.Trigger, decided db.TriggerOrgDecision) error {
+func (r backfillBeforeWrite) UpdateTriggerInOrg(ctx context.Context, t *core.Trigger, reads ...db.OrgRead) error {
 	if err := r.repo.AssignUnassignedOrg(context.Background(), r.userID, r.org); err != nil {
 		return err
 	}
-	return r.Repository.UpdateTriggerInOrg(ctx, t, decided)
+	return r.Repository.UpdateTriggerInOrg(ctx, t, reads...)
+}
+
+func (r backfillBeforeWrite) CreateTriggerInOrg(ctx context.Context, t *core.Trigger, reads ...db.OrgRead) error {
+	if !r.creates {
+		return r.Repository.CreateTriggerInOrg(ctx, t, reads...)
+	}
+	if err := r.repo.AssignUnassignedOrg(context.Background(), r.userID, r.org); err != nil {
+		return err
+	}
+	return r.Repository.CreateTriggerInOrg(ctx, t, reads...)
 }
 
 // An update decided in one org is not written once a backfill commits the
@@ -325,4 +337,65 @@ func TestUpdateTrigger_ABackfillBetweenDecisionAndWriteIsRefused(t *testing.T) {
 	refused("a move to a project of the decided org", unassigned(), homeProject)
 	inPlace := unassigned()
 	refused("an update in place", inPlace, inPlace.ProjectID)
+}
+
+// noDefaultSource: the caller is a live member of home and has no default
+// org, so a trigger and projects with no org decide as none.
+type noDefaultSource struct{}
+
+func (noDefaultSource) ResolveOrgMembership(_ context.Context, _, orgID string) (accesstokenclient.OrgMembership, error) {
+	if orgID == "" {
+		return accesstokenclient.OrgMembership{}, nil
+	}
+	return accesstokenclient.OrgMembership{OrgID: orgID, Member: orgID == "home"}, nil
+}
+
+// An empty decision is no special case: with no default org, a move of an
+// unassigned trigger between two unassigned projects decides "none", and a
+// backfill that stamps the trigger and its project with acme before the
+// write refuses the move. The trigger stays where it was.
+func TestUpdateTrigger_ABackfillAfterAnEmptyDecisionIsRefused(t *testing.T) {
+	t.Parallel()
+	env := setupTriggerTest(t)
+	resolver := orgs.New(noDefaultSource{})
+	env.configure(t, func(d *Deps) { d.Orgs = resolver })
+	env.ctx = authz.WithMembership(env.ctx, resolver)
+	from, to := env.orgProject(t, nil), env.orgProject(t, nil)
+	created, err := env.createIn(env.ctx, from, nil)
+	require.NoError(t, err)
+	before, err := env.repo.GetTrigger(context.Background(), created.GetId())
+	require.NoError(t, err)
+	require.Nil(t, before.OrgID, "no default: created with no org")
+
+	env.configure(t, func(d *Deps) {
+		d.Repo = backfillBeforeWrite{Repository: d.Repo, repo: env.repo, userID: env.userID, org: "acme"}
+	})
+	_, err = env.svc.UpdateTrigger(env.ctx, connect.NewRequest(&reliantv1.UpdateTriggerRequest{
+		Id:      created.GetId(),
+		Trigger: env.definition(func(d *reliantv1.TriggerDefinition) { d.ProjectId = to }),
+	}))
+	requireDenied(t, err, connect.CodeFailedPrecondition, "")
+	after, err := env.repo.GetTrigger(context.Background(), created.GetId())
+	require.NoError(t, err)
+	assert.Equal(t, from, after.ProjectID, "the move did not land")
+	require.NotNil(t, after.OrgID)
+	assert.Equal(t, "acme", *after.OrgID)
+}
+
+// A create decided from a project with no org (the caller's default, none
+// here) is refused once a backfill stamps that project with acme before the
+// insert: nothing is stored.
+func TestCreateTrigger_ABackfillBetweenDecisionAndInsertIsRefused(t *testing.T) {
+	t.Parallel()
+	env := setupTriggerTest(t)
+	resolver := orgs.New(noDefaultSource{})
+	env.ctx = authz.WithMembership(env.ctx, resolver)
+	project := env.orgProject(t, nil)
+	env.configure(t, func(d *Deps) {
+		d.Orgs = resolver
+		d.Repo = backfillBeforeWrite{Repository: d.Repo, repo: env.repo, userID: env.userID, org: "acme", creates: true}
+	})
+	_, err := env.createIn(env.ctx, project, nil)
+	requireDenied(t, err, connect.CodeFailedPrecondition, "")
+	assert.Empty(t, env.userTriggers(t), "nothing stored")
 }

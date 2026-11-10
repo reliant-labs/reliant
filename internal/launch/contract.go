@@ -370,6 +370,10 @@ func (e *InternalError) Is(target error) bool { return target == ErrInternal }
 
 // ChatWriter creates and updates the chat a launch materializes.
 type ChatWriter interface {
+	// LockUserOrgs takes the owner's org lock for the launch's transaction,
+	// before any row lock, and re-checks the orgs a new chat's org was
+	// decided from (db.ErrOrgChanged when a backfill changed one).
+	LockUserOrgs(ctx context.Context, userID string, reads ...db.OrgRead) error
 	CreateChat(ctx context.Context, chat *db.Chat) error
 	GetChat(ctx context.Context, id string) (*db.Chat, error)
 	UpdateChat(ctx context.Context, chat *db.Chat) error

@@ -18,6 +18,7 @@ import (
 	"errors"
 
 	"github.com/reliant-labs/forge/pkg/orm"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/uptrace/bun"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -55,9 +56,14 @@ func InsertWorkflowDraft(ctx context.Context, db orm.Context, d *core.WorkflowDr
 // with its slug, updates that one's content in place and bumps its version.
 // The existing row keeps its id, source_path, created_at and forked_from (an
 // upsert must not rewrite a workflow's origin). Returns the stored row.
-func UpsertWorkflowDraftBySlug(ctx context.Context, db orm.Context, d *core.WorkflowDraft) (*core.WorkflowDraft, error) {
+//
+// It overwrites only the draft whose id is over ("": none), the row its
+// caller locked and authorized (LockWorkflowDraftBySlug) under the owner's
+// org lock: a conflict with any other row writes nothing and is
+// ErrWorkflowDraftChanged.
+func UpsertWorkflowDraftBySlug(ctx context.Context, db orm.Context, d *core.WorkflowDraft, over string) (*core.WorkflowDraft, error) {
 	row := newWorkflowDraftRow(d)
-	_, err := db.Bun().NewInsert().Model(row).
+	res, err := db.Bun().NewInsert().Model(row).
 		ExcludeColumn(WorkflowDraftFieldChatID).
 		On("CONFLICT (user_id, slug) DO UPDATE").
 		Set("name = EXCLUDED.name").
@@ -67,12 +73,55 @@ func UpsertWorkflowDraftBySlug(ctx context.Context, db orm.Context, d *core.Work
 		Set("is_hidden = EXCLUDED.is_hidden").
 		Set("updated_at = NOW()").
 		Set("version = workflow_drafts.version + 1").
+		Where("workflow_drafts.id = ?", over).
 		Returning("?TableColumns").
 		Exec(ctx)
 	if err != nil {
 		return nil, err
 	}
+	if n, err := res.RowsAffected(); err != nil {
+		return nil, err
+	} else if n == 0 {
+		return nil, ErrWorkflowDraftChanged
+	}
 	return workflowDraftToCore(row), nil
+}
+
+// ErrWorkflowDraftChanged refuses a draft write whose row is not the one its
+// caller locked and authorized.
+var ErrWorkflowDraftChanged = svcerr.Aborted("the workflow changed while it was being saved; try again")
+
+// LockWorkflowDraftBySlug row-locks the user's draft with slug for the rest
+// of the surrounding transaction and returns it, or nil when there is none.
+// Its caller holds the owner's org lock first (LockUserOrgs).
+func LockWorkflowDraftBySlug(ctx context.Context, db orm.Context, userID, slug string) (*core.WorkflowDraft, error) {
+	return findWorkflowDraft(ctx, db, func(q *bun.SelectQuery) *bun.SelectQuery {
+		return q.Where("user_id = ?", userID).Where("slug = ?", slug).For("UPDATE")
+	})
+}
+
+// LockWorkflowDraft row-locks the draft with id and returns it; a miss is
+// NotFound. Its caller holds the owner's org lock first (LockUserOrgs).
+func LockWorkflowDraft(ctx context.Context, db orm.Context, id string) (*core.WorkflowDraft, error) {
+	d, err := findWorkflowDraft(ctx, db, func(q *bun.SelectQuery) *bun.SelectQuery { return q.Where("id = ?", id).For("UPDATE") })
+	if err == nil && d == nil {
+		return nil, missing("workflow draft")
+	}
+	return d, err
+}
+
+// WorkflowDraftOwner is the user who owns the draft with id; a miss is
+// NotFound. The owner never changes, so it is read before the owner's org
+// lock is taken.
+func WorkflowDraftOwner(ctx context.Context, db orm.Context, id string) (string, error) {
+	var owners []string
+	if err := db.Bun().NewRaw(`SELECT user_id FROM workflow_drafts WHERE id = ?`, id).Scan(ctx, &owners); err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return "", err
+	}
+	if len(owners) == 0 {
+		return "", missing("workflow draft")
+	}
+	return owners[0], nil
 }
 
 // LoadWorkflowDraft reads one draft by id; a miss is sql.ErrNoRows.
@@ -212,11 +261,11 @@ func SetWorkflowDraftForkedFrom(ctx context.Context, db orm.Context, id, forkedF
 	})
 }
 
-// RemoveWorkflowDraftBySlug deletes the user's draft with slug and returns
-// it; a miss is sql.ErrNoRows.
-func RemoveWorkflowDraftBySlug(ctx context.Context, db orm.Context, userID, slug string) (*core.WorkflowDraft, error) {
+// RemoveWorkflowDraft deletes the draft with id and returns it; a miss is
+// NotFound.
+func RemoveWorkflowDraft(ctx context.Context, db orm.Context, id string) (*core.WorkflowDraft, error) {
 	return deleteWorkflowDraft(ctx, db, func(q *bun.DeleteQuery) *bun.DeleteQuery {
-		return q.Where("user_id = ?", userID).Where("slug = ?", slug)
+		return q.Where("id = ?", id)
 	})
 }
 

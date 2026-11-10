@@ -161,8 +161,10 @@ func assignUnassignedOrg(ctx context.Context, db orm.Context, userID, orgID stri
 				}
 				// One user's batches run one at a time, whichever pass
 				// they belong to, so two passes with different defaults
-				// never stamp the same user's rows concurrently.
-				if _, err := db.Bun().NewRaw("SELECT pg_advisory_xact_lock(hashtextextended('org-backfill:' || ?, 0))", userID).Exec(ctx); err != nil {
+				// never stamp the same user's rows concurrently; and never
+				// between an org-sensitive write's decision and its commit
+				// (LockUserOrgs, org_lock.go).
+				if err := LockUserOrgs(ctx, db, userID); err != nil {
 					return err
 				}
 				if err := db.Bun().NewRaw(step.sql, userID, orgID, after, batch).Scan(ctx, &ids); err != nil && !errors.Is(err, sql.ErrNoRows) {
