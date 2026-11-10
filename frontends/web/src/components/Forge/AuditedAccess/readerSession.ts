@@ -19,18 +19,27 @@ function discardConfirmations() {
 discardConfirmations();
 export const getReaderSession = () => current;
 // Synthetic readers belong to an isolated fixture subtree, never the global auth store.
-const fixtureReaders = new WeakSet<ReaderSession>();
+// Only createFixtureReader mints one (a fresh object, never `current`), so an
+// authenticated session can never become a fixture reader and outlive its epoch.
+const mintedFixtureReaders = new WeakSet<ReaderSession>();
+const mountedFixtureReaders = new WeakSet<ReaderSession>();
 const ReaderContext = createContext<ReaderSession | null>(null);
 export function FixtureReaderProvider({ reader, children }: { reader: ReaderSession; children: ReactNode }) {
-  useEffect(() => { fixtureReaders.add(reader); return () => { fixtureReaders.delete(reader); }; }, [reader]);
+  if (!mintedFixtureReaders.has(reader)) throw new Error("FixtureReaderProvider takes only a reader from createFixtureReader");
+  useEffect(() => { mountedFixtureReaders.add(reader); return () => { mountedFixtureReaders.delete(reader); }; }, [reader]);
   return createElement(ReaderContext.Provider, { value: reader }, children);
 }
 export function createFixtureReader(): ReaderSession {
-  const reader = { principalId: "synthetic-console-demo", epoch: crypto.randomUUID() };
-  fixtureReaders.add(reader);
+  const reader: ReaderSession = Object.freeze({ principalId: "synthetic-console-demo", epoch: crypto.randomUUID() });
+  mintedFixtureReaders.add(reader);
+  mountedFixtureReaders.add(reader);
   return reader;
 }
-export const isCurrentReader = (reader: ReaderSession) => !!reader.principalId && (reader === current || fixtureReaders.has(reader));
+/** The authenticated path: the captured reader IS the current session, nothing else. */
+const isAuthenticatedReader = (reader: ReaderSession) => !!reader.principalId && reader === current;
+/** The synthetic path: a reader createFixtureReader minted, still mounted. */
+const isFixtureReader = (reader: ReaderSession) => mintedFixtureReaders.has(reader) && mountedFixtureReaders.has(reader);
+export const isCurrentReader = (reader: ReaderSession) => isAuthenticatedReader(reader) || isFixtureReader(reader);
 export function setReaderPrincipal(principalId: string | null, force = false): void {
   if (!force && current.principalId === principalId) return;
   discardConfirmations(); // Never migrate a legacy/unscoped reason into a new identity.
