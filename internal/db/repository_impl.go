@@ -3967,12 +3967,33 @@ func (r *Repo) GetWorkflowDraft(ctx context.Context, id string) (*WorkflowDraft,
 	return row, nil
 }
 
+// GetWorkflowDraftBySlug is userID's workflow with slug, or (nil, nil) when
+// they have none. The store read filters on the owner; authz confirms the row
+// it returns, as GetChatRowWithUserCheck does, so a workflow in an org the
+// owner has left is core.ErrWorkflowDraftNotVisible rather than theirs to read
+// or update by its slug.
 func (r *Repo) GetWorkflowDraftBySlug(ctx context.Context, userID, slug string) (*WorkflowDraft, error) {
-	return store.FindWorkflowDraftBySlug(ctx, r.ORM(), userID, slug)
+	return visibleWorkflowDraft(ctx, userID)(store.FindWorkflowDraftBySlug(ctx, r.ORM(), userID, slug))
 }
 
+// GetWorkflowDraftByName is GetWorkflowDraftBySlug by name, ignoring case.
 func (r *Repo) GetWorkflowDraftByName(ctx context.Context, userID, name string) (*WorkflowDraft, error) {
-	return store.FindWorkflowDraftByName(ctx, r.ORM(), userID, name)
+	return visibleWorkflowDraft(ctx, userID)(store.FindWorkflowDraftByName(ctx, r.ORM(), userID, name))
+}
+
+// visibleWorkflowDraft passes an owner-filtered workflow read through authz:
+// a row authz refuses userID is core.ErrWorkflowDraftNotVisible, with its
+// slug, never the row.
+func visibleWorkflowDraft(ctx context.Context, userID string) func(*WorkflowDraft, error) (*WorkflowDraft, error) {
+	return func(draft *WorkflowDraft, err error) (*WorkflowDraft, error) {
+		if err != nil || draft == nil {
+			return draft, err
+		}
+		if !authz.CanWriteWorkflow(ctx, userID, draft) {
+			return nil, fmt.Errorf("%w: %s", core.ErrWorkflowDraftNotVisible, draft.Slug)
+		}
+		return draft, nil
+	}
 }
 
 // GetUsableWorkflowBySlug returns the runnable (complete, visible) workflow
@@ -3980,11 +4001,11 @@ func (r *Repo) GetWorkflowDraftByName(ctx context.Context, userID, name string) 
 // slug is reported as *WorkflowDraftNotRunnableError rather than hidden behind
 // "not found": the workflow exists, and the fix is to mark it complete.
 func (r *Repo) GetUsableWorkflowBySlug(ctx context.Context, userID, slug string) (*WorkflowDraft, error) {
-	usable, err := store.FindUsableWorkflowBySlug(ctx, r.ORM(), userID, slug)
+	usable, err := visibleWorkflowDraft(ctx, userID)(store.FindUsableWorkflowBySlug(ctx, r.ORM(), userID, slug))
 	if err != nil || usable != nil {
 		return usable, err
 	}
-	draft, err := store.FindWorkflowDraftBySlug(ctx, r.ORM(), userID, slug)
+	draft, err := r.GetWorkflowDraftBySlug(ctx, userID, slug)
 	if err != nil {
 		return nil, err
 	}

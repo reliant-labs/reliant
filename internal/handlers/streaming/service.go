@@ -87,6 +87,10 @@ type Service struct {
 	// Always defaultHeartbeatInterval in production; a field only so a test
 	// can observe a real heartbeat frame without waiting 30 seconds for it.
 	heartbeatInterval time.Duration
+	// reauthorizeInterval is how often an open chat stream re-reads its chat
+	// and asks authz again (defaultReauthorizeInterval in production; a field
+	// so a test can observe a revocation without waiting for it).
+	reauthorizeInterval time.Duration
 }
 
 // New creates a new streaming service instance with the supplied Deps.
@@ -95,7 +99,7 @@ func New(deps Deps) (*Service, error) {
 	if err := deps.validateDeps(); err != nil {
 		return nil, err
 	}
-	return &Service{deps: deps, heartbeatInterval: defaultHeartbeatInterval}, nil
+	return &Service{deps: deps, heartbeatInterval: defaultHeartbeatInterval, reauthorizeInterval: defaultReauthorizeInterval}, nil
 }
 
 // Name returns the service name for logging and registry.

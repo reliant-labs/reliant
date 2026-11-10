@@ -32,7 +32,12 @@ const (
 const (
 	// defaultHeartbeatInterval is Service.heartbeatInterval in production.
 	defaultHeartbeatInterval = 30 * time.Second
-	batchSize                = 100
+	// defaultReauthorizeInterval is Service.reauthorizeInterval in
+	// production: how often an open chat stream asks authz again whether its
+	// caller may still read the chat. A removed org member's stream ends
+	// within this plus orgs.CacheTTL of the removal.
+	defaultReauthorizeInterval = 15 * time.Second
+	batchSize                  = 100
 
 	// chatReplayBatchSize is how many chat updates one replay read returns
 	// and one replay frame carries. Every batch is a serial database round

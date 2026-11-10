@@ -33,6 +33,7 @@ func TestSentinelsAreClassifiedWithUnchangedIdentityAndText(t *testing.T) {
 		{ErrModelEndpointNotFound, connect.CodeNotFound, "model endpoint not found"},
 		{ErrIntegrationWriteNotFound, connect.CodeNotFound, "integration write not found"},
 		{ErrPlanNotFound, connect.CodeNotFound, "plan not found"},
+		{ErrWorkflowDraftNotVisible, connect.CodeNotFound, "workflow not found or access denied"},
 
 		{ErrWorktreeNameTaken, connect.CodeAlreadyExists, "a live worktree already has this name"},
 		{ErrConnectionNameTaken, connect.CodeAlreadyExists, "connection name already in use"},

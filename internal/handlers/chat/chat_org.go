@@ -5,6 +5,8 @@ package chat
 import (
 	"context"
 
+	"github.com/reliant-labs/reliant/internal/authz"
+	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/logging"
 )
@@ -36,4 +38,21 @@ func (s *Service) listScope(ctx context.Context, userID, requested string) (*cor
 		return nil, nil
 	}
 	return s.deps.Orgs.ListScope(ctx, userID, requested, s.deps.Repo.AssignUnassignedOrg)
+}
+
+// readableChats keeps the rows of a chat collection (a list, a search, the
+// archive) that authz lets userID read, in order. The store's query filters
+// on the owner, and on the org only when the request names one, so a member
+// removed from an org would otherwise still list that org's chats they
+// created; GetChat refuses those, and a collection must not show them either.
+// A chat with no org stays its owner's. A membership that cannot be checked
+// drops the org's rows (fail closed, logged by authz).
+func readableChats[T any](ctx context.Context, userID string, rows []T, chatOf func(T) *db.Chat) []T {
+	kept := make([]T, 0, len(rows))
+	for _, row := range rows {
+		if authz.CanReadChat(ctx, userID, chatOf(row)) {
+			kept = append(kept, row)
+		}
+	}
+	return kept
 }

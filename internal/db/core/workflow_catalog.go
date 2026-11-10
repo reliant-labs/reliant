@@ -3,7 +3,16 @@ package core
 import (
 	"fmt"
 	"time"
+
+	"github.com/reliant-labs/forge/pkg/svcerr"
 )
+
+// ErrWorkflowDraftNotVisible is a saved workflow found by its owner's slug or
+// name that authz refuses them: one in an org they are no longer a live
+// member of. It is NotFound to a client, like a workflow that does not exist,
+// but a caller that only asks whether the slug or name is TAKEN can tell it
+// apart (errors.Is): the row still occupies it.
+var ErrWorkflowDraftNotVisible = svcerr.WithMessage(svcerr.ErrNotFound, "workflow not found or access denied")
 
 // WorkflowDraft represents a user-owned workflow definition stored in the database.
 // Workflows are available across all projects. Project-specific workflows come from

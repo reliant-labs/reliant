@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -17,6 +18,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/errreason"
 	"github.com/reliant-labs/reliant/internal/launch"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -261,7 +263,12 @@ func (s *Service) workflowSlugTaken(ctx context.Context, userID, projectID, slug
 	if _, err := builtin.BuiltinWorkflowsFS.ReadFile(slug + ".yaml"); err == nil {
 		return true, nil
 	}
+	// A draft the caller may no longer see (core.ErrWorkflowDraftNotVisible)
+	// still occupies its slug and name.
 	bySlug, err := s.deps.Repo.GetWorkflowDraftBySlug(ctx, userID, slug)
+	if errors.Is(err, core.ErrWorkflowDraftNotVisible) {
+		return true, nil
+	}
 	if err != nil {
 		return false, svcerr.WrapOr(err, svcerr.Internal("failed to check existing workflow"))
 	}
@@ -269,6 +276,9 @@ func (s *Service) workflowSlugTaken(ctx context.Context, userID, projectID, slug
 		return true, nil
 	}
 	byName, err := s.deps.Repo.GetWorkflowDraftByName(ctx, userID, slug)
+	if errors.Is(err, core.ErrWorkflowDraftNotVisible) {
+		return true, nil
+	}
 	if err != nil {
 		return false, svcerr.WrapOr(err, svcerr.Internal("failed to check existing workflow name"))
 	}

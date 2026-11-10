@@ -312,6 +312,7 @@ func (s *Service) ListChats(
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list chats"))
 	}
+	chats = readableChats(ctx, userID, chats, func(c *db.Chat) *db.Chat { return c })
 
 	// The background reconciler repairs stale DB status against Temporal.
 	protoChats := make([]*reliantv1.Chat, len(chats))
@@ -688,6 +689,7 @@ func (s *Service) SearchChats(
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to search chats"))
 	}
+	chats = readableChats(ctx, userID, chats, func(c *db.Chat) *db.Chat { return c })
 
 	protoChats := make([]*reliantv1.Chat, len(chats))
 	for i, c := range chats {
@@ -711,6 +713,7 @@ func (s *Service) ListArchivedChats(
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list archived chats"))
 	}
+	archivedChats = readableChats(ctx, userID, archivedChats, func(ac *db.ArchivedChatInfo) *db.Chat { return &ac.Chat })
 
 	protoChats := make([]*reliantv1.ArchivedChat, len(archivedChats))
 	for i, ac := range archivedChats {

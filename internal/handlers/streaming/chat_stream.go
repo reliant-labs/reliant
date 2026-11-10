@@ -142,6 +142,13 @@ func (s *Service) StreamChatUpdates(
 	heartbeatTicker := time.NewTicker(s.heartbeatInterval)
 	defer heartbeatTicker.Stop()
 
+	// The open was authorized once, but the stream can outlive the caller's
+	// access: a removed org member must stop receiving the chat. Every
+	// reauthorizeInterval the stream re-reads the chat and asks authz again,
+	// and ends on a denial or on any failure to decide (fail closed).
+	reauthorizeTicker := time.NewTicker(s.reauthorizeInterval)
+	defer reauthorizeTicker.Stop()
+
 	// The transcript the live frames carried after the initial sync, by
 	// block kind, summed over the stream's life and put on the RPC span as
 	// it ends (the initial sync's own spans carry theirs).
@@ -214,6 +221,11 @@ func (s *Service) StreamChatUpdates(
 				return err
 			}
 
+		case <-reauthorizeTicker.C:
+			if err := s.reauthorizeChat(ctx, userID, chatID); err != nil {
+				return err
+			}
+
 		case <-heartbeatTicker.C:
 			if err := stream.Send(&reliantv1.ChatStreamEvent{
 				Event: &reliantv1.ChatStreamEvent_Heartbeat{
@@ -228,6 +240,23 @@ func (s *Service) StreamChatUpdates(
 			}
 		}
 	}
+}
+
+// reauthorizeChat asks again whether userID may read chatID, for an open
+// stream: nil while they may, otherwise the error that ends the stream. A
+// denial is the open's NotFound, so the client drops the chat rather than
+// reconnecting to it.
+func (s *Service) reauthorizeChat(ctx context.Context, userID, chatID string) error {
+	chat, err := s.deps.Repo.GetChatRow(ctx, chatID)
+	if err != nil {
+		return svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
+	}
+	if !authz.CanReadChat(ctx, userID, chat) {
+		logging.InfoContext(ctx, LOG_PREFIX_STREAM_CHAT+" Caller may no longer read the chat; ending its stream",
+			"userID", userID, "chatID", shortID(chatID))
+		return svcerr.NotFound("chat")
+	}
+	return nil
 }
 
 // sendInitialChatSync sends a snapshot for an initial load (sinceSeq 0),

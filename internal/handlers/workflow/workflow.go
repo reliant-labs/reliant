@@ -101,7 +101,13 @@ func (s *Service) SaveWorkflow(
 		if err != nil {
 			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get workflow draft by ID"))
 		}
-		if authz.CanWriteWorkflow(ctx, userID, draft) {
+		// A draft the caller may not write (one in an org they have left) is
+		// refused outright: falling through to the slug lookup below would
+		// find the same row again by its name.
+		if draft != nil && !authz.CanWriteWorkflow(ctx, userID, draft) {
+			return nil, svcerr.NotFound("workflow")
+		}
+		if draft != nil {
 			existingUserWorkflow = draft
 			isUpdate = true
 			isRename = draft.Slug != slug
@@ -124,6 +130,12 @@ func (s *Service) SaveWorkflow(
 		draft, err := s.deps.Repo.GetWorkflowDraftBySlug(ctx, userID, slug)
 		if err != nil {
 			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to check existing workflow"))
+		}
+		// The repository already refuses a draft authz denies
+		// (core.ErrWorkflowDraftNotVisible); this check keeps the decision
+		// here too, where the update happens.
+		if draft != nil && !authz.CanWriteWorkflow(ctx, userID, draft) {
+			return nil, svcerr.NotFound("workflow")
 		}
 		if draft != nil {
 			// Found existing workflow by slug - check if names match
@@ -466,6 +478,9 @@ func (s *Service) GetWorkflow(
 	draft, err := s.deps.Repo.GetWorkflowDraftBySlug(ctx, userID, slug)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to look up workflow"))
+	}
+	if draft != nil && !authz.CanReadWorkflow(ctx, userID, draft) {
+		return nil, svcerr.WithMessage(svcerr.ErrNotFound, fmt.Sprintf("workflow not found: %s", workflowName))
 	}
 
 	if draft == nil {
