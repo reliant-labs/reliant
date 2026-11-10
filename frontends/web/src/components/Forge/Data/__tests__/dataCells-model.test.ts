@@ -1,6 +1,8 @@
 // Copyright (c) 2025 Reliant Labs
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { setReaderPrincipal } from "../../AuditedAccess/readerSession";
+beforeEach(() => setReaderPrincipal("fixture-reader", true));
 
 import { clearAccess, isDenied, needsConfirmation, readAccess, validReason, writeAccess } from "../dataAccess-model";
 import { CELL_PREVIEW_CHARS, cellCut, cellDisplay, cutNote, isJsonType, isNumericType, shortTypeLabel } from "../dataCells-model";

@@ -1843,6 +1843,16 @@ func (r *Repo) ListWorktreesByBranch(ctx context.Context, projectID, branch stri
 	return store.ListWorktreesByBranch(ctx, r.ORM(), projectID, branch)
 }
 
+// ListFailedWorktreesForDaemon returns daemonID's FAILED workspaces created
+// since `since` whose leftover checkouts are not yet known to be gone, newest
+// first, at most limit (store.ListFailedWorktreesForDaemon).
+func (r *Repo) ListFailedWorktreesForDaemon(ctx context.Context, daemonID string, since time.Time, limit int) ([]*Worktree, error) {
+	if daemonID == "" {
+		return nil, nil
+	}
+	return store.ListFailedWorktreesForDaemon(ctx, r.ORM(), daemonID, since, limit)
+}
+
 func (r *Repo) ListWorktrees(ctx context.Context, filters WorktreeFilters) ([]*Worktree, error) {
 	return store.ListWorktrees(ctx, r.ORM(), filters)
 }

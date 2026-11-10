@@ -21,6 +21,7 @@
  */
 
 import { timestampMs, type Timestamp } from "@bufbuild/protobuf/wkt";
+import type { Client } from "@connectrpc/connect";
 
 import {
   BucketRuntimeKind,
@@ -156,8 +157,9 @@ function accessFields(access: AccessConfirmation | undefined) {
 
 const callOptions = (signal: AbortSignal | undefined) => (signal ? { signal } : undefined);
 
-export async function listBrowsableBuckets(environmentId: string, options: { signal?: AbortSignal } = {}): Promise<StorageBucketList> {
-  const res = await client().listBrowsableBuckets({ environmentId }, callOptions(options.signal));
+export function createStorageBrowserApi(browserClient: Client<typeof StorageBrowserService>) {
+async function listBrowsableBuckets(environmentId: string, options: { signal?: AbortSignal } = {}): Promise<StorageBucketList> {
+  const res = await browserClient.listBrowsableBuckets({ environmentId }, callOptions(options.signal));
   return {
     policy: POLICY_NAMES[res.policy] ?? "unknown",
     buckets: res.buckets.map((bucket) => ({
@@ -170,8 +172,8 @@ export async function listBrowsableBuckets(environmentId: string, options: { sig
   };
 }
 
-export async function listObjects(req: ListObjectsInput, options: { signal?: AbortSignal } = {}): Promise<StorageListing> {
-  const res = await client().listObjects(
+async function listObjects(req: ListObjectsInput, options: { signal?: AbortSignal } = {}): Promise<StorageListing> {
+  const res = await browserClient.listObjects(
     {
       environmentId: req.environmentId,
       bucket: req.bucket,
@@ -190,8 +192,8 @@ export async function listObjects(req: ListObjectsInput, options: { signal?: Abo
   };
 }
 
-export async function getObjectMetadata(req: ObjectInput, options: { signal?: AbortSignal } = {}): Promise<StorageObjectMeta> {
-  const res = await client().getObjectMetadata(
+async function getObjectMetadata(req: ObjectInput, options: { signal?: AbortSignal } = {}): Promise<StorageObjectMeta> {
+  const res = await browserClient.getObjectMetadata(
     { environmentId: req.environmentId, bucket: req.bucket, key: req.key, ...accessFields(req.access) },
     callOptions(options.signal)
   );
@@ -209,16 +211,16 @@ export async function getObjectMetadata(req: ObjectInput, options: { signal?: Ab
 }
 
 /** Mints a new URL on every call: never cache it, never call it but on a click. */
-export async function presignObjectDownload(req: ObjectInput, options: { signal?: AbortSignal } = {}): Promise<PresignedDownload> {
-  const res = await client().presignObjectDownload(
+async function presignObjectDownload(req: ObjectInput, options: { signal?: AbortSignal } = {}): Promise<PresignedDownload> {
+  const res = await browserClient.presignObjectDownload(
     { environmentId: req.environmentId, bucket: req.bucket, key: req.key, ...accessFields(req.access) },
     callOptions(options.signal)
   );
   return { url: res.url, filename: res.filename, size: Number(res.size), expiresAtMs: msOf(res.expiresAt) };
 }
 
-export async function previewObject(req: ObjectInput, options: { signal?: AbortSignal } = {}): Promise<StoragePreview> {
-  const res = await client().previewObject(
+async function previewObject(req: ObjectInput, options: { signal?: AbortSignal } = {}): Promise<StoragePreview> {
+  const res = await browserClient.previewObject(
     { environmentId: req.environmentId, bucket: req.bucket, key: req.key, ...accessFields(req.access) },
     callOptions(options.signal)
   );
@@ -230,3 +232,11 @@ export async function previewObject(req: ObjectInput, options: { signal?: AbortS
     content: res.body.case === "content" ? res.body.value : null,
   };
 }
+return { listBrowsableBuckets, listObjects, getObjectMetadata, presignObjectDownload, previewObject };
+}
+
+export const listBrowsableBuckets = (...args: Parameters<ReturnType<typeof createStorageBrowserApi>["listBrowsableBuckets"]>) => createStorageBrowserApi(client()).listBrowsableBuckets(...args);
+export const listObjects = (...args: Parameters<ReturnType<typeof createStorageBrowserApi>["listObjects"]>) => createStorageBrowserApi(client()).listObjects(...args);
+export const getObjectMetadata = (...args: Parameters<ReturnType<typeof createStorageBrowserApi>["getObjectMetadata"]>) => createStorageBrowserApi(client()).getObjectMetadata(...args);
+export const presignObjectDownload = (...args: Parameters<ReturnType<typeof createStorageBrowserApi>["presignObjectDownload"]>) => createStorageBrowserApi(client()).presignObjectDownload(...args);
+export const previewObject = (...args: Parameters<ReturnType<typeof createStorageBrowserApi>["previewObject"]>) => createStorageBrowserApi(client()).previewObject(...args);
