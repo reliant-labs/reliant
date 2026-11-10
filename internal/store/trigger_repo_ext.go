@@ -187,13 +187,24 @@ var triggerDefinitionColumns = []string{
 }
 
 // ReplaceTrigger rewrites a trigger's definition and stamps updated_at, or
-// returns core.ErrTriggerNotFound.
+// returns core.ErrTriggerNotFound. A trigger's org is fixed, so it is not a
+// definition column: t.OrgID only fills one the trigger does not have yet
+// (an update that moved it decided its org, see the trigger handler).
 func ReplaceTrigger(ctx context.Context, db orm.Context, t *core.Trigger) error {
 	row, err := triggerFromCore(t)
 	if err != nil {
 		return err
 	}
-	return writeTrigger(ctx, db, row, "definition", triggerDefinitionColumns...)
+	if err := writeTrigger(ctx, db, row, "definition", triggerDefinitionColumns...); err != nil {
+		return err
+	}
+	if t.OrgID == nil {
+		return nil
+	}
+	if _, err := db.Bun().NewRaw(`UPDATE triggers SET org_id = ? WHERE id = ? AND org_id IS NULL`, *t.OrgID, t.ID).Exec(ctx); err != nil {
+		return fmt.Errorf("stamp the trigger's org: %w", err)
+	}
+	return nil
 }
 
 // RemoveTrigger deletes a trigger. Deleting one that does not exist is not an
