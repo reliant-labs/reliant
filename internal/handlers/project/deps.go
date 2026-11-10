@@ -5,6 +5,7 @@ package project
 
 import (
 	"context"
+	"time"
 
 	"github.com/reliant-labs/reliant/internal/controlplane"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -45,6 +46,11 @@ type Repository interface {
 	CreateWorktree(ctx context.Context, worktree *db.Worktree) error
 	ListWorktrees(ctx context.Context, filters db.WorktreeFilters) ([]*db.Worktree, error)
 	UpdateWorktree(ctx context.Context, worktree *db.Worktree) error
+	// ListFailedWorktreesForDaemon and MergeWorktreeCleanupMetadata complete
+	// workspacecreate.FailedCreateStore: a connecting machine is asked to
+	// remove what its failed creates left behind.
+	ListFailedWorktreesForDaemon(ctx context.Context, daemonID string, since time.Time, limit int) ([]*db.Worktree, error)
+	MergeWorktreeCleanupMetadata(ctx context.Context, id string, fn func(m *db.CleanupMetadata, archived bool) bool) error
 
 	UpsertProjectConfigRecord(ctx context.Context, record *db.ProjectConfigRecord) error
 

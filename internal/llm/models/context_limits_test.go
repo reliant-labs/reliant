@@ -53,6 +53,7 @@ var catalogContextLimits = []struct {
 	{"claude-5.1-fable", "openrouter", 1000000, 128000, "OpenRouter"},
 	{"claude-5.1-fable", "reliant", 1000000, 128000, "Anthropic fable-5-1 (gateway)"},
 	{"claude-5.1-fable", "vertexai", 1000000, 128000, "Vertex claude/fable-5-1"},
+	{"claude-5.2-fable", "claude", 1000000, 128000, "Claude subscription fable-5-2 (fable-5.1's limits)"},
 	{"claude-4.8-opus", "anthropic", 1000000, 128000, "Anthropic opus-4-8"},
 	{"claude-4.8-opus", "claude", 1000000, 128000, "Claude subscription opus-4-8"},
 	{"claude-4.8-opus", "openrouter", 1000000, 128000, "OpenRouter"},

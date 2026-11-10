@@ -8,7 +8,8 @@
  */
 
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { setReaderPrincipal } from "../../AuditedAccess/readerSession";
 import userEvent from "@testing-library/user-event";
 import { Code } from "@connectrpc/connect";
 
@@ -26,6 +27,47 @@ afterEach(() => window.sessionStorage.clear());
 const described = (api: ReturnType<typeof createDataFixtureApi>) => api.calls.filter((call) => call.method === "describeDatabase");
 
 describe("an audited environment", () => {
+  it("requires the next reader's own reason and fresh reads without displaying the previous reader's cache", async () => {
+    writeAccess("env-prod", "Reader A's investigation");
+    const api = createDataFixtureApi({ onlyShop: true });
+    renderBrowser(api, { db: "shop", table: "public.orders" }, PROD);
+    await waitFor(() => expect(screen.getByTestId("data-grid")).toHaveAttribute("data-state", "ready"));
+    expect(screen.getAllByTestId("data-row")).toHaveLength(50);
+    const reads = browseCalls(api).length;
+    act(() => setReaderPrincipal("reader-b"));
+    expect(screen.queryAllByTestId("data-row")).toHaveLength(0);
+    expect(await screen.findByRole("dialog")).toHaveTextContent("Reading prod's data is audited");
+    expect(readAccess("env-prod")).toBeNull();
+    expect(browseCalls(api)).toHaveLength(reads);
+    await userEvent.type(screen.getByTestId("data-access-reason"), "Reader B's investigation");
+    fireEvent.click(screen.getByTestId("data-access-confirm"));
+    await waitFor(() => expect(screen.getByTestId("data-grid")).toHaveAttribute("data-state", "ready"));
+    expect(described(api)).toHaveLength(2);
+    expect(browseCalls(api).at(-1)).toMatchObject({ access: { reason: "Reader B's investigation" } });
+    act(() => setReaderPrincipal(null));
+    expect(screen.getByTestId("data-reader-required")).toBeInTheDocument();
+    expect(screen.queryAllByTestId("data-row")).toHaveLength(0);
+  });
+
+  it("discards a previous reader's late schema completion before it can start any row reads", async () => {
+    writeAccess("env-prod", "Reader A");
+    const fixture = createDataFixtureApi({ onlyShop: true });
+    let release: (() => void) | undefined;
+    const pending = new Promise<void>((resolve) => { release = resolve; });
+    const describe = vi.fn(async (...args: Parameters<typeof fixture.describeDatabase>) => {
+      await pending;
+      return fixture.describeDatabase(...args);
+    });
+    renderBrowser({ ...fixture, describeDatabase: describe }, { db: "shop", table: "public.orders" }, PROD);
+    await waitFor(() => expect(describe).toHaveBeenCalledTimes(1));
+    act(() => setReaderPrincipal("reader-b"));
+    await screen.findByRole("dialog");
+    await act(async () => release!());
+    expect(screen.queryAllByTestId("data-row")).toHaveLength(0);
+    expect(browseCalls(fixture)).toHaveLength(0);
+    expect(screen.getByTestId("data-needs-reason")).toBeInTheDocument();
+  });
+
   it("asks for a reason, naming the environment, before reading anything", async () => {
     const api = createDataFixtureApi({ onlyShop: true });
     renderBrowser(api, { db: "shop", table: "public.orders" }, PROD);

@@ -121,9 +121,18 @@ func (c *Client) IntrospectAccount(ctx context.Context, token string) (auth.Acce
 	return auth.AccessTokenAccount{Principal: p, Email: strings.TrimSpace(out.ActingUserEmail)}, nil
 }
 
+// ErrNoRecognisedScope is an active token that resolved to no scope this
+// server recognises: refused, never authenticated as nothing. A token whose
+// ceiling holds only environment-bound grants resolves so (the control plane
+// clips it to org-wide grants), which ExchangeToken reports as such.
+var ErrNoRecognisedScope = errors.New("the token carries no scope this server recognises")
+
 // principal maps an active introspection onto forge's principal.
 func (out introspectResponse) principal() (*fat.Principal, error) {
 	scopes := wildcardScopes(out.Scopes)
+	if !out.AllScopes && len(out.Scopes) == 0 {
+		return nil, fmt.Errorf("accesstokenclient: token %s: %w", out.TokenID, ErrNoRecognisedScope)
+	}
 	if !out.AllScopes {
 		var err error
 		if scopes, err = fat.NewSet(out.Scopes); err != nil {
@@ -133,7 +142,7 @@ func (out introspectResponse) principal() (*fat.Principal, error) {
 		}
 	}
 	if len(scopes) == 0 {
-		return nil, fmt.Errorf("accesstokenclient: token %s carries no scope this server recognises", out.TokenID)
+		return nil, fmt.Errorf("accesstokenclient: token %s: %w", out.TokenID, ErrNoRecognisedScope)
 	}
 	p := &fat.Principal{
 		TokenID:      out.TokenID,

@@ -81,9 +81,6 @@ func TestTransactionOpenersBeginAtTheirLevel(t *testing.T) {
 		{"orm.Client.RunTx(orm.Serializable)", serializable, func(ctx context.Context) error { return p.ORM.RunTx(ctx, orm.Serializable, noop) }},
 
 		// Serializable Repository writers.
-		{"Repo.CreateChatUpdate", serializable, func(ctx context.Context) error {
-			return p.Repo.CreateChatUpdate(ctx, "chat-iso", reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_MESSAGE, "e", `{}`)
-		}},
 		// An upsert plus a stale-row delete; the 40001 retry is harmless
 		// (no effect outside the database).
 		{"Repo.ReplaceIntegrationAccess", serializable, func(ctx context.Context) error {
@@ -92,6 +89,11 @@ func TestTransactionOpenersBeginAtTheirLevel(t *testing.T) {
 
 		// READ COMMITTED: correctness from row/advisory locks or a single
 		// allocating statement, never from snapshot isolation.
+		// One counter row per chat; its row lock keeps sequence order equal
+		// to commit order (Repo.CreateChatUpdate says why not SERIALIZABLE).
+		{"Repo.CreateChatUpdate", readCommitted, func(ctx context.Context) error {
+			return p.Repo.CreateChatUpdate(ctx, "chat-iso", reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_MESSAGE, "e", `{}`)
+		}},
 		{"Repo.CreateUserUpdate", readCommitted, func(ctx context.Context) error {
 			return p.Repo.CreateUserUpdate(ctx, &db.UserUpdate{
 				UserID: storetest.SeedUserID, UpdateType: db.UserUpdateChatActivityChanged,

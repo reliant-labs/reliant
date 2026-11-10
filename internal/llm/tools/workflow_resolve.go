@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/rctx"
 )
@@ -46,7 +47,7 @@ func resolveWorkflowDraft(ctx *rctx.ToolContext, repo workflowDraftLookup, idOrN
 			// user's draft is reported identically: a UUID must not confirm
 			// that a stranger's workflow exists.
 			draft, err := repo.GetWorkflowDraft(ctx, idOrName)
-			if err == nil && draft != nil && draft.UserID == userID {
+			if err == nil && authz.CanReadWorkflow(ctx, userID, draft) {
 				return draft, nil
 			}
 			return nil, workflowNotFoundError(idOrName)

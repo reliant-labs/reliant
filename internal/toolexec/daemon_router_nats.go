@@ -1356,11 +1356,25 @@ func (e daemonReportedFailure) Is(target error) bool { return target == errDaemo
 // forge.topology and fs.get_tree for a path only their laptop had produced 70
 // ERROR issue events in two days (2026-10-23..25). Any other daemon failure
 // keeps no opinion (svcerr.ClassNone), so its code decides.
+//
+// The daemon refusing a credential store (daemonpolicy.ErrCredentialFile,
+// ErrViewerCredential) is a user error too: the daemon's own policy said no to
+// what a tool or the file viewer asked for, as designed. Logged as a server
+// fault it was an ERROR "machinewake.AfterFailure" issue (prod issue
+// 1e396220, 2026-11-09) for a refusal that worked.
 func (e daemonReportedFailure) ErrorClass() svcerr.Class {
-	if IsMissingPathText(string(e)) {
+	if IsMissingPathText(string(e)) || isCredentialRefusalText(string(e)) {
 		return svcerr.ClassUser
 	}
 	return svcerr.ClassNone
+}
+
+// isCredentialRefusalText reports whether a daemon's failure text is its
+// refusal to read or write a credential store. The refusal crosses the wire
+// as text, so its sentinel's message is what there is to match.
+func isCredentialRefusalText(text string) bool {
+	return strings.Contains(text, daemonpolicy.ErrCredentialFile.Error()) ||
+		strings.Contains(text, daemonpolicy.ErrViewerCredential.Error())
 }
 
 // missingPathMarkers are how a daemon's error text says "that path does not

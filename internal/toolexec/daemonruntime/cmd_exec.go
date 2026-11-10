@@ -17,6 +17,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/daemon"
 	"github.com/reliant-labs/reliant/internal/daemonpolicy"
 	"github.com/reliant-labs/reliant/internal/diskwatch"
+	"github.com/reliant-labs/reliant/internal/ghshim"
 	"github.com/reliant-labs/reliant/internal/heavyjob"
 	"github.com/reliant-labs/reliant/internal/llm/tools/shell"
 	"github.com/reliant-labs/reliant/internal/osutil"
@@ -127,6 +128,9 @@ func handleExecRun(ctx context.Context, payload []byte) ([]byte, error) {
 		return nil, err
 	}
 	cmd.Env = daemonpolicy.ChildEnv(ctx, req.Env, credentials)
+	// A chat's command finds the gh shim first on PATH, so a pull request it
+	// opens with `gh pr create` names the chat (internal/ghshim).
+	cmd.Env = ghshim.Default().Env(cmd.Env)
 
 	// A heavy command runs under the slot wrapper, waiting for one of the
 	// machine's heavy slots first; its timeout counts the wait. On a nearly

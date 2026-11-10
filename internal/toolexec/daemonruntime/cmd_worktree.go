@@ -535,8 +535,14 @@ func diagnoseWorktreeAdd(ctx context.Context, repoPath, branch, base string, che
 // feat/x instead of <new>, and succeeds: the worktree row records <new>, a
 // branch that was never made. So base is resolved here, in order:
 //
-//  1. refs/heads/<base>, the local branch;
-//  2. refs/remotes/origin/<base>, origin's copy;
+//  1. refs/heads/<base>, the local branch — unless origin's copy is strictly
+//     ahead of it (the local branch is an ancestor of origin's), when
+//     origin's copy is used instead. A local main nobody fast-forwarded
+//     holds nothing origin lacks, and branching from it put new work weeks
+//     behind the tip (agents' bug reports, 2026-11-06..09). A local branch
+//     with commits of its own (ahead, or diverged) is the user's, and wins;
+//  2. refs/remotes/origin/<base>, origin's copy, as this clone last fetched
+//     it (nothing is fetched for a base this clone already has);
 //  3. anything else that names a commit — a tag, a sha, an explicit remote
 //     ref — as the commit id it names;
 //  4. origin's <base>, fetched (that one ref) when this clone has never seen
@@ -553,10 +559,14 @@ func resolveWorktreeStartPoint(ctx context.Context, repoPath, base string) (star
 	isBranch := gitRefFormatValid(ctx, repoPath, "refs/heads/"+base)
 	local, remote := "refs/heads/"+base, "refs/remotes/origin/"+base
 	if isBranch {
-		if gitRefExists(ctx, repoPath, local) {
+		hasLocal, hasRemote := gitRefExists(ctx, repoPath, local), gitRefExists(ctx, repoPath, remote)
+		if hasLocal && hasRemote && gitStrictlyBehind(ctx, repoPath, local, remote) {
+			return remote, true
+		}
+		if hasLocal {
 			return local, true
 		}
-		if gitRefExists(ctx, repoPath, remote) {
+		if hasRemote {
 			return remote, true
 		}
 	}
@@ -578,6 +588,28 @@ func gitRefFormatValid(ctx context.Context, repoPath, ref string) bool {
 	cmd := exec.CommandContext(ctx, "git", "check-ref-format", ref)
 	cmd.Dir = repoPath
 	return cmd.Run() == nil
+}
+
+// gitStrictlyBehind reports whether ref is an ancestor of other and not the
+// same commit: other holds everything ref does, and more. Any error (an
+// unrelated history, a git that cannot answer) reports false, which keeps
+// ref.
+func gitStrictlyBehind(ctx context.Context, repoPath, ref, other string) bool {
+	// Both are full refs this file built (refs/heads/…, refs/remotes/…), so
+	// neither can be read as an option. (rev-parse echoes --end-of-options
+	// rather than consuming it, on git 2.43.)
+	revs := exec.CommandContext(ctx, "git", "rev-parse", ref+"^{commit}", other+"^{commit}")
+	revs.Dir = repoPath
+	out, err := revs.Output()
+	if err != nil {
+		return false
+	}
+	if shas := strings.Fields(string(out)); len(shas) != 2 || shas[0] == shas[1] {
+		return false
+	}
+	ancestor := exec.CommandContext(ctx, "git", "merge-base", "--is-ancestor", ref, other)
+	ancestor.Dir = repoPath
+	return ancestor.Run() == nil
 }
 
 // gitRefExists reports whether the full ref exists.
@@ -1335,6 +1367,30 @@ type worktreeRecreateResponse struct {
 	// RestoredFromQuarantine names checkouts that were parked and moved back
 	// instead of being recreated.
 	RestoredFromQuarantine []string `json:"restored_from_quarantine,omitempty"`
+	// CaptureApplied names the checkouts (by rel) whose reclaim capture was
+	// put back; CaptureNote says so, and names any capture that could not be.
+	CaptureApplied []string `json:"capture_applied,omitempty"`
+	CaptureNote    string   `json:"capture_note,omitempty"`
+}
+
+func relName(rel string) string {
+	if rel == "" {
+		return "the checkout"
+	}
+	return rel
+}
+
+// captureNote is RestoredWork for the chat's notice: what came back from
+// the reclaim captures, and what is kept on a ref because it could not.
+func captureNote(applied, kept []string) string {
+	var parts []string
+	if len(applied) > 0 {
+		parts = append(parts, "the work "+strings.Join(applied, ", ")+" held when it was reclaimed (uncommitted and staged changes, untracked files) was put back from its capture")
+	}
+	if len(kept) > 0 {
+		parts = append(parts, "the work of "+strings.Join(kept, "; ")+" was NOT put back; restore it with `reliant worktree restore <ref> --repo <repo> --to <dir>`")
+	}
+	return strings.Join(parts, "; ")
 }
 
 func handleWorktreeRecreate(ctx context.Context, payload []byte) ([]byte, error) {
@@ -1447,6 +1503,33 @@ func recreateWorktree(ctx context.Context, req worktreeRecreateRequest) worktree
 		}
 	}
 
+	// A checkout the machine sweep reclaimed while its chat was idle gets its
+	// capture back first: everything it held then, staged and unstaged apart
+	// (worktreereclaim.ApplyCapture). The newest capture of exactly this path
+	// is applied, once; it is then moved to refs/reliant/restored/.
+	fromCapture := map[int]bool{}
+	if req.WorktreeID != "" {
+		var applied, kept []string
+		for i, repo := range repos {
+			if created[i] == "" {
+				continue
+			}
+			info, ok := worktreereclaim.LatestCapture(ctx, repo.RepoPath, req.WorktreeID, created[i])
+			if !ok {
+				continue
+			}
+			fromCapture[i] = true
+			if err := worktreereclaim.ApplyCapture(ctx, created[i], info); err != nil {
+				kept = append(kept, fmt.Sprintf("%s (kept at %s in %s: %v)", relName(repo.Rel), info.Ref, repo.RepoPath, err))
+				logging.WarnContext(ctx, "worktree recreated but its reclaim capture was not applied", "ref", info.Ref, "error", err)
+				continue
+			}
+			resp.CaptureApplied = append(resp.CaptureApplied, repo.Rel)
+			applied = append(applied, relName(repo.Rel))
+		}
+		resp.CaptureNote = captureNote(applied, kept)
+	}
+
 	// Put back the work each checkout had. Applied per checkout, from that
 	// checkout's own repository, and reported honestly: the refs are only safe
 	// to forget once EVERY one of them was re-applied.
@@ -1454,7 +1537,7 @@ func recreateWorktree(ctx context.Context, req worktreeRecreateRequest) worktree
 	anySnapshot := false
 	if req.WorktreeID != "" {
 		for i, repo := range repos {
-			if created[i] == "" {
+			if created[i] == "" || fromCapture[i] {
 				continue
 			}
 			ref := worktreereclaim.LatestSnapshot(ctx, repo.RepoPath, req.WorktreeID, snapshotRefsFor(req.WorktreeID, repo, req.SnapshotRefs))

@@ -16,6 +16,14 @@ Recorded target: merged Forge main
 - #1997: `50e2684dd3a22f24f93210aee87f069982776c9f`
 - #2000: `25d82dfda4481503bb29913da4c26dc6ea7b280b`
 
+Reconciled `origin/main` at `c00fa76d7` with a merge commit, preserving both
+remote PR commits and upstream work. The only text conflicts were `go.mod`
+and `go.sum`: retained the new Forge pin and main's newer SDK pin
+`v0.0.0-20261108222230-d52105107cab`. Re-ran canonical scoped pin
+(build/generate/docs), scoped CLI/root tests and scoped lint on that merge.
+The infrastructure bot removed its hold while this repair was running; this
+operator did not remove or add any queue/review label.
+
 ## RC-09: newly gating lint transitions
 
 Compared the **original consumer pin** `9caded4a37d5b0fc2c5c9d86a89900175d4af648`
