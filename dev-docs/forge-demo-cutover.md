@@ -1,4 +1,12 @@
-# demo.reliantlabs.io → its own env: the cutover runbook
+# demo.reliantlabs.io: the cutover runbook
+
+> **Since 2026-11-10 the demo ships with prod.** Owner decision: "put the demo into the prod
+> env, so it releases with prod". control-plane's prod env declares `forge-demo`
+> (`control-plane/deploy/kcl/lib/reliant_web.k`). It is the same demo build as below, from
+> the same pinned reliant commit as reliant-web, so every rc-train promotion ships it by
+> digest. Read [Into prod](#into-prod-2026-11-10) first. The `demo` env and the rest of this
+> page are the previous path: deprecated, and kept working until the retirement follow-up.
+
 
 Run every command from a reliant checkout of `main` that contains `deploy/kcl/demo`, with the
 tenant-zero credential. Until step 3 passes its checks, demo.reliantlabs.io stays on
@@ -121,3 +129,68 @@ deprecated but kept working after step 4 too).
 
 - **control-plane** `deploy/kcl/prod/main.k`: `_demo_url` is in `_cors_origins` "for the phase-2 demo-data gateway and for the previous build's calls". After the cutover, the demo calls no API, so it can go (owner's call: a prod config change).
 - **Phase 2**, a live demo-data gateway: set `DEMO_DATA_SOURCE=remote` and `DEMO_DATA_URL=<gateway>` in `deploy/kcl/demo/main.k`. A CORS entry would then be needed on the gateway, not on prod.
+
+## Into prod (2026-11-10)
+
+The alternatives considered, and why each was rejected (a second promote step for the `demo` env, a demo declaration imported from reliant's KCL, serving it from reliant-web by hostname), are in the control-plane PR that made this change.
+
+
+### What changes
+
+| | `demo` env (deprecated) | prod |
+|---|---|---|
+| Declared in | reliant `deploy/kcl/demo/main.k` | control-plane `deploy/kcl/lib/reliant_web.k` `forge_demo`, listed in `deploy/kcl/prod/main.k` `frontends` |
+| Built from | the reliant checkout you deploy from (`path`) | reliant-web's `GitSource`: one literal, so `task pin:reliant` and the train's pins move both builds together |
+| Shipped by | `forge env build/deploy demo`, by hand | the rc-train: `forge env build prod` at the cut, `forge env deploy prod` at the promote |
+| Activation | when deployed | `release_dependencies = {}`. The demo calls no API, so it does not wait for the server rollout (reliant-web does) |
+| Runtime config | `DEMO_*`, `OTEL_*` | the same, plus `AUTH_MODE = "self-hosted"`. forge requires a cross-repo document to state its mode selector, and `self-hosted` is the same app as unset. The platform's `ENVIRONMENT` reads `prod`. |
+
+Neither the demo bundle nor the build target changes. A demo fix lands on reliant `main`, and
+the next release ships it. Label the PR `release:asap` to ship sooner.
+
+### The one-time domain move
+
+Do this after the first prod promotion whose release carries `forge-demo`. Until then the
+domain stays on the `demo` env, so there is no gap. Run from a control-plane checkout at
+that release:
+
+```bash
+reliant forge env status prod                        # forge-demo: its *.sites.reliantlabs.dev URL
+node ../reliant/frontends/web/scripts/demo/smoke-demo-site.mjs https://<that sites URL>
+reliant forge domain bind demo.reliantlabs.io --env prod --target forge-demo
+reliant forge domain show demo.reliantlabs.io --env prod   # serving: forge-demo in prod; records "ok"
+```
+
+DNS does not change. The verification and the edge certificate belong to the domain, as
+in step 3 above.
+
+### Proof that the demo is served from the prod release
+
+```bash
+# control-plane checkout at the promoted release: /version.json's commit = the pinned
+# reliant ref, served through the edge (via: 1.1 google), config.js uncached. Exit 0.
+scripts/check-web-version.sh --url https://demo.reliantlabs.io
+node ../reliant/frontends/web/scripts/demo/smoke-demo-site.mjs https://demo.reliantlabs.io
+```
+
+`forge obs check prod` does not judge the demo: it judges server spans. Once the domain has
+moved, `scripts/verify-prod-release.sh` should run the `check-web-version.sh` line above on
+every promotion (follow-up). Adding it before the move would fail every promotion, because
+the domain still serves the `demo` env's older build.
+
+### Rollback
+
+- **Domain**: back to the `demo` env, which keeps serving its last release until it is retired:
+  `reliant forge domain bind demo.reliantlabs.io --env demo --target forge-demo`. It is
+  instant, and DNS does not change.
+- **A prod rollback below the first release that carries `forge-demo`** drops prod's demo
+  site. Rebind the domain to the `demo` env first. Do not raise prod's rollback floor for
+  it: floors gate migration compatibility, not a static site.
+
+### Retiring the `demo` env (follow-up)
+
+Do this once prod has served the domain through at least one more release:
+
+- delete `deploy/kcl/demo/` and `.github/scripts/forge-demo-env.test.mjs`;
+- delete the env on the control plane;
+- drop this page's previous-path sections.
