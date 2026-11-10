@@ -60,7 +60,8 @@ const runRowsSQL = `
         COALESCE(c.display_state, 1)::integer AS display_state,
         c.state AS chat_state,
         COALESCE(pe.parent_chat_id, '')::text AS parent_chat_id,
-        pc.title AS parent_chat_title
+        pc.title AS parent_chat_title,
+        c.org_id
     FROM chats_with_activity c
     LEFT JOIN workflows rw ON rw.id = c.workflow_id
     LEFT JOIN triggers t ON t.id = c.trigger_id AND t.user_id = c.user_id
@@ -131,6 +132,14 @@ func ListRuns(ctx context.Context, db orm.Context, filters core.RunListFilters) 
 		q = q.Where("r.chat_state IS DISTINCT FROM ?", core.ChatStateArchived)
 	}
 	q = whereProjectAndWorkflows(q, filters)
+	if filters.Org != nil {
+		// A run's org is its chat's (workflows_inherit_chat_org).
+		if filters.Org.IncludeUnassigned {
+			q = q.Where("(r.org_id = ? OR r.org_id IS NULL)", filters.Org.OrgID)
+		} else {
+			q = q.Where("r.org_id = ?", filters.Org.OrgID)
+		}
+	}
 	if filters.TriggerID != nil {
 		q = q.Where("r.trigger_id = ?", *filters.TriggerID)
 	}
@@ -326,6 +335,8 @@ type runRow struct {
 	ChatState       *core.ChatState          `bun:"chat_state"`
 	ParentChatID    string                   `bun:"parent_chat_id"`
 	ParentChatTitle *string                  `bun:"parent_chat_title"`
+	// OrgID is the run's chat's org, read only to filter (RunListFilters.Org).
+	OrgID *string `bun:"org_id"`
 }
 
 func runItems(rows []runRow) []*core.RunListItem {

@@ -330,6 +330,19 @@ type OrgScope struct {
 	IncludeUnassigned bool
 }
 
+// Includes reports whether a row of org orgID (nil: none yet) is in the
+// scope. A nil scope includes everything. For a list filtered in memory; a
+// store query applies the same rule in SQL.
+func (s *OrgScope) Includes(orgID *string) bool {
+	if s == nil {
+		return true
+	}
+	if orgID == nil {
+		return s.IncludeUnassigned
+	}
+	return *orgID == s.OrgID
+}
+
 // WorktreeFilters contains options for filtering worktrees.
 type WorktreeFilters struct {
 	ProjectID *string

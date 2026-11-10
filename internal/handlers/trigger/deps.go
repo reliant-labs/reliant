@@ -19,10 +19,23 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/launch"
+	"github.com/reliant-labs/reliant/internal/orgs"
 )
 
 // Repository is everything the trigger handlers read and write.
+// OrgResolver answers the org questions of these rpcs. *orgs.Resolver is
+// one; nil (or a nil *orgs.Resolver) is a deployment with no orgs.
+type OrgResolver interface {
+	Named(ctx context.Context, userID, requested string) (string, error)
+	DefaultOrg(ctx context.Context, userID string) (string, error)
+	ActingOrg(ctx context.Context, userID, requested string) (string, error)
+	ListScope(ctx context.Context, userID, requested string, stamp orgs.Backfill) (*core.OrgScope, error)
+}
+
 type Repository interface {
+	// AssignUnassignedOrg stamps the caller's rows that have no org with
+	// their default org (the lazy backfill, orgs.ListScope).
+	AssignUnassignedOrg(ctx context.Context, userID, orgID string) error
 	RunTx(context.Context, orm.TxPolicy, func(context.Context) error) error
 	LockActivationDependencies(context.Context, string, string) error
 	ListSettingsByKey(context.Context, string, string) ([]*db.Setting, error)

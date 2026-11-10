@@ -47,8 +47,10 @@ type orgBackfillStep struct {
 }
 
 // orgBackfillSteps run in order: every project of the user first, then the
-// chats, each of which takes its project's committed org (never a default of
-// its own), so a chat and its project agree however passes interleave.
+// chats and triggers, each of which takes its project's committed org (never
+// a default of its own), so they agree with their project however passes
+// interleave. Saved workflows belong to no project and take the default. Runs
+// come last and take their chat's committed org.
 var orgBackfillSteps = []orgBackfillStep{
 	{"projects", `
 WITH batch AS (
@@ -80,12 +82,58 @@ WITH batch AS (
     RETURNING c.id
 )
 SELECT id FROM stamped ORDER BY id`},
+	// A trigger in a project takes its project's committed org, as a chat
+	// does, and waits for a project still unassigned.
+	{"triggers", `
+WITH batch AS (
+    SELECT t.id FROM triggers t
+    LEFT JOIN projects p ON p.id = t.project_id
+    WHERE t.user_id = ?0 AND t.org_id IS NULL AND t.id > ?2
+      AND (p.id IS NULL OR p.org_id IS NOT NULL)
+    ORDER BY t.id LIMIT ?3
+    FOR UPDATE OF t SKIP LOCKED
+), stamped AS (
+    UPDATE triggers t SET org_id = COALESCE((SELECT p.org_id FROM projects p WHERE p.id = t.project_id), ?1)
+    FROM batch WHERE t.id = batch.id
+    RETURNING t.id
+)
+SELECT id FROM stamped ORDER BY id`},
+	{"saved workflows", `
+WITH batch AS (
+    SELECT id FROM workflow_drafts
+    WHERE user_id = ?0 AND org_id IS NULL AND id > ?2
+    ORDER BY id LIMIT ?3
+    FOR UPDATE SKIP LOCKED
+), stamped AS (
+    UPDATE workflow_drafts d SET org_id = ?1
+    FROM batch WHERE d.id = batch.id
+    RETURNING d.id
+)
+SELECT id FROM stamped ORDER BY id`},
+	// A run's org is its chat's committed org; runs carry no user, so the
+	// batch is drawn through the user's chats (idx_workflows_chat_id). ?1 is
+	// unused.
+	{"runs", `
+WITH batch AS (
+    SELECT w.id FROM workflows w
+    JOIN chats c ON c.id = w.chat_id
+    WHERE c.user_id = ?0 AND c.org_id IS NOT NULL AND w.org_id IS NULL AND w.id > ?2
+    ORDER BY w.id LIMIT ?3
+    FOR UPDATE OF w SKIP LOCKED
+), stamped AS (
+    UPDATE workflows w SET org_id = c.org_id
+    FROM batch, chats c WHERE w.id = batch.id AND c.id = w.chat_id
+    RETURNING w.id
+)
+SELECT id FROM stamped ORDER BY id`},
 }
 
-// AssignUnassignedOrg gives userID's projects and chats that have no org yet
-// orgID, their default org: the lazy backfill of the rows written before orgs
-// (internal/orgs ListScope). It only ever fills NULL, so it is idempotent and
-// never moves a row between orgs.
+// AssignUnassignedOrg gives userID's projects, chats, triggers, saved
+// workflows and runs that have no org yet orgID, their default org: the lazy
+// backfill of the rows written before orgs (internal/orgs ListScope). A chat
+// or trigger in a project takes the project's org, so they agree with their
+// project, and a run takes its chat's. It only ever fills NULL, so it is
+// idempotent and never moves a row between orgs.
 //
 // It stamps in bounded batches (OrgBackfillBatch rows), each its own
 // transaction under a short statement_timeout and a per-user advisory lock,
