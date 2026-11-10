@@ -148,21 +148,46 @@ The alternatives considered, and why each was rejected (a second promote step fo
 Neither the demo bundle nor the build target changes. A demo fix lands on reliant `main`, and
 the next release ships it. Label the PR `release:asap` to ship sooner.
 
+### The domain bind contract
+
+What the move and the rollback rely on (forge's `forge domain`, `internal/cli/domain_cmd.go`):
+
+- A domain is an org resource with **at most one binding**: one environment and one target in
+  it. The move is not two envs sharing the domain.
+- `forge domain bind` **replaces** whatever binding the domain has, in one call
+  (`CreateDomainBinding`). There is no unbind step first, so there is no moment where the domain
+  serves nothing. This is the same operation step 3 above used to move the domain from
+  control-plane `prod/reliant-web` to reliant `demo`.
+- A binding is not a deployment. Rebinding the domain away from the `demo` env leaves the env's
+  `forge-demo` site deployed and serving on its `*.sites.reliantlabs.dev` URL. That deployed site
+  is the rollback target, and the old binding is not kept anywhere. Rolling back is one more
+  `bind`.
+- `--env` is resolved inside **the project of the checkout you run from**. `--env prod` must run
+  from a control-plane checkout, and `--env demo` from a reliant checkout.
+- The binding carries its HSTS policy, and a rebind without `--hsts-include-subdomains` turns
+  that policy off. demo.reliantlabs.io was bound without the flag (step 3 above), so neither bind
+  below passes it. Check the `hsts:` line of `domain show` before each bind and keep it the same.
+
 ### The one-time domain move
 
 Do this after the first prod promotion whose release carries `forge-demo`. Until then the
-domain stays on the `demo` env, so there is no gap. Run from a control-plane checkout at
-that release:
+domain stays on the `demo` env, so there is no gap.
 
 ```bash
+# reliant checkout: confirm the rollback target is deployed and serving before moving away from it
+forge domain show demo.reliantlabs.io --env demo     # serving: forge-demo in <demo env id>; note hsts
+forge env status demo                                # forge-demo: its *.sites.reliantlabs.dev URL
+node frontends/web/scripts/demo/smoke-demo-site.mjs https://<demo's sites URL>
+
+# control-plane checkout at that release: check prod's copy, then move the binding (replaces demo's)
 reliant forge env status prod                        # forge-demo: its *.sites.reliantlabs.dev URL
-node ../reliant/frontends/web/scripts/demo/smoke-demo-site.mjs https://<that sites URL>
+node ../reliant/frontends/web/scripts/demo/smoke-demo-site.mjs https://<prod's sites URL>
 reliant forge domain bind demo.reliantlabs.io --env prod --target forge-demo
 reliant forge domain show demo.reliantlabs.io --env prod   # serving: forge-demo in prod; records "ok"
 ```
 
 DNS does not change. The verification and the edge certificate belong to the domain, as
-in step 3 above.
+in step 3 above, so they survive every rebind.
 
 ### Proof that the demo is served from the prod release
 
@@ -180,9 +205,18 @@ the domain still serves the `demo` env's older build.
 
 ### Rollback
 
-- **Domain**: back to the `demo` env, which keeps serving its last release until it is retired:
-  `reliant forge domain bind demo.reliantlabs.io --env demo --target forge-demo`. It is
-  instant, and DNS does not change.
+- **Domain**: back to the `demo` env. Its `forge-demo` site stays deployed after the move (a
+  binding is not a deployment; see the contract above), so the rollback is one rebind, which
+  replaces prod's binding. Run it from a reliant checkout, because `--env demo` resolves in
+  reliant's project:
+
+  ```bash
+  node frontends/web/scripts/demo/smoke-demo-site.mjs https://<demo's sites URL>   # still serving
+  forge domain bind demo.reliantlabs.io --env demo --target forge-demo
+  forge domain show demo.reliantlabs.io --env demo   # serving: forge-demo in <demo env id>; records "ok"
+  ```
+
+  It takes effect at once, and DNS does not change.
 - **A prod rollback below the first release that carries `forge-demo`** drops prod's demo
   site. Rebind the domain to the `demo` env first. Do not raise prod's rollback floor for
   it: floors gate migration compatibility, not a static site.
