@@ -34,6 +34,11 @@ const (
 	defaultHeartbeatInterval = 30 * time.Second
 	batchSize                = 100
 
+	// defaultReauthorizeInterval is Service.reauthorizeInterval in
+	// production: an open chat stream of a removed org member ends within
+	// orgs.CacheTTL (30s) plus this.
+	defaultReauthorizeInterval = 10 * time.Second
+
 	// chatReplayBatchSize is how many chat updates one replay read returns
 	// and one replay frame carries. Every batch is a serial database round
 	// trip before the client is caught up, so a reopen maxChatReplayGap

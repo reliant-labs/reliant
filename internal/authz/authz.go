@@ -405,6 +405,20 @@ func Visible[T any](ctx context.Context, userID string, rows []T, can func(conte
 	return out
 }
 
+// Visible returns the rows of a list that can lets userID read, in order: a
+// collection shows exactly what the single-resource read would. Membership
+// is cached per org (orgs.CacheTTL), so a list costs one lookup per distinct
+// org, not per row. rows is not modified.
+func Visible[T any](ctx context.Context, userID string, rows []T, can func(context.Context, string, T) bool) []T {
+	out := make([]T, 0, len(rows))
+	for _, row := range rows {
+		if can(ctx, userID, row) {
+			out = append(out, row)
+		}
+	}
+	return out
+}
+
 // CanAccessPersonal reports whether userID owns a personal resource whose
 // owner is ownerUserID. Personal resources are never shared, so there is no
 // read/write split and no org: only the owner. An empty caller owns nothing.

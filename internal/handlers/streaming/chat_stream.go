@@ -142,6 +142,17 @@ func (s *Service) StreamChatUpdates(
 	heartbeatTicker := time.NewTicker(s.heartbeatInterval)
 	defer heartbeatTicker.Stop()
 
+	// The open's decision is re-asked while the stream lives: a chat of an
+	// org is its owner's only while they are a live member of it, and a
+	// removal must end a stream opened before it, not just refuse the next
+	// open. The chat's owner and org do not change under an open stream, so
+	// the held row is re-decided, not re-read; membership answers are cached
+	// (orgs.CacheTTL), so a tick costs no round trip most of the time. A
+	// removal ends the stream within orgs.CacheTTL plus this interval, and a
+	// failed check ends it too (authz fails closed).
+	reauthorizeTicker := time.NewTicker(s.reauthorizeInterval)
+	defer reauthorizeTicker.Stop()
+
 	// The transcript the live frames carried after the initial sync, by
 	// block kind, summed over the stream's life and put on the RPC span as
 	// it ends (the initial sync's own spans carry theirs).
@@ -212,6 +223,13 @@ func (s *Service) StreamChatUpdates(
 				},
 			}); err != nil {
 				return err
+			}
+
+		case <-reauthorizeTicker.C:
+			if !authz.CanReadChat(ctx, userID, chat) {
+				logging.InfoContext(ctx, LOG_PREFIX_STREAM_CHAT+" Caller may no longer read the chat; ending its stream",
+					"userID", userID, "chatID", shortID(chatID))
+				return svcerr.NotFound("chat")
 			}
 
 		case <-heartbeatTicker.C:

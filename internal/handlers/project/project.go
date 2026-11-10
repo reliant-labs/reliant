@@ -13,6 +13,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/analytics"
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/daemonplacement"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -283,6 +284,9 @@ func (s *Service) ListProjects(
 		// server fault: only an unclassified store failure is Internal.
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list projects"))
 	}
+	// A project of an org the caller has left is not listed, named org or
+	// not: the list shows what GetProject would.
+	projects = authz.Visible(ctx, userID, projects, authz.CanReadProject)
 
 	protoProjects := make([]*reliantv1.Project, len(projects))
 	for i, p := range projects {
