@@ -794,11 +794,11 @@ func (r *Repo) GetLatestNonMessageUpdatesPerEntity(ctx context.Context, chatID s
 	// calls.
 	//
 	// "Few" only holds if they can be FOUND without reading the rest:
-	// idx_chat_updates_snapshot_rekeyed is a partial index over exactly the
-	// re-keyed types. Without it the re-keyed read rechecked every row
-	// idx_chat_updates_snapshot_heads holds for the chat (165,843 on chat
-	// 8bb0a875, almost all NODE_EXECUTION) to keep 758: ~350ms of a ~475ms
-	// query. With it, ~3ms.
+	// idx_chat_updates_snapshot_rekey_heads is a partial index over exactly
+	// the re-keyed types, keyed by their dedup key. Without such an index the
+	// re-keyed read rechecked every row the old idx_chat_updates_snapshot_heads
+	// held for the chat (165,843 on chat 8bb0a875, almost all NODE_EXECUTION)
+	// to keep 758: ~350ms of a ~475ms query. With one, ~3ms.
 	//
 	// WORKFLOW_STATUS and NODE_EXECUTION are excluded: they are workflow state,
 	// keyed per workflow and per workflow node, so every run a chat ever made
