@@ -84,6 +84,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm/keyvalidate"
 	"github.com/reliant-labs/reliant/internal/llm/providerusage"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
+	"github.com/reliant-labs/reliant/internal/orgs"
 	"github.com/reliant-labs/reliant/internal/queueddelivery"
 	"github.com/reliant-labs/reliant/internal/runs"
 	"github.com/reliant-labs/reliant/internal/servergateway"
@@ -136,6 +137,12 @@ func (g *Graph) newTokenAuthority() (tokenauthority.Authority, error) {
 	return NewTokenAuthority(TokenAuthorityDeps{
 		ControlPlane: g.ServerProcessConfig.GetControlPlane(),
 		DB:           g.Database(),
+	})
+}
+
+func (g *Graph) newOrgResolver() (*orgs.Resolver, error) {
+	return NewOrgResolver(OrgResolverDeps{
+		Authority: g.TokenAuthority(),
 	})
 }
 
@@ -969,6 +976,7 @@ func (g *Graph) newChat() (*chat.Service, error) {
 		Pause:       g.PauseService(),
 		Router:      g.APIDaemonRouter().NATSDaemonRouter,
 		LocalModels: local.NewRepoDirectory(g.Database()),
+		Orgs:        g.OrgResolver(),
 	})
 }
 
@@ -1158,6 +1166,7 @@ func (g *Graph) newProject() (*project.Service, error) {
 		Repo:         g.Database(),
 		Router:       g.APIDaemonRouter().NATSDaemonRouter,
 		ControlPlane: hostedControlPlane(g.ServerProcessConfig.GetControlPlane()),
+		Orgs:         g.OrgResolver(),
 	})
 }
 

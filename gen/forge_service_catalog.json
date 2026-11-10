@@ -46,6 +46,7 @@
         "Message",
         "ModelEndpoint",
         "NATSConn",
+        "OrgResolver",
         "PackageCommands",
         "PauseService",
         "PayloadGC",
@@ -5374,6 +5375,11 @@
               "Name": "limit",
               "ProtoType": "int32",
               "IsOptional": true
+            },
+            {
+              "Name": "org_id",
+              "ProtoType": "string",
+              "IsOptional": true
             }
           ],
           "ListChatsResponse": [
@@ -5968,6 +5974,11 @@
               "Name": "client_message_id",
               "ProtoType": "string",
               "IsOptional": true
+            },
+            {
+              "Name": "org_id",
+              "ProtoType": "string",
+              "IsOptional": true
             }
           ],
           "StartChatResponse": [
@@ -6427,6 +6438,11 @@
               "name": "origin",
               "kind": "enum",
               "type_name": "reliant.v1.ChatOrigin"
+            },
+            {
+              "name": "org_id",
+              "kind": "string",
+              "optional": true
             }
           ],
           "reliant.v1.ChatErrorUpdate": [
@@ -7001,6 +7017,11 @@
             {
               "name": "limit",
               "kind": "int32",
+              "optional": true
+            },
+            {
+              "name": "org_id",
+              "kind": "string",
               "optional": true
             }
           ],
@@ -7731,6 +7752,11 @@
             },
             {
               "name": "client_message_id",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "org_id",
               "kind": "string",
               "optional": true
             }
@@ -21706,6 +21732,11 @@
               "Name": "path",
               "ProtoType": "string",
               "IsOptional": true
+            },
+            {
+              "Name": "org_id",
+              "ProtoType": "string",
+              "IsOptional": true
             }
           ],
           "CreateProjectFromRepoResponse": [
@@ -21755,6 +21786,11 @@
             },
             {
               "Name": "daemon_id",
+              "ProtoType": "string",
+              "IsOptional": true
+            },
+            {
+              "Name": "org_id",
               "ProtoType": "string",
               "IsOptional": true
             }
@@ -22149,6 +22185,11 @@
               "Name": "offset",
               "ProtoType": "int32",
               "IsOptional": false
+            },
+            {
+              "Name": "org_id",
+              "ProtoType": "string",
+              "IsOptional": true
             }
           ],
           "ListProjectsResponse": [
@@ -22421,6 +22462,11 @@
               "name": "path",
               "kind": "string",
               "optional": true
+            },
+            {
+              "name": "org_id",
+              "kind": "string",
+              "optional": true
             }
           ],
           "reliant.v1.CreateProjectFromRepoResponse": [
@@ -22464,6 +22510,11 @@
             },
             {
               "name": "daemon_id",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "org_id",
               "kind": "string",
               "optional": true
             }
@@ -22895,6 +22946,11 @@
             {
               "name": "offset",
               "kind": "int32"
+            },
+            {
+              "name": "org_id",
+              "kind": "string",
+              "optional": true
             }
           ],
           "reliant.v1.ListProjectsResponse": [
@@ -23006,6 +23062,11 @@
             },
             {
               "name": "forge_project_name",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "org_id",
               "kind": "string",
               "optional": true
             }
@@ -46209,6 +46270,18 @@
       "implementation_candidates": []
     },
     {
+      "id": "OrgResolver",
+      "name": "OrgResolver",
+      "kind": "provider",
+      "type": "*github.com/reliant-labs/reliant/internal/orgs.Resolver",
+      "source": {
+        "path": "internal/app/providers.go",
+        "symbol": "NewOrgResolver"
+      },
+      "methods": [],
+      "implementation_candidates": []
+    },
+    {
       "id": "PackageCommands",
       "name": "PackageCommands",
       "kind": "component",
@@ -47215,6 +47288,19 @@
     },
     {
       "consumer": "Chat",
+      "field": "Orgs",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/chat.OrgResolver",
+      "methods": [],
+      "candidates": [
+        "OrgResolver"
+      ],
+      "providers": [
+        "OrgResolver"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Chat",
       "field": "Pause",
       "interface": "github.com/reliant-labs/reliant/internal/runs.PauseController",
       "methods": [],
@@ -47613,6 +47699,19 @@
       "resolution": "unresolved"
     },
     {
+      "consumer": "OrgResolver",
+      "field": "Authority",
+      "interface": "github.com/reliant-labs/reliant/internal/tokenauthority.Authority",
+      "methods": [],
+      "candidates": [
+        "TokenAuthority"
+      ],
+      "providers": [
+        "TokenAuthority"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
       "consumer": "PackageCommands",
       "field": "Repo",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/package_commands.Repository",
@@ -47673,6 +47772,19 @@
       "candidates": [],
       "providers": [],
       "resolution": "unresolved"
+    },
+    {
+      "consumer": "Project",
+      "field": "Orgs",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/project.OrgResolver",
+      "methods": [],
+      "candidates": [
+        "OrgResolver"
+      ],
+      "providers": [
+        "OrgResolver"
+      ],
+      "resolution": "composition_expression"
     },
     {
       "consumer": "Project",

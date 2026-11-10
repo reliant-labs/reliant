@@ -111,8 +111,12 @@ type Project struct {
 	// Unset when never read: not a forge project, a forge.yaml without a name,
 	// or no daemon has reported it since the project was created.
 	ForgeProjectName *string `protobuf:"bytes,13,opt,name=forge_project_name,json=forgeProjectName,proto3,oneof" json:"forge_project_name,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	// The organization the project belongs to, fixed at creation. Unset for a
+	// project created before orgs or where no org could be resolved: such a
+	// project belongs to its creator's default org.
+	OrgId         *string `protobuf:"bytes,14,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Project) Reset() {
@@ -232,6 +236,13 @@ func (x *Project) GetIsForge() bool {
 func (x *Project) GetForgeProjectName() string {
 	if x != nil && x.ForgeProjectName != nil {
 		return *x.ForgeProjectName
+	}
+	return ""
+}
+
+func (x *Project) GetOrgId() string {
+	if x != nil && x.OrgId != nil {
+		return *x.OrgId
 	}
 	return ""
 }
@@ -378,7 +389,13 @@ type CreateProjectRequest struct {
 	// becomes its checkout here (response.attached). A folder that is already
 	// a project's checkout on this machine is AlreadyExists, as is a project
 	// that is already on this machine at another path.
-	DaemonId      *string `protobuf:"bytes,5,opt,name=daemon_id,json=daemonId,proto3,oneof" json:"daemon_id,omitempty"`
+	DaemonId *string `protobuf:"bytes,5,opt,name=daemon_id,json=daemonId,proto3,oneof" json:"daemon_id,omitempty"`
+	// The organization to act in (control-plane organizations.id); the web
+	// fills it with the active org. It must be one the caller is a live member
+	// of (PERMISSION_DENIED otherwise), and a machine credential may name only
+	// its own org. Unset is the caller's default org. An existing project that is
+	// attached keeps its own org.
+	OrgId         *string `protobuf:"bytes,6,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -444,6 +461,13 @@ func (x *CreateProjectRequest) GetDefaultBranch() string {
 func (x *CreateProjectRequest) GetDaemonId() string {
 	if x != nil && x.DaemonId != nil {
 		return *x.DaemonId
+	}
+	return ""
+}
+
+func (x *CreateProjectRequest) GetOrgId() string {
+	if x != nil && x.OrgId != nil {
+		return *x.OrgId
 	}
 	return ""
 }
@@ -515,9 +539,14 @@ func (x *CreateProjectResponse) GetAttached() bool {
 
 // ListProjectsRequest lists projects with optional filters
 type ListProjectsRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Limit         int32                  `protobuf:"varint,1,opt,name=limit,proto3" json:"limit,omitempty"`
-	Offset        int32                  `protobuf:"varint,2,opt,name=offset,proto3" json:"offset,omitempty"`
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	Limit  int32                  `protobuf:"varint,1,opt,name=limit,proto3" json:"limit,omitempty"`
+	Offset int32                  `protobuf:"varint,2,opt,name=offset,proto3" json:"offset,omitempty"`
+	// List only this organization's projects. It must be one the caller is a
+	// live member of (PERMISSION_DENIED otherwise). Projects created before
+	// orgs list under the caller's default org. Unset lists every project the
+	// caller owns, in any org, as before this field existed.
+	OrgId         *string `protobuf:"bytes,3,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -564,6 +593,13 @@ func (x *ListProjectsRequest) GetOffset() int32 {
 		return x.Offset
 	}
 	return 0
+}
+
+func (x *ListProjectsRequest) GetOrgId() string {
+	if x != nil && x.OrgId != nil {
+		return *x.OrgId
+	}
+	return ""
 }
 
 // ListProjectsResponse returns a list of projects
@@ -2799,7 +2835,12 @@ type CreateProjectFromRepoRequest struct {
 	Branch *string `protobuf:"bytes,4,opt,name=branch,proto3,oneof" json:"branch,omitempty"`
 	// Absolute path on the daemon. Defaults to the conventional projects
 	// directory for the repo name.
-	Path          *string `protobuf:"bytes,5,opt,name=path,proto3,oneof" json:"path,omitempty"`
+	Path *string `protobuf:"bytes,5,opt,name=path,proto3,oneof" json:"path,omitempty"`
+	// The organization to act in (control-plane organizations.id); the web
+	// fills it with the active org. It must be one the caller is a live member
+	// of (PERMISSION_DENIED otherwise), and a machine credential may name only
+	// its own org. Unset is the caller's default org.
+	OrgId         *string `protobuf:"bytes,6,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2865,6 +2906,13 @@ func (x *CreateProjectFromRepoRequest) GetBranch() string {
 func (x *CreateProjectFromRepoRequest) GetPath() string {
 	if x != nil && x.Path != nil {
 		return *x.Path
+	}
+	return ""
+}
+
+func (x *CreateProjectFromRepoRequest) GetOrgId() string {
+	if x != nil && x.OrgId != nil {
+		return *x.OrgId
 	}
 	return ""
 }
@@ -3638,7 +3686,7 @@ var File_reliant_v1_project_proto protoreflect.FileDescriptor
 const file_reliant_v1_project_proto_rawDesc = "" +
 	"\n" +
 	"\x18reliant/v1/project.proto\x12\n" +
-	"reliant.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\x1a\x17reliant/v1/common.proto\"\xe7\x03\n" +
+	"reliant.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\x1a\x17reliant/v1/common.proto\"\x8e\x04\n" +
 	"\aProject\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x17\n" +
 	"\auser_id\x18\x02 \x01(\tR\x06userId\x12\x12\n" +
@@ -3657,11 +3705,13 @@ const file_reliant_v1_project_proto_rawDesc = "" +
 	"\n" +
 	"remote_url\x18\v \x01(\tH\x02R\tremoteUrl\x88\x01\x01\x12\x19\n" +
 	"\bis_forge\x18\f \x01(\bR\aisForge\x121\n" +
-	"\x12forge_project_name\x18\r \x01(\tH\x03R\x10forgeProjectName\x88\x01\x01B\x0e\n" +
+	"\x12forge_project_name\x18\r \x01(\tH\x03R\x10forgeProjectName\x88\x01\x01\x12\x1a\n" +
+	"\x06org_id\x18\x0e \x01(\tH\x04R\x05orgId\x88\x01\x01B\x0e\n" +
 	"\f_descriptionB\x11\n" +
 	"\x0f_default_branchB\r\n" +
 	"\v_remote_urlB\x15\n" +
-	"\x13_forge_project_name\"\xfd\x02\n" +
+	"\x13_forge_project_nameB\t\n" +
+	"\a_org_id\"\xfd\x02\n" +
 	"\rProjectDaemon\x12\x1d\n" +
 	"\n" +
 	"project_id\x18\x01 \x01(\tR\tprojectId\x12\x1b\n" +
@@ -3676,24 +3726,28 @@ const file_reliant_v1_project_proto_rawDesc = "" +
 	"\vdaemon_name\x18\t \x01(\tR\n" +
 	"daemonNameB\x11\n" +
 	"\x0f_default_branchB\x0e\n" +
-	"\f_verified_at\"\xe4\x01\n" +
+	"\f_verified_at\"\x8b\x02\n" +
 	"\x14CreateProjectRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x12\n" +
 	"\x04path\x18\x02 \x01(\tR\x04path\x12%\n" +
 	"\vdescription\x18\x03 \x01(\tH\x00R\vdescription\x88\x01\x01\x12*\n" +
 	"\x0edefault_branch\x18\x04 \x01(\tH\x01R\rdefaultBranch\x88\x01\x01\x12 \n" +
-	"\tdaemon_id\x18\x05 \x01(\tH\x02R\bdaemonId\x88\x01\x01B\x0e\n" +
+	"\tdaemon_id\x18\x05 \x01(\tH\x02R\bdaemonId\x88\x01\x01\x12\x1a\n" +
+	"\x06org_id\x18\x06 \x01(\tH\x03R\x05orgId\x88\x01\x01B\x0e\n" +
 	"\f_descriptionB\x11\n" +
 	"\x0f_default_branchB\f\n" +
 	"\n" +
-	"_daemon_id\"\xa4\x01\n" +
+	"_daemon_idB\t\n" +
+	"\a_org_id\"\xa4\x01\n" +
 	"\x15CreateProjectResponse\x12-\n" +
 	"\aproject\x18\x01 \x01(\v2\x13.reliant.v1.ProjectR\aproject\x12@\n" +
 	"\x0eproject_daemon\x18\x02 \x01(\v2\x19.reliant.v1.ProjectDaemonR\rprojectDaemon\x12\x1a\n" +
-	"\battached\x18\x03 \x01(\bR\battached\"C\n" +
+	"\battached\x18\x03 \x01(\bR\battached\"j\n" +
 	"\x13ListProjectsRequest\x12\x14\n" +
 	"\x05limit\x18\x01 \x01(\x05R\x05limit\x12\x16\n" +
-	"\x06offset\x18\x02 \x01(\x05R\x06offset\"]\n" +
+	"\x06offset\x18\x02 \x01(\x05R\x06offset\x12\x1a\n" +
+	"\x06org_id\x18\x03 \x01(\tH\x00R\x05orgId\x88\x01\x01B\t\n" +
+	"\a_org_id\"]\n" +
 	"\x14ListProjectsResponse\x12/\n" +
 	"\bprojects\x18\x01 \x03(\v2\x13.reliant.v1.ProjectR\bprojects\x12\x14\n" +
 	"\x05total\x18\x02 \x01(\x05R\x05total\"2\n" +
@@ -3871,16 +3925,18 @@ const file_reliant_v1_project_proto_rawDesc = "" +
 	"\x0edefault_branch\x18\x04 \x01(\tH\x00R\rdefaultBranch\x88\x01\x01B\x11\n" +
 	"\x0f_default_branch\"`\n" +
 	"\x1cMarkProjectInstalledResponse\x12@\n" +
-	"\x0eproject_daemon\x18\x01 \x01(\v2\x19.reliant.v1.ProjectDaemonR\rprojectDaemon\"\xc4\x01\n" +
+	"\x0eproject_daemon\x18\x01 \x01(\v2\x19.reliant.v1.ProjectDaemonR\rprojectDaemon\"\xeb\x01\n" +
 	"\x1cCreateProjectFromRepoRequest\x12\x1b\n" +
 	"\tclone_url\x18\x01 \x01(\tR\bcloneUrl\x12\x1b\n" +
 	"\tdaemon_id\x18\x02 \x01(\tR\bdaemonId\x12\x17\n" +
 	"\x04name\x18\x03 \x01(\tH\x00R\x04name\x88\x01\x01\x12\x1b\n" +
 	"\x06branch\x18\x04 \x01(\tH\x01R\x06branch\x88\x01\x01\x12\x17\n" +
-	"\x04path\x18\x05 \x01(\tH\x02R\x04path\x88\x01\x01B\a\n" +
+	"\x04path\x18\x05 \x01(\tH\x02R\x04path\x88\x01\x01\x12\x1a\n" +
+	"\x06org_id\x18\x06 \x01(\tH\x03R\x05orgId\x88\x01\x01B\a\n" +
 	"\x05_nameB\t\n" +
 	"\a_branchB\a\n" +
-	"\x05_path\"\xc9\x01\n" +
+	"\x05_pathB\t\n" +
+	"\a_org_id\"\xc9\x01\n" +
 	"\x1dCreateProjectFromRepoResponse\x12-\n" +
 	"\aproject\x18\x01 \x01(\v2\x13.reliant.v1.ProjectR\aproject\x12@\n" +
 	"\x0eproject_daemon\x18\x02 \x01(\v2\x19.reliant.v1.ProjectDaemonR\rprojectDaemon\x12\x16\n" +
@@ -4164,6 +4220,7 @@ func file_reliant_v1_project_proto_init() {
 	file_reliant_v1_project_proto_msgTypes[0].OneofWrappers = []any{}
 	file_reliant_v1_project_proto_msgTypes[1].OneofWrappers = []any{}
 	file_reliant_v1_project_proto_msgTypes[2].OneofWrappers = []any{}
+	file_reliant_v1_project_proto_msgTypes[4].OneofWrappers = []any{}
 	file_reliant_v1_project_proto_msgTypes[8].OneofWrappers = []any{}
 	file_reliant_v1_project_proto_msgTypes[15].OneofWrappers = []any{}
 	file_reliant_v1_project_proto_msgTypes[16].OneofWrappers = []any{}
