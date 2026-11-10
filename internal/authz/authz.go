@@ -21,8 +21,26 @@
 //   - Write: change it, act on it, or spend through it (send, pause, approve,
 //     place work, wake or rename a machine).
 //
-// ctx is taken now because the org half of the decision asks control-plane
-// whether the caller is a live member, which needs a context.
+// ── THE ORG HALF ──────────────────────────────────────────────────────
+//
+// A resource that belongs to an org (its org_id is set) is the caller's only
+// while they are a LIVE member of that org, so a removed member loses the
+// org's chats, projects, saved workflows and triggers even though they created
+// them (control-plane docs/design/orgs-and-members.md §5). Membership is
+// control-plane's: the decision asks the Membership the context carries
+// (WithMembership; *orgs.Resolver, cached for orgs.CacheTTL), which every
+// process installs once, at its edge: the API and daemon listeners for every
+// request, the worker for every activity.
+//
+// It FAILS CLOSED. An error asking is a denial (the call site's NotFound), and
+// so is an org resource decided on a context that carries no Membership at all,
+// logged at ERROR because it means a path was never wired. A Membership that
+// has no answer (a deployment with no control plane, AUTH_MODE=apikey, or a
+// control plane without the rpc; IsMember's ok=false) keeps today's rule:
+// owner only. Rows with no org (written before orgs) are owner-only too.
+//
+// No sharing yet: the owner is still required. Read-only sharing (phase 5)
+// widens CanRead*, never CanWrite*.
 //
 // The resource kinds that will belong to an org: chats, projects, machines,
 // saved workflows (workflow_drafts), triggers and their events. A workflow
@@ -46,7 +64,30 @@ import (
 	"context"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/logging"
 )
+
+// Membership answers whether userID is a live member of orgID. ok is false
+// when the deployment has no answer (no orgs); err is an outage.
+// *orgs.Resolver is one.
+type Membership interface {
+	IsMember(ctx context.Context, userID, orgID string) (member, ok bool, err error)
+}
+
+type membershipKey struct{}
+
+// WithMembership returns ctx carrying m, which every decision about an org
+// resource on that context asks. A process installs it once, at its edge.
+func WithMembership(ctx context.Context, m Membership) context.Context {
+	return context.WithValue(ctx, membershipKey{}, m)
+}
+
+// NoOrgs is the Membership of a deployment without orgs: it never has an
+// answer, so every decision is owner-only.
+type NoOrgs struct{}
+
+// IsMember implements Membership.
+func (NoOrgs) IsMember(context.Context, string, string) (bool, bool, error) { return false, false, nil }
 
 // chatRecord is either read of a chat: the activity view (core.Chat) or the
 // bare row (core.ChatRow). Both carry the same ownership.
@@ -54,28 +95,57 @@ type chatRecord interface {
 	*core.Chat | *core.ChatRow
 }
 
-// resource is what a decision reads from a row: whether there is one, and
-// who owns it.
+// resource is what a decision reads from a row: whether there is one, who
+// owns it, and the org it belongs to ("" for none).
 type resource struct {
 	present     bool
 	ownerUserID string
+	orgID       string
 }
 
-// decide is the rule. A caller with no id never owns anything, so an empty
-// caller and an unowned row are not a match.
-func decide(_ context.Context, userID string, r resource) bool {
-	return r.present && userID != "" && r.ownerUserID == userID
+func orgOf(org *string) string {
+	if org == nil {
+		return ""
+	}
+	return *org
+}
+
+// decide is the rule: the owner, and, for a resource in an org, only while
+// they are a live member of it. A caller with no id never owns anything, so
+// an empty caller and an unowned row are not a match.
+func decide(ctx context.Context, userID string, r resource) bool {
+	if !r.present || userID == "" || r.ownerUserID != userID {
+		return false
+	}
+	if r.orgID == "" {
+		return true
+	}
+	m, wired := ctx.Value(membershipKey{}).(Membership)
+	if !wired || m == nil {
+		logging.ErrorContext(ctx, "[authz] no membership on the context; denying an org resource (a path was never wired with authz.WithMembership)",
+			"user_id", userID, "org_id", r.orgID)
+		return false
+	}
+	member, ok, err := m.IsMember(ctx, userID, r.orgID)
+	if err != nil {
+		logging.WarnContext(ctx, "[authz] could not check org membership; denying", "user_id", userID, "org_id", r.orgID, "error", err)
+		return false
+	}
+	if !ok {
+		return true
+	}
+	return member
 }
 
 func chatResource[C chatRecord](chat C) resource {
 	switch c := any(chat).(type) {
 	case *core.Chat:
 		if c != nil {
-			return resource{present: true, ownerUserID: c.UserID}
+			return resource{present: true, ownerUserID: c.UserID, orgID: orgOf(c.OrgID)}
 		}
 	case *core.ChatRow:
 		if c != nil {
-			return resource{present: true, ownerUserID: c.UserID}
+			return resource{present: true, ownerUserID: c.UserID, orgID: orgOf(c.OrgID)}
 		}
 	}
 	return resource{}
@@ -97,7 +167,7 @@ func projectResource(p *core.Project) resource {
 	if p == nil {
 		return resource{}
 	}
-	return resource{present: true, ownerUserID: p.UserID}
+	return resource{present: true, ownerUserID: p.UserID, orgID: orgOf(p.OrgID)}
 }
 
 // CanReadProject reports whether userID may see project. nil is false.
@@ -134,7 +204,7 @@ func workflowResource(w *core.WorkflowDraft) resource {
 	if w == nil {
 		return resource{}
 	}
-	return resource{present: true, ownerUserID: w.UserID}
+	return resource{present: true, ownerUserID: w.UserID, orgID: orgOf(w.OrgID)}
 }
 
 // CanReadWorkflow reports whether userID may see a saved workflow
@@ -153,7 +223,7 @@ func triggerResource(t *core.Trigger) resource {
 	if t == nil {
 		return resource{}
 	}
-	return resource{present: true, ownerUserID: t.UserID}
+	return resource{present: true, ownerUserID: t.UserID, orgID: orgOf(t.OrgID)}
 }
 
 // CanReadTrigger reports whether userID may see trigger. nil is false.
