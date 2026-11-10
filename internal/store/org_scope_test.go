@@ -21,7 +21,7 @@ func orgp(s string) *string { return &s }
 func TestOrgScopedListsAndBackfill(t *testing.T) {
 	env := storetest.New(t)
 	ctx := context.Background()
-	at := time.Now().UTC().Truncate(time.Microsecond).Add(-time.Hour)
+	at := time.Date(2026, 1, 15, 12, 0, 0, 0, time.UTC) // fixed: nothing here depends on the wall clock
 	user := storetest.SeedUserID
 
 	for _, p := range []*core.Project{
