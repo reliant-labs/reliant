@@ -53,6 +53,10 @@ func (s *Service) CreateProjectFromRepo(
 	req *connect.Request[reliantv1.CreateProjectFromRepoRequest],
 ) (*connect.Response[reliantv1.CreateProjectFromRepoResponse], error) {
 	userID := auth.MustGetUserID(ctx)
+	orgID, err := s.actingOrg(ctx, userID, req.Msg.GetOrgId())
+	if err != nil {
+		return nil, err
+	}
 
 	// Git authenticates through the credential helper, never the URL: a token
 	// in the URL would be stored as the project's remote and written into the
@@ -130,7 +134,7 @@ func (s *Service) CreateProjectFromRepo(
 
 	project := existing
 	if project == nil {
-		project, err = s.createProjectForRepo(ctx, projectID, userID, name, clonedPath, cloneURL, branch)
+		project, err = s.createProjectForRepo(ctx, projectID, userID, orgID, name, clonedPath, cloneURL, branch)
 		if err != nil {
 			return nil, err
 		}
@@ -195,7 +199,7 @@ func (s *Service) existingProjectForRepo(ctx context.Context, userID, path, clon
 // createProjectForRepo creates the project row for a repo being added, under
 // the id the clone's request id was already derived from.
 func (s *Service) createProjectForRepo(
-	ctx context.Context, projectID, userID, name, path, cloneURL, branch string,
+	ctx context.Context, projectID, userID string, orgID *string, name, path, cloneURL, branch string,
 ) (*core.Project, error) {
 	// The store writes these columns verbatim — they have no database
 	// default — so a project created without them is dated 0001-01-01 and
@@ -210,6 +214,7 @@ func (s *Service) createProjectForRepo(
 		Name:       name,
 		Path:       path,
 		UserID:     userID,
+		OrgID:      orgID,
 		IsGitRepo:  true,
 		CreatedAt:  now,
 		UpdatedAt:  now,
