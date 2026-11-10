@@ -55,7 +55,9 @@
 // Store queries that filter `user_id = ?` in SQL (lists, and the
 // *WithUserCheck reads) are visibility predicates, not decisions; the
 // *WithUserCheck reads in internal/db confirm their row through this package
-// too, so the seam sees every single-resource read.
+// too, so the seam sees every single-resource read. Owner-filtered lists keep
+// the rows of an org their owner has left, so a list a caller sees passes
+// through Visible as well, whether or not the request named an org.
 //
 //forge:exclude-contract: pure decisions over rows the caller already read; no state, no I/O, nothing to mock
 package authz
@@ -244,6 +246,20 @@ func CanReadTriggerEvent(ctx context.Context, userID string, event *core.Trigger
 		return decide(ctx, userID, resource{})
 	}
 	return decide(ctx, userID, resource{present: true, ownerUserID: event.UserID})
+}
+
+// Visible returns the rows of a list that can lets userID read, in order: a
+// collection shows exactly what the single-resource read would. Membership
+// is cached per org (orgs.CacheTTL), so a list costs one lookup per distinct
+// org, not per row. rows is not modified.
+func Visible[T any](ctx context.Context, userID string, rows []T, can func(context.Context, string, T) bool) []T {
+	out := make([]T, 0, len(rows))
+	for _, row := range rows {
+		if can(ctx, userID, row) {
+			out = append(out, row)
+		}
+	}
+	return out
 }
 
 // CanAccessPersonal reports whether userID owns a personal resource whose

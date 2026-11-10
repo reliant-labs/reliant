@@ -213,6 +213,9 @@ func (s *Service) ListTriggers(
 	if err != nil {
 		return nil, triggerDBError("list triggers", err)
 	}
+	// A trigger of an org the caller has left is not listed, named org or
+	// not: the list shows what GetTrigger would.
+	stored = authz.Visible(ctx, userID, stored, authz.CanReadTrigger)
 
 	// One query for every trigger's recent firings: health and last_event are
 	// computed from it, so the list costs a constant number of queries.

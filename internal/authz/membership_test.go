@@ -20,6 +20,30 @@ func (m members) IsMember(_ context.Context, userID, orgID string) (bool, bool, 
 	return userID == "alice" && orgID == "acme", true, nil
 }
 
+// A list keeps, in order, exactly the rows the single-resource read allows,
+// and leaves the slice it was given alone.
+func TestVisibleKeepsWhatTheReadAllows(t *testing.T) {
+	acme, globex := "acme", "globex"
+	rows := []*core.Chat{
+		{ID: "acme", UserID: "alice", OrgID: &acme},
+		{ID: "globex", UserID: "alice", OrgID: &globex},
+		{ID: "none", UserID: "alice"},
+		{ID: "bobs", UserID: "bob"},
+	}
+	ctx := WithMembership(context.Background(), members{})
+	got := Visible(ctx, "alice", rows, CanReadChat[*core.Chat])
+	var ids []string
+	for _, c := range got {
+		ids = append(ids, c.ID)
+	}
+	if len(ids) != 2 || ids[0] != "acme" || ids[1] != "none" {
+		t.Fatalf("Visible = %v, want [acme none]", ids)
+	}
+	if rows[1].ID != "globex" {
+		t.Fatalf("Visible modified its input: %v", rows[1].ID)
+	}
+}
+
 // A resource in an org is its owner's only while they are a live member of
 // that org, for every kind that carries an org, and the decision fails closed.
 func TestOrgResourcesNeedLiveMembership(t *testing.T) {
