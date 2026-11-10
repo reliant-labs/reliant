@@ -72,6 +72,9 @@ type Reclaimer struct {
 	Acquire func(context.Context, []string) (RecoveryLease, error)
 	// ProcessUse checks executables, open and mapped files, not only cwd.
 	ProcessUse func(ctx context.Context, paths []string) error
+	// DisposalCheckEvery paces the admission and process check while a parked
+	// checkout is unlinked; zero means DefaultDisposalCheckEvery.
+	DisposalCheckEvery time.Duration
 	// Now is the clock; nil means time.Now.
 	Now func() time.Time
 	// PRMerged and FetchBase are the network checks behind "its work was merged"
@@ -428,8 +431,12 @@ func (r *Reclaimer) settle(ctx context.Context, w Worktree, confirmed bool) Resu
 	r.ensureRepaired(ctx, w)
 
 	// A row with checkouts parked under .reclaim is never "gone": the files
-	// exist, in quarantine, still locked. Say so before anything else.
+	// exist, in quarantine, still locked. Say so before anything else, unless
+	// they are this archive's own retirement, stopped part-way: that resumes.
 	if parked := r.quarantined(w.ID); len(parked) > 0 && w.State == StateArchived {
+		if !confirmed && !w.KeepFiles && r.resumable(w, parked) {
+			return r.resumeRetirement(ctx, w, parked)
+		}
 		return r.heldQuarantined(w, parked, "")
 	}
 	if _, err := os.Lstat(w.Path); os.IsNotExist(err) {

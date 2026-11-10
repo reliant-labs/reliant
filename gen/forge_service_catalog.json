@@ -376,6 +376,7 @@
         "DaemonRoutes",
         "DaemonStatePublisher",
         "Database",
+        "DisconnectSubscriber",
         "FlowHealth",
         "JetStream",
         "ManagedReconciler",
@@ -42195,6 +42196,11 @@
               "type_name": "reliant.v1.Workflow"
             },
             {
+              "name": "finally",
+              "kind": "message",
+              "type_name": "reliant.v1.Workflow"
+            },
+            {
               "name": "requires",
               "kind": "message",
               "type_name": "reliant.v1.WorkflowRequirements"
@@ -46012,6 +46018,18 @@
       "source": {
         "path": "internal/app/providers.go",
         "symbol": "NewDebugServer"
+      },
+      "methods": [],
+      "implementation_candidates": []
+    },
+    {
+      "id": "DisconnectSubscriber",
+      "name": "DisconnectSubscriber",
+      "kind": "provider",
+      "type": "*github.com/reliant-labs/reliant/internal/app.DisconnectSubscriber",
+      "source": {
+        "path": "internal/app/nodes_gateway.go",
+        "symbol": "NewDisconnectSubscriber"
       },
       "methods": [],
       "implementation_candidates": []
