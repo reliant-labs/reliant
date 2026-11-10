@@ -1194,6 +1194,134 @@ func (ReleaseFindingCode) EnumDescriptor() ([]byte, []int) {
 	return file_services_observability_v1_observability_proto_rawDescGZIP(), []int{19}
 }
 
+// FrontendReplayState is what a frontend's runtime config and its environment's
+// policy together decide.
+//
+// A frontend that enables replay with the DEPRECATED build flag
+// ({VITE_,NEXT_PUBLIC_}OTEL_REPLAY baked into its bundle) has no OTEL_REPLAY
+// in its runtime config, so it reads OFF here though it may still record: a
+// reader reconciles OFF with the sessions it observed carrying a replay.
+type FrontendReplayState int32
+
+const (
+	FrontendReplayState_FRONTEND_REPLAY_STATE_UNSPECIFIED FrontendReplayState = 0
+	// The frontend records sessions and the environment keeps them.
+	FrontendReplayState_FRONTEND_REPLAY_STATE_ON FrontendReplayState = 1
+	// The frontend's runtime config does not turn replay on.
+	FrontendReplayState_FRONTEND_REPLAY_STATE_OFF FrontendReplayState = 2
+	// The frontend turns replay on but nothing is recorded or kept: its runtime
+	// config sends no browser telemetry (OTEL_ENDPOINT blank or "off", after the
+	// platform fills a hosted site's missing one), its environment's
+	// observability policy does not opt in to replay (a release cut by a forge
+	// that predates per-frontend replay), or browser telemetry is off.
+	FrontendReplayState_FRONTEND_REPLAY_STATE_BLOCKED FrontendReplayState = 3
+	// Not known: no runtime config could be read for the frontend, or it turns
+	// replay on and the environment's policy could not be read.
+	FrontendReplayState_FRONTEND_REPLAY_STATE_UNKNOWN FrontendReplayState = 4
+)
+
+// Enum value maps for FrontendReplayState.
+var (
+	FrontendReplayState_name = map[int32]string{
+		0: "FRONTEND_REPLAY_STATE_UNSPECIFIED",
+		1: "FRONTEND_REPLAY_STATE_ON",
+		2: "FRONTEND_REPLAY_STATE_OFF",
+		3: "FRONTEND_REPLAY_STATE_BLOCKED",
+		4: "FRONTEND_REPLAY_STATE_UNKNOWN",
+	}
+	FrontendReplayState_value = map[string]int32{
+		"FRONTEND_REPLAY_STATE_UNSPECIFIED": 0,
+		"FRONTEND_REPLAY_STATE_ON":          1,
+		"FRONTEND_REPLAY_STATE_OFF":         2,
+		"FRONTEND_REPLAY_STATE_BLOCKED":     3,
+		"FRONTEND_REPLAY_STATE_UNKNOWN":     4,
+	}
+)
+
+func (x FrontendReplayState) Enum() *FrontendReplayState {
+	p := new(FrontendReplayState)
+	*p = x
+	return p
+}
+
+func (x FrontendReplayState) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (FrontendReplayState) Descriptor() protoreflect.EnumDescriptor {
+	return file_services_observability_v1_observability_proto_enumTypes[20].Descriptor()
+}
+
+func (FrontendReplayState) Type() protoreflect.EnumType {
+	return &file_services_observability_v1_observability_proto_enumTypes[20]
+}
+
+func (x FrontendReplayState) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use FrontendReplayState.Descriptor instead.
+func (FrontendReplayState) EnumDescriptor() ([]byte, []int) {
+	return file_services_observability_v1_observability_proto_rawDescGZIP(), []int{20}
+}
+
+// FrontendReplaySource is where a frontend's runtime config was read from.
+type FrontendReplaySource int32
+
+const (
+	FrontendReplaySource_FRONTEND_REPLAY_SOURCE_UNSPECIFIED FrontendReplaySource = 0
+	// The hosted StaticSite's runtime config, as the platform serves it now.
+	FrontendReplaySource_FRONTEND_REPLAY_SOURCE_LIVE FrontendReplaySource = 1
+	// The runtime config recorded in the environment's current release (a
+	// frontend the platform does not serve).
+	FrontendReplaySource_FRONTEND_REPLAY_SOURCE_RELEASE FrontendReplaySource = 2
+	// No runtime config was readable.
+	FrontendReplaySource_FRONTEND_REPLAY_SOURCE_NONE FrontendReplaySource = 3
+)
+
+// Enum value maps for FrontendReplaySource.
+var (
+	FrontendReplaySource_name = map[int32]string{
+		0: "FRONTEND_REPLAY_SOURCE_UNSPECIFIED",
+		1: "FRONTEND_REPLAY_SOURCE_LIVE",
+		2: "FRONTEND_REPLAY_SOURCE_RELEASE",
+		3: "FRONTEND_REPLAY_SOURCE_NONE",
+	}
+	FrontendReplaySource_value = map[string]int32{
+		"FRONTEND_REPLAY_SOURCE_UNSPECIFIED": 0,
+		"FRONTEND_REPLAY_SOURCE_LIVE":        1,
+		"FRONTEND_REPLAY_SOURCE_RELEASE":     2,
+		"FRONTEND_REPLAY_SOURCE_NONE":        3,
+	}
+)
+
+func (x FrontendReplaySource) Enum() *FrontendReplaySource {
+	p := new(FrontendReplaySource)
+	*p = x
+	return p
+}
+
+func (x FrontendReplaySource) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (FrontendReplaySource) Descriptor() protoreflect.EnumDescriptor {
+	return file_services_observability_v1_observability_proto_enumTypes[21].Descriptor()
+}
+
+func (FrontendReplaySource) Type() protoreflect.EnumType {
+	return &file_services_observability_v1_observability_proto_enumTypes[21]
+}
+
+func (x FrontendReplaySource) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use FrontendReplaySource.Descriptor instead.
+func (FrontendReplaySource) EnumDescriptor() ([]byte, []int) {
+	return file_services_observability_v1_observability_proto_rawDescGZIP(), []int{21}
+}
+
 // TimeRange is a half-open range [start, end). Both ends are required and
 // end must be after start; each RPC caps the length.
 type TimeRange struct {
@@ -1315,6 +1443,18 @@ type QueryScope struct {
 	// environment. It takes no env_ids and no project_id (both narrow by
 	// environment): sending either is InvalidArgument.
 	PlatformScope bool `protobuf:"varint,8,opt,name=platform_scope,json=platformScope,proto3" json:"platform_scope,omitempty"`
+	// Narrow to these dev instances: reliant.instance.id, which the OTLP gateway
+	// stamps from a dev token's `sid` (dropping any a client sent). ANDed with
+	// the environments and everything else. Empty = not narrowed. A response
+	// says it applied this in instance_scope; one without instance_scope was
+	// not narrowed (controlplane.v1.InstanceScope).
+	InstanceIds []string `protobuf:"bytes,9,rep,name=instance_ids,json=instanceIds,proto3" json:"instance_ids,omitempty"`
+	// Narrow to the instances of these people, by email. Each email is resolved
+	// to the org member's user id (reliant.instance.user, the gateway's stamp of
+	// the token's `uid`); an email that names no member of org_id matches
+	// nothing, never the whole scope. ANDed with instance_ids. Empty = not
+	// narrowed.
+	InstanceUsers []string `protobuf:"bytes,10,rep,name=instance_users,json=instanceUsers,proto3" json:"instance_users,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1396,6 +1536,20 @@ func (x *QueryScope) GetPlatformScope() bool {
 		return x.PlatformScope
 	}
 	return false
+}
+
+func (x *QueryScope) GetInstanceIds() []string {
+	if x != nil {
+		return x.InstanceIds
+	}
+	return nil
+}
+
+func (x *QueryScope) GetInstanceUsers() []string {
+	if x != nil {
+		return x.InstanceUsers
+	}
+	return nil
 }
 
 // === Service graph: identities never contain URLs, SQL or arbitrary attributes. ===
@@ -1502,8 +1656,12 @@ type GetServiceGraphResponse struct {
 	Edges              []*GraphEdge           `protobuf:"bytes,2,rep,name=edges,proto3" json:"edges,omitempty"`
 	Completeness       *GraphCompleteness     `protobuf:"bytes,3,opt,name=completeness,proto3" json:"completeness,omitempty"`
 	EffectiveTimeRange *TimeRange             `protobuf:"bytes,4,opt,name=effective_time_range,json=effectiveTimeRange,proto3" json:"effective_time_range,omitempty"`
-	unknownFields      protoimpl.UnknownFields
-	sizeCache          protoimpl.SizeCache
+	// Always unset: this read is never narrowed to dev instances (the service graph is read from edges that keep no dev instance),
+	// so it answers for the whole scope even when scope.instance_ids or
+	// instance_users is set (controlplane.v1.InstanceScope).
+	InstanceScope *v1.InstanceScope `protobuf:"bytes,5,opt,name=instance_scope,json=instanceScope,proto3" json:"instance_scope,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *GetServiceGraphResponse) Reset() {
@@ -1560,6 +1718,13 @@ func (x *GetServiceGraphResponse) GetCompleteness() *GraphCompleteness {
 func (x *GetServiceGraphResponse) GetEffectiveTimeRange() *TimeRange {
 	if x != nil {
 		return x.EffectiveTimeRange
+	}
+	return nil
+}
+
+func (x *GetServiceGraphResponse) GetInstanceScope() *v1.InstanceScope {
+	if x != nil {
+		return x.InstanceScope
 	}
 	return nil
 }
@@ -2505,8 +2670,12 @@ type GetServiceGraphCatalogResponse struct {
 	DeclaredCatalogStatus            string                  `protobuf:"bytes,3,opt,name=declared_catalog_status,json=declaredCatalogStatus,proto3" json:"declared_catalog_status,omitempty"`
 	DeclaredCatalogUnavailableReason string                  `protobuf:"bytes,4,opt,name=declared_catalog_unavailable_reason,json=declaredCatalogUnavailableReason,proto3" json:"declared_catalog_unavailable_reason,omitempty"`
 	DeclaredCatalogs                 []*GraphDeclaredCatalog `protobuf:"bytes,5,rep,name=declared_catalogs,json=declaredCatalogs,proto3" json:"declared_catalogs,omitempty"`
-	unknownFields                    protoimpl.UnknownFields
-	sizeCache                        protoimpl.SizeCache
+	// Always unset: this read is never narrowed to dev instances (the service graph is read from edges that keep no dev instance),
+	// so it answers for the whole scope even when scope.instance_ids or
+	// instance_users is set (controlplane.v1.InstanceScope).
+	InstanceScope *v1.InstanceScope `protobuf:"bytes,6,opt,name=instance_scope,json=instanceScope,proto3" json:"instance_scope,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *GetServiceGraphCatalogResponse) Reset() {
@@ -2570,6 +2739,13 @@ func (x *GetServiceGraphCatalogResponse) GetDeclaredCatalogUnavailableReason() s
 func (x *GetServiceGraphCatalogResponse) GetDeclaredCatalogs() []*GraphDeclaredCatalog {
 	if x != nil {
 		return x.DeclaredCatalogs
+	}
+	return nil
+}
+
+func (x *GetServiceGraphCatalogResponse) GetInstanceScope() *v1.InstanceScope {
+	if x != nil {
+		return x.InstanceScope
 	}
 	return nil
 }
@@ -2833,6 +3009,10 @@ type SearchLogsResponse struct {
 	Logs  []*LogRecord           `protobuf:"bytes,1,rep,name=logs,proto3" json:"logs,omitempty"`
 	// Empty when there are no more rows.
 	NextPageToken string `protobuf:"bytes,2,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
+	// The instance narrowing this answer applied: scope.instance_ids and
+	// instance_users, echoed exactly. Unset when the request named none, or
+	// when this read could not apply it (controlplane.v1.InstanceScope).
+	InstanceScope *v1.InstanceScope `protobuf:"bytes,3,opt,name=instance_scope,json=instanceScope,proto3" json:"instance_scope,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2879,6 +3059,13 @@ func (x *SearchLogsResponse) GetNextPageToken() string {
 		return x.NextPageToken
 	}
 	return ""
+}
+
+func (x *SearchLogsResponse) GetInstanceScope() *v1.InstanceScope {
+	if x != nil {
+		return x.InstanceScope
+	}
+	return nil
 }
 
 type LogRecord struct {
@@ -3198,7 +3385,11 @@ type ListTracesResponse struct {
 	// One RED summary per distinct group (request.group_by), busiest first, at
 	// most 50. Empty without group_by, and on every page after the first (as
 	// red).
-	RedGroups     []*TraceRedGroup `protobuf:"bytes,4,rep,name=red_groups,json=redGroups,proto3" json:"red_groups,omitempty"`
+	RedGroups []*TraceRedGroup `protobuf:"bytes,4,rep,name=red_groups,json=redGroups,proto3" json:"red_groups,omitempty"`
+	// The instance narrowing this answer applied: scope.instance_ids and
+	// instance_users, echoed exactly. Unset when the request named none, or
+	// when this read could not apply it (controlplane.v1.InstanceScope).
+	InstanceScope *v1.InstanceScope `protobuf:"bytes,5,opt,name=instance_scope,json=instanceScope,proto3" json:"instance_scope,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3257,6 +3448,13 @@ func (x *ListTracesResponse) GetRed() *TraceRedSummary {
 func (x *ListTracesResponse) GetRedGroups() []*TraceRedGroup {
 	if x != nil {
 		return x.RedGroups
+	}
+	return nil
+}
+
+func (x *ListTracesResponse) GetInstanceScope() *v1.InstanceScope {
+	if x != nil {
+		return x.InstanceScope
 	}
 	return nil
 }
@@ -3675,8 +3873,12 @@ type GetTraceResponse struct {
 	RelatedTraces []*RelatedTrace `protobuf:"bytes,4,rep,name=related_traces,json=relatedTraces,proto3" json:"related_traces,omitempty"`
 	// At most 100 references are returned, in stable identity order.
 	RelatedTracesTruncated bool `protobuf:"varint,5,opt,name=related_traces_truncated,json=relatedTracesTruncated,proto3" json:"related_traces_truncated,omitempty"`
-	unknownFields          protoimpl.UnknownFields
-	sizeCache              protoimpl.SizeCache
+	// The instance narrowing this answer applied: scope.instance_ids and
+	// instance_users, echoed exactly. Unset when the request named none, or
+	// when this read could not apply it (controlplane.v1.InstanceScope).
+	InstanceScope *v1.InstanceScope `protobuf:"bytes,6,opt,name=instance_scope,json=instanceScope,proto3" json:"instance_scope,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *GetTraceResponse) Reset() {
@@ -3742,6 +3944,13 @@ func (x *GetTraceResponse) GetRelatedTracesTruncated() bool {
 		return x.RelatedTracesTruncated
 	}
 	return false
+}
+
+func (x *GetTraceResponse) GetInstanceScope() *v1.InstanceScope {
+	if x != nil {
+		return x.InstanceScope
+	}
+	return nil
 }
 
 type RelatedTrace struct {
@@ -4137,9 +4346,13 @@ func (x *ListMetricsRequest) GetLimit() int32 {
 }
 
 type ListMetricsResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Metrics       []*MetricInfo          `protobuf:"bytes,1,rep,name=metrics,proto3" json:"metrics,omitempty"`
-	Truncated     bool                   `protobuf:"varint,2,opt,name=truncated,proto3" json:"truncated,omitempty"`
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	Metrics   []*MetricInfo          `protobuf:"bytes,1,rep,name=metrics,proto3" json:"metrics,omitempty"`
+	Truncated bool                   `protobuf:"varint,2,opt,name=truncated,proto3" json:"truncated,omitempty"`
+	// The instance narrowing this answer applied: scope.instance_ids and
+	// instance_users, echoed exactly. Unset when the request named none, or
+	// when this read could not apply it (controlplane.v1.InstanceScope).
+	InstanceScope *v1.InstanceScope `protobuf:"bytes,3,opt,name=instance_scope,json=instanceScope,proto3" json:"instance_scope,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -4186,6 +4399,13 @@ func (x *ListMetricsResponse) GetTruncated() bool {
 		return x.Truncated
 	}
 	return false
+}
+
+func (x *ListMetricsResponse) GetInstanceScope() *v1.InstanceScope {
+	if x != nil {
+		return x.InstanceScope
+	}
+	return nil
 }
 
 // One catalog entry: what ListMetrics returns and GetMetric echoes. A metric
@@ -4501,8 +4721,12 @@ type GetMetricResponse struct {
 	// Attribute keys worth grouping by, best first: enumerated keys, then keys
 	// with 2 to 50 distinct values.
 	SuggestedBreakdowns []string `protobuf:"bytes,5,rep,name=suggested_breakdowns,json=suggestedBreakdowns,proto3" json:"suggested_breakdowns,omitempty"`
-	unknownFields       protoimpl.UnknownFields
-	sizeCache           protoimpl.SizeCache
+	// The instance narrowing this answer applied: scope.instance_ids and
+	// instance_users, echoed exactly. Unset when the request named none, or
+	// when this read could not apply it (controlplane.v1.InstanceScope).
+	InstanceScope *v1.InstanceScope `protobuf:"bytes,6,opt,name=instance_scope,json=instanceScope,proto3" json:"instance_scope,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *GetMetricResponse) Reset() {
@@ -4566,6 +4790,13 @@ func (x *GetMetricResponse) GetAttributes() []*MetricAttribute {
 func (x *GetMetricResponse) GetSuggestedBreakdowns() []string {
 	if x != nil {
 		return x.SuggestedBreakdowns
+	}
+	return nil
+}
+
+func (x *GetMetricResponse) GetInstanceScope() *v1.InstanceScope {
+	if x != nil {
+		return x.InstanceScope
 	}
 	return nil
 }
@@ -4764,7 +4995,11 @@ func (x *ListMetricExemplarsRequest) GetLimit() int32 {
 type ListMetricExemplarsResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Exemplars whose trace is stored first, then by time.
-	Exemplars     []*MetricExemplar `protobuf:"bytes,1,rep,name=exemplars,proto3" json:"exemplars,omitempty"`
+	Exemplars []*MetricExemplar `protobuf:"bytes,1,rep,name=exemplars,proto3" json:"exemplars,omitempty"`
+	// The instance narrowing this answer applied: scope.instance_ids and
+	// instance_users, echoed exactly. Unset when the request named none, or
+	// when this read could not apply it (controlplane.v1.InstanceScope).
+	InstanceScope *v1.InstanceScope `protobuf:"bytes,2,opt,name=instance_scope,json=instanceScope,proto3" json:"instance_scope,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -4802,6 +5037,13 @@ func (*ListMetricExemplarsResponse) Descriptor() ([]byte, []int) {
 func (x *ListMetricExemplarsResponse) GetExemplars() []*MetricExemplar {
 	if x != nil {
 		return x.Exemplars
+	}
+	return nil
+}
+
+func (x *ListMetricExemplarsResponse) GetInstanceScope() *v1.InstanceScope {
+	if x != nil {
+		return x.InstanceScope
 	}
 	return nil
 }
@@ -5001,8 +5243,12 @@ type QueryMetricResponse struct {
 	Aggregation MetricAggregation `protobuf:"varint,6,opt,name=aggregation,proto3,enum=controlplane.v1.MetricAggregation" json:"aggregation,omitempty"`
 	// True when more than 50 series matched; the largest 50 are returned.
 	SeriesTruncated bool `protobuf:"varint,5,opt,name=series_truncated,json=seriesTruncated,proto3" json:"series_truncated,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// The instance narrowing this answer applied: scope.instance_ids and
+	// instance_users, echoed exactly. Unset when the request named none, or
+	// when this read could not apply it (controlplane.v1.InstanceScope).
+	InstanceScope *v1.InstanceScope `protobuf:"bytes,7,opt,name=instance_scope,json=instanceScope,proto3" json:"instance_scope,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *QueryMetricResponse) Reset() {
@@ -5075,6 +5321,13 @@ func (x *QueryMetricResponse) GetSeriesTruncated() bool {
 		return x.SeriesTruncated
 	}
 	return false
+}
+
+func (x *QueryMetricResponse) GetInstanceScope() *v1.InstanceScope {
+	if x != nil {
+		return x.InstanceScope
+	}
+	return nil
 }
 
 type MetricSeries struct {
@@ -5200,8 +5453,12 @@ type GetServiceOverviewResponse struct {
 	// is exact; a missing part reads as absent, never as zero. A client shows
 	// what arrived and says which part did not.
 	UnavailableSections []string `protobuf:"bytes,3,rep,name=unavailable_sections,json=unavailableSections,proto3" json:"unavailable_sections,omitempty"`
-	unknownFields       protoimpl.UnknownFields
-	sizeCache           protoimpl.SizeCache
+	// The instance narrowing this answer applied: scope.instance_ids and
+	// instance_users, echoed exactly. Unset when the request named none, or
+	// when this read could not apply it (controlplane.v1.InstanceScope).
+	InstanceScope *v1.InstanceScope `protobuf:"bytes,4,opt,name=instance_scope,json=instanceScope,proto3" json:"instance_scope,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *GetServiceOverviewResponse) Reset() {
@@ -5251,6 +5508,13 @@ func (x *GetServiceOverviewResponse) GetTrendStepSeconds() int32 {
 func (x *GetServiceOverviewResponse) GetUnavailableSections() []string {
 	if x != nil {
 		return x.UnavailableSections
+	}
+	return nil
+}
+
+func (x *GetServiceOverviewResponse) GetInstanceScope() *v1.InstanceScope {
+	if x != nil {
+		return x.InstanceScope
 	}
 	return nil
 }
@@ -5491,7 +5755,11 @@ type GetFlamegraphResponse struct {
 	// Profile types the service has in the range, for the type picker.
 	AvailableProfileTypes []string `protobuf:"bytes,5,rep,name=available_profile_types,json=availableProfileTypes,proto3" json:"available_profile_types,omitempty"`
 	// True when the stack list was cut at the cap (the heaviest stacks are kept).
-	Truncated     bool `protobuf:"varint,6,opt,name=truncated,proto3" json:"truncated,omitempty"`
+	Truncated bool `protobuf:"varint,6,opt,name=truncated,proto3" json:"truncated,omitempty"`
+	// Always unset: this read is never narrowed to dev instances (profiles keep no dev instance),
+	// so it answers for the whole scope even when scope.instance_ids or
+	// instance_users is set (controlplane.v1.InstanceScope).
+	InstanceScope *v1.InstanceScope `protobuf:"bytes,7,opt,name=instance_scope,json=instanceScope,proto3" json:"instance_scope,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -5566,6 +5834,13 @@ func (x *GetFlamegraphResponse) GetTruncated() bool {
 		return x.Truncated
 	}
 	return false
+}
+
+func (x *GetFlamegraphResponse) GetInstanceScope() *v1.InstanceScope {
+	if x != nil {
+		return x.InstanceScope
+	}
+	return nil
 }
 
 type ListAttributeValuesRequest struct {
@@ -5665,7 +5940,11 @@ type ListAttributeValuesResponse struct {
 	// Most frequent first.
 	Values []*AttributeValue `protobuf:"bytes,1,rep,name=values,proto3" json:"values,omitempty"`
 	// True when more values matched than limit.
-	Truncated     bool `protobuf:"varint,2,opt,name=truncated,proto3" json:"truncated,omitempty"`
+	Truncated bool `protobuf:"varint,2,opt,name=truncated,proto3" json:"truncated,omitempty"`
+	// The instance narrowing this answer applied: scope.instance_ids and
+	// instance_users, echoed exactly. Unset when the request named none, or
+	// when this read could not apply it (controlplane.v1.InstanceScope).
+	InstanceScope *v1.InstanceScope `protobuf:"bytes,3,opt,name=instance_scope,json=instanceScope,proto3" json:"instance_scope,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -5712,6 +5991,13 @@ func (x *ListAttributeValuesResponse) GetTruncated() bool {
 		return x.Truncated
 	}
 	return false
+}
+
+func (x *ListAttributeValuesResponse) GetInstanceScope() *v1.InstanceScope {
+	if x != nil {
+		return x.InstanceScope
+	}
+	return nil
 }
 
 type AttributeValue struct {
@@ -5818,7 +6104,11 @@ type GetServiceSignalsResponse struct {
 	// By service name.
 	Services []*ServiceSignals `protobuf:"bytes,1,rep,name=services,proto3" json:"services,omitempty"`
 	// True when more services emitted than the 500 listed.
-	Truncated     bool `protobuf:"varint,2,opt,name=truncated,proto3" json:"truncated,omitempty"`
+	Truncated bool `protobuf:"varint,2,opt,name=truncated,proto3" json:"truncated,omitempty"`
+	// Always unset: this read is never narrowed to dev instances (the signal summaries keep no dev instance),
+	// so it answers for the whole scope even when scope.instance_ids or
+	// instance_users is set (controlplane.v1.InstanceScope).
+	InstanceScope *v1.InstanceScope `protobuf:"bytes,3,opt,name=instance_scope,json=instanceScope,proto3" json:"instance_scope,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -5865,6 +6155,13 @@ func (x *GetServiceSignalsResponse) GetTruncated() bool {
 		return x.Truncated
 	}
 	return false
+}
+
+func (x *GetServiceSignalsResponse) GetInstanceScope() *v1.InstanceScope {
+	if x != nil {
+		return x.InstanceScope
+	}
+	return nil
 }
 
 // ServiceSignals is one service's signals. A signal name is "traces", "logs"
@@ -6010,8 +6307,12 @@ type ListWorkloadsResponse struct {
 	// not, instead of failing the whole Overview: the server keeps reading a
 	// missing part and serves it to the next request (a retry or the poll).
 	UnavailableSections []string `protobuf:"bytes,5,rep,name=unavailable_sections,json=unavailableSections,proto3" json:"unavailable_sections,omitempty"`
-	unknownFields       protoimpl.UnknownFields
-	sizeCache           protoimpl.SizeCache
+	// The instance narrowing this answer applied: scope.instance_ids and
+	// instance_users, echoed exactly. Unset when the request named none, or
+	// when this read could not apply it (controlplane.v1.InstanceScope).
+	InstanceScope *v1.InstanceScope `protobuf:"bytes,6,opt,name=instance_scope,json=instanceScope,proto3" json:"instance_scope,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ListWorkloadsResponse) Reset() {
@@ -6079,6 +6380,13 @@ func (x *ListWorkloadsResponse) GetUnavailableSections() []string {
 	return nil
 }
 
+func (x *ListWorkloadsResponse) GetInstanceScope() *v1.InstanceScope {
+	if x != nil {
+		return x.InstanceScope
+	}
+	return nil
+}
+
 type Workload struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// reliant.env.id, and the environment's name when it is known.
@@ -6099,10 +6407,14 @@ type Workload struct {
 	LatestWarning *WorkloadEvent `protobuf:"bytes,9,opt,name=latest_warning,json=latestWarning,proto3" json:"latest_warning,omitempty"`
 	// How the workload runs, from the environment's recorded bundle (the
 	// telemetry carries no kind). UNSPECIFIED when the environment has no
-	// recorded bundle or the bundle does not declare the workload.
+	// recorded bundle or the bundle does not declare the workload, and always on
+	// a read narrowed to dev instances (scope.instance_ids / instance_users),
+	// which reads no deploy ledger or bundle: those are the hosted deployment's.
 	Kind v1.WorkloadKind `protobuf:"varint,10,opt,name=kind,proto3,enum=controlplane.v1.WorkloadKind" json:"kind,omitempty"`
 	// ONE server-side verdict per workload, so the list, the detail page and the
-	// nav badge cannot disagree. Rules: see WorkloadHealth.
+	// nav badge cannot disagree. Rules: see WorkloadHealth. Narrowed to dev
+	// instances, from the instances' own telemetry alone: no hosted suspension,
+	// rollout or ready count enters it.
 	Health WorkloadHealth `protobuf:"varint,11,opt,name=health,proto3,enum=controlplane.v1.WorkloadHealth" json:"health,omitempty"`
 	// One line saying why: "2 of 3 replicas ready", "restarted 14x, last exit
 	// OOMKilled". Empty for HEALTHY.
@@ -6111,10 +6423,13 @@ type Workload struct {
 	// count when it observes the workload, else replicas_observed (pods
 	// reporting). desired: the ledger's desired count, else the bundle's
 	// declared replicas; unset when neither is known (then render ready alone).
+	// Narrowed to dev instances: ready is the instances' pods reporting, and
+	// desired is unset (an instance declares no replica count).
 	ReadyReplicas   *int32 `protobuf:"varint,13,opt,name=ready_replicas,json=readyReplicas,proto3,oneof" json:"ready_replicas,omitempty"`
 	DesiredReplicas *int32 `protobuf:"varint,14,opt,name=desired_replicas,json=desiredReplicas,proto3,oneof" json:"desired_replicas,omitempty"`
 	// The release this workload is running, e.g. "v1.7.44". Empty when it cannot
-	// be established; release_basis says how it was.
+	// be established; release_basis says how it was. Empty, with release_basis
+	// unset, on a read narrowed to dev instances: a dev instance runs no release.
 	ReleaseVersion string               `protobuf:"bytes,15,opt,name=release_version,json=releaseVersion,proto3" json:"release_version,omitempty"`
 	ReleaseBasis   WorkloadReleaseBasis `protobuf:"varint,16,opt,name=release_basis,json=releaseBasis,proto3,enum=controlplane.v1.WorkloadReleaseBasis" json:"release_basis,omitempty"`
 	// GetWorkload only (the list leaves it empty): this workload's pods in the
@@ -6123,7 +6438,7 @@ type Workload struct {
 	// GetWorkload only (the list leaves it unset): what the environment's recorded
 	// bundle declares for the workload, the same message DeployService.GetBundle
 	// returns. Unset when the environment has no recorded bundle or the bundle
-	// does not declare it.
+	// does not declare it, and on a read narrowed to dev instances.
 	Declared *v1.DeclaredWorkload `protobuf:"bytes,18,opt,name=declared,proto3" json:"declared,omitempty"`
 	// Whose side the fault is on, when health is not HEALTHY. The platform alerts
 	// on PLATFORM; the console says "this is on us" instead of asking the user to
@@ -6571,7 +6886,8 @@ type WorkloadJob struct {
 	// BackoffLimitExceeded, DeadlineExceeded, ... for a FAILED run.
 	Reason string `protobuf:"bytes,6,opt,name=reason,proto3" json:"reason,omitempty"`
 	// The release in effect when the run started (newest promotion that moved
-	// the workload at or before started_at). Empty when unknown.
+	// the workload at or before started_at). Empty when unknown, and on a read
+	// narrowed to dev instances, which reads no promotion.
 	ReleaseVersion string                 `protobuf:"bytes,7,opt,name=release_version,json=releaseVersion,proto3" json:"release_version,omitempty"`
 	StartedAt      *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=started_at,json=startedAt,proto3" json:"started_at,omitempty"`
 	FinishedAt     *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=finished_at,json=finishedAt,proto3" json:"finished_at,omitempty"`
@@ -7107,6 +7423,10 @@ type GetWorkloadResponse struct {
 	// The workload's health transitions in the range, oldest first, per
 	// environment in scope. Derived from the readiness series, not recorded.
 	HealthChanges []*WorkloadHealthChange `protobuf:"bytes,8,rep,name=health_changes,json=healthChanges,proto3" json:"health_changes,omitempty"`
+	// The instance narrowing this answer applied: scope.instance_ids and
+	// instance_users, echoed exactly. Unset when the request named none, or
+	// when this read could not apply it (controlplane.v1.InstanceScope).
+	InstanceScope *v1.InstanceScope `protobuf:"bytes,9,opt,name=instance_scope,json=instanceScope,proto3" json:"instance_scope,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -7193,6 +7513,13 @@ func (x *GetWorkloadResponse) GetWorkloads() []*Workload {
 func (x *GetWorkloadResponse) GetHealthChanges() []*WorkloadHealthChange {
 	if x != nil {
 		return x.HealthChanges
+	}
+	return nil
+}
+
+func (x *GetWorkloadResponse) GetInstanceScope() *v1.InstanceScope {
+	if x != nil {
+		return x.InstanceScope
 	}
 	return nil
 }
@@ -7874,7 +8201,14 @@ type QueryPanelResponse struct {
 	// "bar" (Panel.draw resolved against the result's columns). "line" fills
 	// series; every other draw fills columns and rows. Empty with explain, for
 	// every other kind, and from a server older than Panel.draw.
-	Draw          string `protobuf:"bytes,21,opt,name=draw,proto3" json:"draw,omitempty"`
+	Draw string `protobuf:"bytes,21,opt,name=draw,proto3" json:"draw,omitempty"`
+	// The instance narrowing this answer applied: scope.instance_ids and
+	// instance_users, echoed exactly. Unset when the request named none; always
+	// for a sql panel, whose statement is its author's and is never narrowed;
+	// and always for a browser panel (funnel, issues, sessions), which is
+	// narrowed to the sessions the instances' spans carry, but a session can
+	// span instances (controlplane.v1.InstanceScope).
+	InstanceScope *v1.InstanceScope `protobuf:"bytes,22,opt,name=instance_scope,json=instanceScope,proto3" json:"instance_scope,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -8054,6 +8388,13 @@ func (x *QueryPanelResponse) GetDraw() string {
 		return x.Draw
 	}
 	return ""
+}
+
+func (x *QueryPanelResponse) GetInstanceScope() *v1.InstanceScope {
+	if x != nil {
+		return x.InstanceScope
+	}
+	return nil
 }
 
 // What one PanelSeriesResult of a metrics panel measures, so a client can
@@ -8706,7 +9047,11 @@ type GetDashboardsResponse struct {
 	// environment in scope has a recorded set: its current release's bundle was
 	// never recorded (a failed registry push, a self-managed environment), or
 	// predates dashboards in the bundle, or nothing has been promoted into it.
-	Source        string `protobuf:"bytes,2,opt,name=source,proto3" json:"source,omitempty"`
+	Source string `protobuf:"bytes,2,opt,name=source,proto3" json:"source,omitempty"`
+	// Always unset: this read is never narrowed to dev instances (dashboards are the environment's definitions),
+	// so it answers for the whole scope even when scope.instance_ids or
+	// instance_users is set (controlplane.v1.InstanceScope).
+	InstanceScope *v1.InstanceScope `protobuf:"bytes,3,opt,name=instance_scope,json=instanceScope,proto3" json:"instance_scope,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -8753,6 +9098,13 @@ func (x *GetDashboardsResponse) GetSource() string {
 		return x.Source
 	}
 	return ""
+}
+
+func (x *GetDashboardsResponse) GetInstanceScope() *v1.InstanceScope {
+	if x != nil {
+		return x.InstanceScope
+	}
+	return nil
 }
 
 type DashboardSpec struct {
@@ -10462,7 +10814,11 @@ type GetReleaseHealthResponse struct {
 	Thresholds []*EffectiveThreshold `protobuf:"bytes,12,rep,name=thresholds,proto3" json:"thresholds,omitempty"`
 	// Finding codes this server could not check (no alert state, no issue
 	// reader), so a PASS is not read as covering them.
-	NotEvaluated  []string `protobuf:"bytes,13,rep,name=not_evaluated,json=notEvaluated,proto3" json:"not_evaluated,omitempty"`
+	NotEvaluated []string `protobuf:"bytes,13,rep,name=not_evaluated,json=notEvaluated,proto3" json:"not_evaluated,omitempty"`
+	// Always unset: this read is never narrowed to dev instances (a release is judged over its whole environment),
+	// so it answers for the whole scope even when scope.instance_ids or
+	// instance_users is set (controlplane.v1.InstanceScope).
+	InstanceScope *v1.InstanceScope `protobuf:"bytes,14,opt,name=instance_scope,json=instanceScope,proto3" json:"instance_scope,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -10584,6 +10940,13 @@ func (x *GetReleaseHealthResponse) GetThresholds() []*EffectiveThreshold {
 func (x *GetReleaseHealthResponse) GetNotEvaluated() []string {
 	if x != nil {
 		return x.NotEvaluated
+	}
+	return nil
+}
+
+func (x *GetReleaseHealthResponse) GetInstanceScope() *v1.InstanceScope {
+	if x != nil {
+		return x.InstanceScope
 	}
 	return nil
 }
@@ -11094,6 +11457,219 @@ func (x *EffectiveThreshold) GetSource() string {
 	return ""
 }
 
+type ListFrontendReplayRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The org whose environments are read. Verified against the caller, never
+	// assumed.
+	OrgId string `protobuf:"bytes,1,opt,name=org_id,json=orgId,proto3" json:"org_id,omitempty"`
+	// The forge project whose environments are in scope. Unset = not narrowed by
+	// project; set to "" = the project-less environments.
+	ProjectId *string `protobuf:"bytes,2,opt,name=project_id,json=projectId,proto3,oneof" json:"project_id,omitempty"`
+	// Control-plane environment ids (deploy_environments.id). Empty = every
+	// environment the caller may read in the org (of the project, when named).
+	EnvIds        []string `protobuf:"bytes,3,rep,name=env_ids,json=envIds,proto3" json:"env_ids,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListFrontendReplayRequest) Reset() {
+	*x = ListFrontendReplayRequest{}
+	mi := &file_services_observability_v1_observability_proto_msgTypes[106]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListFrontendReplayRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListFrontendReplayRequest) ProtoMessage() {}
+
+func (x *ListFrontendReplayRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_services_observability_v1_observability_proto_msgTypes[106]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListFrontendReplayRequest.ProtoReflect.Descriptor instead.
+func (*ListFrontendReplayRequest) Descriptor() ([]byte, []int) {
+	return file_services_observability_v1_observability_proto_rawDescGZIP(), []int{106}
+}
+
+func (x *ListFrontendReplayRequest) GetOrgId() string {
+	if x != nil {
+		return x.OrgId
+	}
+	return ""
+}
+
+func (x *ListFrontendReplayRequest) GetProjectId() string {
+	if x != nil && x.ProjectId != nil {
+		return *x.ProjectId
+	}
+	return ""
+}
+
+func (x *ListFrontendReplayRequest) GetEnvIds() []string {
+	if x != nil {
+		return x.EnvIds
+	}
+	return nil
+}
+
+type ListFrontendReplayResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// One row per (environment, frontend), in environment scope order, then by
+	// frontend name.
+	Frontends []*FrontendReplay `protobuf:"bytes,1,rep,name=frontends,proto3" json:"frontends,omitempty"`
+	// Environments in scope whose frontends could not be read at all (the
+	// release ledger was unreadable). They have no rows; that is not "no
+	// frontends".
+	UnavailableEnvIds []string `protobuf:"bytes,2,rep,name=unavailable_env_ids,json=unavailableEnvIds,proto3" json:"unavailable_env_ids,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
+}
+
+func (x *ListFrontendReplayResponse) Reset() {
+	*x = ListFrontendReplayResponse{}
+	mi := &file_services_observability_v1_observability_proto_msgTypes[107]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListFrontendReplayResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListFrontendReplayResponse) ProtoMessage() {}
+
+func (x *ListFrontendReplayResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_services_observability_v1_observability_proto_msgTypes[107]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListFrontendReplayResponse.ProtoReflect.Descriptor instead.
+func (*ListFrontendReplayResponse) Descriptor() ([]byte, []int) {
+	return file_services_observability_v1_observability_proto_rawDescGZIP(), []int{107}
+}
+
+func (x *ListFrontendReplayResponse) GetFrontends() []*FrontendReplay {
+	if x != nil {
+		return x.Frontends
+	}
+	return nil
+}
+
+func (x *ListFrontendReplayResponse) GetUnavailableEnvIds() []string {
+	if x != nil {
+		return x.UnavailableEnvIds
+	}
+	return nil
+}
+
+// FrontendReplay is one frontend instance's session replay state.
+type FrontendReplay struct {
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	EnvId   string                 `protobuf:"bytes,1,opt,name=env_id,json=envId,proto3" json:"env_id,omitempty"`
+	EnvName string                 `protobuf:"bytes,2,opt,name=env_name,json=envName,proto3" json:"env_name,omitempty"`
+	// The forge frontend's name: the forge.frontend attribute its telemetry
+	// carries.
+	Frontend string              `protobuf:"bytes,3,opt,name=frontend,proto3" json:"frontend,omitempty"`
+	State    FrontendReplayState `protobuf:"varint,4,opt,name=state,proto3,enum=controlplane.v1.FrontendReplayState" json:"state,omitempty"`
+	// Where the frontend's runtime config was read from.
+	Source FrontendReplaySource `protobuf:"varint,5,opt,name=source,proto3,enum=controlplane.v1.FrontendReplaySource" json:"source,omitempty"`
+	// The fraction of sessions recorded (REPLAY_SAMPLE_RATE), 0 to 1. 1 when the
+	// config does not set it, and when the state is UNKNOWN.
+	SampleRate    float64 `protobuf:"fixed64,6,opt,name=sample_rate,json=sampleRate,proto3" json:"sample_rate,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *FrontendReplay) Reset() {
+	*x = FrontendReplay{}
+	mi := &file_services_observability_v1_observability_proto_msgTypes[108]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *FrontendReplay) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*FrontendReplay) ProtoMessage() {}
+
+func (x *FrontendReplay) ProtoReflect() protoreflect.Message {
+	mi := &file_services_observability_v1_observability_proto_msgTypes[108]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use FrontendReplay.ProtoReflect.Descriptor instead.
+func (*FrontendReplay) Descriptor() ([]byte, []int) {
+	return file_services_observability_v1_observability_proto_rawDescGZIP(), []int{108}
+}
+
+func (x *FrontendReplay) GetEnvId() string {
+	if x != nil {
+		return x.EnvId
+	}
+	return ""
+}
+
+func (x *FrontendReplay) GetEnvName() string {
+	if x != nil {
+		return x.EnvName
+	}
+	return ""
+}
+
+func (x *FrontendReplay) GetFrontend() string {
+	if x != nil {
+		return x.Frontend
+	}
+	return ""
+}
+
+func (x *FrontendReplay) GetState() FrontendReplayState {
+	if x != nil {
+		return x.State
+	}
+	return FrontendReplayState_FRONTEND_REPLAY_STATE_UNSPECIFIED
+}
+
+func (x *FrontendReplay) GetSource() FrontendReplaySource {
+	if x != nil {
+		return x.Source
+	}
+	return FrontendReplaySource_FRONTEND_REPLAY_SOURCE_UNSPECIFIED
+}
+
+func (x *FrontendReplay) GetSampleRate() float64 {
+	if x != nil {
+		return x.SampleRate
+	}
+	return 0
+}
+
 var File_services_observability_v1_observability_proto protoreflect.FileDescriptor
 
 const file_services_observability_v1_observability_proto_rawDesc = "" +
@@ -11101,7 +11677,7 @@ const file_services_observability_v1_observability_proto_rawDesc = "" +
 	"-services/observability/v1/observability.proto\x12\x0fcontrolplane.v1\x1a\x1ccontrolplane/v1/client.proto\x1a\x1ccontrolplane/v1/deploy.proto\x1a\x1ccontrolplane/v1/issues.proto\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"k\n" +
 	"\tTimeRange\x120\n" +
 	"\x05start\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\x05start\x12,\n" +
-	"\x03end\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x03end\"\xb7\x02\n" +
+	"\x03end\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x03end\"\x81\x03\n" +
 	"\n" +
 	"QueryScope\x12\x15\n" +
 	"\x06org_id\x18\x01 \x01(\tR\x05orgId\x12\x1a\n" +
@@ -11112,7 +11688,10 @@ const file_services_observability_v1_observability_proto_rawDesc = "" +
 	"project_id\x18\x05 \x01(\tH\x00R\tprojectId\x88\x01\x01\x12\x17\n" +
 	"\aenv_ids\x18\x06 \x03(\tR\x06envIds\x12:\n" +
 	"\afilters\x18\a \x03(\v2 .controlplane.v1.AttributeFilterR\afilters\x12%\n" +
-	"\x0eplatform_scope\x18\b \x01(\bR\rplatformScopeB\r\n" +
+	"\x0eplatform_scope\x18\b \x01(\bR\rplatformScope\x12!\n" +
+	"\finstance_ids\x18\t \x03(\tR\vinstanceIds\x12%\n" +
+	"\x0einstance_users\x18\n" +
+	" \x03(\tR\rinstanceUsersB\r\n" +
 	"\v_project_idJ\x04\b\x02\x10\x03R\x06env_id\"\xb0\x02\n" +
 	"\x16GetServiceGraphRequest\x121\n" +
 	"\x05scope\x18\x01 \x01(\v2\x1b.controlplane.v1.QueryScopeR\x05scope\x12\x17\n" +
@@ -11123,12 +11702,13 @@ const file_services_observability_v1_observability_proto_rawDesc = "" +
 	"\tmax_edges\x18\x05 \x01(\rR\bmaxEdges\x12)\n" +
 	"\x10include_internal\x18\x06 \x01(\bR\x0fincludeInternal\x12\x1f\n" +
 	"\vrpc_service\x18\a \x01(\tR\n" +
-	"rpcService\"\x93\x02\n" +
+	"rpcService\"\xda\x02\n" +
 	"\x17GetServiceGraphResponse\x120\n" +
 	"\x05nodes\x18\x01 \x03(\v2\x1a.controlplane.v1.GraphNodeR\x05nodes\x120\n" +
 	"\x05edges\x18\x02 \x03(\v2\x1a.controlplane.v1.GraphEdgeR\x05edges\x12F\n" +
 	"\fcompleteness\x18\x03 \x01(\v2\".controlplane.v1.GraphCompletenessR\fcompleteness\x12L\n" +
-	"\x14effective_time_range\x18\x04 \x01(\v2\x1a.controlplane.v1.TimeRangeR\x12effectiveTimeRange\"\xaa\x02\n" +
+	"\x14effective_time_range\x18\x04 \x01(\v2\x1a.controlplane.v1.TimeRangeR\x12effectiveTimeRange\x12E\n" +
+	"\x0einstance_scope\x18\x05 \x01(\v2\x1e.controlplane.v1.InstanceScopeR\rinstanceScope\"\xaa\x02\n" +
 	"\tGraphNode\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x15\n" +
 	"\x06env_id\x18\x02 \x01(\tR\x05envId\x122\n" +
@@ -11229,13 +11809,14 @@ const file_services_observability_v1_observability_proto_rawDesc = "" +
 	"\n" +
 	"repository\x18\x05 \x01(\tR\n" +
 	"repository\x12\x16\n" +
-	"\x06commit\x18\x06 \x01(\tR\x06commit\"\xfe\x02\n" +
+	"\x06commit\x18\x06 \x01(\tR\x06commit\"\xc5\x03\n" +
 	"\x1eGetServiceGraphCatalogResponse\x129\n" +
 	"\amethods\x18\x01 \x03(\v2\x1f.controlplane.v1.GraphRPCMethodR\amethods\x12F\n" +
 	"\fcompleteness\x18\x02 \x01(\v2\".controlplane.v1.GraphCompletenessR\fcompleteness\x126\n" +
 	"\x17declared_catalog_status\x18\x03 \x01(\tR\x15declaredCatalogStatus\x12M\n" +
 	"#declared_catalog_unavailable_reason\x18\x04 \x01(\tR declaredCatalogUnavailableReason\x12R\n" +
-	"\x11declared_catalogs\x18\x05 \x03(\v2%.controlplane.v1.GraphDeclaredCatalogR\x10declaredCatalogs\"\x7f\n" +
+	"\x11declared_catalogs\x18\x05 \x03(\v2%.controlplane.v1.GraphDeclaredCatalogR\x10declaredCatalogs\x12E\n" +
+	"\x0einstance_scope\x18\x06 \x01(\v2\x1e.controlplane.v1.InstanceScopeR\rinstanceScope\"\x7f\n" +
 	"\x0fAttributeFilter\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12,\n" +
 	"\x02op\x18\x02 \x01(\x0e2\x1c.controlplane.v1.AttributeOpR\x02op\x12\x14\n" +
@@ -11255,10 +11836,11 @@ const file_services_observability_v1_observability_proto_rawDesc = "" +
 	"\x05order\x18\x04 \x01(\x0e2\x1a.controlplane.v1.SortOrderR\x05order\x12\x1b\n" +
 	"\tpage_size\x18\x05 \x01(\x05R\bpageSize\x12\x1d\n" +
 	"\n" +
-	"page_token\x18\x06 \x01(\tR\tpageToken\"l\n" +
+	"page_token\x18\x06 \x01(\tR\tpageToken\"\xb3\x01\n" +
 	"\x12SearchLogsResponse\x12.\n" +
 	"\x04logs\x18\x01 \x03(\v2\x1a.controlplane.v1.LogRecordR\x04logs\x12&\n" +
-	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"\x80\x05\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\x12E\n" +
+	"\x0einstance_scope\x18\x03 \x01(\v2\x1e.controlplane.v1.InstanceScopeR\rinstanceScope\"\x80\x05\n" +
 	"\tLogRecord\x128\n" +
 	"\ttimestamp\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\ttimestamp\x12#\n" +
 	"\rseverity_text\x18\x02 \x01(\tR\fseverityText\x12'\n" +
@@ -11311,13 +11893,14 @@ const file_services_observability_v1_observability_proto_rawDesc = "" +
 	"\b_browserB\x05\n" +
 	"\x03_osB\x13\n" +
 	"\x11_frontend_versionB\x12\n" +
-	"\x10_backend_versionJ\x04\b\x05\x10\x06R\x0fspan_attributes\"\xe6\x01\n" +
+	"\x10_backend_versionJ\x04\b\x05\x10\x06R\x0fspan_attributes\"\xad\x02\n" +
 	"\x12ListTracesResponse\x125\n" +
 	"\x06traces\x18\x01 \x03(\v2\x1d.controlplane.v1.TraceSummaryR\x06traces\x12&\n" +
 	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\x122\n" +
 	"\x03red\x18\x03 \x01(\v2 .controlplane.v1.TraceRedSummaryR\x03red\x12=\n" +
 	"\n" +
-	"red_groups\x18\x04 \x03(\v2\x1e.controlplane.v1.TraceRedGroupR\tredGroups\"\xbe\x01\n" +
+	"red_groups\x18\x04 \x03(\v2\x1e.controlplane.v1.TraceRedGroupR\tredGroups\x12E\n" +
+	"\x0einstance_scope\x18\x05 \x01(\v2\x1e.controlplane.v1.InstanceScopeR\rinstanceScope\"\xbe\x01\n" +
 	"\rTraceRedGroup\x12?\n" +
 	"\x05group\x18\x01 \x03(\v2).controlplane.v1.TraceRedGroup.GroupEntryR\x05group\x122\n" +
 	"\x03red\x18\x02 \x01(\v2 .controlplane.v1.TraceRedSummaryR\x03red\x1a8\n" +
@@ -11363,13 +11946,14 @@ const file_services_observability_v1_observability_proto_rawDesc = "" +
 	"\x06p99_ms\x18\a \x01(\x01R\x05p99Ms\"_\n" +
 	"\x0fGetTraceRequest\x121\n" +
 	"\x05scope\x18\x01 \x01(\v2\x1b.controlplane.v1.QueryScopeR\x05scope\x12\x19\n" +
-	"\btrace_id\x18\x02 \x01(\tR\atraceId\"\xf8\x01\n" +
+	"\btrace_id\x18\x02 \x01(\tR\atraceId\"\xbf\x02\n" +
 	"\x10GetTraceResponse\x12\x19\n" +
 	"\btrace_id\x18\x01 \x01(\tR\atraceId\x12+\n" +
 	"\x05spans\x18\x02 \x03(\v2\x15.controlplane.v1.SpanR\x05spans\x12\x1c\n" +
 	"\ttruncated\x18\x03 \x01(\bR\ttruncated\x12D\n" +
 	"\x0erelated_traces\x18\x04 \x03(\v2\x1d.controlplane.v1.RelatedTraceR\rrelatedTraces\x128\n" +
-	"\x18related_traces_truncated\x18\x05 \x01(\bR\x16relatedTracesTruncated\"h\n" +
+	"\x18related_traces_truncated\x18\x05 \x01(\bR\x16relatedTracesTruncated\x12E\n" +
+	"\x0einstance_scope\x18\x06 \x01(\v2\x1e.controlplane.v1.InstanceScopeR\rinstanceScope\"h\n" +
 	"\fRelatedTrace\x12\x19\n" +
 	"\btrace_id\x18\x01 \x01(\tR\atraceId\x12\x17\n" +
 	"\aspan_id\x18\x02 \x01(\tR\x06spanId\x12$\n" +
@@ -11418,10 +12002,11 @@ const file_services_observability_v1_observability_proto_rawDesc = "" +
 	"\x05scope\x18\x01 \x01(\v2\x1b.controlplane.v1.QueryScopeR\x05scope\x12(\n" +
 	"\rname_contains\x18\x02 \x01(\tH\x00R\fnameContains\x88\x01\x01\x12\x14\n" +
 	"\x05limit\x18\x03 \x01(\x05R\x05limitB\x10\n" +
-	"\x0e_name_contains\"j\n" +
+	"\x0e_name_contains\"\xb1\x01\n" +
 	"\x13ListMetricsResponse\x125\n" +
 	"\ametrics\x18\x01 \x03(\v2\x1b.controlplane.v1.MetricInfoR\ametrics\x12\x1c\n" +
-	"\ttruncated\x18\x02 \x01(\bR\ttruncated\"\xeb\x04\n" +
+	"\ttruncated\x18\x02 \x01(\bR\ttruncated\x12E\n" +
+	"\x0einstance_scope\x18\x03 \x01(\v2\x1e.controlplane.v1.InstanceScopeR\rinstanceScope\"\xeb\x04\n" +
 	"\n" +
 	"MetricInfo\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12/\n" +
@@ -11450,7 +12035,7 @@ const file_services_observability_v1_observability_proto_rawDesc = "" +
 	"metricName\x12A\n" +
 	"\vmetric_type\x18\x03 \x01(\x0e2\x1b.controlplane.v1.MetricTypeH\x00R\n" +
 	"metricType\x88\x01\x01B\x0e\n" +
-	"\f_metric_type\"\x91\x02\n" +
+	"\f_metric_type\"\xd8\x02\n" +
 	"\x11GetMetricResponse\x12/\n" +
 	"\x04info\x18\x01 \x01(\v2\x1b.controlplane.v1.MetricInfoR\x04info\x12)\n" +
 	"\x10interval_seconds\x18\x02 \x01(\x05R\x0fintervalSeconds\x12+\n" +
@@ -11458,7 +12043,8 @@ const file_services_observability_v1_observability_proto_rawDesc = "" +
 	"\n" +
 	"attributes\x18\x04 \x03(\v2 .controlplane.v1.MetricAttributeR\n" +
 	"attributes\x121\n" +
-	"\x14suggested_breakdowns\x18\x05 \x03(\tR\x13suggestedBreakdowns\"\xb7\x01\n" +
+	"\x14suggested_breakdowns\x18\x05 \x03(\tR\x13suggestedBreakdowns\x12E\n" +
+	"\x0einstance_scope\x18\x06 \x01(\v2\x1e.controlplane.v1.InstanceScopeR\rinstanceScope\"\xb7\x01\n" +
 	"\x0fMetricAttribute\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x1a\n" +
 	"\bresource\x18\x02 \x01(\bR\bresource\x12+\n" +
@@ -11485,9 +12071,10 @@ const file_services_observability_v1_observability_proto_rawDesc = "" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01B\x0e\n" +
 	"\f_metric_typeB\f\n" +
 	"\n" +
-	"_min_value\"\\\n" +
+	"_min_value\"\xa3\x01\n" +
 	"\x1bListMetricExemplarsResponse\x12=\n" +
-	"\texemplars\x18\x01 \x03(\v2\x1f.controlplane.v1.MetricExemplarR\texemplars\"\xbd\x02\n" +
+	"\texemplars\x18\x01 \x03(\v2\x1f.controlplane.v1.MetricExemplarR\texemplars\x12E\n" +
+	"\x0einstance_scope\x18\x02 \x01(\v2\x1e.controlplane.v1.InstanceScopeR\rinstanceScope\"\xbd\x02\n" +
 	"\x0eMetricExemplar\x12.\n" +
 	"\x04time\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\x04time\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\x01R\x05value\x12\x19\n" +
@@ -11508,7 +12095,7 @@ const file_services_observability_v1_observability_proto_rawDesc = "" +
 	"metricType\x12D\n" +
 	"\vaggregation\x18\x04 \x01(\x0e2\".controlplane.v1.MetricAggregationR\vaggregation\x12\x19\n" +
 	"\bgroup_by\x18\x05 \x03(\tR\agroupBy\x12!\n" +
-	"\fstep_seconds\x18\a \x01(\x05R\vstepSecondsJ\x04\b\x06\x10\aR\afilters\"\xb2\x02\n" +
+	"\fstep_seconds\x18\a \x01(\x05R\vstepSecondsJ\x04\b\x06\x10\aR\afilters\"\xf9\x02\n" +
 	"\x13QueryMetricResponse\x125\n" +
 	"\x06series\x18\x01 \x03(\v2\x1d.controlplane.v1.MetricSeriesR\x06series\x12!\n" +
 	"\fstep_seconds\x18\x02 \x01(\x05R\vstepSeconds\x12<\n" +
@@ -11516,7 +12103,8 @@ const file_services_observability_v1_observability_proto_rawDesc = "" +
 	"metricType\x12\x12\n" +
 	"\x04unit\x18\x04 \x01(\tR\x04unit\x12D\n" +
 	"\vaggregation\x18\x06 \x01(\x0e2\".controlplane.v1.MetricAggregationR\vaggregation\x12)\n" +
-	"\x10series_truncated\x18\x05 \x01(\bR\x0fseriesTruncated\"\xc0\x01\n" +
+	"\x10series_truncated\x18\x05 \x01(\bR\x0fseriesTruncated\x12E\n" +
+	"\x0einstance_scope\x18\a \x01(\v2\x1e.controlplane.v1.InstanceScopeR\rinstanceScope\"\xc0\x01\n" +
 	"\fMetricSeries\x12A\n" +
 	"\x06labels\x18\x01 \x03(\v2).controlplane.v1.MetricSeries.LabelsEntryR\x06labels\x122\n" +
 	"\x06points\x18\x02 \x03(\v2\x1a.controlplane.v1.TimePointR\x06points\x1a9\n" +
@@ -11525,11 +12113,12 @@ const file_services_observability_v1_observability_proto_rawDesc = "" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"i\n" +
 	"\x19GetServiceOverviewRequest\x121\n" +
 	"\x05scope\x18\x01 \x01(\v2\x1b.controlplane.v1.QueryScopeR\x05scope\x12\x19\n" +
-	"\bgroup_by\x18\x02 \x03(\tR\agroupBy\"\xbb\x01\n" +
+	"\bgroup_by\x18\x02 \x03(\tR\agroupBy\"\x82\x02\n" +
 	"\x1aGetServiceOverviewResponse\x12<\n" +
 	"\bservices\x18\x01 \x03(\v2 .controlplane.v1.ServiceOverviewR\bservices\x12,\n" +
 	"\x12trend_step_seconds\x18\x02 \x01(\x05R\x10trendStepSeconds\x121\n" +
-	"\x14unavailable_sections\x18\x03 \x03(\tR\x13unavailableSections\"\xdd\x04\n" +
+	"\x14unavailable_sections\x18\x03 \x03(\tR\x13unavailableSections\x12E\n" +
+	"\x0einstance_scope\x18\x04 \x01(\v2\x1e.controlplane.v1.InstanceScopeR\rinstanceScope\"\xdd\x04\n" +
 	"\x0fServiceOverview\x12\x18\n" +
 	"\aservice\x18\x01 \x01(\tR\aservice\x12#\n" +
 	"\rrequest_count\x18\x02 \x01(\x03R\frequestCount\x12&\n" +
@@ -11557,7 +12146,7 @@ const file_services_observability_v1_observability_proto_rawDesc = "" +
 	"\x05scope\x18\x01 \x01(\v2\x1b.controlplane.v1.QueryScopeR\x05scope\x12\x18\n" +
 	"\aservice\x18\x02 \x01(\tR\aservice\x12!\n" +
 	"\fprofile_type\x18\x03 \x01(\tR\vprofileType\x12\x19\n" +
-	"\btrace_id\x18\x04 \x01(\tR\atraceId\"\xec\x01\n" +
+	"\btrace_id\x18\x04 \x01(\tR\atraceId\"\xb3\x02\n" +
 	"\x15GetFlamegraphResponse\x12'\n" +
 	"\x0fspeedscope_json\x18\x01 \x01(\tR\x0espeedscopeJson\x12\x1f\n" +
 	"\vtotal_value\x18\x02 \x01(\x03R\n" +
@@ -11566,7 +12155,8 @@ const file_services_observability_v1_observability_proto_rawDesc = "" +
 	"\vstack_count\x18\x04 \x01(\x05R\n" +
 	"stackCount\x126\n" +
 	"\x17available_profile_types\x18\x05 \x03(\tR\x15availableProfileTypes\x12\x1c\n" +
-	"\ttruncated\x18\x06 \x01(\bR\ttruncated\"\x96\x02\n" +
+	"\ttruncated\x18\x06 \x01(\bR\ttruncated\x12E\n" +
+	"\x0einstance_scope\x18\a \x01(\v2\x1e.controlplane.v1.InstanceScopeR\rinstanceScope\"\x96\x02\n" +
 	"\x1aListAttributeValuesRequest\x121\n" +
 	"\x05scope\x18\x01 \x01(\v2\x1b.controlplane.v1.QueryScopeR\x05scope\x12\x10\n" +
 	"\x03key\x18\x02 \x01(\tR\x03key\x12\x1b\n" +
@@ -11577,31 +12167,34 @@ const file_services_observability_v1_observability_proto_rawDesc = "" +
 	"\x05limit\x18\x06 \x01(\x05R\x05limitB\t\n" +
 	"\a_prefixB\t\n" +
 	"\a_signalB\x0e\n" +
-	"\f_metric_name\"t\n" +
+	"\f_metric_name\"\xbb\x01\n" +
 	"\x1bListAttributeValuesResponse\x127\n" +
 	"\x06values\x18\x01 \x03(\v2\x1f.controlplane.v1.AttributeValueR\x06values\x12\x1c\n" +
-	"\ttruncated\x18\x02 \x01(\bR\ttruncated\"<\n" +
+	"\ttruncated\x18\x02 \x01(\bR\ttruncated\x12E\n" +
+	"\x0einstance_scope\x18\x03 \x01(\v2\x1e.controlplane.v1.InstanceScopeR\rinstanceScope\"<\n" +
 	"\x0eAttributeValue\x12\x14\n" +
 	"\x05value\x18\x01 \x01(\tR\x05value\x12\x14\n" +
 	"\x05count\x18\x02 \x01(\x03R\x05count\"M\n" +
 	"\x18GetServiceSignalsRequest\x121\n" +
-	"\x05scope\x18\x01 \x01(\v2\x1b.controlplane.v1.QueryScopeR\x05scope\"v\n" +
+	"\x05scope\x18\x01 \x01(\v2\x1b.controlplane.v1.QueryScopeR\x05scope\"\xbd\x01\n" +
 	"\x19GetServiceSignalsResponse\x12;\n" +
 	"\bservices\x18\x01 \x03(\v2\x1f.controlplane.v1.ServiceSignalsR\bservices\x12\x1c\n" +
-	"\ttruncated\x18\x02 \x01(\bR\ttruncated\"\x8f\x01\n" +
+	"\ttruncated\x18\x02 \x01(\bR\ttruncated\x12E\n" +
+	"\x0einstance_scope\x18\x03 \x01(\v2\x1e.controlplane.v1.InstanceScopeR\rinstanceScope\"\x8f\x01\n" +
 	"\x0eServiceSignals\x12\x18\n" +
 	"\aservice\x18\x01 \x01(\tR\aservice\x12\x1a\n" +
 	"\bemitting\x18\x02 \x03(\tR\bemitting\x12\x1a\n" +
 	"\bdeclared\x18\x03 \x03(\tR\bdeclared\x12+\n" +
 	"\x11declaration_known\x18\x04 \x01(\bR\x10declarationKnown\"I\n" +
 	"\x14ListWorkloadsRequest\x121\n" +
-	"\x05scope\x18\x01 \x01(\v2\x1b.controlplane.v1.QueryScopeR\x05scope\"\xfa\x01\n" +
+	"\x05scope\x18\x01 \x01(\v2\x1b.controlplane.v1.QueryScopeR\x05scope\"\xc1\x02\n" +
 	"\x15ListWorkloadsResponse\x127\n" +
 	"\tworkloads\x18\x01 \x03(\v2\x19.controlplane.v1.WorkloadR\tworkloads\x12\x1c\n" +
 	"\ttruncated\x18\x02 \x01(\bR\ttruncated\x120\n" +
 	"\x04jobs\x18\x03 \x03(\v2\x1c.controlplane.v1.WorkloadJobR\x04jobs\x12%\n" +
 	"\x0ejobs_truncated\x18\x04 \x01(\bR\rjobsTruncated\x121\n" +
-	"\x14unavailable_sections\x18\x05 \x03(\tR\x13unavailableSections\"\xd5\b\n" +
+	"\x14unavailable_sections\x18\x05 \x03(\tR\x13unavailableSections\x12E\n" +
+	"\x0einstance_scope\x18\x06 \x01(\v2\x1e.controlplane.v1.InstanceScopeR\rinstanceScope\"\xd5\b\n" +
 	"\bWorkload\x12\x15\n" +
 	"\x06env_id\x18\x01 \x01(\tR\x05envId\x12\x19\n" +
 	"\benv_name\x18\x02 \x01(\tR\aenvName\x12\x1a\n" +
@@ -11710,7 +12303,7 @@ const file_services_observability_v1_observability_proto_rawDesc = "" +
 	"\x05scope\x18\x01 \x01(\v2\x1b.controlplane.v1.QueryScopeR\x05scope\x12\x1a\n" +
 	"\bworkload\x18\x02 \x01(\tR\bworkload\x12\x1c\n" +
 	"\tcontainer\x18\x03 \x01(\tR\tcontainer\x12!\n" +
-	"\fstep_seconds\x18\x04 \x01(\x05R\vstepSeconds\"\xda\x03\n" +
+	"\fstep_seconds\x18\x04 \x01(\x05R\vstepSeconds\"\xa1\x04\n" +
 	"\x13GetWorkloadResponse\x127\n" +
 	"\x06series\x18\x01 \x03(\v2\x1f.controlplane.v1.WorkloadSeriesR\x06series\x126\n" +
 	"\x06events\x18\x02 \x03(\v2\x1e.controlplane.v1.WorkloadEventR\x06events\x12A\n" +
@@ -11719,7 +12312,8 @@ const file_services_observability_v1_observability_proto_rawDesc = "" +
 	"\fstep_seconds\x18\x05 \x01(\x05R\vstepSeconds\x12\x1c\n" +
 	"\ttruncated\x18\x06 \x01(\bR\ttruncated\x127\n" +
 	"\tworkloads\x18\a \x03(\v2\x19.controlplane.v1.WorkloadR\tworkloads\x12L\n" +
-	"\x0ehealth_changes\x18\b \x03(\v2%.controlplane.v1.WorkloadHealthChangeR\rhealthChanges\"\xc6\x01\n" +
+	"\x0ehealth_changes\x18\b \x03(\v2%.controlplane.v1.WorkloadHealthChangeR\rhealthChanges\x12E\n" +
+	"\x0einstance_scope\x18\t \x01(\v2\x1e.controlplane.v1.InstanceScopeR\rinstanceScope\"\xc6\x01\n" +
 	"\x0eWorkloadSeries\x12\x15\n" +
 	"\x06env_id\x18\x01 \x01(\tR\x05envId\x12\x1c\n" +
 	"\tcontainer\x18\x02 \x01(\tR\tcontainer\x127\n" +
@@ -11767,7 +12361,7 @@ const file_services_observability_v1_observability_proto_rawDesc = "" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x12\n" +
 	"\x04type\x18\x02 \x01(\tR\x04type\x12\x18\n" +
 	"\anumeric\x18\x03 \x01(\bR\anumeric\x12\x12\n" +
-	"\x04time\x18\x04 \x01(\bR\x04time\"\xa8\a\n" +
+	"\x04time\x18\x04 \x01(\bR\x04time\"\xef\a\n" +
 	"\x12QueryPanelResponse\x12\x19\n" +
 	"\bpanel_id\x18\x01 \x01(\tR\apanelId\x12\x12\n" +
 	"\x04kind\x18\x02 \x01(\tR\x04kind\x12\x12\n" +
@@ -11792,7 +12386,8 @@ const file_services_observability_v1_observability_proto_rawDesc = "" +
 	"\x0ebucket_seconds\x18\x12 \x01(\x05R\rbucketSeconds\x12'\n" +
 	"\x0fbucket_timezone\x18\x13 \x01(\tR\x0ebucketTimezone\x12,\n" +
 	"\x05panel\x18\x14 \x01(\v2\x16.controlplane.v1.PanelR\x05panel\x12\x12\n" +
-	"\x04draw\x18\x15 \x01(\tR\x04draw\"\xbe\x02\n" +
+	"\x04draw\x18\x15 \x01(\tR\x04draw\x12E\n" +
+	"\x0einstance_scope\x18\x16 \x01(\v2\x1e.controlplane.v1.InstanceScopeR\rinstanceScope\"\xbe\x02\n" +
 	"\x0fPanelSeriesMeta\x12\x14\n" +
 	"\x05label\x18\x01 \x01(\tR\x05label\x12\x16\n" +
 	"\x06metric\x18\x02 \x01(\tR\x06metric\x12<\n" +
@@ -11862,10 +12457,11 @@ const file_services_observability_v1_observability_proto_rawDesc = "" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"I\n" +
 	"\x14GetDashboardsRequest\x121\n" +
-	"\x05scope\x18\x01 \x01(\v2\x1b.controlplane.v1.QueryScopeR\x05scope\"c\n" +
+	"\x05scope\x18\x01 \x01(\v2\x1b.controlplane.v1.QueryScopeR\x05scope\"\xaa\x01\n" +
 	"\x15GetDashboardsResponse\x122\n" +
 	"\x04spec\x18\x01 \x01(\v2\x1e.controlplane.v1.DashboardSpecR\x04spec\x12\x16\n" +
-	"\x06source\x18\x02 \x01(\tR\x06source\"\xfd\x01\n" +
+	"\x06source\x18\x02 \x01(\tR\x06source\x12E\n" +
+	"\x0einstance_scope\x18\x03 \x01(\v2\x1e.controlplane.v1.InstanceScopeR\rinstanceScope\"\xfd\x01\n" +
 	"\rDashboardSpec\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\tR\aversion\x12\x18\n" +
 	"\aproject\x18\x02 \x01(\tR\aproject\x12:\n" +
@@ -12010,7 +12606,7 @@ const file_services_observability_v1_observability_proto_rawDesc = "" +
 	"\x17ThresholdOverridesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01B\t\n" +
-	"\asubject\"\x9e\x06\n" +
+	"\asubject\"\xe5\x06\n" +
 	"\x18GetReleaseHealthResponse\x12B\n" +
 	"\tpromotion\x18\x01 \x01(\v2$.controlplane.v1.ReleasePromotionRefR\tpromotion\x122\n" +
 	"\x06before\x18\x02 \x01(\v2\x1a.controlplane.v1.TimeRangeR\x06before\x120\n" +
@@ -12028,7 +12624,8 @@ const file_services_observability_v1_observability_proto_rawDesc = "" +
 	"\n" +
 	"thresholds\x18\f \x03(\v2#.controlplane.v1.EffectiveThresholdR\n" +
 	"thresholds\x12#\n" +
-	"\rnot_evaluated\x18\r \x03(\tR\fnotEvaluated\"\xe4\x01\n" +
+	"\rnot_evaluated\x18\r \x03(\tR\fnotEvaluated\x12E\n" +
+	"\x0einstance_scope\x18\x0e \x01(\v2\x1e.controlplane.v1.InstanceScopeR\rinstanceScope\"\xe4\x01\n" +
 	"\x13ReleasePromotionRef\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12'\n" +
 	"\x0frelease_version\x18\x02 \x01(\tR\x0ereleaseVersion\x12\x1d\n" +
@@ -12071,7 +12668,24 @@ const file_services_observability_v1_observability_proto_rawDesc = "" +
 	"\x12EffectiveThreshold\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value\x12\x16\n" +
-	"\x06source\x18\x03 \x01(\tR\x06source*\xbc\x02\n" +
+	"\x06source\x18\x03 \x01(\tR\x06source\"~\n" +
+	"\x19ListFrontendReplayRequest\x12\x15\n" +
+	"\x06org_id\x18\x01 \x01(\tR\x05orgId\x12\"\n" +
+	"\n" +
+	"project_id\x18\x02 \x01(\tH\x00R\tprojectId\x88\x01\x01\x12\x17\n" +
+	"\aenv_ids\x18\x03 \x03(\tR\x06envIdsB\r\n" +
+	"\v_project_id\"\x8b\x01\n" +
+	"\x1aListFrontendReplayResponse\x12=\n" +
+	"\tfrontends\x18\x01 \x03(\v2\x1f.controlplane.v1.FrontendReplayR\tfrontends\x12.\n" +
+	"\x13unavailable_env_ids\x18\x02 \x03(\tR\x11unavailableEnvIds\"\xfa\x01\n" +
+	"\x0eFrontendReplay\x12\x15\n" +
+	"\x06env_id\x18\x01 \x01(\tR\x05envId\x12\x19\n" +
+	"\benv_name\x18\x02 \x01(\tR\aenvName\x12\x1a\n" +
+	"\bfrontend\x18\x03 \x01(\tR\bfrontend\x12:\n" +
+	"\x05state\x18\x04 \x01(\x0e2$.controlplane.v1.FrontendReplayStateR\x05state\x12=\n" +
+	"\x06source\x18\x05 \x01(\x0e2%.controlplane.v1.FrontendReplaySourceR\x06source\x12\x1f\n" +
+	"\vsample_rate\x18\x06 \x01(\x01R\n" +
+	"sampleRate*\xbc\x02\n" +
 	"\rGraphNodeKind\x12\x1f\n" +
 	"\x1bGRAPH_NODE_KIND_UNSPECIFIED\x10\x00\x12\x1b\n" +
 	"\x17GRAPH_NODE_KIND_PROCESS\x10\x01\x12\x17\n" +
@@ -12200,7 +12814,18 @@ const file_services_observability_v1_observability_proto_rawDesc = "" +
 	"\x1eRELEASE_FINDING_CODE_NEW_ISSUE\x10\x03\x12(\n" +
 	"$RELEASE_FINDING_CODE_REGRESSED_ISSUE\x10\x04\x12%\n" +
 	"!RELEASE_FINDING_CODE_ALERT_FIRING\x10\x05\x12*\n" +
-	"&RELEASE_FINDING_CODE_WORKLOAD_RESTARTS\x10\x062\xf9\x0e\n" +
+	"&RELEASE_FINDING_CODE_WORKLOAD_RESTARTS\x10\x06*\xbf\x01\n" +
+	"\x13FrontendReplayState\x12%\n" +
+	"!FRONTEND_REPLAY_STATE_UNSPECIFIED\x10\x00\x12\x1c\n" +
+	"\x18FRONTEND_REPLAY_STATE_ON\x10\x01\x12\x1d\n" +
+	"\x19FRONTEND_REPLAY_STATE_OFF\x10\x02\x12!\n" +
+	"\x1dFRONTEND_REPLAY_STATE_BLOCKED\x10\x03\x12!\n" +
+	"\x1dFRONTEND_REPLAY_STATE_UNKNOWN\x10\x04*\xa4\x01\n" +
+	"\x14FrontendReplaySource\x12&\n" +
+	"\"FRONTEND_REPLAY_SOURCE_UNSPECIFIED\x10\x00\x12\x1f\n" +
+	"\x1bFRONTEND_REPLAY_SOURCE_LIVE\x10\x01\x12\"\n" +
+	"\x1eFRONTEND_REPLAY_SOURCE_RELEASE\x10\x02\x12\x1f\n" +
+	"\x1bFRONTEND_REPLAY_SOURCE_NONE\x10\x032\xe8\x0f\n" +
 	"\x14ObservabilityService\x12U\n" +
 	"\n" +
 	"SearchLogs\x12\".controlplane.v1.SearchLogsRequest\x1a#.controlplane.v1.SearchLogsResponse\x12U\n" +
@@ -12223,7 +12848,8 @@ const file_services_observability_v1_observability_proto_rawDesc = "" +
 	"\vGetWorkload\x12#.controlplane.v1.GetWorkloadRequest\x1a$.controlplane.v1.GetWorkloadResponse\x12^\n" +
 	"\rGetDashboards\x12%.controlplane.v1.GetDashboardsRequest\x1a&.controlplane.v1.GetDashboardsResponse\x12{\n" +
 	"\x15GetObservabilityUsage\x12-.controlplane.v1.GetObservabilityUsageRequest\x1a..controlplane.v1.GetObservabilityUsageResponse\"\x03\x88\x02\x01\x12g\n" +
-	"\x10GetReleaseHealth\x12(.controlplane.v1.GetReleaseHealthRequest\x1a).controlplane.v1.GetReleaseHealthResponseB\xe1\x01\n" +
+	"\x10GetReleaseHealth\x12(.controlplane.v1.GetReleaseHealthRequest\x1a).controlplane.v1.GetReleaseHealthResponse\x12m\n" +
+	"\x12ListFrontendReplay\x12*.controlplane.v1.ListFrontendReplayRequest\x1a+.controlplane.v1.ListFrontendReplayResponseB\xe1\x01\n" +
 	"\x13com.controlplane.v1B\x12ObservabilityProtoP\x01ZYgithub.com/reliant-labs/reliant/gen/controlplane/services/observability/v1;controlplanev1\xa2\x02\x03CXX\xaa\x02\x0fControlplane.V1\xca\x02\x0fControlplane\\V1\xe2\x02\x1bControlplane\\V1\\GPBMetadata\xea\x02\x10Controlplane::V1b\x06proto3"
 
 var (
@@ -12238,8 +12864,8 @@ func file_services_observability_v1_observability_proto_rawDescGZIP() []byte {
 	return file_services_observability_v1_observability_proto_rawDescData
 }
 
-var file_services_observability_v1_observability_proto_enumTypes = make([]protoimpl.EnumInfo, 20)
-var file_services_observability_v1_observability_proto_msgTypes = make([]protoimpl.MessageInfo, 121)
+var file_services_observability_v1_observability_proto_enumTypes = make([]protoimpl.EnumInfo, 22)
+var file_services_observability_v1_observability_proto_msgTypes = make([]protoimpl.MessageInfo, 124)
 var file_services_observability_v1_observability_proto_goTypes = []any{
 	(GraphNodeKind)(0),                     // 0: controlplane.v1.GraphNodeKind
 	(GraphEdgeKind)(0),                     // 1: controlplane.v1.GraphEdgeKind
@@ -12261,378 +12887,407 @@ var file_services_observability_v1_observability_proto_goTypes = []any{
 	(ObservabilityQuotaState)(0),           // 17: controlplane.v1.ObservabilityQuotaState
 	(ReleaseVerdict)(0),                    // 18: controlplane.v1.ReleaseVerdict
 	(ReleaseFindingCode)(0),                // 19: controlplane.v1.ReleaseFindingCode
-	(*TimeRange)(nil),                      // 20: controlplane.v1.TimeRange
-	(*QueryScope)(nil),                     // 21: controlplane.v1.QueryScope
-	(*GetServiceGraphRequest)(nil),         // 22: controlplane.v1.GetServiceGraphRequest
-	(*GetServiceGraphResponse)(nil),        // 23: controlplane.v1.GetServiceGraphResponse
-	(*GraphNode)(nil),                      // 24: controlplane.v1.GraphNode
-	(*GraphHistogram)(nil),                 // 25: controlplane.v1.GraphHistogram
-	(*GraphTraceExemplar)(nil),             // 26: controlplane.v1.GraphTraceExemplar
-	(*GraphEdge)(nil),                      // 27: controlplane.v1.GraphEdge
-	(*GraphCompleteness)(nil),              // 28: controlplane.v1.GraphCompleteness
-	(*GetServiceGraphCatalogRequest)(nil),  // 29: controlplane.v1.GetServiceGraphCatalogRequest
-	(*GraphRPCMethod)(nil),                 // 30: controlplane.v1.GraphRPCMethod
-	(*GraphDeclaredCatalog)(nil),           // 31: controlplane.v1.GraphDeclaredCatalog
-	(*GetServiceGraphCatalogResponse)(nil), // 32: controlplane.v1.GetServiceGraphCatalogResponse
-	(*AttributeFilter)(nil),                // 33: controlplane.v1.AttributeFilter
-	(*TimePoint)(nil),                      // 34: controlplane.v1.TimePoint
-	(*SearchLogsRequest)(nil),              // 35: controlplane.v1.SearchLogsRequest
-	(*SearchLogsResponse)(nil),             // 36: controlplane.v1.SearchLogsResponse
-	(*LogRecord)(nil),                      // 37: controlplane.v1.LogRecord
-	(*ListTracesRequest)(nil),              // 38: controlplane.v1.ListTracesRequest
-	(*ListTracesResponse)(nil),             // 39: controlplane.v1.ListTracesResponse
-	(*TraceRedGroup)(nil),                  // 40: controlplane.v1.TraceRedGroup
-	(*TraceSummary)(nil),                   // 41: controlplane.v1.TraceSummary
-	(*TraceRedSummary)(nil),                // 42: controlplane.v1.TraceRedSummary
-	(*GetTraceRequest)(nil),                // 43: controlplane.v1.GetTraceRequest
-	(*GetTraceResponse)(nil),               // 44: controlplane.v1.GetTraceResponse
-	(*RelatedTrace)(nil),                   // 45: controlplane.v1.RelatedTrace
-	(*Span)(nil),                           // 46: controlplane.v1.Span
-	(*SpanEvent)(nil),                      // 47: controlplane.v1.SpanEvent
-	(*SpanLink)(nil),                       // 48: controlplane.v1.SpanLink
-	(*ListMetricsRequest)(nil),             // 49: controlplane.v1.ListMetricsRequest
-	(*ListMetricsResponse)(nil),            // 50: controlplane.v1.ListMetricsResponse
-	(*MetricInfo)(nil),                     // 51: controlplane.v1.MetricInfo
-	(*MetricAttributeSpec)(nil),            // 52: controlplane.v1.MetricAttributeSpec
-	(*GetMetricRequest)(nil),               // 53: controlplane.v1.GetMetricRequest
-	(*GetMetricResponse)(nil),              // 54: controlplane.v1.GetMetricResponse
-	(*MetricAttribute)(nil),                // 55: controlplane.v1.MetricAttribute
-	(*ListMetricExemplarsRequest)(nil),     // 56: controlplane.v1.ListMetricExemplarsRequest
-	(*ListMetricExemplarsResponse)(nil),    // 57: controlplane.v1.ListMetricExemplarsResponse
-	(*MetricExemplar)(nil),                 // 58: controlplane.v1.MetricExemplar
-	(*QueryMetricRequest)(nil),             // 59: controlplane.v1.QueryMetricRequest
-	(*QueryMetricResponse)(nil),            // 60: controlplane.v1.QueryMetricResponse
-	(*MetricSeries)(nil),                   // 61: controlplane.v1.MetricSeries
-	(*GetServiceOverviewRequest)(nil),      // 62: controlplane.v1.GetServiceOverviewRequest
-	(*GetServiceOverviewResponse)(nil),     // 63: controlplane.v1.GetServiceOverviewResponse
-	(*ServiceOverview)(nil),                // 64: controlplane.v1.ServiceOverview
-	(*GetFlamegraphRequest)(nil),           // 65: controlplane.v1.GetFlamegraphRequest
-	(*GetFlamegraphResponse)(nil),          // 66: controlplane.v1.GetFlamegraphResponse
-	(*ListAttributeValuesRequest)(nil),     // 67: controlplane.v1.ListAttributeValuesRequest
-	(*ListAttributeValuesResponse)(nil),    // 68: controlplane.v1.ListAttributeValuesResponse
-	(*AttributeValue)(nil),                 // 69: controlplane.v1.AttributeValue
-	(*GetServiceSignalsRequest)(nil),       // 70: controlplane.v1.GetServiceSignalsRequest
-	(*GetServiceSignalsResponse)(nil),      // 71: controlplane.v1.GetServiceSignalsResponse
-	(*ServiceSignals)(nil),                 // 72: controlplane.v1.ServiceSignals
-	(*ListWorkloadsRequest)(nil),           // 73: controlplane.v1.ListWorkloadsRequest
-	(*ListWorkloadsResponse)(nil),          // 74: controlplane.v1.ListWorkloadsResponse
-	(*Workload)(nil),                       // 75: controlplane.v1.Workload
-	(*WorkloadHealthChange)(nil),           // 76: controlplane.v1.WorkloadHealthChange
-	(*WorkloadPod)(nil),                    // 77: controlplane.v1.WorkloadPod
-	(*WorkloadJob)(nil),                    // 78: controlplane.v1.WorkloadJob
-	(*WorkloadContainer)(nil),              // 79: controlplane.v1.WorkloadContainer
-	(*ResourceUsage)(nil),                  // 80: controlplane.v1.ResourceUsage
-	(*WorkloadEvent)(nil),                  // 81: controlplane.v1.WorkloadEvent
-	(*GetWorkloadRequest)(nil),             // 82: controlplane.v1.GetWorkloadRequest
-	(*GetWorkloadResponse)(nil),            // 83: controlplane.v1.GetWorkloadResponse
-	(*WorkloadSeries)(nil),                 // 84: controlplane.v1.WorkloadSeries
-	(*ImageChange)(nil),                    // 85: controlplane.v1.ImageChange
-	(*VersionChange)(nil),                  // 86: controlplane.v1.VersionChange
-	(*QueryPanelRequest)(nil),              // 87: controlplane.v1.QueryPanelRequest
-	(*PanelRef)(nil),                       // 88: controlplane.v1.PanelRef
-	(*CompiledStatement)(nil),              // 89: controlplane.v1.CompiledStatement
-	(*HeatmapCell)(nil),                    // 90: controlplane.v1.HeatmapCell
-	(*SqlColumn)(nil),                      // 91: controlplane.v1.SqlColumn
-	(*QueryPanelResponse)(nil),             // 92: controlplane.v1.QueryPanelResponse
-	(*PanelSeriesMeta)(nil),                // 93: controlplane.v1.PanelSeriesMeta
-	(*FunnelStepResult)(nil),               // 94: controlplane.v1.FunnelStepResult
-	(*PanelIssue)(nil),                     // 95: controlplane.v1.PanelIssue
-	(*PanelSession)(nil),                   // 96: controlplane.v1.PanelSession
-	(*PanelSeriesResult)(nil),              // 97: controlplane.v1.PanelSeriesResult
-	(*PanelTableRow)(nil),                  // 98: controlplane.v1.PanelTableRow
-	(*GetDashboardsRequest)(nil),           // 99: controlplane.v1.GetDashboardsRequest
-	(*GetDashboardsResponse)(nil),          // 100: controlplane.v1.GetDashboardsResponse
-	(*DashboardSpec)(nil),                  // 101: controlplane.v1.DashboardSpec
-	(*Dashboard)(nil),                      // 102: controlplane.v1.Dashboard
-	(*DashboardSection)(nil),               // 103: controlplane.v1.DashboardSection
-	(*DashboardFilter)(nil),                // 104: controlplane.v1.DashboardFilter
-	(*DashboardAnnotation)(nil),            // 105: controlplane.v1.DashboardAnnotation
-	(*Panel)(nil),                          // 106: controlplane.v1.Panel
-	(*PanelFunnel)(nil),                    // 107: controlplane.v1.PanelFunnel
-	(*PanelSeries)(nil),                    // 108: controlplane.v1.PanelSeries
-	(*PanelPredicate)(nil),                 // 109: controlplane.v1.PanelPredicate
-	(*SavedSearch)(nil),                    // 110: controlplane.v1.SavedSearch
-	(*DashboardAlert)(nil),                 // 111: controlplane.v1.DashboardAlert
-	(*QueryQuotaExhausted)(nil),            // 112: controlplane.v1.QueryQuotaExhausted
-	(*GetObservabilityUsageRequest)(nil),   // 113: controlplane.v1.GetObservabilityUsageRequest
-	(*GetObservabilityUsageResponse)(nil),  // 114: controlplane.v1.GetObservabilityUsageResponse
-	(*SignalUsage)(nil),                    // 115: controlplane.v1.SignalUsage
-	(*ServiceUsage)(nil),                   // 116: controlplane.v1.ServiceUsage
-	(*GetReleaseHealthRequest)(nil),        // 117: controlplane.v1.GetReleaseHealthRequest
-	(*GetReleaseHealthResponse)(nil),       // 118: controlplane.v1.GetReleaseHealthResponse
-	(*ReleasePromotionRef)(nil),            // 119: controlplane.v1.ReleasePromotionRef
-	(*ServiceHealthDelta)(nil),             // 120: controlplane.v1.ServiceHealthDelta
-	(*ServiceWindowStats)(nil),             // 121: controlplane.v1.ServiceWindowStats
-	(*ReleaseAlertRef)(nil),                // 122: controlplane.v1.ReleaseAlertRef
-	(*WorkloadFinding)(nil),                // 123: controlplane.v1.WorkloadFinding
-	(*ReleaseFinding)(nil),                 // 124: controlplane.v1.ReleaseFinding
-	(*EffectiveThreshold)(nil),             // 125: controlplane.v1.EffectiveThreshold
-	nil,                                    // 126: controlplane.v1.LogRecord.AttributesEntry
-	nil,                                    // 127: controlplane.v1.LogRecord.ResourceAttributesEntry
-	nil,                                    // 128: controlplane.v1.TraceRedGroup.GroupEntry
-	nil,                                    // 129: controlplane.v1.Span.AttributesEntry
-	nil,                                    // 130: controlplane.v1.Span.ResourceAttributesEntry
-	nil,                                    // 131: controlplane.v1.SpanEvent.AttributesEntry
-	nil,                                    // 132: controlplane.v1.ListMetricExemplarsRequest.GroupEntry
-	nil,                                    // 133: controlplane.v1.MetricExemplar.AttributesEntry
-	nil,                                    // 134: controlplane.v1.MetricSeries.LabelsEntry
-	nil,                                    // 135: controlplane.v1.ServiceOverview.GroupEntry
-	nil,                                    // 136: controlplane.v1.CompiledStatement.ParamsEntry
-	nil,                                    // 137: controlplane.v1.PanelSeriesResult.GroupEntry
-	nil,                                    // 138: controlplane.v1.PanelTableRow.GroupEntry
-	nil,                                    // 139: controlplane.v1.GetReleaseHealthRequest.ThresholdOverridesEntry
-	nil,                                    // 140: controlplane.v1.ReleaseAlertRef.LabelsEntry
-	(*timestamppb.Timestamp)(nil),          // 141: google.protobuf.Timestamp
-	(*v1.ClientContext)(nil),               // 142: controlplane.v1.ClientContext
-	(*v1.ServiceBuild)(nil),                // 143: controlplane.v1.ServiceBuild
-	(v1.WorkloadKind)(0),                   // 144: controlplane.v1.WorkloadKind
-	(*v1.DeclaredWorkload)(nil),            // 145: controlplane.v1.DeclaredWorkload
-	(*durationpb.Duration)(nil),            // 146: google.protobuf.Duration
-	(*v1.Issue)(nil),                       // 147: controlplane.v1.Issue
+	(FrontendReplayState)(0),               // 20: controlplane.v1.FrontendReplayState
+	(FrontendReplaySource)(0),              // 21: controlplane.v1.FrontendReplaySource
+	(*TimeRange)(nil),                      // 22: controlplane.v1.TimeRange
+	(*QueryScope)(nil),                     // 23: controlplane.v1.QueryScope
+	(*GetServiceGraphRequest)(nil),         // 24: controlplane.v1.GetServiceGraphRequest
+	(*GetServiceGraphResponse)(nil),        // 25: controlplane.v1.GetServiceGraphResponse
+	(*GraphNode)(nil),                      // 26: controlplane.v1.GraphNode
+	(*GraphHistogram)(nil),                 // 27: controlplane.v1.GraphHistogram
+	(*GraphTraceExemplar)(nil),             // 28: controlplane.v1.GraphTraceExemplar
+	(*GraphEdge)(nil),                      // 29: controlplane.v1.GraphEdge
+	(*GraphCompleteness)(nil),              // 30: controlplane.v1.GraphCompleteness
+	(*GetServiceGraphCatalogRequest)(nil),  // 31: controlplane.v1.GetServiceGraphCatalogRequest
+	(*GraphRPCMethod)(nil),                 // 32: controlplane.v1.GraphRPCMethod
+	(*GraphDeclaredCatalog)(nil),           // 33: controlplane.v1.GraphDeclaredCatalog
+	(*GetServiceGraphCatalogResponse)(nil), // 34: controlplane.v1.GetServiceGraphCatalogResponse
+	(*AttributeFilter)(nil),                // 35: controlplane.v1.AttributeFilter
+	(*TimePoint)(nil),                      // 36: controlplane.v1.TimePoint
+	(*SearchLogsRequest)(nil),              // 37: controlplane.v1.SearchLogsRequest
+	(*SearchLogsResponse)(nil),             // 38: controlplane.v1.SearchLogsResponse
+	(*LogRecord)(nil),                      // 39: controlplane.v1.LogRecord
+	(*ListTracesRequest)(nil),              // 40: controlplane.v1.ListTracesRequest
+	(*ListTracesResponse)(nil),             // 41: controlplane.v1.ListTracesResponse
+	(*TraceRedGroup)(nil),                  // 42: controlplane.v1.TraceRedGroup
+	(*TraceSummary)(nil),                   // 43: controlplane.v1.TraceSummary
+	(*TraceRedSummary)(nil),                // 44: controlplane.v1.TraceRedSummary
+	(*GetTraceRequest)(nil),                // 45: controlplane.v1.GetTraceRequest
+	(*GetTraceResponse)(nil),               // 46: controlplane.v1.GetTraceResponse
+	(*RelatedTrace)(nil),                   // 47: controlplane.v1.RelatedTrace
+	(*Span)(nil),                           // 48: controlplane.v1.Span
+	(*SpanEvent)(nil),                      // 49: controlplane.v1.SpanEvent
+	(*SpanLink)(nil),                       // 50: controlplane.v1.SpanLink
+	(*ListMetricsRequest)(nil),             // 51: controlplane.v1.ListMetricsRequest
+	(*ListMetricsResponse)(nil),            // 52: controlplane.v1.ListMetricsResponse
+	(*MetricInfo)(nil),                     // 53: controlplane.v1.MetricInfo
+	(*MetricAttributeSpec)(nil),            // 54: controlplane.v1.MetricAttributeSpec
+	(*GetMetricRequest)(nil),               // 55: controlplane.v1.GetMetricRequest
+	(*GetMetricResponse)(nil),              // 56: controlplane.v1.GetMetricResponse
+	(*MetricAttribute)(nil),                // 57: controlplane.v1.MetricAttribute
+	(*ListMetricExemplarsRequest)(nil),     // 58: controlplane.v1.ListMetricExemplarsRequest
+	(*ListMetricExemplarsResponse)(nil),    // 59: controlplane.v1.ListMetricExemplarsResponse
+	(*MetricExemplar)(nil),                 // 60: controlplane.v1.MetricExemplar
+	(*QueryMetricRequest)(nil),             // 61: controlplane.v1.QueryMetricRequest
+	(*QueryMetricResponse)(nil),            // 62: controlplane.v1.QueryMetricResponse
+	(*MetricSeries)(nil),                   // 63: controlplane.v1.MetricSeries
+	(*GetServiceOverviewRequest)(nil),      // 64: controlplane.v1.GetServiceOverviewRequest
+	(*GetServiceOverviewResponse)(nil),     // 65: controlplane.v1.GetServiceOverviewResponse
+	(*ServiceOverview)(nil),                // 66: controlplane.v1.ServiceOverview
+	(*GetFlamegraphRequest)(nil),           // 67: controlplane.v1.GetFlamegraphRequest
+	(*GetFlamegraphResponse)(nil),          // 68: controlplane.v1.GetFlamegraphResponse
+	(*ListAttributeValuesRequest)(nil),     // 69: controlplane.v1.ListAttributeValuesRequest
+	(*ListAttributeValuesResponse)(nil),    // 70: controlplane.v1.ListAttributeValuesResponse
+	(*AttributeValue)(nil),                 // 71: controlplane.v1.AttributeValue
+	(*GetServiceSignalsRequest)(nil),       // 72: controlplane.v1.GetServiceSignalsRequest
+	(*GetServiceSignalsResponse)(nil),      // 73: controlplane.v1.GetServiceSignalsResponse
+	(*ServiceSignals)(nil),                 // 74: controlplane.v1.ServiceSignals
+	(*ListWorkloadsRequest)(nil),           // 75: controlplane.v1.ListWorkloadsRequest
+	(*ListWorkloadsResponse)(nil),          // 76: controlplane.v1.ListWorkloadsResponse
+	(*Workload)(nil),                       // 77: controlplane.v1.Workload
+	(*WorkloadHealthChange)(nil),           // 78: controlplane.v1.WorkloadHealthChange
+	(*WorkloadPod)(nil),                    // 79: controlplane.v1.WorkloadPod
+	(*WorkloadJob)(nil),                    // 80: controlplane.v1.WorkloadJob
+	(*WorkloadContainer)(nil),              // 81: controlplane.v1.WorkloadContainer
+	(*ResourceUsage)(nil),                  // 82: controlplane.v1.ResourceUsage
+	(*WorkloadEvent)(nil),                  // 83: controlplane.v1.WorkloadEvent
+	(*GetWorkloadRequest)(nil),             // 84: controlplane.v1.GetWorkloadRequest
+	(*GetWorkloadResponse)(nil),            // 85: controlplane.v1.GetWorkloadResponse
+	(*WorkloadSeries)(nil),                 // 86: controlplane.v1.WorkloadSeries
+	(*ImageChange)(nil),                    // 87: controlplane.v1.ImageChange
+	(*VersionChange)(nil),                  // 88: controlplane.v1.VersionChange
+	(*QueryPanelRequest)(nil),              // 89: controlplane.v1.QueryPanelRequest
+	(*PanelRef)(nil),                       // 90: controlplane.v1.PanelRef
+	(*CompiledStatement)(nil),              // 91: controlplane.v1.CompiledStatement
+	(*HeatmapCell)(nil),                    // 92: controlplane.v1.HeatmapCell
+	(*SqlColumn)(nil),                      // 93: controlplane.v1.SqlColumn
+	(*QueryPanelResponse)(nil),             // 94: controlplane.v1.QueryPanelResponse
+	(*PanelSeriesMeta)(nil),                // 95: controlplane.v1.PanelSeriesMeta
+	(*FunnelStepResult)(nil),               // 96: controlplane.v1.FunnelStepResult
+	(*PanelIssue)(nil),                     // 97: controlplane.v1.PanelIssue
+	(*PanelSession)(nil),                   // 98: controlplane.v1.PanelSession
+	(*PanelSeriesResult)(nil),              // 99: controlplane.v1.PanelSeriesResult
+	(*PanelTableRow)(nil),                  // 100: controlplane.v1.PanelTableRow
+	(*GetDashboardsRequest)(nil),           // 101: controlplane.v1.GetDashboardsRequest
+	(*GetDashboardsResponse)(nil),          // 102: controlplane.v1.GetDashboardsResponse
+	(*DashboardSpec)(nil),                  // 103: controlplane.v1.DashboardSpec
+	(*Dashboard)(nil),                      // 104: controlplane.v1.Dashboard
+	(*DashboardSection)(nil),               // 105: controlplane.v1.DashboardSection
+	(*DashboardFilter)(nil),                // 106: controlplane.v1.DashboardFilter
+	(*DashboardAnnotation)(nil),            // 107: controlplane.v1.DashboardAnnotation
+	(*Panel)(nil),                          // 108: controlplane.v1.Panel
+	(*PanelFunnel)(nil),                    // 109: controlplane.v1.PanelFunnel
+	(*PanelSeries)(nil),                    // 110: controlplane.v1.PanelSeries
+	(*PanelPredicate)(nil),                 // 111: controlplane.v1.PanelPredicate
+	(*SavedSearch)(nil),                    // 112: controlplane.v1.SavedSearch
+	(*DashboardAlert)(nil),                 // 113: controlplane.v1.DashboardAlert
+	(*QueryQuotaExhausted)(nil),            // 114: controlplane.v1.QueryQuotaExhausted
+	(*GetObservabilityUsageRequest)(nil),   // 115: controlplane.v1.GetObservabilityUsageRequest
+	(*GetObservabilityUsageResponse)(nil),  // 116: controlplane.v1.GetObservabilityUsageResponse
+	(*SignalUsage)(nil),                    // 117: controlplane.v1.SignalUsage
+	(*ServiceUsage)(nil),                   // 118: controlplane.v1.ServiceUsage
+	(*GetReleaseHealthRequest)(nil),        // 119: controlplane.v1.GetReleaseHealthRequest
+	(*GetReleaseHealthResponse)(nil),       // 120: controlplane.v1.GetReleaseHealthResponse
+	(*ReleasePromotionRef)(nil),            // 121: controlplane.v1.ReleasePromotionRef
+	(*ServiceHealthDelta)(nil),             // 122: controlplane.v1.ServiceHealthDelta
+	(*ServiceWindowStats)(nil),             // 123: controlplane.v1.ServiceWindowStats
+	(*ReleaseAlertRef)(nil),                // 124: controlplane.v1.ReleaseAlertRef
+	(*WorkloadFinding)(nil),                // 125: controlplane.v1.WorkloadFinding
+	(*ReleaseFinding)(nil),                 // 126: controlplane.v1.ReleaseFinding
+	(*EffectiveThreshold)(nil),             // 127: controlplane.v1.EffectiveThreshold
+	(*ListFrontendReplayRequest)(nil),      // 128: controlplane.v1.ListFrontendReplayRequest
+	(*ListFrontendReplayResponse)(nil),     // 129: controlplane.v1.ListFrontendReplayResponse
+	(*FrontendReplay)(nil),                 // 130: controlplane.v1.FrontendReplay
+	nil,                                    // 131: controlplane.v1.LogRecord.AttributesEntry
+	nil,                                    // 132: controlplane.v1.LogRecord.ResourceAttributesEntry
+	nil,                                    // 133: controlplane.v1.TraceRedGroup.GroupEntry
+	nil,                                    // 134: controlplane.v1.Span.AttributesEntry
+	nil,                                    // 135: controlplane.v1.Span.ResourceAttributesEntry
+	nil,                                    // 136: controlplane.v1.SpanEvent.AttributesEntry
+	nil,                                    // 137: controlplane.v1.ListMetricExemplarsRequest.GroupEntry
+	nil,                                    // 138: controlplane.v1.MetricExemplar.AttributesEntry
+	nil,                                    // 139: controlplane.v1.MetricSeries.LabelsEntry
+	nil,                                    // 140: controlplane.v1.ServiceOverview.GroupEntry
+	nil,                                    // 141: controlplane.v1.CompiledStatement.ParamsEntry
+	nil,                                    // 142: controlplane.v1.PanelSeriesResult.GroupEntry
+	nil,                                    // 143: controlplane.v1.PanelTableRow.GroupEntry
+	nil,                                    // 144: controlplane.v1.GetReleaseHealthRequest.ThresholdOverridesEntry
+	nil,                                    // 145: controlplane.v1.ReleaseAlertRef.LabelsEntry
+	(*timestamppb.Timestamp)(nil),          // 146: google.protobuf.Timestamp
+	(*v1.InstanceScope)(nil),               // 147: controlplane.v1.InstanceScope
+	(*v1.ClientContext)(nil),               // 148: controlplane.v1.ClientContext
+	(*v1.ServiceBuild)(nil),                // 149: controlplane.v1.ServiceBuild
+	(v1.WorkloadKind)(0),                   // 150: controlplane.v1.WorkloadKind
+	(*v1.DeclaredWorkload)(nil),            // 151: controlplane.v1.DeclaredWorkload
+	(*durationpb.Duration)(nil),            // 152: google.protobuf.Duration
+	(*v1.Issue)(nil),                       // 153: controlplane.v1.Issue
 }
 var file_services_observability_v1_observability_proto_depIdxs = []int32{
-	141, // 0: controlplane.v1.TimeRange.start:type_name -> google.protobuf.Timestamp
-	141, // 1: controlplane.v1.TimeRange.end:type_name -> google.protobuf.Timestamp
-	20,  // 2: controlplane.v1.QueryScope.time_range:type_name -> controlplane.v1.TimeRange
-	33,  // 3: controlplane.v1.QueryScope.filters:type_name -> controlplane.v1.AttributeFilter
-	21,  // 4: controlplane.v1.GetServiceGraphRequest.scope:type_name -> controlplane.v1.QueryScope
+	146, // 0: controlplane.v1.TimeRange.start:type_name -> google.protobuf.Timestamp
+	146, // 1: controlplane.v1.TimeRange.end:type_name -> google.protobuf.Timestamp
+	22,  // 2: controlplane.v1.QueryScope.time_range:type_name -> controlplane.v1.TimeRange
+	35,  // 3: controlplane.v1.QueryScope.filters:type_name -> controlplane.v1.AttributeFilter
+	23,  // 4: controlplane.v1.GetServiceGraphRequest.scope:type_name -> controlplane.v1.QueryScope
 	1,   // 5: controlplane.v1.GetServiceGraphRequest.edge_kinds:type_name -> controlplane.v1.GraphEdgeKind
-	24,  // 6: controlplane.v1.GetServiceGraphResponse.nodes:type_name -> controlplane.v1.GraphNode
-	27,  // 7: controlplane.v1.GetServiceGraphResponse.edges:type_name -> controlplane.v1.GraphEdge
-	28,  // 8: controlplane.v1.GetServiceGraphResponse.completeness:type_name -> controlplane.v1.GraphCompleteness
-	20,  // 9: controlplane.v1.GetServiceGraphResponse.effective_time_range:type_name -> controlplane.v1.TimeRange
-	0,   // 10: controlplane.v1.GraphNode.kind:type_name -> controlplane.v1.GraphNodeKind
-	1,   // 11: controlplane.v1.GraphEdge.kind:type_name -> controlplane.v1.GraphEdgeKind
-	2,   // 12: controlplane.v1.GraphEdge.evidence:type_name -> controlplane.v1.GraphEvidenceKind
-	25,  // 13: controlplane.v1.GraphEdge.duration:type_name -> controlplane.v1.GraphHistogram
-	26,  // 14: controlplane.v1.GraphEdge.exemplars:type_name -> controlplane.v1.GraphTraceExemplar
-	141, // 15: controlplane.v1.GraphEdge.first_seen:type_name -> google.protobuf.Timestamp
-	141, // 16: controlplane.v1.GraphEdge.last_seen:type_name -> google.protobuf.Timestamp
-	141, // 17: controlplane.v1.GraphCompleteness.aggregated_through:type_name -> google.protobuf.Timestamp
-	21,  // 18: controlplane.v1.GetServiceGraphCatalogRequest.scope:type_name -> controlplane.v1.QueryScope
-	2,   // 19: controlplane.v1.GraphRPCMethod.evidence:type_name -> controlplane.v1.GraphEvidenceKind
-	25,  // 20: controlplane.v1.GraphRPCMethod.duration:type_name -> controlplane.v1.GraphHistogram
-	30,  // 21: controlplane.v1.GetServiceGraphCatalogResponse.methods:type_name -> controlplane.v1.GraphRPCMethod
-	28,  // 22: controlplane.v1.GetServiceGraphCatalogResponse.completeness:type_name -> controlplane.v1.GraphCompleteness
-	31,  // 23: controlplane.v1.GetServiceGraphCatalogResponse.declared_catalogs:type_name -> controlplane.v1.GraphDeclaredCatalog
-	4,   // 24: controlplane.v1.AttributeFilter.op:type_name -> controlplane.v1.AttributeOp
-	141, // 25: controlplane.v1.TimePoint.time:type_name -> google.protobuf.Timestamp
-	21,  // 26: controlplane.v1.SearchLogsRequest.scope:type_name -> controlplane.v1.QueryScope
-	3,   // 27: controlplane.v1.SearchLogsRequest.order:type_name -> controlplane.v1.SortOrder
-	37,  // 28: controlplane.v1.SearchLogsResponse.logs:type_name -> controlplane.v1.LogRecord
-	141, // 29: controlplane.v1.LogRecord.timestamp:type_name -> google.protobuf.Timestamp
-	126, // 30: controlplane.v1.LogRecord.attributes:type_name -> controlplane.v1.LogRecord.AttributesEntry
-	127, // 31: controlplane.v1.LogRecord.resource_attributes:type_name -> controlplane.v1.LogRecord.ResourceAttributesEntry
-	21,  // 32: controlplane.v1.ListTracesRequest.scope:type_name -> controlplane.v1.QueryScope
-	5,   // 33: controlplane.v1.ListTracesRequest.order:type_name -> controlplane.v1.TraceOrder
-	41,  // 34: controlplane.v1.ListTracesResponse.traces:type_name -> controlplane.v1.TraceSummary
-	42,  // 35: controlplane.v1.ListTracesResponse.red:type_name -> controlplane.v1.TraceRedSummary
-	40,  // 36: controlplane.v1.ListTracesResponse.red_groups:type_name -> controlplane.v1.TraceRedGroup
-	128, // 37: controlplane.v1.TraceRedGroup.group:type_name -> controlplane.v1.TraceRedGroup.GroupEntry
-	42,  // 38: controlplane.v1.TraceRedGroup.red:type_name -> controlplane.v1.TraceRedSummary
-	141, // 39: controlplane.v1.TraceSummary.start_time:type_name -> google.protobuf.Timestamp
-	142, // 40: controlplane.v1.TraceSummary.client:type_name -> controlplane.v1.ClientContext
-	143, // 41: controlplane.v1.TraceSummary.backend_builds:type_name -> controlplane.v1.ServiceBuild
-	21,  // 42: controlplane.v1.GetTraceRequest.scope:type_name -> controlplane.v1.QueryScope
-	46,  // 43: controlplane.v1.GetTraceResponse.spans:type_name -> controlplane.v1.Span
-	45,  // 44: controlplane.v1.GetTraceResponse.related_traces:type_name -> controlplane.v1.RelatedTrace
-	141, // 45: controlplane.v1.Span.start_time:type_name -> google.protobuf.Timestamp
-	129, // 46: controlplane.v1.Span.attributes:type_name -> controlplane.v1.Span.AttributesEntry
-	130, // 47: controlplane.v1.Span.resource_attributes:type_name -> controlplane.v1.Span.ResourceAttributesEntry
-	47,  // 48: controlplane.v1.Span.events:type_name -> controlplane.v1.SpanEvent
-	48,  // 49: controlplane.v1.Span.links:type_name -> controlplane.v1.SpanLink
-	141, // 50: controlplane.v1.SpanEvent.time:type_name -> google.protobuf.Timestamp
-	131, // 51: controlplane.v1.SpanEvent.attributes:type_name -> controlplane.v1.SpanEvent.AttributesEntry
-	21,  // 52: controlplane.v1.ListMetricsRequest.scope:type_name -> controlplane.v1.QueryScope
-	51,  // 53: controlplane.v1.ListMetricsResponse.metrics:type_name -> controlplane.v1.MetricInfo
-	6,   // 54: controlplane.v1.MetricInfo.type:type_name -> controlplane.v1.MetricType
-	7,   // 55: controlplane.v1.MetricInfo.temporality:type_name -> controlplane.v1.MetricTemporality
-	141, // 56: controlplane.v1.MetricInfo.last_seen:type_name -> google.protobuf.Timestamp
-	52,  // 57: controlplane.v1.MetricInfo.declared_attributes:type_name -> controlplane.v1.MetricAttributeSpec
-	21,  // 58: controlplane.v1.GetMetricRequest.scope:type_name -> controlplane.v1.QueryScope
-	6,   // 59: controlplane.v1.GetMetricRequest.metric_type:type_name -> controlplane.v1.MetricType
-	51,  // 60: controlplane.v1.GetMetricResponse.info:type_name -> controlplane.v1.MetricInfo
-	55,  // 61: controlplane.v1.GetMetricResponse.attributes:type_name -> controlplane.v1.MetricAttribute
-	21,  // 62: controlplane.v1.ListMetricExemplarsRequest.scope:type_name -> controlplane.v1.QueryScope
-	6,   // 63: controlplane.v1.ListMetricExemplarsRequest.metric_type:type_name -> controlplane.v1.MetricType
-	109, // 64: controlplane.v1.ListMetricExemplarsRequest.where:type_name -> controlplane.v1.PanelPredicate
-	132, // 65: controlplane.v1.ListMetricExemplarsRequest.group:type_name -> controlplane.v1.ListMetricExemplarsRequest.GroupEntry
-	20,  // 66: controlplane.v1.ListMetricExemplarsRequest.time_range:type_name -> controlplane.v1.TimeRange
-	58,  // 67: controlplane.v1.ListMetricExemplarsResponse.exemplars:type_name -> controlplane.v1.MetricExemplar
-	141, // 68: controlplane.v1.MetricExemplar.time:type_name -> google.protobuf.Timestamp
-	133, // 69: controlplane.v1.MetricExemplar.attributes:type_name -> controlplane.v1.MetricExemplar.AttributesEntry
-	21,  // 70: controlplane.v1.QueryMetricRequest.scope:type_name -> controlplane.v1.QueryScope
-	6,   // 71: controlplane.v1.QueryMetricRequest.metric_type:type_name -> controlplane.v1.MetricType
-	8,   // 72: controlplane.v1.QueryMetricRequest.aggregation:type_name -> controlplane.v1.MetricAggregation
-	61,  // 73: controlplane.v1.QueryMetricResponse.series:type_name -> controlplane.v1.MetricSeries
-	6,   // 74: controlplane.v1.QueryMetricResponse.metric_type:type_name -> controlplane.v1.MetricType
-	8,   // 75: controlplane.v1.QueryMetricResponse.aggregation:type_name -> controlplane.v1.MetricAggregation
-	134, // 76: controlplane.v1.MetricSeries.labels:type_name -> controlplane.v1.MetricSeries.LabelsEntry
-	34,  // 77: controlplane.v1.MetricSeries.points:type_name -> controlplane.v1.TimePoint
-	21,  // 78: controlplane.v1.GetServiceOverviewRequest.scope:type_name -> controlplane.v1.QueryScope
-	64,  // 79: controlplane.v1.GetServiceOverviewResponse.services:type_name -> controlplane.v1.ServiceOverview
-	34,  // 80: controlplane.v1.ServiceOverview.request_trend:type_name -> controlplane.v1.TimePoint
-	34,  // 81: controlplane.v1.ServiceOverview.error_trend:type_name -> controlplane.v1.TimePoint
-	135, // 82: controlplane.v1.ServiceOverview.group:type_name -> controlplane.v1.ServiceOverview.GroupEntry
-	21,  // 83: controlplane.v1.GetFlamegraphRequest.scope:type_name -> controlplane.v1.QueryScope
-	21,  // 84: controlplane.v1.ListAttributeValuesRequest.scope:type_name -> controlplane.v1.QueryScope
-	9,   // 85: controlplane.v1.ListAttributeValuesRequest.signal:type_name -> controlplane.v1.Signal
-	69,  // 86: controlplane.v1.ListAttributeValuesResponse.values:type_name -> controlplane.v1.AttributeValue
-	21,  // 87: controlplane.v1.GetServiceSignalsRequest.scope:type_name -> controlplane.v1.QueryScope
-	72,  // 88: controlplane.v1.GetServiceSignalsResponse.services:type_name -> controlplane.v1.ServiceSignals
-	21,  // 89: controlplane.v1.ListWorkloadsRequest.scope:type_name -> controlplane.v1.QueryScope
-	75,  // 90: controlplane.v1.ListWorkloadsResponse.workloads:type_name -> controlplane.v1.Workload
-	78,  // 91: controlplane.v1.ListWorkloadsResponse.jobs:type_name -> controlplane.v1.WorkloadJob
-	79,  // 92: controlplane.v1.Workload.containers:type_name -> controlplane.v1.WorkloadContainer
-	81,  // 93: controlplane.v1.Workload.latest_warning:type_name -> controlplane.v1.WorkloadEvent
-	144, // 94: controlplane.v1.Workload.kind:type_name -> controlplane.v1.WorkloadKind
-	11,  // 95: controlplane.v1.Workload.health:type_name -> controlplane.v1.WorkloadHealth
-	12,  // 96: controlplane.v1.Workload.release_basis:type_name -> controlplane.v1.WorkloadReleaseBasis
-	77,  // 97: controlplane.v1.Workload.pods:type_name -> controlplane.v1.WorkloadPod
-	145, // 98: controlplane.v1.Workload.declared:type_name -> controlplane.v1.DeclaredWorkload
-	10,  // 99: controlplane.v1.Workload.health_cause:type_name -> controlplane.v1.WorkloadCause
-	141, // 100: controlplane.v1.Workload.health_since:type_name -> google.protobuf.Timestamp
-	141, // 101: controlplane.v1.WorkloadHealthChange.at:type_name -> google.protobuf.Timestamp
-	11,  // 102: controlplane.v1.WorkloadHealthChange.from:type_name -> controlplane.v1.WorkloadHealth
-	11,  // 103: controlplane.v1.WorkloadHealthChange.to:type_name -> controlplane.v1.WorkloadHealth
-	10,  // 104: controlplane.v1.WorkloadHealthChange.cause:type_name -> controlplane.v1.WorkloadCause
-	13,  // 105: controlplane.v1.WorkloadPod.state:type_name -> controlplane.v1.WorkloadPodState
-	141, // 106: controlplane.v1.WorkloadPod.last_exit_at:type_name -> google.protobuf.Timestamp
-	141, // 107: controlplane.v1.WorkloadPod.first_seen:type_name -> google.protobuf.Timestamp
-	141, // 108: controlplane.v1.WorkloadPod.last_seen:type_name -> google.protobuf.Timestamp
-	81,  // 109: controlplane.v1.WorkloadPod.latest_warning:type_name -> controlplane.v1.WorkloadEvent
-	14,  // 110: controlplane.v1.WorkloadJob.result:type_name -> controlplane.v1.WorkloadJobResult
-	141, // 111: controlplane.v1.WorkloadJob.started_at:type_name -> google.protobuf.Timestamp
-	141, // 112: controlplane.v1.WorkloadJob.finished_at:type_name -> google.protobuf.Timestamp
-	141, // 113: controlplane.v1.WorkloadContainer.last_terminated_at:type_name -> google.protobuf.Timestamp
-	80,  // 114: controlplane.v1.WorkloadContainer.cpu:type_name -> controlplane.v1.ResourceUsage
-	80,  // 115: controlplane.v1.WorkloadContainer.memory:type_name -> controlplane.v1.ResourceUsage
-	141, // 116: controlplane.v1.WorkloadEvent.time:type_name -> google.protobuf.Timestamp
-	21,  // 117: controlplane.v1.GetWorkloadRequest.scope:type_name -> controlplane.v1.QueryScope
-	84,  // 118: controlplane.v1.GetWorkloadResponse.series:type_name -> controlplane.v1.WorkloadSeries
-	81,  // 119: controlplane.v1.GetWorkloadResponse.events:type_name -> controlplane.v1.WorkloadEvent
-	85,  // 120: controlplane.v1.GetWorkloadResponse.image_changes:type_name -> controlplane.v1.ImageChange
-	86,  // 121: controlplane.v1.GetWorkloadResponse.version_changes:type_name -> controlplane.v1.VersionChange
-	75,  // 122: controlplane.v1.GetWorkloadResponse.workloads:type_name -> controlplane.v1.Workload
-	76,  // 123: controlplane.v1.GetWorkloadResponse.health_changes:type_name -> controlplane.v1.WorkloadHealthChange
-	15,  // 124: controlplane.v1.WorkloadSeries.metric:type_name -> controlplane.v1.WorkloadMetric
-	34,  // 125: controlplane.v1.WorkloadSeries.points:type_name -> controlplane.v1.TimePoint
-	141, // 126: controlplane.v1.ImageChange.first_seen:type_name -> google.protobuf.Timestamp
-	141, // 127: controlplane.v1.ImageChange.last_seen:type_name -> google.protobuf.Timestamp
-	141, // 128: controlplane.v1.VersionChange.first_seen:type_name -> google.protobuf.Timestamp
-	141, // 129: controlplane.v1.VersionChange.last_seen:type_name -> google.protobuf.Timestamp
-	21,  // 130: controlplane.v1.QueryPanelRequest.scope:type_name -> controlplane.v1.QueryScope
-	106, // 131: controlplane.v1.QueryPanelRequest.panel:type_name -> controlplane.v1.Panel
-	109, // 132: controlplane.v1.QueryPanelRequest.filters:type_name -> controlplane.v1.PanelPredicate
-	88,  // 133: controlplane.v1.QueryPanelRequest.panel_ref:type_name -> controlplane.v1.PanelRef
-	136, // 134: controlplane.v1.CompiledStatement.params:type_name -> controlplane.v1.CompiledStatement.ParamsEntry
-	141, // 135: controlplane.v1.HeatmapCell.time:type_name -> google.protobuf.Timestamp
-	97,  // 136: controlplane.v1.QueryPanelResponse.series:type_name -> controlplane.v1.PanelSeriesResult
-	98,  // 137: controlplane.v1.QueryPanelResponse.rows:type_name -> controlplane.v1.PanelTableRow
-	94,  // 138: controlplane.v1.QueryPanelResponse.funnel_steps:type_name -> controlplane.v1.FunnelStepResult
-	95,  // 139: controlplane.v1.QueryPanelResponse.issues:type_name -> controlplane.v1.PanelIssue
-	96,  // 140: controlplane.v1.QueryPanelResponse.sessions:type_name -> controlplane.v1.PanelSession
-	89,  // 141: controlplane.v1.QueryPanelResponse.compiled_sql:type_name -> controlplane.v1.CompiledStatement
-	90,  // 142: controlplane.v1.QueryPanelResponse.heatmap:type_name -> controlplane.v1.HeatmapCell
-	91,  // 143: controlplane.v1.QueryPanelResponse.sql_columns:type_name -> controlplane.v1.SqlColumn
-	93,  // 144: controlplane.v1.QueryPanelResponse.series_meta:type_name -> controlplane.v1.PanelSeriesMeta
-	106, // 145: controlplane.v1.QueryPanelResponse.panel:type_name -> controlplane.v1.Panel
-	6,   // 146: controlplane.v1.PanelSeriesMeta.metric_type:type_name -> controlplane.v1.MetricType
-	7,   // 147: controlplane.v1.PanelSeriesMeta.temporality:type_name -> controlplane.v1.MetricTemporality
-	141, // 148: controlplane.v1.PanelIssue.first_seen:type_name -> google.protobuf.Timestamp
-	141, // 149: controlplane.v1.PanelIssue.last_seen:type_name -> google.protobuf.Timestamp
-	141, // 150: controlplane.v1.PanelSession.start:type_name -> google.protobuf.Timestamp
-	141, // 151: controlplane.v1.PanelSession.end:type_name -> google.protobuf.Timestamp
-	137, // 152: controlplane.v1.PanelSeriesResult.group:type_name -> controlplane.v1.PanelSeriesResult.GroupEntry
-	34,  // 153: controlplane.v1.PanelSeriesResult.points:type_name -> controlplane.v1.TimePoint
-	138, // 154: controlplane.v1.PanelTableRow.group:type_name -> controlplane.v1.PanelTableRow.GroupEntry
-	21,  // 155: controlplane.v1.GetDashboardsRequest.scope:type_name -> controlplane.v1.QueryScope
-	101, // 156: controlplane.v1.GetDashboardsResponse.spec:type_name -> controlplane.v1.DashboardSpec
-	102, // 157: controlplane.v1.DashboardSpec.dashboards:type_name -> controlplane.v1.Dashboard
-	110, // 158: controlplane.v1.DashboardSpec.saved_searches:type_name -> controlplane.v1.SavedSearch
-	111, // 159: controlplane.v1.DashboardSpec.alerts:type_name -> controlplane.v1.DashboardAlert
-	104, // 160: controlplane.v1.Dashboard.filters:type_name -> controlplane.v1.DashboardFilter
-	106, // 161: controlplane.v1.Dashboard.panels:type_name -> controlplane.v1.Panel
-	105, // 162: controlplane.v1.Dashboard.annotations:type_name -> controlplane.v1.DashboardAnnotation
-	103, // 163: controlplane.v1.Dashboard.sections:type_name -> controlplane.v1.DashboardSection
-	108, // 164: controlplane.v1.Panel.series:type_name -> controlplane.v1.PanelSeries
-	109, // 165: controlplane.v1.Panel.where:type_name -> controlplane.v1.PanelPredicate
-	107, // 166: controlplane.v1.Panel.funnel:type_name -> controlplane.v1.PanelFunnel
-	109, // 167: controlplane.v1.PanelSeries.where:type_name -> controlplane.v1.PanelPredicate
-	109, // 168: controlplane.v1.SavedSearch.where:type_name -> controlplane.v1.PanelPredicate
-	16,  // 169: controlplane.v1.QueryQuotaExhausted.limit:type_name -> controlplane.v1.QueryQuotaLimit
-	141, // 170: controlplane.v1.QueryQuotaExhausted.resets_at:type_name -> google.protobuf.Timestamp
-	141, // 171: controlplane.v1.GetObservabilityUsageResponse.period_start:type_name -> google.protobuf.Timestamp
-	141, // 172: controlplane.v1.GetObservabilityUsageResponse.period_end:type_name -> google.protobuf.Timestamp
-	141, // 173: controlplane.v1.GetObservabilityUsageResponse.measured_through:type_name -> google.protobuf.Timestamp
-	17,  // 174: controlplane.v1.GetObservabilityUsageResponse.state:type_name -> controlplane.v1.ObservabilityQuotaState
-	17,  // 175: controlplane.v1.GetObservabilityUsageResponse.usage_state:type_name -> controlplane.v1.ObservabilityQuotaState
-	115, // 176: controlplane.v1.GetObservabilityUsageResponse.by_signal:type_name -> controlplane.v1.SignalUsage
-	116, // 177: controlplane.v1.GetObservabilityUsageResponse.by_service:type_name -> controlplane.v1.ServiceUsage
-	17,  // 178: controlplane.v1.GetObservabilityUsageResponse.dev_state:type_name -> controlplane.v1.ObservabilityQuotaState
-	21,  // 179: controlplane.v1.GetReleaseHealthRequest.scope:type_name -> controlplane.v1.QueryScope
-	146, // 180: controlplane.v1.GetReleaseHealthRequest.window:type_name -> google.protobuf.Duration
-	139, // 181: controlplane.v1.GetReleaseHealthRequest.threshold_overrides:type_name -> controlplane.v1.GetReleaseHealthRequest.ThresholdOverridesEntry
-	119, // 182: controlplane.v1.GetReleaseHealthResponse.promotion:type_name -> controlplane.v1.ReleasePromotionRef
-	20,  // 183: controlplane.v1.GetReleaseHealthResponse.before:type_name -> controlplane.v1.TimeRange
-	20,  // 184: controlplane.v1.GetReleaseHealthResponse.after:type_name -> controlplane.v1.TimeRange
-	120, // 185: controlplane.v1.GetReleaseHealthResponse.services:type_name -> controlplane.v1.ServiceHealthDelta
-	147, // 186: controlplane.v1.GetReleaseHealthResponse.new_issues:type_name -> controlplane.v1.Issue
-	147, // 187: controlplane.v1.GetReleaseHealthResponse.regressed_issues:type_name -> controlplane.v1.Issue
-	122, // 188: controlplane.v1.GetReleaseHealthResponse.firing_alerts:type_name -> controlplane.v1.ReleaseAlertRef
-	123, // 189: controlplane.v1.GetReleaseHealthResponse.workload_findings:type_name -> controlplane.v1.WorkloadFinding
-	18,  // 190: controlplane.v1.GetReleaseHealthResponse.verdict:type_name -> controlplane.v1.ReleaseVerdict
-	124, // 191: controlplane.v1.GetReleaseHealthResponse.findings:type_name -> controlplane.v1.ReleaseFinding
-	125, // 192: controlplane.v1.GetReleaseHealthResponse.thresholds:type_name -> controlplane.v1.EffectiveThreshold
-	141, // 193: controlplane.v1.ReleasePromotionRef.promoted_at:type_name -> google.protobuf.Timestamp
-	121, // 194: controlplane.v1.ServiceHealthDelta.before:type_name -> controlplane.v1.ServiceWindowStats
-	121, // 195: controlplane.v1.ServiceHealthDelta.after:type_name -> controlplane.v1.ServiceWindowStats
-	141, // 196: controlplane.v1.ReleaseAlertRef.firing_at:type_name -> google.protobuf.Timestamp
-	140, // 197: controlplane.v1.ReleaseAlertRef.labels:type_name -> controlplane.v1.ReleaseAlertRef.LabelsEntry
-	19,  // 198: controlplane.v1.ReleaseFinding.code:type_name -> controlplane.v1.ReleaseFindingCode
-	35,  // 199: controlplane.v1.ObservabilityService.SearchLogs:input_type -> controlplane.v1.SearchLogsRequest
-	38,  // 200: controlplane.v1.ObservabilityService.ListTraces:input_type -> controlplane.v1.ListTracesRequest
-	43,  // 201: controlplane.v1.ObservabilityService.GetTrace:input_type -> controlplane.v1.GetTraceRequest
-	49,  // 202: controlplane.v1.ObservabilityService.ListMetrics:input_type -> controlplane.v1.ListMetricsRequest
-	59,  // 203: controlplane.v1.ObservabilityService.QueryMetric:input_type -> controlplane.v1.QueryMetricRequest
-	53,  // 204: controlplane.v1.ObservabilityService.GetMetric:input_type -> controlplane.v1.GetMetricRequest
-	56,  // 205: controlplane.v1.ObservabilityService.ListMetricExemplars:input_type -> controlplane.v1.ListMetricExemplarsRequest
-	22,  // 206: controlplane.v1.ObservabilityService.GetServiceGraph:input_type -> controlplane.v1.GetServiceGraphRequest
-	29,  // 207: controlplane.v1.ObservabilityService.GetServiceGraphCatalog:input_type -> controlplane.v1.GetServiceGraphCatalogRequest
-	62,  // 208: controlplane.v1.ObservabilityService.GetServiceOverview:input_type -> controlplane.v1.GetServiceOverviewRequest
-	65,  // 209: controlplane.v1.ObservabilityService.GetFlamegraph:input_type -> controlplane.v1.GetFlamegraphRequest
-	87,  // 210: controlplane.v1.ObservabilityService.QueryPanel:input_type -> controlplane.v1.QueryPanelRequest
-	67,  // 211: controlplane.v1.ObservabilityService.ListAttributeValues:input_type -> controlplane.v1.ListAttributeValuesRequest
-	70,  // 212: controlplane.v1.ObservabilityService.GetServiceSignals:input_type -> controlplane.v1.GetServiceSignalsRequest
-	73,  // 213: controlplane.v1.ObservabilityService.ListWorkloads:input_type -> controlplane.v1.ListWorkloadsRequest
-	82,  // 214: controlplane.v1.ObservabilityService.GetWorkload:input_type -> controlplane.v1.GetWorkloadRequest
-	99,  // 215: controlplane.v1.ObservabilityService.GetDashboards:input_type -> controlplane.v1.GetDashboardsRequest
-	113, // 216: controlplane.v1.ObservabilityService.GetObservabilityUsage:input_type -> controlplane.v1.GetObservabilityUsageRequest
-	117, // 217: controlplane.v1.ObservabilityService.GetReleaseHealth:input_type -> controlplane.v1.GetReleaseHealthRequest
-	36,  // 218: controlplane.v1.ObservabilityService.SearchLogs:output_type -> controlplane.v1.SearchLogsResponse
-	39,  // 219: controlplane.v1.ObservabilityService.ListTraces:output_type -> controlplane.v1.ListTracesResponse
-	44,  // 220: controlplane.v1.ObservabilityService.GetTrace:output_type -> controlplane.v1.GetTraceResponse
-	50,  // 221: controlplane.v1.ObservabilityService.ListMetrics:output_type -> controlplane.v1.ListMetricsResponse
-	60,  // 222: controlplane.v1.ObservabilityService.QueryMetric:output_type -> controlplane.v1.QueryMetricResponse
-	54,  // 223: controlplane.v1.ObservabilityService.GetMetric:output_type -> controlplane.v1.GetMetricResponse
-	57,  // 224: controlplane.v1.ObservabilityService.ListMetricExemplars:output_type -> controlplane.v1.ListMetricExemplarsResponse
-	23,  // 225: controlplane.v1.ObservabilityService.GetServiceGraph:output_type -> controlplane.v1.GetServiceGraphResponse
-	32,  // 226: controlplane.v1.ObservabilityService.GetServiceGraphCatalog:output_type -> controlplane.v1.GetServiceGraphCatalogResponse
-	63,  // 227: controlplane.v1.ObservabilityService.GetServiceOverview:output_type -> controlplane.v1.GetServiceOverviewResponse
-	66,  // 228: controlplane.v1.ObservabilityService.GetFlamegraph:output_type -> controlplane.v1.GetFlamegraphResponse
-	92,  // 229: controlplane.v1.ObservabilityService.QueryPanel:output_type -> controlplane.v1.QueryPanelResponse
-	68,  // 230: controlplane.v1.ObservabilityService.ListAttributeValues:output_type -> controlplane.v1.ListAttributeValuesResponse
-	71,  // 231: controlplane.v1.ObservabilityService.GetServiceSignals:output_type -> controlplane.v1.GetServiceSignalsResponse
-	74,  // 232: controlplane.v1.ObservabilityService.ListWorkloads:output_type -> controlplane.v1.ListWorkloadsResponse
-	83,  // 233: controlplane.v1.ObservabilityService.GetWorkload:output_type -> controlplane.v1.GetWorkloadResponse
-	100, // 234: controlplane.v1.ObservabilityService.GetDashboards:output_type -> controlplane.v1.GetDashboardsResponse
-	114, // 235: controlplane.v1.ObservabilityService.GetObservabilityUsage:output_type -> controlplane.v1.GetObservabilityUsageResponse
-	118, // 236: controlplane.v1.ObservabilityService.GetReleaseHealth:output_type -> controlplane.v1.GetReleaseHealthResponse
-	218, // [218:237] is the sub-list for method output_type
-	199, // [199:218] is the sub-list for method input_type
-	199, // [199:199] is the sub-list for extension type_name
-	199, // [199:199] is the sub-list for extension extendee
-	0,   // [0:199] is the sub-list for field type_name
+	26,  // 6: controlplane.v1.GetServiceGraphResponse.nodes:type_name -> controlplane.v1.GraphNode
+	29,  // 7: controlplane.v1.GetServiceGraphResponse.edges:type_name -> controlplane.v1.GraphEdge
+	30,  // 8: controlplane.v1.GetServiceGraphResponse.completeness:type_name -> controlplane.v1.GraphCompleteness
+	22,  // 9: controlplane.v1.GetServiceGraphResponse.effective_time_range:type_name -> controlplane.v1.TimeRange
+	147, // 10: controlplane.v1.GetServiceGraphResponse.instance_scope:type_name -> controlplane.v1.InstanceScope
+	0,   // 11: controlplane.v1.GraphNode.kind:type_name -> controlplane.v1.GraphNodeKind
+	1,   // 12: controlplane.v1.GraphEdge.kind:type_name -> controlplane.v1.GraphEdgeKind
+	2,   // 13: controlplane.v1.GraphEdge.evidence:type_name -> controlplane.v1.GraphEvidenceKind
+	27,  // 14: controlplane.v1.GraphEdge.duration:type_name -> controlplane.v1.GraphHistogram
+	28,  // 15: controlplane.v1.GraphEdge.exemplars:type_name -> controlplane.v1.GraphTraceExemplar
+	146, // 16: controlplane.v1.GraphEdge.first_seen:type_name -> google.protobuf.Timestamp
+	146, // 17: controlplane.v1.GraphEdge.last_seen:type_name -> google.protobuf.Timestamp
+	146, // 18: controlplane.v1.GraphCompleteness.aggregated_through:type_name -> google.protobuf.Timestamp
+	23,  // 19: controlplane.v1.GetServiceGraphCatalogRequest.scope:type_name -> controlplane.v1.QueryScope
+	2,   // 20: controlplane.v1.GraphRPCMethod.evidence:type_name -> controlplane.v1.GraphEvidenceKind
+	27,  // 21: controlplane.v1.GraphRPCMethod.duration:type_name -> controlplane.v1.GraphHistogram
+	32,  // 22: controlplane.v1.GetServiceGraphCatalogResponse.methods:type_name -> controlplane.v1.GraphRPCMethod
+	30,  // 23: controlplane.v1.GetServiceGraphCatalogResponse.completeness:type_name -> controlplane.v1.GraphCompleteness
+	33,  // 24: controlplane.v1.GetServiceGraphCatalogResponse.declared_catalogs:type_name -> controlplane.v1.GraphDeclaredCatalog
+	147, // 25: controlplane.v1.GetServiceGraphCatalogResponse.instance_scope:type_name -> controlplane.v1.InstanceScope
+	4,   // 26: controlplane.v1.AttributeFilter.op:type_name -> controlplane.v1.AttributeOp
+	146, // 27: controlplane.v1.TimePoint.time:type_name -> google.protobuf.Timestamp
+	23,  // 28: controlplane.v1.SearchLogsRequest.scope:type_name -> controlplane.v1.QueryScope
+	3,   // 29: controlplane.v1.SearchLogsRequest.order:type_name -> controlplane.v1.SortOrder
+	39,  // 30: controlplane.v1.SearchLogsResponse.logs:type_name -> controlplane.v1.LogRecord
+	147, // 31: controlplane.v1.SearchLogsResponse.instance_scope:type_name -> controlplane.v1.InstanceScope
+	146, // 32: controlplane.v1.LogRecord.timestamp:type_name -> google.protobuf.Timestamp
+	131, // 33: controlplane.v1.LogRecord.attributes:type_name -> controlplane.v1.LogRecord.AttributesEntry
+	132, // 34: controlplane.v1.LogRecord.resource_attributes:type_name -> controlplane.v1.LogRecord.ResourceAttributesEntry
+	23,  // 35: controlplane.v1.ListTracesRequest.scope:type_name -> controlplane.v1.QueryScope
+	5,   // 36: controlplane.v1.ListTracesRequest.order:type_name -> controlplane.v1.TraceOrder
+	43,  // 37: controlplane.v1.ListTracesResponse.traces:type_name -> controlplane.v1.TraceSummary
+	44,  // 38: controlplane.v1.ListTracesResponse.red:type_name -> controlplane.v1.TraceRedSummary
+	42,  // 39: controlplane.v1.ListTracesResponse.red_groups:type_name -> controlplane.v1.TraceRedGroup
+	147, // 40: controlplane.v1.ListTracesResponse.instance_scope:type_name -> controlplane.v1.InstanceScope
+	133, // 41: controlplane.v1.TraceRedGroup.group:type_name -> controlplane.v1.TraceRedGroup.GroupEntry
+	44,  // 42: controlplane.v1.TraceRedGroup.red:type_name -> controlplane.v1.TraceRedSummary
+	146, // 43: controlplane.v1.TraceSummary.start_time:type_name -> google.protobuf.Timestamp
+	148, // 44: controlplane.v1.TraceSummary.client:type_name -> controlplane.v1.ClientContext
+	149, // 45: controlplane.v1.TraceSummary.backend_builds:type_name -> controlplane.v1.ServiceBuild
+	23,  // 46: controlplane.v1.GetTraceRequest.scope:type_name -> controlplane.v1.QueryScope
+	48,  // 47: controlplane.v1.GetTraceResponse.spans:type_name -> controlplane.v1.Span
+	47,  // 48: controlplane.v1.GetTraceResponse.related_traces:type_name -> controlplane.v1.RelatedTrace
+	147, // 49: controlplane.v1.GetTraceResponse.instance_scope:type_name -> controlplane.v1.InstanceScope
+	146, // 50: controlplane.v1.Span.start_time:type_name -> google.protobuf.Timestamp
+	134, // 51: controlplane.v1.Span.attributes:type_name -> controlplane.v1.Span.AttributesEntry
+	135, // 52: controlplane.v1.Span.resource_attributes:type_name -> controlplane.v1.Span.ResourceAttributesEntry
+	49,  // 53: controlplane.v1.Span.events:type_name -> controlplane.v1.SpanEvent
+	50,  // 54: controlplane.v1.Span.links:type_name -> controlplane.v1.SpanLink
+	146, // 55: controlplane.v1.SpanEvent.time:type_name -> google.protobuf.Timestamp
+	136, // 56: controlplane.v1.SpanEvent.attributes:type_name -> controlplane.v1.SpanEvent.AttributesEntry
+	23,  // 57: controlplane.v1.ListMetricsRequest.scope:type_name -> controlplane.v1.QueryScope
+	53,  // 58: controlplane.v1.ListMetricsResponse.metrics:type_name -> controlplane.v1.MetricInfo
+	147, // 59: controlplane.v1.ListMetricsResponse.instance_scope:type_name -> controlplane.v1.InstanceScope
+	6,   // 60: controlplane.v1.MetricInfo.type:type_name -> controlplane.v1.MetricType
+	7,   // 61: controlplane.v1.MetricInfo.temporality:type_name -> controlplane.v1.MetricTemporality
+	146, // 62: controlplane.v1.MetricInfo.last_seen:type_name -> google.protobuf.Timestamp
+	54,  // 63: controlplane.v1.MetricInfo.declared_attributes:type_name -> controlplane.v1.MetricAttributeSpec
+	23,  // 64: controlplane.v1.GetMetricRequest.scope:type_name -> controlplane.v1.QueryScope
+	6,   // 65: controlplane.v1.GetMetricRequest.metric_type:type_name -> controlplane.v1.MetricType
+	53,  // 66: controlplane.v1.GetMetricResponse.info:type_name -> controlplane.v1.MetricInfo
+	57,  // 67: controlplane.v1.GetMetricResponse.attributes:type_name -> controlplane.v1.MetricAttribute
+	147, // 68: controlplane.v1.GetMetricResponse.instance_scope:type_name -> controlplane.v1.InstanceScope
+	23,  // 69: controlplane.v1.ListMetricExemplarsRequest.scope:type_name -> controlplane.v1.QueryScope
+	6,   // 70: controlplane.v1.ListMetricExemplarsRequest.metric_type:type_name -> controlplane.v1.MetricType
+	111, // 71: controlplane.v1.ListMetricExemplarsRequest.where:type_name -> controlplane.v1.PanelPredicate
+	137, // 72: controlplane.v1.ListMetricExemplarsRequest.group:type_name -> controlplane.v1.ListMetricExemplarsRequest.GroupEntry
+	22,  // 73: controlplane.v1.ListMetricExemplarsRequest.time_range:type_name -> controlplane.v1.TimeRange
+	60,  // 74: controlplane.v1.ListMetricExemplarsResponse.exemplars:type_name -> controlplane.v1.MetricExemplar
+	147, // 75: controlplane.v1.ListMetricExemplarsResponse.instance_scope:type_name -> controlplane.v1.InstanceScope
+	146, // 76: controlplane.v1.MetricExemplar.time:type_name -> google.protobuf.Timestamp
+	138, // 77: controlplane.v1.MetricExemplar.attributes:type_name -> controlplane.v1.MetricExemplar.AttributesEntry
+	23,  // 78: controlplane.v1.QueryMetricRequest.scope:type_name -> controlplane.v1.QueryScope
+	6,   // 79: controlplane.v1.QueryMetricRequest.metric_type:type_name -> controlplane.v1.MetricType
+	8,   // 80: controlplane.v1.QueryMetricRequest.aggregation:type_name -> controlplane.v1.MetricAggregation
+	63,  // 81: controlplane.v1.QueryMetricResponse.series:type_name -> controlplane.v1.MetricSeries
+	6,   // 82: controlplane.v1.QueryMetricResponse.metric_type:type_name -> controlplane.v1.MetricType
+	8,   // 83: controlplane.v1.QueryMetricResponse.aggregation:type_name -> controlplane.v1.MetricAggregation
+	147, // 84: controlplane.v1.QueryMetricResponse.instance_scope:type_name -> controlplane.v1.InstanceScope
+	139, // 85: controlplane.v1.MetricSeries.labels:type_name -> controlplane.v1.MetricSeries.LabelsEntry
+	36,  // 86: controlplane.v1.MetricSeries.points:type_name -> controlplane.v1.TimePoint
+	23,  // 87: controlplane.v1.GetServiceOverviewRequest.scope:type_name -> controlplane.v1.QueryScope
+	66,  // 88: controlplane.v1.GetServiceOverviewResponse.services:type_name -> controlplane.v1.ServiceOverview
+	147, // 89: controlplane.v1.GetServiceOverviewResponse.instance_scope:type_name -> controlplane.v1.InstanceScope
+	36,  // 90: controlplane.v1.ServiceOverview.request_trend:type_name -> controlplane.v1.TimePoint
+	36,  // 91: controlplane.v1.ServiceOverview.error_trend:type_name -> controlplane.v1.TimePoint
+	140, // 92: controlplane.v1.ServiceOverview.group:type_name -> controlplane.v1.ServiceOverview.GroupEntry
+	23,  // 93: controlplane.v1.GetFlamegraphRequest.scope:type_name -> controlplane.v1.QueryScope
+	147, // 94: controlplane.v1.GetFlamegraphResponse.instance_scope:type_name -> controlplane.v1.InstanceScope
+	23,  // 95: controlplane.v1.ListAttributeValuesRequest.scope:type_name -> controlplane.v1.QueryScope
+	9,   // 96: controlplane.v1.ListAttributeValuesRequest.signal:type_name -> controlplane.v1.Signal
+	71,  // 97: controlplane.v1.ListAttributeValuesResponse.values:type_name -> controlplane.v1.AttributeValue
+	147, // 98: controlplane.v1.ListAttributeValuesResponse.instance_scope:type_name -> controlplane.v1.InstanceScope
+	23,  // 99: controlplane.v1.GetServiceSignalsRequest.scope:type_name -> controlplane.v1.QueryScope
+	74,  // 100: controlplane.v1.GetServiceSignalsResponse.services:type_name -> controlplane.v1.ServiceSignals
+	147, // 101: controlplane.v1.GetServiceSignalsResponse.instance_scope:type_name -> controlplane.v1.InstanceScope
+	23,  // 102: controlplane.v1.ListWorkloadsRequest.scope:type_name -> controlplane.v1.QueryScope
+	77,  // 103: controlplane.v1.ListWorkloadsResponse.workloads:type_name -> controlplane.v1.Workload
+	80,  // 104: controlplane.v1.ListWorkloadsResponse.jobs:type_name -> controlplane.v1.WorkloadJob
+	147, // 105: controlplane.v1.ListWorkloadsResponse.instance_scope:type_name -> controlplane.v1.InstanceScope
+	81,  // 106: controlplane.v1.Workload.containers:type_name -> controlplane.v1.WorkloadContainer
+	83,  // 107: controlplane.v1.Workload.latest_warning:type_name -> controlplane.v1.WorkloadEvent
+	150, // 108: controlplane.v1.Workload.kind:type_name -> controlplane.v1.WorkloadKind
+	11,  // 109: controlplane.v1.Workload.health:type_name -> controlplane.v1.WorkloadHealth
+	12,  // 110: controlplane.v1.Workload.release_basis:type_name -> controlplane.v1.WorkloadReleaseBasis
+	79,  // 111: controlplane.v1.Workload.pods:type_name -> controlplane.v1.WorkloadPod
+	151, // 112: controlplane.v1.Workload.declared:type_name -> controlplane.v1.DeclaredWorkload
+	10,  // 113: controlplane.v1.Workload.health_cause:type_name -> controlplane.v1.WorkloadCause
+	146, // 114: controlplane.v1.Workload.health_since:type_name -> google.protobuf.Timestamp
+	146, // 115: controlplane.v1.WorkloadHealthChange.at:type_name -> google.protobuf.Timestamp
+	11,  // 116: controlplane.v1.WorkloadHealthChange.from:type_name -> controlplane.v1.WorkloadHealth
+	11,  // 117: controlplane.v1.WorkloadHealthChange.to:type_name -> controlplane.v1.WorkloadHealth
+	10,  // 118: controlplane.v1.WorkloadHealthChange.cause:type_name -> controlplane.v1.WorkloadCause
+	13,  // 119: controlplane.v1.WorkloadPod.state:type_name -> controlplane.v1.WorkloadPodState
+	146, // 120: controlplane.v1.WorkloadPod.last_exit_at:type_name -> google.protobuf.Timestamp
+	146, // 121: controlplane.v1.WorkloadPod.first_seen:type_name -> google.protobuf.Timestamp
+	146, // 122: controlplane.v1.WorkloadPod.last_seen:type_name -> google.protobuf.Timestamp
+	83,  // 123: controlplane.v1.WorkloadPod.latest_warning:type_name -> controlplane.v1.WorkloadEvent
+	14,  // 124: controlplane.v1.WorkloadJob.result:type_name -> controlplane.v1.WorkloadJobResult
+	146, // 125: controlplane.v1.WorkloadJob.started_at:type_name -> google.protobuf.Timestamp
+	146, // 126: controlplane.v1.WorkloadJob.finished_at:type_name -> google.protobuf.Timestamp
+	146, // 127: controlplane.v1.WorkloadContainer.last_terminated_at:type_name -> google.protobuf.Timestamp
+	82,  // 128: controlplane.v1.WorkloadContainer.cpu:type_name -> controlplane.v1.ResourceUsage
+	82,  // 129: controlplane.v1.WorkloadContainer.memory:type_name -> controlplane.v1.ResourceUsage
+	146, // 130: controlplane.v1.WorkloadEvent.time:type_name -> google.protobuf.Timestamp
+	23,  // 131: controlplane.v1.GetWorkloadRequest.scope:type_name -> controlplane.v1.QueryScope
+	86,  // 132: controlplane.v1.GetWorkloadResponse.series:type_name -> controlplane.v1.WorkloadSeries
+	83,  // 133: controlplane.v1.GetWorkloadResponse.events:type_name -> controlplane.v1.WorkloadEvent
+	87,  // 134: controlplane.v1.GetWorkloadResponse.image_changes:type_name -> controlplane.v1.ImageChange
+	88,  // 135: controlplane.v1.GetWorkloadResponse.version_changes:type_name -> controlplane.v1.VersionChange
+	77,  // 136: controlplane.v1.GetWorkloadResponse.workloads:type_name -> controlplane.v1.Workload
+	78,  // 137: controlplane.v1.GetWorkloadResponse.health_changes:type_name -> controlplane.v1.WorkloadHealthChange
+	147, // 138: controlplane.v1.GetWorkloadResponse.instance_scope:type_name -> controlplane.v1.InstanceScope
+	15,  // 139: controlplane.v1.WorkloadSeries.metric:type_name -> controlplane.v1.WorkloadMetric
+	36,  // 140: controlplane.v1.WorkloadSeries.points:type_name -> controlplane.v1.TimePoint
+	146, // 141: controlplane.v1.ImageChange.first_seen:type_name -> google.protobuf.Timestamp
+	146, // 142: controlplane.v1.ImageChange.last_seen:type_name -> google.protobuf.Timestamp
+	146, // 143: controlplane.v1.VersionChange.first_seen:type_name -> google.protobuf.Timestamp
+	146, // 144: controlplane.v1.VersionChange.last_seen:type_name -> google.protobuf.Timestamp
+	23,  // 145: controlplane.v1.QueryPanelRequest.scope:type_name -> controlplane.v1.QueryScope
+	108, // 146: controlplane.v1.QueryPanelRequest.panel:type_name -> controlplane.v1.Panel
+	111, // 147: controlplane.v1.QueryPanelRequest.filters:type_name -> controlplane.v1.PanelPredicate
+	90,  // 148: controlplane.v1.QueryPanelRequest.panel_ref:type_name -> controlplane.v1.PanelRef
+	141, // 149: controlplane.v1.CompiledStatement.params:type_name -> controlplane.v1.CompiledStatement.ParamsEntry
+	146, // 150: controlplane.v1.HeatmapCell.time:type_name -> google.protobuf.Timestamp
+	99,  // 151: controlplane.v1.QueryPanelResponse.series:type_name -> controlplane.v1.PanelSeriesResult
+	100, // 152: controlplane.v1.QueryPanelResponse.rows:type_name -> controlplane.v1.PanelTableRow
+	96,  // 153: controlplane.v1.QueryPanelResponse.funnel_steps:type_name -> controlplane.v1.FunnelStepResult
+	97,  // 154: controlplane.v1.QueryPanelResponse.issues:type_name -> controlplane.v1.PanelIssue
+	98,  // 155: controlplane.v1.QueryPanelResponse.sessions:type_name -> controlplane.v1.PanelSession
+	91,  // 156: controlplane.v1.QueryPanelResponse.compiled_sql:type_name -> controlplane.v1.CompiledStatement
+	92,  // 157: controlplane.v1.QueryPanelResponse.heatmap:type_name -> controlplane.v1.HeatmapCell
+	93,  // 158: controlplane.v1.QueryPanelResponse.sql_columns:type_name -> controlplane.v1.SqlColumn
+	95,  // 159: controlplane.v1.QueryPanelResponse.series_meta:type_name -> controlplane.v1.PanelSeriesMeta
+	108, // 160: controlplane.v1.QueryPanelResponse.panel:type_name -> controlplane.v1.Panel
+	147, // 161: controlplane.v1.QueryPanelResponse.instance_scope:type_name -> controlplane.v1.InstanceScope
+	6,   // 162: controlplane.v1.PanelSeriesMeta.metric_type:type_name -> controlplane.v1.MetricType
+	7,   // 163: controlplane.v1.PanelSeriesMeta.temporality:type_name -> controlplane.v1.MetricTemporality
+	146, // 164: controlplane.v1.PanelIssue.first_seen:type_name -> google.protobuf.Timestamp
+	146, // 165: controlplane.v1.PanelIssue.last_seen:type_name -> google.protobuf.Timestamp
+	146, // 166: controlplane.v1.PanelSession.start:type_name -> google.protobuf.Timestamp
+	146, // 167: controlplane.v1.PanelSession.end:type_name -> google.protobuf.Timestamp
+	142, // 168: controlplane.v1.PanelSeriesResult.group:type_name -> controlplane.v1.PanelSeriesResult.GroupEntry
+	36,  // 169: controlplane.v1.PanelSeriesResult.points:type_name -> controlplane.v1.TimePoint
+	143, // 170: controlplane.v1.PanelTableRow.group:type_name -> controlplane.v1.PanelTableRow.GroupEntry
+	23,  // 171: controlplane.v1.GetDashboardsRequest.scope:type_name -> controlplane.v1.QueryScope
+	103, // 172: controlplane.v1.GetDashboardsResponse.spec:type_name -> controlplane.v1.DashboardSpec
+	147, // 173: controlplane.v1.GetDashboardsResponse.instance_scope:type_name -> controlplane.v1.InstanceScope
+	104, // 174: controlplane.v1.DashboardSpec.dashboards:type_name -> controlplane.v1.Dashboard
+	112, // 175: controlplane.v1.DashboardSpec.saved_searches:type_name -> controlplane.v1.SavedSearch
+	113, // 176: controlplane.v1.DashboardSpec.alerts:type_name -> controlplane.v1.DashboardAlert
+	106, // 177: controlplane.v1.Dashboard.filters:type_name -> controlplane.v1.DashboardFilter
+	108, // 178: controlplane.v1.Dashboard.panels:type_name -> controlplane.v1.Panel
+	107, // 179: controlplane.v1.Dashboard.annotations:type_name -> controlplane.v1.DashboardAnnotation
+	105, // 180: controlplane.v1.Dashboard.sections:type_name -> controlplane.v1.DashboardSection
+	110, // 181: controlplane.v1.Panel.series:type_name -> controlplane.v1.PanelSeries
+	111, // 182: controlplane.v1.Panel.where:type_name -> controlplane.v1.PanelPredicate
+	109, // 183: controlplane.v1.Panel.funnel:type_name -> controlplane.v1.PanelFunnel
+	111, // 184: controlplane.v1.PanelSeries.where:type_name -> controlplane.v1.PanelPredicate
+	111, // 185: controlplane.v1.SavedSearch.where:type_name -> controlplane.v1.PanelPredicate
+	16,  // 186: controlplane.v1.QueryQuotaExhausted.limit:type_name -> controlplane.v1.QueryQuotaLimit
+	146, // 187: controlplane.v1.QueryQuotaExhausted.resets_at:type_name -> google.protobuf.Timestamp
+	146, // 188: controlplane.v1.GetObservabilityUsageResponse.period_start:type_name -> google.protobuf.Timestamp
+	146, // 189: controlplane.v1.GetObservabilityUsageResponse.period_end:type_name -> google.protobuf.Timestamp
+	146, // 190: controlplane.v1.GetObservabilityUsageResponse.measured_through:type_name -> google.protobuf.Timestamp
+	17,  // 191: controlplane.v1.GetObservabilityUsageResponse.state:type_name -> controlplane.v1.ObservabilityQuotaState
+	17,  // 192: controlplane.v1.GetObservabilityUsageResponse.usage_state:type_name -> controlplane.v1.ObservabilityQuotaState
+	117, // 193: controlplane.v1.GetObservabilityUsageResponse.by_signal:type_name -> controlplane.v1.SignalUsage
+	118, // 194: controlplane.v1.GetObservabilityUsageResponse.by_service:type_name -> controlplane.v1.ServiceUsage
+	17,  // 195: controlplane.v1.GetObservabilityUsageResponse.dev_state:type_name -> controlplane.v1.ObservabilityQuotaState
+	23,  // 196: controlplane.v1.GetReleaseHealthRequest.scope:type_name -> controlplane.v1.QueryScope
+	152, // 197: controlplane.v1.GetReleaseHealthRequest.window:type_name -> google.protobuf.Duration
+	144, // 198: controlplane.v1.GetReleaseHealthRequest.threshold_overrides:type_name -> controlplane.v1.GetReleaseHealthRequest.ThresholdOverridesEntry
+	121, // 199: controlplane.v1.GetReleaseHealthResponse.promotion:type_name -> controlplane.v1.ReleasePromotionRef
+	22,  // 200: controlplane.v1.GetReleaseHealthResponse.before:type_name -> controlplane.v1.TimeRange
+	22,  // 201: controlplane.v1.GetReleaseHealthResponse.after:type_name -> controlplane.v1.TimeRange
+	122, // 202: controlplane.v1.GetReleaseHealthResponse.services:type_name -> controlplane.v1.ServiceHealthDelta
+	153, // 203: controlplane.v1.GetReleaseHealthResponse.new_issues:type_name -> controlplane.v1.Issue
+	153, // 204: controlplane.v1.GetReleaseHealthResponse.regressed_issues:type_name -> controlplane.v1.Issue
+	124, // 205: controlplane.v1.GetReleaseHealthResponse.firing_alerts:type_name -> controlplane.v1.ReleaseAlertRef
+	125, // 206: controlplane.v1.GetReleaseHealthResponse.workload_findings:type_name -> controlplane.v1.WorkloadFinding
+	18,  // 207: controlplane.v1.GetReleaseHealthResponse.verdict:type_name -> controlplane.v1.ReleaseVerdict
+	126, // 208: controlplane.v1.GetReleaseHealthResponse.findings:type_name -> controlplane.v1.ReleaseFinding
+	127, // 209: controlplane.v1.GetReleaseHealthResponse.thresholds:type_name -> controlplane.v1.EffectiveThreshold
+	147, // 210: controlplane.v1.GetReleaseHealthResponse.instance_scope:type_name -> controlplane.v1.InstanceScope
+	146, // 211: controlplane.v1.ReleasePromotionRef.promoted_at:type_name -> google.protobuf.Timestamp
+	123, // 212: controlplane.v1.ServiceHealthDelta.before:type_name -> controlplane.v1.ServiceWindowStats
+	123, // 213: controlplane.v1.ServiceHealthDelta.after:type_name -> controlplane.v1.ServiceWindowStats
+	146, // 214: controlplane.v1.ReleaseAlertRef.firing_at:type_name -> google.protobuf.Timestamp
+	145, // 215: controlplane.v1.ReleaseAlertRef.labels:type_name -> controlplane.v1.ReleaseAlertRef.LabelsEntry
+	19,  // 216: controlplane.v1.ReleaseFinding.code:type_name -> controlplane.v1.ReleaseFindingCode
+	130, // 217: controlplane.v1.ListFrontendReplayResponse.frontends:type_name -> controlplane.v1.FrontendReplay
+	20,  // 218: controlplane.v1.FrontendReplay.state:type_name -> controlplane.v1.FrontendReplayState
+	21,  // 219: controlplane.v1.FrontendReplay.source:type_name -> controlplane.v1.FrontendReplaySource
+	37,  // 220: controlplane.v1.ObservabilityService.SearchLogs:input_type -> controlplane.v1.SearchLogsRequest
+	40,  // 221: controlplane.v1.ObservabilityService.ListTraces:input_type -> controlplane.v1.ListTracesRequest
+	45,  // 222: controlplane.v1.ObservabilityService.GetTrace:input_type -> controlplane.v1.GetTraceRequest
+	51,  // 223: controlplane.v1.ObservabilityService.ListMetrics:input_type -> controlplane.v1.ListMetricsRequest
+	61,  // 224: controlplane.v1.ObservabilityService.QueryMetric:input_type -> controlplane.v1.QueryMetricRequest
+	55,  // 225: controlplane.v1.ObservabilityService.GetMetric:input_type -> controlplane.v1.GetMetricRequest
+	58,  // 226: controlplane.v1.ObservabilityService.ListMetricExemplars:input_type -> controlplane.v1.ListMetricExemplarsRequest
+	24,  // 227: controlplane.v1.ObservabilityService.GetServiceGraph:input_type -> controlplane.v1.GetServiceGraphRequest
+	31,  // 228: controlplane.v1.ObservabilityService.GetServiceGraphCatalog:input_type -> controlplane.v1.GetServiceGraphCatalogRequest
+	64,  // 229: controlplane.v1.ObservabilityService.GetServiceOverview:input_type -> controlplane.v1.GetServiceOverviewRequest
+	67,  // 230: controlplane.v1.ObservabilityService.GetFlamegraph:input_type -> controlplane.v1.GetFlamegraphRequest
+	89,  // 231: controlplane.v1.ObservabilityService.QueryPanel:input_type -> controlplane.v1.QueryPanelRequest
+	69,  // 232: controlplane.v1.ObservabilityService.ListAttributeValues:input_type -> controlplane.v1.ListAttributeValuesRequest
+	72,  // 233: controlplane.v1.ObservabilityService.GetServiceSignals:input_type -> controlplane.v1.GetServiceSignalsRequest
+	75,  // 234: controlplane.v1.ObservabilityService.ListWorkloads:input_type -> controlplane.v1.ListWorkloadsRequest
+	84,  // 235: controlplane.v1.ObservabilityService.GetWorkload:input_type -> controlplane.v1.GetWorkloadRequest
+	101, // 236: controlplane.v1.ObservabilityService.GetDashboards:input_type -> controlplane.v1.GetDashboardsRequest
+	115, // 237: controlplane.v1.ObservabilityService.GetObservabilityUsage:input_type -> controlplane.v1.GetObservabilityUsageRequest
+	119, // 238: controlplane.v1.ObservabilityService.GetReleaseHealth:input_type -> controlplane.v1.GetReleaseHealthRequest
+	128, // 239: controlplane.v1.ObservabilityService.ListFrontendReplay:input_type -> controlplane.v1.ListFrontendReplayRequest
+	38,  // 240: controlplane.v1.ObservabilityService.SearchLogs:output_type -> controlplane.v1.SearchLogsResponse
+	41,  // 241: controlplane.v1.ObservabilityService.ListTraces:output_type -> controlplane.v1.ListTracesResponse
+	46,  // 242: controlplane.v1.ObservabilityService.GetTrace:output_type -> controlplane.v1.GetTraceResponse
+	52,  // 243: controlplane.v1.ObservabilityService.ListMetrics:output_type -> controlplane.v1.ListMetricsResponse
+	62,  // 244: controlplane.v1.ObservabilityService.QueryMetric:output_type -> controlplane.v1.QueryMetricResponse
+	56,  // 245: controlplane.v1.ObservabilityService.GetMetric:output_type -> controlplane.v1.GetMetricResponse
+	59,  // 246: controlplane.v1.ObservabilityService.ListMetricExemplars:output_type -> controlplane.v1.ListMetricExemplarsResponse
+	25,  // 247: controlplane.v1.ObservabilityService.GetServiceGraph:output_type -> controlplane.v1.GetServiceGraphResponse
+	34,  // 248: controlplane.v1.ObservabilityService.GetServiceGraphCatalog:output_type -> controlplane.v1.GetServiceGraphCatalogResponse
+	65,  // 249: controlplane.v1.ObservabilityService.GetServiceOverview:output_type -> controlplane.v1.GetServiceOverviewResponse
+	68,  // 250: controlplane.v1.ObservabilityService.GetFlamegraph:output_type -> controlplane.v1.GetFlamegraphResponse
+	94,  // 251: controlplane.v1.ObservabilityService.QueryPanel:output_type -> controlplane.v1.QueryPanelResponse
+	70,  // 252: controlplane.v1.ObservabilityService.ListAttributeValues:output_type -> controlplane.v1.ListAttributeValuesResponse
+	73,  // 253: controlplane.v1.ObservabilityService.GetServiceSignals:output_type -> controlplane.v1.GetServiceSignalsResponse
+	76,  // 254: controlplane.v1.ObservabilityService.ListWorkloads:output_type -> controlplane.v1.ListWorkloadsResponse
+	85,  // 255: controlplane.v1.ObservabilityService.GetWorkload:output_type -> controlplane.v1.GetWorkloadResponse
+	102, // 256: controlplane.v1.ObservabilityService.GetDashboards:output_type -> controlplane.v1.GetDashboardsResponse
+	116, // 257: controlplane.v1.ObservabilityService.GetObservabilityUsage:output_type -> controlplane.v1.GetObservabilityUsageResponse
+	120, // 258: controlplane.v1.ObservabilityService.GetReleaseHealth:output_type -> controlplane.v1.GetReleaseHealthResponse
+	129, // 259: controlplane.v1.ObservabilityService.ListFrontendReplay:output_type -> controlplane.v1.ListFrontendReplayResponse
+	240, // [240:260] is the sub-list for method output_type
+	220, // [220:240] is the sub-list for method input_type
+	220, // [220:220] is the sub-list for extension type_name
+	220, // [220:220] is the sub-list for extension extendee
+	0,   // [0:220] is the sub-list for field type_name
 }
 
 func init() { file_services_observability_v1_observability_proto_init() }
@@ -12653,13 +13308,14 @@ func file_services_observability_v1_observability_proto_init() {
 		(*GetReleaseHealthRequest_PromotionId)(nil),
 		(*GetReleaseHealthRequest_ReleaseVersion)(nil),
 	}
+	file_services_observability_v1_observability_proto_msgTypes[106].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_services_observability_v1_observability_proto_rawDesc), len(file_services_observability_v1_observability_proto_rawDesc)),
-			NumEnums:      20,
-			NumMessages:   121,
+			NumEnums:      22,
+			NumMessages:   124,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

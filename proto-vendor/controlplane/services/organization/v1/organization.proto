@@ -103,10 +103,12 @@ service OrganizationService {
         target: {
           kind: "member"
           id: "response.invitation.id"
-          label: "response.invitation.email"
         }
         scope: "org_id"
-        detail: ["role", "response.resent"]
+        detail: [
+          "role",
+          "response.resent"
+        ]
         writer: ACTIVITY_WRITER_HANDLER
       }
     };
@@ -164,7 +166,10 @@ service OrganizationService {
           id: "response.user_id"
         }
         scope: "response.organization.id"
-        detail: ["response.organization.role", "response.invitation_id"]
+        detail: [
+          "response.organization.role",
+          "response.invitation_id"
+        ]
         writer: ACTIVITY_WRITER_HANDLER
       }
     };
@@ -173,8 +178,9 @@ service OrganizationService {
   // RemoveMember removes another member. Admin or owner; only an owner may
   // remove an owner; not yourself (FailedPrecondition, "cannot_remove_self":
   // use LeaveOrganization). The last owner cannot be removed ("last_owner").
-  // Removal deletes their grants, revokes their tokens in this org and the
-  // org-automation tokens they minted (daemon-bound tokens excepted), and
+  // Removal deletes their grants, revokes their tokens in this org (the
+  // daemon-bound tokens of machines they operate here included: the machine
+  // is the org's and stops) and the org-automation tokens they minted, and
   // retires their LLM gateway keys in this org.
   rpc RemoveMember(RemoveMemberRequest) returns (RemoveMemberResponse) {
     option (forge.v1.method) = {
@@ -186,7 +192,6 @@ service OrganizationService {
           id: "user_id"
         }
         scope: "org_id"
-        detail: ["response.revoked_token_count"]
         writer: ACTIVITY_WRITER_HANDLER
       }
     };
@@ -205,7 +210,6 @@ service OrganizationService {
           id: "response.user_id"
         }
         scope: "org_id"
-        detail: ["response.revoked_token_count"]
         writer: ACTIVITY_WRITER_HANDLER
       }
     };
@@ -380,8 +384,8 @@ message RemoveMemberRequest {
 }
 
 message RemoveMemberResponse {
-  // Access tokens revoked: the member's own in this org and the
-  // org-automation tokens they minted (daemon-bound tokens excepted).
+  // Access tokens revoked: the member's own in this org (daemon-bound ones
+  // included) and the org-automation tokens they minted.
   int32 revoked_token_count = 1;
 }
 
@@ -439,6 +443,10 @@ message ListMyOrganizationsResponse {
   repeated MyOrganization organizations = 1;
   // The org requests that name none act in. "" when organizations is empty.
   string default_org_id = 2;
+  // 3 and 4 carried a per-person billing org (#2397); the owner dropped that
+  // design (2026-11-09) and approved removing them (breaking:approved).
+  reserved 3, 4;
+  reserved "billing_org_id", "billing_org_explicit";
 }
 
 message SetDefaultOrganizationRequest {

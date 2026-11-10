@@ -139,8 +139,9 @@ type OrganizationServiceClient interface {
 	// RemoveMember removes another member. Admin or owner; only an owner may
 	// remove an owner; not yourself (FailedPrecondition, "cannot_remove_self":
 	// use LeaveOrganization). The last owner cannot be removed ("last_owner").
-	// Removal deletes their grants, revokes their tokens in this org and the
-	// org-automation tokens they minted (daemon-bound tokens excepted), and
+	// Removal deletes their grants, revokes their tokens in this org (the
+	// daemon-bound tokens of machines they operate here included: the machine
+	// is the org's and stops) and the org-automation tokens they minted, and
 	// retires their LLM gateway keys in this org.
 	RemoveMember(context.Context, *connect.Request[v1.RemoveMemberRequest]) (*connect.Response[v1.RemoveMemberResponse], error)
 	// LeaveOrganization removes the caller from the org, with the same cleanup
@@ -373,8 +374,9 @@ type OrganizationServiceHandler interface {
 	// RemoveMember removes another member. Admin or owner; only an owner may
 	// remove an owner; not yourself (FailedPrecondition, "cannot_remove_self":
 	// use LeaveOrganization). The last owner cannot be removed ("last_owner").
-	// Removal deletes their grants, revokes their tokens in this org and the
-	// org-automation tokens they minted (daemon-bound tokens excepted), and
+	// Removal deletes their grants, revokes their tokens in this org (the
+	// daemon-bound tokens of machines they operate here included: the machine
+	// is the org's and stops) and the org-automation tokens they minted, and
 	// retires their LLM gateway keys in this org.
 	RemoveMember(context.Context, *connect.Request[v1.RemoveMemberRequest]) (*connect.Response[v1.RemoveMemberResponse], error)
 	// LeaveOrganization removes the caller from the org, with the same cleanup
