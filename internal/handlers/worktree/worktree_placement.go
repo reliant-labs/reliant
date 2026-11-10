@@ -7,6 +7,7 @@ import (
 	"fmt"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
+	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/daemonchoice"
 	"github.com/reliant-labs/reliant/internal/daemonerr"
 	"github.com/reliant-labs/reliant/internal/daemonplacement"
@@ -47,7 +48,7 @@ func (s *Service) placeNewWorktree(ctx context.Context, userID, projectID string
 			return machinewake.Target{}, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 		}
 		// Someone else's chat is not found, so the answer never reveals it.
-		if chat == nil || chat.UserID != userID {
+		if !authz.CanWriteChat(ctx, userID, chat) {
 			return machinewake.Target{}, svcerr.NotFound("chat")
 		}
 		if chat.ProjectID != projectID {
@@ -105,7 +106,7 @@ func (s *Service) placeOnRequestedMachine(ctx context.Context, userID, projectID
 		if err != nil {
 			return machinewake.Target{}, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 		}
-		if chat == nil || chat.UserID != userID {
+		if !authz.CanWriteChat(ctx, userID, chat) {
 			return machinewake.Target{}, svcerr.NotFound("chat")
 		}
 		if chat.ProjectID != projectID {

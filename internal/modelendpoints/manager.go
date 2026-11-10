@@ -14,6 +14,7 @@ import (
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/local"
 	"github.com/reliant-labs/reliant/internal/localprobe"
@@ -317,7 +318,7 @@ func (m *Manager) checkRoute(ctx context.Context, userID string, n *normalizedIn
 	switch n.Route {
 	case db.ModelEndpointRouteViaDaemon:
 		d, err := m.cfg.Store.GetDaemon(ctx, n.DaemonID)
-		if err != nil || d == nil || d.UserID != userID {
+		if err != nil || !authz.CanWriteMachine(ctx, userID, d) {
 			return ErrDaemonNotOwned
 		}
 	case db.ModelEndpointRouteDirect:
