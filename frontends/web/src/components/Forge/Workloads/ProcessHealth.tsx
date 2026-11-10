@@ -6,6 +6,10 @@
  * logs and alerts. Compact on purpose: the service cards above carry a
  * workload's full picture (memory, restarts, release), so this list is the
  * request-side index, and it reads as a different thing from the cards.
+ *
+ * On a phone each process stacks into labelled lines; CPU and Alerts drop out
+ * there (Services carries CPU, "Needs attention" carries the firing alerts),
+ * so a process is five short lines rather than eight.
  */
 import { useMemo } from "react";
 import DataTable, { type DataTableColumn } from "@/components/forge-ui/data_table";
@@ -67,6 +71,8 @@ export function ProcessHealth({ scope, range, workloads, alerts, envNameOf, work
       key: "cpu",
       header: "CPU",
       width: "10rem",
+      // `!`: the stacked layout's own max-md display would otherwise win.
+      className: "max-md:!hidden",
       render: (_, { row }) => (row.workload ? <UsageMeter usage={worstUsage(row.workload, "cpu")} format={formatCores} what="CPU" /> : "—"),
     },
     {
@@ -84,6 +90,7 @@ export function ProcessHealth({ scope, range, workloads, alerts, envNameOf, work
       key: "alerts",
       header: "Alerts",
       numeric: true,
+      className: "max-md:!hidden",
       render: (_, { row }) =>
         row.alertsFiring > 0 ? <span className="text-warning-ink">{row.alertsFiring} firing</span> : <span className="text-ink-muted">·</span>,
     },
