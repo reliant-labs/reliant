@@ -179,6 +179,12 @@ const (
 	ReasonNoMachine HeldReason = "no-machine-on-record"
 	// ReasonRecentlyActive: touched within the idle floor.
 	ReasonRecentlyActive HeldReason = "recently_active"
+	// ReasonUsedAfterArchive: something in the checkout (a file or directory,
+	// its HEAD or its reflog) changed after the row was archived, so the archive
+	// was decided on activity that did not see this use. The worktree is in
+	// use: it is never retired on that archive, and the server should treat
+	// the row as un-archived.
+	ReasonUsedAfterArchive HeldReason = "used_after_archive"
 	// ReasonStale: the request's fence no longer matches the lock.
 	ReasonStale HeldReason = "stale"
 	// ReasonError: the pass failed (a timeout, a git failure). Recorded so the

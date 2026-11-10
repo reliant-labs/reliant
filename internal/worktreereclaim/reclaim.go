@@ -695,13 +695,17 @@ func (r *Reclaimer) autoRemove(ctx context.Context, w Worktree) Result {
 	if checkouts == nil {
 		return held(w, ReasonStale, "nothing is claimed for removal")
 	}
-	if r.IdleFloor > 0 {
+	archivedAt, hasArchiveTime := archiveTime(w.Fence)
+	if r.IdleFloor > 0 || hasArchiveTime {
 		last, err := idleSince(ctx, w.Path, checkouts)
 		if err != nil {
 			return held(w, ReasonUnverified, "could not determine quiet time: "+err.Error())
 		}
-		if age := r.now().Sub(last); age < r.IdleFloor {
+		if age := r.now().Sub(last); r.IdleFloor > 0 && age < r.IdleFloor {
 			return held(w, ReasonRecentlyActive, fmt.Sprintf("touched %s ago", age.Round(time.Minute)))
+		}
+		if hasArchiveTime && last.After(archivedAt) {
+			return held(w, ReasonUsedAfterArchive, usedAfterArchive(last, archivedAt))
 		}
 	}
 	// A fresh process list, immediately before removal.

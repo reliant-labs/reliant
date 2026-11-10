@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"time"
 )
 
@@ -32,6 +33,30 @@ func persistRetirementState(path string, data []byte) error {
 	}
 	defer dir.Close()
 	return dir.Sync()
+}
+
+// archiveTime is the moment a row was archived, read from its fence: the
+// server writes the archive time in nanoseconds (worktreesweep.Fence). A fence
+// that is not such a time (before 2020) carries none.
+func archiveTime(fence string) (time.Time, bool) {
+	ns, err := strconv.ParseInt(fence, 10, 64)
+	if err != nil {
+		return time.Time{}, false
+	}
+	at := time.Unix(0, ns)
+	return at, at.After(time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC))
+}
+
+// usedAfterArchive is the hold for a checkout something changed after its
+// row was archived: the archive decided on activity the server could see (the
+// chats and threads bound to the row), and this shows use it could not, such
+// as an agent working in the checkout by path, or a chat paused mid-run. Such
+// a worktree is held, never retired on that archive; using it through a bound
+// chat revives the row (ReviveArchivedWorktree), and a later archive carries a
+// later fence (Reliant bug 7576a754, 2026-11-10).
+func usedAfterArchive(last, archivedAt time.Time) string {
+	return fmt.Sprintf("used after it was archived: changed %s, archived %s",
+		last.UTC().Format(time.RFC3339), archivedAt.UTC().Format(time.RFC3339))
 }
 
 // DefaultDisposalCheckEvery paces the full admission and process check while a
@@ -165,6 +190,10 @@ func (r *Reclaimer) retireWorkspace(ctx context.Context, w Worktree, checkouts [
 		if r.IdleFloor > 0 && r.now().Sub(original.newest) < r.IdleFloor {
 			original.close()
 			return rollback(ReasonRecentlyActive, "a file in the checkout changed recently")
+		}
+		if at, ok := archiveTime(w.Fence); ok && original.newest.After(at) {
+			original.close()
+			return rollback(ReasonUsedAfterArchive, usedAfterArchive(original.newest, at))
 		}
 		if err := original.validate(ctx); err != nil {
 			original.close()
@@ -454,6 +483,9 @@ func (r *Reclaimer) resumeRetirement(ctx context.Context, w Worktree, parked []s
 		// had has its directories' mtimes moved by the unlinks themselves.
 		if !disposingUnder(q, w.Fence) && r.IdleFloor > 0 && r.now().Sub(tree.newest) < r.IdleFloor {
 			return r.heldQuarantined(w, parked, "a parked checkout changed recently")
+		}
+		if at, ok := archiveTime(w.Fence); ok && !disposingUnder(q, w.Fence) && tree.newest.After(at) {
+			return r.heldQuarantined(w, parked, usedAfterArchive(tree.newest, at))
 		}
 		if err := tree.validate(ctx); err != nil {
 			return r.heldQuarantined(w, parked, err.Error())
