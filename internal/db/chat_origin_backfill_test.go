@@ -80,6 +80,8 @@ func TestChatOriginMigrationBackfillsFromLaunchEvent(t *testing.T) {
 	body, err := forgedb.MigrationsFS.ReadFile(matches[0])
 	require.NoError(t, err)
 	exec(string(body))
+	// The replayed migration's view predates later columns (org_id).
+	restoreLatestChatsView(t, raw)
 
 	for _, kind := range kinds {
 		id := "bf-" + string(kind)

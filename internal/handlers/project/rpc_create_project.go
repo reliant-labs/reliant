@@ -41,6 +41,13 @@ func (s *Service) CreateProject(
 		return nil, svcerr.InvalidArgument(fmt.Sprintf("project path must be absolute, got: %q", req.Msg.Path))
 	}
 
+	// The org is decided before anything touches a machine, so a request
+	// naming an org the caller is not in changes nothing.
+	orgID, err := s.actingOrg(ctx, userID, req.Msg.GetOrgId())
+	if err != nil {
+		return nil, err
+	}
+
 	// pinned is the machine the request names (daemon_id); "" is today's
 	// default resolution. A named machine is resolved, and an existing
 	// project attached, before anything below (findOrAttachOn).
@@ -266,6 +273,7 @@ func (s *Service) CreateProject(
 		RemoteURL:        projectRemoteURL,
 		IsForge:          discoverResp.HasForge,
 		ForgeProjectName: forgeProjectName,
+		OrgID:            orgID,
 		CreatedAt:        now,
 		UpdatedAt:        now,
 		LastActive:       now,

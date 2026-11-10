@@ -190,24 +190,28 @@ func (s WorkflowStatus) Label() string {
 
 // Chat represents a top-level conversation.
 type Chat struct {
-	ID                   string            `json:"id"`
-	Title                string            `json:"title"`
-	ProjectID            string            `json:"project_id"`
-	WorktreeID           *string           `json:"worktree_id,omitempty"`
-	ArchivedWorktreeName *string           `json:"archived_worktree_name,omitempty"`
-	UserID               string            `json:"user_id"`
-	WorkflowName         *string           `json:"workflow_name,omitempty"`
-	State                ChatState         `json:"state"`
-	WorkflowID           *string           `json:"workflow_id,omitempty"`
-	RunID                *string           `json:"run_id,omitempty"`
-	SelectedPresets      map[string]string `json:"selected_presets,omitempty"`
-	CreatedAt            time.Time         `json:"created_at"`
-	UpdatedAt            time.Time         `json:"updated_at"`
-	LastActive           time.Time         `json:"last_active"`
-	LastMessageAt        *time.Time        `json:"last_message_at,omitempty"`
-	Activity             *int              `json:"activity,omitempty"`
-	Unread               bool              `json:"unread"`
-	ActiveDaemonID       *string           `json:"active_daemon_id,omitempty"`
+	ID                   string  `json:"id"`
+	Title                string  `json:"title"`
+	ProjectID            string  `json:"project_id"`
+	WorktreeID           *string `json:"worktree_id,omitempty"`
+	ArchivedWorktreeName *string `json:"archived_worktree_name,omitempty"`
+	UserID               string  `json:"user_id"`
+	// OrgID is the organization the chat belongs to, fixed at creation; its
+	// LLM usage bills this org. nil: written before orgs, or no org could be
+	// resolved (see Project.OrgID).
+	OrgID           *string           `json:"org_id,omitempty"`
+	WorkflowName    *string           `json:"workflow_name,omitempty"`
+	State           ChatState         `json:"state"`
+	WorkflowID      *string           `json:"workflow_id,omitempty"`
+	RunID           *string           `json:"run_id,omitempty"`
+	SelectedPresets map[string]string `json:"selected_presets,omitempty"`
+	CreatedAt       time.Time         `json:"created_at"`
+	UpdatedAt       time.Time         `json:"updated_at"`
+	LastActive      time.Time         `json:"last_active"`
+	LastMessageAt   *time.Time        `json:"last_message_at,omitempty"`
+	Activity        *int              `json:"activity,omitempty"`
+	Unread          bool              `json:"unread"`
+	ActiveDaemonID  *string           `json:"active_daemon_id,omitempty"`
 	// NoMachine records that this chat's runs have no machine by design: set
 	// at launch, never inferred from a daemon being absent (an absent pinned
 	// daemon is asleep and gets woken). Every run in the chat is offered only
@@ -285,6 +289,7 @@ type ChatRow struct {
 	Title          string
 	ProjectID      string
 	UserID         string
+	OrgID          *string
 	State          ChatState
 	WorkflowID     *string
 	WorkflowName   *string
@@ -316,8 +321,11 @@ type ArchivedChatInfo struct {
 
 // ChatFilters contains options for filtering chats.
 type ChatFilters struct {
-	UserID          string
-	ProjectID       *string
+	UserID    string
+	ProjectID *string
+	// Org narrows the list to one organization; nil lists every chat UserID
+	// owns, in any org or none (every client before orgs).
+	Org             *OrgScope
 	State           *ChatState
 	ExcludeArchived bool
 	// SidebarOnly keeps only chats the sidebar lists: the view's

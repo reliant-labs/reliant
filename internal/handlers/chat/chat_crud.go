@@ -158,6 +158,13 @@ func (s *Service) startChat(
 	if jwt, ok := auth.GetUserJWT(userID); ok {
 		spec.UserJWT = jwt
 	}
+	// A new chat's org is fixed here and never changes; an existing chat
+	// keeps its own.
+	if msg.GetChatId() == "" {
+		if spec.OrgID, spec.DefaultOrgID, err = s.newChatOrgs(ctx, userID, msg.GetOrgId()); err != nil {
+			return nil, err
+		}
+	}
 
 	// A chat with no machine by design: there is nothing to choose, validate
 	// or wake. The launcher refuses the contradictions (with a daemon_id, or
@@ -286,9 +293,14 @@ func (s *Service) ListChats(
 	if req.Msg.ProjectId != "" {
 		projectID = &req.Msg.ProjectId
 	}
+	scope, err := s.listScope(ctx, userID, req.Msg.GetOrgId())
+	if err != nil {
+		return nil, err
+	}
 	filters := db.ChatFilters{
 		UserID:          userID,
 		ProjectID:       projectID,
+		Org:             scope,
 		Limit:           limit,
 		ExcludeArchived: true,
 		// The chat list holds conversations: USER-origin chats and adopted
