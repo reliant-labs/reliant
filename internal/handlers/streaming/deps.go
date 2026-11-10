@@ -32,6 +32,11 @@ type Repository interface {
 	GetLatestUserUpdateSequence(ctx context.Context, userID string) (int64, error)
 	GetUserUpdatesSince(ctx context.Context, userID string, sinceSeq int64, limit int) ([]db.UserUpdate, error)
 
+	// The org of the project or saved workflow a user update is about, which
+	// decides whether the user stream delivers it (orgGate).
+	GetProject(ctx context.Context, id string) (*db.Project, error)
+	GetWorkflowDraft(ctx context.Context, id string) (*db.WorkflowDraft, error)
+
 	// What a chat snapshot is assembled from.
 	ListThreadsByConversation(ctx context.Context, chatID string) ([]*db.Thread, error)
 	CountMessagesInChat(ctx context.Context, chatID string) (int, error)

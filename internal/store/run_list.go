@@ -241,7 +241,7 @@ func ListUnlaunchedTriggerEvents(ctx context.Context, db orm.Context, filters co
 		Join("JOIN triggers AS t ON t.id = te.trigger_id AND t.user_id = te.user_id").
 		ColumnExpr("te.id, te.trigger_id, t.name AS trigger_name, t.workflow AS workflow_name").
 		ColumnExpr("COALESCE(t.workflow_trigger, '') AS workflow_trigger, t.project_id, te.kind").
-		ColumnExpr("te.occurred_at, te.outcome, te.outcome_detail").
+		ColumnExpr("te.occurred_at, te.outcome, te.outcome_detail, t.org_id").
 		Where("te.user_id = ?", filters.UserID).
 		Where("te.outcome IN (?, ?)", core.TriggerEventSkipped, core.TriggerEventFailed).
 		Where("te.chat_id IS NULL")
@@ -304,6 +304,7 @@ func ListUnlaunchedTriggerEvents(ctx context.Context, db orm.Context, filters co
 			OccurredAt:      row.OccurredAt,
 			Outcome:         core.TriggerEventOutcome(row.Outcome),
 			OutcomeDetail:   row.OutcomeDetail,
+			OrgID:           row.OrgID,
 		}
 	}
 	return events, hasMore, nil
@@ -320,6 +321,7 @@ type unlaunchedEventRow struct {
 	OccurredAt      time.Time `bun:"occurred_at"`
 	Outcome         string    `bun:"outcome"`
 	OutcomeDetail   string    `bun:"outcome_detail"`
+	OrgID           *string   `bun:"org_id"`
 }
 
 // runRow is one row of runRowsSQL.
@@ -370,6 +372,7 @@ func runItems(rows []runRow) []*core.RunListItem {
 			ParentChatID:    row.ParentChatID,
 			ParentChatTitle: deref(row.ParentChatTitle),
 			Archived:        row.ChatState != nil && *row.ChatState == core.ChatStateArchived,
+			OrgID:           row.OrgID,
 		}
 		// The zero status when the chat has no root workflow row yet: the
 		// join leaves both halves NULL.

@@ -248,6 +248,14 @@ func CanReadTriggerEvent(ctx context.Context, userID string, event *core.Trigger
 	return decide(ctx, userID, resource{present: true, ownerUserID: event.UserID})
 }
 
+// CanReadOwn reports whether userID may still see a row of their own that
+// belongs to org (nil: none): the org half of every decision, for a row a
+// store read already scoped to its owner (a run log row, a user update),
+// which carries the org of the resource it is about but not that resource.
+func CanReadOwn(ctx context.Context, userID string, org *string) bool {
+	return decide(ctx, userID, resource{present: true, ownerUserID: userID, orgID: orgOf(org)})
+}
+
 // Visible returns the rows of a list that can lets userID read, in order: a
 // collection shows exactly what the single-resource read would. Membership
 // is cached per org (orgs.CacheTTL), so a list costs one lookup per distinct
