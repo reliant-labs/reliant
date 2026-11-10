@@ -29,7 +29,10 @@
 // "demo smoke <run id>", confirm, then require the read to happen and the page to
 // show the reason. It is a failure when the dialog does not appear on an audited
 // environment the tab has not answered for, when anything was read before it was
-// answered, or when it appears anywhere else. Pass 1 opens both on prod directly.
+// answered, or when it appears anywhere else. The environment is the one the
+// browser rendered with (its root's data-env), not the URL: a nav link need not
+// carry ?env=. Pass 1 opens both on prod directly; the nav pass must reach each
+// in an audited environment and answer there, so the visitor's path is proved too.
 // DEMO_AUDITED_ENVS (default "prod"): the environments the demo audits.
 // DEMO_SMOKE_RUN_ID (default: the start time): the run id in the reason.
 //
@@ -48,10 +51,11 @@ const home = `/forge/p/${project}`;
 const settle = Number(process.env.SETTLE_MS ?? 4000);
 const auditedEnvs = (process.env.DEMO_AUDITED_ENVS ?? "prod").split(",").map((env) => env.trim()).filter(Boolean);
 const reason = `demo smoke ${process.env.DEMO_SMOKE_RUN_ID ?? new Date().toISOString()}`;
-// The surfaces that ask, and what each shows once it has read.
+// The surfaces that ask: their browser root (which names the environment it
+// reads, data-env), and what each shows once it has read.
 const audited = [
-  { path: `${home}/data`, subject: "data", read: (page) => page.getByRole("navigation", { name: "Tables" }).getByRole("link").first() },
-  { path: `${home}/storage`, subject: "files", read: (page) => page.getByRole("main").getByRole("table").getByRole("row").nth(1) },
+  { path: `${home}/data`, subject: "data", root: "data-browser", read: (page) => page.getByRole("navigation", { name: "Tables" }).getByRole("link").first() },
+  { path: `${home}/storage`, subject: "files", root: "storage-browser", read: (page) => page.getByRole("main").getByRole("table").getByRole("row").nth(1) },
 ];
 const pages = [
   "/",
@@ -149,13 +153,25 @@ async function revealNav(page, viewport) {
  * checks the read. `answered` holds the surface/environment pairs this tab has
  * already given a reason for (they are not asked again). Returns problems.
  */
-async function answerAudit(page, answered) {
+async function answerAudit(page, answered, reached = new Map()) {
   const url = new URL(page.url());
   const surface = audited.find((s) => url.pathname === s.path);
   if (!surface) return [];
-  const env = url.searchParams.get("env");
-  if (!env) return [`${url.pathname}: no ?env= in the URL, so no environment to read`];
-  const where = `${url.pathname}?env=${env}`;
+  // The environment the browser reads from is the one it rendered with, whatever
+  // the URL says: a nav link need not carry ?env=, and the console's scope can
+  // fill it in. The browser root names it (data-env, from its env prop).
+  const root = page.getByTestId(surface.root);
+  try {
+    await root.waitFor({ timeout: 15000 });
+  } catch {
+    return [`${url.pathname}: the ${surface.subject} browser never rendered, so no environment to read`];
+  }
+  const env = await root.getAttribute("data-env");
+  if (!env) return [`${url.pathname}: the ${surface.subject} browser names no environment`];
+  const where = `${url.pathname} (${env})`;
+  const asked = new URL(page.url()).searchParams.get("env");
+  if (asked && asked !== env) return [`${where}: the URL asks for ${asked}, but the ${surface.subject} browser reads ${env}`];
+  reached.set(surface.subject, env);
   const dialog = page.getByRole("dialog", { name: `Reading ${env}'s ${surface.subject} is audited` });
   const read = surface.read(page);
   const problems = [];
@@ -247,6 +263,8 @@ try {
     let prev = await pageState(page);
     const dead = [];
     const answered = new Set();
+    // Which environment each audited surface read in, when the nav reached it.
+    const reached = new Map();
     let clicked = 0;
     const clickItem = async (item) => {
       const navProblem = await revealNav(page, viewport);
@@ -272,7 +290,7 @@ try {
       }
       clicked++;
       await page.waitForTimeout(settle / 2);
-      problems.push(...(await answerAudit(page, answered)).map((p) => `${viewport.name}: ${p}`));
+      problems.push(...(await answerAudit(page, answered, reached)).map((p) => `${viewport.name}: ${p}`));
       const now = await pageState(page);
       const why = [];
       if (now.path !== item.href) why.push(`URL ${now.path}, want ${item.href}`);
@@ -297,6 +315,12 @@ try {
     if (seen.size < 7) problems.push(`only ${seen.size} nav items found`);
     for (const surface of audited) {
       if (!seen.has(surface.path)) problems.push(`no ${surface.path} nav item`);
+      // The visitor's path must prove the dialog too, not only the direct links.
+      else if (auditedEnvs.length && !answered.has(`${surface.subject}:${reached.get(surface.subject)}`)) {
+        const env = reached.get(surface.subject);
+        const how = !env ? `never rendered ${surface.path}` : auditedEnvs.includes(env) ? `reached ${surface.path} in ${env} but never answered its dialog` : `reached ${surface.path} in ${env}, which is not audited`;
+        problems.push(`the nav ${how}: the audited-read dialog went unproved on the nav path`);
+      }
     }
     problems.push(...dead.map((d) => `dead nav item: ${d}`));
     report(`nav ${viewport.name} ${viewport.width}×${viewport.height}`, problems, ` (${clicked} of ${seen.size} items clicked)`);
