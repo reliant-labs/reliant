@@ -148,21 +148,66 @@ The alternatives considered, and why each was rejected (a second promote step fo
 Neither the demo bundle nor the build target changes. A demo fix lands on reliant `main`, and
 the next release ships it. Label the PR `release:asap` to ship sooner.
 
+### Domain bind contract
+
+These facts are read from the forge reliant pins (forge.yaml `forge_version`
+`v1.2.1-0.20261109043137-9caded4a37d5`), `internal/cli/domain_cmd.go`. The server side is
+control-plane `internal/domainregistry/service.go` (`bindSQL`, `Bind`).
+
+- **A domain has at most ONE binding, and `bind` replaces it** (`domain_cmd.go:21-26`:
+  org-scoped, "moved between environments freely"; `:555`: "replacing any binding it has";
+  `:650` is one `CreateDomainBinding` call). On the server, the binding is one row per
+  domain: `ON CONFLICT (domain_id) DO UPDATE SET environment_id = …`. Its environment may
+  belong to any project of the org, and only the org is checked. So binding prod while the
+  `demo` env holds the domain is not refused: the domain moves. There is no unbind step, no
+  DNS change and no new certificate. Verification and the certificate belong to the domain.
+- **A binding is not a deployment** (`:28-31`: a domain is not spec, and nothing is
+  dropped or redeployed with it). The `demo` env's `forge-demo` site stays deployed on its
+  own `*.sites.reliantlabs.dev` URL after the move. Rollback is one more `bind`.
+- **`--env` resolves inside the project of the checkout you run in** (`:610-623`:
+  `domainEnvironmentID` → `LookupHostedEnvironment(…, hostedProjectName(), env)`;
+  `hostedProjectName` is that checkout's forge.yaml `name`). So:
+  - `--env prod` runs from a **control-plane** checkout (project `control-plane`);
+  - `--env demo` runs from a **reliant** checkout that still has `deploy/kcl/demo/`
+    (project `reliant`).
+
+  From the wrong checkout, the env is not found. forge's global `-C <dir>` resolves from
+  another directory, the same as `cd`.
+- **A rebind also replaces the HSTS policy** (`:658-661`: "A rebind replaces the whole
+  binding, so leaving the flag off turns includeSubDomains off"). Before each bind, record
+  the `hsts:` line of `domain show` (`:298`; `host only`, `includeSubDomains` or `-`). Pass
+  `--hsts-include-subdomains` on the new bind exactly when it read `includeSubDomains`.
+  Check it again afterwards.
+- `domain show` prints `serving: <target> in <environment id>` (`:136-144`). That is an id,
+  not a name, so record the id before a move and compare it after. `config.js`'s
+  platform-written `ENVIRONMENT` names the env that serves.
+
+`TestForgeDemoCutoverDomainCommandsParse` (`cmd/reliant/cmd`) parses every `forge domain` and
+`forge env status` command on this page against the forge command tree reliant embeds.
+It checks the subcommand, its flags, and bind's one-of `--target`/`--redirect-to`, so a
+renamed command or flag fails before it is pasted into prod.
+
 ### The one-time domain move
 
 Do this after the first prod promotion whose release carries `forge-demo`. Until then the
-domain stays on the `demo` env, so there is no gap. Run from a control-plane checkout at
-that release:
+domain stays on the `demo` env, so there is no gap. The gates and the four proofs are in
+control-plane `docs/runbook.md`, "demo.reliantlabs.io (forge-demo)". In short:
 
 ```bash
-reliant forge env status prod                        # forge-demo: its *.sites.reliantlabs.dev URL
+# 0. Read-only, in a RELIANT checkout with deploy/kcl/demo: the rollback path resolves.
+reliant forge env status demo                                 # forge-demo and its live release
+reliant forge domain show demo.reliantlabs.io --env demo      # serving: forge-demo in <ID_DEMO>; record hsts:
+
+# 1-4. In a CONTROL-PLANE checkout at the promoted release.
+reliant forge domain show demo.reliantlabs.io --env prod      # the same <ID_DEMO> and hsts: (domains are the org's)
+reliant forge obs check prod --wait --json                    # exit 0, or stop
+reliant forge env status prod                                 # forge-demo: its *.sites.reliantlabs.dev URL
 node ../reliant/frontends/web/scripts/demo/smoke-demo-site.mjs https://<that sites URL>
 reliant forge domain bind demo.reliantlabs.io --env prod --target forge-demo
-reliant forge domain show demo.reliantlabs.io --env prod   # serving: forge-demo in prod; records "ok"
+# ...or, only if hsts: read includeSubDomains:
+reliant forge domain bind demo.reliantlabs.io --env prod --target forge-demo --hsts-include-subdomains
+reliant forge domain show demo.reliantlabs.io --env prod      # serving: forge-demo in <ID> != <ID_DEMO>; same hsts:; records "ok"
 ```
-
-DNS does not change. The verification and the edge certificate belong to the domain, as
-in step 3 above.
 
 ### Proof that the demo is served from the prod release
 
@@ -170,8 +215,11 @@ in step 3 above.
 # control-plane checkout at the promoted release: /version.json's commit = the pinned
 # reliant ref, served through the edge (via: 1.1 google), config.js uncached. Exit 0.
 scripts/check-web-version.sh --url https://demo.reliantlabs.io
+curl -s https://demo.reliantlabs.io/config.js | grep -o '"ENVIRONMENT":"[^"]*"'   # "ENVIRONMENT":"prod"
 node ../reliant/frontends/web/scripts/demo/smoke-demo-site.mjs https://demo.reliantlabs.io
 ```
+
+If the proofs do not all pass within 5 minutes, roll the domain back at once (below).
 
 `forge obs check prod` does not judge the demo: it judges server spans. Once the domain has
 moved, `scripts/verify-prod-release.sh` should run the `check-web-version.sh` line above on
@@ -180,12 +228,25 @@ the domain still serves the `demo` env's older build.
 
 ### Rollback
 
-- **Domain**: back to the `demo` env, which keeps serving its last release until it is retired:
-  `reliant forge domain bind demo.reliantlabs.io --env demo --target forge-demo`. It is
-  instant, and DNS does not change.
+Run it from a **reliant** checkout that has `deploy/kcl/demo/` (reliant `main` until the env
+is retired). It does not work from control-plane, whose project has no `demo` env. The
+`demo` env's site was never undeployed, so this is one bind:
+
+```bash
+reliant forge env status demo                                 # read-only: forge-demo is still deployed
+reliant forge domain show demo.reliantlabs.io --env demo      # read-only: resolves; record hsts:
+reliant forge domain bind demo.reliantlabs.io --env demo --target forge-demo
+# ...or, only if hsts: read includeSubDomains:
+reliant forge domain bind demo.reliantlabs.io --env demo --target forge-demo --hsts-include-subdomains
+reliant forge domain show demo.reliantlabs.io --env demo      # serving: forge-demo in <ID_DEMO>; same hsts:
+curl -s https://demo.reliantlabs.io/config.js | grep -o '"ENVIRONMENT":"[^"]*"'   # "ENVIRONMENT":"demo"
+```
+
+- **The domain, at any time:** the block above. It takes effect at once, with no DNS change.
 - **A prod rollback below the first release that carries `forge-demo`** drops prod's demo
-  site. Rebind the domain to the `demo` env first. Do not raise prod's rollback floor for
-  it: floors gate migration compatibility, not a static site.
+  site. Run the block above first. Do not raise prod's rollback floor for it: floors gate
+  migration compatibility, not a static site.
+- **Back into prod afterwards:** the bind in "The one-time domain move", from control-plane.
 
 ### Retiring the `demo` env (follow-up)
 
