@@ -28,7 +28,7 @@
  * have (Releases, Environments, …) open its overview.
  */
 
-import { lazy, Suspense, useCallback, useMemo, useState } from "react";
+import { lazy, Suspense, useCallback, useMemo, useState, type ReactNode } from "react";
 import { Code, ConnectError } from "@connectrpc/connect";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useNavigate, useSearch } from "@tanstack/react-router";
@@ -56,6 +56,7 @@ import type { DataSearch } from "../Data/dataUrl-model";
 import { StorageBrowser } from "../Storage/StorageBrowser";
 import type { StorageSearch } from "../Storage/storageUrl-model";
 import { DemoBanner } from "./DemoBanner";
+import { DemoNavExtras } from "./DemoNavExtras";
 import { DemoWelcome } from "./DemoWelcome";
 import { DEMO_SECTION_BUILT, FORGE_DEMO_PATH } from "./demoPath";
 import { HowBuiltLink } from "./howBuilt/HowBuiltLink";
@@ -97,6 +98,11 @@ function demoLink(target: ConsolePage): string {
 /** The nav's open page for a panel view. */
 function pageOf(view: ObsView): ConsolePage {
   return view !== "overview" && isObsNavView(view) ? { kind: "obs-view", view } : { kind: "overview" };
+}
+
+/** The public demo's nav additions (DemoNavExtras); the other shells keep the console's own nav. */
+function MaybeDemoNav({ builtActive, children }: { builtActive: boolean; children: ReactNode }) {
+  return isDemoShell() ? <DemoNavExtras builtActive={builtActive}>{children}</DemoNavExtras> : <>{children}</>;
 }
 
 export interface DemoConsoleProps {
@@ -152,6 +158,7 @@ export function DemoConsole({ shell: shellProp }: DemoConsoleProps = {}) {
           <DemoBrowserProviders>
           <ObservabilityApiProvider api={api}>
             <ObservabilityBillingApiContext.Provider value={legacyBillingApi}>
+              <MaybeDemoNav builtActive={search.section === DEMO_SECTION_BUILT}>
               <ConsoleShell
                 project={FIXTURE_PROJECT}
                 page={search.browser ? { kind: search.browser } : pageOf(view)}
@@ -171,7 +178,8 @@ export function DemoConsole({ shell: shellProp }: DemoConsoleProps = {}) {
                 }
                 brandCollapsed={<ProjectMonogram name={FIXTURE_PROJECT} />}
               >
-                {!(isDemoShell() && search.section === DEMO_SECTION_BUILT) && <DemoBanner shell={shell} />}
+                {/* The public demo says "sample, read-only" once, in its action row (DemoScreenActions). */}
+                {!isDemoShell() && <DemoBanner shell={shell} />}
                 <div className="space-y-4" data-testid="forge-demo">
                   {search.section === DEMO_SECTION_BUILT ? (
                     <>
@@ -194,12 +202,13 @@ export function DemoConsole({ shell: shellProp }: DemoConsoleProps = {}) {
                       {/* One compact row; the top bar's scope control says which environments. */}
                       <PageHeader density="compact" title={OBS_VIEW_LABELS[view]} className="mb-0" />
                       <ObservabilityPanel place={PLACE} search={{ ...search, view }} navigate={navigateObs} />
-                      {/* Last on the page, after the console's views. */}
-                      <HowBuiltLink onOpen={openBuilt} />
+                      {/* Last on the page, after the console's views. The public demo has a nav row for it instead. */}
+                      {!isDemoShell() && <HowBuiltLink onOpen={openBuilt} />}
                     </>
                   )}
                 </div>
               </ConsoleShell>
+              </MaybeDemoNav>
             </ObservabilityBillingApiContext.Provider>
           </ObservabilityApiProvider>
           </DemoBrowserProviders>
