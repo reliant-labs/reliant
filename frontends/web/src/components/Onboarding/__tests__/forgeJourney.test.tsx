@@ -143,15 +143,13 @@ describe("the forge journey", () => {
     ]);
   });
 
-  it("explains the agent's work, Forge's foundation and the user's ownership", () => {
+  it("opens with two sentences: what Forge is, and what the tour shows", () => {
     resetShellForTests("demo");
     render(<>{presentStep(step("fg-intro")).description}</>);
-    expect(screen.getByText(/open-source toolkit.*Claude Code, Codex or Cursor/)).toBeInTheDocument();
-    expect(
-      screen.getByText(
-        "Tell your agent what to build. Your agent defines the data and API and writes your app's custom behavior. Forge generates supporting code and production setup, with checks to guide the work. Its tools let the agent build, deploy and monitor the app; you own the code and decide what ships."
-      )
-    ).toBeInTheDocument();
+    // Two sentences: what Forge is, and what the tour shows.
+    const intro = screen.getByText(/open-source toolkit.*Claude Code, Codex or Cursor/);
+    expect(intro).toHaveTextContent(/follow one failing request/);
+    expect(intro.textContent!.trim().split(/(?<=[.?!])\s+/)).toHaveLength(2);
     expect(screen.queryByTestId("install-forge-link-tour_intro")).toBeNull();
     expect(conditionsOf(step("fg-intro"))).toEqual([]);
   });
@@ -315,7 +313,7 @@ describe("the forge journey", () => {
       expect(screen.queryByText(/reliant forge/)).toBeNull();
     });
 
-    it("tells the agent story with the shell's CLI, and offers Install and Sign up on the demo's end card", () => {
+    it("tells the agent story with the shell's CLI, and ends the demo's tour on Sign up and Install", () => {
       setTourShell("forge");
       const agent = render(<>{presentStep(step("fg-agent")).description}</>);
       expect(screen.getByText(`forge obs trace ${DEMO_TRACE_ID} prod`)).toBeInTheDocument();
@@ -323,9 +321,11 @@ describe("the forge journey", () => {
       agent.unmount();
       resetShellForTests("demo");
       render(<>{presentStep(step("fg-done")).description}</>);
-      expect(screen.getByText("forge scaffold service inventory")).toBeInTheDocument();
-      expect(screen.queryByTestId("demo-cta-end_card")).toBeNull();
-      expect(screen.queryByTestId("demo-cta-signup")).toBeNull();
+      // The public demo ends on its call to action, not a command list.
+      expect(screen.queryByText("forge scaffold service inventory")).toBeNull();
+      expect(screen.getByTestId("demo-cta-end_card")).toBeInTheDocument();
+      expect(screen.getByTestId("demo-cta-signup")).toHaveTextContent("Sign up free");
+      expect(screen.getByTestId("demo-cta-install")).toHaveTextContent("Install Forge");
     });
 
     it("says on each feature step what an agent does with it, with the shell's CLI", () => {
