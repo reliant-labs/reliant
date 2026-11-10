@@ -56,35 +56,37 @@ func (s *Service) triggerOrg(ctx context.Context, userID, requested string, proj
 	return orgs.InProject(projectOrg, named, def)
 }
 
-// movedTriggerOrg is the org a trigger keeps when an update moves it from
-// project source to project target. A trigger's org is fixed, so the move is
-// refused when target belongs to another org. A trigger with no org yet is
-// resolved as the backfill would stamp it (its project's org, else the
-// caller's default) and is stamped with it now, so the backfill cannot later
-// give it the org of the project it left. A default that cannot be resolved
-// fails closed (Unavailable).
-func (s *Service) movedTriggerOrg(ctx context.Context, userID string, existing *core.Trigger, source, target *core.Project) (*string, error) {
+// updatedTriggerOrg is the org a trigger has after an update, which moves it
+// to project target when target is not nil. Every update of a trigger with an
+// org acts in that org, so the caller must be a live member of it, with a
+// credential bound to it if they use one (orgs.Named), whether or not the
+// update moves the trigger. A trigger's org is fixed, so a move to a project
+// of another org is refused. A trigger with no org yet is resolved as the
+// backfill would stamp it (its project's org, else the caller's default), and
+// a move stamps it with that org, so the backfill cannot later give it the
+// org of the project it left. A default that cannot be resolved fails closed
+// (Unavailable).
+func (s *Service) updatedTriggerOrg(ctx context.Context, userID string, existing *core.Trigger, source, target *core.Project) (*string, error) {
 	from := existing.OrgID
 	if from == nil && source != nil {
 		from = source.OrgID
 	}
-	to := target.OrgID
-	if from == nil && to == nil {
-		return existing.OrgID, nil // both take the default when stamped
-	}
-	if from != nil && to != nil {
-		if *from != *to {
-			return nil, errTriggerCrossesOrgs
-		}
-		org := *from
-		return &org, nil
+	var to *string
+	if target != nil {
+		to = target.OrgID
 	}
 	if s.deps.Orgs == nil {
+		if from != nil && to != nil && *from != *to {
+			return nil, errTriggerCrossesOrgs
+		}
 		return existing.OrgID, nil
 	}
-	def, err := s.deps.Orgs.DefaultOrg(ctx, userID)
-	if err != nil {
-		return nil, svcerr.WithCause(svcerr.Unavailable("could not resolve your default organization; try again"), err)
+	def := ""
+	if from == nil || (target != nil && to == nil) {
+		var err error
+		if def, err = s.deps.Orgs.DefaultOrg(ctx, userID); err != nil {
+			return nil, svcerr.WithCause(svcerr.Unavailable("could not resolve your default organization; try again"), err)
+		}
 	}
 	effective := func(org *string) string {
 		if org == nil {
@@ -93,8 +95,19 @@ func (s *Service) movedTriggerOrg(ctx context.Context, userID string, existing *
 		return *org
 	}
 	org := effective(from)
+	if org != "" {
+		if _, err := s.deps.Orgs.Named(ctx, userID, org); err != nil {
+			return nil, err
+		}
+	}
+	if target == nil {
+		return existing.OrgID, nil
+	}
 	if org != effective(to) {
 		return nil, errTriggerCrossesOrgs
+	}
+	if org == "" {
+		return existing.OrgID, nil
 	}
 	return &org, nil
 }
