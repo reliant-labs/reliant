@@ -385,8 +385,8 @@ export const ENV_TRAFFIC: Record<DemoEnvKey, number> = { "env-prod": 1, "env-sta
 /**
  * The quietest hour's share of the busiest's. shop sells worldwide, so it is
  * never idle: whatever the hour a visitor opens the demo, prod has enough
- * traffic for the incident to read clearly (dozens of failed charges since
- * v1.8.3, not a handful).
+ * traffic for the incident to read clearly (≈ 18 failed requests since
+ * v1.8.3 at the quietest hour, ≈ 44 at the busiest).
  */
 export const LOAD_FLOOR = 0.4;
 
