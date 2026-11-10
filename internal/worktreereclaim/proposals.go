@@ -207,6 +207,13 @@ func RecordNotes(ctx context.Context, stateDir string, notes []Note, by string) 
 	if err != nil {
 		return nil, err
 	}
+	// The report is read under the lock the sweep writes it under, so the
+	// pending set checked here is the one the notes are stored against.
+	unlock, err := approvalsLock(ctx, dir)
+	if err != nil {
+		return nil, err
+	}
+	defer unlock()
 	set, err := allPendingProposals(dir)
 	if err != nil {
 		return nil, fmt.Errorf("no reclaim report to note: %w", err)
@@ -236,11 +243,6 @@ func RecordNotes(ctx context.Context, stateDir string, notes []Note, by string) 
 		at[n.Key] = len(add)
 		add = append(add, note)
 	}
-	unlock, err := approvalsLock(ctx, dir)
-	if err != nil {
-		return nil, err
-	}
-	defer unlock()
 	cur, err := readNotes(dir)
 	if err != nil {
 		return nil, err
@@ -290,11 +292,20 @@ type DecisionResult struct {
 // person was shown. A decision whose fingerprint is not the report's current
 // one for that key is not recorded: the worktree changed since, and the
 // person was asked about a state that no longer exists.
+//
+// The report is read, and each fingerprint checked, under the approvals lock,
+// which a sweep also holds while it rewrites the report: a pass cannot replace
+// the entry a decision was checked against before the decision is stored.
 func RecordDecisionsFor(ctx context.Context, stateDir string, reqs []DecisionRequest, by string) ([]DecisionResult, error) {
 	dir, err := stateDirOr(stateDir)
 	if err != nil {
 		return nil, err
 	}
+	unlock, err := approvalsLock(ctx, dir)
+	if err != nil {
+		return nil, err
+	}
+	defer unlock()
 	rep, err := ReadSweepReport(dir)
 	if err != nil {
 		return nil, fmt.Errorf("no sweep report to decide from: %w", err)
@@ -327,19 +338,15 @@ func RecordDecisionsFor(ctx context.Context, stateDir string, reqs []DecisionReq
 	if len(add) == 0 {
 		return results, nil
 	}
-	if err := storeApprovals(ctx, dir, add); err != nil {
+	if err := storeApprovalsLocked(dir, add); err != nil {
 		return nil, err
 	}
 	return results, nil
 }
 
-// storeApprovals adds decisions, each replacing any earlier one about its key.
-func storeApprovals(ctx context.Context, dir string, add []Approval) error {
-	unlock, err := approvalsLock(ctx, dir)
-	if err != nil {
-		return err
-	}
-	defer unlock()
+// storeApprovalsLocked adds decisions, each replacing any earlier one about
+// its key. The caller holds approvalsLock.
+func storeApprovalsLocked(dir string, add []Approval) error {
 	cur, err := readApprovals(dir)
 	if err != nil {
 		return err

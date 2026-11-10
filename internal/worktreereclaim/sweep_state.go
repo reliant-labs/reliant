@@ -204,8 +204,10 @@ func (a Approvals) find(key, fingerprint string) (Approval, bool) {
 	return Approval{}, false
 }
 
-// approvalsLock serializes every read-modify-write of approvals.json, the
-// CLI's and the daemon's.
+// approvalsLock serializes every read-modify-write of approvals.json and
+// notes.json, the CLI's and the daemon's, with the sweep's rewrite of
+// report.json: a decision or note is checked against the report and stored
+// while no pass can replace it.
 func approvalsLock(ctx context.Context, dir string) (func(), error) {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return nil, err
@@ -246,6 +248,11 @@ func RecordDecisions(ctx context.Context, stateDir string, decision Decision, ke
 	if err != nil {
 		return nil, err
 	}
+	unlock, err := approvalsLock(ctx, dir)
+	if err != nil {
+		return nil, err
+	}
+	defer unlock()
 	rep, err := ReadSweepReport(dir)
 	if err != nil {
 		return nil, fmt.Errorf("no sweep report to decide from: %w", err)
@@ -264,7 +271,7 @@ func RecordDecisions(ctx context.Context, stateDir string, decision Decision, ke
 		}
 		add = append(add, Approval{Key: k, Path: e.Path, Fingerprint: e.Fingerprint, Decision: decision, DecidedAt: time.Now().UTC(), DecidedBy: by})
 	}
-	return add, storeApprovals(ctx, dir, add)
+	return add, storeApprovalsLocked(dir, add)
 }
 
 // PendingApprovals reports whether approvals.json holds an approval made
@@ -288,14 +295,10 @@ func PendingApprovals(stateDir string, since time.Time) bool {
 	return false
 }
 
-// settleApprovals drops the approvals a pass consumed (the worktree was
-// reclaimed, or is gone) and the decisions older than approvalTTL.
-func settleApprovals(ctx context.Context, dir string, consumed map[string]bool, now time.Time) {
-	unlock, err := approvalsLock(ctx, dir)
-	if err != nil {
-		return
-	}
-	defer unlock()
+// settleApprovalsLocked drops the approvals a pass consumed (the worktree was
+// reclaimed, or is gone) and the decisions older than approvalTTL. The caller
+// holds approvalsLock.
+func settleApprovalsLocked(dir string, consumed map[string]bool, now time.Time) {
 	cur, err := readApprovals(dir)
 	if err != nil {
 		return

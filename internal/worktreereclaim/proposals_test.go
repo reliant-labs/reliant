@@ -96,6 +96,50 @@ func TestRecordDecisionsForBindsToTheFingerprintShown(t *testing.T) {
 	}
 }
 
+// A sweep rewrites the report under the approvals lock, and a decision checks
+// its fingerprint under the same lock: a report replaced while the decision
+// waits is the one it is checked against, so an approval of the state shown
+// is refused once the report lists a newer one.
+func TestRecordDecisionsForChecksTheReportUnderTheSweepsLock(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	writeReport(t, dir, proposal("p-a", "fp-a1", testNow))
+	unlock, err := approvalsLock(context.Background(), dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	type outcome struct {
+		res []DecisionResult
+		err error
+	}
+	done := make(chan outcome, 1)
+	go func() {
+		res, err := RecordDecisionsFor(context.Background(), dir, []DecisionRequest{
+			{Key: "p-a", Fingerprint: "fp-a1", Decision: DecisionApprove},
+		}, "inbox:u1")
+		done <- outcome{res, err}
+	}()
+	// The sweep's rewrite, while it holds the lock.
+	writeReport(t, dir, proposal("p-a", "fp-a2", testNow))
+	select {
+	case o := <-done:
+		t.Fatalf("decision stored while the report's writer held the lock: %+v, %v", o.res, o.err)
+	default:
+	}
+	unlock()
+	o := <-done
+	if o.err != nil {
+		t.Fatal(o.err)
+	}
+	if len(o.res) != 1 || o.res[0].Recorded || o.res[0].Reason != "changed" {
+		t.Fatalf("results = %+v, want p-a not recorded (changed)", o.res)
+	}
+	a, _ := readApprovals(dir)
+	if len(a.Approvals) != 0 {
+		t.Fatalf("approvals.json = %+v, want no approval of a state the report no longer lists", a)
+	}
+}
+
 // A note about a state that has changed is refused; notes about states the
 // report no longer lists are dropped when the next note is written.
 func TestRecordNotesRefusesStaleStates(t *testing.T) {
