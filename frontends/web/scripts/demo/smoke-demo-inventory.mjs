@@ -74,7 +74,7 @@ try {
   await page.getByRole("heading", { name: "v1.8.3 → v1.8.4" }).waitFor();
   text = await page.locator("main").innerText();
   assert.match(text, /ORDER_TIMEOUT_MS/);
-  assert.match(text, /Historical: "2000"/);
+  assert.match(text, /Historical: "3000"/);
   assert.match(text, /Selected: "5000"/);
   assert.doesNotMatch(text, /forge\.dev\/redacted:\s*sha256/);
   await screenshot("config-history");

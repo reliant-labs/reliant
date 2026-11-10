@@ -21,14 +21,19 @@ vi.mock("@/hooks/project-queries", async (importOriginal) => ({
 }));
 const startAskReliantChat = vi.hoisted(() => vi.fn());
 vi.mock("@/components/Forge/Observability/AskReliant/startAskReliantChat", () => ({ startAskReliantChat }));
-// Every fixture API read, to see the scope the panel asked for.
+// Every read of the demo's sample data, to see the scope the panel asked for.
 const fixtureCalls = vi.hoisted(() => [] as { rpc: string; request: unknown }[]);
-vi.mock("../../Observability/__fixtures__/fixtureApi", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../../Observability/__fixtures__/fixtureApi")>();
+vi.mock("../demoData/shop/shopApi", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../demoData/shop/shopApi")>();
   return {
     ...actual,
-    createFixtureApi: (options: Parameters<typeof actual.createFixtureApi>[0] = {}) =>
-      actual.createFixtureApi({ ...options, onCall: (rpc, request) => fixtureCalls.push({ rpc, request }) }),
+    createShopApi: (now?: number) => {
+      const api = actual.createShopApi(now);
+      const rpcName = (key: string) => key.charAt(0).toUpperCase() + key.slice(1);
+      return Object.fromEntries(
+        Object.entries(api).map(([key, fn]) => [key, (...args: unknown[]) => (fixtureCalls.push({ rpc: rpcName(key), request: args[0] }), (fn as (...a: unknown[]) => unknown)(...args))]),
+      ) as unknown as typeof api;
+    },
   };
 });
 vi.mock("uplot", async () => (await import("../../Observability/__tests__/obsMocks")).obsMocks.uplot());

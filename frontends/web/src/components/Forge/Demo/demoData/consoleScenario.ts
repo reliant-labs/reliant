@@ -5,13 +5,13 @@
  * for shop's Releases, Environments, Secrets, Domains and Activity tabs, for
  * the demo's mock transport (demoScenario.ts spreads these handlers in).
  *
- * The same story as the observability fixtures (Observability/__fixtures__):
+ * The story is shopStory.ts's, the same the observability views read:
  *
  *   shop has an api, a worker, an inventory service and a static storefront,
  *   in dev, staging and prod (env-dev / env-staging / env-prod). prod and
- *   staging run v1.8.3, the release the CreateOrder deadline issue first
- *   appeared in (prod got it 40 minutes ago, the observability fixtures'
- *   ledger marker, fixtureDelivery.ts); dev already runs v1.8.4, the fix.
+ *   staging run v1.8.3, the release the payment-timeout incident started
+ *   with in prod (40 minutes ago); dev already runs v1.8.4, the fix. The
+ *   releases, their promotions and who made them are shopStory's ledger.
  *
  * Overrides only: forge's generated service defaults answer every other read
  * (demoServiceDefaults.ts); these say what shop's console is ABOUT.
@@ -40,15 +40,32 @@ import {
   DomainSource,
 } from "@/gen/controlplane/controlplane/v1/deploy_pb";
 import { ActivityActorKind, ActivityEventSchema, ActivityService } from "@/gen/controlplane/services/activity/v1/activity_pb";
-import { DeployService } from "@/gen/controlplane/services/deploy/v1/deploy_pb";
+import { DeployChangeKind, DeployCommitComparisonState, DeployObjectComparisonState, DeployService } from "@/gen/controlplane/services/deploy/v1/deploy_pb";
 import { DomainService } from "@/gen/controlplane/services/domain/v1/domain_pb";
 import { SecretAuthorKind, SecretStoreService } from "@/gen/controlplane/services/secret_store/v1/secret_store_pb";
 
 import { completed } from "./demoServiceDefaults";
+import { shopActivity } from "./shop/activity";
 import { DEMO_ENVS, DEMO_PROJECT, demoEnvId, inDemoProject, type DemoEnvId } from "./demoScope";
 import { mockService, type MockHandlers } from "@reliantlabs/forge-web-runtime/mock-transport";
+import {
+  artifactVersion,
+  commitAgeMs,
+  demoBundleDigest,
+  demoBundleId,
+  DEMO_RELEASES,
+  DEMO_REPO,
+  demoNow,
+  demoRelease,
+  HISTORY,
+  PASSED_GATE,
+  PROMOTED_FROM,
+  promotionId,
+  RUNNING,
+  type DemoPromotion,
+} from "./shopStory";
 
-const REPO = "github.com/acme/shop";
+const REPO = DEMO_REPO;
 const FORGE_VERSION = "v1.0.17";
 
 const MINUTE = 60_000;
@@ -56,211 +73,11 @@ const HOUR = 60 * MINUTE;
 const DAY = 24 * HOUR;
 
 /** `ms` ago, from this page load. */
-const ago = (ms: number, now = Date.now()): Timestamp => timestampFromMs(now - ms);
+const ago = (ms: number, now = demoNow()): Timestamp => timestampFromMs(now - ms);
 
-export { DEMO_ENVS, DEMO_PROJECT };
+export { DEMO_ENVS, DEMO_PROJECT, DEMO_RELEASES, RUNNING };
 
 type EnvId = DemoEnvId;
-
-/** The releases, newest first: what each changed, and when it was cut. */
-export const DEMO_RELEASES = [
-  {
-    version: "v1.8.4",
-    commit: "9c2e41d07a3f",
-    subject: "fix(orders): give the payment call its own deadline and retry budget",
-    author: "maya",
-    age: 30 * MINUTE,
-    commits: [
-      {
-        sha: "9c2e41d07a3f",
-        subject: "fix(orders): give the payment call its own deadline and retry budget",
-        author: "maya",
-      },
-      {
-        sha: "51ab0e9c11d2",
-        subject: "test(orders): CreateOrder survives a slow payment provider",
-        author: "maya",
-      },
-    ],
-  },
-  {
-    version: "v1.8.3",
-    commit: "e7d93a2b5c18",
-    subject: "feat(orders): retry the payment charge once on a timeout",
-    author: "jon",
-    age: 26 * HOUR,
-    commits: [
-      {
-        sha: "e7d93a2b5c18",
-        subject: "feat(orders): retry the payment charge once on a timeout",
-        author: "jon",
-      },
-      {
-        sha: "a40f6c2d9e77",
-        subject: "feat(inventory): reserve stock from the order event",
-        author: "priya",
-      },
-      {
-        sha: "3b81d5f0e2c4",
-        subject: "chore(deps): bump connect-go to v1.19",
-        author: "jon",
-      },
-    ],
-  },
-  {
-    version: "v1.8.2",
-    commit: "c51f08e3a96b",
-    subject: "feat(web): show the order's status on the confirmation page",
-    author: "priya",
-    age: 6 * DAY,
-    commits: [
-      {
-        sha: "c51f08e3a96b",
-        subject: "feat(web): show the order's status on the confirmation page",
-        author: "priya",
-      },
-    ],
-  },
-  {
-    version: "v1.8.1",
-    commit: "07e2b9d4f1a0",
-    subject: "fix(worker): ack the order event only after inventory answers",
-    author: "maya",
-    age: 9 * DAY,
-    commits: [
-      {
-        sha: "07e2b9d4f1a0",
-        subject: "fix(worker): ack the order event only after inventory answers",
-        author: "maya",
-      },
-    ],
-  },
-] as const;
-
-/**
- * One promotion in an environment's ledger. Beyond the release, who and when:
- * `seq` tells apart two promotions of one release in one env (it suffixes the
- * id), `targets` makes it a scoped deploy, `from: null` a direct deploy (a
- * rollback is one), and `health` is the `forge obs check` gate it recorded —
- * "none" records no health gate at all, which the console shows as unknown.
- */
-interface DemoPromotion {
-  version: string;
-  age: number;
-  by: string;
-  seq?: string;
-  targets?: readonly string[];
-  note?: string;
-  from?: string | null;
-  health?: { status: "passed" | "failed"; summary: string } | "none";
-}
-
-/** Which release each environment runs, and when it got it. */
-export const RUNNING: Record<EnvId, DemoPromotion> = {
-  "env-dev": { version: "v1.8.4", age: 20 * MINUTE, by: "maya" },
-  "env-staging": { version: "v1.8.3", age: 3 * HOUR, by: "jon" },
-  "env-prod": { version: "v1.8.3", age: 40 * MINUTE, by: "jon" },
-};
-
-/**
- * Earlier promotions, newest first (beyond the one running).
- *
- * staging's is the long one, so the environment page's Promotions card shows
- * every kind of row a real ledger holds (oldest first):
- *
- *   9d    v1.8.1 everywhere; then the worker alone re-applied (a scoped redeploy)
- *   5.8d  v1.8.2 everywhere, rolled back to v1.8.1 four hours later (a whole-
- *         release rollback), and promoted again once the migration was split
- *   4.5d  v1.8.2 re-applied by CI after a secret rotation (a redeploy with no
- *         health check recorded); inventory re-applied alone a day later
- *   22h   v1.8.3 to the api alone (a canary) — it regressed; the storefront
- *         re-shipped on v1.8.2; then api went BACK to v1.8.2 with the
- *         storefront in one scoped deploy: api rolled back, shop-web
- *         redeployed (a mixed row)
- *   3h    v1.8.3 everywhere (RUNNING), then on to prod — the release whose
- *         CreateOrder deadline issue v1.8.4 fixes, as the canary had warned
- *
- * Eleven rows with the running one, so the card lists ten and offers the rest.
- */
-const HISTORY: Record<EnvId, DemoPromotion[]> = {
-  "env-dev": [
-    { version: "v1.8.3", age: 26 * HOUR, by: "jon" },
-    { version: "v1.8.2", age: 6 * DAY, by: "priya" },
-  ],
-  "env-staging": [
-    {
-      version: "v1.8.2",
-      seq: "api-web",
-      age: 20.5 * HOUR,
-      by: "jon",
-      targets: ["api", "shop-web"],
-      from: null,
-      note: "v1.8.3's api timed out on the payment call; api back on v1.8.2, shop-web re-shipped with it.",
-    },
-    {
-      version: "v1.8.2",
-      seq: "web",
-      age: 21 * HOUR,
-      by: "priya",
-      targets: ["shop-web"],
-      from: null,
-      health: "none",
-      note: "Storefront re-shipped for the /checkout CDN cache rule.",
-    },
-    {
-      version: "v1.8.3",
-      seq: "api",
-      age: 22 * HOUR,
-      by: "jon",
-      targets: ["api"],
-      health: { status: "failed", summary: "release health FAIL: CreateOrder p95 4.1s, up from 380ms" },
-      note: "Canary: the api alone first.",
-    },
-    {
-      version: "v1.8.2",
-      seq: "inventory",
-      age: 3.5 * DAY,
-      by: "priya",
-      targets: ["inventory"],
-      from: null,
-      note: "inventory re-applied once the orders index finished building.",
-    },
-    {
-      version: "v1.8.2",
-      seq: "reapply",
-      age: 4.5 * DAY,
-      by: "github-actions",
-      from: null,
-      health: "none",
-      note: "Re-applied after PAYMENTS_WEBHOOK_SECRET was rotated.",
-    },
-    { version: "v1.8.2", seq: "again", age: 5.2 * DAY, by: "priya", note: "The inventory migration, split into two steps." },
-    {
-      version: "v1.8.1",
-      seq: "rollback",
-      age: 5.6 * DAY,
-      by: "priya",
-      from: null,
-      note: "v1.8.2's inventory migration held a lock on orders for 40s; back to v1.8.1.",
-    },
-    { version: "v1.8.2", age: 5.8 * DAY, by: "priya" },
-    {
-      version: "v1.8.1",
-      seq: "worker",
-      age: 8.7 * DAY,
-      by: "maya",
-      targets: ["worker"],
-      from: null,
-      health: "none",
-      note: "worker re-applied with a longer ack timeout.",
-    },
-    { version: "v1.8.1", age: 9 * DAY, by: "maya" },
-  ],
-  "env-prod": [
-    { version: "v1.8.2", age: 5.5 * DAY, by: "priya" },
-    { version: "v1.8.1", age: 8.5 * DAY, by: "maya" },
-  ],
-};
 
 /** Observability calls the storefront `web`; the release ledger calls it
  * `shop-web`. Keep this alias at the fixture boundary, not in production UI. */
@@ -313,6 +130,16 @@ export const DEMO_SECRETS = [
   },
 ] as const;
 
+/** When each secret's current value was set (the rotations the activity feed and promotion notes mention). */
+const SECRET_UPDATED: Record<string, number> = {
+  DATABASE_URL: 31 * DAY,
+  PAYMENTS_API_KEY: 12 * DAY,
+  PAYMENTS_WEBHOOK_SECRET: 4.6 * DAY,
+  NATS_CREDENTIALS: 27 * DAY,
+  SESSION_SIGNING_KEY: 3 * DAY,
+  RESEND_API_KEY: 18 * DAY,
+};
+
 export const DEMO_DOMAINS = [
   {
     id: "dom-shop",
@@ -349,9 +176,7 @@ export const DEMO_DOMAINS = [
   },
 ] as const;
 
-const releaseOf = (version: string) => DEMO_RELEASES.find((r) => r.version === version) ?? DEMO_RELEASES[0];
-const promotionId = (env: string, version: string, seq?: string) =>
-  `promo-${env.replace("env-", "")}-${version.replace(/\./g, "")}${seq ? `-${seq}` : ""}`;
+const releaseOf = (version: string) => demoRelease(version) ?? DEMO_RELEASES[0];
 const digest = (seed: string) => {
   let h = 0x811c9dc5;
   for (const c of seed) h = Math.imul(h ^ c.charCodeAt(0), 0x01000193) >>> 0;
@@ -368,8 +193,12 @@ function provenance(version: string) {
     forgeVersion: FORGE_VERSION,
     commitSubject: r.subject,
     commitAuthor: r.author,
+    commitTime: ago(commitAgeMs(r, 0)),
   };
 }
+
+/** A workload's artifact digest in `version`: unchanged since the release that last changed it. */
+const artifactDigest = (workload: string, version: string) => digest(`${workload}@${artifactVersion(workload, version)}`);
 
 function environment(env: (typeof DEMO_ENVS)[number]) {
   const running = RUNNING[env.id];
@@ -391,7 +220,7 @@ function environment(env: (typeof DEMO_ENVS)[number]) {
 
 function promotion(envId: EnvId, p: DemoPromotion, from?: string): MessageInitShape<typeof DeployPromotionSchema> {
   const r = releaseOf(p.version);
-  const health = p.health ?? { status: "passed", summary: "error rate and p95 within the previous release's window" };
+  const health = p.health ?? PASSED_GATE;
   return {
     id: promotionId(envId, p.version, p.seq),
     environmentId: envId,
@@ -403,7 +232,9 @@ function promotion(envId: EnvId, p: DemoPromotion, from?: string): MessageInitSh
     fromEnvironmentName: p.from === undefined ? (from ?? "") : (p.from ?? ""),
     note: p.note ?? "",
     targets: [...(p.targets ?? [])],
-    resolvedArtifacts: Object.fromEntries(DEMO_WORKLOADS.map((w) => [w.name, digest(`${w.name}@${r.version}`)])),
+    resolvedArtifacts: Object.fromEntries(DEMO_WORKLOADS.map((w) => [w.name, artifactDigest(w.name, r.version)])),
+    bundleId: demoBundleId(envId, r.version),
+    bundleDigest: demoBundleDigest(envId, r.version),
     gates: [
       ...(health === "none"
         ? []
@@ -425,11 +256,6 @@ function promotion(envId: EnvId, p: DemoPromotion, from?: string): MessageInitSh
   };
 }
 
-const PROMOTED_FROM: Record<EnvId, string | undefined> = {
-  "env-dev": undefined,
-  "env-staging": "dev",
-  "env-prod": "staging",
-};
 
 function release(r: (typeof DEMO_RELEASES)[number], index: number) {
   const base = DEMO_RELEASES[index + 1];
@@ -444,7 +270,7 @@ function release(r: (typeof DEMO_RELEASES)[number], index: number) {
     artifacts: DEMO_WORKLOADS.map((w) => ({
       name: w.name,
       kind: w.tier === DeployTier.STATIC ? "static" : "image",
-      digest: digest(`${w.name}@${r.version}`),
+      digest: artifactDigest(w.name, r.version),
       uri: w.tier === DeployTier.STATIC ? `sites/shop-web/${r.version}` : `registry.example.com/shop/${w.name}`,
       version: r.version,
       platforms: w.tier === DeployTier.STATIC ? [] : ["linux/amd64", "linux/arm64"],
@@ -454,7 +280,7 @@ function release(r: (typeof DEMO_RELEASES)[number], index: number) {
       baseCommit: base?.commit ?? "",
       commits: r.commits.map((c, i) => ({
         ...c,
-        time: ago(r.age + (i + 1) * 40 * MINUTE),
+        time: ago(commitAgeMs(r, i)),
       })),
       total: r.commits.length,
     },
@@ -480,19 +306,19 @@ function shape(envId: EnvId): JsonObject {
     alerts: [
       {
         alert: "OrdersErrorRateHigh",
-        expr: 'rate(rpc_server_errors{service="api"}[5m]) / rate(rpc_server_requests{service="api"}[5m]) > 0.05',
+        expr: 'rate(rpc_server_errors{service="api",rpc_method="CreateOrder"}[5m]) / rate(rpc_server_requests{service="api",rpc_method="CreateOrder"}[5m]) > 0.05',
         for: "5m",
         labels: { severity: "page" },
-        annotations: { summary: "More than 5% of api requests are failing" },
+        annotations: { summary: "More than 5% of CreateOrder requests are failing" },
         source: "user",
         default_id: "",
       },
       {
-        alert: "OrdersLatencyHigh",
-        expr: 'histogram_quantile(0.95, rpc_server_duration{service="api"}) > 0.5',
+        alert: "ListOrdersSlow",
+        expr: 'histogram_quantile(0.95, rpc_server_duration{service="api",rpc_method="ListOrders"}) > 0.5',
         for: "10m",
         labels: { severity: "ticket" },
-        annotations: { summary: "api p95 over 500 ms" },
+        annotations: { summary: "ListOrders p95 over 500 ms" },
         source: "default",
         default_id: "rpc-latency",
       },
@@ -533,7 +359,7 @@ function deployments(envId: EnvId) {
       observed: {
         state: DeployObservedState.READY,
         replicas: w.replicas,
-        imageDigest: digest(`${w.name}@${running.version}`),
+        imageDigest: artifactDigest(w.name, running.version),
         reconciledAt: ago(2 * MINUTE),
         stableSince: ago(running.age - 3 * MINUTE),
         url: w.path
@@ -546,7 +372,7 @@ function deployments(envId: EnvId) {
       },
     },
     verdict: DeployVerdict.CONVERGED,
-    desiredDigest: digest(`${w.name}@${running.version}`),
+    desiredDigest: artifactDigest(w.name, running.version),
     observedAt: ago(2 * MINUTE),
   }));
 }
@@ -590,94 +416,19 @@ function domain(d: (typeof DEMO_DOMAINS)[number]) {
   };
 }
 
+/** The activity feed on the wire: the same events the observability views read (shop/activity.ts). */
 function activity(): MessageInitShape<typeof ActivityEventSchema>[] {
-  const env = (id: EnvId) => ({
-    id,
-    name: DEMO_ENVS.find((e) => e.id === id)!.name,
-  });
-  const user = (name: string) => ({
-    id: `user-${name}`,
-    name,
-    kind: ActivityActorKind.USER,
-  });
-  const agent = {
-    id: "token-ci",
-    name: "github-actions",
-    kind: ActivityActorKind.MACHINE,
-  };
-  return [
-    {
-      id: "act-1",
-      at: ago(20 * MINUTE),
-      actor: user("maya"),
-      verb: "promote",
-      target: { kind: "release", id: "v1.8.4", label: "v1.8.4" },
-      env: env("env-dev"),
-      via: "cli",
-      detail: { from: "v1.8.3" },
-    },
-    {
-      id: "act-2",
-      at: ago(30 * MINUTE),
-      actor: agent,
-      verb: "cut",
-      target: { kind: "release", id: "v1.8.4", label: "v1.8.4" },
-      env: env("env-dev"),
-      via: "ci",
-      detail: {},
-    },
-    {
-      id: "act-3",
-      at: ago(35 * MINUTE),
-      actor: user("jon"),
-      verb: "assign",
-      target: {
-        kind: "issue",
-        id: "iss-orders-deadline",
-        label: "CreateOrder: context deadline exceeded",
-      },
-      env: env("env-prod"),
-      via: "console",
-      detail: { assignee: "maya" },
-    },
-    {
-      id: "act-4",
-      at: ago(40 * MINUTE),
-      actor: user("jon"),
-      verb: "promote",
-      target: { kind: "release", id: "v1.8.3", label: "v1.8.3" },
-      env: env("env-prod"),
-      via: "cli",
-      detail: { from: "v1.8.2" },
-    },
-    {
-      id: "act-5",
-      at: ago(3 * HOUR),
-      actor: user("jon"),
-      verb: "promote",
-      target: { kind: "release", id: "v1.8.3", label: "v1.8.3" },
-      env: env("env-staging"),
-      via: "cli",
-      detail: { from: "v1.8.2" },
-    },
-    {
-      id: "act-6",
-      at: ago(3 * DAY),
-      actor: user("priya"),
-      verb: "rotate",
-      target: {
-        kind: "secret",
-        id: "SESSION_SIGNING_KEY",
-        label: "SESSION_SIGNING_KEY",
-      },
-      env: env("env-prod"),
-      via: "cli",
-      detail: {},
-    },
-  ].map((e) => ({
-    ...e,
-    detail: e.detail as Record<string, string>,
-    project: DEMO_PROJECT,
+  const kinds = { user: ActivityActorKind.USER, machine: ActivityActorKind.MACHINE, system: ActivityActorKind.SYSTEM, unknown: ActivityActorKind.UNSPECIFIED } as const;
+  return shopActivity(demoNow()).map((e) => ({
+    id: e.id,
+    at: timestampFromMs(e.atMs),
+    actor: { ...e.actor, kind: kinds[e.actor.kind] },
+    verb: e.verb,
+    target: e.target,
+    env: e.env ?? undefined,
+    via: e.via,
+    detail: e.detail,
+    project: e.project,
   }));
 }
 
@@ -695,8 +446,8 @@ const FAILED_DEPLOY = {
   error: "go build ./cmd/worker: internal/inventory/reserve.go:42:9: undefined: inventory.ReserveFromEvent",
   log: [
     "forge env deploy staging",
-    "  preflight  ok · staging has room for 7 workloads",
-    "  build      api ✓  orders ✓  payments ✓  inventory ✓",
+    "  preflight  ok · staging has room for 4 workloads",
+    "  build      api ✓  inventory ✓  shop-web ✓",
     "  build      worker ✗",
     "internal/inventory/reserve.go:42:9: undefined: inventory.ReserveFromEvent",
     "error: build failed for worker; nothing was cut or promoted",
@@ -721,7 +472,8 @@ function deployAttempts() {
   return runs.map((r) => {
     const env = DEMO_ENVS.find((e) => e.id === r.envId)!;
     const ci = !r.failed && env.name !== "prod";
-    const took = r.failed ? 3 * MINUTE : 6 * MINUTE;
+    // Deploys take a few minutes, varying with what they rolled out.
+    const took = r.failed ? 3 * MINUTE : (4 + (Math.round(r.age / MINUTE) % 4)) * MINUTE + (Math.round(r.age / 1000) % 50) * 1000;
     const phases = r.failed ? DEPLOY_PHASES.slice(0, DEPLOY_PHASES.indexOf("build") + 1) : DEPLOY_PHASES;
     return {
       id: r.failed ? r.failed.id : `dep-run-${env.name}-${r.version.replace(/\./g, "")}${r.seq ? `-${r.seq}` : ""}`,
@@ -762,6 +514,66 @@ function deployLog(attempt: ReturnType<typeof deployAttempts>[number]): string {
     `  rollout    ${DEMO_WORKLOADS.map((w) => `${w.name} ✓`).join("  ")}`,
     `deployed ${attempt.releaseVersion} to ${attempt.environmentName}`,
   ].join("\n");
+}
+
+/**
+ * What changed between two releases (indexes into DEMO_RELEASES, newest
+ * first): the commits cut in between, the artifacts whose digest moved (an
+ * artifact a release did not change keeps its digest, artifactVersion), and —
+ * in one environment — the objects of its bundle that changed.
+ */
+function comparison(from: number, to: number, envId: EnvId | undefined) {
+  const newer = Math.min(from, to);
+  const older = Math.max(from, to);
+  const between = DEMO_RELEASES.slice(newer, older);
+  const commits = between.flatMap((r) => r.commits.map((c, i) => ({ ...c, time: ago(commitAgeMs(r, i)) })));
+  const fromVersion = DEMO_RELEASES[from].version;
+  const toVersion = DEMO_RELEASES[to].version;
+  const changed = DEMO_WORKLOADS.filter((w) => artifactVersion(w.name, fromVersion) !== artifactVersion(w.name, toVersion));
+  const env = envId ? DEMO_ENVS.find((e) => e.id === envId) : undefined;
+  const timeoutChanged = [fromVersion, toVersion].includes("v1.8.4") && fromVersion !== toVersion;
+  return {
+    commits: {
+      state: from === to ? DeployCommitComparisonState.SAME : DeployCommitComparisonState.COMPUTED,
+      reverts: from < to,
+      commits,
+      total: commits.length,
+      releases: between.map((r) => r.version),
+    },
+    artifacts: changed.map((w) => ({
+      name: w.name,
+      kind: w.tier === DeployTier.STATIC ? "static" : "image",
+      change: DeployChangeKind.MODIFIED,
+      from: artifactDigest(w.name, fromVersion),
+      to: artifactDigest(w.name, toVersion),
+    })),
+    unchangedArtifacts: DEMO_WORKLOADS.length - changed.length,
+    objects: env
+      ? {
+          state: DeployObjectComparisonState.COMPARED,
+          environmentId: env.id,
+          fromBundleDigest: demoBundleDigest(env.id, fromVersion),
+          toBundleDigest: demoBundleDigest(env.id, toVersion),
+          deltas: [
+            ...changed
+              .filter((w) => w.tier !== DeployTier.STATIC)
+              .map((w) => ({
+                change: DeployChangeKind.MODIFIED,
+                kind: "Deployment",
+                namespace: `shop-${env.name}`,
+                name: w.name,
+                workload: w.name,
+                summary: `image ${fromVersion} → ${toVersion}`,
+                images: [{ artifact: w.name, from: artifactDigest(w.name, fromVersion), to: artifactDigest(w.name, toVersion) }],
+              })),
+            ...(timeoutChanged
+              ? [{ change: DeployChangeKind.MODIFIED, kind: "ConfigMap", namespace: `shop-${env.name}`, name: "api-config", workload: "api", summary: "ORDER_TIMEOUT_MS changed" }]
+              : []),
+          ],
+          unchanged: 9 - changed.length,
+        }
+      : { state: DeployObjectComparisonState.NO_ENVIRONMENT },
+  };
 }
 
 // ── Handlers ────────────────────────────────────────────────────────────────
@@ -875,8 +687,8 @@ export function consoleScenarioHandlers(): MockHandlers {
                 deploymentId: `dep-${id}-${w.name}`,
                 name: w.name,
                 artifact: w.name,
-                desiredDigest: digest(`${w.name}@${p.version}`),
-                observedDigest: digest(`${w.name}@${p.version}`),
+                desiredDigest: artifactDigest(w.name, p.version),
+                observedDigest: artifactDigest(w.name, p.version),
                 observedState: DeployObservedState.READY,
                 verdict: DeployVerdict.CONVERGED,
                 phase: DeployRolloutPhase.SUCCEEDED,
@@ -895,7 +707,7 @@ export function consoleScenarioHandlers(): MockHandlers {
           return {
             from: release(DEMO_RELEASES[from], from),
             to: release(DEMO_RELEASES[to], to),
-            unchangedArtifacts: 0,
+            ...comparison(from, to, envIdOf(req.environmentId)),
           };
         },
         listDeployAttempts: (req) => {
@@ -929,7 +741,7 @@ export function consoleScenarioHandlers(): MockHandlers {
                   oldestVersion: 1,
                   maxVersions: 10,
                   createdTime: ago(38 * DAY),
-                  updatedTime: ago(s.name === "SESSION_SIGNING_KEY" ? 3 * DAY : 20 * DAY),
+                  updatedTime: ago(SECRET_UPDATED[s.name] ?? 20 * DAY),
                 }))
               : [],
           };
@@ -946,11 +758,11 @@ export function consoleScenarioHandlers(): MockHandlers {
               oldestVersion: 1,
               maxVersions: 10,
               createdTime: ago(38 * DAY),
-              updatedTime: ago(20 * DAY),
+              updatedTime: ago(SECRET_UPDATED[s.name] ?? 20 * DAY),
             },
             versions: Array.from({ length: s.versions }, (_, i) => ({
               version: s.versions - i,
-              createdTime: ago((i + 1) * 9 * DAY),
+              createdTime: ago((SECRET_UPDATED[s.name] ?? 20 * DAY) + i * 9 * DAY),
               setBy: {
                 kind: SecretAuthorKind.USER,
                 email: `${["maya", "jon", "priya"][i % 3]}@example.com`,

@@ -5,7 +5,7 @@
  *
  *  - the `demo` scenario, read through the console's REAL client (api.ts and
  *    its mappers, over connect.ts's routed transport), answers exactly what
- *    the model fixtures answer — the wire encoding loses nothing;
+ *    the story's model (shop/shopApi.ts) answers — the wire encoding loses nothing;
  *  - the transport refuses every write before a handler or the gateway sees it;
  *  - DEMO_DATA_SOURCE=remote asks the gateway first and falls back to the
  *    sample data, saying so, when it fails;
@@ -25,16 +25,16 @@ import { resetShellForTests } from "@/lib/shell";
 import { controlPlaneObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
 import { setRuntimeConfig } from "@/test/runtimeConfig";
 
-import { FIXTURE_SIGNALS } from "../../../Observability/__fixtures__/fixtureSignals";
 import { createDemoApi } from "../demoApi";
-import { createDemoFixtures } from "../busyApp";
+import { DEMO_SIGNALS } from "../busyApp";
+import { createShopApi } from "../shop/shopApi";
 import { getDemoDataStatus, resetDemoDataStatusForTests } from "../demoDataStatus";
 import { DEMO_SCENARIO_RPCS, splitLogQuery } from "../demoScenario";
 import { createDemoTransport, demoDataConfig, isDemoRead } from "../demoTransport";
 
 const END_MS = Date.UTC(2026, 0, 15, 12, 0, 0);
 const window = { startMs: END_MS - 3_600_000, endMs: END_MS };
-const scope = { orgId: "org-fixture", projectId: "shop", envIds: [] as string[], filters: [] };
+const scope = { orgId: "org-acme", projectId: "shop", envIds: [] as string[], filters: [] };
 const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
 
 /** Numbers to 3 decimals (a Timestamp's nanos round-trip a millisecond fraction to within 1e-9); empty `links` dropped. */
@@ -64,10 +64,10 @@ afterEach(() => {
 });
 
 describe("the demo scenario, through the console's real client", () => {
-  const fixtures = createDemoFixtures();
+  const fixtures = createShopApi();
   const wire = controlPlaneObservabilityApi;
 
-  it("answers ListTraces, GetTrace and SearchLogs exactly as the fixtures do", async () => {
+  it("answers ListTraces, GetTrace and SearchLogs exactly as the model does", async () => {
     const traces = { ...scope, window, rootSpanName: "", services: [], errorsOnly: false, minDurationMs: 0, limit: 50 };
     expect(normalize(await wire.listTraces(traces))).toEqual(normalize(await fixtures.listTraces(traces)));
 
@@ -84,14 +84,14 @@ describe("the demo scenario, through the console's real client", () => {
     expect(fromWire.records.map((r) => r.service)).toContain("inventory");
   });
 
-  it("answers the overview, the flamegraph and the service signals as the fixtures do", async () => {
+  it("answers the overview, the flamegraph and the service signals as the model does", async () => {
     // The client always reports unavailableSections (empty from a whole answer); the fixture leaves it out.
     expect(normalize(await wire.getServiceOverview({ ...scope, window }))).toEqual(
       normalize({ unavailableSections: [], ...(await fixtures.getServiceOverview({ ...scope, window })) }),
     );
     const flame = { ...scope, window, service: "api", profileType: "cpu", traceId: TRACE };
     expect(normalize(await wire.getFlamegraph(flame))).toEqual(normalize(await fixtures.getFlamegraph(flame)));
-    expect(await wire.getServiceSignals({ ...scope, window })).toEqual(FIXTURE_SIGNALS);
+    expect(await wire.getServiceSignals({ ...scope, window })).toEqual(DEMO_SIGNALS);
   });
 
   it("splits SearchLogs' composed query back into the reader's text and the trace scope", () => {
