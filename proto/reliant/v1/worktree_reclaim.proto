@@ -1,0 +1,72 @@
+// Copyright (c) 2026 Reliant Labs. All rights reserved.
+syntax = "proto3";
+
+package reliant.v1;
+
+import "forge/v1/forge.proto";
+
+option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
+
+// WorktreeReclaimService answers a machine's worktree-reclaim inbox item
+// (INBOX_ITEM_KIND_WORKTREE_RECLAIM). The machine's daemon proposes removing
+// idle worktrees that hold work only they have, and removes none of them
+// (worktreereclaim's SweepOptions.ApprovalsVerified); this is where the
+// person keeps or approves each, bound to the exact state shown. It manages the caller's own machine, so it is not part of the
+// public SDK (proto/public-api.txt), like InboxService.CleanupStorage.
+service WorktreeReclaimService {
+  // DecideWorktreeReclaim approves or declines removing each proposed
+  // worktree, as the person saw it. Every decision names the proposal's
+  // fingerprint; the server refuses one that is not on the machine's last
+  // report ("not_shown"), and the machine records it only while that is
+  // still the worktree's state ("changed" otherwise). Declining keeps it
+  // until its state changes. An approval is recorded, with who made it, but
+  // the machine does not remove an approved worktree yet: nothing on the
+  // machine can prove an approval is a person's, so it stays proposed as
+  // approved. When the machine does reclaim one, it first saves everything
+  // git can see of it to a local ref (refs/reliant/reclaimed/...), from which
+  // `reliant worktree restore` brings it back. FAILED_PRECONDITION when the machine is
+  // offline; NOT_FOUND for a machine that is not the caller's.
+  rpc DecideWorktreeReclaim(DecideWorktreeReclaimRequest) returns (DecideWorktreeReclaimResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "decide_worktree_reclaim"
+        target: {
+          kind: "daemon"
+          id: "daemon_id"
+        }
+      }
+    };
+  }
+}
+
+message DecideWorktreeReclaimRequest {
+  // The machine whose item was shown.
+  string daemon_id = 1;
+  // At most 50.
+  repeated WorktreeReclaimDecision decisions = 2;
+}
+
+// WorktreeReclaimDecision is one approve/decline about one proposal.
+message WorktreeReclaimDecision {
+  // WorktreeReclaimProposal.key and .fingerprint, as shown.
+  string key = 1;
+  string fingerprint = 2;
+  // True to remove it (after saving it); false to keep it.
+  bool approve = 3;
+}
+
+message DecideWorktreeReclaimResponse {
+  // One entry per decision, in request order.
+  repeated WorktreeReclaimDecisionResult results = 1;
+}
+
+message WorktreeReclaimDecisionResult {
+  string key = 1;
+  // True when the machine recorded it.
+  bool recorded = 2;
+  // Why not: "changed" (the worktree is no longer in the state shown; the
+  // item will list its new state), "unknown" (the machine no longer proposes
+  // it), "not_shown" (not on the machine's last report).
+  string reason = 3;
+}
+

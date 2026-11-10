@@ -66,6 +66,58 @@ func TestPendingProposalsCarryNotesAndDecisions(t *testing.T) {
 	}
 }
 
+// With more proposals than a heartbeat carries, declining the whole first
+// batch brings the rest into it: decided proposals never crowd undecided
+// ones out of the cap.
+func TestPendingProposalsPutUndecidedBeforeTheCap(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	base := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
+	const n = MaxProposals + 10
+	entries := make([]SweepEntry, 0, n)
+	for i := range n {
+		entries = append(entries, proposal(fmt.Sprintf("p-%03d", i), fmt.Sprintf("fp-%03d", i), base.Add(time.Duration(i)*time.Minute)))
+	}
+	writeReport(t, dir, entries...)
+	ctx := context.Background()
+
+	first, err := PendingProposals(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.Total != n || len(first.Proposals) != MaxProposals {
+		t.Fatalf("total %d, carried %d", first.Total, len(first.Proposals))
+	}
+	var decline []DecisionRequest
+	for _, p := range first.Proposals {
+		decline = append(decline, DecisionRequest{Key: p.Key, Fingerprint: p.Fingerprint, Decision: DecisionDecline})
+	}
+	if _, err := RecordDecisionsFor(ctx, dir, decline, "inbox:u1"); err != nil {
+		t.Fatal(err)
+	}
+
+	next, err := PendingProposals(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if next.Total != n || len(next.Proposals) != MaxProposals {
+		t.Fatalf("total %d, carried %d", next.Total, len(next.Proposals))
+	}
+	for i, p := range next.Proposals[:n-MaxProposals] {
+		if want := fmt.Sprintf("p-%03d", MaxProposals+i); p.Key != want || p.Decision != "" {
+			t.Fatalf("proposal %d = %s (%q), want undecided %s", i, p.Key, p.Decision, want)
+		}
+	}
+	for _, p := range next.Proposals[n-MaxProposals:] {
+		if p.Decision != DecisionDecline {
+			t.Fatalf("%s: decision %q after the undecided ones, want decline", p.Key, p.Decision)
+		}
+	}
+	if _, err := RecordNotes(ctx, dir, []Note{{Key: "p-055", Fingerprint: "fp-055", Text: "reviewable"}}, "agent"); err != nil {
+		t.Fatalf("a proposal beyond the first batch cannot be noted: %v", err)
+	}
+}
+
 // A decision is recorded only for the state the person was shown: a stale
 // fingerprint (the worktree changed) or a key the report no longer proposes
 // records nothing, and the sweep then has no approval to act on.

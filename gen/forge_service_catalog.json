@@ -94,6 +94,7 @@
         "Workflow",
         "WorkflowReconciler",
         "Worktree",
+        "WorktreeReclaim",
         "WorktreeSweep",
         "WorktreeSweeper"
       ],
@@ -339,6 +340,13 @@
         {
           "component": "Workflow",
           "service": "reliant.v1.WorkflowService",
+          "route_set": "UserRoutes",
+          "audience": "user",
+          "resolution": "declared_route_set"
+        },
+        {
+          "component": "WorktreeReclaim",
+          "service": "reliant.v1.WorktreeReclaimService",
           "route_set": "UserRoutes",
           "audience": "user",
           "resolution": "declared_route_set"
@@ -42624,6 +42632,133 @@
       }
     },
     {
+      "name": "reliant.v1.WorktreeReclaimService",
+      "proto_file": "reliant/v1/worktree_reclaim.proto",
+      "methods": [
+        {
+          "id": "reliant.v1.WorktreeReclaimService/DecideWorktreeReclaim",
+          "name": "DecideWorktreeReclaim",
+          "input": "reliant.v1.DecideWorktreeReclaimRequest",
+          "output": "reliant.v1.DecideWorktreeReclaimResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "UNKNOWN",
+          "auth_required": true
+        }
+      ],
+      "descriptor": {
+        "Name": "WorktreeReclaimService",
+        "Package": "reliant.v1",
+        "GoPackage": "github.com/reliant-labs/reliant/gen/reliant/v1",
+        "PkgName": "reliantv1",
+        "Methods": [
+          {
+            "Name": "DecideWorktreeReclaim",
+            "InputType": "DecideWorktreeReclaimRequest",
+            "OutputType": "DecideWorktreeReclaimResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "InputTypeFQ": "reliant.v1.DecideWorktreeReclaimRequest",
+            "OutputTypeFQ": "reliant.v1.DecideWorktreeReclaimResponse",
+            "InputProtoFile": "reliant/v1/worktree_reclaim.proto",
+            "OutputProtoFile": "reliant/v1/worktree_reclaim.proto",
+            "Activity": {
+              "Mutating": true,
+              "Declared": true,
+              "Verb": "decide_worktree_reclaim",
+              "TargetKind": "daemon",
+              "Writer": "INTERCEPTOR"
+            }
+          }
+        ],
+        "ProtoFile": "reliant/v1/worktree_reclaim.proto",
+        "ModulePath": "github.com/reliant-labs/reliant",
+        "Messages": {
+          "DecideWorktreeReclaimRequest": [
+            {
+              "Name": "daemon_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "decisions",
+              "ProtoType": "[]message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.WorktreeReclaimDecision"
+            }
+          ],
+          "DecideWorktreeReclaimResponse": [
+            {
+              "Name": "results",
+              "ProtoType": "[]message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.WorktreeReclaimDecisionResult"
+            }
+          ]
+        },
+        "Audience": "user",
+        "Schemas": {
+          "reliant.v1.DecideWorktreeReclaimRequest": [
+            {
+              "name": "daemon_id",
+              "kind": "string"
+            },
+            {
+              "name": "decisions",
+              "kind": "message",
+              "type_name": "reliant.v1.WorktreeReclaimDecision",
+              "repeated": true
+            }
+          ],
+          "reliant.v1.DecideWorktreeReclaimResponse": [
+            {
+              "name": "results",
+              "kind": "message",
+              "type_name": "reliant.v1.WorktreeReclaimDecisionResult",
+              "repeated": true
+            }
+          ],
+          "reliant.v1.WorktreeReclaimDecision": [
+            {
+              "name": "key",
+              "kind": "string"
+            },
+            {
+              "name": "fingerprint",
+              "kind": "string"
+            },
+            {
+              "name": "approve",
+              "kind": "bool"
+            }
+          ],
+          "reliant.v1.WorktreeReclaimDecisionResult": [
+            {
+              "name": "key",
+              "kind": "string"
+            },
+            {
+              "name": "recorded",
+              "kind": "bool"
+            },
+            {
+              "name": "reason",
+              "kind": "string"
+            }
+          ]
+        },
+        "SchemaFiles": {
+          "reliant.v1.DecideWorktreeReclaimRequest": "reliant/v1/worktree_reclaim.proto",
+          "reliant.v1.DecideWorktreeReclaimResponse": "reliant/v1/worktree_reclaim.proto",
+          "reliant.v1.WorktreeReclaimDecision": "reliant/v1/worktree_reclaim.proto",
+          "reliant.v1.WorktreeReclaimDecisionResult": "reliant/v1/worktree_reclaim.proto"
+        }
+      }
+    },
+    {
       "name": "reliant.v1.WorktreeService",
       "proto_file": "reliant/v1/worktree.proto",
       "methods": [
@@ -47031,6 +47166,18 @@
       "implementation_candidates": []
     },
     {
+      "id": "WorktreeReclaim",
+      "name": "WorktreeReclaim",
+      "kind": "component",
+      "type": "*github.com/reliant-labs/reliant/internal/handlers/worktree_reclaim.Service",
+      "source": {
+        "path": "internal/handlers/worktree_reclaim/service.go",
+        "symbol": "New"
+      },
+      "methods": [],
+      "implementation_candidates": []
+    },
+    {
       "id": "WorktreeSweep",
       "name": "WorktreeSweep",
       "kind": "provider",
@@ -48515,6 +48662,33 @@
       "candidates": [],
       "providers": [
         "TemporalClient"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "WorktreeReclaim",
+      "field": "Repo",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/worktree_reclaim.Repository",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "WorktreeReclaim",
+      "field": "Sender",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/worktree_reclaim.Sender",
+      "methods": [],
+      "candidates": [
+        "APIDaemonRouter",
+        "WorkerDaemonRouter"
+      ],
+      "providers": [
+        "APIDaemonRouter"
       ],
       "resolution": "composition_expression"
     },
