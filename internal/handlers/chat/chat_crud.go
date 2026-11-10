@@ -312,13 +312,16 @@ func (s *Service) ListChats(
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list chats"))
 	}
+	// The store lists what the caller owns; a chat of an org they have left
+	// is not theirs to see, named org or not (GetChat refuses it too).
+	chats = authz.Visible(ctx, userID, chats, authz.CanReadChat[*db.Chat])
 
 	// The background reconciler repairs stale DB status against Temporal.
 	protoChats := make([]*reliantv1.Chat, len(chats))
 	for i, c := range chats {
 		protoChats[i] = chatToProto(c)
 	}
-	mainWorktrees := s.attachWorktrees(ctx, userID, req.Msg.ProjectId, chats, protoChats)
+	mainWorktrees := s.attachWorktrees(ctx, userID, req.Msg.ProjectId, scope, chats, protoChats)
 
 	// Get latest user update sequence for stream sync —
 	// the frontend uses this to connect the streaming RPC without redundant event replay.
@@ -688,6 +691,7 @@ func (s *Service) SearchChats(
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to search chats"))
 	}
+	chats = authz.Visible(ctx, userID, chats, authz.CanReadChat[*db.Chat])
 
 	protoChats := make([]*reliantv1.Chat, len(chats))
 	for i, c := range chats {
@@ -711,6 +715,9 @@ func (s *Service) ListArchivedChats(
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list archived chats"))
 	}
+	archivedChats = authz.Visible(ctx, userID, archivedChats, func(ctx context.Context, userID string, ac *db.ArchivedChatInfo) bool {
+		return authz.CanReadChat(ctx, userID, &ac.Chat)
+	})
 
 	protoChats := make([]*reliantv1.ArchivedChat, len(archivedChats))
 	for i, ac := range archivedChats {

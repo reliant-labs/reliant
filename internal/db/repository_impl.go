@@ -3913,6 +3913,13 @@ func (r *Repo) UpsertWorkflowDraft(ctx context.Context, draft *WorkflowDraft) (*
 	}
 	var saved *WorkflowDraft
 	err := r.runWorkflowDraftTx(ctx, func(txCtx context.Context) error {
+		// The upsert would overwrite a denied draft: its slug is taken.
+		if denied, err := r.deniedWorkflowDraftSlug(txCtx, draft.UserID, draft.Slug); err != nil || denied {
+			if err == nil {
+				err = fmt.Errorf("%w: %q", ErrWorkflowSlugTaken, draft.Slug)
+			}
+			return err
+		}
 		row, err := store.UpsertWorkflowDraftBySlug(txCtx, r.ORM(), draft)
 		if err != nil {
 			return mapWorkflowSlugConflict(err, draft.Slug)
@@ -3975,12 +3982,39 @@ func (r *Repo) GetWorkflowDraft(ctx context.Context, id string) (*WorkflowDraft,
 	return row, nil
 }
 
+// visibleWorkflowDraft confirms a draft an owner-filtered read returned
+// through authz: a draft of an org its owner has left reads as no draft, so
+// no lookup by slug or name (the handlers', the tools', the launch path's)
+// can reach what the lookup by id refuses.
+func visibleWorkflowDraft(ctx context.Context, userID string, draft *WorkflowDraft, err error) (*WorkflowDraft, error) {
+	if err != nil || draft == nil {
+		return draft, err
+	}
+	if !authz.CanReadWorkflow(ctx, userID, draft) {
+		return nil, nil
+	}
+	return draft, nil
+}
+
+// deniedWorkflowDraftSlug reports whether the owner's draft with slug is one
+// authz no longer lets them change: its slug stays taken (the unique key is
+// the owner's), but its content is not theirs to overwrite or delete.
+func (r *Repo) deniedWorkflowDraftSlug(ctx context.Context, userID, slug string) (bool, error) {
+	existing, err := store.FindWorkflowDraftBySlug(ctx, r.ORM(), userID, slug)
+	if err != nil {
+		return false, err
+	}
+	return existing != nil && !authz.CanWriteWorkflow(ctx, userID, existing), nil
+}
+
 func (r *Repo) GetWorkflowDraftBySlug(ctx context.Context, userID, slug string) (*WorkflowDraft, error) {
-	return store.FindWorkflowDraftBySlug(ctx, r.ORM(), userID, slug)
+	draft, err := store.FindWorkflowDraftBySlug(ctx, r.ORM(), userID, slug)
+	return visibleWorkflowDraft(ctx, userID, draft, err)
 }
 
 func (r *Repo) GetWorkflowDraftByName(ctx context.Context, userID, name string) (*WorkflowDraft, error) {
-	return store.FindWorkflowDraftByName(ctx, r.ORM(), userID, name)
+	draft, err := store.FindWorkflowDraftByName(ctx, r.ORM(), userID, name)
+	return visibleWorkflowDraft(ctx, userID, draft, err)
 }
 
 // GetUsableWorkflowBySlug returns the runnable (complete, visible) workflow
@@ -3989,10 +4023,15 @@ func (r *Repo) GetWorkflowDraftByName(ctx context.Context, userID, name string) 
 // "not found": the workflow exists, and the fix is to mark it complete.
 func (r *Repo) GetUsableWorkflowBySlug(ctx context.Context, userID, slug string) (*WorkflowDraft, error) {
 	usable, err := store.FindUsableWorkflowBySlug(ctx, r.ORM(), userID, slug)
-	if err != nil || usable != nil {
-		return usable, err
+	if err != nil {
+		return nil, err
 	}
-	draft, err := store.FindWorkflowDraftBySlug(ctx, r.ORM(), userID, slug)
+	if usable != nil {
+		// A runnable draft the caller may no longer see is no workflow:
+		// nil, nil, the same as a slug nobody has.
+		return visibleWorkflowDraft(ctx, userID, usable, nil)
+	}
+	draft, err := r.GetWorkflowDraftBySlug(ctx, userID, slug)
 	if err != nil {
 		return nil, err
 	}
@@ -4002,8 +4041,14 @@ func (r *Repo) GetUsableWorkflowBySlug(ctx context.Context, userID, slug string)
 	return nil, nil
 }
 
+// ListWorkflowDraftsByUser is the drafts userID owns and may still see: a
+// draft of an org they have left is not listed (authz decides each row).
 func (r *Repo) ListWorkflowDraftsByUser(ctx context.Context, userID string) ([]*WorkflowDraft, error) {
-	return store.ListUserWorkflowDrafts(ctx, r.ORM(), userID)
+	drafts, err := store.ListUserWorkflowDrafts(ctx, r.ORM(), userID)
+	if err != nil {
+		return nil, err
+	}
+	return authz.Visible(ctx, userID, drafts, authz.CanReadWorkflow), nil
 }
 
 func (r *Repo) UpdateWorkflowDraft(ctx context.Context, draft *WorkflowDraft) error {
@@ -4061,6 +4106,10 @@ func (r *Repo) SetWorkflowDraftHidden(ctx context.Context, id string, isHidden b
 
 func (r *Repo) DeleteWorkflowDraftBySlug(ctx context.Context, userID, slug string) error {
 	return r.runWorkflowDraftTx(ctx, func(txCtx context.Context) error {
+		// A denied draft is deleted like a missing one: not at all.
+		if denied, err := r.deniedWorkflowDraftSlug(txCtx, userID, slug); err != nil || denied {
+			return err
+		}
 		deleted, err := store.RemoveWorkflowDraftBySlug(txCtx, r.ORM(), userID, slug)
 		if svcerr.IsNotFound(err) {
 			return nil

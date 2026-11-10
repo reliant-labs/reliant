@@ -10,6 +10,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/daemonplacement"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/orgs"
 )
 
 // AutomationRetirer is the trigger service's cleanup after automations are
@@ -21,7 +22,19 @@ type AutomationRetirer interface {
 // Repository is the slice of *db.Repo the workflow handlers use. The
 // last three are what workflowcatalog, workflowsource and launch read
 // through it when they resolve a workflow's refs.
+// OrgResolver answers the org questions of these rpcs. *orgs.Resolver is
+// one; nil (or a nil *orgs.Resolver) is a deployment with no orgs.
+type OrgResolver interface {
+	Named(ctx context.Context, userID, requested string) (string, error)
+	DefaultOrg(ctx context.Context, userID string) (string, error)
+	ActingOrg(ctx context.Context, userID, requested string) (string, error)
+	ListScope(ctx context.Context, userID, requested string, stamp orgs.Backfill) (*core.OrgScope, error)
+}
+
 type Repository interface {
+	// AssignUnassignedOrg stamps the caller's rows that have no org with
+	// their default org (the lazy backfill, orgs.ListScope).
+	AssignUnassignedOrg(ctx context.Context, userID, orgID string) error
 	GetProject(ctx context.Context, id string) (*db.Project, error)
 	GetProjectWithUserCheck(ctx context.Context, id string, userID string) (*db.Project, error)
 

@@ -107,6 +107,9 @@ func (s *Service) StreamChatUpdates(
 	// project-scoped user stream drops (see chatFocusFilter). Only a
 	// project-scoped client has any.
 	focus := newChatFocusFilter(s.deps.Repo, req.Msg.GetProjectId(), chatID)
+	// Each is decided as the user stream decides it (orgGate): an update
+	// about a chat of an org the caller may not read is not forwarded.
+	updateOrgs := newOrgGate(s.deps.Repo, userID, s.unassignedOrgRecheck)
 	var userUpdateCh <-chan streaming.UpdateEvent[db.UserUpdate]
 	if focus != nil && s.deps.UserUpdates != nil {
 		userUpdateSub := s.deps.UserUpdates.Subscribe(ctx, userID)
@@ -141,6 +144,17 @@ func (s *Service) StreamChatUpdates(
 	// seq <= lastChatSeq check below discards the overlap.
 	heartbeatTicker := time.NewTicker(s.heartbeatInterval)
 	defer heartbeatTicker.Stop()
+
+	// The open's decision is re-asked while the stream lives: a chat of an
+	// org is its owner's only while they are a live member of it, and a
+	// removal must end a stream opened before it, not just refuse the next
+	// open. The chat's owner and org do not change under an open stream, so
+	// the held row is re-decided, not re-read; membership answers are cached
+	// (orgs.CacheTTL), so a tick costs no round trip most of the time. A
+	// removal ends the stream within orgs.CacheTTL plus this interval, and a
+	// failed check ends it too (authz fails closed).
+	reauthorizeTicker := time.NewTicker(s.reauthorizeInterval)
+	defer reauthorizeTicker.Stop()
 
 	// The transcript the live frames carried after the initial sync, by
 	// block kind, summed over the stream's life and put on the RPC span as
@@ -201,7 +215,7 @@ func (s *Service) StreamChatUpdates(
 				userUpdateCh = nil
 				continue
 			}
-			if !focus.matches(ctx, &event.Payload) {
+			if !focus.matches(ctx, &event.Payload) || !updateOrgs.allows(ctx, &event.Payload) {
 				continue
 			}
 			if err := stream.Send(&reliantv1.ChatStreamEvent{
@@ -212,6 +226,29 @@ func (s *Service) StreamChatUpdates(
 				},
 			}); err != nil {
 				return err
+			}
+
+		case <-reauthorizeTicker.C:
+			// A chat of no org yet may be stamped with one (the lazy
+			// backfill): re-read it while it has none, so the decision is
+			// made on the org it has now, not the one it opened with.
+			if chat.OrgID == nil || *chat.OrgID == "" {
+				refreshed, err := s.deps.Repo.GetChatRow(ctx, chatID)
+				switch {
+				case svcerr.IsNotFound(err):
+					return svcerr.NotFound("chat")
+				case err != nil:
+					// Fails closed: the client reopens, and the open decides.
+					logging.WarnContext(ctx, LOG_PREFIX_STREAM_CHAT+" Could not re-read an unassigned chat's org; ending its stream",
+						"userID", userID, "chatID", shortID(chatID), "error", err)
+					return svcerr.Unavailable("could not re-check access to the chat")
+				}
+				chat = refreshed
+			}
+			if !authz.CanReadChat(ctx, userID, chat) {
+				logging.InfoContext(ctx, LOG_PREFIX_STREAM_CHAT+" Caller may no longer read the chat; ending its stream",
+					"userID", userID, "chatID", shortID(chatID))
+				return svcerr.NotFound("chat")
 			}
 
 		case <-heartbeatTicker.C:
