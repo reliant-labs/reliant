@@ -1342,8 +1342,13 @@ func (d *daemonClient) handleServerMessage(ctx context.Context, s *gatewaySessio
 			return nil
 		}
 		// Recorded before the goroutine starts, so a status question that
-		// arrives right behind the request already finds it running.
-		d.results.start(m.ToolRequest.RequestId)
+		// arrives right behind the request already finds it running. A
+		// request id this daemon already ran is never run again
+		// (result_once.go).
+		if known, fresh := d.results.begin(m.ToolRequest.RequestId); !fresh {
+			d.answerRepeatedRequest(s, m.ToolRequest.RequestId, known)
+			return nil
+		}
 		if s != nil && m.ToolRequest.RequestId != "" {
 			s.inFlight.Add(1) // until a gateway acknowledges the result
 		}
@@ -2013,9 +2018,17 @@ func (d *daemonClient) executeTool(s *gatewaySession, req *reliantv1.ToolRequest
 		contextMap["user_id"] = d.currentUserID()
 	}
 	// A run step's result outlives its acknowledgement for a while, so a
-	// retry whose worker went away can still reattach to it (result_retain.go).
+	// retry whose worker went away can still reattach to it
+	// (result_retain.go), and its id is tombstoned so it never runs twice
+	// (result_once.go). Before the command runs; a tombstone that cannot be
+	// made durable means the command does not run at all (fail closed).
 	if runStep, _ := contextMap[toolexec.RunStepContextKey].(bool); runStep {
-		d.results.markRetain(req.RequestId)
+		if err := d.results.markRunStep(req.RequestId, time.Duration(req.TimeoutMs)*time.Millisecond); err != nil {
+			logging.Warn(logPrefix+" Not running a run step: its tombstone could not be persisted",
+				"request_id", req.RequestId, "error", err)
+			d.sendToolResult(s, req.RequestId, failClosedRunStep(req.RequestId, err))
+			return
+		}
 	}
 
 	// The worktree or project this call works in: recorded the first time it
