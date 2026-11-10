@@ -2,8 +2,8 @@
 
 /**
  * The public demo's one row of chrome under the console's header: a quiet
- * "Sample app · read-only data" line (and, from a laptop up, what the demo
- * records), then Take the tour, Install Forge and the primary Sign up free.
+ * "Sample app · read-only data" line and what the demo records (the same on
+ * every entry, the tour's route included), then Take the tour, Install Forge and the primary Sign up free.
  *
  * On a phone the row is one line, the status and Sign up: the tour, Install
  * and the telemetry notice sit in the nav drawer (DemoDrawerActions, through
@@ -98,9 +98,10 @@ export function DemoScreenActions() {
   if (!host || drawerOpen) return null;
   return createPortal(
     <nav aria-label="Demo actions" data-testid="demo-screen-actions" className="flex min-h-11 items-center gap-3 border-b border-border bg-surface px-3 py-1 text-sm md:px-8">
-      <span className="min-w-0 flex-1 truncate text-xs text-ink-muted">
-        <DemoStatusLine />
-        <DemoTelemetryNotice className="max-lg:hidden before:mx-1.5 before:content-['·']" />
+      {/* The notice is a disclosure: it is never truncated away. From a tablet up it is in the row (wrapping if it must); on a phone, in the drawer. */}
+      <span className="min-w-0 flex-1 text-xs text-ink-muted">
+        <DemoStatusLine className="whitespace-nowrap" />
+        <DemoTelemetryNotice className="max-md:hidden before:mx-1.5 before:content-['·']" />
       </span>
       <div className="flex shrink-0 items-center gap-3">
         {!tourOpen && <TakeTheTourButton className="max-md:hidden" />}

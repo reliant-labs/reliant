@@ -3,10 +3,15 @@
 /**
  * One current-page explanation; no cross-page sequence.
  *
- *  - Laptop and up: a page's tip opens by itself the FIRST time it is visited
- *    this browser session (demoSession.seenTips), and never moves the page to
- *    do it: a target off screen gets the corner card instead of a spotlight.
- *    After that, and once dismissed, the page has the corner's "?" button.
+ *  - Laptop and up: a section's tip opens by itself the FIRST time the section
+ *    is visited this browser session (demoSession.seenTips), and only on the
+ *    section's own page (isDemoSectionPage): never on one release, workload,
+ *    environment or dashboard, or with a trace or issue open. It never moves
+ *    the page to do it: a target off screen gets the corner card instead of a
+ *    spotlight. Otherwise, and once dismissed, the page has the "?" button.
+ *  - Any change of page, or of the item open inside it, tears the card down
+ *    (each visit is its own mount, demoPageVisit), so it never outlives the
+ *    page it explains. A guided tour suppresses it entirely.
  *  - Phone: a one-line "About this page" disclosure at the top of the page,
  *    closed by default; it never pushes the data down unasked.
  */
@@ -24,13 +29,13 @@ import { DemoCorner, useConsoleDrawerOpen } from "../DemoCorner";
 import { demoSession } from "../demoSession";
 import { PageAgentHelp } from "./DemoTips";
 import { DEMO_TIPS } from "./tipCopy";
-import { demoTipKey, type DemoTipKey } from "./tipKeys";
+import { demoDetailOf, demoTipKey, isDemoSectionPage, type DemoTipKey } from "./tipKeys";
 
 /** Path identifies real pages; legacy view/trace URLs also distinguish their visible page.
  * Range, environment, sorting, polling and the tour URL itself are not new visits.
  */
 export function demoPageVisit(pathname: string, search: Record<string, unknown>): string {
-  return `${pathname}:${demoTipKey(pathname, search) ?? "none"}`;
+  return `${pathname}:${demoTipKey(pathname, search) ?? "none"}:${demoDetailOf(search)}`;
 }
 
 const PHONE = "(max-width: 1023px)";
@@ -45,17 +50,18 @@ export function PageEntryTour() {
   // A guided tour owns the page, except an old trace-less deep link, which
   // keeps its page card (isLegacyDemoTourLink).
   if (!key || (search.tour && !isLegacyDemoTourLink(search)) || drawerOpen) return null;
-  return mobile ? <MobilePageDisclosure key={visit} tipKey={key} /> : <VisitTour key={visit} tipKey={key} />;
+  const section = isDemoSectionPage(location.pathname, search);
+  return mobile ? <MobilePageDisclosure key={visit} tipKey={key} /> : <VisitTour key={visit} tipKey={key} section={section} />;
 }
 
-function VisitTour({ tipKey }: { tipKey: DemoTipKey }) {
-  // First visit this session: open by itself. A reload, or coming back, does not.
-  const [open, setOpen] = useState(() => !demoSession.hasSeenTip(tipKey));
+function VisitTour({ tipKey, section }: { tipKey: DemoTipKey; section: boolean }) {
+  // A section's first visit this session: open by itself. A reload, coming back, or a sub-page does not.
+  const [open, setOpen] = useState(() => section && !demoSession.hasSeenTip(tipKey));
   // Opened from "?": the reader asked, so the page may scroll to the tip's anchor.
   const [requested, setRequested] = useState(false);
   const restoreFocus = useRef(false);
   const tip = DEMO_TIPS[tipKey];
-  useEffect(() => { demoSession.markTipSeen(tipKey); }, [tipKey]);
+  useEffect(() => { if (section) demoSession.markTipSeen(tipKey); }, [tipKey, section]);
   const dismiss = () => {
     // Focus goes back to "?" only when it was in the card (a keyboard reader); a click leaves it where it was.
     restoreFocus.current = !!document.activeElement?.closest("[data-page-tour], [data-testid='onboarding-callout']");
@@ -92,7 +98,6 @@ function VisitTour({ tipKey }: { tipKey: DemoTipKey }) {
 function MobilePageDisclosure({ tipKey }: { tipKey: DemoTipKey }) {
   const [open, setOpen] = useState(false);
   const tip = DEMO_TIPS[tipKey];
-  useEffect(() => { demoSession.markTipSeen(tipKey); }, [tipKey]);
   return (
     <MobilePageSlot>
       <div className="text-sm text-ink" data-page-tour={tipKey}>

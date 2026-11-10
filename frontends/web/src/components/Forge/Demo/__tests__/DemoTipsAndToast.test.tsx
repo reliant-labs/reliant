@@ -66,6 +66,42 @@ it("each page's tip opens by itself once a session; coming back does not reopen 
   expect(await screen.findByRole("button", {name:"About Overview"})).toBeInTheDocument();
   expect(screen.queryByTestId("tour-callout")).toBeNull();
 });
+it.each([
+  ["one release", "/forge/p/shop/releases/v1"],
+  ["one workload", "/forge/p/shop/workloads/prod/api"],
+  ["one environment", "/forge/p/shop/environments/prod"],
+  ["one dashboard", "/forge/p/shop/observability/dashboards/release/latency"],
+  ["an open trace", "/forge/p/shop/observability/traces?trace=abc"],
+  ["an open issue", "/forge/p/shop/observability/errors?issue=iss-1"],
+  ["an open trace on the demo console", "/forge/demo?view=traces&trace=abc"],
+])("never opens by itself on a sub-page (%s), and does not use up its section's tip", async (_name, path) => {
+  renderDemo(path);
+  expect(await screen.findByTestId("demo-page-info")).toBeInTheDocument();
+  expect(screen.queryByTestId("tour-callout")).toBeNull();
+  expect(demoSession.get().seenTips).toEqual([]);
+});
+it("tears the card down when the page changes under it: an item opened inside it, or another page", async () => {
+  const {go} = renderDemo("/forge/p/shop/observability/errors");
+  expect(await screen.findByTestId("tour-callout")).toHaveTextContent(DEMO_TIPS.errors.body);
+  // Opening an issue in the list: same path, a sub-page now.
+  await go("/forge/p/shop/observability/errors?issue=iss-orders-deadline");
+  expect(screen.queryByTestId("tour-callout")).toBeNull();
+  expect(screen.queryByTestId("onboarding-spotlight-ring")).toBeNull();
+  // Back to the list: its tip was seen this session, so it stays closed.
+  await go("/forge/p/shop/observability/errors");
+  expect(await screen.findByRole("button", {name:"About Errors"})).toBeInTheDocument();
+  expect(screen.queryByTestId("tour-callout")).toBeNull();
+  // Another section's first visit replaces nothing: only its own card shows.
+  await go("/forge/p/shop/releases");
+  expect(await screen.findByTestId("tour-callout")).toHaveTextContent(DEMO_TIPS.releases.body);
+  expect(screen.getAllByTestId("tour-callout")).toHaveLength(1);
+});
+it("filters, ranges and tabs are not a new visit: a dismissed tip stays dismissed", async () => {
+  const {go} = renderDemo("/forge/p/shop/observability/traces");
+  await waitFor(() => fireEvent.click(screen.getByTestId("tour-next")));
+  await go("/forge/p/shop/observability/traces?range=6h&errors=true&groupBy=service");
+  expect(screen.queryByTestId("tour-callout")).toBeNull();
+});
 it("a reload in the same session keeps a seen page's tip closed", async () => {
   renderDemo("/forge/p/shop/observability/errors");
   await waitFor(() => fireEvent.click(screen.getByTestId("tour-next"))); cleanup();
@@ -136,6 +172,14 @@ it("the action row is Take the tour, Install Forge and Sign up, and survives nav
   expect(row.className).not.toMatch(/\bz-/);
   await go("/forge/p/shop/observability/logs");
   expect(screen.getByTestId("demo-screen-actions")).toHaveTextContent("Install Forge");
+});
+it.each(["/forge/p/shop", "/forge/demo?view=overview&tour=forge:fg-intro", "/forge/demo?section=built"])("discloses what the demo records on every entry (%s)", async (path) => {
+  renderDemo(path);
+  const row = await screen.findByTestId("demo-screen-actions");
+  expect(row.querySelector('[data-testid="forge-demo-telemetry-notice"]')).toHaveTextContent(/This demo (records|counts)/);
+  expect(row.querySelector('[data-testid="forge-demo-telemetry-notice"] a')).toHaveTextContent("Privacy");
+  // The legacy yellow banner is not drawn on the demo host: this row replaces it.
+  expect(screen.queryByTestId("forge-demo-banner")).toBeNull();
 });
 it("hides Take the tour while a tour is open", async()=>{
   renderDemo("/forge/demo?view=overview&tour=forge:fg-intro");
