@@ -77,6 +77,16 @@ type Spec struct {
 	ProjectID   string
 	WorktreeID  *string // nil → the project's main worktree
 
+	// OrgID is the organization the request acts in by name, already
+	// verified (orgs.Named): a new chat belongs to it. A project that has
+	// an org decides instead, and naming another org is FailedPrecondition:
+	// a chat and its project are in one org. Ignored for an existing chat.
+	OrgID string
+	// DefaultOrgID is the creator's default org: a new chat's org when the
+	// request named none and its project has none. Empty stores no org
+	// (see core.Chat.OrgID), as every chat before orgs.
+	DefaultOrgID string
+
 	// ChatID names an existing PENDING chat to start (a branched chat's first
 	// send). Empty creates a new chat.
 	ChatID string
