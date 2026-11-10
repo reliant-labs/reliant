@@ -5,12 +5,12 @@ package daemonruntime
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -43,11 +43,13 @@ func (d daemonOnTheWire) SendDaemonCommandToDaemon(ctx context.Context, _, daemo
 // The whole Inbox path, end to end: the machine sweep proposes an idle
 // worktree with uncommitted work, the heartbeat carries the proposal and the
 // gateway stores it, the Inbox lists it on the machine's item, the person
-// approves it there, the decision reaches the daemon bound to the state they
-// saw, and the daemon's next approval pass captures the worktree into a local
-// ref and only then deletes it.
-func TestInboxApprovalReachesTheDaemonWhichCapturesThenReclaims(t *testing.T) {
-	testkit.Slow(t, "creates real git checkouts and a database, and reclaims one")
+// approves it there, and the decision reaches the daemon bound to the state
+// they saw. The daemon's own pass does not act on it: nothing proves an
+// approval in approvals.json is a person's (SweepOptions.ApprovalsVerified),
+// so the worktree stays, proposed as approved. The same recorded approval is
+// what a verified caller would act on, capture first.
+func TestInboxApprovalReachesTheDaemonWhichRecordsItAndDeletesNothing(t *testing.T) {
+	testkit.Slow(t, "creates real git checkouts and a database, and sweeps them")
 	f := newEnsureFixture(t, "")
 	commitIn(t, f.root, "committed.txt")
 	if err := os.WriteFile(filepath.Join(f.root, "a.txt"), []byte("unstaged edit\n"), 0o644); err != nil {
@@ -161,11 +163,33 @@ func TestInboxApprovalReachesTheDaemonWhichCapturesThenReclaims(t *testing.T) {
 		t.Fatalf("next heartbeat %+v, want the proposal approved", got)
 	}
 
-	// The daemon's approval pass captures it, then removes it.
-	opts.ApprovedOnly = true
+	// The daemon's next pass, as the daemon runs it, deletes nothing: the
+	// approval is reported as not verified, and nothing is captured.
+	var entry worktreereclaim.SweepEntry
+	for _, e := range r.SweepMachine(ctx, opts).Entries {
+		if e.Path == f.root {
+			entry = e
+		}
+	}
+	if entry.Outcome != worktreereclaim.OutcomeAwaiting || !strings.Contains(entry.Detail, "nothing verifies the approval") {
+		t.Fatalf("daemon pass entry %+v, want the approved workspace held as not verified", entry)
+	}
+	if _, err := os.Stat(filepath.Join(f.root, ".git")); err != nil {
+		t.Fatalf("the daemon's pass removed the checkout: %v", err)
+	}
+	if _, ok := worktreereclaim.LatestCapture(ctx, f.project, f.worktreeID, f.root); ok {
+		t.Fatal("the daemon's pass captured an approval it does not act on")
+	}
+	if got := worktreeReclaimProposals(worktreereclaim.SweepOn); got == nil || len(got.Proposals) != 1 || got.Proposals[0].Decision != "approve" {
+		t.Fatalf("heartbeat after the pass %+v, want the proposal still listed as approved", got)
+	}
+
+	// A caller that could verify the approval acts on exactly this one:
+	// captured into a local ref, then removed.
+	opts.ApprovedOnly, opts.ApprovalsVerified = true, true
 	pass := r.SweepMachine(ctx, opts)
 	if len(pass.Entries) != 1 || pass.Entries[0].Outcome != worktreereclaim.OutcomeReclaimed {
-		t.Fatalf("approved pass %+v, want the workspace reclaimed", pass.Entries)
+		t.Fatalf("verified pass %+v, want the workspace reclaimed", pass.Entries)
 	}
 	if _, err := os.Stat(filepath.Join(f.root, ".git")); !os.IsNotExist(err) {
 		t.Fatalf("the checkout is still there: %v", err)
@@ -177,6 +201,4 @@ func TestInboxApprovalReachesTheDaemonWhichCapturesThenReclaims(t *testing.T) {
 	if got := rcGit(t, f.project, "rev-parse", "--verify", capture.Ref); got == "" {
 		t.Fatalf("capture ref %s does not resolve", capture.Ref)
 	}
-	raw, _ := json.Marshal(capture.Meta)
-	t.Logf("captured into %s (%s)", capture.Ref, raw)
 }

@@ -873,8 +873,8 @@ func (s *Service) processesItem(ctx context.Context, userID string, m *worktrees
 
 // reclaimItem is a machine's worktree-reclaim item: the proposals its daemon
 // last reported that nobody has decided yet, with any already approved
-// (the machine removes those on its next pass, so they are shown as such
-// until it reports them gone). Declined ones are not asked about again; a
+// (shown as such: the machine does not act on an approval yet, so they stay
+// until the person frees them or they change). Declined ones are not asked about again; a
 // declined worktree that changes is a new proposal. nil when nothing is
 // undecided.
 func reclaimItem(m *worktreesweep.MachineStorage, name string) *reliantv1.InboxItem {

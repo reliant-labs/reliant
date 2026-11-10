@@ -20,8 +20,10 @@ import (
 // last disk report (DiskReport.worktree_reclaim, stored in
 // daemons.storage_state); a decision about one is sent back to that daemon as
 // worktree.reclaim_decide, which records it exactly as `reliant worktree
-// reclaim approve|decline` does. The daemon, not this server, removes the
-// worktree, capture first, on its next pass.
+// reclaim approve|decline` does. Only the daemon could remove a worktree,
+// and it does not act on an approval yet (worktreereclaim's
+// SweepOptions.ApprovalsVerified), so an approval is recorded and the
+// worktree stays.
 
 // Repository is what the service reads: the caller's machine, its stored
 // report, and whether it is connected.

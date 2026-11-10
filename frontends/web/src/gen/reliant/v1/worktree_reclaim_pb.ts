@@ -130,9 +130,9 @@ export const WorktreeReclaimDecisionResultSchema: GenMessage<WorktreeReclaimDeci
 /**
  * WorktreeReclaimService answers a machine's worktree-reclaim inbox item
  * (INBOX_ITEM_KIND_WORKTREE_RECLAIM). The machine's daemon proposes removing
- * idle worktrees that hold work only they have, and never removes one until
- * the person approves that exact state of it; this is where the approval
- * comes from. It manages the caller's own machine, so it is not part of the
+ * idle worktrees that hold work only they have, and removes none of them
+ * (worktreereclaim's SweepOptions.ApprovalsVerified); this is where the
+ * person keeps or approves each, bound to the exact state shown. It manages the caller's own machine, so it is not part of the
  * public SDK (proto/public-api.txt), like InboxService.CleanupStorage.
  *
  * @generated from service reliant.v1.WorktreeReclaimService
@@ -143,11 +143,13 @@ export const WorktreeReclaimService: GenService<{
    * worktree, as the person saw it. Every decision names the proposal's
    * fingerprint; the server refuses one that is not on the machine's last
    * report ("not_shown"), and the machine records it only while that is
-   * still the worktree's state ("changed" otherwise). An approved worktree is
-   * removed by the machine within about a minute, after it has saved
-   * everything git can see of it to a local ref (refs/reliant/reclaimed/...),
-   * from which `reliant worktree restore` brings it back. Declining keeps it
-   * until its state changes. FAILED_PRECONDITION when the machine is
+   * still the worktree's state ("changed" otherwise). Declining keeps it
+   * until its state changes. An approval is recorded, with who made it, but
+   * the machine does not remove an approved worktree yet: nothing on the
+   * machine can prove an approval is a person's, so it stays proposed as
+   * approved. When the machine does reclaim one, it first saves everything
+   * git can see of it to a local ref (refs/reliant/reclaimed/...), from which
+   * `reliant worktree restore` brings it back. FAILED_PRECONDITION when the machine is
    * offline; NOT_FOUND for a machine that is not the caller's.
    *
    * @generated from rpc reliant.v1.WorktreeReclaimService.DecideWorktreeReclaim

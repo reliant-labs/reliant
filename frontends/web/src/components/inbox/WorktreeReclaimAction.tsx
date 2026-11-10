@@ -8,11 +8,12 @@
  * long it has been idle and a reviewing agent's note, and sends one decision
  * per worktree: remove it, or keep it.
  *
- * Approving is recoverable: before deleting, the machine saves everything git
- * can see of the worktree to a local ref (refs/reliant/reclaimed/...), checks
- * the save against the files, and only then deletes them; `reliant worktree
- * restore` brings it back. A decision binds to the state the person saw (its
- * fingerprint): a worktree that changes after it is proposed again.
+ * Both are recorded on the machine, bound to the state the person saw (its
+ * fingerprint): a worktree that changes after it is proposed again. Keep stops
+ * it being proposed until then. The machine does not yet act on an approval
+ * (worktreereclaim's SweepOptions.ApprovalsVerified: nothing on the machine
+ * can prove an approval there is a person's), so an approved worktree stays
+ * until the person frees it, and the copy here says so.
  */
 
 import { useState } from "react";
@@ -118,9 +119,7 @@ export function WorktreeReclaimAction({
             {
               description: [
                 approving.length > 0
-                  ? item.mode === "dry-run"
-                    ? "Approved worktrees are removed once worktree reclaim is switched on for this machine."
-                    : "Approved worktrees are saved to a local git ref, then removed, within about a minute."
+                  ? "Approvals are recorded, but this machine does not remove approved worktrees yet. To free one now, check its work and run git worktree remove."
                   : "",
                 changed > 0
                   ? `${changed} changed since you saw ${changed === 1 ? "it" : "them"} and will be proposed again.`
@@ -161,11 +160,10 @@ export function WorktreeReclaimAction({
         <div className="flex flex-col gap-4">
           <p className="text-pretty text-sm text-muted-foreground">
             These worktrees have been idle for days and hold work that exists
-            only in them. Nothing is removed unless you approve it. An approved
-            worktree is first saved, with its uncommitted, staged and untracked
-            files and unpushed commits, to a local git ref on that machine;{" "}
-            <code className="font-mono">reliant worktree restore</code> brings
-            it back. Nothing is pushed and no branch is deleted.
+            only in them. Your decisions are recorded on that machine: Keep
+            stops a worktree being proposed until it changes. The machine does
+            not remove an approved worktree yet; to free one, check its work and
+            run <code className="font-mono">git worktree remove</code> yourself.
           </p>
           <div className="flex justify-end gap-2">
             <Button

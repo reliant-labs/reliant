@@ -46,11 +46,13 @@ type WorktreeReclaimServiceClient interface {
 	// worktree, as the person saw it. Every decision names the proposal's
 	// fingerprint; the server refuses one that is not on the machine's last
 	// report ("not_shown"), and the machine records it only while that is
-	// still the worktree's state ("changed" otherwise). An approved worktree is
-	// removed by the machine within about a minute, after it has saved
-	// everything git can see of it to a local ref (refs/reliant/reclaimed/...),
-	// from which `reliant worktree restore` brings it back. Declining keeps it
-	// until its state changes. FAILED_PRECONDITION when the machine is
+	// still the worktree's state ("changed" otherwise). Declining keeps it
+	// until its state changes. An approval is recorded, with who made it, but
+	// the machine does not remove an approved worktree yet: nothing on the
+	// machine can prove an approval is a person's, so it stays proposed as
+	// approved. When the machine does reclaim one, it first saves everything
+	// git can see of it to a local ref (refs/reliant/reclaimed/...), from which
+	// `reliant worktree restore` brings it back. FAILED_PRECONDITION when the machine is
 	// offline; NOT_FOUND for a machine that is not the caller's.
 	DecideWorktreeReclaim(context.Context, *connect.Request[v1.DecideWorktreeReclaimRequest]) (*connect.Response[v1.DecideWorktreeReclaimResponse], error)
 }
@@ -92,11 +94,13 @@ type WorktreeReclaimServiceHandler interface {
 	// worktree, as the person saw it. Every decision names the proposal's
 	// fingerprint; the server refuses one that is not on the machine's last
 	// report ("not_shown"), and the machine records it only while that is
-	// still the worktree's state ("changed" otherwise). An approved worktree is
-	// removed by the machine within about a minute, after it has saved
-	// everything git can see of it to a local ref (refs/reliant/reclaimed/...),
-	// from which `reliant worktree restore` brings it back. Declining keeps it
-	// until its state changes. FAILED_PRECONDITION when the machine is
+	// still the worktree's state ("changed" otherwise). Declining keeps it
+	// until its state changes. An approval is recorded, with who made it, but
+	// the machine does not remove an approved worktree yet: nothing on the
+	// machine can prove an approval is a person's, so it stays proposed as
+	// approved. When the machine does reclaim one, it first saves everything
+	// git can see of it to a local ref (refs/reliant/reclaimed/...), from which
+	// `reliant worktree restore` brings it back. FAILED_PRECONDITION when the machine is
 	// offline; NOT_FOUND for a machine that is not the caller's.
 	DecideWorktreeReclaim(context.Context, *connect.Request[v1.DecideWorktreeReclaimRequest]) (*connect.Response[v1.DecideWorktreeReclaimResponse], error)
 }
