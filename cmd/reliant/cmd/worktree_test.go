@@ -100,3 +100,15 @@ func TestWorktreeApproveIsRefusedEvenWithoutTheAgentMarker(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no sweep report")
 }
+
+// The report leads with every process that blocks reclaim, one line each, so
+// whoever reads it knows what to end.
+func TestPrintSweepReport_NamesBlockers(t *testing.T) {
+	seen := time.Date(2026, 11, 10, 11, 0, 0, 0, time.UTC)
+	rep := worktreereclaim.SweepReport{Mode: worktreereclaim.SweepDryRun, FinishedAt: seen, Blockers: []worktreereclaim.ReclaimBlocker{
+		{PID: 2789376, Comm: "python3", Unreadable: "cwd", StartedAt: seen.Add(-7 * time.Hour), FirstSeen: seen, LastSeen: seen, Worktrees: 39},
+	}}
+	var out bytes.Buffer
+	printSweepReport(&out, rep)
+	assert.Contains(t, out.String(), "BLOCKED: pid 2789376 (python3, up 7h0m0s) blocks worktree reclaim: 39 worktree(s) held; its cwd cannot be read")
+}

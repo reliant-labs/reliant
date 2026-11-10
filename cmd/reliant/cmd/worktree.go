@@ -361,6 +361,12 @@ func printSweepReport(w io.Writer, rep worktreereclaim.SweepReport) {
 	fmt.Fprintf(w, "mode %s, pass finished %s: %d worktrees; auto-safe %d (%s), needs approval %d (%s), held %d, reclaimed %d (%s freed)\n\n",
 		rep.Mode, rep.FinishedAt.Local().Format(time.DateTime), t.Seen, t.AutoSafe, humanBytes(t.AutoSafeBytes),
 		t.NeedsApproval, humanBytes(t.NeedsApprovalBytes), t.Held, t.Reclaimed, humanBytes(t.ReclaimedBytes))
+	for _, b := range rep.Blockers {
+		fmt.Fprintf(w, "BLOCKED: %s\n", b)
+	}
+	if len(rep.Blockers) > 0 {
+		fmt.Fprintln(w)
+	}
 	tw := tabwriter.NewWriter(w, 0, 2, 2, ' ', 0)
 	fmt.Fprintln(tw, "CLASS\tOUTCOME\tSIZE\tIDLE\tPATH\tKEY\tWHY")
 	for _, e := range rep.Entries {
