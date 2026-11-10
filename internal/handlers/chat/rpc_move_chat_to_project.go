@@ -51,10 +51,39 @@ import (
 const moveCheckoutPurpose = "move this chat there"
 
 // crossesOrgs reports whether a chat of org from moving to a project of org to
-// would change its org. A side with no org yet (written before orgs) crosses
-// nothing: it belongs to its owner's default org until stamped.
-func crossesOrgs(from, to *string) bool {
-	return from != nil && to != nil && *from != *to
+// would change its org. A side with no org yet (written before orgs) belongs
+// to its owner's default org, def, and is stamped with it later, so it is
+// compared as that org: a legacy chat cannot move into another org's project
+// (the backfill would then give it the project's org), and an assigned chat
+// cannot move into a legacy project of another org.
+func crossesOrgs(from, to *string, def string) bool {
+	effective := func(org *string) string {
+		if org == nil {
+			return def
+		}
+		return *org
+	}
+	return effective(from) != effective(to)
+}
+
+// movesBetweenOrgs is crossesOrgs with the caller's default org resolved when
+// one side has no org. No orgs on the deployment crosses nothing; a default
+// that cannot be resolved fails closed (Unavailable).
+func (s *Service) movesBetweenOrgs(ctx context.Context, userID string, from, to *string) (bool, error) {
+	if from == nil && to == nil {
+		return false, nil
+	}
+	if from != nil && to != nil {
+		return *from != *to, nil
+	}
+	if s.deps.Orgs == nil {
+		return false, nil
+	}
+	def, err := s.deps.Orgs.DefaultOrg(ctx, userID)
+	if err != nil {
+		return false, svcerr.WithCause(svcerr.Unavailable("could not resolve your default organization; try again"), err)
+	}
+	return crossesOrgs(from, to, def), nil
 }
 
 // MoveChatToProject moves an idle chat to another of the caller's projects.
@@ -90,7 +119,9 @@ func (s *Service) MoveChatToProject(
 	}
 	// Nothing moves between orgs (owner decision, 2026-10-26): a chat that
 	// belongs to an org may move only to a project of the same org.
-	if crossesOrgs(chat.OrgID, target.OrgID) {
+	if crosses, err := s.movesBetweenOrgs(ctx, userID, chat.OrgID, target.OrgID); err != nil {
+		return nil, err
+	} else if crosses {
 		return nil, svcerr.FailedPrecondition("that project belongs to another organization; a chat stays in its organization")
 	}
 	source, err := s.ownedProject(ctx, userID, chat.ProjectID)
