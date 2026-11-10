@@ -138,7 +138,7 @@ import { workflowExecutionsOfChat } from "../hooks/useWorkflowExecutions";
 import { chatServiceKeys } from "../hooks/chat-service-hooks_gen";
 import { DEFAULT_WORKFLOW } from "../hooks/settings-queries";
 import { tabSwitchProfiler } from "../lib/tabSwitchProfiler";
-import { armChatOpen, beginChatOpen, leaveChatOpen } from "../lib/chatOpenInteraction";
+import { armChatOpen, beginChatOpen, leaveChatOpen, type ChatOpenEntry } from "../lib/chatOpenInteraction";
 import {
   STREAMING_FLUSH_FALLBACK_MS,
 } from "../lib/constants";
@@ -945,7 +945,7 @@ interface ChatStoreState {
   // deferPersist skips recording the chat as the worktree's active chat: a
   // caller still resolving the chat's worktree context calls persistActiveChat
   // once that context is current (see selectChatWithWorktreeContext).
-  selectChat: (chat: Chat, options?: { deferPersist?: boolean }) => void;
+  selectChat: (chat: Chat, options?: { deferPersist?: boolean; openEntry?: ChatOpenEntry }) => void;
   persistActiveChat: (chatId: string) => void;
   clearCurrentChat: (worktreeId?: string | null) => void;
 
@@ -1486,7 +1486,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
   },
 
   // Select a chat (make it active and load its data)
-  selectChat: (chat: Chat, options?: { deferPersist?: boolean }) => {
+  selectChat: (chat: Chat, options?: { deferPersist?: boolean; openEntry?: ChatOpenEntry }) => {
     // Start profiler session here since this is the reliable entry point for tab switching
     tabSwitchProfiler.startSession(chat.id);
 
@@ -1510,10 +1510,11 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     // below, so the RPCs this kicks off (the chat stream among them) are its
     // children; a quicker second click supersedes it.
     const cachedMessages = getMessagesFromCache(chat.id).length;
-    beginChatOpen(chat.id, {
-      "chat.cached": cachedMessages > 0,
-      "chat.cached_messages": cachedMessages,
-    });
+    beginChatOpen(
+      chat.id,
+      { "chat.cached": cachedMessages > 0, "chat.cached_messages": cachedMessages },
+      options?.openEntry ?? "switch",
+    );
 
     // Opening a different chat ABANDONS any pending new-chat compose, so its
     // scratch params die here.
