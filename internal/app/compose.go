@@ -245,6 +245,13 @@ func (g *Graph) newActivitySubscriber() (*ActivitySubscriber, error) {
 	})
 }
 
+func (g *Graph) newDisconnectSubscriber() (*DisconnectSubscriber, error) {
+	return NewDisconnectSubscriber(DisconnectSubscriberDeps{
+		NATS:        g.NATSConn(),
+		ToolsDaemon: g.ToolsDaemon(),
+	})
+}
+
 func (g *Graph) newDaemonConnector() (*servergateway.DaemonConnector, error) {
 	return NewDaemonConnector(DaemonConnectorDeps{
 		ToolsDaemon: g.ToolsDaemon(),
