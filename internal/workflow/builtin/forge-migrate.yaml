@@ -184,6 +184,12 @@ nodes:
           order, and the per-package recipe. This workflow adds gates and
           ordering; the skills define HOW.
 
+          **Not Go? This is not the path.** An app in another language
+          (Express, Django, Rails, ...) is not ported: it is adopted as it is,
+          by its own Dockerfile (`reliant forge skill load adopt`, Tier 1 in
+          about an hour). Tell the user that with `ask_user` before planning,
+          and plan a port to forge's Go stack only if they still want one.
+
           **Investigate before asking.** Read the source repo: entrypoints,
           go.mod, internal packages and their import graph, background
           workers, HTTP/RPC surface, DB schema/migrations, frontends. The
