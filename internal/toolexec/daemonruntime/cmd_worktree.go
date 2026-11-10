@@ -535,8 +535,14 @@ func diagnoseWorktreeAdd(ctx context.Context, repoPath, branch, base string, che
 // feat/x instead of <new>, and succeeds: the worktree row records <new>, a
 // branch that was never made. So base is resolved here, in order:
 //
-//  1. refs/heads/<base>, the local branch;
-//  2. refs/remotes/origin/<base>, origin's copy;
+//  1. refs/heads/<base>, the local branch — unless origin's copy is strictly
+//     ahead of it (the local branch is an ancestor of origin's), when
+//     origin's copy is used instead. A local main nobody fast-forwarded
+//     holds nothing origin lacks, and branching from it put new work weeks
+//     behind the tip (agents' bug reports, 2026-11-06..09). A local branch
+//     with commits of its own (ahead, or diverged) is the user's, and wins;
+//  2. refs/remotes/origin/<base>, origin's copy, as this clone last fetched
+//     it (nothing is fetched for a base this clone already has);
 //  3. anything else that names a commit — a tag, a sha, an explicit remote
 //     ref — as the commit id it names;
 //  4. origin's <base>, fetched (that one ref) when this clone has never seen
@@ -553,10 +559,14 @@ func resolveWorktreeStartPoint(ctx context.Context, repoPath, base string) (star
 	isBranch := gitRefFormatValid(ctx, repoPath, "refs/heads/"+base)
 	local, remote := "refs/heads/"+base, "refs/remotes/origin/"+base
 	if isBranch {
-		if gitRefExists(ctx, repoPath, local) {
+		hasLocal, hasRemote := gitRefExists(ctx, repoPath, local), gitRefExists(ctx, repoPath, remote)
+		if hasLocal && hasRemote && gitStrictlyBehind(ctx, repoPath, local, remote) {
+			return remote, true
+		}
+		if hasLocal {
 			return local, true
 		}
-		if gitRefExists(ctx, repoPath, remote) {
+		if hasRemote {
 			return remote, true
 		}
 	}
@@ -578,6 +588,28 @@ func gitRefFormatValid(ctx context.Context, repoPath, ref string) bool {
 	cmd := exec.CommandContext(ctx, "git", "check-ref-format", ref)
 	cmd.Dir = repoPath
 	return cmd.Run() == nil
+}
+
+// gitStrictlyBehind reports whether ref is an ancestor of other and not the
+// same commit: other holds everything ref does, and more. Any error (an
+// unrelated history, a git that cannot answer) reports false, which keeps
+// ref.
+func gitStrictlyBehind(ctx context.Context, repoPath, ref, other string) bool {
+	// Both are full refs this file built (refs/heads/…, refs/remotes/…), so
+	// neither can be read as an option. (rev-parse echoes --end-of-options
+	// rather than consuming it, on git 2.43.)
+	revs := exec.CommandContext(ctx, "git", "rev-parse", ref+"^{commit}", other+"^{commit}")
+	revs.Dir = repoPath
+	out, err := revs.Output()
+	if err != nil {
+		return false
+	}
+	if shas := strings.Fields(string(out)); len(shas) != 2 || shas[0] == shas[1] {
+		return false
+	}
+	ancestor := exec.CommandContext(ctx, "git", "merge-base", "--is-ancestor", ref, other)
+	ancestor.Dir = repoPath
+	return ancestor.Run() == nil
 }
 
 // gitRefExists reports whether the full ref exists.

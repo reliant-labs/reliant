@@ -151,14 +151,42 @@ func TestWorktreeCreate_LocalBaseWinsOverOrigin(t *testing.T) {
 		t.Skip("builds a bare origin, a clone and worktrees with git; runs in task test")
 	}
 	r := newBaseRepos(t)
-	// A local feat/x that differs from origin's: the user's own copy wins.
-	r.run(r.clone, "branch", "feat/x", "main")
+	// A local feat/x with a commit of its own, which origin's lacks: the
+	// user's own copy wins.
+	localOnly := r.run(r.clone, "commit-tree", "-p", "main", "-m", "local only", "main^{tree}")
+	r.run(r.clone, "branch", "feat/x", localOnly)
 	require.NotEqual(t, r.run(r.clone, "rev-parse", "refs/heads/feat/x"), r.run(r.clone, "rev-parse", "refs/remotes/origin/feat/x"))
 
 	resp := r.create(t, "ws-local-base", "worktree/local", "feat/x")
 	require.True(t, resp.Success, resp.Error)
 	assert.Equal(t, "worktree/local", r.run(resp.WorktreePath, "branch", "--show-current"))
 	assert.Equal(t, r.run(r.clone, "rev-parse", "refs/heads/feat/x"), r.run(resp.WorktreePath, "rev-parse", "HEAD"))
+}
+
+// A local main that nobody fast-forwarded holds nothing origin's lacks: the
+// worktree starts at origin's newer main, not weeks behind it (agents' bug
+// reports, 2026-11-06..09: "worktree create with base_branch=main branches
+// from a stale local main").
+func TestWorktreeCreate_StaleLocalBaseUsesOriginsNewerCopy(t *testing.T) {
+	if testing.Short() {
+		t.Skip("builds a bare origin, a clone and worktrees with git; runs in task test")
+	}
+	r := newBaseRepos(t)
+	seed := filepath.Join(filepath.Dir(r.clone), "seed")
+	r.run(seed, "switch", "main")
+	r.run(seed, "commit", "--allow-empty", "-m", "main moved on")
+	r.run(seed, "push", "origin", "main")
+	r.run(r.clone, "fetch", "-q", "origin")
+	staleLocal := r.run(r.clone, "rev-parse", "refs/heads/main")
+	require.NotEqual(t, staleLocal, r.run(r.clone, "rev-parse", "refs/remotes/origin/main"), "precondition: local main is behind origin's")
+
+	resp := r.create(t, "ws-stale-base", "worktree/fresh", "main")
+	require.True(t, resp.Success, resp.Error)
+	assert.Equal(t, "main", resp.BaseBranch, "the recorded base is still the branch name")
+	assert.Equal(t, "worktree/fresh", r.run(resp.WorktreePath, "branch", "--show-current"))
+	assert.Equal(t, r.run(seed, "rev-parse", "HEAD"), r.run(resp.WorktreePath, "rev-parse", "HEAD"),
+		"the worktree starts at origin's main")
+	assert.Equal(t, staleLocal, r.run(r.clone, "rev-parse", "refs/heads/main"), "the local branch itself is not moved")
 }
 
 func TestWorktreeCreate_CommitBaseIsUsedAsIs(t *testing.T) {
