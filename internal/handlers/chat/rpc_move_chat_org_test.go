@@ -81,6 +81,37 @@ func TestMoveChatToProject_UnassignedChatIsItsProjectsOrg(t *testing.T) {
 	assert.Equal(t, b, f2.row(legacyChat).ProjectID)
 }
 
+// "Neither side has an org yet" is a decision the move statement checks like
+// any other: when one side is stamped between the handler's read and the
+// write, the move is refused instead of skipping the org check.
+func TestMoveChatToProject_BothUnassignedIsCheckedToo(t *testing.T) {
+	t.Parallel()
+	f := newMoveFixture(t)
+	from, fromMain := f.orgProject("legacy-a", nil)
+	to, toMain := f.orgProject("legacy-b", nil)
+	chatID := f.chat(from, fromMain, nil)
+	// The decision with nothing assigned: no org, no default needed.
+	decided := db.ChatMove{ChatID: chatID, FromProjectID: from, ToProjectID: to, WorktreeID: toMain}
+
+	_, err := f.repo.ORM().Bun().NewRaw(`UPDATE projects SET org_id = 'acme' WHERE id = ?`, from).Exec(f.ctx)
+	require.NoError(t, err)
+	moved, err := f.repo.MoveChatToProject(f.ctx, decided)
+	require.NoError(t, err)
+	assert.False(t, moved, "the source was stamped with an org the target does not have")
+	assert.Equal(t, from, f.row(chatID).ProjectID)
+
+	// Stamped alike, the same decision moves it, and the chat takes the org.
+	_, err = f.repo.ORM().Bun().NewRaw(`UPDATE projects SET org_id = 'acme' WHERE id = ?`, to).Exec(f.ctx)
+	require.NoError(t, err)
+	moved, err = f.repo.MoveChatToProject(f.ctx, decided)
+	require.NoError(t, err)
+	assert.True(t, moved)
+	row := f.row(chatID)
+	assert.Equal(t, to, row.ProjectID)
+	require.NotNil(t, row.OrgID)
+	assert.Equal(t, "acme", *row.OrgID)
+}
+
 // The org decision is re-checked by the move's own statement: a backfill
 // that stamps the chat with another org between the handler's read and the
 // write makes the move a no-op, never a move across orgs.

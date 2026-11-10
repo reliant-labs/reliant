@@ -252,13 +252,25 @@ const (
 // chat row lock withChatWorktreeAdmission takes (which a workflow's admission
 // takes too), so a run cannot start between them. last_active does not move:
 // the sidebar orders by it, and moving a chat is not activity in it.
+//
+// The org is re-decided here too, from the rows as they are now: the chat's
+// effective org (its own, else its project's, else the default ?8) must still
+// be the target project's (its own, else the default), with NULL compared as
+// a value, so "neither side has an org yet" is a decision the statement checks
+// like any other, never a bypass. A backfill that stamped one side since the
+// handler read them makes the move a no-op. A backfill stamps the projects and
+// then the chat in one transaction, and the chat row lock is held here, so it
+// has either committed both before this statement's snapshot or is waiting on
+// this chat. ?7, when set, is the org the handler decided, and must also still
+// hold. The chat is stamped with that org, or the target's, so the backfill
+// cannot later give the moved chat another one.
 const moveChatToProjectSQL = `
 UPDATE chats SET
     project_id = ?0,
     worktree_id = ?1,
     active_daemon_id = ?2,
     no_machine = no_machine AND ?2::text IS NULL,
-    org_id = COALESCE(org_id, ?7::text),
+    org_id = COALESCE(org_id, ?7::text, (SELECT p.org_id FROM projects p WHERE p.id = ?0)),
     updated_at = NOW()
 WHERE id = ?3
   AND project_id = ?4
@@ -266,10 +278,10 @@ WHERE id = ?3
       SELECT 1 FROM chats_with_activity v
       WHERE v.id = ?3 AND v.activity IN (?5, ?6)
   )
-  AND (?7::text IS NULL OR (
-      COALESCE(org_id, (SELECT p.org_id FROM projects p WHERE p.id = ?4), ?8::text) = ?7::text
-      AND COALESCE((SELECT p.org_id FROM projects p WHERE p.id = ?0), ?8::text) = ?7::text
-  ))
+  AND COALESCE(org_id, (SELECT p.org_id FROM projects p WHERE p.id = ?4), ?8::text)
+      IS NOT DISTINCT FROM COALESCE((SELECT p.org_id FROM projects p WHERE p.id = ?0), ?8::text)
+  AND (?7::text IS NULL
+      OR COALESCE(org_id, (SELECT p.org_id FROM projects p WHERE p.id = ?4), ?8::text) = ?7::text)
 RETURNING id`
 
 // moveChatPlansSQL moves the chat's plans with it: plans.project_id cascades
