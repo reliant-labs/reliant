@@ -93,7 +93,7 @@ func (s *Service) StreamUserUpdates(
 	}
 
 	sinceSeq := req.Msg.SinceSeq
-	filter := userUpdateFilter{projectID: req.Msg.GetProjectId()}
+	filter := userUpdateFilter{projectID: req.Msg.GetProjectId(), orgs: newOrgGate(s.deps.Repo, userID)}
 
 	// --- User-level initialization ---
 	latestSeq, err := s.deps.Repo.GetLatestUserUpdateSequence(ctx, userID)
@@ -1119,17 +1119,19 @@ func (s *Service) sendUserUpdateBatches(ctx context.Context, userID string, star
 }
 
 // userUpdateFilter decides which user updates one user stream delivers: those
-// in the client's current project (see userUpdateMatchesProject). The chat the
-// client has open may be in another project; StreamChatUpdates forwards that
-// chat's updates the filter drops (chatFocusFilter), so this stream needs no
+// in the client's current project (see userUpdateMatchesProject) about
+// nothing of an org the caller has left (orgGate). The chat the client has
+// open may be in another project; StreamChatUpdates forwards that chat's
+// updates the filter drops (chatFocusFilter), so this stream needs no
 // knowledge of which chat is open.
 type userUpdateFilter struct {
 	projectID string
+	orgs      *orgGate
 }
 
 // matches reports whether the stream should receive the update.
-func (f userUpdateFilter) matches(_ context.Context, update *db.UserUpdate) bool {
-	return userUpdateMatchesProject(update, f.projectID)
+func (f userUpdateFilter) matches(ctx context.Context, update *db.UserUpdate) bool {
+	return userUpdateMatchesProject(update, f.projectID) && f.orgs.allows(ctx, update)
 }
 
 // userUpdateMatchesProject reports whether a project-scoped subscriber should

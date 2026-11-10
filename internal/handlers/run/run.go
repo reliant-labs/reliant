@@ -470,6 +470,16 @@ func (s *Service) listAllRuns(
 		}
 		items, events, next = mergeRunLog(items, hasMore, events, eventsMore, limit)
 	}
+	// The store lists what the caller owns; a run (its chat) or a firing (its
+	// trigger) of an org they have left is not theirs to see, named org or
+	// not. Filtered after the page and its cursor are cut from the rows as
+	// read, so a page of denied rows is short, never the end of the log.
+	items = authz.Visible(ctx, userID, items, func(ctx context.Context, userID string, item *db.RunListItem) bool {
+		return authz.CanReadOwn(ctx, userID, item.OrgID)
+	})
+	events = authz.Visible(ctx, userID, events, func(ctx context.Context, userID string, event *db.UnlaunchedTriggerEvent) bool {
+		return authz.CanReadOwn(ctx, userID, event.OrgID)
+	})
 
 	resp := runLogResponse(items, events)
 	if next != nil {

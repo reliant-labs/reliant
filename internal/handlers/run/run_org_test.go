@@ -3,9 +3,11 @@ package run_test
 import (
 	"context"
 	"testing"
+	"time"
 
 	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/svcerr"
+	"github.com/stretchr/testify/require"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 
@@ -70,3 +72,58 @@ func TestListRuns_SessionAndParentHonourTheOrg(t *testing.T) {
 		})
 	}
 }
+
+// The run log shows what the single reads would: a run (its chat) or a firing
+// (its trigger) of an org the caller has left is not listed, even when the
+// request names no org, while their live org's rows and rows with no org are.
+// A page whose rows are all denied still continues the log.
+func TestListRuns_LeavesOutARemovedMembersOrgRows(t *testing.T) {
+	acme, globex := "acme", "globex"
+	at := time.Date(2026, 1, 15, 12, 0, 0, 0, time.UTC)
+	repo := &run.MockRepository{
+		ListRunsFunc: func(_ context.Context, f db.RunListFilters) ([]*db.RunListItem, bool, error) {
+			if f.After != nil {
+				return []*db.RunListItem{{ChatID: "c-acme-older", CreatedAt: at.Add(-time.Hour), OrgID: &acme}}, false, nil
+			}
+			return []*db.RunListItem{
+				{ChatID: "c-acme", CreatedAt: at.Add(-1 * time.Minute), OrgID: &acme},
+				{ChatID: "c-globex", CreatedAt: at.Add(-2 * time.Minute), OrgID: &globex},
+				{ChatID: "c-legacy", CreatedAt: at.Add(-3 * time.Minute)},
+			}, false, nil
+		},
+		ListUnlaunchedTriggerEventsFunc: func(_ context.Context, f db.RunListFilters) ([]*db.UnlaunchedTriggerEvent, bool, error) {
+			if f.After != nil {
+				return nil, false, nil
+			}
+			return []*db.UnlaunchedTriggerEvent{
+				{ID: "e-globex", OccurredAt: at, OrgID: &globex},
+				{ID: "e-acme", OccurredAt: at.Add(-90 * time.Second), OrgID: &acme},
+			}, false, nil
+		},
+	}
+	resolver := orgs.New(orgSource{}) // test-user is in acme and home, not globex
+	svc := run.NewTestRun(t, run.WithRunDeps(run.Deps{Repo: repo, Orgs: resolver}))
+	ctx := authz.WithMembership(run.AuthedContext(t), resolver)
+
+	got, err := svc.ListRuns(ctx, connect.NewRequest(&pb.ListRunsRequest{IncludeUnlaunchedEvents: ptrBool(true)}))
+	require.NoError(t, err)
+	var runs, events []string
+	for _, r := range got.Msg.GetRuns() {
+		runs = append(runs, r.GetSessionId())
+	}
+	for _, e := range got.Msg.GetUnlaunchedEvents() {
+		events = append(events, e.GetId())
+	}
+	require.Equal(t, []string{"c-acme", "c-legacy"}, runs)
+	require.Equal(t, []string{"e-acme"}, events)
+
+	// Limit 1: the newest row is a denied firing. The page is empty, but its
+	// cursor continues the log rather than ending it.
+	got, err = svc.ListRuns(ctx, connect.NewRequest(&pb.ListRunsRequest{IncludeUnlaunchedEvents: ptrBool(true), Limit: 1}))
+	require.NoError(t, err)
+	require.Empty(t, got.Msg.GetRuns())
+	require.Empty(t, got.Msg.GetUnlaunchedEvents())
+	require.NotEmpty(t, got.Msg.GetNextPageToken(), "a page of denied rows is not the end of the log")
+}
+
+func ptrBool(b bool) *bool { return &b }

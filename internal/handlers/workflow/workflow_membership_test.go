@@ -30,7 +30,7 @@ func TestWorkflowDraft_RemovedMemberByIDAndByName(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 	ctx := authz.WithMembership(context.WithValue(context.Background(), auth.UserIDContextKey, "test-user"), liveIn{"home": true})
-	now := time.Now().UTC()
+	now := time.Date(2026, 1, 15, 12, 0, 0, 0, time.UTC) // a fixture, not the wall clock
 	projectID := "test-project-member-" + uuid.NewString()
 	require.NoError(t, repo.CreateProject(ctx, &db.Project{
 		ID: projectID, UserID: "test-user", Name: "P", Path: t.TempDir(),

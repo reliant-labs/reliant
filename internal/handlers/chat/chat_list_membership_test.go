@@ -28,7 +28,7 @@ func TestChatCollections_LeaveOutARemovedMembersOrgChats(t *testing.T) {
 	resolver := orgs.New(orgSource{}) // alice is a live member of home only
 	service := NewTestChat(t, WithChatDeps(Deps{Repo: repo, Orgs: resolver}))
 	ctx := authz.WithMembership(context.WithValue(context.Background(), auth.UserIDContextKey, "alice"), resolver)
-	now := time.Now().UTC()
+	now := time.Date(2026, 1, 15, 12, 0, 0, 0, time.UTC) // a fixture, not the wall clock
 	projectID := "member-project-" + uuid.NewString()
 	require.NoError(t, repo.CreateProject(ctx, &db.Project{
 		ID: projectID, UserID: "alice", Name: "p", Path: "/p/member",
