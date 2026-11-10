@@ -13,6 +13,7 @@ import (
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/diskwatch"
 )
 
@@ -70,7 +71,9 @@ func (s *Service) DecideWorktreeReclaim(
 	if err != nil && !svcerr.IsNotFound(err) {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get machine"))
 	}
-	if err != nil || daemon == nil || daemon.UserID != userID {
+	// Deciding sends a command to the machine, so it is a write. A missing
+	// machine, an unowned one and another user's are all not found.
+	if err != nil || !authz.CanWriteMachine(ctx, userID, daemon) {
 		return nil, svcerr.NotFound("machine")
 	}
 	if s.deps.Sender == nil {

@@ -105,6 +105,31 @@ func TestDecideWorktreeReclaim_AnotherUsersMachineIsNotFound(t *testing.T) {
 	assert.Empty(t, sender.got)
 }
 
+// internal/authz decides who may act on the machine, and fails closed: a
+// machine nobody owns, or one the store does not return, is not found too,
+// and neither its report nor the machine is reached.
+func TestDecideWorktreeReclaim_AuthzDeniesUnownedAndMissingMachines(t *testing.T) {
+	t.Parallel()
+	for name, daemon := range map[string]*core.Daemon{
+		"unowned": {ID: testDaemon},
+		"missing": nil,
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			repo := machineRepo(t, true, shownProposal("a", "fa"))
+			repo.GetDaemonFunc = func(context.Context, string) (*core.Daemon, error) { return daemon, nil }
+			repo.GetDaemonStorageStateFunc = func(context.Context, string) (string, error) {
+				t.Error("read the report of a machine the caller may not act on")
+				return "", nil
+			}
+			sender := &echoSender{}
+			_, err := decide(t, repo, sender, testUser, &pb.WorktreeReclaimDecision{Key: "a", Fingerprint: "fa", Approve: true})
+			assert.Equal(t, connect.CodeNotFound, svcerr.Code(err))
+			assert.Empty(t, sender.got)
+		})
+	}
+}
+
 // Only what the machine last reported can be decided: an unknown key, or a
 // known key at a fingerprint the item did not show, is not_shown and never
 // reaches the machine.
