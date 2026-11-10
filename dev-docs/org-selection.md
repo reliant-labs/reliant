@@ -4,7 +4,13 @@ The control-plane contract is `control-plane/docs/orgs.md`. The web's active org
 
 `ActiveOrgBinding` binds the persisted choice to the signed-in user, reconciles it against the membership list (including leaving the last org), and resets org-scoped query families when it changes. Chats and projects remain user-scoped. `orgInterceptor` fills an empty `org_id` field using the message descriptor, on the shared authenticated Connect chain. It leaves an explicitly named org alone, including `SetDefaultOrganization`. New org-scoped messages therefore participate without another ad-hoc client wrapper. Identity/observability's required org parameters resolve through `orgs.currentOrgId`, which shares the membership-list query.
 
-The switcher appears only with multiple orgs: the app sidebar, Apps header, Settings header, app/organization consoles, and mobile Account. CLI/device approval has an independent choice: the requested org if it is a membership, otherwise the default. It does not change the web's active org. Approval stays unavailable when membership cannot be loaded; Deny remains available.
+The switcher menu appears for everyone with an org, one included, in the app sidebar, Apps header, Settings header and app/organization consoles: it names the org the app acts in and holds "Create organization" (`CreateOrganizationDialog`, which switches to the new org). The phone's Account list and the approve pages stay a pure choice, so they appear only with multiple orgs.
+
+## Members and invitations
+
+Settings › Members (`components/Settings/cloud/members/`) is the roster, seat count ("N of M seats", pending invitations included), invite dialog, pending invitations, leave, the per-permission grant editor (`MemberPermissions`, its Permissions tab) and, for admins and owners, the membership history (`ActivityService.ListMembershipActivity`). Every call names its org explicitly (`services/controlPlane/members.ts`); membership administration is gated on the caller's role, and each refusal reason has its own copy there. Contract: control-plane `docs/design/orgs-and-members.md`, phase 1.
+
+An invitation link is `/accept-invite#rinv_<token>`. `lib/inviteLinkBoot` moves the token from the fragment into localStorage at boot, before the router or telemetry can read the URL (the claim link's pattern), so it survives a sign-in round trip and is never sent anywhere but `GetInvitation`/`AcceptInvitation` request bodies. `/accept-invite` is root-level and unguarded; after `AcceptInvitation` it makes the joined org the active org (`switchToJoinedOrg`). CLI/device approval has an independent choice: the requested org if it is a membership, otherwise the default. It does not change the web's active org. Approval stays unavailable when membership cannot be loaded; Deny remains available.
 
 ## Requests now naming the active org
 
