@@ -178,19 +178,25 @@ func (s *outboxStore) retainResult(requestID string, at time.Time) {
 // markSeen durably records that a run step's request id began here, until
 // expires: an empty <request id>.seen whose modification time is its expiry.
 // It is synced before the call runs, so no crash can leave a command that ran
-// without its tombstone. A failure is logged; the tombstone is then held in
-// memory only.
-func (s *outboxStore) markSeen(requestID string, expires time.Time) {
+// without its tombstone. The error says it is not durable — the write, the
+// sync, or setting its expiry failed — and the caller does not run the call
+// (markRunStep). No store, or an id that cannot be a file name, is nil: there
+// is nothing that could be made durable.
+func (s *outboxStore) markSeen(requestID string, expires time.Time) error {
 	if !s.storable(requestID) {
-		return
+		return nil
 	}
 	name := requestID + seenFileExt
 	if err := writeFileDurably(s.dir, name, nil); err != nil {
-		logging.Warn(logPrefix+" Could not persist a run step's tombstone; a restart will not remember it ran",
-			"request_id", requestID, "error", err)
-		return
+		return fmt.Errorf("persist run step tombstone: %w", err)
 	}
-	_ = os.Chtimes(filepath.Join(s.dir, name), expires, expires)
+	// The expiry is the tombstone: a file left at "now" would be reloaded as
+	// already expired.
+	if err := os.Chtimes(filepath.Join(s.dir, name), expires, expires); err != nil {
+		_ = os.Remove(filepath.Join(s.dir, name))
+		return fmt.Errorf("set run step tombstone expiry: %w", err)
+	}
+	return nil
 }
 
 // removeSeen deletes a run step's tombstone, once it expires.

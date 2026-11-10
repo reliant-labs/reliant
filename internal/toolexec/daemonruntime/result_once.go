@@ -61,19 +61,44 @@ func runStepSeenFor(commandTimeout time.Duration) time.Duration {
 // markRunStep records that requestID is a run step's command, before it runs:
 // its result is retained after delivery (markRetain), and its id is
 // tombstoned for runStepSeenFor(commandTimeout), on disk first.
-func (o *resultOutbox) markRunStep(requestID string, commandTimeout time.Duration) {
+//
+// A non-nil error means the tombstone could not be made durable: the command
+// must not run (failClosedRunStep), since a restart would forget it ran. The
+// tombstone is still held in memory, so this process never runs it either.
+// An outbox with no store (an embedded runtime, no data directory) has no
+// durability to lose and returns nil.
+func (o *resultOutbox) markRunStep(requestID string, commandTimeout time.Duration) error {
 	if requestID == "" {
-		return
+		return nil
 	}
 	o.markRetain(requestID)
 	expires := o.now().Add(runStepSeenFor(commandTimeout))
-	o.store.markSeen(requestID, expires)
+	err := o.store.markSeen(requestID, expires)
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	if o.seen == nil {
 		o.seen = make(map[string]time.Time)
 	}
 	o.seen[requestID] = expires
+	return err
+}
+
+// failClosedRunStep is the result of a run step whose tombstone could not be
+// made durable (markRunStep): the command was not run. It is the daemon's own
+// outcome-unknown answer (ErrorCodeDaemonRestarted), so the worker pauses the
+// step instead of recording a verdict or sending it again, and a resume
+// dispatches it afresh under a new id.
+func failClosedRunStep(requestID string, cause error) *toolexec.ExecutionResult {
+	msg := fmt.Sprintf("Tool request %q was not run: this machine could not durably record that it started it "+
+		"(%v), and without that record a daemon restart could run it a second time. Its outcome is unknown to "+
+		"the run; nothing was executed. Check the machine's disk, then resume the run.", requestID, cause)
+	return &toolexec.ExecutionResult{
+		Success:      false,
+		IsError:      true,
+		Content:      msg,
+		ErrorMessage: msg,
+		ErrorCode:    toolexec.ErrorCodeDaemonRestarted,
+	}
 }
 
 // expireSeenLocked forgets the tombstones past their expiry, at most once per

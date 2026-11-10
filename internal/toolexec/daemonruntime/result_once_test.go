@@ -3,6 +3,7 @@ package daemonruntime
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"sync"
 	"testing"
@@ -89,10 +90,20 @@ func TestFreshRequestRuns(t *testing.T) {
 	d := newTestDaemonClient("d-once", "u-once")
 	s := useTestSession(d, 16)
 	require.NoError(t, d.handleServerMessage(context.Background(), s, toolRequestMessage("new-1")))
-	require.Eventually(t, func() bool {
-		return d.results.state("new-1") == toolexec.ToolRequestCompleted
-	}, 5*time.Second, 5*time.Millisecond, "the request ran and its result is held")
-	assert.Equal(t, "new-1", sentToolResponse(t, s).RequestId)
+	got := awaitToolResponse(s) // the call's own result: it ran
+	assert.Equal(t, "new-1", got.RequestId)
+	assert.Equal(t, toolexec.ToolRequestCompleted, d.results.state("new-1"), "and its result is held")
+}
+
+// awaitToolResponse blocks until the next tool response is queued on s: the
+// event itself, with no deadline of its own (the test binary's bounds it).
+func awaitToolResponse(s *gatewaySession) *reliantv1.ToolResponse {
+	for msg := range s.sendCh {
+		if r := msg.GetToolResponse(); r != nil {
+			return r
+		}
+	}
+	return nil
 }
 
 // A run step's result, delivered to a worker that was going away, outlives a
@@ -190,7 +201,7 @@ func runStepDelivered(t *testing.T, o *resultOutbox, id string, size int) {
 	_, fresh := o.begin(id)
 	require.True(t, fresh)
 	o.persistRunning(id)
-	o.markRunStep(id, 5*time.Minute)
+	require.NoError(t, o.markRunStep(id, 5*time.Minute))
 	o.hold(id, (&daemonClient{}).toolResponse(id, finished(string(make([]byte, size)))), nil)
 	require.NotNil(t, o.ack(id))
 }
@@ -312,4 +323,55 @@ func TestDaemonNeverRerunsARunStepWhoseResultIsGone(t *testing.T) {
 	assert.Contains(t, got.Content, "already ran on this machine")
 	assert.Equal(t, inFlight, s.inFlight.Load(), "nothing was started: a started call holds its stream")
 	assert.Equal(t, toolexec.ToolRequestDelivered, d.results.state("run-1"))
+}
+
+// [R2.B1] A run step whose tombstone cannot be made durable is not run: a
+// restart would forget it ran, so the daemon fails closed with its own
+// outcome-unknown answer, and a repeat of the id is still refused.
+func TestRunStepIsNotRunWhenItsTombstoneCannotBePersisted(t *testing.T) {
+	d := newTestDaemonClient("d-once", "u-once")
+	s := useTestSession(d, 16)
+	dir := filepath.Join(t.TempDir(), "outbox")
+	store, err := openOutboxStore(dir)
+	require.NoError(t, err)
+	d.results.restore(store)
+	// The outbox directory is gone and a file stands in its place: nothing
+	// can be written there, whoever the test runs as.
+	require.NoError(t, os.RemoveAll(dir))
+	require.NoError(t, os.WriteFile(dir, nil, 0o600))
+
+	req := toolRequestMessage("run-1").GetToolRequest()
+	_, fresh := d.results.begin("run-1")
+	require.True(t, fresh)
+	d.executeTool(s, req)
+
+	got := sentToolResponse(t, s)
+	assert.Equal(t, "run-1", got.RequestId)
+	assert.Equal(t, toolexec.ErrorCodeDaemonRestarted, got.ErrorCode, "outcome unknown to the run, never a verdict")
+	assert.True(t, toolexec.IsTransportErrorCode(got.ErrorCode))
+	assert.Contains(t, got.Content, "was not run", "the tool never ran: it would have answered for itself")
+	noToolResponse(t, s, "one answer, and nothing ran")
+
+	_, fresh = d.results.begin("run-1")
+	assert.False(t, fresh, "this process still never runs the id")
+}
+
+// markSeen says whether the tombstone is durable; with no store there is
+// nothing to make durable.
+func TestMarkSeenReportsWhetherTheTombstoneIsDurable(t *testing.T) {
+	expires := newOutboxClock().now().Add(runStepSeenFloor)
+	var none *outboxStore
+	assert.NoError(t, none.markSeen("run-1", expires))
+
+	dir := filepath.Join(t.TempDir(), "outbox")
+	store, err := openOutboxStore(dir)
+	require.NoError(t, err)
+	require.NoError(t, store.markSeen("run-1", expires))
+	info, err := os.Stat(filepath.Join(dir, "run-1"+seenFileExt))
+	require.NoError(t, err)
+	assert.True(t, info.ModTime().Equal(expires), "its expiry is its modification time")
+
+	require.NoError(t, os.RemoveAll(dir))
+	require.NoError(t, os.WriteFile(dir, nil, 0o600))
+	assert.Error(t, store.markSeen("run-2", expires))
 }

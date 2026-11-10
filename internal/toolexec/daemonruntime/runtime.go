@@ -2008,9 +2008,15 @@ func (d *daemonClient) executeTool(s *gatewaySession, req *reliantv1.ToolRequest
 	// A run step's result outlives its acknowledgement for a while, so a
 	// retry whose worker went away can still reattach to it
 	// (result_retain.go), and its id is tombstoned so it never runs twice
-	// (result_once.go). Before the command runs.
+	// (result_once.go). Before the command runs; a tombstone that cannot be
+	// made durable means the command does not run at all (fail closed).
 	if runStep, _ := contextMap[toolexec.RunStepContextKey].(bool); runStep {
-		d.results.markRunStep(req.RequestId, time.Duration(req.TimeoutMs)*time.Millisecond)
+		if err := d.results.markRunStep(req.RequestId, time.Duration(req.TimeoutMs)*time.Millisecond); err != nil {
+			logging.Warn(logPrefix+" Not running a run step: its tombstone could not be persisted",
+				"request_id", req.RequestId, "error", err)
+			d.sendToolResult(s, req.RequestId, failClosedRunStep(req.RequestId, err))
+			return
+		}
 	}
 
 	// The worktree or project this call works in: recorded the first time it
