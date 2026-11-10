@@ -34,6 +34,9 @@ func (m *statusMachine) Send(_ context.Context, commandType string, payload, res
 	return json.Unmarshal([]byte(m.answer), resp)
 }
 
+// teardownNow is the fixed clock these tests judge the legacy grace by.
+var teardownNow = time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC)
+
 func pendingTeardown(created time.Time) *db.CheckoutTeardown {
 	return &db.CheckoutTeardown{ID: "op-1", ProjectID: "p1", DaemonID: "d1", Kind: db.CheckoutTeardownReclone,
 		Path: "/proj", State: db.CheckoutTeardownPending, CreatedAt: created}
@@ -64,18 +67,20 @@ func TestInsertSettlesAnUnconfirmedTeardownFirst(t *testing.T) {
 		},
 		{
 			name: "an old machine, inside the grace", err: errors.New(`this machine is running an older version of Reliant (v1.0.0) that doesn't support "git.teardown_status"`),
-			created: time.Now(), wantState: db.CheckoutTeardownPending, wantErr: "too old to confirm",
+			created: teardownNow.Add(-time.Minute), wantState: db.CheckoutTeardownPending, wantErr: "too old to confirm",
 		},
 		{
 			name: "an old machine, past the grace", err: errors.New(`this machine is running an older version of Reliant (v1.0.0) that doesn't support "git.teardown_status"`),
-			created: time.Now().Add(-checkoutteardown.LegacyGrace - time.Minute), wantState: db.CheckoutTeardownExpired,
+			created: teardownNow.Add(-checkoutteardown.LegacyGrace - time.Minute), wantState: db.CheckoutTeardownExpired,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			st := &fakeStore{teardown: pendingTeardown(tc.created)}
 			m := &statusMachine{answer: tc.answer, err: tc.err}
-			wt, err := Insert(context.Background(), st, m, twoRepoReq())
+			req := twoRepoReq()
+			req.Now = func() time.Time { return teardownNow }
+			wt, err := Insert(context.Background(), st, m, req)
 			assert.Equal(t, []string{"op-1"}, m.asked, "the machine is asked about the op it was sent")
 			assert.Equal(t, tc.wantState, st.teardown.State)
 			if tc.wantErr == "" {
@@ -95,7 +100,7 @@ func TestInsertSettlesAnUnconfirmedTeardownFirst(t *testing.T) {
 // With no machine to ask, the refusal stands.
 func TestInsertWithoutAMachineRefusesWhileATeardownIsPending(t *testing.T) {
 	t.Parallel()
-	st := &fakeStore{teardown: pendingTeardown(time.Now())}
+	st := &fakeStore{teardown: pendingTeardown(teardownNow)}
 	_, err := Insert(context.Background(), st, nil, twoRepoReq())
 	var held *TeardownPendingError
 	require.ErrorAs(t, err, &held)

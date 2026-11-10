@@ -131,6 +131,9 @@ type Request struct {
 	// worktrees root (see worktreepath.WorkspaceDirName). Adopt needs it up
 	// front because it moves a checkout into the directory before Finish.
 	WorkspaceID string
+	// Now is the clock a pending checkout teardown's grace is judged by
+	// (checkoutteardown.Query); nil is time.Now.
+	Now func() time.Time
 	// Existing lists repos whose checkout already exists (an adopted
 	// worktree). Finish makes no checkout for them and records their branch
 	// and base. Setting it also puts Finish in adopt mode for the OTHER repos:
@@ -253,7 +256,11 @@ func settleTeardown(ctx context.Context, store Store, m Machine, req Request, op
 	if m == nil {
 		return &TeardownPendingError{Project: req.Project.Name, Teardown: op, Cause: errors.New("no machine to ask")}
 	}
-	settled, err := checkoutteardown.Query(ctx, store, m, op, time.Now())
+	now := time.Now
+	if req.Now != nil {
+		now = req.Now
+	}
+	settled, err := checkoutteardown.Query(ctx, store, m, op, now())
 	if err != nil {
 		logging.WarnContext(ctx, "workspace create: a checkout teardown is unsettled", "teardown", op.ID, "kind", op.Kind, "error", err)
 		return &TeardownPendingError{Project: req.Project.Name, Teardown: op, Cause: err}

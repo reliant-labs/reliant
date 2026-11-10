@@ -633,7 +633,7 @@ func (s *Service) RemoveProjectFromDaemon(
 	var reply teardownReply
 	payload := map[string]string{"path": pd.Path, "op_id": op.ID}
 	sendErr := teardownMachine{s: s, userID: userID, daemonID: req.Msg.DaemonId}.Send(ctx, "git.remove", payload, &reply, teardownTimeoutMs)
-	if err := s.settleTeardown(ctx, op, project, machine, reply, sendErr); err != nil {
+	if err := s.settleTeardown(ctx, userID, op, project, machine, reply, sendErr); err != nil {
 		return nil, err
 	}
 	return connect.NewResponse(&reliantv1.RemoveProjectFromDaemonResponse{}), nil
@@ -683,7 +683,7 @@ func (s *Service) RecloneProjectOnDaemon(
 		"op_id":  op.ID,
 	}
 	sendErr := teardownMachine{s: s, userID: userID, daemonID: req.Msg.DaemonId}.Send(ctx, "git.reclone", payload, &reply, teardownTimeoutMs)
-	if err := s.settleTeardown(ctx, op, project, machine, reply, sendErr); err != nil {
+	if err := s.settleTeardown(ctx, userID, op, project, machine, reply, sendErr); err != nil {
 		return nil, err
 	}
 	// Refresh cloned_at — the row's path/branch are unchanged but the

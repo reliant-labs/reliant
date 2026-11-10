@@ -152,21 +152,25 @@ type teardownReply struct {
 // settleTeardown records how op ended from the command's reply (or its
 // failure) and returns nil when it is done. Every other outcome is the error
 // for the caller to return; what said "still running" leaves op pending.
-func (s *Service) settleTeardown(ctx context.Context, op *db.CheckoutTeardown, project *db.Project, machine string, reply teardownReply, sendErr error) error {
+func (s *Service) settleTeardown(ctx context.Context, userID string, op *db.CheckoutTeardown, project *db.Project, machine string, reply teardownReply, sendErr error) error {
 	what := fmt.Sprintf("the %s of %q on %s", op.Kind, project.Name, machine)
 	if sendErr != nil {
-		// Only the daemon's own failure is an outcome: a daemon that knows
-		// ids reports one only before it journaled the op (nothing ran), an
-		// older one after its synchronous attempt. Every other failure —
-		// unreachable, a timeout, a dropped connection, the caller going
-		// away, an unreadable reply — says nothing about whether the
-		// machine is deleting, so the op stays pending and holds
-		// creation until the machine says (a retry, or a status query).
+		// A failure the daemon reported is not, by itself, the op's
+		// outcome: the daemon replaces a handler's reply with a refusal
+		// (its workspace guard) AFTER the handler returned, so a detached
+		// teardown can still be deleting behind a reported failure, and a
+		// retry can be refused before it reaches the journal while the
+		// first delivery runs on. So the op's own status is asked, and only
+		// an answer naming the op settles it (fenced: it never ran and now
+		// never will). A daemon too old to know op ids answers that with
+		// "unknown command"; for it, as before, the reported failure is
+		// its synchronous outcome. Every other failure — unreachable, a
+		// timeout, a dropped connection, the caller going away, an
+		// unreadable reply, a status query that is refused too — says
+		// nothing about whether the machine is deleting, so the op stays
+		// pending and holds creation until the machine says.
 		if text, ok := toolexec.DaemonReportedText(sendErr); ok {
-			if _, err := s.deps.Repo.SettleCheckoutTeardown(ctx, op.ID, db.CheckoutTeardownFailed, text); err != nil {
-				return svcerr.WrapOr(err, svcerr.Internal("failed to record the teardown"))
-			}
-			return daemonerr.Error(teardownVerb(op.Kind), sendErr)
+			return s.settleReportedFailure(ctx, teardownMachine{s: s, userID: userID, daemonID: op.DaemonID}, op, what, text, sendErr)
 		}
 		switch {
 		case daemonerr.Unreachable(sendErr):
@@ -215,6 +219,39 @@ func (s *Service) settleTeardown(ctx context.Context, op *db.CheckoutTeardown, p
 		reason = "the machine did not report it finished"
 	}
 	return svcerr.WithClass(svcerr.FailedPrecondition(fmt.Sprintf("could not %s: %s", teardownVerb(op.Kind), reason)), svcerr.ClassUser)
+}
+
+// settleReportedFailure settles op after its command came back with a
+// failure the daemon reported (text), from the op's status — see
+// settleTeardown.
+func (s *Service) settleReportedFailure(ctx context.Context, m teardownMachine, op *db.CheckoutTeardown, what, text string, sendErr error) error {
+	settled, qerr := checkoutteardown.Query(ctx, s.deps.Repo, m, op, time.Now())
+	var legacy *checkoutteardown.LegacyPendingError
+	switch {
+	case errors.As(qerr, &legacy):
+		// An older daemon: the failure it reported is how its synchronous
+		// attempt ended.
+		if _, err := s.deps.Repo.SettleCheckoutTeardown(ctx, op.ID, db.CheckoutTeardownFailed, text); err != nil {
+			return svcerr.WrapOr(err, svcerr.Internal("failed to record the teardown"))
+		}
+		return daemonerr.Error(teardownVerb(op.Kind), sendErr)
+	case qerr != nil, settled.State == db.CheckoutTeardownPending:
+		return svcerr.WithCause(svcerr.WithClass(svcerr.Unavailable(fmt.Sprintf(
+			"%s was refused by the machine (%s), but the machine has not said how the operation itself ended; "+
+				"workspaces are not created there until it does. Try again to see", what, text)), svcerr.ClassUser), sendErr)
+	case settled.State == db.CheckoutTeardownNotRun:
+		return svcerr.WithCause(svcerr.WithClass(svcerr.FailedPrecondition(fmt.Sprintf(
+			"%s did not run: the machine refused it (%s)", what, text)), svcerr.ClassUser), sendErr)
+	case settled.State == db.CheckoutTeardownDone:
+		// It ran to completion; only the reply was replaced.
+		return nil
+	}
+	reason := strings.TrimSpace(settled.Detail)
+	if reason == "" {
+		reason = text
+	}
+	return svcerr.WithCause(svcerr.WithClass(svcerr.FailedPrecondition(fmt.Sprintf(
+		"could not %s: %s", teardownVerb(op.Kind), reason)), svcerr.ClassUser), sendErr)
 }
 
 // teardownVerb names what a teardown kind does, for a sentence.

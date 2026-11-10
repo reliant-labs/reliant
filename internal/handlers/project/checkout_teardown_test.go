@@ -170,19 +170,95 @@ func TestRemove_ATransportFailureIsNoOutcome(t *testing.T) {
 	assert.Zero(t, *deleted)
 }
 
-// The daemon's own failure IS an outcome: it reported it after (an older
-// daemon) or instead of (one that knows ids) running the delete.
-func TestRemove_ADaemonReportedFailureSettlesTheOpFailed(t *testing.T) {
+// guardRefusal is what the daemon's workspace guard replies with when $HOME
+// changed under a command — possibly AFTER the handler started a detached
+// teardown (daemonruntime handleDaemonCommand).
+func guardRefusal(command string) func(string, map[string]string) ([]byte, error) {
+	return fail(toolexec.DaemonReportedFailure(command, "the workspace directory changed while this ran"))
+}
+
+// An older daemon's reported failure IS its outcome: it ran the delete
+// synchronously and said how it ended. The status query that establishes it
+// is an older daemon ("unknown command") is the only extra round trip.
+func TestRemove_AnOlderDaemonsReportedFailureIsItsOutcome(t *testing.T) {
 	t.Parallel()
 	store, book, deleted := teardownStore(t)
 	d := &scriptedDaemon{answers: []func(string, map[string]string) ([]byte, error){
 		fail(toolexec.DaemonReportedFailure("git.remove", "refusing to remove non-clone path (no .git): /clone")),
+		fail(outdated),
 	}}
 	err := remove(t, newService(t, store, fakeDaemon(d.answer)))
 	require.Error(t, err)
 	assert.Contains(t, svcerr.ToConnect(err).Message(), "refusing to remove non-clone path")
 	assert.Equal(t, db.CheckoutTeardownFailed, book["op-1"].State)
+	assert.Equal(t, []string{"git.remove", "git.teardown_status"}, d.sent)
 	assert.Zero(t, *deleted)
+}
+
+// The regression: a daemon that knows ids replies with a guard refusal while
+// the detached teardown it started is still deleting. The reported failure
+// is not the op's outcome; the op's status says it is running, so the op
+// stays pending and workspace creation stays held.
+func TestRemove_AGuardRefusalWhileTheTeardownRunsKeepsItPending(t *testing.T) {
+	t.Parallel()
+	store, book, deleted := teardownStore(t)
+	d := &scriptedDaemon{answers: []func(string, map[string]string) ([]byte, error){
+		guardRefusal("git.remove"),
+		reply(`{"op_id":"%s","op_state":"running"}`),
+	}}
+	err := remove(t, newService(t, store, fakeDaemon(d.answer)))
+	require.Error(t, err)
+	assert.Equal(t, connect.CodeUnavailable, svcerr.Code(err))
+	assert.Contains(t, svcerr.ToConnect(err).Message(), "has not said how the operation itself ended")
+	assert.Equal(t, db.CheckoutTeardownPending, book["op-1"].State, "creation stays held while the teardown may be deleting")
+	assert.Equal(t, []string{"op-1", "op-1"}, d.opIDs, "the status asked is the op's own")
+	assert.Zero(t, *deleted)
+}
+
+// A refusal before the op reached the journal: the op's status fences it
+// ("not run", durably on the machine), which is an op-id-bearing answer, so
+// the op settles not_run and nothing can run it later.
+func TestRemove_ARefusalBeforeTheJournalSettlesNotRunViaTheFence(t *testing.T) {
+	t.Parallel()
+	store, book, deleted := teardownStore(t)
+	d := &scriptedDaemon{answers: []func(string, map[string]string) ([]byte, error){
+		guardRefusal("git.remove"),
+		reply(`{"op_id":"%s","op_state":"fenced"}`),
+	}}
+	err := remove(t, newService(t, store, fakeDaemon(d.answer)))
+	require.Error(t, err)
+	assert.Contains(t, svcerr.ToConnect(err).Message(), "did not run")
+	assert.Equal(t, db.CheckoutTeardownNotRun, book["op-1"].State)
+	assert.Zero(t, *deleted)
+}
+
+// A retry refused by the guard settles nothing, whether the guard refuses
+// the status question before any resend or the resend itself (and then the
+// status question too): the first delivery may still be running.
+func TestRemove_ARetryRefusedByTheGuardStaysPending(t *testing.T) {
+	t.Parallel()
+	for name, retry := range map[string][]func(string, map[string]string) ([]byte, error){
+		"the status question is refused": {guardRefusal("git.teardown_status")},
+		"the resend is refused": {
+			reply(`{"op_id":"%s","op_state":"running"}`),
+			guardRefusal("git.remove"),
+			guardRefusal("git.teardown_status"),
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			store, book, deleted := teardownStore(t)
+			d := &scriptedDaemon{answers: append([]func(string, map[string]string) ([]byte, error){
+				fail(fmt.Errorf("send: %w", toolexec.ErrDaemonTimeout)),
+			}, retry...)}
+			svc := newService(t, store, fakeDaemon(d.answer))
+			require.Error(t, remove(t, svc))
+			require.Error(t, remove(t, svc))
+			assert.Equal(t, db.CheckoutTeardownPending, book["op-1"].State, "a refused retry settles nothing")
+			assert.Empty(t, d.answers, "every scripted answer was consumed")
+			assert.Zero(t, *deleted)
+		})
+	}
 }
 
 // An older daemon whose reply to a remove was lost: the retry asks first,
