@@ -326,7 +326,11 @@ func TestFingerprintBindsContent(t *testing.T) {
 		t.Fatal("undoing the edit did not restore the fingerprint")
 	}
 
-	set("staged two\n")
+	// A different length from "staged one\n": git add trusts its stat cache, and
+	// with the mtime pinned, the same size and a ctime in the same second it
+	// would keep the old blob in the index (racy git), so the test, not the
+	// fingerprint, would see no change.
+	set("staged second\n")
 	run(t, path, "add", "a.txt")
 	set("on disk one\n")
 	if got := run(t, path, "status", "--porcelain", "--untracked-files=all"); got != status {
