@@ -46,10 +46,9 @@ type orgBackfillStep struct {
 	sql   string
 }
 
-// orgBackfillSteps run in order: every project of the user first, so each
-// chat batch reads its project's final org. A chat whose project has an org
-// takes the project's, so a chat and its project agree; one whose project has
-// none takes the default, which is what that project is stamped with too.
+// orgBackfillSteps run in order: every project of the user first, then the
+// chats, each of which takes its project's committed org (never a default of
+// its own), so a chat and its project agree however passes interleave.
 var orgBackfillSteps = []orgBackfillStep{
 	{"projects", `
 WITH batch AS (
@@ -63,12 +62,18 @@ WITH batch AS (
     RETURNING p.id
 )
 SELECT id FROM stamped ORDER BY id`},
+	// A chat in a project only ever takes its project's committed org: one
+	// whose project has no org yet is left for a later pass (it is stamped
+	// once the project is), never given a default its project may not get.
+	// A chat with no project takes the default.
 	{"chats", `
 WITH batch AS (
-    SELECT id FROM chats
-    WHERE user_id = ?0 AND org_id IS NULL AND id > ?2
-    ORDER BY id LIMIT ?3
-    FOR UPDATE SKIP LOCKED
+    SELECT c.id FROM chats c
+    LEFT JOIN projects p ON p.id = c.project_id
+    WHERE c.user_id = ?0 AND c.org_id IS NULL AND c.id > ?2
+      AND (p.id IS NULL OR p.org_id IS NOT NULL)
+    ORDER BY c.id LIMIT ?3
+    FOR UPDATE OF c SKIP LOCKED
 ), stamped AS (
     UPDATE chats c SET org_id = COALESCE((SELECT p.org_id FROM projects p WHERE p.id = c.project_id), ?1)
     FROM batch WHERE c.id = batch.id
@@ -83,9 +88,11 @@ SELECT id FROM stamped ORDER BY id`},
 // never moves a row between orgs.
 //
 // It stamps in bounded batches (OrgBackfillBatch rows), each its own
-// transaction under a short statement_timeout, resuming from the last id
-// stamped, so a user with many rows never holds one long transaction over all
-// of them. A failed batch leaves the earlier ones stamped; the next call
+// transaction under a short statement_timeout and a per-user advisory lock,
+// resuming from the last id stamped, so a user with many rows never holds one
+// long transaction over all of them. A row a concurrent write holds is
+// skipped (SKIP LOCKED) and stamped by a later pass; a chat whose project was
+// skipped waits for it. A failed batch leaves the earlier ones stamped; the next call
 // resumes from what is still NULL. It must not be called inside a
 // transaction, which would join every batch into it.
 func AssignUnassignedOrg(ctx context.Context, db orm.Context, userID, orgID string) error {
@@ -102,6 +109,12 @@ func assignUnassignedOrg(ctx context.Context, db orm.Context, userID, orgID stri
 			var ids []string
 			err := db.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
 				if _, err := db.Bun().NewRaw("SET LOCAL statement_timeout = '" + orgBackfillStatementTimeout + "'").Exec(ctx); err != nil {
+					return err
+				}
+				// One user's batches run one at a time, whichever pass
+				// they belong to, so two passes with different defaults
+				// never stamp the same user's rows concurrently.
+				if _, err := db.Bun().NewRaw("SELECT pg_advisory_xact_lock(hashtextextended('org-backfill:' || ?, 0))", userID).Exec(ctx); err != nil {
 					return err
 				}
 				if err := db.Bun().NewRaw(step.sql, userID, orgID, after, batch).Scan(ctx, &ids); err != nil && !errors.Is(err, sql.ErrNoRows) {
