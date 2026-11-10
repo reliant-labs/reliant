@@ -271,6 +271,10 @@ func (l *Launcher) launchNew(ctx context.Context, ev Event, spec Spec, seed seed
 	if err != nil {
 		return nil, projectLookupError(err)
 	}
+	orgID, err := chatOrg(spec, project)
+	if err != nil {
+		return nil, err
+	}
 
 	// Resolve workflow - use user's default if not specified
 	workflowName := l.ResolveDefaultWorkflow(ctx, userID, spec.Workflow)
@@ -288,6 +292,7 @@ func (l *Launcher) launchNew(ctx context.Context, ev Event, spec Spec, seed seed
 		UserID:       userID,
 		Title:        title,
 		ProjectID:    spec.ProjectID,
+		OrgID:        orgID,
 		WorkflowName: &workflowName,
 		State:        db.ChatStateIdle,
 		// Who started it decides whether it is a conversation (the chat
@@ -1084,6 +1089,27 @@ func seedFingerprint(messages []SeedMessage, attachments []string) string {
 
 // projectLookupError separates a project that is not there (final) from a
 // store failure (worth retrying).
+// chatOrg is the organization a new chat belongs to: its project's, when the
+// project has one (a chat and its project are in one org, so a request naming
+// another is refused), else the org the request named, else the creator's
+// default org, else none.
+func chatOrg(spec Spec, project *db.Project) (*string, error) {
+	if project != nil && project.OrgID != nil && *project.OrgID != "" {
+		if spec.OrgID != "" && spec.OrgID != *project.OrgID {
+			return nil, &ValidationError{Kind: ValidationFailedPrecondition,
+				Reason: "the project belongs to another organization: open it from that organization to start a chat in it"}
+		}
+		org := *project.OrgID
+		return &org, nil
+	}
+	for _, org := range []string{spec.OrgID, spec.DefaultOrgID} {
+		if org != "" {
+			return &org, nil
+		}
+	}
+	return nil, nil
+}
+
 func projectLookupError(err error) error {
 	if errors.Is(err, core.ErrProjectNotFound) {
 		return &NotFoundError{Reason: "project not found", Err: err}

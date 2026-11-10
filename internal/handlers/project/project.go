@@ -245,6 +245,7 @@ func projectToProto(p *db.Project) *reliantv1.Project {
 	if p.RemoteURL != nil {
 		proto.RemoteUrl = p.RemoteURL
 	}
+	proto.OrgId = p.OrgID
 	if p.ForgeProjectName != nil {
 		proto.ForgeProjectName = p.ForgeProjectName
 	}
@@ -267,8 +268,13 @@ func (s *Service) ListProjects(
 		offset = 0
 	}
 
+	scope, err := s.listScope(ctx, userID, req.Msg.GetOrgId())
+	if err != nil {
+		return nil, err
+	}
 	projects, err := s.deps.Repo.ListProjects(ctx, db.ProjectFilters{
 		UserID: userID,
+		Org:    scope,
 		Limit:  limit,
 		Offset: offset,
 	})

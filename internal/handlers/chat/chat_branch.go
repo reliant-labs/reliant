@@ -223,8 +223,10 @@ func (s *Service) BranchChat(
 	// NOTE: Context inheritance is now handled via workflow fork (see below)
 	// The Chat struct no longer has BranchedFromChatID, BranchedAtOrdinal, ParentContextSequence
 	branchChat := &db.Chat{
-		ID:           branchChatID,
-		UserID:       sourceChat.UserID,
+		ID:     branchChatID,
+		UserID: sourceChat.UserID,
+		// A branch is the source chat's conversation continued: same org.
+		OrgID:        sourceChat.OrgID,
 		Title:        title,
 		ProjectID:    sourceChat.ProjectID,
 		WorktreeID:   worktreeID,

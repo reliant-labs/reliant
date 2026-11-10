@@ -49,6 +49,13 @@ import (
 // moveCheckoutPurpose finishes projectcheckout's "… to <purpose>".
 const moveCheckoutPurpose = "move this chat there"
 
+// crossesOrgs reports whether a chat of org from moving to a project of org to
+// would change its org. A side with no org yet (written before orgs) crosses
+// nothing: it belongs to its owner's default org until stamped.
+func crossesOrgs(from, to *string) bool {
+	return from != nil && to != nil && *from != *to
+}
+
 // MoveChatToProject moves an idle chat to another of the caller's projects.
 func (s *Service) MoveChatToProject(
 	ctx context.Context,
@@ -79,6 +86,11 @@ func (s *Service) MoveChatToProject(
 	}
 	if reason := moveBlockedReason(chat); reason != "" {
 		return nil, svcerr.FailedPrecondition(reason)
+	}
+	// Nothing moves between orgs (owner decision, 2026-10-26): a chat that
+	// belongs to an org may move only to a project of the same org.
+	if crossesOrgs(chat.OrgID, target.OrgID) {
+		return nil, svcerr.FailedPrecondition("that project belongs to another organization; a chat stays in its organization")
 	}
 	source, err := s.ownedProject(ctx, userID, chat.ProjectID)
 	if err != nil {
