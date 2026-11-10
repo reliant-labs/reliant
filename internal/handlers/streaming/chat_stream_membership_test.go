@@ -70,7 +70,9 @@ func TestStreamChatUpdates_RemovedMemberStreamEnds(t *testing.T) {
 
 	for caughtUp := false; !caughtUp; {
 		event, open := <-events
-		require.True(t, open, "the stream ended before its initial sync: %v", stream.Err())
+		if !open { // stream.Err() only once receiveAll has stopped: it races Receive
+			t.Fatalf("the stream ended before its initial sync: %v", stream.Err())
+		}
 		caughtUp = event.GetCaughtUp() != nil
 	}
 	// While a member, the stream is re-authorized and stays open.
@@ -144,7 +146,9 @@ func TestStreamChatUpdates_AnUnassignedChatStampedWhileOpenIsReauthorized(t *tes
 			events := receiveAll(t, stream)
 			for caughtUp := false; !caughtUp; {
 				event, open := <-events
-				require.True(t, open, "the stream ended before its initial sync: %v", stream.Err())
+				if !open { // stream.Err() only once receiveAll has stopped: it races Receive
+					t.Fatalf("the stream ended before its initial sync: %v", stream.Err())
+				}
 				caughtUp = event.GetCaughtUp() != nil
 			}
 			// Unassigned, the chat is the default org's: it is re-read on
