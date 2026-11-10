@@ -252,3 +252,77 @@ func TestListTriggers_LeavesOutALeftOrgsTriggers(t *testing.T) {
 	_, err = env.svc.ListTriggers(machine, connect.NewRequest(&reliantv1.ListTriggersRequest{}))
 	requireDenied(t, err, connect.CodePermissionDenied, orgs.ReasonNotOrgMember)
 }
+
+// backfillBeforeWrite is the trigger repository with a backfill that stamps
+// the user's unassigned rows with org between the handler's org decision and
+// its write: the interleaving the write's own re-check exists for.
+type backfillBeforeWrite struct {
+	Repository
+	repo   *db.Repo
+	userID string
+	org    string
+}
+
+func (r backfillBeforeWrite) UpdateTriggerInOrg(ctx context.Context, t *core.Trigger, decided db.TriggerOrgDecision) error {
+	if err := r.repo.AssignUnassignedOrg(context.Background(), r.userID, r.org); err != nil {
+		return err
+	}
+	return r.Repository.UpdateTriggerInOrg(ctx, t, decided)
+}
+
+// An update decided in one org is not written once a backfill commits the
+// trigger, or the project it is in, to another org between the decision and
+// the write: neither a move to a project of the decided org nor an update in
+// place lands, and the stored definition is unchanged.
+func TestUpdateTrigger_ABackfillBetweenDecisionAndWriteIsRefused(t *testing.T) {
+	t.Parallel()
+	env := setupTriggerTest(t).withOrgs(t)
+	home := "home"
+	homeProject := env.orgProject(t, &home)
+
+	// A trigger written before orgs, in a project written before orgs: both
+	// decide as the caller's default, home, until the backfill says otherwise.
+	unassigned := func() *core.Trigger {
+		t.Helper()
+		project := env.orgProject(t, nil)
+		created, err := env.createIn(env.ctx, project, nil)
+		require.NoError(t, err)
+		_, err = env.repo.ORM().Bun().NewRaw(`UPDATE triggers SET org_id = NULL WHERE id = ?`, created.GetId()).Exec(context.Background())
+		require.NoError(t, err)
+		stored, err := env.repo.GetTrigger(context.Background(), created.GetId())
+		require.NoError(t, err)
+		require.Nil(t, stored.OrgID)
+		return stored
+	}
+
+	// The backfill stamps the user's unassigned rows acme (a default that
+	// changed under the request) after the handler decided home.
+	env.configure(t, func(d *Deps) {
+		d.Repo = backfillBeforeWrite{Repository: d.Repo, repo: env.repo, userID: env.userID, org: "acme"}
+	})
+	update := func(tr *core.Trigger, projectID string) error {
+		_, err := env.svc.UpdateTrigger(env.ctx, connect.NewRequest(&reliantv1.UpdateTriggerRequest{
+			Id: tr.ID,
+			Trigger: env.definition(func(d *reliantv1.TriggerDefinition) {
+				d.ProjectId = projectID
+				d.Message = "Reconfigured."
+			}),
+		}))
+		return err
+	}
+	refused := func(name string, tr *core.Trigger, projectID string) {
+		t.Helper()
+		requireDenied(t, update(tr, projectID), connect.CodeFailedPrecondition, "")
+		after, err := env.repo.GetTrigger(context.Background(), tr.ID)
+		require.NoError(t, err)
+		assert.Equal(t, tr.ProjectID, after.ProjectID, name)
+		assert.Equal(t, tr.Message, after.Message, name)
+		require.NotNil(t, after.OrgID, name)
+		assert.Equal(t, "acme", *after.OrgID, "%s: the backfill's org stands", name)
+	}
+	// Each backfill stamps every unassigned row, so each case starts from
+	// rows created after the previous one's.
+	refused("a move to a project of the decided org", unassigned(), homeProject)
+	inPlace := unassigned()
+	refused("an update in place", inPlace, inPlace.ProjectID)
+}

@@ -287,7 +287,8 @@ func (s *Service) UpdateTrigger(
 			return nil, triggerDBError("get project", err)
 		}
 	}
-	if updated.OrgID, err = s.updatedTriggerOrg(ctx, existing.UserID, existing, source, target); err != nil {
+	var decided db.TriggerOrgDecision
+	if updated.OrgID, decided, err = s.updatedTriggerOrg(ctx, existing.UserID, existing, source, target); err != nil {
 		return nil, err
 	}
 	// nil enabled on update means "leave it as it is": an update of the
@@ -300,7 +301,7 @@ func (s *Service) UpdateTrigger(
 		return nil, err
 	}
 
-	if err := s.deps.Repo.UpdateTrigger(ctx, updated); err != nil {
+	if err := s.deps.Repo.UpdateTriggerInOrg(ctx, updated, decided); err != nil {
 		return nil, triggerDBError("update trigger", err)
 	}
 

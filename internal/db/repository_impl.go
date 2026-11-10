@@ -3141,7 +3141,22 @@ func (r *Repo) LockTrigger(ctx context.Context, id string) error {
 	return store.LockTrigger(ctx, r.ORM(), id)
 }
 
+// TriggerOrgDecision is the org an update of a trigger was decided in
+// (UpdateTriggerInOrg).
+type TriggerOrgDecision = store.TriggerOrgDecision
+
+// UpdateTrigger is UpdateTriggerInOrg with no org decision: an update that
+// neither moves the trigger nor was decided in an org.
 func (r *Repo) UpdateTrigger(ctx context.Context, t *core.Trigger) error {
+	return r.UpdateTriggerInOrg(ctx, t, TriggerOrgDecision{})
+}
+
+// UpdateTriggerInOrg replaces the trigger's definition only while the org it
+// was decided in still holds once the trigger is locked: a backfill that
+// stamped the trigger, its project or the target project with another org
+// between the decision and this write makes it store.ErrTriggerOrgChanged,
+// and nothing is written.
+func (r *Repo) UpdateTriggerInOrg(ctx context.Context, t *core.Trigger, decided TriggerOrgDecision) error {
 	if t == nil {
 		return fmt.Errorf("trigger cannot be nil")
 	}
@@ -3150,6 +3165,9 @@ func (r *Repo) UpdateTrigger(ctx context.Context, t *core.Trigger) error {
 	}
 	return r.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
 		if err := store.LockTrigger(ctx, r.ORM(), t.ID); err != nil {
+			return err
+		}
+		if err := store.CheckTriggerOrg(ctx, r.ORM(), t.ID, decided); err != nil {
 			return err
 		}
 		before, err := store.GetTrigger(ctx, r.ORM(), t.ID)

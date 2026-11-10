@@ -8,6 +8,7 @@ import (
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
+	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/orgs"
@@ -65,8 +66,12 @@ func (s *Service) triggerOrg(ctx context.Context, userID, requested string, proj
 // backfill would stamp it (its project's org, else the caller's default), and
 // a move stamps it with that org, so the backfill cannot later give it the
 // org of the project it left. A default that cannot be resolved fails closed
-// (Unavailable).
-func (s *Service) updatedTriggerOrg(ctx context.Context, userID string, existing *core.Trigger, source, target *core.Project) (*string, error) {
+// (Unavailable). The decision is returned too: the write re-checks it once
+// the trigger is locked (db.UpdateTriggerInOrg), so a backfill between this
+// read and the write cannot turn it into an update in, or a move to, another
+// org.
+func (s *Service) updatedTriggerOrg(ctx context.Context, userID string, existing *core.Trigger, source, target *core.Project) (*string, db.TriggerOrgDecision, error) {
+	var decided db.TriggerOrgDecision
 	from := existing.OrgID
 	if from == nil && source != nil {
 		from = source.OrgID
@@ -77,15 +82,15 @@ func (s *Service) updatedTriggerOrg(ctx context.Context, userID string, existing
 	}
 	if s.deps.Orgs == nil {
 		if from != nil && to != nil && *from != *to {
-			return nil, errTriggerCrossesOrgs
+			return nil, decided, errTriggerCrossesOrgs
 		}
-		return existing.OrgID, nil
+		return existing.OrgID, decided, nil
 	}
 	def := ""
 	if from == nil || (target != nil && to == nil) {
 		var err error
 		if def, err = s.deps.Orgs.DefaultOrg(ctx, userID); err != nil {
-			return nil, svcerr.WithCause(svcerr.Unavailable("could not resolve your default organization; try again"), err)
+			return nil, decided, svcerr.WithCause(svcerr.Unavailable("could not resolve your default organization; try again"), err)
 		}
 	}
 	effective := func(org *string) string {
@@ -97,19 +102,21 @@ func (s *Service) updatedTriggerOrg(ctx context.Context, userID string, existing
 	org := effective(from)
 	if org != "" {
 		if _, err := s.deps.Orgs.Named(ctx, userID, org); err != nil {
-			return nil, err
+			return nil, decided, err
 		}
 	}
+	decided = db.TriggerOrgDecision{Org: org, DefaultOrg: def}
 	if target == nil {
-		return existing.OrgID, nil
+		return existing.OrgID, decided, nil
 	}
+	decided.TargetProjectID = target.ID
 	if org != effective(to) {
-		return nil, errTriggerCrossesOrgs
+		return nil, decided, errTriggerCrossesOrgs
 	}
 	if org == "" {
-		return existing.OrgID, nil
+		return existing.OrgID, decided, nil
 	}
-	return &org, nil
+	return &org, decided, nil
 }
 
 // errTriggerCrossesOrgs refuses an update that would move a trigger to a

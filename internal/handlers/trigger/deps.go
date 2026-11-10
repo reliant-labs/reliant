@@ -45,6 +45,9 @@ type Repository interface {
 	GetTrigger(ctx context.Context, id string) (*core.Trigger, error)
 	ListTriggerChanges(ctx context.Context, userID, triggerID string) ([]core.TriggerChange, error)
 	UpdateTrigger(ctx context.Context, t *core.Trigger) error
+	// UpdateTriggerInOrg writes an update only while the org it was decided
+	// in still holds under the trigger's lock (UpdateTrigger's handler).
+	UpdateTriggerInOrg(ctx context.Context, t *core.Trigger, decided db.TriggerOrgDecision) error
 	DeleteTrigger(ctx context.Context, id string) error
 	SetTriggerEnabled(ctx context.Context, id string, enabled bool) error
 	SetTriggerWebhookSecret(ctx context.Context, id string, sealed []byte) error
