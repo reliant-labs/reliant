@@ -10,7 +10,6 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/llm"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/registry"
-	"github.com/reliant-labs/reliant/internal/llm/drivers/replay"
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -172,27 +171,6 @@ var ReplayMode struct {
 	Enabled  bool
 	FilePath string
 	Driver   llm.Driver
-}
-
-// SetReplayMode configures the resolver to use replay mode
-func SetReplayMode(filePath string) error {
-	if filePath == "" {
-		ReplayMode.Enabled = false
-		ReplayMode.Driver = nil
-		return nil
-	}
-
-	// Always use the comprehensive driver - it handles single sessions too
-	replayDriver, err := replay.NewComprehensiveReplayDriver(filePath)
-	if err != nil {
-		return fmt.Errorf("failed to create replay driver: %w", err)
-	}
-
-	ReplayMode.Enabled = true
-	ReplayMode.FilePath = filePath
-	ReplayMode.Driver = replayDriver
-
-	return nil
 }
 
 // ParseModelIDWithDriver extracts the base model ID and optional driver from a combined model ID

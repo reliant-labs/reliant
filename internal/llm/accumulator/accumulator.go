@@ -126,7 +126,7 @@ func StreamAndAccumulateObserving(
 			case llm.EventToolUseStop:
 				// Fallback only — see the EventComplete merge below. Drivers
 				// that report tool calls exclusively through stop events
-				// (openrouter, mock_static, replay) depend on this.
+				// (openrouter, replay) depend on this.
 				if event.ToolCall != nil {
 					toolCalls = append(toolCalls, *event.ToolCall)
 				}
