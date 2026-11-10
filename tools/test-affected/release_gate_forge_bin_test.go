@@ -89,7 +89,7 @@ func TestReleaseGatePinnedForgeBin(t *testing.T) {
 				t.Fatalf("out = %q, want FAIL", got)
 			case tc.wantOK && tc.given != "" && got != "OK "+tc.given:
 				t.Fatalf("out = %q, want the given FORGE_BIN kept", got)
-			case tc.wantOK && tc.given == "" && !(strings.HasPrefix(got, "OK "+dir) && strings.HasSuffix(got, "/forge")):
+			case tc.wantOK && tc.given == "" && (!strings.HasPrefix(got, "OK "+dir) || !strings.HasSuffix(got, "/forge")):
 				t.Fatalf("out = %q, want FORGE_BIN exported to the built forge", got)
 			}
 		})
