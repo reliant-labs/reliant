@@ -173,10 +173,11 @@ deadlock.
 `ChatUpdateHeadsBackfill`, an api-server component like `LLMUsageRetention`,
 walks `update_stream_counters` for chat streams whose watermark is behind, in
 keyset batches of chat ids, one chat at a time with a pause between chats, and
-starts over on a timer. It is resumable by construction: the work list IS the
-state (`heads_through_seq <> last_assigned_seq`), so a restart, a crash, a
-second replica or a rollback-and-roll-forward simply finds what is still
-behind. Every replica may run it; two replicas on one chat both converge
+starts over on a timer (every 10 minutes). It is resumable by construction: the
+work list IS the state (`heads_through_seq <> last_assigned_seq`), so a
+restart, a crash or a rollback-and-roll-forward simply finds what is still
+behind. A session advisory lock keeps a pass to one replica at a time; that is
+only to avoid duplicated work, since two backfills of one chat converge anyway
 (monotone upsert; step 3 serialized by the row lock).
 
 There is no backfill in a migration: a single transaction over 8M rows on prod

@@ -9,6 +9,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sort"
 	"time"
@@ -125,6 +126,134 @@ const applyChatUpdateHeadSQL = `
 	          FROM (VALUES ($1::text, $2::text, $3::bigint, $4::integer, $5::text, $6::text, $7::timestamptz))
 	               AS v(chat_id, id, sequence_number, update_type, entity_id, data, created_at)) r
 	 WHERE head_key IS NOT NULL` + chatUpdateHeadUpsertSQL
+
+// backfillChatUpdateHeadsSQL upserts the heads SnapshotHeadsSQL computes from
+// the log: the backfill's one slow statement, the skip scan through
+// idx_chat_updates_snapshot_entity_heads and idx_chat_updates_snapshot_rekey_heads.
+// Each key appears once in its result (one head per entity, one per re-key
+// key, in separate namespaces), as ON CONFLICT DO UPDATE requires.
+const backfillChatUpdateHeadsSQL = `
+	INSERT INTO chat_update_heads (chat_id, head_key, update_id, sequence_number, update_type, entity_id, data, created_at)
+	SELECT chat_id, head_key, id, sequence_number, update_type, entity_id, data, created_at
+	  FROM (SELECT s.*, (` + chatUpdateHeadKeySQL + `) AS head_key
+	          FROM (` + SnapshotHeadsSQL + `) s) r
+	 WHERE head_key IS NOT NULL` + chatUpdateHeadUpsertSQL
+
+// applyChatUpdateHeadsRangeSQL applies the log rows of ($2, $3] to the heads,
+// the newest per key: what the backfill's last step reads under the counter
+// lock, a range of chat_updates_chat_sequence_key.
+const applyChatUpdateHeadsRangeSQL = `
+	INSERT INTO chat_update_heads (chat_id, head_key, update_id, sequence_number, update_type, entity_id, data, created_at)
+	SELECT DISTINCT ON (head_key) chat_id, head_key, id, sequence_number, update_type, entity_id, data, created_at
+	  FROM (SELECT cu.id, cu.chat_id, cu.sequence_number, cu.update_type, cu.entity_id, cu.data, cu.created_at,
+	               (` + chatUpdateHeadKeySQL + `) AS head_key
+	          FROM chat_updates cu
+	         WHERE cu.chat_id = $1 AND cu.sequence_number > $2 AND cu.sequence_number <= $3) r
+	 WHERE head_key IS NOT NULL
+	 ORDER BY head_key, sequence_number DESC` + chatUpdateHeadUpsertSQL
+
+// lockChatStreamCounterSQL locks a chat's counter row and reads it. Taking the
+// lock waits out every writer that allocated a sequence and has not yet
+// committed (each holds the row from its allocation to its commit), so once it
+// returns, every sequence up to last_assigned_seq is committed or gone.
+const lockChatStreamCounterSQL = `
+	SELECT last_assigned_seq, heads_through_seq FROM update_stream_counters
+	 WHERE stream_kind = 'chat' AND stream_id = $1
+	   FOR UPDATE`
+
+// BackfillChatUpdateHeads makes one chat's heads complete: afterwards
+// chat_update_heads holds what SnapshotHeadsSQL computes from its log, and the
+// counter vouches for it (heads_through_seq = last_assigned_seq). It reports
+// whether it had anything to do; a chat already complete, or with no counter,
+// costs one locked read.
+//
+// Three steps, so the slow one holds no lock a writer needs
+// (dev-docs/design/chat-update-heads.md, "Backfill"):
+//
+//  1. Lock the counter and read L0, then commit: every sequence <= L0 is
+//     committed.
+//  2. With no lock, upsert the heads the log has (backfillChatUpdateHeadsSQL).
+//     It sees every row <= L0. Writers carry on beside it; a writer of this
+//     release upserts its own head, and the upsert is monotone, so their
+//     order does not matter.
+//  3. Lock the counter again and read L1, apply the rows of (L0, L1] (written
+//     meanwhile, by either release), and set heads_through_seq = L1. Holding
+//     the lock, no row above L1 exists.
+//
+// Every log row <= L1 is then reflected. Both steps that lock take the counter
+// row first and head rows after, the writers' order, so they cannot deadlock
+// with a writer. Concurrent backfills of one chat converge the same way.
+// ctx must not carry a transaction: each step is its own.
+func BackfillChatUpdateHeads(ctx context.Context, db orm.Context, chatID string) (bool, error) {
+	if orm.InTx(ctx) {
+		return false, fmt.Errorf("backfill chat update heads: must not run inside a transaction")
+	}
+	var l0, h0 int64
+	found := true
+	if err := db.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
+		err := db.QueryRow(ctx, lockChatStreamCounterSQL, chatID).Scan(&l0, &h0)
+		if errors.Is(err, sql.ErrNoRows) {
+			found = false
+			return nil
+		}
+		return err
+	}); err != nil {
+		return false, fmt.Errorf("backfill chat update heads: read counter: %w", err)
+	}
+	if !found || h0 == l0 {
+		return false, nil
+	}
+
+	if _, err := db.Exec(ctx, backfillChatUpdateHeadsSQL, chatID); err != nil {
+		return false, fmt.Errorf("backfill chat update heads: from the log: %w", err)
+	}
+
+	if err := db.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
+		var l1, h1 int64
+		if err := db.QueryRow(ctx, lockChatStreamCounterSQL, chatID).Scan(&l1, &h1); err != nil {
+			return err
+		}
+		if h1 == l1 {
+			return nil // another backfill finished first
+		}
+		if _, err := db.Exec(ctx, applyChatUpdateHeadsRangeSQL, chatID, l0, l1); err != nil {
+			return err
+		}
+		_, err := db.Exec(ctx, `
+			UPDATE update_stream_counters SET heads_through_seq = last_assigned_seq
+			 WHERE stream_kind = 'chat' AND stream_id = $1`, chatID)
+		return err
+	}); err != nil {
+		return false, fmt.Errorf("backfill chat update heads: catch up: %w", err)
+	}
+	return true, nil
+}
+
+// ChatsWithIncompleteHeads lists, in id order, up to limit chats after
+// afterChatID whose heads the counter does not vouch for: the backfill's work
+// list. It is the state itself, so a backfill that stops resumes where the
+// state says, and a chat the previous release writes to again (a rollback)
+// reappears on it.
+func ChatsWithIncompleteHeads(ctx context.Context, db orm.Context, afterChatID string, limit int) ([]string, error) {
+	rows, err := db.Query(ctx, `
+		SELECT stream_id FROM update_stream_counters
+		 WHERE stream_kind = 'chat' AND stream_id > $1 AND heads_through_seq <> last_assigned_seq
+		 ORDER BY stream_id
+		 LIMIT $2`, afterChatID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var chats []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		chats = append(chats, id)
+	}
+	return chats, rows.Err()
+}
 
 // SnapshotHeadsTableSQL is SnapshotUpdateHeads' statement: the chat's heads
 // from chat_update_heads, but only when its stream counter vouches for them

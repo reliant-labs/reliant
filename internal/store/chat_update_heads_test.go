@@ -242,10 +242,18 @@ func TestChatUpdateHeads_KeepTheNewestWhateverTheOrder(t *testing.T) {
 // heads watermark, and the log insert, with no head.
 func previousReleaseWrite(t *testing.T, env *storetest.Env, chatID string, typ reliantv1.ChatUpdateType, entity, data string) {
 	t.Helper()
+	if err := previousReleaseWriteErr(env, chatID, typ, entity, data); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// previousReleaseWriteErr is previousReleaseWrite for a goroutine, which may
+// not call t.Fatal.
+func previousReleaseWriteErr(env *storetest.Env, chatID string, typ reliantv1.ChatUpdateType, entity, data string) error {
 	ctx := context.Background()
 	tx, err := env.SQL.BeginTx(ctx, nil)
 	if err != nil {
-		t.Fatal(err)
+		return err
 	}
 	defer func() { _ = tx.Rollback() }()
 	var seq int64
@@ -256,17 +264,15 @@ ON CONFLICT (stream_kind, stream_id) DO UPDATE
 SET last_assigned_seq = update_stream_counters.last_assigned_seq + 1
 RETURNING last_assigned_seq
 `, "chat", chatID).Scan(&seq); err != nil {
-		t.Fatal(err)
+		return err
 	}
 	if _, err := tx.ExecContext(ctx, `
 INSERT INTO chat_updates (id, chat_id, sequence_number, update_type, entity_id, data, created_at)
 VALUES ($1, $2, $3, $4, $5, $6, $7)`,
 		fmt.Sprintf("%s-%d", chatID, seq), chatID, seq, int32(typ), entity, data, time.Now().UTC()); err != nil {
-		t.Fatal(err)
+		return err
 	}
-	if err := tx.Commit(); err != nil {
-		t.Fatal(err)
-	}
+	return tx.Commit()
 }
 
 // TestChatUpdateHeads_PreviousReleaseWritesFallBackToTheLog: during a rolling
@@ -340,5 +346,140 @@ func TestChatUpdateHeads_RolledBackWritesLeaveNoHead(t *testing.T) {
 	got, _, err := store.SnapshotUpdateHeads(ctx, env.ORM, chatID)
 	if err != nil || len(got) != 1 || string(got[0].Data) != `{"v":1}` {
 		t.Fatalf("heads = %+v, %v; want ap-1 at v1", got, err)
+	}
+}
+
+// TestChatUpdateHeads_BackfillCatchesUpTheLog: a chat whose history the
+// previous release wrote (the log only) falls back to the log until it is
+// backfilled, and is then served from the table with exactly the log's heads.
+// A second backfill has nothing to do.
+func TestChatUpdateHeads_BackfillCatchesUpTheLog(t *testing.T) {
+	env := storetest.New(t)
+	ctx := context.Background()
+	for seed := int64(1); seed <= 3; seed++ {
+		chatID := fmt.Sprintf("chat-heads-backfill-%d", seed)
+		w := &headsWorkload{rng: rand.New(rand.NewSource(seed))}
+		for i := 0; i < 80; i++ {
+			typ, entity, data := w.next()
+			if w.rng.Intn(3) == 0 {
+				if err := env.Repo.CreateChatUpdate(ctx, chatID, typ, entity, data); err != nil {
+					t.Fatal(err)
+				}
+				continue
+			}
+			previousReleaseWrite(t, env, chatID, typ, entity, data)
+		}
+		requireHeadsFromLog(t, env, chatID, fmt.Sprintf("seed %d before the backfill", seed))
+
+		did, err := store.BackfillChatUpdateHeads(ctx, env.ORM, chatID)
+		if err != nil || !did {
+			t.Fatalf("seed %d: BackfillChatUpdateHeads = %v, %v; want it to backfill", seed, did, err)
+		}
+		requireHeadsFromTable(t, env, chatID, fmt.Sprintf("seed %d after the backfill", seed))
+		if did, err := store.BackfillChatUpdateHeads(ctx, env.ORM, chatID); err != nil || did {
+			t.Fatalf("seed %d: second BackfillChatUpdateHeads = %v, %v; want nothing to do", seed, did, err)
+		}
+
+		// This release's writes keep it complete from here.
+		for i := 0; i < 20; i++ {
+			typ, entity, data := w.next()
+			if err := env.Repo.CreateChatUpdate(ctx, chatID, typ, entity, data); err != nil {
+				t.Fatal(err)
+			}
+		}
+		requireHeadsFromTable(t, env, chatID, fmt.Sprintf("seed %d after more writes", seed))
+	}
+	if did, err := store.BackfillChatUpdateHeads(ctx, env.ORM, "chat-heads-no-counter"); err != nil || did {
+		t.Fatalf("BackfillChatUpdateHeads(no counter) = %v, %v; want nothing to do", did, err)
+	}
+}
+
+// TestChatUpdateHeads_BackfillBesideLiveWriters: writes of both releases race
+// the backfill. Whatever it interleaved with, once the writers stop, one more
+// backfill leaves the chat complete, with exactly the log's heads: no head a
+// racing writer applied, or that the backfill applied around it, is lost or
+// left stale.
+func TestChatUpdateHeads_BackfillBesideLiveWriters(t *testing.T) {
+	env := storetest.New(t)
+	ctx := context.Background()
+	const chatID = "chat-heads-backfill-race"
+	seedW := &headsWorkload{rng: rand.New(rand.NewSource(7))}
+	for i := 0; i < 60; i++ {
+		typ, entity, data := seedW.next()
+		previousReleaseWrite(t, env, chatID, typ, entity, data)
+	}
+
+	var wg sync.WaitGroup
+	errs := make(chan error, 8)
+	for g := 0; g < 3; g++ {
+		wg.Add(1)
+		go func(g int) {
+			defer wg.Done()
+			w := &headsWorkload{rng: rand.New(rand.NewSource(int64(200 + g)))}
+			for i := 0; i < 20; i++ {
+				typ, entity, data := w.next()
+				if g == 0 && i%5 == 4 {
+					if err := previousReleaseWriteErr(env, chatID, typ, entity, data); err != nil {
+						errs <- err
+						return
+					}
+					continue
+				}
+				if err := env.Repo.CreateChatUpdate(ctx, chatID, typ, entity, data); err != nil {
+					errs <- err
+					return
+				}
+			}
+		}(g)
+	}
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for i := 0; i < 5; i++ {
+			if _, err := store.BackfillChatUpdateHeads(ctx, env.ORM, chatID); err != nil {
+				errs <- err
+				return
+			}
+		}
+	}()
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		t.Fatal(err)
+	}
+	if _, err := store.BackfillChatUpdateHeads(ctx, env.ORM, chatID); err != nil {
+		t.Fatal(err)
+	}
+	requireHeadsFromTable(t, env, chatID, "after the writers stopped and a final backfill")
+}
+
+// TestChatsWithIncompleteHeads: the backfill's work list is every chat whose
+// counter does not vouch for its heads, in id order, resumable from an id.
+func TestChatsWithIncompleteHeads(t *testing.T) {
+	env := storetest.New(t)
+	ctx := context.Background()
+	ap := reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_APPROVAL
+	for _, c := range []string{"chat-inc-a", "chat-inc-c", "chat-inc-e"} {
+		previousReleaseWrite(t, env, c, ap, "ap-1", `{}`)
+	}
+	for _, c := range []string{"chat-inc-b", "chat-inc-d"} {
+		if err := env.Repo.CreateChatUpdate(ctx, c, ap, "ap-1", `{}`); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got, err := store.ChatsWithIncompleteHeads(ctx, env.ORM, "chat-inc-", 2)
+	if err != nil || fmt.Sprint(got) != "[chat-inc-a chat-inc-c]" {
+		t.Fatalf("first page = %v, %v", got, err)
+	}
+	got, err = store.ChatsWithIncompleteHeads(ctx, env.ORM, got[len(got)-1], 2)
+	if err != nil || fmt.Sprint(got) != "[chat-inc-e]" {
+		t.Fatalf("second page = %v, %v", got, err)
+	}
+	if _, err := store.BackfillChatUpdateHeads(ctx, env.ORM, "chat-inc-c"); err != nil {
+		t.Fatal(err)
+	}
+	got, err = store.ChatsWithIncompleteHeads(ctx, env.ORM, "chat-inc-", 10)
+	if err != nil || fmt.Sprint(got) != "[chat-inc-a chat-inc-e]" {
+		t.Fatalf("after backfilling c = %v, %v", got, err)
 	}
 }

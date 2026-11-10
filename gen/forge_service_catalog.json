@@ -23,6 +23,7 @@
         "Background",
         "Catalog",
         "Chat",
+        "ChatUpdateHeadsBackfill",
         "ChatUpdateHub",
         "Connection",
         "Connector",
@@ -45937,6 +45938,18 @@
       "source": {
         "path": "internal/handlers/chat/service.go",
         "symbol": "New"
+      },
+      "methods": [],
+      "implementation_candidates": []
+    },
+    {
+      "id": "ChatUpdateHeadsBackfill",
+      "name": "ChatUpdateHeadsBackfill",
+      "kind": "provider",
+      "type": "*github.com/reliant-labs/reliant/internal/app.ChatUpdateHeadsBackfill",
+      "source": {
+        "path": "internal/app/providers_api.go",
+        "symbol": "NewChatUpdateHeadsBackfill"
       },
       "methods": [],
       "implementation_candidates": []
