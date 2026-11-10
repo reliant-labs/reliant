@@ -643,6 +643,8 @@ github.com/reliant-labs/forge v1.2.1-0.20261109043137-9caded4a37d5 h1:4C71vOTJFA
 github.com/reliant-labs/forge v1.2.1-0.20261109043137-9caded4a37d5/go.mod h1:fPC6rNyr3tAuWdVh6PcEzg4g0gcgOZiEjGZoj26Lx9Y=
 github.com/reliant-labs/reliant/sdk/go v0.0.0-20261110122657-fa78f602469f h1:mmSq9d9rdJ8j/VwRTvdz1f3MUeD1ci9Ie1WrdRPfMsc=
 github.com/reliant-labs/reliant/sdk/go v0.0.0-20261110122657-fa78f602469f/go.mod h1:Zp37AmXZwf1MA8txS+iyAnk65cR6hBVHD9MxOY2SagM=
+github.com/reliant-labs/reliant/sdk/go v0.0.0-20261110124808-bd67cda5b1e4 h1:NcIzQYLJZiO4TmZjSn/VputzlbCHz5CgRHhi5D4X7fw=
+github.com/reliant-labs/reliant/sdk/go v0.0.0-20261110124808-bd67cda5b1e4/go.mod h1:Zp37AmXZwf1MA8txS+iyAnk65cR6hBVHD9MxOY2SagM=
 github.com/rivo/uniseg v0.1.0/go.mod h1:J6wj4VEh+S6ZtnVlnTBMWIodfgj8LQOQFoIToxlJtxc=
 github.com/robfig/cron v1.2.0 h1:ZjScXvvxeQ63Dbyxy76Fj3AT3Ut0aKsyd2/tl3DTMuQ=
 github.com/robfig/cron v1.2.0/go.mod h1:JGuDeoQd7Z6yL4zQhZ3OPEVHB7fL6Ka6skscFHfmt2k=
