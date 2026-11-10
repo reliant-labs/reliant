@@ -86,6 +86,10 @@ var requestIDFile = regexp.MustCompile(`^[A-Za-z0-9_-]{1,128}$`)
 // nothing, so an outbox with no directory is the in-memory outbox it was.
 type outboxStore struct {
 	dir string
+	// dirSync flushes a directory entry change on the tombstone path, where
+	// it must succeed (result_once_store.go); nil is syncDirStrict. Tests
+	// replace it to make the sync fail.
+	dirSync func(dir string) error
 }
 
 // openOutboxStore prepares dir for use: created 0700, and tightened to 0700
@@ -173,71 +177,6 @@ func (s *outboxStore) retainResult(requestID string, at time.Time) {
 		return
 	}
 	_ = os.Chtimes(retained, at, at)
-}
-
-// markSeen durably records that a run step's request id began here, until
-// expires: an empty <request id>.seen whose modification time is its expiry.
-// It is synced before the call runs, so no crash can leave a command that ran
-// without its tombstone. The error says it is not durable — the write, the
-// sync, or setting its expiry failed — and the caller does not run the call
-// (markRunStep). No store, or an id that cannot be a file name, is nil: there
-// is nothing that could be made durable.
-func (s *outboxStore) markSeen(requestID string, expires time.Time) error {
-	if !s.storable(requestID) {
-		return nil
-	}
-	name := requestID + seenFileExt
-	if err := writeFileDurably(s.dir, name, nil); err != nil {
-		return fmt.Errorf("persist run step tombstone: %w", err)
-	}
-	// The expiry is the tombstone: a file left at "now" would be reloaded as
-	// already expired.
-	if err := os.Chtimes(filepath.Join(s.dir, name), expires, expires); err != nil {
-		_ = os.Remove(filepath.Join(s.dir, name))
-		return fmt.Errorf("set run step tombstone expiry: %w", err)
-	}
-	return nil
-}
-
-// removeSeen deletes a run step's tombstone, once it expires.
-func (s *outboxStore) removeSeen(requestID string) {
-	if s.storable(requestID) {
-		_ = os.Remove(s.path(requestID, seenFileExt))
-	}
-}
-
-// loadSeen reads back the tombstones still in force at now, each with its
-// expiry, and removes the expired ones, counting them.
-func (s *outboxStore) loadSeen(now time.Time) (seen map[string]time.Time, expired int) {
-	seen = make(map[string]time.Time)
-	if s == nil {
-		return seen, 0
-	}
-	entries, err := os.ReadDir(s.dir)
-	if err != nil {
-		return seen, 0
-	}
-	for _, e := range entries {
-		name := e.Name()
-		if e.IsDir() || strings.Contains(name, tempInfix) || !strings.HasSuffix(name, seenFileExt) {
-			continue
-		}
-		id := strings.TrimSuffix(name, seenFileExt)
-		if !requestIDFile.MatchString(id) {
-			continue
-		}
-		info, err := e.Info()
-		if err != nil {
-			continue
-		}
-		if !now.Before(info.ModTime()) {
-			expired++
-			_ = os.Remove(filepath.Join(s.dir, name))
-			continue
-		}
-		seen[id] = info.ModTime()
-	}
-	return seen, expired
 }
 
 // removeRetained deletes a retained result's file, once its window ends.
@@ -467,6 +406,16 @@ func readResultFile(path, requestID string) (*heldResult, error) {
 // none: a 0600 temp file in the same directory, synced, renamed over name,
 // and the directory synced so the rename itself survives a power cut.
 func writeFileDurably(dir, name string, data []byte) error {
+	if err := writeFileSynced(dir, name, data); err != nil {
+		return err
+	}
+	syncDir(dir)
+	return nil
+}
+
+// writeFileSynced is writeFileDurably up to, and not including, syncing the
+// directory: the file's bytes are synced and renamed into place.
+func writeFileSynced(dir, name string, data []byte) error {
 	tmp, err := os.CreateTemp(dir, name+tempInfix+"*")
 	if err != nil {
 		return err
@@ -494,7 +443,6 @@ func writeFileDurably(dir, name string, data []byte) error {
 		_ = os.Remove(tmpName)
 		return err
 	}
-	syncDir(dir)
 	return nil
 }
 

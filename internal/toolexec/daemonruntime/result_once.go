@@ -31,8 +31,9 @@ import (
 // of those ends: by age, or by a byte budget that drops results to make room.
 // None of them can be what keeps a deploy from running twice. So a run step's
 // id also leaves a tombstone, independent of its result and of any budget: a
-// <request id>.seen file, synced before the command starts, whose
-// modification time is when it may be forgotten, reloaded by a restart.
+// <request id>.seen file carrying when it may be forgotten, synced with its
+// directory before the command starts, reloaded by a restart
+// (result_once_store.go).
 //
 // How long that is follows from who can send the id again. The worker sends a
 // run step's command only from the activity attempt that first sent it, and

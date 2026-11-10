@@ -5,7 +5,9 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 
@@ -367,11 +369,94 @@ func TestMarkSeenReportsWhetherTheTombstoneIsDurable(t *testing.T) {
 	store, err := openOutboxStore(dir)
 	require.NoError(t, err)
 	require.NoError(t, store.markSeen("run-1", expires))
-	info, err := os.Stat(filepath.Join(dir, "run-1"+seenFileExt))
+	data, err := os.ReadFile(filepath.Join(dir, "run-1"+seenFileExt))
 	require.NoError(t, err)
-	assert.True(t, info.ModTime().Equal(expires), "its expiry is its modification time")
+	got, current := decodeSeen(data, time.Time{})
+	assert.True(t, current, "the tombstone carries its expiry in its contents")
+	assert.True(t, got.Equal(expires))
 
 	require.NoError(t, os.RemoveAll(dir))
 	require.NoError(t, os.WriteFile(dir, nil, 0o600))
 	assert.Error(t, store.markSeen("run-2", expires))
+}
+
+// [R3.B1] The expiry is in the bytes the file sync covers: a crash that loses
+// or resets the file's metadata (its modification time) does not shorten it.
+func TestTombstoneExpirySurvivesALostModificationTime(t *testing.T) {
+	clock := newOutboxClock()
+	dir := filepath.Join(t.TempDir(), "outbox")
+	store, err := openOutboxStore(dir)
+	require.NoError(t, err)
+	expires := clock.now().Add(runStepSeenFor(48 * time.Hour))
+	require.NoError(t, store.markSeen("run-1", expires))
+
+	// What a crash after the rename can leave: the file whole, its
+	// modification time anything at all — here, long past.
+	lost := time.Unix(0, 0)
+	require.NoError(t, os.Chtimes(filepath.Join(dir, "run-1"+seenFileExt), lost, lost))
+
+	seen, expired := store.loadSeen(clock.now().Add(48 * time.Hour))
+	assert.Zero(t, expired)
+	require.Contains(t, seen, "run-1", "still in force: its expiry did not ride on metadata")
+	assert.True(t, seen["run-1"].Equal(expires))
+}
+
+// [R3.B1] A tombstone written before the expiry moved into the contents (an
+// empty file, its expiry in its modification time) is honoured for its
+// modification time plus the floor; so is one whose contents are unreadable.
+// Never forgotten sooner than that.
+func TestLegacyTombstonesAreHonoured(t *testing.T) {
+	clock := newOutboxClock()
+	for name, contents := range map[string][]byte{"legacy": nil, "garbage": []byte("not a tombstone")} {
+		t.Run(name, func(t *testing.T) {
+			dir := filepath.Join(t.TempDir(), "outbox")
+			store, err := openOutboxStore(dir)
+			require.NoError(t, err)
+			path := filepath.Join(dir, "run-1"+seenFileExt)
+			require.NoError(t, os.WriteFile(path, contents, 0o600))
+			stamped := clock.now() // a reset time: the file's creation
+			require.NoError(t, os.Chtimes(path, stamped, stamped))
+
+			seen, expired := store.loadSeen(stamped.Add(runStepSeenFloor - time.Second))
+			assert.Zero(t, expired)
+			require.Contains(t, seen, "run-1", "honoured for the floor past its modification time")
+			assert.True(t, seen["run-1"].Equal(stamped.Add(runStepSeenFloor)))
+
+			seen, expired = store.loadSeen(stamped.Add(runStepSeenFloor))
+			assert.Empty(t, seen)
+			assert.Equal(t, 1, expired)
+			_, err = os.Stat(path)
+			assert.True(t, os.IsNotExist(err), "and removed once past it")
+		})
+	}
+}
+
+// [R3.B1] A directory sync that fails is the tombstone's failure, not a log
+// line: markSeen returns it, and the run step is not run.
+func TestTombstoneDirectorySyncFailureIsSurfaced(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "outbox")
+	store, err := openOutboxStore(dir)
+	require.NoError(t, err)
+	store.dirSync = func(string) error { return syscall.EIO }
+	expires := newOutboxClock().now().Add(runStepSeenFloor)
+	assert.ErrorIs(t, store.markSeen("run-1", expires), syscall.EIO)
+
+	d := newTestDaemonClient("d-once", "u-once")
+	s := useTestSession(d, 16)
+	d.results.restore(store)
+	_, fresh := d.results.begin("run-2")
+	require.True(t, fresh)
+	d.executeTool(s, toolRequestMessage("run-2").GetToolRequest())
+	got := sentToolResponse(t, s)
+	assert.Equal(t, toolexec.ErrorCodeDaemonRestarted, got.ErrorCode)
+	assert.Contains(t, got.Content, "was not run")
+	noToolResponse(t, s, "nothing ran")
+}
+
+// syncDirStrict returns what went wrong, and succeeds on a real directory.
+func TestSyncDirStrict(t *testing.T) {
+	assert.NoError(t, syncDirStrict(t.TempDir()))
+	if runtime.GOOS != "windows" { // no directory sync there to fail
+		assert.Error(t, syncDirStrict(filepath.Join(t.TempDir(), "missing")))
+	}
 }
