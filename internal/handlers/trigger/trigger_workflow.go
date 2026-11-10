@@ -62,6 +62,12 @@ func (s *Service) EnableWorkflow(
 	if msg.ProjectId == "" {
 		return nil, svcerr.InvalidArgument("project_id is required")
 	}
+	// The activations are the project's, in its org: a caller who may not
+	// work in the project (authz: another owner, an org they left, a
+	// credential of another org) enables nothing, before anything is read.
+	if _, err := s.deps.Repo.GetProjectWithUserCheck(ctx, msg.ProjectId, userID); err != nil {
+		return nil, triggerDBError("get project", err)
+	}
 
 	// Enabling activates the workflow's triggers: resolve it as they will.
 	wf, err := launch.ResolveValidatedRunWorkflowOn(ctx, s.deps.Repo, launch.AutomationScope(userID, msg.ProjectId, msg.GetDaemonId()), msg.Workflow)

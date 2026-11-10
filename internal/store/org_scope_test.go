@@ -431,3 +431,56 @@ func TestAssignUnassignedOrg_ChatsWaitForTheirProject(t *testing.T) {
 		}
 	}
 }
+
+// A trigger follows its project as a chat does: one in a project a
+// concurrent write holds waits for it, and ends in its project's org.
+func TestAssignUnassignedOrg_TriggersWaitForTheirProject(t *testing.T) {
+	env := storetest.New(t)
+	ctx := context.Background()
+	at := time.Date(2026, 1, 15, 12, 0, 0, 0, time.UTC)
+	user := storetest.SeedUserID
+	if err := env.Repo.CreateProject(ctx, &core.Project{ID: "p-held", UserID: user, Name: "held", Path: "/srv/held",
+		CreatedAt: at, UpdatedAt: at, LastActive: at}); err != nil {
+		t.Fatal(err)
+	}
+	tr := newStoreTrigger("t-held", "held", at)
+	tr.ProjectID = "p-held"
+	if err := env.Repo.CreateTrigger(ctx, tr); err != nil {
+		t.Fatal(err)
+	}
+	triggerOrg := func() *string {
+		t.Helper()
+		got, err := env.Repo.GetTrigger(ctx, "t-held")
+		if err != nil {
+			t.Fatal(err)
+		}
+		return got.OrgID
+	}
+
+	held, err := env.SQL.BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := held.ExecContext(ctx, `SELECT id FROM projects WHERE id = 'p-held' FOR UPDATE`); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.AssignUnassignedOrg(ctx, env.ORM, user, "home"); err != nil {
+		t.Fatal(err)
+	}
+	if got := triggerOrg(); got != nil {
+		t.Fatalf("the trigger of a held project took %q before its project", *got)
+	}
+	if err := held.Rollback(); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.AssignUnassignedOrg(ctx, env.ORM, user, "acme"); err != nil {
+		t.Fatal(err)
+	}
+	project, err := env.Repo.GetProject(ctx, "p-held")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := triggerOrg(); got == nil || project.OrgID == nil || *got != *project.OrgID {
+		t.Fatalf("trigger org %v, project org %v: want them equal", got, project.OrgID)
+	}
+}

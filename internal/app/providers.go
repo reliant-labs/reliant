@@ -38,6 +38,7 @@ import (
 
 	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
 	"github.com/reliant-labs/reliant/internal/analytics"
+	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/certs"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/debugserver"
@@ -236,12 +237,17 @@ type OrgResolverDeps struct {
 // to answer about, so the resolver is nil, which every consumer reads as "no
 // orgs": nothing is stamped with one and lists ignore org_id.
 func NewOrgResolver(d OrgResolverDeps) (*orgs.Resolver, error) {
+	// The process's background decides org resources against the same
+	// resolver its listeners and activities install (authz).
 	src, hosted := d.Authority.(orgs.Source)
 	if !hosted {
 		logging.Info("org resolver: no control plane; organizations are off")
+		authz.SetProcessMembership(authz.NoOrgs{})
 		return nil, nil
 	}
-	return orgs.New(src), nil
+	resolver := orgs.New(src)
+	authz.SetProcessMembership(resolver)
+	return resolver, nil
 }
 
 // TLSFiles is the certificate and key a listener serves TLS with; both empty

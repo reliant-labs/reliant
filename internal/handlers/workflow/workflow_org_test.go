@@ -57,7 +57,8 @@ func TestSavedWorkflows_OrgIsVerifiedAndListed(t *testing.T) {
 	}))
 	svc := NewTestWorkflow(t, WithWorkflowDeps(Deps{Repo: repo, Orgs: resolver}))
 	acme, home, globex := "acme", "home", "globex"
-	machine := auth.WithMachineToken(ctx, &fat.Principal{OrgID: acme, ActingUserID: userID})
+	// Bound to home, the default: the project (no org yet) is home's too.
+	machine := auth.WithMachineToken(ctx, &fat.Principal{OrgID: home, ActingUserID: userID})
 
 	create := func(ctx context.Context, title string, org *string) (*reliantv1.CreateWorkflowDraftResponse, error) {
 		resp, err := svc.CreateWorkflowDraft(ctx, connect.NewRequest(&reliantv1.CreateWorkflowDraftRequest{
@@ -78,10 +79,10 @@ func TestSavedWorkflows_OrgIsVerifiedAndListed(t *testing.T) {
 
 	_, err := create(ctx, "Not Mine", &globex)
 	requireOrgRefusal(t, err, orgs.ReasonNotOrgMember)
-	_, err = create(machine, "Elsewhere", &home)
+	_, err = create(machine, "Elsewhere", &acme)
 	requireOrgRefusal(t, err, orgs.ReasonOrgMismatch)
 	requireOrgRefusal(t, save(ctx, "not-mine", &globex), orgs.ReasonNotOrgMember)
-	requireOrgRefusal(t, save(machine, "elsewhere", &home), orgs.ReasonOrgMismatch)
+	requireOrgRefusal(t, save(machine, "elsewhere", &acme), orgs.ReasonOrgMismatch)
 	stored, err := repo.ListWorkflowDraftsByUser(ctx, userID)
 	require.NoError(t, err)
 	require.Empty(t, stored, "a refused create stores no saved workflow")
@@ -98,7 +99,7 @@ func TestSavedWorkflows_OrgIsVerifiedAndListed(t *testing.T) {
 		require.NotNil(t, d.OrgID, d.Slug)
 		orgOf[d.Slug] = *d.OrgID
 	}
-	assert.Equal(t, map[string]string{"acme-flow": acme, "home-flow": home, "machine-flow": acme}, orgOf)
+	assert.Equal(t, map[string]string{"acme-flow": acme, "home-flow": home, "machine-flow": home}, orgOf)
 
 	includeDrafts := true // the saved workflows here are drafts
 	listed := func(org *string) []string {
@@ -113,8 +114,8 @@ func TestSavedWorkflows_OrgIsVerifiedAndListed(t *testing.T) {
 		}
 		return slugs
 	}
-	assert.ElementsMatch(t, []string{"acme-flow", "machine-flow"}, listed(&acme))
-	assert.ElementsMatch(t, []string{"home-flow"}, listed(&home))
+	assert.ElementsMatch(t, []string{"acme-flow"}, listed(&acme))
+	assert.ElementsMatch(t, []string{"home-flow", "machine-flow"}, listed(&home))
 	assert.ElementsMatch(t, []string{"acme-flow", "home-flow", "machine-flow"}, listed(nil))
 	_, err = svc.ListWorkflows(ctx, connect.NewRequest(&reliantv1.ListWorkflowsRequest{ProjectId: projectID, OrgId: &globex}))
 	requireOrgRefusal(t, err, orgs.ReasonNotOrgMember)

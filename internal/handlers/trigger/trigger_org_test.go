@@ -95,8 +95,14 @@ func TestCreateTrigger_OrgIsVerified(t *testing.T) {
 	_, err := env.createIn(env.ctx, env.projectID, &globex)
 	requireDenied(t, err, connect.CodePermissionDenied, orgs.ReasonNotOrgMember)
 
+	// A credential bound to acme cannot even see a project of home (its
+	// default org, which a project with no org yet belongs to): authz refuses
+	// it before the org is asked about; naming another org than its own is a
+	// mismatch.
 	machine := auth.WithMachineToken(env.ctx, &fat.Principal{OrgID: acme, ActingUserID: env.userID})
 	_, err = env.createIn(machine, env.projectID, &home)
+	requireDenied(t, err, connect.CodeNotFound, "")
+	_, err = env.createIn(machine, acmeProject, &home)
 	requireDenied(t, err, connect.CodePermissionDenied, orgs.ReasonOrgMismatch)
 
 	// A project of an org the caller is not in is not theirs to see at all
@@ -206,7 +212,7 @@ func TestUpdateTrigger_ActsInTheTriggersOrg(t *testing.T) {
 	machine := auth.WithMachineToken(env.ctx, &fat.Principal{OrgID: "home", ActingUserID: env.userID})
 	// Reconfigure in place, and move within the org.
 	for _, projectID := range []string{acmeProject, acmeOther} {
-		requireDenied(t, update(machine, projectID), connect.CodePermissionDenied, orgs.ReasonOrgMismatch)
+		requireDenied(t, update(machine, projectID), connect.CodeNotFound, "") // authz: another org's trigger
 		unchanged()
 	}
 
