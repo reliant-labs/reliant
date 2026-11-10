@@ -24,9 +24,10 @@ type Service struct {
 	temporal TemporalClient
 	pause    PauseController
 
-	// cancelGrace and cancelPoll override the package defaults of the same
-	// names when positive; tests shrink them.
-	cancelGrace, cancelPoll time.Duration
+	// cancelGrace, cancelSettle and cancelPoll override cancelGrace,
+	// cancelSettleTimeout and cancelPollInterval when positive; tests shrink
+	// them.
+	cancelGrace, cancelSettle, cancelPoll time.Duration
 }
 
 // NewService builds a run-lifecycle service over the chat store, Temporal, and
@@ -95,9 +96,9 @@ func (s *Service) Pause(ctx context.Context, chatID string) error {
 // which kills the commands they were running on the machine; its terminal
 // handlers run, so a workflow releases what it holds (a lease, a claim, a
 // label); and it writes its own cancelled status and cascade. Terminate waits
-// at most cancelGrace for the run to report that it is ending
-// (model.RunStopQuery) and then returns, leaving the run to finish its cleanup,
-// which its handlers' own timeouts bound.
+// for the run to acknowledge the cancel and then for its terminal state to be
+// durable, reconciling the row itself when the execution closed without
+// writing it (cancelCooperatively has the phases and their bounds).
 //
 // A run that does not report ending in time — parked on a signal Await that
 // never observes the cancel, or with no worker to run it — is hard-terminated,
@@ -152,28 +153,51 @@ func (s *Service) Terminate(ctx context.Context, chatID string) error {
 	return nil
 }
 
-// cancelGrace bounds how long Terminate waits for a cancelled run to report
-// that it is ending before it hard-terminates the run. A run that observes the
-// cancel reaches its completion code within one workflow task — a second or
-// two on a loaded worker — so this is long enough for a slow worker and short
-// enough that a caller is not held waiting on a run that will never answer.
+// cancelGrace bounds how long Terminate waits for a cancelled run to
+// ACKNOWLEDGE the cancel — report that it has left its graph — before it
+// hard-terminates the run. A run that observes the cancel reaches its
+// completion code within one workflow task — a second or two on a loaded
+// worker — so this is long enough for a slow worker and short enough that a
+// caller is not held waiting on a run that will never answer.
 const cancelGrace = 15 * time.Second
 
-// cancelPollInterval is how often Terminate asks a cancelled run whether it is
-// ending.
+// cancelSettleTimeout bounds how long Terminate then waits for the cancelled
+// run to SETTLE: its terminal status and cascade durably written, or its
+// execution closed. A run with no finally handler settles within seconds of
+// acknowledging; one whose finally runs longer is still executing that
+// handler when this elapses, and is left to finish it (see
+// cancelCooperatively).
+const cancelSettleTimeout = 30 * time.Second
+
+// cancelPollInterval is how often Terminate asks a cancelled run how far it
+// has got.
 const cancelPollInterval = 250 * time.Millisecond
 
-// cancelCooperatively asks Temporal to cancel workflowID and waits up to
-// cancelGrace for the run to report, through model.RunStopQuery, that it is
-// ending — or for Temporal to report it closed. true means the run is stopping
-// itself and owns the rest of its cleanup; false means the caller must
-// terminate it.
+// cancelCooperatively asks Temporal to cancel workflowID and reports whether
+// the run is stopping itself (true) or the caller must hard-terminate it
+// (false).
 //
-// The query is what keeps the wait short for a run with cleanup to do: a
-// workflow's finally handler may run for minutes, and the run must not be
-// terminated during it, but Terminate need not wait for it either. A run on a
-// worker too old to answer the query is still seen through Describe once it
-// closes.
+// Two phases, because a run's word that it is ending is not the same as its
+// bookkeeping being done:
+//
+//  1. Acknowledge, within cancelGrace: the run reports, through
+//     model.RunStopQuery, that it has entered its completion code, or
+//     Temporal reports it closed. Neither yet says the database agrees: the
+//     query is answered the moment the completion defer starts, before its
+//     handlers and its status write, and an execution that closed may have
+//     closed some other way (it completed concurrently with this cancel, or
+//     its own status write failed). No acknowledgement means the run will
+//     not stop itself: terminate it.
+//  2. Settle, within cancelSettleTimeout: the run's row is durably terminal
+//     (the run wrote it), or the execution is closed — and then the caller
+//     reconciles the row itself, exactly as it does for a run it found
+//     closed before cancelling, since nothing else will write it.
+//
+// A run still open when phase 2 elapses is running its finally handler: it is
+// live in Temporal and live in the database, which agree, and its own
+// completion code writes its terminal status when the handler finishes,
+// inside the handler's own budget. Terminating it would cut off the cleanup
+// the cancel was cooperative for, so it is left running, and said so.
 func (s *Service) cancelCooperatively(ctx context.Context, workflowID string) bool {
 	canceller, ok := s.temporal.(TemporalCanceller)
 	if !ok {
@@ -184,21 +208,38 @@ func (s *Service) cancelCooperatively(ctx context.Context, workflowID string) bo
 			"workflowID", workflowID, "error", err)
 		return false
 	}
-	grace, poll := s.cancelGrace, s.cancelPoll
+	grace, settle, poll := s.cancelGrace, s.cancelSettle, s.cancelPoll
 	if grace <= 0 {
 		grace = cancelGrace
+	}
+	if settle <= 0 {
+		settle = cancelSettleTimeout
 	}
 	if poll <= 0 {
 		poll = cancelPollInterval
 	}
-	deadline := time.Now().Add(grace)
+
+	if !pollUntil(ctx, grace, poll, func() bool { return s.runAcknowledgedCancel(ctx, canceller, workflowID) }) {
+		logging.WarnContext(ctx, "[runs] Cancelled run did not acknowledge the cancel in time; terminating it",
+			"workflowID", workflowID, "grace", grace)
+		return false
+	}
+	if !pollUntil(ctx, settle, poll, func() bool { return s.cancelledRunSettled(ctx, workflowID) }) {
+		logging.InfoContext(ctx, "[runs] Cancelled run is still running its cleanup; it writes its own terminal status when that ends",
+			"workflowID", workflowID, "waited", settle)
+	}
+	return true
+}
+
+// pollUntil calls done every poll until it reports true, for at most budget
+// (and one last time at the end of it). It reports whether done did.
+func pollUntil(ctx context.Context, budget, poll time.Duration, done func() bool) bool {
+	deadline := time.Now().Add(budget)
 	for {
-		if s.runIsEnding(ctx, canceller, workflowID) {
+		if done() {
 			return true
 		}
 		if time.Now().After(deadline) || ctx.Err() != nil {
-			logging.WarnContext(ctx, "[runs] Cancelled run did not report ending in time; terminating it",
-				"workflowID", workflowID, "grace", grace)
 			return false
 		}
 		timer := time.NewTimer(poll)
@@ -210,9 +251,10 @@ func (s *Service) cancelCooperatively(ctx context.Context, workflowID string) bo
 	}
 }
 
-// runIsEnding reports whether a cancelled run has left its graph: it says so
-// itself, or Temporal reports it closed.
-func (s *Service) runIsEnding(ctx context.Context, canceller TemporalCanceller, workflowID string) bool {
+// runAcknowledgedCancel reports whether a cancelled run has left its graph:
+// it says so itself, or Temporal reports it closed. Neither means its
+// bookkeeping is done (cancelledRunSettled).
+func (s *Service) runAcknowledgedCancel(ctx context.Context, canceller TemporalCanceller, workflowID string) bool {
 	if value, err := canceller.QueryWorkflow(ctx, workflowID, "", model.RunStopQuery); err == nil {
 		var state model.RunStopState
 		if value != nil && value.Get(&state) == nil && state.Ending {
@@ -221,6 +263,22 @@ func (s *Service) runIsEnding(ctx context.Context, canceller TemporalCanceller, 
 	}
 	state, err := s.State(ctx, workflowID)
 	return err == nil && (!state.Exists || !state.IsRunning)
+}
+
+// cancelledRunSettled reports whether a cancelled run's terminal state is
+// durable: its row is no longer live, or its execution has closed — in which
+// case nothing but this caller will write a row the run left live, so it
+// reconciles it here, as Terminate does for a run it found closed.
+func (s *Service) cancelledRunSettled(ctx context.Context, workflowID string) bool {
+	if wf, err := s.repo.GetWorkflow(ctx, workflowID); err == nil && wf != nil && !wf.Status.Live() {
+		return true
+	}
+	state, err := s.State(ctx, workflowID)
+	if err != nil || (state.Exists && state.IsRunning) {
+		return false
+	}
+	s.reconcileStoppedRun(ctx, workflowID, db.Cancelled())
+	return true
 }
 
 // clearUsageLimitWait releases the chat's usage-limit wait markers. A
