@@ -275,8 +275,12 @@ var backgroundCommands = map[string]bool{
 	"worktree.git_status":         true,
 	"worktree.import_validate":    true,
 	"worktree.reconcile":          true,
-	"worktree.snapshot_remove":    true,
-	"worktree.validate_path":      true,
+	// remove_failed_create is sent when a machine connects, to clear the
+	// checkouts of creates whose answer was lost (reliant #2413), and
+	// before a create retries a branch such a checkout holds.
+	"worktree.remove_failed_create": true,
+	"worktree.snapshot_remove":      true,
+	"worktree.validate_path":        true,
 }
 
 // IsTerminalReport reports whether terminal input consists only of the
