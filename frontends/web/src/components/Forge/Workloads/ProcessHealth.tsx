@@ -1,11 +1,10 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * PROCESSES on the Overview: every process that sends telemetry
+ * PROCESSES on the Dashboards hub: every process that sends telemetry
  * (service.name), one dense line each — status, the RED figures, CPU, error
- * logs and alerts. Compact on purpose: the service cards above carry a
- * workload's full picture (memory, restarts, release), so this list is the
- * request-side index, and it reads as a different thing from the cards.
+ * logs and alerts. (The project Overview folds the same figures into its one
+ * Services list, overviewRows.ts, and has no Processes table of its own.)
  *
  * On a phone each process stacks into labelled lines; CPU and Alerts drop out
  * there (Services carries CPU, "Needs attention" carries the firing alerts),

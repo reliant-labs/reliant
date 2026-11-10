@@ -75,13 +75,9 @@ import { ObsError, ObsNotSetUp, ObsAsOf } from "../Observability/ObsStates";
 import { Ago, INK_BUTTON, INK_LINK, Panel } from "../Releases/releaseParts";
 import { shortVersion } from "../Releases/releaseModel";
 import {
-  KIND_LABEL,
   attentionItems,
-  filterServices,
   formatAge,
   jobRows,
-  kindsOf,
-  needsAttention,
   previewsCell,
   serviceRows,
   stripCell,
@@ -96,8 +92,8 @@ import {
 import { SkeletonRows } from "./workloadParts";
 import { FrontendList, FrontendsEmpty, FrontendsLoading } from "../Frontends/FrontendList";
 import { JobTimeline } from "./JobTimeline";
-import { ProcessHealth } from "./ProcessHealth";
-import { ServiceCards, type RedLookup } from "./ServiceCards";
+import { ServiceCards } from "./ServiceCards";
+import { filterRows, overviewRows, rowKindsOf, ROW_KIND_LABEL } from "./overviewRows";
 import { PartialNote, StaleNote, keepsStaleResult } from "./tileState";
 
 export interface OverviewSearch {
@@ -200,22 +196,36 @@ export function OverviewHome({
   const allJobs = useMemo(() => jobRows(listed.data?.jobs ?? [], ENV_ALL), [listed.data]);
   const services = useMemo(() => serviceRows(workloads, env, envs), [workloads, env, envs]);
   const jobs = useMemo(() => (all ? allJobs : allJobs.filter((row) => row.envName === env)), [allJobs, all, env]);
-  const visible = useMemo(() => filterServices(services, search), [services, search]);
   // Every run in scope, for the jobs' timeline; the window it is drawn over.
   const jobRuns = useMemo(() => (listed.data?.jobs ?? []).filter((run) => all || run.envName === env), [listed.data, all, env]);
   const jobWindow = useMemo(() => resolveWindow(range), [range, listed.dataUpdatedAt]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // The service cards' requests: the same GetServiceOverview read (scope, window, group-by) Processes makes, so one cached answer.
+  // The list's request side: GetServiceOverview for the scope (the read the Dashboards hub's Processes makes, so one cached answer).
   const redGroupBy = useMemo(() => (kpiScope?.envIds.length === 0 ? [ENV_KEY] : []), [kpiScope]);
   const red = useServiceOverview(kpiScope, range, [], redGroupBy);
-  const redLookup = useMemo<RedLookup>(() => {
-    const byKey = new Map(red.data?.services.map((health) => [`${health.group[ENV_KEY] ?? ""}/${health.name}`, health] as const) ?? []);
-    return { loading: red.isLoading, of: (name, envName) => byKey.get(`${redGroupBy.length ? envName : ""}/${name}`) };
-  }, [red.data, red.isLoading, redGroupBy]);
-  const obsHref = (view: "traces" | "sessions", extra: Record<string, unknown> = {}) =>
+  // Its own state: a failed telemetry read blanks only the figures, never the rows the workload read drew.
+  const redFailed = !!red.error && !keepsStaleResult(red.error, red.data);
+  const obsHref = (view: "traces" | "sessions" | "logs", extra: Record<string, unknown> = {}) =>
     withSearch(consolePath(project, { kind: "obs-view", view }), { env, range, ...extra });
 
   const projectEnvIds = useMemo(() => new Set(envs.map((candidate) => candidate.id)), [envs]);
+  const envNameOf = useMemo(() => (id: string) => envs.find((candidate) => candidate.id === id)?.name, [envs]);
+  // ONE list: services, jobs and the processes that send telemetry with no workload (overviewRows.ts).
+  const rows = useMemo(
+    () =>
+      overviewRows({
+        services,
+        jobs,
+        workloads,
+        telemetry: redFailed ? [] : (red.data?.services ?? []),
+        alerts: (alerts.data ?? []).filter((alert) => projectEnvIds.has(alert.envId)),
+        env,
+        envNameOf,
+        workloadsUnread: !!listed.error && !listed.data,
+      }),
+    [services, jobs, workloads, red.data, redFailed, alerts.data, projectEnvIds, env, envNameOf, listed.error, listed.data]
+  );
+  const visible = useMemo(() => filterRows(rows, search), [rows, search]);
   const firing = useMemo(
     () => (alerts.data ?? []).filter((a) => a.state === "firing" && projectEnvIds.has(a.envId) && (all || a.envId === scopedEnv?.id)),
     [alerts.data, projectEnvIds, all, scopedEnv]
@@ -243,7 +253,7 @@ export function OverviewHome({
   const servicesMissing = missing.filter((section) => section !== "jobs");
   const retryWorkloads = () => void listed.refetch({ cancelRefetch: false });
   const where = all ? "all environments" : env;
-  const unhealthy = services.filter(needsAttention).length;
+  const unhealthy = rows.filter((row) => row.attention).length;
 
   // NOTHING DEPLOYED: the header states no counts. They would be drawn from
   // telemetry about environments the page is about to say do not exist.
@@ -361,10 +371,12 @@ export function OverviewHome({
       ) : (
         <section className="space-y-2" aria-labelledby="overview-services-heading" data-testid="overview-services">
           <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-            <h2 id="overview-services-heading" className="text-sm font-medium text-ink" title="Long-running workloads: health, requests, and CPU and memory against their limits">
+            <h2 id="overview-services-heading" className="text-sm font-medium text-ink" title="Everything the app runs: services, jobs and processes, with their health and requests. CPU, memory and pods are on each workload's page.">
               Services
-              {!loading && !workloadsFailed && <span className="ml-1.5 text-xs font-normal tabular-nums text-ink-muted">{services.length}</span>}
+              {!loading && <span className="ml-1.5 text-xs font-normal tabular-nums text-ink-muted">{rows.length}</span>}
             </h2>
+            {/* The request figures are their own read: during a quota pause they are the last result, and say so. */}
+            {red.data && <ObsAsOf updatedAt={red.dataUpdatedAt} />}
             <FilterBar
               label="Filter services"
               active={[search.q, search.status, search.kind].filter(Boolean).length}
@@ -375,7 +387,7 @@ export function OverviewHome({
               <FilterSearch value={search.q ?? ""} onChange={(q) => onSearch({ q: q || undefined })} placeholder="Filter services" testId="overview-filter" />
               <FilterChip
                 on={search.status === "attention"}
-                count={filterServices(services, { ...search, status: "attention" }).length}
+                count={filterRows(rows, { ...search, status: "attention" }).length}
                 onClick={() => onSearch({ status: search.status ? undefined : "attention" })}
                 testId="overview-chip-status"
                 title={search.status ? "Show every service" : "Show only the services that need attention"}
@@ -385,30 +397,35 @@ export function OverviewHome({
               <FilterMenu
                 label="Kind"
                 value={search.kind}
-                options={kindsOf(services).map((kind) => ({ value: kind, label: KIND_LABEL[kind], count: filterServices(services, { ...search, kind }).length }))}
+                options={rowKindsOf(rows).map((kind) => ({ value: kind, label: ROW_KIND_LABEL[kind], count: filterRows(rows, { ...search, kind }).length }))}
                 onChange={(kind) => onSearch({ kind: kind as KindFilter | undefined })}
                 testId="overview-chip-kind"
               />
             </FilterBar>
           </div>
-          {workloadsFailed ? (
+          {workloadsFailed && (
             <div className="rounded-lg border border-border bg-surface p-4" data-testid="overview-services-error">
               <ObsError error={listed.error} subject={project} onRetry={retryWorkloads} retrying={listed.isFetching} />
             </div>
-          ) : (
+          )}
+          {/* The telemetry is its own read: a failed workload read still lists what sends requests, with its figures. */}
+          {(!workloadsFailed || rows.length > 0) && (
             <div data-testid="overview-services-table">
               <ServiceCards
                 rows={visible}
-                loading={loading}
+                loading={loading && !workloadsFailed}
                 showEnv={all}
-                windowShort={range}
                 hosted={hosted}
                 hrefs={hrefs}
-                red={redLookup}
+                rowHrefs={{
+                  logs: (name) => obsHref("logs", { service: name, severity: "error,fatal" }),
+                  traces: (name) => obsHref("traces", { service: name }),
+                }}
+                redLoading={red.isLoading}
                 empty={
                   filtered ? (
                     <>
-                      No service matches these filters.{" "}
+                      Nothing matches these filters.{" "}
                       <button type="button" className={INK_BUTTON} onClick={() => onSearch({ q: undefined, status: undefined, kind: undefined })}>
                         Clear them
                       </button>
@@ -417,12 +434,19 @@ export function OverviewHome({
                     <>Nothing is reported for {env}.</>
                   ) : (
                     <>
-                      No service has reported from {where} in the {windowWords}. Workloads appear once Reliant sees their pods; an environment
-                      that runs only jobs looks like this.
+                      No service or job has reported from {where} in the {windowWords}. Workloads appear once Reliant sees their pods.
                     </>
                   )
                 }
               />
+            </div>
+          )}
+          {redFailed && (
+            <div className="flex flex-wrap items-center gap-x-2 text-xs text-ink-muted" data-testid="overview-services-red-error">
+              Requests, error logs and alerts per service could not be read, so those columns are empty.
+              <button type="button" className={INK_BUTTON} onClick={() => void red.refetch({ cancelRefetch: false })} disabled={red.isFetching} data-testid="overview-services-red-retry">
+                {red.isFetching ? "Retrying…" : "Try again"}
+              </button>
             </div>
           )}
           {listed.data?.truncated && (
@@ -461,17 +485,7 @@ export function OverviewHome({
 
       {!notSetUp && (
         <div className="space-y-4">
-          {!unrecorded && <ProcessHealth
-            scope={kpiScope}
-            range={range}
-            workloads={workloads}
-            alerts={(alerts.data ?? []).filter(alert => projectEnvIds.has(alert.envId))}
-            envNameOf={(id) => envs.find(candidate => candidate.id === id)?.name}
-            workloadHref={(name, processEnv) => hrefs.workload(name, processEnv ?? env)}
-            logsHref={(name) => withSearch(consolePath(project, { kind: "obs-view", view: "logs" }), { env, range, service: name, severity: "error,fatal" })}
-          />}
-
-          <Panel title="Jobs" meta="Migrations, provisioning and scheduled jobs: every run in the window" flush testId="overview-jobs">
+          <Panel title="Job runs" meta="Every run of each job in the window; the latest is on its row above" flush testId="overview-jobs">
             {workloadsFailed ? (
               <div className="p-4" data-testid="overview-jobs-error">
                 <ObsError error={listed.error} subject={project} onRetry={retryWorkloads} retrying={listed.isFetching} />
