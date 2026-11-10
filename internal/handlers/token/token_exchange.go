@@ -264,6 +264,16 @@ func (s *Service) ExchangeToken(
 		// The control plane's refusal of a ceiling that would authorize
 		// nothing (control-plane #2400) is the caller's to act on, not an
 		// outage.
+		//
+		// MIXED VERSIONS. A control plane before #2400 clips a bindable
+		// scope to org-wide grants at the mint, so this exchange stays as
+		// narrow as before (never wider) and an environment-only request
+		// ends as its permission_denied above. A control plane with #2400
+		// refuses that request here. Either way nothing that cannot
+		// authenticate is handed back; confirmOrg is the backstop. Rolling
+		// this server back restores exchangeCeiling's old answer (the
+		// resolved scopes only), the narrow behaviour, with no control-plane
+		// step: the control plane only ever clips more.
 		if errors.As(err, &refused) && refused.Code == "failed_precondition" {
 			return nil, svcerr.WithReason(svcerr.FailedPrecondition(refused.Message), refused.Reason)
 		}
