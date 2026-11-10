@@ -208,6 +208,9 @@ type SweepEntry struct {
 	Bytes        int64        `json:"bytes,omitempty"`
 	// Fingerprint binds an approval to this exact state (needs approval).
 	Fingerprint string `json:"fingerprint,omitempty"`
+	// ProposedAt is when this exact state (Fingerprint) was first proposed;
+	// carried from pass to pass while it stays the same.
+	ProposedAt time.Time `json:"proposed_at,omitempty"`
 	// Work summarizes what only this worktree holds (needs approval): the
 	// changed files and the commits on no remote.
 	Work          string `json:"work,omitempty"`
@@ -387,16 +390,24 @@ func (r *Reclaimer) SweepMachine(ctx context.Context, opts SweepOptions) SweepRe
 	rep.Totals = totals(entries)
 	rep.FinishedAt = r.now().UTC()
 
-	if len(consumed) > 0 || !opts.ApprovedOnly {
-		settleApprovals(context.WithoutCancel(ctx), dir, consumed, r.now())
-	}
-	if b, err := json.MarshalIndent(rep, "", "  "); err == nil && (!opts.ApprovedOnly || len(entries) != 0) {
-		if opts.ApprovedOnly {
-			// An approved-only pass amends the last full report rather than
-			// replacing it: what it did not look at is still true.
-			b = r.mergeIntoLastReport(dir, rep)
+	// The report is rewritten under the approvals lock, which a decision or
+	// note also holds from reading the report to storing itself: one checked
+	// against an entry this pass replaces is checked again, against the new
+	// entry, after it.
+	if unlock, err := approvalsLock(context.WithoutCancel(ctx), dir); err == nil {
+		carryProposedAt(dir, entries, rep.FinishedAt)
+		if len(consumed) > 0 || !opts.ApprovedOnly {
+			settleApprovalsLocked(dir, consumed, r.now())
 		}
-		_ = writeFileAtomic(filepath.Join(dir, reportFile), b)
+		if b, err := json.MarshalIndent(rep, "", "  "); err == nil && (!opts.ApprovedOnly || len(entries) != 0) {
+			if opts.ApprovedOnly {
+				// An approved-only pass amends the last full report rather than
+				// replacing it: what it did not look at is still true.
+				b = r.mergeIntoLastReport(dir, rep)
+			}
+			_ = writeFileAtomic(filepath.Join(dir, reportFile), b)
+		}
+		unlock()
 	}
 	lines := make([]JournalLine, 0, len(entries))
 	for _, e := range entries {

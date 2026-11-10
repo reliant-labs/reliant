@@ -482,6 +482,8 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant worktree reclaim`](#reliant-worktree-reclaim) | The daemon's last reclaim report, and decisions about proposed worktrees |
 | [`reliant worktree reclaim approve`](#reliant-worktree-reclaim-approve) | Approve reclaiming proposed worktrees |
 | [`reliant worktree reclaim decline`](#reliant-worktree-reclaim-decline) | Decline reclaiming proposed worktrees |
+| [`reliant worktree reclaim note`](#reliant-worktree-reclaim-note) | Attach a reviewing note to proposed worktrees |
+| [`reliant worktree reclaim proposals`](#reliant-worktree-reclaim-proposals) | Print the pending proposals as JSON |
 | [`reliant worktree reclaim report`](#reliant-worktree-reclaim-report) | Show the daemon's last reclaim report |
 | [`reliant worktree reclaim scan`](#reliant-worktree-reclaim-scan) | Run a dry-run pass now and write its report |
 | [`reliant worktree reclaimed`](#reliant-worktree-reclaimed) | List the captures of reclaimed worktrees |
@@ -20063,6 +20065,8 @@ reliant worktree reclaim
 |---------|-------------|
 | [`approve`](#reliant-worktree-reclaim-approve) | Approve reclaiming proposed worktrees |
 | [`decline`](#reliant-worktree-reclaim-decline) | Decline reclaiming proposed worktrees |
+| [`note`](#reliant-worktree-reclaim-note) | Attach a reviewing note to proposed worktrees |
+| [`proposals`](#reliant-worktree-reclaim-proposals) | Print the pending proposals as JSON |
 | [`report`](#reliant-worktree-reclaim-report) | Show the daemon's last reclaim report |
 | [`scan`](#reliant-worktree-reclaim-scan) | Run a dry-run pass now and write its report |
 
@@ -20112,6 +20116,54 @@ proposed worktree is to be kept; an agent's shell is refused that too.
 
 ```
 reliant worktree reclaim decline <key>... [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--state-dir` | `string` | - | the reclaim state directory (default ~/.reliant/reclaim) |
+
+---
+
+#### reliant worktree reclaim note
+
+Attach a reviewing note to proposed worktrees
+
+Attach a short assessment to a proposal: what the unsaved work looks like,
+how recently it was touched, whether it looks abandoned. The person sees it on
+the machine's Inbox item next to approve and decline. A note binds to the
+proposal's fingerprint (--fingerprint, from `proposals`), so a note about a
+state that has since changed is refused. It decides nothing.
+
+--from `<file>` (or - for stdin) records many at once: a JSON list of
+`{"key", "fingerprint", "text"}.`
+
+```
+reliant worktree reclaim note [<key> <text>] [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--fingerprint` | `string` | - | the proposal's fingerprint the note is about |
+| `--from` | `string` | - | read notes from this JSON file (- for stdin) |
+| `--state-dir` | `string` | - | the reclaim state directory (default ~/.reliant/reclaim) |
+
+---
+
+#### reliant worktree reclaim proposals
+
+Print the pending proposals as JSON
+
+Print the worktrees the last pass proposes for removal and that are not yet
+reclaimed, as JSON: each one's key, fingerprint, path, branch, what its unsaved
+work is, how long it has been idle, any reviewing agent's note and any decision
+already recorded. This is what the machine's Inbox item lists.
+
+```
+reliant worktree reclaim proposals [flags]
 ```
 
 **Flags:**

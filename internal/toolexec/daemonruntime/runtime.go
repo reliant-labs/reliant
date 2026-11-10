@@ -146,6 +146,9 @@ type daemonClient struct {
 	// DiskReport, and explains ENOSPC failures in tool results. The
 	// process-wide diskwatch.Default(), shared with the exec paths.
 	diskWatcher *diskwatch.Watcher
+	// reclaimMode is the machine sweep's mode; the heartbeat carries its
+	// proposals while it is dry-run or on (worktree_reclaim_proposals.go).
+	reclaimMode worktreereclaim.SweepMode
 
 	// diskGuard acts on the volumes diskWatcher reports: it reclaims past
 	// one threshold and refuses new heavy commands past another
@@ -390,6 +393,7 @@ func Start(ctx context.Context, opts StartOptions) error {
 	// Every linked worktree on the machine, on the same schedule: captured,
 	// then reclaimed, or only reported in dry-run (worktree_sweep.go).
 	client.diskWatcher.ConfigureWorktreeSweep(worktreeSweep(opts.WorktreeReclaim))
+	client.reclaimMode = opts.WorktreeReclaim.Mode
 	go client.diskWatcher.RunReaper(ctx)
 	// The disk guard reclaims with the same pass, at once, when a volume
 	// crosses its reclaim threshold — where the routine runs at all: a
@@ -1885,6 +1889,7 @@ func (d *daemonClient) runHeartbeats(ctx context.Context, s *gatewaySession, liv
 		if rep, ok := d.diskWatcher.Report(); ok {
 			d.diskGuard.Annotate(rep)
 			rep.Processes = d.procGuard.Report()
+			rep.WorktreeReclaim = worktreeReclaimProposals(d.reclaimMode)
 			hb.Disk = rep
 		}
 		hb.ToolCallsInFlight = uint32(d.results.runningCount())
