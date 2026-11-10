@@ -14,6 +14,7 @@ import (
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/daemonerr"
 	"github.com/reliant-labs/reliant/internal/daemonevents"
 	"github.com/reliant-labs/reliant/internal/daemonplacement"
@@ -173,6 +174,9 @@ func (s *Service) ensureProjectDirsOnDaemon(userID, daemonID string) error {
 		logging.Warn("project-dir-heal: failed to list user projects", "error", err, "userID", userID, "daemonID", daemonID)
 		return nil
 	}
+	// A project of an org the user has left is not theirs to put on a
+	// machine any more.
+	projects = authz.Visible(ctx, userID, projects, authz.CanWriteProject)
 	if len(projects) == 0 {
 		return nil
 	}
@@ -410,6 +414,9 @@ func (s *Service) ListProjectDaemons(
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list project_daemons"))
 	}
+	// Checkouts of a project the caller may no longer read (an org they
+	// left, a credential's other org) are not listed.
+	projects = authz.Visible(ctx, userID, projects, authz.CanReadProject)
 
 	out := make([]*reliantv1.ProjectDaemon, 0)
 	names := s.newMachineNames()

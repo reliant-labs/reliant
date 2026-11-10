@@ -322,7 +322,7 @@ func TestServerRoleDatabasePool(t *testing.T) {
 		require.NoError(t, os.Unsetenv(name))
 	}
 	api := loadServerAPIOptions(t)
-	assert.Equal(t, db.Pool{MaxOpenConns: 25, MaxIdleConns: 10, SchemaWait: 300 * time.Second, KeepIdleWarm: true}, api.DatabasePool)
+	assert.Equal(t, db.Pool{MaxOpenConns: 25, MaxIdleConns: 20, SchemaWait: 300 * time.Second, KeepIdleWarm: true}, api.DatabasePool)
 
 	t.Setenv("RELIANT_DB_MAX_OPEN_CONNS", "8")
 	t.Setenv("RELIANT_DB_MAX_IDLE_CONNS", "2")

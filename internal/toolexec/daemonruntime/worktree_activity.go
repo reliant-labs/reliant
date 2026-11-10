@@ -393,9 +393,11 @@ func beginRecoveryCommand(name string, payload []byte) (func(), error) {
 		return func() {}, nil
 	}
 	var paths []string
-	if name == WorktreeReclaimDecideCommand {
+	if name == WorktreeReclaimDecideCommand || name == WorktreeReclaimApproveCommand {
 		// It writes only the reclaim's own state (approvals.json), never a
 		// worktree: scoped there, it never waits on a reclaim in progress.
+		// The approve command's removal runs after it answers, under a
+		// recovery lease of its own (Reclaimer.Acquire), like any pass.
 		if dir, err := reclaimStateDir(); err == nil {
 			paths = []string{dir}
 		}

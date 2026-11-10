@@ -64,11 +64,6 @@ export interface ElectronAPI {
   setTrayStatus: (status: { agentStatus: 'idle' | 'running' | 'error'; activeWorkflows: number; hasChats: boolean; canCreateChat: boolean; currentProjectName: string | null; currentWorktreeName: string | null; currentWorktreeId: string; activeChatId: string | null; activeChatTitle: string | null; recentChats: Array<{ id: string; title: string; activity: string; needsRecovery: boolean }>; workspaces: Array<{ id: string; name: string; isMain: boolean }>; workflows: Array<{ name: string; source: 'builtin' | 'user' | 'project' }>; lastActivityAt: string | null }) => Promise<{ success: boolean; error?: string }>;
   onNotification: (callback: (data: NotificationData) => void) => void;
 
-  // Mock driver configuration
-  getMockDriverConfig: () => Promise<any>;
-  setMockDriverConfig: (config: any) => Promise<void>;
-  browseMockFile: () => Promise<string | null>;
-
   // Window management
   getWindowContext: () => Promise<{ worktreeId?: string; projectId?: string; projectName?: string } | null>;
   openWorktreeWindow: (worktreeData: { id: string; name?: string; path?: string; projectId?: string }) => Promise<{ success: boolean; windowId?: string; error?: string }>;

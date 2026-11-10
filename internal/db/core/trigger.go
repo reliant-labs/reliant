@@ -221,9 +221,13 @@ func (i ActingIdentity) OrOwner() ActingIdentity {
 // Trigger is a stored trigger definition. UserID is the owner, and the
 // identity every run it launches executes as.
 type Trigger struct {
-	ID         string
-	UserID     string
-	ProjectID  string
+	ID        string
+	UserID    string
+	ProjectID string
+	// OrgID is the organization the trigger belongs to, fixed at creation
+	// (its project's when the project has one). Every chat it launches
+	// belongs to it, so its runs bill it. nil: written before orgs.
+	OrgID      *string
 	WorktreeID *string // nil → the project's main worktree
 	Name       string
 	Kind       TriggerKind
@@ -661,6 +665,9 @@ type TriggerProjection struct {
 type TriggerFilters struct {
 	UserID    string
 	ProjectID *string
+	// Org narrows the list to one organization; nil lists every trigger
+	// UserID owns (every client before orgs).
+	Org *OrgScope
 }
 
 // OriginConfidence is how sure Reliant is that it caused an event.

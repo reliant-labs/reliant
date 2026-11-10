@@ -280,6 +280,33 @@ service ObservabilityService {
       idempotent: true
     };
   }
+
+  // ListFrontendReplay answers "is session replay on for this frontend, in
+  // this environment": one row per (environment, frontend). Replay is a
+  // setting of a frontend INSTANCE (forge.BrowserTelemetry.replay, rendered
+  // into its runtime config as OTEL_REPLAY), gated by the environment's
+  // observability policy, which must opt in to replay for the ingest to keep
+  // the recordings.
+  //
+  // A hosted frontend (a StaticSite) is read LIVE, from the runtime config the
+  // platform serves it now. Any other frontend is read from the runtime config
+  // its environment's current release recorded (RELEASE); a self-hosted
+  // frontend serves its own config.js, which the control plane cannot read. A
+  // frontend the release names with neither reads UNKNOWN (source NONE).
+  //
+  // Admission is every other read's: a member of org_id, or a machine
+  // credential holding obs:read in it, whose environment binding covers the
+  // environments read. Postgres and Kubernetes reads only; nothing here
+  // queries ClickHouse. At most 100 environments in scope.
+  //
+  // forge:custom — a read over runtime configs and the release ledger; a
+  // FrontendReplay row is not a stored entity.
+  rpc ListFrontendReplay(ListFrontendReplayRequest) returns (ListFrontendReplayResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+    };
+  }
 }
 
 // === Shared ===
@@ -359,6 +386,26 @@ message QueryScope {
   // environment. It takes no env_ids and no project_id (both narrow by
   // environment): sending either is InvalidArgument.
   bool platform_scope = 8;
+  // Narrow to these dev instances: reliant.instance.id, which the OTLP gateway
+  // stamps from a dev token's `sid` (dropping any a client sent). ANDed with
+  // the environments and everything else. Empty = not narrowed. A response
+  // says it applied this in instance_scope; one without instance_scope was
+  // not narrowed (controlplane.v1.InstanceScope).
+  repeated string instance_ids = 9 [
+    (buf.validate.field).repeated.max_items = 50,
+    (buf.validate.field).repeated.items.string.min_len = 1,
+    (buf.validate.field).repeated.items.string.max_len = 128
+  ];
+  // Narrow to the instances of these people, by email. Each email is resolved
+  // to the org member's user id (reliant.instance.user, the gateway's stamp of
+  // the token's `uid`); an email that names no member of org_id matches
+  // nothing, never the whole scope. ANDed with instance_ids. Empty = not
+  // narrowed.
+  repeated string instance_users = 10 [
+    (buf.validate.field).repeated.max_items = 50,
+    (buf.validate.field).repeated.items.string.min_len = 1,
+    (buf.validate.field).repeated.items.string.max_len = 320
+  ];
 }
 
 // === Service graph: identities never contain URLs, SQL or arbitrary attributes. ===
@@ -381,6 +428,10 @@ message GetServiceGraphResponse {
   repeated GraphEdge edges = 2;
   GraphCompleteness completeness = 3;
   TimeRange effective_time_range = 4;
+  // Always unset: this read is never narrowed to dev instances (the service graph is read from edges that keep no dev instance),
+  // so it answers for the whole scope even when scope.instance_ids or
+  // instance_users is set (controlplane.v1.InstanceScope).
+  controlplane.v1.InstanceScope instance_scope = 5;
 }
 enum GraphNodeKind {
   GRAPH_NODE_KIND_UNSPECIFIED = 0;
@@ -532,6 +583,10 @@ message GetServiceGraphCatalogResponse {
   string declared_catalog_status = 3;
   string declared_catalog_unavailable_reason = 4;
   repeated GraphDeclaredCatalog declared_catalogs = 5;
+  // Always unset: this read is never narrowed to dev instances (the service graph is read from edges that keep no dev instance),
+  // so it answers for the whole scope even when scope.instance_ids or
+  // instance_users is set (controlplane.v1.InstanceScope).
+  controlplane.v1.InstanceScope instance_scope = 6;
 }
 
 enum SortOrder {
@@ -618,6 +673,10 @@ message SearchLogsResponse {
   repeated LogRecord logs = 1;
   // Empty when there are no more rows.
   string next_page_token = 2;
+  // The instance narrowing this answer applied: scope.instance_ids and
+  // instance_users, echoed exactly. Unset when the request named none, or
+  // when this read could not apply it (controlplane.v1.InstanceScope).
+  controlplane.v1.InstanceScope instance_scope = 3;
 }
 
 message LogRecord {
@@ -704,6 +763,10 @@ message ListTracesResponse {
   // most 50. Empty without group_by, and on every page after the first (as
   // red).
   repeated TraceRedGroup red_groups = 4;
+  // The instance narrowing this answer applied: scope.instance_ids and
+  // instance_users, echoed exactly. Unset when the request named none, or
+  // when this read could not apply it (controlplane.v1.InstanceScope).
+  controlplane.v1.InstanceScope instance_scope = 5;
 }
 
 message TraceRedGroup {
@@ -780,6 +843,10 @@ message GetTraceResponse {
   repeated RelatedTrace related_traces = 4;
   // At most 100 references are returned, in stable identity order.
   bool related_traces_truncated = 5;
+  // The instance narrowing this answer applied: scope.instance_ids and
+  // instance_users, echoed exactly. Unset when the request named none, or
+  // when this read could not apply it (controlplane.v1.InstanceScope).
+  controlplane.v1.InstanceScope instance_scope = 6;
 }
 
 message RelatedTrace {
@@ -864,6 +931,10 @@ message ListMetricsRequest {
 message ListMetricsResponse {
   repeated MetricInfo metrics = 1;
   bool truncated = 2;
+  // The instance narrowing this answer applied: scope.instance_ids and
+  // instance_users, echoed exactly. Unset when the request named none, or
+  // when this read could not apply it (controlplane.v1.InstanceScope).
+  controlplane.v1.InstanceScope instance_scope = 3;
 }
 
 // One catalog entry: what ListMetrics returns and GetMetric echoes. A metric
@@ -936,6 +1007,10 @@ message GetMetricResponse {
   // Attribute keys worth grouping by, best first: enumerated keys, then keys
   // with 2 to 50 distinct values.
   repeated string suggested_breakdowns = 5;
+  // The instance narrowing this answer applied: scope.instance_ids and
+  // instance_users, echoed exactly. Unset when the request named none, or
+  // when this read could not apply it (controlplane.v1.InstanceScope).
+  controlplane.v1.InstanceScope instance_scope = 6;
 }
 
 message MetricAttribute {
@@ -982,6 +1057,10 @@ message ListMetricExemplarsRequest {
 message ListMetricExemplarsResponse {
   // Exemplars whose trace is stored first, then by time.
   repeated MetricExemplar exemplars = 1;
+  // The instance narrowing this answer applied: scope.instance_ids and
+  // instance_users, echoed exactly. Unset when the request named none, or
+  // when this read could not apply it (controlplane.v1.InstanceScope).
+  controlplane.v1.InstanceScope instance_scope = 2;
 }
 
 message MetricExemplar {
@@ -1033,6 +1112,10 @@ message QueryMetricResponse {
   MetricAggregation aggregation = 6;
   // True when more than 50 series matched; the largest 50 are returned.
   bool series_truncated = 5;
+  // The instance narrowing this answer applied: scope.instance_ids and
+  // instance_users, echoed exactly. Unset when the request named none, or
+  // when this read could not apply it (controlplane.v1.InstanceScope).
+  controlplane.v1.InstanceScope instance_scope = 7;
 }
 
 message MetricSeries {
@@ -1065,6 +1148,10 @@ message GetServiceOverviewResponse {
   // is exact; a missing part reads as absent, never as zero. A client shows
   // what arrived and says which part did not.
   repeated string unavailable_sections = 3;
+  // The instance narrowing this answer applied: scope.instance_ids and
+  // instance_users, echoed exactly. Unset when the request named none, or
+  // when this read could not apply it (controlplane.v1.InstanceScope).
+  controlplane.v1.InstanceScope instance_scope = 4;
 }
 
 message ServiceOverview {
@@ -1119,6 +1206,10 @@ message GetFlamegraphResponse {
   repeated string available_profile_types = 5;
   // True when the stack list was cut at the cap (the heaviest stacks are kept).
   bool truncated = 6;
+  // Always unset: this read is never narrowed to dev instances (profiles keep no dev instance),
+  // so it answers for the whole scope even when scope.instance_ids or
+  // instance_users is set (controlplane.v1.InstanceScope).
+  controlplane.v1.InstanceScope instance_scope = 7;
 }
 
 // === Attribute values (filter autocomplete) ===
@@ -1159,6 +1250,10 @@ message ListAttributeValuesResponse {
   repeated AttributeValue values = 1;
   // True when more values matched than limit.
   bool truncated = 2;
+  // The instance narrowing this answer applied: scope.instance_ids and
+  // instance_users, echoed exactly. Unset when the request named none, or
+  // when this read could not apply it (controlplane.v1.InstanceScope).
+  controlplane.v1.InstanceScope instance_scope = 3;
 }
 
 message AttributeValue {
@@ -1180,6 +1275,10 @@ message GetServiceSignalsResponse {
   repeated ServiceSignals services = 1;
   // True when more services emitted than the 500 listed.
   bool truncated = 2;
+  // Always unset: this read is never narrowed to dev instances (the signal summaries keep no dev instance),
+  // so it answers for the whole scope even when scope.instance_ids or
+  // instance_users is set (controlplane.v1.InstanceScope).
+  controlplane.v1.InstanceScope instance_scope = 3;
 }
 
 // ServiceSignals is one service's signals. A signal name is "traces", "logs"
@@ -1236,6 +1335,10 @@ message ListWorkloadsResponse {
   // not, instead of failing the whole Overview: the server keeps reading a
   // missing part and serves it to the next request (a retry or the poll).
   repeated string unavailable_sections = 5;
+  // The instance narrowing this answer applied: scope.instance_ids and
+  // instance_users, echoed exactly. Unset when the request named none, or
+  // when this read could not apply it (controlplane.v1.InstanceScope).
+  controlplane.v1.InstanceScope instance_scope = 6;
 }
 
 message Workload {
@@ -1258,10 +1361,14 @@ message Workload {
 
   // How the workload runs, from the environment's recorded bundle (the
   // telemetry carries no kind). UNSPECIFIED when the environment has no
-  // recorded bundle or the bundle does not declare the workload.
+  // recorded bundle or the bundle does not declare the workload, and always on
+  // a read narrowed to dev instances (scope.instance_ids / instance_users),
+  // which reads no deploy ledger or bundle: those are the hosted deployment's.
   WorkloadKind kind = 10;
   // ONE server-side verdict per workload, so the list, the detail page and the
-  // nav badge cannot disagree. Rules: see WorkloadHealth.
+  // nav badge cannot disagree. Rules: see WorkloadHealth. Narrowed to dev
+  // instances, from the instances' own telemetry alone: no hosted suspension,
+  // rollout or ready count enters it.
   WorkloadHealth health = 11;
   // One line saying why: "2 of 3 replicas ready", "restarted 14x, last exit
   // OOMKilled". Empty for HEALTHY.
@@ -1270,10 +1377,13 @@ message Workload {
   // count when it observes the workload, else replicas_observed (pods
   // reporting). desired: the ledger's desired count, else the bundle's
   // declared replicas; unset when neither is known (then render ready alone).
+  // Narrowed to dev instances: ready is the instances' pods reporting, and
+  // desired is unset (an instance declares no replica count).
   optional int32 ready_replicas = 13;
   optional int32 desired_replicas = 14;
   // The release this workload is running, e.g. "v1.7.44". Empty when it cannot
-  // be established; release_basis says how it was.
+  // be established; release_basis says how it was. Empty, with release_basis
+  // unset, on a read narrowed to dev instances: a dev instance runs no release.
   string release_version = 15;
   WorkloadReleaseBasis release_basis = 16;
   // GetWorkload only (the list leaves it empty): this workload's pods in the
@@ -1282,7 +1392,7 @@ message Workload {
   // GetWorkload only (the list leaves it unset): what the environment's recorded
   // bundle declares for the workload, the same message DeployService.GetBundle
   // returns. Unset when the environment has no recorded bundle or the bundle
-  // does not declare it.
+  // does not declare it, and on a read narrowed to dev instances.
   DeclaredWorkload declared = 18;
   // Whose side the fault is on, when health is not HEALTHY. The platform alerts
   // on PLATFORM; the console says "this is on us" instead of asking the user to
@@ -1431,7 +1541,8 @@ message WorkloadJob {
   // BackoffLimitExceeded, DeadlineExceeded, ... for a FAILED run.
   string reason = 6;
   // The release in effect when the run started (newest promotion that moved
-  // the workload at or before started_at). Empty when unknown.
+  // the workload at or before started_at). Empty when unknown, and on a read
+  // narrowed to dev instances, which reads no promotion.
   string release_version = 7;
   google.protobuf.Timestamp started_at = 8;
   google.protobuf.Timestamp finished_at = 9;
@@ -1525,6 +1636,10 @@ message GetWorkloadResponse {
   // The workload's health transitions in the range, oldest first, per
   // environment in scope. Derived from the readiness series, not recorded.
   repeated WorkloadHealthChange health_changes = 8;
+  // The instance narrowing this answer applied: scope.instance_ids and
+  // instance_users, echoed exactly. Unset when the request named none, or
+  // when this read could not apply it (controlplane.v1.InstanceScope).
+  controlplane.v1.InstanceScope instance_scope = 9;
 }
 
 enum WorkloadMetric {
@@ -1735,6 +1850,13 @@ message QueryPanelResponse {
   // series; every other draw fills columns and rows. Empty with explain, for
   // every other kind, and from a server older than Panel.draw.
   string draw = 21;
+  // The instance narrowing this answer applied: scope.instance_ids and
+  // instance_users, echoed exactly. Unset when the request named none; always
+  // for a sql panel, whose statement is its author's and is never narrowed;
+  // and always for a browser panel (funnel, issues, sessions), which is
+  // narrowed to the sessions the instances' spans carry, but a session can
+  // span instances (controlplane.v1.InstanceScope).
+  controlplane.v1.InstanceScope instance_scope = 22;
 }
 
 // What one PanelSeriesResult of a metrics panel measures, so a client can
@@ -1848,6 +1970,10 @@ message GetDashboardsResponse {
   // never recorded (a failed registry push, a self-managed environment), or
   // predates dashboards in the bundle, or nothing has been promoted into it.
   string source = 2;
+  // Always unset: this read is never narrowed to dev instances (dashboards are the environment's definitions),
+  // so it answers for the whole scope even when scope.instance_ids or
+  // instance_users is set (controlplane.v1.InstanceScope).
+  controlplane.v1.InstanceScope instance_scope = 3;
 }
 
 message DashboardSpec {
@@ -2208,6 +2334,10 @@ message GetReleaseHealthResponse {
   // Finding codes this server could not check (no alert state, no issue
   // reader), so a PASS is not read as covering them.
   repeated string not_evaluated = 13;
+  // Always unset: this read is never narrowed to dev instances (a release is judged over its whole environment),
+  // so it answers for the whole scope even when scope.instance_ids or
+  // instance_users is set (controlplane.v1.InstanceScope).
+  controlplane.v1.InstanceScope instance_scope = 14;
 }
 
 // ReleasePromotionRef names the promotion a health check judged.
@@ -2293,4 +2423,79 @@ message EffectiveThreshold {
   string value = 2;
   // "release_shape" (declared in KCL), "default" or "request".
   string source = 3;
+}
+
+// === Session replay per frontend ===
+
+message ListFrontendReplayRequest {
+  // The org whose environments are read. Verified against the caller, never
+  // assumed.
+  string org_id = 1 [(buf.validate.field).string.min_len = 1];
+  // The forge project whose environments are in scope. Unset = not narrowed by
+  // project; set to "" = the project-less environments.
+  optional string project_id = 2 [(buf.validate.field).string.max_len = 128];
+  // Control-plane environment ids (deploy_environments.id). Empty = every
+  // environment the caller may read in the org (of the project, when named).
+  repeated string env_ids = 3 [(buf.validate.field).repeated.max_items = 50];
+}
+
+message ListFrontendReplayResponse {
+  // One row per (environment, frontend), in environment scope order, then by
+  // frontend name.
+  repeated FrontendReplay frontends = 1;
+  // Environments in scope whose frontends could not be read at all (the
+  // release ledger was unreadable). They have no rows; that is not "no
+  // frontends".
+  repeated string unavailable_env_ids = 2;
+}
+
+// FrontendReplay is one frontend instance's session replay state.
+message FrontendReplay {
+  string env_id = 1;
+  string env_name = 2;
+  // The forge frontend's name: the forge.frontend attribute its telemetry
+  // carries.
+  string frontend = 3;
+  FrontendReplayState state = 4;
+  // Where the frontend's runtime config was read from.
+  FrontendReplaySource source = 5;
+  // The fraction of sessions recorded (REPLAY_SAMPLE_RATE), 0 to 1. 1 when the
+  // config does not set it, and when the state is UNKNOWN.
+  double sample_rate = 6;
+}
+
+// FrontendReplayState is what a frontend's runtime config and its environment's
+// policy together decide.
+//
+// A frontend that enables replay with the DEPRECATED build flag
+// ({VITE_,NEXT_PUBLIC_}OTEL_REPLAY baked into its bundle) has no OTEL_REPLAY
+// in its runtime config, so it reads OFF here though it may still record: a
+// reader reconciles OFF with the sessions it observed carrying a replay.
+enum FrontendReplayState {
+  FRONTEND_REPLAY_STATE_UNSPECIFIED = 0;
+  // The frontend records sessions and the environment keeps them.
+  FRONTEND_REPLAY_STATE_ON = 1;
+  // The frontend's runtime config does not turn replay on.
+  FRONTEND_REPLAY_STATE_OFF = 2;
+  // The frontend turns replay on but nothing is recorded or kept: its runtime
+  // config sends no browser telemetry (OTEL_ENDPOINT blank or "off", after the
+  // platform fills a hosted site's missing one), its environment's
+  // observability policy does not opt in to replay (a release cut by a forge
+  // that predates per-frontend replay), or browser telemetry is off.
+  FRONTEND_REPLAY_STATE_BLOCKED = 3;
+  // Not known: no runtime config could be read for the frontend, or it turns
+  // replay on and the environment's policy could not be read.
+  FRONTEND_REPLAY_STATE_UNKNOWN = 4;
+}
+
+// FrontendReplaySource is where a frontend's runtime config was read from.
+enum FrontendReplaySource {
+  FRONTEND_REPLAY_SOURCE_UNSPECIFIED = 0;
+  // The hosted StaticSite's runtime config, as the platform serves it now.
+  FRONTEND_REPLAY_SOURCE_LIVE = 1;
+  // The runtime config recorded in the environment's current release (a
+  // frontend the platform does not serve).
+  FRONTEND_REPLAY_SOURCE_RELEASE = 2;
+  // No runtime config was readable.
+  FRONTEND_REPLAY_SOURCE_NONE = 3;
 }

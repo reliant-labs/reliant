@@ -143,11 +143,14 @@ func ListProjects(ctx context.Context, db orm.Context, filters core.ProjectFilte
 	if limit == 0 {
 		limit = 100
 	}
-	rows, err := ListProject(ctx, db,
-		orm.WhereEq(ProjectFieldUserID, filters.UserID),
+	opts := []orm.QueryOption{orm.WhereEq(ProjectFieldUserID, filters.UserID)}
+	if filters.Org != nil {
+		opts = append(opts, whereOrg(ProjectFieldOrgID, filters.Org))
+	}
+	rows, err := ListProject(ctx, db, append(opts,
 		orm.WithOrderBy(ProjectFieldLastActive, orm.Desc),
 		orm.WithLimit(limit),
-		orm.WithOffset(filters.Offset))
+		orm.WithOffset(filters.Offset))...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list projects: %w", err)
 	}
@@ -239,6 +242,7 @@ func projectFromCore(p *core.Project) *Project {
 		RemoteURL:        gitremote.StripCredentialsPtr(p.RemoteURL),
 		IsForge:          p.IsForge,
 		ForgeProjectName: p.ForgeProjectName,
+		OrgID:            p.OrgID,
 		CreatedAt:        p.CreatedAt,
 		UpdatedAt:        p.UpdatedAt,
 		LastActive:       p.LastActive,
@@ -257,6 +261,7 @@ func projectToCore(row *Project) *core.Project {
 		RemoteURL:        gitremote.StripCredentialsPtr(row.RemoteURL),
 		IsForge:          row.IsForge,
 		ForgeProjectName: row.ForgeProjectName,
+		OrgID:            row.OrgID,
 		CreatedAt:        row.CreatedAt,
 		UpdatedAt:        row.UpdatedAt,
 		LastActive:       row.LastActive,

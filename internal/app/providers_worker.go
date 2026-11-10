@@ -40,6 +40,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/machinepool"
+	"github.com/reliant-labs/reliant/internal/orgs"
 	"github.com/reliant-labs/reliant/internal/runs"
 	"github.com/reliant-labs/reliant/internal/temporal"
 	"github.com/reliant-labs/reliant/internal/temporal/stopnudge"
@@ -624,6 +625,9 @@ type TemporalWorkerDeps struct {
 	Worker *configv1.WorkerConfig
 	// NATS delivers the stop nudges the activities on this worker watch.
 	NATS *NATSConn
+	// Membership decides org resources in every activity (authz); the org
+	// resolver.
+	Membership *orgs.Resolver
 }
 
 // HostedActions is the worker's hosted HTTP action executor: a separate
@@ -719,6 +723,7 @@ func NewTemporalWorker(d TemporalWorkerDeps) (*workersetup.Worker, error) {
 		MCPBinder:              toolexec.NewDaemonMCPContextBinder(d.Router),
 		ConfigProvider:         d.ConfigProvider,
 		TriggerLauncher:        d.Launcher,
+		Membership:             d.Membership,
 		IntegrationCredentials: creds,
 		HostedActions:          hostedActions,
 		SecretResolver:         secretResolver,

@@ -347,6 +347,47 @@ func (c *Client) UpdateForUser(
 	return info, nil
 }
 
+// OrgMembership is control-plane's answer about one user and one org.
+type OrgMembership struct {
+	// OrgID is the org the answer is about: the one asked for, or the
+	// user's default org when none was. "" when the user has no org.
+	OrgID string
+	// Member reports whether the user is a live member of OrgID.
+	Member bool
+}
+
+// ErrUnsupported reports a control plane that predates the rpc asked for. A
+// caller treats it as "this deployment has no answer", never as a negative.
+var ErrUnsupported = errors.New("accesstokenclient: the control plane does not support this call yet")
+
+// ResolveOrgMembership asks control-plane whether userID is a live member of
+// orgID, or, with orgID "", which org is their default.
+func (c *Client) ResolveOrgMembership(ctx context.Context, userID, orgID string) (OrgMembership, error) {
+	var out struct {
+		OrgID  string `json:"orgId"`
+		Member bool   `json:"member"`
+	}
+	body := map[string]any{"userId": userID}
+	if orgID != "" {
+		body["orgId"] = orgID
+	}
+	if err := c.call(ctx, "ResolveOrgMembership", body, &out); err != nil {
+		if isUnsupported(err) {
+			return OrgMembership{}, fmt.Errorf("%w: ResolveOrgMembership: %w", ErrUnsupported, err)
+		}
+		return OrgMembership{}, err
+	}
+	return OrgMembership{OrgID: out.OrgID, Member: out.Member}, nil
+}
+
+// isUnsupported is a control plane without the method: Connect's
+// unimplemented, or the 404 connect-go's service handler answers for a
+// procedure it does not know.
+func isUnsupported(err error) bool {
+	var rpc *RPCError
+	return errors.As(err, &rpc) && (rpc.Code == "unimplemented" || rpc.Code == http.StatusText(http.StatusNotFound))
+}
+
 // IsNotFound reports whether err is control-plane's not_found.
 func IsNotFound(err error) bool {
 	var rpc *RPCError

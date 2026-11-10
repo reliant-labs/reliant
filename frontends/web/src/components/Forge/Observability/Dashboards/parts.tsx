@@ -19,7 +19,7 @@ import { cn } from "@/lib/utils";
 
 import { BUTTON_PRIMARY, BUTTON_SECONDARY, ICON_BUTTON, INK_LINK } from "../../Releases/releaseParts";
 import { SOURCE_LABELS } from "./dashboardModel";
-import { SEGMENTED, segmentTone } from "../../controlStyles";
+import { FIELD_SHELL, SEGMENTED, segmentTone } from "../../controlStyles";
 
 export { BUTTON_PRIMARY, BUTTON_SECONDARY, ICON_BUTTON, INK_LINK };
 
@@ -143,14 +143,15 @@ export function VariableSelect({
   onChange: (value: string) => void;
 }) {
   return (
-    <label htmlFor={id} className="inline-flex h-7 items-center gap-1.5 rounded-md border border-border-strong bg-surface pl-2 text-xs focus-within:ring-2 focus-within:ring-ring">
+    // The console's one field (controlStyles FIELD_SHELL): h-8, the control edge, the ring on focus-within.
+    <label htmlFor={id} className={cn(FIELD_SHELL, "inline-flex gap-1.5 pr-0 text-sm")}>
       <span className="text-ink-muted">{label}</span>
       <span className="relative inline-flex items-center">
         <select
           id={id}
           value={value}
           onChange={(event) => onChange(event.target.value)}
-          className="h-6 appearance-none bg-transparent pl-0.5 pr-6 text-xs font-medium text-ink focus:outline-none"
+          className="h-7 appearance-none bg-transparent pl-0.5 pr-7 text-sm font-medium text-ink focus:outline-none"
           data-testid={id}
         >
           {options.map((option) => (
@@ -159,7 +160,7 @@ export function VariableSelect({
             </option>
           ))}
         </select>
-        <ChevronDown className="pointer-events-none absolute right-1.5 h-3 w-3 text-ink-muted" aria-hidden="true" />
+        <ChevronDown className="pointer-events-none absolute right-2.5 h-3.5 w-3.5 text-ink-muted" aria-hidden="true" />
       </span>
     </label>
   );

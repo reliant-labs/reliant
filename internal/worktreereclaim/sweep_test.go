@@ -256,8 +256,8 @@ func TestSweepNeverAutoDeletesNeedsApproval(t *testing.T) {
 
 	opts := s.opts(SweepOn)
 	opts.ApprovedOnly = true
-	// An approval nothing verifies as a person's (the daemon's case: any
-	// process running as the user can write approvals.json) deletes nothing.
+	// An approval only in approvals.json (any process running as the user
+	// can write it) deletes nothing.
 	unverified := s.r.SweepMachine(ctx, opts)
 	if e := entryFor(t, unverified, dirty); e.Outcome != OutcomeAwaiting || !exists(filepath.Join(dirty, "a.txt")) {
 		t.Fatalf("unverified approval: %+v, want still awaiting and kept", e)
@@ -265,7 +265,12 @@ func TestSweepNeverAutoDeletesNeedsApproval(t *testing.T) {
 	if refs := captureRefs(t, s.project); refs != "" {
 		t.Fatalf("captured on an unverified approval: %s", refs)
 	}
-	opts.ApprovalsVerified = true
+	// The same approvals, delivered by the server as a command, are acted on:
+	// the one still in the state approved is reclaimed.
+	for _, p := range []string{dirty, other} {
+		e := entryFor(t, rep, p)
+		opts.Authorized = append(opts.Authorized, AuthorizedApproval{Key: e.Key, Fingerprint: e.Fingerprint, Path: e.Path, ApprovedBy: "inbox:u1"})
+	}
 	pass := s.r.SweepMachine(ctx, opts)
 	e := entryFor(t, pass, dirty)
 	if e.Outcome != OutcomeReclaimed || e.CaptureRef == "" || exists(dirty) {

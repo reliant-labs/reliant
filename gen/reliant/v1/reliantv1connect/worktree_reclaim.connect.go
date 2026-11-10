@@ -47,13 +47,16 @@ type WorktreeReclaimServiceClient interface {
 	// fingerprint; the server refuses one that is not on the machine's last
 	// report ("not_shown"), and the machine records it only while that is
 	// still the worktree's state ("changed" otherwise). Declining keeps it
-	// until its state changes. An approval is recorded, with who made it, but
-	// the machine does not remove an approved worktree yet: nothing on the
-	// machine can prove an approval is a person's, so it stays proposed as
-	// approved. When the machine does reclaim one, it first saves everything
-	// git can see of it to a local ref (refs/reliant/reclaimed/...), from which
-	// `reliant worktree restore` brings it back. FAILED_PRECONDITION when the machine is
-	// offline; NOT_FOUND for a machine that is not the caller's.
+	// until its state changes. An approval is recorded, with who made it, and
+	// sent to the machine as worktree.reclaim_approve, which removes exactly
+	// that worktree at exactly that state: first saved, with everything git
+	// can see of it, to a local ref (refs/reliant/reclaimed/...), from which
+	// `reliant worktree restore` brings it back. The machine checks it all
+	// again first (the state, the capture, that nothing is using it), and the
+	// server refuses a Reliant workspace whose chat is still open; a refusal
+	// is in the result's removal fields and puts the proposal back in the
+	// item. FAILED_PRECONDITION when the machine is offline; NOT_FOUND for a
+	// machine the caller may not write.
 	DecideWorktreeReclaim(context.Context, *connect.Request[v1.DecideWorktreeReclaimRequest]) (*connect.Response[v1.DecideWorktreeReclaimResponse], error)
 }
 
@@ -95,13 +98,16 @@ type WorktreeReclaimServiceHandler interface {
 	// fingerprint; the server refuses one that is not on the machine's last
 	// report ("not_shown"), and the machine records it only while that is
 	// still the worktree's state ("changed" otherwise). Declining keeps it
-	// until its state changes. An approval is recorded, with who made it, but
-	// the machine does not remove an approved worktree yet: nothing on the
-	// machine can prove an approval is a person's, so it stays proposed as
-	// approved. When the machine does reclaim one, it first saves everything
-	// git can see of it to a local ref (refs/reliant/reclaimed/...), from which
-	// `reliant worktree restore` brings it back. FAILED_PRECONDITION when the machine is
-	// offline; NOT_FOUND for a machine that is not the caller's.
+	// until its state changes. An approval is recorded, with who made it, and
+	// sent to the machine as worktree.reclaim_approve, which removes exactly
+	// that worktree at exactly that state: first saved, with everything git
+	// can see of it, to a local ref (refs/reliant/reclaimed/...), from which
+	// `reliant worktree restore` brings it back. The machine checks it all
+	// again first (the state, the capture, that nothing is using it), and the
+	// server refuses a Reliant workspace whose chat is still open; a refusal
+	// is in the result's removal fields and puts the proposal back in the
+	// item. FAILED_PRECONDITION when the machine is offline; NOT_FOUND for a
+	// machine the caller may not write.
 	DecideWorktreeReclaim(context.Context, *connect.Request[v1.DecideWorktreeReclaimRequest]) (*connect.Response[v1.DecideWorktreeReclaimResponse], error)
 }
 

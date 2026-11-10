@@ -48,10 +48,15 @@ type Project struct {
 	// deploy environments under. Nil when never read (not a forge project, a
 	// forge.yaml without a name, or no daemon has reported it yet). Written at
 	// create from repo.discover and refreshed by ForgeService.GetTopology.
-	ForgeProjectName *string   `json:"forge_project_name,omitempty"`
-	CreatedAt        time.Time `json:"created_at"`
-	UpdatedAt        time.Time `json:"updated_at"`
-	LastActive       time.Time `json:"last_active"`
+	ForgeProjectName *string `json:"forge_project_name,omitempty"`
+	// OrgID is the organization (control-plane organizations.id) the
+	// project belongs to, fixed at creation. nil: written before orgs, or no
+	// org could be resolved; such a project is its UserID's alone, and the
+	// first org-scoped list stamps it with their default org (internal/orgs).
+	OrgID      *string   `json:"org_id,omitempty"`
+	CreatedAt  time.Time `json:"created_at"`
+	UpdatedAt  time.Time `json:"updated_at"`
+	LastActive time.Time `json:"last_active"`
 }
 
 // ProjectDaemon records that a daemon has a local clone of a project. A
@@ -309,8 +314,33 @@ type Repo struct {
 // ProjectFilters contains options for filtering projects.
 type ProjectFilters struct {
 	UserID string
+	// Org narrows the list to one organization; nil lists every project
+	// UserID owns, in any org or none (every client before orgs).
+	Org    *OrgScope
 	Limit  int
 	Offset int
+}
+
+// OrgScope narrows a list to one organization's rows.
+type OrgScope struct {
+	OrgID string
+	// IncludeUnassigned also lists rows with no org yet: those written
+	// before orgs, which belong to their owner's default org. Set only when
+	// OrgID is the caller's default org.
+	IncludeUnassigned bool
+}
+
+// Includes reports whether a row of org orgID (nil: none yet) is in the
+// scope. A nil scope includes everything. For a list filtered in memory; a
+// store query applies the same rule in SQL.
+func (s *OrgScope) Includes(orgID *string) bool {
+	if s == nil {
+		return true
+	}
+	if orgID == nil {
+		return s.IncludeUnassigned
+	}
+	return *orgID == s.OrgID
 }
 
 // WorktreeFilters contains options for filtering worktrees.

@@ -965,7 +965,6 @@ To switch back to an account whose token is already stored:
 
 			// Clean up background processes on shutdown.
 			defer shell.GetBackgroundManager().KillAllRunning()
-			defer shell.GetProcessMonitor().Stop()
 
 			// NOTE: the localhost OAuth helper is NOT started here. It is
 			// opened ON DEMAND by the `auth.open_oauth_helper` daemon command

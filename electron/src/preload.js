@@ -124,11 +124,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   installCLI: () => ipcRenderer.invoke('install-cli'),
   getCliStatus: () => ipcRenderer.invoke('get-cli-status'),
 
-  // Mock driver configuration
-  getMockDriverConfig: () => ipcRenderer.invoke('get-mock-driver-config'),
-  setMockDriverConfig: (config) => ipcRenderer.invoke('set-mock-driver-config', config),
-  browseMockFile: () => ipcRenderer.invoke('browse-mock-file'),
-
   // Window management
   getWindowContext: () => ipcRenderer.invoke('get-window-context'),
   openWorktreeWindow: (worktreeData) => ipcRenderer.invoke('open-worktree-window', worktreeData),

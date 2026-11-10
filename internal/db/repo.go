@@ -1294,8 +1294,18 @@ type ChatMove = store.ChatMove
 // MoveChatToProject moves an idle (or errored) chat, with its plans, to
 // another project. moved is false, and nothing is written, when the chat is
 // gone, has left m.FromProjectID, or is not idle.
+//
+// It takes the owner's org lock (store.LockUserOrgs) first, before the
+// chat's row lock: call it first in its transaction.
 func (r *Repo) MoveChatToProject(ctx context.Context, m ChatMove) (moved bool, err error) {
-	return store.MoveChatToProject(ctx, r.ORM(), m)
+	err = r.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
+		if err := store.LockUserOrgs(ctx, r.ORM(), m.UserID); err != nil {
+			return err
+		}
+		moved, err = store.MoveChatToProject(ctx, r.ORM(), m)
+		return err
+	})
+	return moved, err
 }
 
 // PinChatDaemonIfUnset pins an unpinned chat that is on a machine to daemonID

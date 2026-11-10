@@ -1,0 +1,31 @@
+-- forge:backward-compatible — additive index; the previous release's queries read through it or through the indexes it leaves in place.
+
+-- Migration: chats_user_org_index
+--
+-- Two queries read chats by (user_id, org_id), both added with org_id
+-- (20261110021244_org_id_projects_chats):
+--
+--   - the org-scoped list: WHERE user_id = $1 AND org_id = $2;
+--   - the lazy backfill of a user's legacy rows (internal/orgs):
+--     UPDATE chats SET org_id = $2 WHERE user_id = $1 AND org_id IS NULL.
+--
+-- One btree on (user_id, org_id) serves both (IS NULL is an index condition).
+--
+-- CONCURRENTLY cannot run in a transaction block, so this is the only
+-- statement in the file.
+--
+-- Post-deploy verification (prod, once the release carrying this file is
+-- deployed):
+--
+--   1. The build finished and is usable (indisvalid = true, not left INVALID):
+--        reliant forge db query prod --database reliant --confirm-env prod --reason "verify idx_chats_user_org" \
+--          "SELECT indisvalid, indisready FROM pg_index WHERE indexrelid = 'public.idx_chats_user_org'::regclass"
+--      An INVALID index (a failed concurrent build) is dropped with
+--      DROP INDEX CONCURRENTLY idx_chats_user_org and rebuilt by re-running
+--      this statement; IF NOT EXISTS would otherwise keep the invalid one.
+--   2. It is used: idx_scan of idx_chats_user_org in pg_stat_user_indexes grows
+--      once web clients list by org.
+--
+-- Rollback: none needed. An extra index changes no result; the previous
+-- release ignores it.
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_chats_user_org ON public.chats USING btree (user_id, org_id);
