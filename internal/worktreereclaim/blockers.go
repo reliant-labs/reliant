@@ -147,7 +147,7 @@ func (s *blockerSet) note(e *UninspectableProcessError, roots []string) {
 	if warn {
 		b.warned = now
 	}
-	line := b.ReclaimBlocker.String()
+	line := b.String()
 	s.mu.Unlock()
 	if warn {
 		slog.Warn("worktreereclaim: "+line, "pid", e.PID, "comm", e.Comm, "unreadable", e.What)
