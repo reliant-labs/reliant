@@ -25247,6 +25247,11 @@
               "Name": "include_unlaunched_events",
               "ProtoType": "bool",
               "IsOptional": true
+            },
+            {
+              "Name": "org_id",
+              "ProtoType": "string",
+              "IsOptional": true
             }
           ],
           "ListRunsResponse": [
@@ -25568,6 +25573,11 @@
             {
               "name": "include_unlaunched_events",
               "kind": "bool",
+              "optional": true
+            },
+            {
+              "name": "org_id",
+              "kind": "string",
               "optional": true
             }
           ],
@@ -36587,6 +36597,11 @@
               "ProtoType": "message",
               "IsOptional": false,
               "MessageType": "reliant.v1.TriggerDefinition"
+            },
+            {
+              "Name": "org_id",
+              "ProtoType": "string",
+              "IsOptional": true
             }
           ],
           "CreateTriggerResponse": [
@@ -36867,6 +36882,11 @@
               "Name": "project_id",
               "ProtoType": "string",
               "IsOptional": true
+            },
+            {
+              "Name": "org_id",
+              "ProtoType": "string",
+              "IsOptional": true
             }
           ],
           "ListTriggersResponse": [
@@ -37029,6 +37049,11 @@
               "name": "trigger",
               "kind": "message",
               "type_name": "reliant.v1.TriggerDefinition"
+            },
+            {
+              "name": "org_id",
+              "kind": "string",
+              "optional": true
             }
           ],
           "reliant.v1.CreateTriggerResponse": [
@@ -37324,6 +37349,11 @@
           "reliant.v1.ListTriggersRequest": [
             {
               "name": "project_id",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "org_id",
               "kind": "string",
               "optional": true
             }
@@ -37669,6 +37699,11 @@
               "name": "definition_source",
               "kind": "message",
               "type_name": "reliant.v1.TriggerDefinitionSource"
+            },
+            {
+              "name": "org_id",
+              "kind": "string",
+              "optional": true
             }
           ],
           "reliant.v1.TriggerChange": [
@@ -39184,6 +39219,11 @@
               "Name": "template",
               "ProtoType": "string",
               "IsOptional": false
+            },
+            {
+              "Name": "org_id",
+              "ProtoType": "string",
+              "IsOptional": true
             }
           ],
           "CreateWorkflowDraftResponse": [
@@ -39464,6 +39504,11 @@
               "Name": "include_hidden",
               "ProtoType": "bool",
               "IsOptional": true
+            },
+            {
+              "Name": "org_id",
+              "ProtoType": "string",
+              "IsOptional": true
             }
           ],
           "ListWorkflowsResponse": [
@@ -39526,6 +39571,11 @@
               "Name": "status",
               "ProtoType": "enum",
               "IsOptional": false
+            },
+            {
+              "Name": "org_id",
+              "ProtoType": "string",
+              "IsOptional": true
             }
           ],
           "SaveWorkflowResponse": [
@@ -40092,6 +40142,11 @@
             {
               "name": "template",
               "kind": "string"
+            },
+            {
+              "name": "org_id",
+              "kind": "string",
+              "optional": true
             }
           ],
           "reliant.v1.CreateWorkflowDraftResponse": [
@@ -40881,6 +40936,11 @@
               "name": "include_hidden",
               "kind": "bool",
               "optional": true
+            },
+            {
+              "name": "org_id",
+              "kind": "string",
+              "optional": true
             }
           ],
           "reliant.v1.ListWorkflowsResponse": [
@@ -41607,6 +41667,11 @@
               "name": "status",
               "kind": "enum",
               "type_name": "reliant.v1.WorkflowDraftStatus"
+            },
+            {
+              "name": "org_id",
+              "kind": "string",
+              "optional": true
             }
           ],
           "reliant.v1.SaveWorkflowResponse": [
@@ -47948,6 +48013,19 @@
     },
     {
       "consumer": "Run",
+      "field": "Orgs",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/run.OrgResolver",
+      "methods": [],
+      "candidates": [
+        "OrgResolver"
+      ],
+      "providers": [
+        "OrgResolver"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Run",
       "field": "Repo",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/run.Repository",
       "methods": [],
@@ -48365,6 +48443,19 @@
     },
     {
       "consumer": "Trigger",
+      "field": "Orgs",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/trigger.OrgResolver",
+      "methods": [],
+      "candidates": [
+        "OrgResolver"
+      ],
+      "providers": [
+        "OrgResolver"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Trigger",
       "field": "Repo",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/trigger.Repository",
       "methods": [],
@@ -48509,6 +48600,19 @@
       ],
       "providers": [
         "Trigger"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Workflow",
+      "field": "Orgs",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/workflow.OrgResolver",
+      "methods": [],
+      "candidates": [
+        "OrgResolver"
+      ],
+      "providers": [
+        "OrgResolver"
       ],
       "resolution": "composition_expression"
     },

@@ -989,6 +989,7 @@ func (g *Graph) newRun() (*run.Service, error) {
 		Config: g.Cfg,
 		Repo:   g.Database(),
 		Chats:  g.Chat(),
+		Orgs:   g.OrgResolver(),
 	})
 }
 
@@ -1016,6 +1017,7 @@ func (g *Graph) newTrigger() (*trigger.Service, error) {
 		Options:      optionsChecker{svc: g.InputOptions()},
 		Alerting:     alertingProvisioner(g.TriggerAlerting()),
 		Drafter:      automationDrafter(g.TemporalClient().Client, v2workflow.SharedTaskQueue),
+		Orgs:         g.OrgResolver(),
 	})
 }
 
@@ -1307,6 +1309,7 @@ func (g *Graph) newWorkflow() (*workflowhandler.Service, error) {
 		Repo:        g.Database(),
 		Router:      g.APIDaemonRouter().NATSDaemonRouter,
 		Automations: g.Trigger(),
+		Orgs:        g.OrgResolver(),
 	})
 }
 

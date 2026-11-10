@@ -276,5 +276,34 @@ func TestListScopeMachineCredentialIsItsOrg(t *testing.T) {
 	}
 	if _, err := r.ListScope(ctx, "alice", "acme", nil); svcerr.Code(err) != connect.CodePermissionDenied || reasonOf(err) != ReasonOrgMismatch {
 		t.Fatalf("another org: %v, want PermissionDenied %s", err, ReasonOrgMismatch)
+
+func TestInProject(t *testing.T) {
+	acme := "acme"
+	cases := map[string]struct {
+		project    *string
+		named, def string
+		want       string
+		refused    bool
+	}{
+		"the project's org decides":       {project: &acme, def: "home", want: "acme"},
+		"naming the project's org":        {project: &acme, named: "acme", want: "acme"},
+		"naming another org is refused":   {project: &acme, named: "home", refused: true},
+		"no project org: the named org":   {named: "acme", def: "home", want: "acme"},
+		"no project org: the default org": {def: "home", want: "home"},
+		"no orgs at all":                  {want: ""},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			got, err := InProject(tc.project, tc.named, tc.def)
+			if tc.refused {
+				if svcerr.Code(err) != connect.CodeFailedPrecondition {
+					t.Fatalf("err = %v, want FailedPrecondition", err)
+				}
+				return
+			}
+			if err != nil || (got == nil) != (tc.want == "") || (got != nil && *got != tc.want) {
+				t.Fatalf("got %v, %v; want %q", got, err, tc.want)
+			}
+		})
 	}
 }

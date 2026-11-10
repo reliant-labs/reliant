@@ -403,8 +403,13 @@ func (s *Service) listAllRuns(
 		limit = maxRunsPageSize
 	}
 
+	scope, err := s.listScope(ctx, userID, req.GetOrgId())
+	if err != nil {
+		return nil, err
+	}
 	filters := db.RunListFilters{
 		UserID:          userID,
+		Org:             scope,
 		ProjectID:       req.ProjectId,
 		Workflows:       req.Workflow,
 		TriggerID:       req.TriggerId,

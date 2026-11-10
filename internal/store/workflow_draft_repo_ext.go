@@ -30,6 +30,7 @@ func newWorkflowDraftRow(d *core.WorkflowDraft) *WorkflowDraft {
 	return &WorkflowDraft{
 		ID:          d.ID,
 		UserID:      d.UserID,
+		OrgID:       d.OrgID,
 		Name:        d.Name,
 		Slug:        d.Slug,
 		Description: d.Description,
@@ -240,6 +241,7 @@ func workflowDraftToCore(row *WorkflowDraft) *core.WorkflowDraft {
 	return &core.WorkflowDraft{
 		ID:          row.ID,
 		UserID:      row.UserID,
+		OrgID:       row.OrgID,
 		Name:        row.Name,
 		Slug:        row.Slug,
 		Description: row.Description,

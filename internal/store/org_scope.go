@@ -26,10 +26,11 @@ func whereOrg(column string, scope *core.OrgScope) orm.QueryOption {
 	}
 }
 
-// AssignUnassignedOrg gives userID's projects and chats that have no org yet
-// orgID, their default org: the lazy backfill of the rows written before orgs
-// (internal/orgs ListScope). A chat whose project has an org takes the
-// project's, so a chat and its project agree. It only ever fills NULL, so it is
+// AssignUnassignedOrg gives userID's projects, chats, triggers, saved
+// workflows and runs that have no org yet orgID, their default org: the lazy
+// backfill of the rows written before orgs (internal/orgs ListScope). A chat
+// or trigger whose project has an org takes the project's, so they agree with
+// their project, and a run takes its chat's. It only ever fills NULL, so it is
 // idempotent and never moves a row between orgs.
 //
 // Called with the ctx of a transaction it joins it; the caller runs both
@@ -50,6 +51,25 @@ func AssignUnassignedOrg(ctx context.Context, db orm.Context, userID, orgID stri
 		SET org_id = COALESCE((SELECT p.org_id FROM projects p WHERE p.id = c.project_id), ?)
 		WHERE c.user_id = ? AND c.org_id IS NULL`, orgID, userID).Exec(ctx); err != nil {
 		return fmt.Errorf("assign unassigned org to chats: %w", err)
+	}
+	if _, err := db.Bun().NewRaw(`
+		UPDATE triggers t
+		SET org_id = COALESCE((SELECT p.org_id FROM projects p WHERE p.id = t.project_id), ?)
+		WHERE t.user_id = ? AND t.org_id IS NULL`, orgID, userID).Exec(ctx); err != nil {
+		return fmt.Errorf("assign unassigned org to triggers: %w", err)
+	}
+	if _, err := db.Bun().NewRaw(`
+		UPDATE workflow_drafts SET org_id = ? WHERE user_id = ? AND org_id IS NULL`, orgID, userID).Exec(ctx); err != nil {
+		return fmt.Errorf("assign unassigned org to saved workflows: %w", err)
+	}
+	// A run's org is its chat's. Driven by idx_workflows_chat_id from the
+	// user's chats.
+	if _, err := db.Bun().NewRaw(`
+		UPDATE workflows w
+		SET org_id = c.org_id
+		FROM chats c
+		WHERE w.chat_id = c.id AND c.user_id = ? AND c.org_id IS NOT NULL AND w.org_id IS NULL`, userID).Exec(ctx); err != nil {
+		return fmt.Errorf("assign unassigned org to runs: %w", err)
 	}
 	return nil
 }
