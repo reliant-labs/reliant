@@ -429,6 +429,11 @@ type resultOutbox struct {
 	retained      map[string]*heldResult
 	retainedBytes int
 
+	// ran holds each run step's tombstone, the time it began, for
+	// runStepRanTTL (result_once.go); ranSweptAt is when it was last swept.
+	ran        map[string]time.Time
+	ranSweptAt time.Time
+
 	// store mirrors running calls and held results to disk so they outlive
 	// the process (result_outbox_store.go). Nil keeps the outbox in memory.
 	store *outboxStore
@@ -458,7 +463,7 @@ func (o *resultOutbox) holdBudget() int {
 func (o *resultOutbox) restore(store *outboxStore) outboxLoadReport {
 	o.store = store
 	now := time.Now()
-	held, retained, report := store.load(now, o.holdTTL(), o.holdBudget())
+	held, retained, ran, report := store.load(now, o.holdTTL(), o.holdBudget())
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	if o.held == nil {
@@ -467,6 +472,9 @@ func (o *resultOutbox) restore(store *outboxStore) outboxLoadReport {
 	for _, h := range held {
 		o.held[h.requestID] = h
 		o.heldBytes += h.size
+	}
+	for id, at := range ran {
+		o.recordRanLocked(id, at)
 	}
 	o.restoreRetainedLocked(retained, now)
 	return report
@@ -640,6 +648,7 @@ func (o *resultOutbox) expireLocked(now time.Time) {
 		}
 	}
 	o.expireRetainedLocked(now)
+	o.expireRanLocked(now)
 }
 
 // messageSize approximates a held result's memory: its payload strings.

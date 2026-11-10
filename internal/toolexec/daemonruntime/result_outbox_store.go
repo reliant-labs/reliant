@@ -47,6 +47,10 @@ import (
 //     (result_retain.go): its file is renamed to <request id>.retained,
 //     stamped with the acknowledgement time, instead of being removed, and a
 //     restart loads it back as delivered and retained until the window ends.
+//   - A run step also leaves <request id>.ran, empty, written durably before
+//     its command runs: the tombstone that keeps its id from running again
+//     (result_once.go). Its modification time is when it began; it outlives
+//     the result and every byte budget, and is removed after runStepRanTTL.
 //   - Results can hold file contents and command output. The directory is
 //     0700, every file 0600, and nothing here logs more than a request id and
 //     a size.
@@ -60,6 +64,7 @@ import (
 const (
 	resultFileExt   = ".result"
 	retainedFileExt = ".retained"
+	ranFileExt      = ".ran"
 	runningFileExt  = ".running"
 	tempInfix       = ".tmp-"
 
@@ -181,6 +186,27 @@ func (s *outboxStore) removeRetained(requestID string) {
 	}
 }
 
+// markRan durably records a run step's tombstone. Synced, unlike the running
+// marker: it is what keeps the command from running twice after its result is
+// gone. A failure is logged; the in-memory tombstone still holds for this
+// process.
+func (s *outboxStore) markRan(requestID string) {
+	if !s.storable(requestID) {
+		return
+	}
+	if err := writeFileDurably(s.dir, requestID+ranFileExt, nil); err != nil {
+		logging.Warn(logPrefix+" Could not persist a run step's tombstone; a restart may not know it ran",
+			"request_id", requestID, "error", err)
+	}
+}
+
+// removeRan deletes a run step's tombstone, once runStepRanTTL ends.
+func (s *outboxStore) removeRan(requestID string) {
+	if s.storable(requestID) {
+		_ = os.Remove(s.path(requestID, ranFileExt))
+	}
+}
+
 // outboxLoadReport says what reloading the outbox found.
 type outboxLoadReport struct {
 	// Restored is the number of unacknowledged results put back in the outbox.
@@ -198,20 +224,24 @@ type outboxLoadReport struct {
 	// Retained is the number of acknowledged run-step results reloaded for a
 	// retry that may still reattach to them (result_retain.go).
 	Retained int
+	// Ran is the number of run-step tombstones reloaded (result_once.go).
+	Ran int
 }
 
 // load reads the directory back at startup. It returns every result the
 // outbox should hold, including one standing in for each call that was
 // running; every retained result still inside resultRetainTTL, its heldAt the
-// acknowledgement; and a report. It removes what it cannot use.
-func (s *outboxStore) load(now time.Time, ttl time.Duration, budget int) (held, retained []*heldResult, report outboxLoadReport) {
+// acknowledgement; every run-step tombstone inside runStepRanTTL, with when
+// it began; and a report. It removes what it cannot use.
+func (s *outboxStore) load(now time.Time, ttl time.Duration, budget int) (held, retained []*heldResult, ran map[string]time.Time, report outboxLoadReport) {
 	entries, err := os.ReadDir(s.dir)
 	if err != nil {
 		logging.Warn(logPrefix+" Could not read the tool result outbox; starting with it empty", "error", err)
-		return nil, nil, report
+		return nil, nil, nil, report
 	}
 
 	results := make(map[string]*heldResult)
+	ran = make(map[string]time.Time)
 	var running []string
 	for _, e := range entries {
 		name := e.Name()
@@ -262,6 +292,21 @@ func (s *outboxStore) load(now time.Time, ttl time.Duration, budget int) (held, 
 				continue
 			}
 			retained = append(retained, h)
+		case strings.HasSuffix(name, ranFileExt):
+			id := strings.TrimSuffix(name, ranFileExt)
+			if !requestIDFile.MatchString(id) {
+				continue
+			}
+			info, err := e.Info()
+			if err != nil {
+				continue
+			}
+			if now.Sub(info.ModTime()) > runStepRanTTL {
+				report.Expired++
+				_ = os.Remove(full)
+				continue
+			}
+			ran[id] = info.ModTime()
 		case strings.HasSuffix(name, runningFileExt):
 			id := strings.TrimSuffix(name, runningFileExt)
 			if !requestIDFile.MatchString(id) {
@@ -324,12 +369,14 @@ func (s *outboxStore) load(now time.Time, ttl time.Duration, budget int) (held, 
 			"count", len(report.Corrupt), "files", strings.Join(report.Corrupt, ","))
 	}
 	report.Retained = len(retained)
-	if report.Restored+report.Interrupted+report.Expired+report.OverBudget+report.Retained > 0 {
+	report.Ran = len(ran)
+	if report.Restored+report.Interrupted+report.Expired+report.OverBudget+report.Retained+report.Ran > 0 {
 		logging.Info(logPrefix+" Reloaded the tool result outbox",
 			"restored", report.Restored, "interrupted_by_restart", report.Interrupted,
-			"expired", report.Expired, "over_budget", report.OverBudget, "retained", report.Retained)
+			"expired", report.Expired, "over_budget", report.OverBudget, "retained", report.Retained,
+			"ran", report.Ran)
 	}
-	return ordered, retained, report
+	return ordered, retained, ran, report
 }
 
 // interruptedByRestartResponse is the answer for a call the previous daemon

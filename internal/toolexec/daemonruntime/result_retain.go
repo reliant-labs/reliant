@@ -44,18 +44,23 @@ const (
 	resultRetainBudget = 16 << 20
 )
 
-// markRetain makes requestID's result retained after its acknowledgement.
-// Called before the call can finish, so hold sees the mark.
+// markRetain makes requestID's result retained after its acknowledgement, and
+// leaves the run step's tombstone (result_once.go), on disk before it returns.
+// Called before the call can run, so hold sees the mark and a restart at any
+// later moment still knows the id ran.
 func (o *resultOutbox) markRetain(requestID string) {
 	if requestID == "" {
 		return
 	}
+	now := time.Now()
 	o.mu.Lock()
-	defer o.mu.Unlock()
 	if o.retainOnAck == nil {
 		o.retainOnAck = make(map[string]struct{})
 	}
 	o.retainOnAck[requestID] = struct{}{}
+	o.recordRanLocked(requestID, now)
+	o.mu.Unlock()
+	o.store.markRan(requestID)
 }
 
 // retainLocked keeps h, just acknowledged at now. Must hold o.mu.

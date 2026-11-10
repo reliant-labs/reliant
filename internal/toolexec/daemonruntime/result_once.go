@@ -27,6 +27,31 @@ import (
 // running call, a held result, or a delivery inside resultHoldTTL, which a
 // restart keeps for held and retained results and turns into "interrupted by
 // daemon restart" for running ones.
+//
+// That memory is bounded by result retention — resultHoldTTL, and the hold
+// and retain byte budgets — and a run step's id lives as long as its activity
+// may be retried, which is far longer. So a run step's id also leaves a
+// tombstone (markRetain): its name and the time it began, nothing else, in
+// memory and as <request id>.ran on disk, written durably before the command
+// runs. It is independent of the result and of every byte budget, and is
+// forgotten only after runStepRanTTL. A repeat that finds only the tombstone
+// gets alreadyRanResponse.
+
+// runStepRanTTL is how long a run step's tombstone keeps its id from running
+// again. A run step's request id names one activity of one workflow run
+// (handlers.runStepRequestID), and that activity is retried for at most its
+// schedule-to-close timeout: the node's own timeout plus the machine-wait
+// allowance, or 30 days when the node sets none
+// (StepExecutor.activityOptionsWithSlack). A day more than the longest
+// default covers clock skew between the worker and this machine. A tombstone
+// is a few dozen bytes, so it carries no budget: one that a budget could evict
+// would make its id fresh again.
+const runStepRanTTL = 31 * 24 * time.Hour
+
+// ranSweepEvery throttles the tombstone sweep: expireLocked runs on every
+// status question, and tombstones live for weeks, so walking them each time
+// buys nothing.
+const ranSweepEvery = time.Minute
 
 // begin records a tool call that arrived to run, unless the outbox already
 // knows requestID: then fresh is false, known is what became of it, and the
@@ -41,11 +66,39 @@ func (o *resultOutbox) begin(requestID string) (known toolexec.ToolRequestState,
 	if known = o.stateLocked(requestID); known != toolexec.ToolRequestUnknown {
 		return known, false
 	}
+	if _, ran := o.ran[requestID]; ran {
+		// It ran here, and its result is gone (expired, or dropped over
+		// budget): answered as delivered and gone.
+		return toolexec.ToolRequestDelivered, false
+	}
 	if o.running == nil {
 		o.running = make(map[string]struct{})
 	}
 	o.running[requestID] = struct{}{}
 	return toolexec.ToolRequestUnknown, true
+}
+
+// recordRanLocked keeps requestID's tombstone, begun at at. Must hold o.mu.
+func (o *resultOutbox) recordRanLocked(requestID string, at time.Time) {
+	if o.ran == nil {
+		o.ran = make(map[string]time.Time)
+	}
+	o.ran[requestID] = at
+}
+
+// expireRanLocked forgets tombstones past runStepRanTTL, at most once per
+// ranSweepEvery. Must hold o.mu.
+func (o *resultOutbox) expireRanLocked(now time.Time) {
+	if len(o.ran) == 0 || now.Sub(o.ranSweptAt) < ranSweepEvery {
+		return
+	}
+	o.ranSweptAt = now
+	for id, at := range o.ran {
+		if now.Sub(at) > runStepRanTTL {
+			delete(o.ran, id)
+			o.store.removeRan(id)
+		}
+	}
 }
 
 // answerRepeatedRequest answers a tool request whose id already ran or is

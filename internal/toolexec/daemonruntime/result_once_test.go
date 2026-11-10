@@ -104,7 +104,7 @@ func TestRetainedResultSurvivesADaemonRestart(t *testing.T) {
 	startRunning(first, "run-1")
 	first.hold("run-1", resultMsg("run-1", "deployed"), nil)
 	require.NotNil(t, first.ack("run-1"))
-	require.Equal(t, []string{"run-1.retained"}, outboxFiles(t, dir), "the acknowledged run step's result is kept")
+	require.Equal(t, []string{"run-1.ran", "run-1.retained"}, outboxFiles(t, dir), "the acknowledged run step's result is kept")
 
 	second, report := newStoredOutbox(t, dir) // the restart
 	assert.Equal(t, 1, report.Retained)
@@ -134,7 +134,7 @@ func TestRetainedResultFilesFollowTheirBounds(t *testing.T) {
 	o.retained["old"].heldAt = past
 	o.mu.Unlock()
 	assert.Nil(t, o.retainedResult("old"))
-	assert.Equal(t, []string{"new.retained"}, outboxFiles(t, dir), "an expired retained result leaves no file")
+	assert.Equal(t, []string{"new.ran", "new.retained", "old.ran"}, outboxFiles(t, dir), "an expired retained result leaves no file, only its tombstone")
 
 	// A file whose window ended while the daemon was down is not reloaded.
 	require.NoError(t, os.Chtimes(filepath.Join(dir, "new.retained"), past, past))
@@ -142,5 +142,76 @@ func TestRetainedResultFilesFollowTheirBounds(t *testing.T) {
 	assert.Zero(t, report.Retained)
 	assert.Equal(t, 1, report.Expired)
 	assert.Equal(t, toolexec.ToolRequestUnknown, again.state("new"))
+	assert.Equal(t, []string{"new.ran", "old.ran"}, outboxFiles(t, dir), "only the tombstones are left")
+}
+
+// A run step's id never runs again for as long as its activity can be
+// retried, whatever became of its result: not after the result's delivery
+// aged out of the outbox, not after an unacknowledged result was dropped over
+// budget, and not after a restart on top of either. Only the tombstone's own
+// window ends it.
+func TestRunStepIDNeverRunsAgainAfterItsResultIsGone(t *testing.T) {
+	// Delivered, retained, and both past their windows.
+	d := newTestDaemonClient("d-once", "u-once")
+	s := useTestSession(d, 16)
+	d.results.markRetain("run-aged")
+	d.results.begin("run-aged")
+	d.results.hold("run-aged", d.toolResponse("run-aged", finished("deployed")), nil)
+	require.NotNil(t, d.results.ack("run-aged"))
+	past := time.Now().Add(-resultHoldTTL - time.Hour)
+	d.results.mu.Lock()
+	d.results.delivered["run-aged"] = past
+	d.results.retained["run-aged"].heldAt = past
+	d.results.mu.Unlock()
+	assert.Nil(t, d.results.retainedResult("run-aged"), "the result is gone")
+	assert.Equal(t, toolexec.ToolRequestUnknown, d.results.state("run-aged"), "and so is its delivery")
+	require.NoError(t, d.handleServerMessage(context.Background(), s, toolRequestMessage("run-aged")))
+	got := sentToolResponse(t, s)
+	assert.Equal(t, toolexec.ErrorCodeDaemonRestarted, got.ErrorCode)
+	assert.Contains(t, got.Content, "already ran on this machine")
+	noToolResponse(t, s, "and nothing ran")
+
+	// Finished, never acknowledged, and dropped over the hold budget; then a
+	// restart.
+	dir := filepath.Join(t.TempDir(), "outbox")
+	o, _ := newStoredOutbox(t, dir)
+	o.budget = 128
+	o.markRetain("run-big")
+	startRunning(o, "run-big")
+	o.hold("run-big", resultMsg("run-big", string(make([]byte, 1024))), nil)
+	assert.Equal(t, toolexec.ToolRequestUnknown, o.state("run-big"), "the result was dropped over budget")
+	known, fresh := o.begin("run-big")
+	assert.False(t, fresh, "a budget never makes a run step's id fresh again")
+	assert.Equal(t, toolexec.ToolRequestDelivered, known)
+	require.Equal(t, []string{"run-big.ran"}, outboxFiles(t, dir), "only the tombstone is on disk")
+
+	again, report := newStoredOutbox(t, dir) // the restart
+	assert.Equal(t, 1, report.Ran)
+	_, fresh = again.begin("run-big")
+	assert.False(t, fresh, "nor does a restart")
+}
+
+// A tombstone lasts runStepRanTTL, on disk and in memory, and no longer.
+func TestRunStepTombstoneEndsWithItsWindow(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "outbox")
+	o, _ := newStoredOutbox(t, dir)
+	o.markRetain("run-old")
+	past := time.Now().Add(-runStepRanTTL - time.Hour)
+	require.NoError(t, os.Chtimes(filepath.Join(dir, "run-old.ran"), past, past))
+
+	// One whose window ended while the daemon was down is not reloaded.
+	again, report := newStoredOutbox(t, dir)
+	assert.Zero(t, report.Ran)
+	assert.Equal(t, 1, report.Expired)
 	assert.Empty(t, outboxFiles(t, dir))
+	_, fresh := again.begin("run-old")
+	assert.True(t, fresh)
+
+	// And one whose window ends while it is up is swept.
+	o.mu.Lock()
+	o.ran["run-old"] = past
+	o.ranSweptAt = time.Time{}
+	o.mu.Unlock()
+	_, fresh = o.begin("run-old")
+	assert.True(t, fresh, "past its window, the activity can no longer be retried")
 }
