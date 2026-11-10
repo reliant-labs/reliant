@@ -125,6 +125,7 @@ func bindNodeSecretRefs(wf *reliantv1.Workflow) {
 			walk(node.GetLoop().GetInline())
 		}
 		walk(w.GetOnFailure())
+		walk(w.GetFinally())
 	}
 	walk(wf)
 }

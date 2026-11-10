@@ -14,6 +14,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/workflow"
+	"github.com/reliant-labs/reliant/internal/workflow/model"
 )
 
 // Service owns the run lifecycle: making a chat's run stop, and making it
@@ -22,6 +23,10 @@ type Service struct {
 	repo     Repository
 	temporal TemporalClient
 	pause    PauseController
+
+	// cancelGrace and cancelPoll override the package defaults of the same
+	// names when positive; tests shrink them.
+	cancelGrace, cancelPoll time.Duration
 }
 
 // NewService builds a run-lifecycle service over the chat store, Temporal, and
@@ -82,14 +87,24 @@ func (s *Service) Pause(ctx context.Context, chatID string) error {
 	return s.pause.PauseWorkflow(ctx, workflowID, chatID, "manual")
 }
 
-// Terminate forcefully ends a chat's run and makes the next message start a
+// Terminate ends a chat's run for good and makes the next message start a
 // fresh run rather than resuming from position.
 //
-// This is a hard operator stop, not Temporal's cooperative cancellation. A run
-// parked on a signal Await may never observe CancelWorkflow, and Terminate skips
-// the workflow completion handler, so this method also performs the durable
-// cleanup that handler would normally own: drop the checkpoint, move the root row
-// with a CAS, void an open question, and drain workflow/thread descendants.
+// It stops the run cooperatively first: Temporal is asked to CANCEL it, which
+// runs the run's own completion code. Its in-flight activities are cancelled,
+// which kills the commands they were running on the machine; its terminal
+// handlers run, so a workflow releases what it holds (a lease, a claim, a
+// label); and it writes its own cancelled status and cascade. Terminate waits
+// at most cancelGrace for the run to report that it is ending
+// (model.RunStopQuery) and then returns, leaving the run to finish its cleanup,
+// which its handlers' own timeouts bound.
+//
+// A run that does not report ending in time — parked on a signal Await that
+// never observes the cancel, or with no worker to run it — is hard-terminated,
+// as every cancel used to be. A terminate runs no workflow code, so then this
+// method performs the durable cleanup the completion handler would have owned:
+// move the root row with a CAS and drain workflow/thread descendants. Either
+// way the checkpoint is dropped and open questions are voided first.
 func (s *Service) Terminate(ctx context.Context, chatID string) error {
 	_, workflowID, err := s.chatRun(ctx, chatID)
 	if err != nil {
@@ -114,6 +129,13 @@ func (s *Service) Terminate(ctx context.Context, chatID string) error {
 
 	s.voidPendingQuestions(ctx, chatID)
 
+	// Only a run Temporal could be read as live is asked: one whose state
+	// could not be read is terminated outright, as before.
+	if stateErr == nil && s.cancelCooperatively(ctx, workflowID) {
+		s.clearUsageLimitWait(ctx, chatID)
+		return nil
+	}
+
 	terminator, ok := s.temporal.(TemporalTerminator)
 	if !ok {
 		return fmt.Errorf("temporal client cannot terminate workflows")
@@ -128,6 +150,77 @@ func (s *Service) Terminate(ctx context.Context, chatID string) error {
 	}
 	s.clearUsageLimitWait(ctx, chatID)
 	return nil
+}
+
+// cancelGrace bounds how long Terminate waits for a cancelled run to report
+// that it is ending before it hard-terminates the run. A run that observes the
+// cancel reaches its completion code within one workflow task — a second or
+// two on a loaded worker — so this is long enough for a slow worker and short
+// enough that a caller is not held waiting on a run that will never answer.
+const cancelGrace = 15 * time.Second
+
+// cancelPollInterval is how often Terminate asks a cancelled run whether it is
+// ending.
+const cancelPollInterval = 250 * time.Millisecond
+
+// cancelCooperatively asks Temporal to cancel workflowID and waits up to
+// cancelGrace for the run to report, through model.RunStopQuery, that it is
+// ending — or for Temporal to report it closed. true means the run is stopping
+// itself and owns the rest of its cleanup; false means the caller must
+// terminate it.
+//
+// The query is what keeps the wait short for a run with cleanup to do: a
+// workflow's finally handler may run for minutes, and the run must not be
+// terminated during it, but Terminate need not wait for it either. A run on a
+// worker too old to answer the query is still seen through Describe once it
+// closes.
+func (s *Service) cancelCooperatively(ctx context.Context, workflowID string) bool {
+	canceller, ok := s.temporal.(TemporalCanceller)
+	if !ok {
+		return false
+	}
+	if err := canceller.CancelWorkflow(ctx, workflowID, ""); err != nil {
+		logging.WarnContext(ctx, "[runs] Could not ask Temporal to cancel the run; terminating it instead",
+			"workflowID", workflowID, "error", err)
+		return false
+	}
+	grace, poll := s.cancelGrace, s.cancelPoll
+	if grace <= 0 {
+		grace = cancelGrace
+	}
+	if poll <= 0 {
+		poll = cancelPollInterval
+	}
+	deadline := time.Now().Add(grace)
+	for {
+		if s.runIsEnding(ctx, canceller, workflowID) {
+			return true
+		}
+		if time.Now().After(deadline) || ctx.Err() != nil {
+			logging.WarnContext(ctx, "[runs] Cancelled run did not report ending in time; terminating it",
+				"workflowID", workflowID, "grace", grace)
+			return false
+		}
+		timer := time.NewTimer(poll)
+		select {
+		case <-ctx.Done():
+		case <-timer.C:
+		}
+		timer.Stop()
+	}
+}
+
+// runIsEnding reports whether a cancelled run has left its graph: it says so
+// itself, or Temporal reports it closed.
+func (s *Service) runIsEnding(ctx context.Context, canceller TemporalCanceller, workflowID string) bool {
+	if value, err := canceller.QueryWorkflow(ctx, workflowID, "", model.RunStopQuery); err == nil {
+		var state model.RunStopState
+		if value != nil && value.Get(&state) == nil && state.Ending {
+			return true
+		}
+	}
+	state, err := s.State(ctx, workflowID)
+	return err == nil && (!state.Exists || !state.IsRunning)
 }
 
 // clearUsageLimitWait releases the chat's usage-limit wait markers. A
