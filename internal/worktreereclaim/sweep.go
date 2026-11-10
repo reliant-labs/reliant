@@ -390,7 +390,7 @@ func (r *Reclaimer) SweepMachine(ctx context.Context, opts SweepOptions) SweepRe
 	if len(consumed) > 0 || !opts.ApprovedOnly {
 		settleApprovals(context.WithoutCancel(ctx), dir, consumed, r.now())
 	}
-	if b, err := json.MarshalIndent(rep, "", "  "); err == nil && !(opts.ApprovedOnly && len(entries) == 0) {
+	if b, err := json.MarshalIndent(rep, "", "  "); err == nil && (!opts.ApprovedOnly || len(entries) != 0) {
 		if opts.ApprovedOnly {
 			// An approved-only pass amends the last full report rather than
 			// replacing it: what it did not look at is still true.
@@ -808,13 +808,13 @@ func (r *Reclaimer) cachedSize(ctx context.Context, path string) int64 {
 func totals(entries []SweepEntry) SweepTotals {
 	t := SweepTotals{Seen: len(entries), HeldByReason: map[HeldReason]int{}}
 	for _, e := range entries {
-		switch {
-		case e.Outcome == OutcomeReclaimed:
+		switch e.Outcome {
+		case OutcomeReclaimed:
 			t.Reclaimed++
 			t.ReclaimedBytes += e.FreedBytes
-		case e.Outcome == OutcomeSweepDeferred:
+		case OutcomeSweepDeferred:
 			t.Deferred++
-		case e.Outcome == OutcomeSweepError:
+		case OutcomeSweepError:
 			t.Errors++
 		}
 		switch e.Class {

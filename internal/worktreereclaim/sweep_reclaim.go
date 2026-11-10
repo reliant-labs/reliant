@@ -203,7 +203,7 @@ func (r *Reclaimer) reclaimEntry(ctx context.Context, e *SweepEntry, opts SweepO
 		return
 	}
 	e.CaptureRef = capt.Ref
-	if class == ClassAutoSafe && !(capt.DiskTree == headTree(ctx, e.Path) && capt.IndexTree == capt.DiskTree && len(capt.Orphans) == 0) {
+	if class == ClassAutoSafe && (capt.DiskTree != headTree(ctx, e.Path) || capt.IndexTree != capt.DiskTree || len(capt.Orphans) != 0) {
 		e.hold(ReasonDirty, "it changed before it could be reclaimed; it needs approval now")
 		return
 	}
