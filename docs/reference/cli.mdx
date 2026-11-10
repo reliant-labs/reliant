@@ -4202,7 +4202,10 @@ Examples:
 CHECK declared 'forge:closed-set `<set>`' whose value list differs from the set:
 the CHECK replaced whole with the set's values, the declaration re-issued, and
 the compatibility line (a widening is backward-compatible, a narrowing breaks
-rollback). The name defaults to `<constraint>`_closed_set.
+rollback). A widening adds the CHECK NOT VALID, so its ACCESS EXCLUSIVE lock is
+never held for a scan of the table, and writes a second migration,
+`<name>`_validate, that validates the existing rows under a lock that blocks
+neither reads nor writes. The name defaults to `<constraint>`_closed_set.
 
 ```
 reliant forge db migration new [name] [flags]
@@ -4340,6 +4343,8 @@ carries ok, exit_code and error like every other forge --json verb, plus
 schema "forge.db.query/v1", scope, columns`[{name,pg_type}]`, rows, row_count,
 truncated, truncated_by, cells_truncated, duration_ms, bytes and audit\{id,
 sql_sha256\}: a hosted query's adds replica, a local one's record (the file).
+The table's footer says when a cap cut the result; csv keeps stdout pure and
+says it on stderr.
 
 Exit codes: 0 rows returned; 1 the statement or the request is wrong (refused
 by the guard or the read-only transaction, a SQL error, a permission error, a
@@ -9359,7 +9364,13 @@ platform registry:
   `<registry>`/`<org>`/`<project>`/`<frontend>`-sourcemaps:\<build id>
 
 and otherwise they are kept in .forge/sourcemaps/`<env>`/`<frontend>`/\<build id>/
-and nothing is uploaded. The artifact format is documented in
+and nothing is uploaded. `<project>` is --project, or forge.yaml's name: name the
+project of the env the bundle reports its errors into, which is where they are
+looked up. `<org>` is --org, or the organization the credential acts for, which
+forge asks the control plane. A registry-only credential (a token carrying only
+sourcemaps:write) cannot ask, because the control plane refuses it on every
+RPC, so a CI job holding one names the org with --org. The artifact format is
+documented in
 internal/deploytarget/sourcemaps_oci.go.
 
 THE BUILD ID must be the version the bundle reports to telemetry
@@ -9378,6 +9389,7 @@ not a no-op.
 Examples:
   forge frontend sourcemaps push web/dist --frontend desktop --build-id 3f9c0e1a2b4d --env prod
   forge frontend sourcemaps push web/dist --frontend desktop --build-id "$VERSION" --env prod --dry-run
+  forge frontend sourcemaps push web/dist --frontend desktop --build-id "$VERSION" --env prod --org "$ORG_ID"
 
 ```
 reliant forge frontend sourcemaps push <dist> [flags]
@@ -9393,7 +9405,8 @@ reliant forge frontend sourcemaps push <dist> [flags]
 | `--dry-run` | `bool` | - | Extract and report; push and keep nothing |
 | `--env` | `string` | - | The env whose control plane and observability decide where the maps go (required) |
 | `--frontend` | `string` | - | The frontend the maps belong to (required) |
-| `--project` | `string` | - | The forge project the frontend belongs to (default: forge.yaml's name) |
+| `--org` | `string` | - | The organization to file under, used as given instead of asking the control plane (a sourcemaps:write credential cannot ask) |
+| `--project` | `string` | - | The forge project the frontend belongs to: its maps are filed under this project's registry subtree (default: forge.yaml's name) |
 
 ---
 
@@ -11364,13 +11377,16 @@ JSON schema forge.obs.check/v1. --fields takes dotted paths of:
   findings.ref
   findings.service
   findings.threshold
+  findings.unattributed
   findings.value
   firing_alerts
   new_issues
   not_evaluated
   query_mode
   reason
+  reason_code
   regressed_issues
+  rollout_incomplete
   scope
   scope.backend
   scope.env
@@ -11389,6 +11405,7 @@ JSON schema forge.obs.check/v1. --fields takes dotted paths of:
   statements.sql
   subject
   subject.git_commit
+  subject.live_at
   subject.previous_release
   subject.promoted_at
   subject.promotion_id
@@ -11399,7 +11416,9 @@ JSON schema forge.obs.check/v1. --fields takes dotted paths of:
   thresholds.source
   thresholds.value
   verdict
+  version_share
   waited
+  window_not_live
   windows
   windows.after
   windows.after.from
@@ -11804,7 +11823,10 @@ range known, the last 20) that touched the files the error was raised from,
 read from this checkout with git. A hosted env also shows who it is assigned to,
 the incident it belongs to (the other issues with the same cause, first seen
 close together: related_count and incident_key), and the newest
---timeline-limit timeline entries, oldest first. [env] defaults to dev.
+--timeline-limit timeline entries, oldest first. An issue that groups bug
+reports (forge report-bug, an agent's report_bug) shows the body of each report
+its latest event and --events carry: id, severity, title, summary, expected,
+actual and evidence. [env] defaults to dev.
 
   cli forge obs issue ISS-7f3a prod
   cli forge obs issue sfp1-0123456789abcdef dev --events 10
@@ -11817,6 +11839,16 @@ close together: related_count and incident_key), and the newest
 Triage needs a hosted env: a local issue is a query over logs and has no state.
 
 JSON schema forge.obs.issue/v1. --fields takes dotted paths of:
+  bug_reports
+  bug_reports.actual
+  bug_reports.evidence
+  bug_reports.expected
+  bug_reports.id
+  bug_reports.product
+  bug_reports.severity
+  bug_reports.summary
+  bug_reports.time
+  bug_reports.title
   by_version
   by_version.affected
   by_version.affected_unit
@@ -12020,6 +12052,16 @@ The write sends the row version it read, so a change made since is refused
 retried: read the issue again, then decide.
 
 JSON schema forge.obs.issue/v1. --fields takes dotted paths of:
+  bug_reports
+  bug_reports.actual
+  bug_reports.evidence
+  bug_reports.expected
+  bug_reports.id
+  bug_reports.product
+  bug_reports.severity
+  bug_reports.summary
+  bug_reports.time
+  bug_reports.title
   by_version
   by_version.affected
   by_version.affected_unit
@@ -12191,6 +12233,16 @@ The document carries the stored comment (comment.id, comment.created_at). A
 credential that acts for no person cannot comment.
 
 JSON schema forge.obs.issue/v1. --fields takes dotted paths of:
+  bug_reports
+  bug_reports.actual
+  bug_reports.evidence
+  bug_reports.expected
+  bug_reports.id
+  bug_reports.product
+  bug_reports.severity
+  bug_reports.summary
+  bug_reports.time
+  bug_reports.title
   by_version
   by_version.affected
   by_version.affected_unit
@@ -12358,6 +12410,16 @@ The write sends the row version it read, so a change made since is refused
 ("re-read and retry", exit 1) instead of overwriting it.
 
 JSON schema forge.obs.issue/v1. --fields takes dotted paths of:
+  bug_reports
+  bug_reports.actual
+  bug_reports.evidence
+  bug_reports.expected
+  bug_reports.id
+  bug_reports.product
+  bug_reports.severity
+  bug_reports.summary
+  bug_reports.time
+  bug_reports.title
   by_version
   by_version.affected
   by_version.affected_unit
@@ -12526,6 +12588,16 @@ The write sends the row version it read, so a change made since is refused
 ("re-read and retry", exit 1) instead of overwriting it.
 
 JSON schema forge.obs.issue/v1. --fields takes dotted paths of:
+  bug_reports
+  bug_reports.actual
+  bug_reports.evidence
+  bug_reports.expected
+  bug_reports.id
+  bug_reports.product
+  bug_reports.severity
+  bug_reports.summary
+  bug_reports.time
+  bug_reports.title
   by_version
   by_version.affected
   by_version.affected_unit
@@ -12694,6 +12766,16 @@ The write sends the row version it read, so a change made since is refused
 ("re-read and retry", exit 1) instead of overwriting it.
 
 JSON schema forge.obs.issue/v1. --fields takes dotted paths of:
+  bug_reports
+  bug_reports.actual
+  bug_reports.evidence
+  bug_reports.expected
+  bug_reports.id
+  bug_reports.product
+  bug_reports.severity
+  bug_reports.summary
+  bug_reports.time
+  bug_reports.title
   by_version
   by_version.affected
   by_version.affected_unit
@@ -13598,6 +13680,11 @@ the reason.
 dashboards/*.json; kinds line, number, table, bar, heatmap, sql) flattened to a
 table. Panels over the hosted platform's own tables (issues, sessions, funnel)
 need the control plane.
+
+--sql returns the result rows as selected: every column, in SELECT order, for
+any column types. On a hosted env whose control plane predates that, a SELECT
+with a date or time column exits 2 when the answer may have been folded into
+series (rows would be lost); select the time column as toString(...) there.
 
 Raw SQL is counted: the JSON document says "query_mode": "raw", and with
 FORGE_OBS_DEBUG=1 the statement's shape (literals removed) is logged to stderr.
@@ -18522,7 +18609,13 @@ platform registry:
   `<registry>`/`<org>`/`<project>`/`<frontend>`-sourcemaps:\<build id>
 
 and otherwise they are kept in .forge/sourcemaps/`<env>`/`<frontend>`/\<build id>/
-and nothing is uploaded. The artifact format is documented in
+and nothing is uploaded. `<project>` is --project, or forge.yaml's name: name the
+project of the env the bundle reports its errors into, which is where they are
+looked up. `<org>` is --org, or the organization the credential acts for, which
+forge asks the control plane. A registry-only credential (a token carrying only
+sourcemaps:write) cannot ask, because the control plane refuses it on every
+RPC, so a CI job holding one names the org with --org. The artifact format is
+documented in
 internal/deploytarget/sourcemaps_oci.go.
 
 THE BUILD ID must be the version the bundle reports to telemetry
@@ -18541,6 +18634,7 @@ not a no-op.
 Examples:
   forge frontend sourcemaps push web/dist --frontend desktop --build-id 3f9c0e1a2b4d --env prod
   forge frontend sourcemaps push web/dist --frontend desktop --build-id "$VERSION" --env prod --dry-run
+  forge frontend sourcemaps push web/dist --frontend desktop --build-id "$VERSION" --env prod --org "$ORG_ID"
 
 ```
 reliant forge ui sourcemaps push <dist> [flags]
@@ -18556,7 +18650,8 @@ reliant forge ui sourcemaps push <dist> [flags]
 | `--dry-run` | `bool` | - | Extract and report; push and keep nothing |
 | `--env` | `string` | - | The env whose control plane and observability decide where the maps go (required) |
 | `--frontend` | `string` | - | The frontend the maps belong to (required) |
-| `--project` | `string` | - | The forge project the frontend belongs to (default: forge.yaml's name) |
+| `--org` | `string` | - | The organization to file under, used as given instead of asking the control plane (a sourcemaps:write credential cannot ask) |
+| `--project` | `string` | - | The forge project the frontend belongs to: its maps are filed under this project's registry subtree (default: forge.yaml's name) |
 
 ---
 
