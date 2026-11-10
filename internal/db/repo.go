@@ -19,6 +19,8 @@ import (
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/observability"
 	"github.com/reliant-labs/reliant/internal/store"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 	"go.temporal.io/sdk/activity"
 )
 
@@ -831,7 +833,20 @@ func (r *Repo) GetLatestNonMessageUpdatesPerEntity(ctx context.Context, chatID s
 	// The statement and the literal-vs-parameter reasoning are
 	// store.SnapshotHeadsSQL's; TestSnapshotHeadsQueryMatchesPartialIndex
 	// pins its literals to the enum values and to both index predicates.
-	return store.LatestNonMessageUpdatesPerEntity(ctx, r.ORM(), chatID)
+	//
+	// That statement is now the fallback. The heads are materialized in
+	// chat_update_heads, in the transaction of every log write, and read from
+	// there when the chat's stream counter vouches for them; a chat the
+	// previous release wrote to, or one not yet backfilled, reads the log as
+	// above (store.SnapshotUpdateHeads, dev-docs/design/chat-update-heads.md).
+	// Which one served is recorded on the caller's span (the snapshot's
+	// chat_snapshot.update_heads) as chat_snapshot.update_heads.source.
+	updates, source, err := store.SnapshotUpdateHeads(ctx, r.ORM(), chatID)
+	if err != nil {
+		return nil, err
+	}
+	trace.SpanFromContext(ctx).SetAttributes(attribute.String("chat_snapshot.update_heads.source", source))
+	return updates, nil
 }
 
 // GetLatestWorkflowNodeUpdates returns the newest NODE_EXECUTION update of
