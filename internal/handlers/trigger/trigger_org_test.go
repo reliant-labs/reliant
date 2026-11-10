@@ -154,3 +154,59 @@ func TestUpdateTrigger_StaysInItsOrg(t *testing.T) {
 	require.NotNil(t, row.OrgID, "the move stamps the org it was decided in")
 	assert.Equal(t, acme, *row.OrgID)
 }
+
+// leftAcmeSource is triggerOrgSource after the caller left acme.
+type leftAcmeSource struct{}
+
+func (leftAcmeSource) ResolveOrgMembership(_ context.Context, _, orgID string) (accesstokenclient.OrgMembership, error) {
+	if orgID == "" {
+		return accesstokenclient.OrgMembership{OrgID: "home", Member: true}, nil
+	}
+	return accesstokenclient.OrgMembership{OrgID: orgID, Member: orgID == "home"}, nil
+}
+
+// Every update of an org's trigger acts in that org, moved or not: a caller
+// who has left the org, or whose credential is bound to another org, cannot
+// reconfigure it or move it within the org, and its stored definition is
+// unchanged.
+func TestUpdateTrigger_ActsInTheTriggersOrg(t *testing.T) {
+	t.Parallel()
+	env := setupTriggerTest(t).withOrgs(t)
+	acme := "acme"
+	acmeProject, acmeOther := env.orgProject(t, &acme), env.orgProject(t, &acme)
+	created, err := env.createIn(env.ctx, acmeProject, nil)
+	require.NoError(t, err)
+	before, err := env.repo.GetTrigger(context.Background(), created.GetId())
+	require.NoError(t, err)
+
+	update := func(ctx context.Context, projectID string) error {
+		_, err := env.svc.UpdateTrigger(ctx, connect.NewRequest(&reliantv1.UpdateTriggerRequest{
+			Id: created.GetId(),
+			Trigger: env.definition(func(d *reliantv1.TriggerDefinition) {
+				d.ProjectId = projectID
+				d.Message = "Reconfigured."
+			}),
+		}))
+		return err
+	}
+	unchanged := func() {
+		t.Helper()
+		after, err := env.repo.GetTrigger(context.Background(), created.GetId())
+		require.NoError(t, err)
+		assert.Equal(t, before.ProjectID, after.ProjectID)
+		assert.Equal(t, before.Message, after.Message)
+	}
+
+	machine := auth.WithMachineToken(env.ctx, &fat.Principal{OrgID: "home", ActingUserID: env.userID})
+	// Reconfigure in place, and move within the org.
+	for _, projectID := range []string{acmeProject, acmeOther} {
+		requireDenied(t, update(machine, projectID), connect.CodePermissionDenied, orgs.ReasonOrgMismatch)
+		unchanged()
+	}
+
+	env.configure(t, func(d *Deps) { d.Orgs = orgs.New(leftAcmeSource{}) })
+	for _, projectID := range []string{acmeProject, acmeOther} {
+		requireDenied(t, update(env.ctx, projectID), connect.CodePermissionDenied, orgs.ReasonNotOrgMember)
+		unchanged()
+	}
+}

@@ -271,22 +271,21 @@ func (s *Service) UpdateTrigger(
 	updated.ID = existing.ID
 	updated.CreatedAt = existing.CreatedAt
 	// A trigger's org is fixed (no moving between orgs): it may move only to
-	// a project of the same org (movedTriggerOrg).
-	updated.OrgID = existing.OrgID
-	if updated.ProjectID != existing.ProjectID {
-		target, err := s.deps.Repo.GetProjectWithUserCheck(ctx, updated.ProjectID, existing.UserID)
-		if err != nil {
+	// a project of the same org, and only a caller acting in that org may
+	// change it at all (updatedTriggerOrg).
+	var source, target *core.Project
+	if existing.OrgID == nil {
+		if source, err = s.deps.Repo.GetProjectWithUserCheck(ctx, existing.ProjectID, existing.UserID); err != nil && !svcerr.IsNotFound(err) {
 			return nil, triggerDBError("get project", err)
 		}
-		var source *core.Project
-		if existing.OrgID == nil {
-			if source, err = s.deps.Repo.GetProjectWithUserCheck(ctx, existing.ProjectID, existing.UserID); err != nil && !svcerr.IsNotFound(err) {
-				return nil, triggerDBError("get project", err)
-			}
+	}
+	if updated.ProjectID != existing.ProjectID {
+		if target, err = s.deps.Repo.GetProjectWithUserCheck(ctx, updated.ProjectID, existing.UserID); err != nil {
+			return nil, triggerDBError("get project", err)
 		}
-		if updated.OrgID, err = s.movedTriggerOrg(ctx, existing.UserID, existing, source, target); err != nil {
-			return nil, err
-		}
+	}
+	if updated.OrgID, err = s.updatedTriggerOrg(ctx, existing.UserID, existing, source, target); err != nil {
+		return nil, err
 	}
 	// nil enabled on update means "leave it as it is": an update of the
 	// schedule should not silently resume a trigger the owner paused.
