@@ -190,6 +190,7 @@ func TestAssignUnassignedOrg_SpansBatches(t *testing.T) {
 			}
 		}
 	}
+}
 
 // Triggers, saved workflows and runs carry their org too: a run inherits its
 // chat's on insert (workflows_inherit_chat_org), lists by org include only
