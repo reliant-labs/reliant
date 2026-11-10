@@ -270,10 +270,24 @@ func (s *Service) ExchangeToken(
 		// narrow as before (never wider) and an environment-only request
 		// ends as its permission_denied above. A control plane with #2400
 		// refuses that request here. Either way nothing that cannot
-		// authenticate is handed back; confirmOrg is the backstop. Rolling
-		// this server back restores exchangeCeiling's old answer (the
-		// resolved scopes only), the narrow behaviour, with no control-plane
-		// step: the control plane only ever clips more.
+		// authenticate is handed back; confirmOrg is the backstop.
+		//
+		// ROLLBACK. The change is this server's alone: no migration, no
+		// proto change, and control-plane's pin of reliant moves nothing
+		// here. If the post-deploy helper check fails (a member's
+		// environment-bound grant is not exchanged for prod, or IS
+		// exchanged for staging), redeploy the Reliant release before this
+		// one (or revert this change and ship it); control-plane stays
+		// where it is, because the control plane only ever clips more.
+		// That restores exchangeCeiling's old answer (subject.Scopes only),
+		// so no environment-bindable scope is handed to the control plane
+		// and a request for only such scopes is the scope_missing
+		// permission_denied above, as before. Verify the recovery with the
+		// same check: from the member's daemon, an org-wide grant still
+		// exchanges and deploys, an environment-only grant is refused on
+		// prod and staging alike (the old narrow behaviour), and no
+		// "access token exchanged" log line names an environment-bound
+		// scope the member holds only on an environment.
 		if errors.As(err, &refused) && refused.Code == "failed_precondition" {
 			return nil, svcerr.WithReason(svcerr.FailedPrecondition(refused.Message), refused.Reason)
 		}
