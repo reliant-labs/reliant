@@ -12,6 +12,8 @@
  *   /forge/p/:project/observability/dashboards/:kind/:key
  *                                             one dashboard: a release one (`release/<id>`)
  *                                             or a workspace one (`workspace/<slug>`)
+ *   /forge/p/:project/storage                 Storage: the scoped environment's buckets, read-only
+ *                                             (`bucket`, `prefix`, `object`, `token`: Storage/storageUrl-model.ts)
  *   /forge/p/:project/data                    Data: the scoped environment's databases, read-only
  *                                             (`db`, `table`, `f`, `sort`, `cols`, `page`, `size`, `row`:
  *                                             Data/dataUrl-model.ts)
@@ -128,6 +130,8 @@ export type ConsolePage =
   | { kind: "obs-view"; view: ObsNavView }
   /** One dashboard. Its kind is in the path: a release dashboard and a workspace one may share a key. */
   | { kind: "dashboard"; dashKind: DashboardPageKind; key: string }
+  /** The storage browser: the scoped environment's buckets (Storage/StoragePage.tsx). */
+  | { kind: "storage" }
   /** The data browser: the scoped environment's databases (Data/DataPage.tsx). */
   | { kind: "data" }
   | { kind: "environments" }
@@ -156,6 +160,8 @@ export function consolePath(project: string, page: ConsolePage): string {
       return `${base}/observability/${page.view}`;
     case "dashboard":
       return `${base}/observability/dashboards/${page.dashKind}/${encodeURIComponent(page.key)}`;
+    case "storage":
+      return `${base}/storage`;
     case "data":
       return `${base}/data`;
     case "environments":
@@ -205,6 +211,7 @@ export function consolePageOf(pathname: string): { project: string; page: Consol
         return isObsNavView(sub) && !dashKind ? { kind: "obs-view", view: sub } : null;
       case "environments":
         return sub ? { kind: "environment", env: safeDecode(sub) } : { kind: "environments" };
+      case "storage":
       case "data":
       case "secrets":
       case "domains":

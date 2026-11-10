@@ -9,7 +9,7 @@
  * issue's triage trail). Phrasing is activityText.ts; this is layout.
  */
 
-import { Bot, Database, User } from "lucide-react";
+import { Bot, Database, HardDrive, User } from "lucide-react";
 
 import Button from "@/components/forge-ui/button";
 import { useActivity } from "@/hooks/observability-queries";
@@ -19,10 +19,12 @@ import type { DeliveryScope } from "@/services/controlPlane/observability/delive
 import { formatAgo, formatWhen } from "../Observability/format";
 import { ObsError, ObsLoadingRows } from "../Observability/ObsStates";
 import { activitySentence, activityText, ENV_IN_SENTENCE } from "./activityText";
+/** The storage browser's feed lines: a bucket opened, a file downloaded. */
+const STORAGE_VERBS: ReadonlySet<string> = new Set(["open_bucket", "download_object"]);
 
 export function ActivityRow({ event, now = Date.now() }: { event: ActivityEvent; now?: number }) {
   const t = activityText(event);
-  const Icon = ENV_IN_SENTENCE.has(event.verb) ? Database : event.actor.kind === "user" ? User : Bot;
+  const Icon = STORAGE_VERBS.has(event.verb) ? HardDrive : ENV_IN_SENTENCE.has(event.verb) ? Database : event.actor.kind === "user" ? User : Bot;
   return (
     <li className="flex items-start gap-3 px-4 py-2.5" data-testid={`activity-${event.id}`} data-verb={event.verb} aria-label={activitySentence(event)}>
       <Icon className="mt-0.5 h-4 w-4 shrink-0 text-ink-muted" aria-hidden="true" />

@@ -16,7 +16,21 @@ import type { BrowseInput, DataAccessConfirmation } from "@/services/controlPlan
 import { useDataBrowserApi } from "@/services/controlPlane/observability/DataBrowserApiContext";
 import { dataBrowserRetry, dataBrowserRetryDelay } from "@/services/controlPlane/observability/errors";
 
+import { useReaderSession, requireCurrentReader, type ReaderSession } from "../AuditedAccess/readerSession";
+
 const BASE = ["data-browser"] as const;
+async function forReader<T>(reader: ReaderSession, read: () => Promise<T>): Promise<T> {
+  requireCurrentReader(reader);
+  const result = await read();
+  requireCurrentReader(reader);
+  return result;
+}
+function readerRetry(reader: ReaderSession) {
+  return (count: number, error: unknown) => {
+    try { requireCurrentReader(reader); } catch { return false; }
+    return dataBrowserRetry(count, error);
+  };
+}
 
 const READ_OPTIONS = {
   retry: dataBrowserRetry,
@@ -27,12 +41,14 @@ const READ_OPTIONS = {
 
 export function useBrowsableDatabases(environmentId: string | null) {
   const api = useDataBrowserApi();
+  const reader = useReaderSession();
   return useQuery({
-    queryKey: [...BASE, "databases", environmentId],
-    queryFn: ({ signal }) => api.listBrowsableDatabases(environmentId!, { signal }),
-    enabled: !!environmentId,
+    queryKey: [...BASE, reader.principalId, reader.epoch, "databases", environmentId],
+    queryFn: ({ signal }) => forReader(reader, () => api.listBrowsableDatabases(environmentId!, { signal })),
+    enabled: !!environmentId && !!reader.principalId,
     staleTime: 60_000,
     ...READ_OPTIONS,
+    retry: readerRetry(reader),
   });
 }
 
@@ -43,42 +59,48 @@ export function useBrowsableDatabases(environmentId: string | null) {
  */
 export function useDescribeDatabase(environmentId: string, database: string | null, access: DataAccessConfirmation | undefined, enabled: boolean) {
   const api = useDataBrowserApi();
+  const reader = useReaderSession();
   return useQuery({
-    queryKey: [...BASE, "describe", environmentId, database],
-    queryFn: ({ signal }) => api.describeDatabase({ environmentId, database: database!, ...(access ? { access } : {}) }, { signal }),
-    enabled: enabled && !!database,
+    queryKey: [...BASE, reader.principalId, reader.epoch, "describe", environmentId, database],
+    queryFn: ({ signal }) => forReader(reader, () => api.describeDatabase({ environmentId, database: database!, ...(access ? { access } : {}) }, { signal })),
+    enabled: enabled && !!database && !!reader.principalId,
     staleTime: 5 * 60_000,
     ...READ_OPTIONS,
+    retry: readerRetry(reader),
   });
 }
 
 /** The request's identity, without the confirmation (which does not change what the rows are). */
-function browseKey(input: BrowseInput) {
+function browseKey(input: BrowseInput, reader: ReaderSession) {
   const { access: _access, ...rest } = input;
-  return [...BASE, "browse", rest] as const;
+  return [...BASE, reader.principalId, reader.epoch, "browse", rest] as const;
 }
 
 /** One page of one table. Paging keeps the previous page on screen until the next arrives. */
 export function useBrowseTable(input: BrowseInput | null, options: { keepPrevious?: boolean } = {}) {
   const api = useDataBrowserApi();
+  const reader = useReaderSession();
   return useQuery({
-    queryKey: input ? browseKey(input) : [...BASE, "browse", null],
-    queryFn: ({ signal }) => api.browseTable(input!, { signal }),
-    enabled: !!input,
+    queryKey: input ? browseKey(input, reader) : [...BASE, reader.principalId, reader.epoch, "browse", null],
+    queryFn: ({ signal }) => forReader(reader, () => api.browseTable(input!, { signal })),
+    enabled: !!input && !!reader.principalId,
     staleTime: 60_000,
     placeholderData: options.keepPrevious ? keepPreviousData : undefined,
     ...READ_OPTIONS,
+    retry: readerRetry(reader),
   });
 }
 
 /** A Related count: a `limit 1, count ESTIMATED` read, started through `gate` (at most a few at once). */
 export function useRelatedCount(input: BrowseInput | null, gate: <T>(task: () => Promise<T>) => Promise<T>) {
   const api = useDataBrowserApi();
+  const reader = useReaderSession();
   return useQuery({
-    queryKey: input ? browseKey(input) : [...BASE, "browse", null],
-    queryFn: ({ signal }) => gate(() => api.browseTable(input!, { signal })),
-    enabled: !!input,
+    queryKey: input ? browseKey(input, reader) : [...BASE, reader.principalId, reader.epoch, "browse", null],
+    queryFn: ({ signal }) => gate(() => forReader(reader, () => api.browseTable(input!, { signal }))),
+    enabled: !!input && !!reader.principalId,
     staleTime: 60_000,
     ...READ_OPTIONS,
+    retry: readerRetry(reader),
   });
 }

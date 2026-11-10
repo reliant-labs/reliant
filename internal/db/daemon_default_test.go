@@ -91,3 +91,56 @@ func TestSetDefaultDaemon_OnePerUserOwnedOnlyAndClearedWithTheMachine(t *testing
 		t.Fatalf("the removed machine's default survived: %v", got)
 	}
 }
+
+// Clearing forgets the user's remembered default (user_default_daemons) even
+// when that machine has no daemons row right now, which no is_default write
+// can reach; setting one leaves the remembered default to the release that
+// remembers it, and another user's is untouched.
+func TestSetDefaultDaemon_ClearForgetsTheRememberedDefault(t *testing.T) {
+	t.Parallel()
+
+	repo, rawDB, cleanup := SetupTestDBWithRawDB(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	const userID = "remembered-user"
+	const otherUser = "remembered-other-user"
+	t.Cleanup(func() {
+		_, _ = rawDB.Exec(`DELETE FROM daemons WHERE user_id = $1`, userID)
+		_, _ = rawDB.Exec(`DELETE FROM user_default_daemons WHERE user_id IN ($1, $2)`, userID, otherUser)
+	})
+	seedLifecycleDaemon(t, repo, "remembered-b", userID)
+	// Remembered for a machine whose row the registry has deleted.
+	if _, err := rawDB.Exec(`INSERT INTO user_default_daemons (user_id, daemon_id) VALUES ($1, 'remembered-a'), ($2, 'theirs')`, userID, otherUser); err != nil {
+		t.Fatalf("seed remembered defaults: %v", err)
+	}
+
+	remembered := func(user string) bool {
+		t.Helper()
+		var n int
+		if err := rawDB.QueryRow(`SELECT count(*) FROM user_default_daemons WHERE user_id = $1`, user).Scan(&n); err != nil {
+			t.Fatalf("count remembered default: %v", err)
+		}
+		return n > 0
+	}
+
+	if err := repo.SetDefaultDaemon(ctx, userID, "remembered-b"); err != nil {
+		t.Fatalf("SetDefaultDaemon b: %v", err)
+	}
+	if !remembered(userID) {
+		t.Fatal("setting a default forgot the remembered one")
+	}
+
+	if err := repo.SetDefaultDaemon(ctx, userID, ""); err != nil {
+		t.Fatalf("clear: %v", err)
+	}
+	if remembered(userID) {
+		t.Fatal("clearing left the remembered default of a machine with no row")
+	}
+	if got := defaultDaemonIDs(t, repo, userID); len(got) != 0 {
+		t.Fatalf("default after clear = %v, want none", got)
+	}
+	if !remembered(otherUser) {
+		t.Fatal("clearing forgot another user's remembered default")
+	}
+}

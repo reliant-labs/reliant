@@ -66,7 +66,8 @@ it("refresh starts again, even after dismissing the previous mount", async () =>
 });
 it("drawer hides the callout, then closing it reveals the new page without consuming dismissal", async () => {
   const {go} = renderDemo("/forge/p/shop"); await screen.findByTestId("tour-callout");
-  const drawer = document.createElement("nav"); drawer.id="sidebar-layout-nav"; document.body.appendChild(drawer);
+  const trigger = document.createElement("button"); trigger.setAttribute("aria-controls", "drawer-tips-unique"); trigger.setAttribute("aria-expanded", "true");
+  const drawer = document.createElement("aside"); drawer.id="drawer-tips-unique"; drawer.setAttribute("role", "dialog"); drawer.append(document.createElement("nav")); document.body.append(trigger, drawer);
   try {
     act(()=>drawer.setAttribute("aria-modal","true"));
     await waitFor(()=>expect(screen.queryByTestId("tour-callout")).toBeNull());
@@ -77,7 +78,7 @@ it("drawer hides the callout, then closing it reveals the new page without consu
     fireEvent.click(screen.getByTestId("tour-next"));
     act(()=>drawer.setAttribute("aria-modal","true")); act(()=>drawer.removeAttribute("aria-modal"));
     expect(screen.queryByTestId("tour-callout")).toBeNull();
-  }finally{drawer.remove();}
+  }finally{drawer.remove();trigger.remove();}
 });
 it("explicit guided tour links suppress the automatic page card", async () => {
   renderDemo("/forge/demo?view=overview&tour=forge:fg-intro");

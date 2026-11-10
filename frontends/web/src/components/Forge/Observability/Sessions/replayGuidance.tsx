@@ -6,9 +6,14 @@
  * "set telemetry.replay" against a forge without it sends the reader to a
  * field that fails to compile.
  *
- *   "build-flag"  forge as pinned today: the frontend's build flag
- *                 (VITE_OTEL_REPLAY / NEXT_PUBLIC_OTEL_REPLAY) plus the
- *                 environment's ingest opt-in (ObservabilitySignals.replay).
+ *   "runtime-config"  forge as pinned today: the frontend's runtime config
+ *                 (forge.Frontend.runtime_config.OTEL_REPLAY = "true"; the
+ *                 scaffolded deploy KCL writes it from `_session_replay`) plus
+ *                 the environment's ingest opt-in (ObservabilitySignals.replay).
+ *                 The build flag (VITE_OTEL_REPLAY / NEXT_PUBLIC_OTEL_REPLAY)
+ *                 is deprecated and read only when the runtime config does not
+ *                 set OTEL_REPLAY, so it never overrides an explicit "false":
+ *                 the notes never offer it as the way to turn replay on.
  *   "telemetry"   forge with forge#1983: forge.BrowserTelemetry.replay on the
  *                 frontend, from which forge derives the environment's opt-in;
  *                 the build flag is deprecated.
@@ -16,18 +21,16 @@
 
 import type { ReactNode } from "react";
 
-export type ReplaySwitch = "build-flag" | "telemetry";
+export type ReplaySwitch = "runtime-config" | "telemetry";
 
 // Flip to "telemetry" once forge.yaml pins a forge with forge.BrowserTelemetry.replay (forge#1983).
-export const REPLAY_SWITCH: ReplaySwitch = "build-flag";
+export const REPLAY_SWITCH: ReplaySwitch = "runtime-config";
 
 const CODE = "font-mono text-ink";
 
-const BUILD_FLAG = (
-  <>
-    the build flag (<code className={CODE}>VITE_OTEL_REPLAY=true</code> for Vite, <code className={CODE}>NEXT_PUBLIC_OTEL_REPLAY=true</code> for Next.js)
-  </>
-);
+const RUNTIME_REPLAY = <code className={CODE}>runtime_config = {"{OTEL_REPLAY = \"true\"}"}</code>;
+// The scaffolded deploy/kcl/<env>/main.k derives both switches from this one line.
+const SCAFFOLD_SWITCH = <code className={CODE}>_session_replay = True</code>;
 const SIGNALS_OPT_IN = <code className={CODE}>signals = forge.ObservabilitySignals {"{replay = True}"}</code>;
 const TELEMETRY_REPLAY = <code className={CODE}>telemetry = forge.BrowserTelemetry {"{replay = True}"}</code>;
 
@@ -37,7 +40,8 @@ export function ReplayOffFix({ env, mode = REPLAY_SWITCH }: { env: ReactNode; mo
     <>set {TELEMETRY_REPLAY} on that frontend and redeploy.</>
   ) : (
     <>
-      set {BUILD_FLAG} on that frontend and {SIGNALS_OPT_IN} in {env}&apos;s <code className={CODE}>forge.Observability</code>, then redeploy.
+      set {RUNTIME_REPLAY} on that frontend&apos;s <code className={CODE}>forge.Frontend</code> and {SIGNALS_OPT_IN} in {env}&apos;s{" "}
+      <code className={CODE}>forge.Observability</code> (a scaffolded {env} sets both from {SCAFFOLD_SWITCH}), then redeploy.
     </>
   );
 }
@@ -81,11 +85,13 @@ export function ReplayTurnOnSteps({ mode = REPLAY_SWITCH }: { mode?: ReplaySwitc
       ) : (
         <>
           <li>
-            The browser build flag: <code className={CODE}>VITE_OTEL_REPLAY=true</code> for Vite, <code className={CODE}>NEXT_PUBLIC_OTEL_REPLAY=true</code> for
-            Next.js.
+            The frontend&apos;s <code className={CODE}>forge.Frontend</code> in KCL: {RUNTIME_REPLAY}.
           </li>
           <li>
             The environment&apos;s <code className={CODE}>forge.Observability</code> in KCL: {SIGNALS_OPT_IN}.
+          </li>
+          <li>
+            A scaffolded environment sets both from one line: {SCAFFOLD_SWITCH}.
           </li>
         </>
       )}

@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/ptr"
 
 	"connectrpc.com/connect"
@@ -40,7 +41,7 @@ func (s *Service) ListStepExecutions(
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}
-	if chat.UserID != userID {
+	if !authz.CanReadChat(ctx, userID, chat) {
 		return nil, svcerr.NotFound("chat")
 	}
 

@@ -177,8 +177,8 @@ describe("the session list", () => {
     // The console cannot see either switch: it says how to turn replay on, never that it is off.
     expect(note).toHaveTextContent("If replay isn't on yet");
     const steps = within(note).getByTestId("obs-sessions-replay-off-steps");
-    expect(steps).toHaveTextContent("VITE_OTEL_REPLAY=true");
-    expect(steps).toHaveTextContent("NEXT_PUBLIC_OTEL_REPLAY=true");
+    expect(steps).toHaveTextContent('runtime_config = {OTEL_REPLAY = "true"}');
+    expect(steps).not.toHaveTextContent("VITE_OTEL_REPLAY");
     expect(steps).toHaveTextContent("forge.Observability");
     expect(steps).toHaveTextContent("replay = True");
     expect(note).toHaveTextContent("redeploy");
@@ -234,7 +234,7 @@ describe("the empty list's replay state, per frontend", () => {
     const note = await known();
     expect(line("env-prod", "web")).toHaveAttribute("data-state", "off");
     expect(line("env-prod", "web")).toHaveTextContent(
-      "Replay is off for web in prod — set the build flag (VITE_OTEL_REPLAY=true for Vite, NEXT_PUBLIC_OTEL_REPLAY=true for Next.js) on that frontend and signals = forge.ObservabilitySignals {replay = True} in prod's forge.Observability, then redeploy."
+      'Replay is off for web in prod — set runtime_config = {OTEL_REPLAY = "true"} on that frontend\'s forge.Frontend and signals = forge.ObservabilitySignals {replay = True} in prod\'s forge.Observability (a scaffolded prod sets both from _session_replay = True), then redeploy.'
     );
     // forge.BrowserTelemetry.replay is not in the forge reliant pins (forge#1983): never name it.
     expect(note).not.toHaveTextContent("BrowserTelemetry");
@@ -318,7 +318,7 @@ describe("the empty list's replay state, per frontend", () => {
     expect(line("env-prod", "web")).toHaveAttribute("data-state", "unknown");
     expect(line("env-prod", "web")).toHaveTextContent("couldn't tell whether replay is on for web in prod");
     expect(line("env-prod", "admin")).toHaveAttribute("data-state", "blocked");
-    expect(within(note).getByTestId("obs-sessions-replay-off-steps")).toHaveTextContent("VITE_OTEL_REPLAY=true");
+    expect(within(note).getByTestId("obs-sessions-replay-off-steps")).toHaveTextContent('runtime_config = {OTEL_REPLAY = "true"}');
   });
 
   it("says an environment's config could not be read, never that it is off", async () => {

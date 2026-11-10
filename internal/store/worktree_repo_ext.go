@@ -140,6 +140,30 @@ func GetLiveWorktreeByName(ctx context.Context, db orm.Context, projectID, name 
 	})
 }
 
+// ListFailedWorktreesForDaemon returns the FAILED workspaces, archived ones
+// included, created on daemonID since `since` that hold no path and whose
+// leftover checkouts are not yet known to be gone (cleanup_metadata
+// directory_deleted), newest first, at most limit. A create whose answer was
+// lost leaves its finished checkout behind under such a row (reliant #2413);
+// the daemon is asked to remove it when it next connects.
+func ListFailedWorktreesForDaemon(ctx context.Context, db orm.Context, daemonID string, since time.Time, limit int) ([]*core.Worktree, error) {
+	var rows []*Worktree
+	err := db.Bun().NewSelect().Model(&rows).
+		Where("worktrees.daemon_id = ?", daemonID).
+		Where("worktrees.status = ?", reliantv1.WorktreeStatus_WORKTREE_STATUS_FAILED).
+		Where("worktrees.is_main = false").
+		Where("worktrees.path = ''").
+		Where("worktrees.created_at >= ?", since).
+		Where(cleanupMetadataPending).
+		OrderExpr("worktrees.created_at DESC").
+		Limit(int64(limit)).
+		Scan(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list failed worktrees for daemon: %w", err)
+	}
+	return worktreesToCore(rows), nil
+}
+
 // ListWorktreesByBranch returns every worktree, archived included, recorded
 // against a branch: an archived row's checkout or branch may outlive the
 // archive.

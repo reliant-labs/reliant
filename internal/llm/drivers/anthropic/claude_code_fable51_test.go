@@ -286,6 +286,28 @@ func promptID(t *testing.T, header string) string {
 	return id
 }
 
+// capturedThinkingAsSent returns a capture's thinking config with the one field
+// the driver deliberately diverges on: the captures send display "updates",
+// which streams only empty thinking deltas, and claudeCodeThinkingConfig sends
+// "summarized" so thinking text reaches the user. Every other field must still
+// match the capture.
+func capturedThinkingAsSent(t *testing.T, captured json.RawMessage) json.RawMessage {
+	t.Helper()
+	var thinking map[string]any
+	if err := json.Unmarshal(captured, &thinking); err != nil {
+		t.Fatalf("unmarshal captured thinking: %v", err)
+	}
+	if thinking["display"] != "updates" {
+		t.Fatalf("captured thinking display = %v, want updates", thinking["display"])
+	}
+	thinking["display"] = "summarized"
+	out, err := json.Marshal(thinking)
+	if err != nil {
+		t.Fatalf("marshal thinking: %v", err)
+	}
+	return out
+}
+
 // TestClaudeCodeThinkingConfig_DisplayUpdates verifies display:"updates" is
 // emitted for fable-5.1 only, and that it marshals to the JSON the capture shows.
 // The value postdates the SDK's declared constants, so the marshal check matters.
@@ -494,8 +516,8 @@ func TestPreparedMessages_MatchesCaptureShape(t *testing.T) {
 	if got.MaxTokens != capture.MaxTokens {
 		t.Errorf("max_tokens = %d, want %d", got.MaxTokens, capture.MaxTokens)
 	}
-	if !jsonEquivalent(t, got.Thinking, capture.Thinking) {
-		t.Errorf("thinking = %s, want %s", got.Thinking, capture.Thinking)
+	if want := capturedThinkingAsSent(t, capture.Thinking); !jsonEquivalent(t, got.Thinking, want) {
+		t.Errorf("thinking = %s, want %s", got.Thinking, want)
 	}
 	if !jsonEquivalent(t, got.Fallbacks, capture.Fallbacks) {
 		t.Errorf("fallbacks = %s, want %s", got.Fallbacks, capture.Fallbacks)

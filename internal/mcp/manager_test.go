@@ -61,6 +61,26 @@ func (f *fakeManagerClient) ServerInfo() *ServerInfo {
 	return &ServerInfo{}
 }
 
+// withoutBuiltins disables every built-in server in a project's servers, so
+// a test of EnsureProjectServersLoaded starts nothing real: the built-ins
+// reach the network (reliant-docs is an HTTP server on the internet) and a
+// browser, and one that timed out failed a test about something else
+// (reliant #2424).
+func withoutBuiltins(servers map[string]config.MCPServer) map[string]config.MCPServer {
+	// chrome-devtools is built in only where a browser is found or one is
+	// configured, so it is named whether or not this host has one.
+	names := []string{chromeDevtoolsServerName}
+	for name := range builtinMCPServers("") {
+		names = append(names, name)
+	}
+	for _, name := range names {
+		if _, set := servers[name]; !set {
+			servers[name] = config.MCPServer{Enabled: false}
+		}
+	}
+	return servers
+}
+
 func TestEnsureProjectServersLoaded_DisabledServerNotLoadedOrFailed(t *testing.T) {
 	config.UseUserConfigDirForTest(t, t.TempDir())
 
@@ -73,13 +93,13 @@ func TestEnsureProjectServersLoaded_DisabledServerNotLoadedOrFailed(t *testing.T
 		_ = ctx
 		_ = projectPath
 		return &config.Config{
-			MCPServers: map[string]config.MCPServer{
+			MCPServers: withoutBuiltins(map[string]config.MCPServer{
 				"disabled-server": {
 					Type:    config.MCPStdio,
 					Command: "definitely-not-a-real-command",
 					Enabled: false,
 				},
-			},
+			}),
 		}, nil
 	})
 
@@ -87,7 +107,7 @@ func TestEnsureProjectServersLoaded_DisabledServerNotLoadedOrFailed(t *testing.T
 	if result == nil {
 		t.Fatalf("expected non-nil load result")
 	}
-	// disabled-server must not be loaded; built-in servers may or may not succeed
+	// disabled-server must not be loaded
 	for _, name := range result.LoadedServers {
 		if name == "disabled-server" {
 			t.Fatalf("disabled server should not appear in loaded servers")
@@ -123,11 +143,11 @@ func TestEnsureProjectServersLoaded_DisabledServerStopsRunningClient(t *testing.
 		_ = ctx
 		_ = projectPath
 		return &config.Config{
-			MCPServers: map[string]config.MCPServer{
+			MCPServers: withoutBuiltins(map[string]config.MCPServer{
 				"server-a": {
 					Enabled: false,
 				},
-			},
+			}),
 		}, nil
 	})
 
@@ -187,11 +207,11 @@ func TestEnsureProjectServersLoaded_AssociatesAlreadyRunningServerWithNewScope(t
 	manager.SetProjectConfigResolver(func(ctx context.Context, projectPath string) (*config.Config, error) {
 		_ = ctx
 		return &config.Config{
-			MCPServers: map[string]config.MCPServer{
+			MCPServers: withoutBuiltins(map[string]config.MCPServer{
 				"server-a": {
 					Enabled: true,
 				},
-			},
+			}),
 		}, nil
 	})
 
@@ -199,7 +219,7 @@ func TestEnsureProjectServersLoaded_AssociatesAlreadyRunningServerWithNewScope(t
 	if result == nil {
 		t.Fatalf("expected non-nil load result")
 	}
-	// server-a must be in loaded servers; built-in servers may also appear
+	// server-a must be in loaded servers
 	foundServerA := false
 	for _, name := range result.LoadedServers {
 		if name == "server-a" {

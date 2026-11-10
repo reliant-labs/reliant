@@ -1012,6 +1012,24 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 	}); err != nil {
 		return nil, fmt.Errorf("failed to set on_failure query handler: %w", err)
 	}
+	// finally: the handler for however the run ends (finally.go), armed with
+	// on_failure's and run by the same defer, after it.
+	var finallyHandler *reliantv1.Workflow
+	var finallyRecord FinallyRecord
+	if err := workflow.SetQueryHandler(ctx, FinallyQuery, func() (FinallyRecord, error) {
+		return finallyRecord, nil
+	}); err != nil {
+		return nil, fmt.Errorf("failed to set finally query handler: %w", err)
+	}
+	// The run's answer to a cooperative cancel (model.RunStopQuery): set the
+	// moment the completion defer below is entered. A query handler is not a
+	// command, so it is safe for every history.
+	var runStop model.RunStopState
+	if err := workflow.SetQueryHandler(ctx, model.RunStopQuery, func() (model.RunStopState, error) {
+		return runStop, nil
+	}); err != nil {
+		return nil, fmt.Errorf("failed to set run stop query handler: %w", err)
+	}
 
 	logger.Debug("[Workflow Runtime] Using execution context",
 		"thread", thread,
@@ -1045,6 +1063,9 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 		if caught.value != nil {
 			result, retErr = nil, recoveredPanic(ctx, caught)
 		}
+		// From here the run ends by itself; a cancel waiting on it must not
+		// terminate it (runs.Service.Terminate).
+		runStop.Ending = true
 		// From here a message to a stopped sub-agent is its successor's to
 		// act on, not this run's (subagent_resume.go).
 		childTracker.runEnding = true
@@ -1059,6 +1080,15 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 			workflow.GetVersion(ctx, onFailureChangeID, workflow.DefaultVersion, 1) != workflow.DefaultVersion {
 			runOnFailure(ctx, onFailureHandler, input, workflowID, execCtx, childTracker, failureNodeOutputs,
 				failureFor(failRec, retErr, runOutcome, runOutcomeNode), &onFailureRecord)
+		}
+		// Every ending gets the finally handler, once, after on_failure and
+		// before the run reports how it ended: a cancelled run included,
+		// which is the ending it exists for.
+		if finallyHandler != nil {
+			if status, ending := runEnding(ctx, retErr, runOutcome); ending && finallyGate(ctx) {
+				runFinallyAt(ctx, finallyHandler, input, workflowID, execCtx, childTracker, failureNodeOutputs,
+					status, failureFor(failRec, retErr, runOutcome, runOutcomeNode), &finallyRecord, "")
+			}
 		}
 		// Read at exit, off the final inputs map (ApplyDefaults replaces it).
 		launchRun := IsLaunchRun(input.Inputs)
@@ -1107,6 +1137,7 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 	// resolution leaves on_failure untouched (it is runtime-evaluated), so the
 	// parsed definition's handler is the handler the resolved one carries.
 	onFailureHandler = wfWithPlaceholders.GetOnFailure()
+	finallyHandler = wfWithPlaceholders.GetFinally()
 
 	// STEP 5.5: Validate and apply defaults from workflow input schemas
 	// This ensures all inputs with defaults are available for CEL evaluation

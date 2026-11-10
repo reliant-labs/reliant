@@ -3,6 +3,9 @@
 // WEB_BUILD_TARGET=demo pnpm build && WEB_BUILD_TARGET=demo pnpm exec vite preview
 // node scripts/demo/smoke-demo-inventory.mjs http://localhost:4173
 // SCREENSHOT_DIR=/tmp/demo-proof optionally keeps screenshots outside the repo.
+// Each page is opened as a fresh document, as a shared or reloaded link is: a host
+// that answers it with anything but the app (a dotted route like
+// /releases/v1.8.3 with no SPA fallback) fails with the status it answered.
 import fs from "node:fs";
 import path from "node:path";
 import assert from "node:assert/strict";
@@ -27,13 +30,38 @@ async function screenshot(name) {
   fs.mkdirSync(process.env.SCREENSHOT_DIR, { recursive: true });
   await page.screenshot({ path: path.join(process.env.SCREENSHOT_DIR, `${name}.png`), fullPage: true });
 }
+/** Loads `pathname` as a fresh document; the host must answer with the app, not a file 404. */
+async function open(pathname) {
+  const response = await page.goto(`${base}${pathname}`);
+  const type = response?.headers()["content-type"] ?? "";
+  if (!response?.ok() || !type.startsWith("text/html")) {
+    const body = ((await response?.text().catch(() => "")) ?? "").trim().slice(0, 80);
+    throw new Error(`${pathname}: the host answered ${response?.status() ?? "nothing"} ${type} ${JSON.stringify(body)} instead of the app${/\/[^/]*\.[^/]*$/.test(pathname.split("?")[0]) ? " (a dotted route: the host has no SPA fallback for it)" : ""}`);
+  }
+}
+const releaseHeading = () => page.getByRole("main").getByRole("heading", { level: 1, name: "v1.8.3" });
 try {
-  await page.goto(`${base}/forge/p/shop/releases/v1.8.3?env=prod`);
-  await page.locator("main h1").filter({ hasText: "v1.8.3" }).waitFor();
+  // The fixture: the demo's own release list must still have v1.8.3 (the config
+  // history below compares it with v1.8.4). Opening it from the list proves the
+  // page; opening its URL afresh proves the deep link a visitor shares or reloads.
+  await open("/forge/p/shop/releases?env=prod");
+  const listed = page.getByRole("main").getByRole("link", { name: "v1.8.3", exact: true }).first();
+  try {
+    await listed.waitFor({ timeout: 15000 });
+  } catch {
+    const hrefs = await page.getByRole("main").locator('a[href*="/releases/"]').evaluateAll((els) => els.map((a) => a.getAttribute("href")));
+    const versions = [...new Set(hrefs.map((href) => href.match(/\/releases\/([^/?]+)/)?.[1]).filter(Boolean))];
+    throw new Error(`the demo's releases no longer include v1.8.3 (they list ${JSON.stringify(versions)}): this fixture is stale`);
+  }
+  await listed.click();
+  await releaseHeading().waitFor();
+  console.log("PASS release detail opens from the release list");
+  await open("/forge/p/shop/releases/v1.8.3?env=prod");
+  await releaseHeading().waitFor();
   await screenshot("release-detail");
-  console.log("PASS release detail loads without missing demo-twin exports");
+  console.log("PASS release detail loads from its deep link without missing demo-twin exports");
 
-  await page.goto(`${base}/forge/p/shop/workloads/dev/api?env=dev&tab=config`);
+  await open("/forge/p/shop/workloads/dev/api?env=dev&tab=config");
   await page.getByRole("button", { name: "View config values", exact: true }).click();
   await page.getByText("Bundle ID:").waitFor();
   let text = await page.locator("main").innerText();
@@ -54,6 +82,10 @@ try {
   assert.deepEqual(errors, []);
   assert(requests.every((request) => request.startsWith("GET ")), "demo made a non-GET network call");
   console.log("PASS no backend, authentication, Supabase or daemon requests", [...new Set(requests.filter((r) => !r.includes("/assets/")))]);
+} catch (err) {
+  // A timeout says only what it waited for: say what the page reported too.
+  if (errors.length) console.error("page errors and forbidden requests so far:", errors);
+  throw err;
 } finally {
   await browser.close();
 }

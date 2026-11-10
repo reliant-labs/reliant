@@ -15,7 +15,14 @@ interface AttachmentStore {
    */
   uploading: boolean;
   inFlight: number;
+  /** Image thumbnails uploaded this session, by attachment id. */
   blobUrls: Map<string, string>;
+  /**
+   * Text files uploaded this session, by attachment id: the text viewer reads
+   * them with `Blob.text()`. Never a blob URL to fetch — the built app's CSP
+   * connect-src does not admit `blob:`, so fetching one fails.
+   */
+  localFiles: Map<string, Blob>;
 
   attachFile: (sessionId: string, file: File) => Promise<Attachment>;
   /**
@@ -34,13 +41,29 @@ interface AttachmentStore {
 }
 
 /**
- * Images get a blob URL for their thumbnail, text files one for the text
- * viewer, both from the bytes already in hand. A draft restored after a reload
- * has neither, and its readers fetch the bytes from the server instead.
+ * Images get a blob URL for their thumbnail, text files keep their bytes for
+ * the text viewer, both from the file already in hand. A draft restored after
+ * a reload has neither, and its readers fetch the bytes from the server instead.
  */
 function localBlobUrl(file: File): string | undefined {
-  const type = getAttachmentType(file.name);
-  return type === 'image' || type === 'file_reference' ? URL.createObjectURL(file) : undefined;
+  return getAttachmentType(file.name) === 'image' ? URL.createObjectURL(file) : undefined;
+}
+
+function localFile(file: File): Blob | undefined {
+  return getAttachmentType(file.name) === 'file_reference' ? file : undefined;
+}
+
+/** The local maps without `ids`, their blob URLs revoked. */
+function withoutLocal(state: Pick<AttachmentStore, 'blobUrls' | 'localFiles'>, ids: string[]) {
+  const blobUrls = new Map(state.blobUrls);
+  const localFiles = new Map(state.localFiles);
+  for (const id of ids) {
+    const url = blobUrls.get(id);
+    if (url) URL.revokeObjectURL(url);
+    blobUrls.delete(id);
+    localFiles.delete(id);
+  }
+  return { blobUrls, localFiles };
 }
 
 const PERSIST_KEY = 'reliant-composer-attachments';
@@ -90,6 +113,7 @@ export const useAttachmentStore = create<AttachmentStore>()(
           uploading: false,
           inFlight: 0,
           blobUrls: new Map(),
+          localFiles: new Map(),
 
           attachFile: async (sessionId: string, file: File) => {
             // Check if file type is supported
@@ -110,6 +134,9 @@ export const useAttachmentStore = create<AttachmentStore>()(
               if (blobUrl) {
                 newBlobUrls.set(attachment.id, blobUrl);
               }
+              const newLocalFiles = new Map(get().localFiles);
+              const local = localFile(file);
+              if (local) newLocalFiles.set(attachment.id, local);
 
               // Add to attachments for this session
               const currentAttachments = get().attachments.get(sessionId) || [];
@@ -118,7 +145,8 @@ export const useAttachmentStore = create<AttachmentStore>()(
 
               set({
                 attachments: newAttachments,
-                blobUrls: newBlobUrls
+                blobUrls: newBlobUrls,
+                localFiles: newLocalFiles,
               });
               endUpload();
 
@@ -162,16 +190,13 @@ export const useAttachmentStore = create<AttachmentStore>()(
             const newAttachments = new Map(get().attachments);
             newAttachments.set(sessionId, next);
 
-            const newBlobUrls = new Map(get().blobUrls);
-            const oldBlobUrl = newBlobUrls.get(attachmentId);
-            if (oldBlobUrl) {
-              URL.revokeObjectURL(oldBlobUrl);
-              newBlobUrls.delete(attachmentId);
-            }
+            const local = withoutLocal(get(), [attachmentId]);
             const blobUrl = localBlobUrl(file);
-            if (blobUrl) newBlobUrls.set(attachment.id, blobUrl);
+            if (blobUrl) local.blobUrls.set(attachment.id, blobUrl);
+            const text = localFile(file);
+            if (text) local.localFiles.set(attachment.id, text);
 
-            set({ attachments: newAttachments, blobUrls: newBlobUrls });
+            set({ attachments: newAttachments, ...local });
             endUpload();
 
             deleteAttachment(attachmentId).catch((error) => {
@@ -185,12 +210,7 @@ export const useAttachmentStore = create<AttachmentStore>()(
             const filteredAttachments = currentAttachments.filter(a => a.id !== attachmentId);
 
             // Revoke blob URL to free memory
-            const blobUrl = get().blobUrls.get(attachmentId);
-            const newBlobUrls = new Map(get().blobUrls);
-            if (blobUrl) {
-              URL.revokeObjectURL(blobUrl);
-              newBlobUrls.delete(attachmentId);
-            }
+            const local = withoutLocal(get(), [attachmentId]);
 
             const newAttachments = new Map(get().attachments);
             if (filteredAttachments.length === 0) {
@@ -200,7 +220,7 @@ export const useAttachmentStore = create<AttachmentStore>()(
             }
 
             // Single atomic state update for instant UI response
-            set({ attachments: newAttachments, blobUrls: newBlobUrls });
+            set({ attachments: newAttachments, ...local });
 
             // Delete from server in background (fire-and-forget)
             deleteAttachment(attachmentId).catch((error) => {
@@ -214,20 +234,13 @@ export const useAttachmentStore = create<AttachmentStore>()(
 
           clearAttachments: (sessionId: string) => {
             const currentAttachments = get().attachments.get(sessionId) || [];
-            const newBlobUrls = new Map(get().blobUrls);
 
             // Revoke blob URLs for all attachments in this session to free memory
-            for (const attachment of currentAttachments) {
-              const blobUrl = newBlobUrls.get(attachment.id);
-              if (blobUrl) {
-                URL.revokeObjectURL(blobUrl);
-                newBlobUrls.delete(attachment.id);
-              }
-            }
+            const local = withoutLocal(get(), currentAttachments.map((attachment) => attachment.id));
 
             const newAttachments = new Map(get().attachments);
             newAttachments.delete(sessionId);
-            set({ attachments: newAttachments, blobUrls: newBlobUrls });
+            set({ attachments: newAttachments, ...local });
           },
 
           getBlobUrl: (attachmentId: string) => {
@@ -246,6 +259,7 @@ export const useAttachmentStore = create<AttachmentStore>()(
               uploading: false,
               inFlight: 0,
               blobUrls: new Map(),
+              localFiles: new Map(),
             });
           },
         };

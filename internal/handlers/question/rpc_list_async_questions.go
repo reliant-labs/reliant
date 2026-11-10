@@ -8,6 +8,7 @@ import (
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/authz"
 )
 
 // ListAsyncQuestions returns every async question in a chat — asked with
@@ -35,7 +36,7 @@ func (s *Service) ListAsyncQuestions(
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}
-	if chat == nil || chat.UserID != userID {
+	if !authz.CanReadChat(ctx, userID, chat) {
 		return nil, svcerr.NotFound("chat")
 	}
 
