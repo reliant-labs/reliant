@@ -297,9 +297,24 @@ func (s *Service) sessionCredential(ctx context.Context, header http.Header) (*f
 
 // confirmOrg introspects the freshly minted token and revokes it if it landed
 // in a different org from the one asked for.
+//
+// A child holding only environment-bound scopes (db:query on prod alone)
+// introspects to no org-wide scope, which the decoder refuses to authenticate
+// (accesstokenclient.ScopelessTokenError). It is still live and still in an
+// org, and the org is all this checks: the child is handed on, never
+// authenticated here, and the control plane judges its every use on its own
+// environment.
 func (s *Service) confirmOrg(ctx context.Context, userID string, minted tokenauthority.Minted, wantOrg string) error {
+	childOrg := ""
 	child, err := s.deps.Authority.Introspect(ctx, minted.Plaintext)
-	if err == nil && child.OrgID == wantOrg {
+	var scopeless *accesstokenclient.ScopelessTokenError
+	switch {
+	case err == nil:
+		childOrg = child.OrgID
+	case errors.As(err, &scopeless):
+		childOrg, err = scopeless.OrgID, nil
+	}
+	if err == nil && childOrg == wantOrg {
 		return nil
 	}
 	if revokeErr := s.deps.Authority.RevokeForUser(ctx, userID, minted.TokenID); revokeErr != nil {

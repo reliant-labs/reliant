@@ -3,7 +3,12 @@ package token
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 
@@ -239,7 +244,7 @@ func TestExchangeToken_CallerChain_EnvironmentBoundGrant(t *testing.T) {
 					t.Fatalf("the parent resolves with deploy:write: %s", p.Scopes)
 				}
 
-				svc := newTokenService(t, cp, TokenControlPlane{Issuer: testControlPlane})
+				svc := newTokenService(t, cp.serveWire(t), TokenControlPlane{Issuer: testControlPlane})
 				resp, err := svc.ExchangeToken(context.Background(), exchangeReq(parentToken, &reliantv1.ExchangeTokenRequest{
 					Audience: testControlPlane, Scopes: []string{string(fat.ScopeDeployRead), string(write)},
 				}))
@@ -273,6 +278,158 @@ func TestExchangeToken_CallerChain_EnvironmentBoundGrant(t *testing.T) {
 				cp.mu.Unlock()
 				if cp.spendsOn(child, prod, write) {
 					t.Error("the child still deploys prod after its person left the org")
+				}
+			})
+		}
+	}
+}
+
+// serveWire exposes the contract over control-plane's
+// AccessTokenInternalService wire protocol and returns the PRODUCTION client
+// (accesstokenclient.Client) pointed at it, so ExchangeToken's introspections
+// go through the real decoder: an explicit-list token that resolves to no
+// org-wide scope is refused there exactly as against a real control plane.
+func (c *controlPlaneMintContract) serveWire(t *testing.T) accesstokenclient.Service {
+	t.Helper()
+	type resource struct {
+		Kind string `json:"kind"`
+		ID   string `json:"id"`
+	}
+	toResource := func(r *fat.Resource) *resource {
+		if r == nil {
+			return nil
+		}
+		return &resource{Kind: string(r.Kind), ID: r.ID}
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var in struct {
+			Token    string    `json:"token"`
+			UserID   string    `json:"userId"`
+			TokenID  string    `json:"tokenId"`
+			Name     string    `json:"name"`
+			Scopes   []string  `json:"scopes"`
+			OrgID    string    `json:"orgId"`
+			Resource *resource `json:"resource"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		reply := func(status int, body any) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(status)
+			_ = json.NewEncoder(w).Encode(body)
+		}
+		switch strings.TrimPrefix(r.URL.Path, accesstokenclient.ServicePath) {
+		case "Introspect":
+			p, err := c.Introspect(r.Context(), in.Token)
+			if err != nil {
+				reply(http.StatusOK, map[string]any{"active": false})
+				return
+			}
+			reply(http.StatusOK, map[string]any{
+				"active": true, "tokenId": p.TokenID, "orgId": p.OrgID, "actingUserId": p.ActingUserID,
+				"scopes": p.Scopes.Strings(), "allScopes": p.AllScopes, "resource": toResource(p.Resource),
+			})
+		case "MintForUser":
+			req := tokenauthority.MintRequest{UserID: in.UserID, Name: in.Name, OrgID: in.OrgID}
+			for _, raw := range in.Scopes {
+				scope, ok := fat.ParseScope(raw)
+				if !ok {
+					reply(http.StatusBadRequest, map[string]any{"code": "invalid_argument", "message": raw})
+					return
+				}
+				req.Scopes = append(req.Scopes, scope)
+			}
+			if in.Resource != nil {
+				req.Resource = &fat.Resource{Kind: fat.ResourceKind(in.Resource.Kind), ID: in.Resource.ID}
+			}
+			m, err := c.MintForUser(r.Context(), req)
+			var refused *accesstokenclient.RPCError
+			if errors.As(err, &refused) {
+				reply(http.StatusForbidden, map[string]any{"code": refused.Code, "message": refused.Message})
+				return
+			}
+			reply(http.StatusOK, map[string]any{"tokenId": m.TokenID, "secret": m.Plaintext, "scopes": m.Scopes})
+		case "RevokeForUser":
+			_ = c.RevokeForUser(r.Context(), in.UserID, in.TokenID)
+			reply(http.StatusOK, map[string]any{})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	return accesstokenclient.New(accesstokenclient.Deps{BaseURL: srv.URL, Sign: func() (string, error) { return "internal", nil }})
+}
+
+// RC-10: an exchange asking ONLY for a scope the person holds bound to one
+// environment. The child's org-wide resolution is empty, so the production
+// decoder refuses to authenticate it; the exchange must still confirm the
+// child's org and hand it on (it authorizes nothing here, and the control
+// plane judges each use on its environment), not revoke it as an outage.
+func TestExchangeToken_CallerChain_EnvironmentOnlyScope(t *testing.T) {
+	const org, user, prod, staging = "org-1", "user-1", "env-prod", "env-staging"
+	query := fat.ScopeDBQuery
+	for _, parent := range []struct {
+		name     string
+		resource *fat.Resource
+	}{
+		{"daemon-bound parent", &fat.Resource{Kind: fat.ResourceDaemon, ID: "daemon-1"}},
+		{"unbound login parent", nil},
+	} {
+		for _, tc := range []struct {
+			name    string
+			arrange func(c *controlPlaneMintContract)
+			minted  bool
+		}{
+			{name: "prod-only grant", arrange: func(*controlPlaneMintContract) {}, minted: true},
+			{name: "membership removed", arrange: func(c *controlPlaneMintContract) { c.member[user] = false }},
+		} {
+			t.Run(parent.name+"/"+tc.name, func(t *testing.T) {
+				cp := newControlPlaneMintContract(org)
+				cp.member[user] = true
+				// No org-wide grant at all: db:query on prod is all they hold.
+				cp.byEnv[user] = map[string]fat.Set{prod: fat.SetOf(query)}
+				parentToken := cp.issue(user, true, nil, parent.resource)
+				tc.arrange(cp)
+
+				authority := cp.serveWire(t)
+				svc := newTokenService(t, authority, TokenControlPlane{Issuer: testControlPlane})
+				resp, err := svc.ExchangeToken(context.Background(), exchangeReq(parentToken, &reliantv1.ExchangeTokenRequest{
+					Audience: testControlPlane, Scopes: []string{string(query)},
+				}))
+				if !tc.minted {
+					if svcerr.Code(err) != connect.CodePermissionDenied {
+						t.Fatalf("ExchangeToken: %v, want PermissionDenied", err)
+					}
+					return
+				}
+				if err != nil {
+					t.Fatalf("ExchangeToken: %v", err)
+				}
+				child := resp.Msg.GetToken()
+				if got := resp.Msg.GetScopes(); len(got) != 1 || got[0] != string(query) {
+					t.Errorf("granted %v, want [%s]", got, query)
+				}
+				if resp.Msg.GetOrgId() != org {
+					t.Errorf("org = %q, want %q", resp.Msg.GetOrgId(), org)
+				}
+				if !cp.spendsOn(child, prod, query) {
+					t.Error("the child cannot query prod, where the person holds db:query")
+				}
+				if cp.spendsOn(child, staging, query) {
+					t.Error("the child queries staging, where the person holds no grant")
+				}
+				// It authenticates as nothing at this server: no org-wide authority.
+				var scopeless *accesstokenclient.ScopelessTokenError
+				if _, err := authority.Introspect(context.Background(), child); !errors.As(err, &scopeless) || scopeless.OrgID != org {
+					t.Errorf("introspecting the child = %v, want a ScopelessTokenError in %s", err, org)
+				}
+				cp.mu.Lock()
+				cp.member[user] = false
+				cp.mu.Unlock()
+				if cp.spendsOn(child, prod, query) {
+					t.Error("the child still queries prod after its person left the org")
 				}
 			})
 		}

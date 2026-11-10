@@ -116,6 +116,28 @@ func TestIntrospect_WildcardSkipsScopesThisBinaryDoesNotKnow(t *testing.T) {
 	}
 }
 
+// A live token that resolves to no recognised scope (an exchanged child
+// holding only an environment-bound grant) authenticates as nothing, but
+// says which org it lives in.
+func TestIntrospect_ScopelessTokenNamesItsOrgAndAuthenticatesNothing(t *testing.T) {
+	for _, body := range []string{
+		`{"active":true,"tokenId":"tok-1","orgId":"org-1","actingUserId":"user-1"}`,
+		`{"active":true,"tokenId":"tok-1","orgId":"org-1","actingUserId":"user-1","scopes":[]}`,
+		`{"active":true,"tokenId":"tok-1","orgId":"org-1","actingUserId":"user-1","scopes":["future:scope"],"allScopes":true}`,
+	} {
+		srv := fakeCP(t, func(string, map[string]any) (int, string) { return 200, body })
+		p, err := New(Deps{BaseURL: srv.URL, Sign: sign}).Introspect(context.Background(), liveToken)
+		srv.Close()
+		var scopeless *ScopelessTokenError
+		if p != nil || !errors.As(err, &scopeless) || scopeless.OrgID != "org-1" || scopeless.TokenID != "tok-1" {
+			t.Fatalf("%s: principal %+v, err %v; want a ScopelessTokenError in org-1", body, p, err)
+		}
+		if errors.Is(err, ErrInactive) {
+			t.Fatalf("%s: a live token reported inactive", body)
+		}
+	}
+}
+
 func TestIntrospect_InactiveIsErrInactive(t *testing.T) {
 	srv := fakeCP(t, func(string, map[string]any) (int, string) { return 200, `{}` })
 	defer srv.Close()

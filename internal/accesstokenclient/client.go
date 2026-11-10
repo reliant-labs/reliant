@@ -121,10 +121,29 @@ func (c *Client) IntrospectAccount(ctx context.Context, token string) (auth.Acce
 	return auth.AccessTokenAccount{Principal: p, Email: strings.TrimSpace(out.ActingUserEmail)}, nil
 }
 
+// ScopelessTokenError reports a LIVE token that resolves, at this
+// introspection, to no scope this server recognises, so it authenticates as
+// nothing here. The commonest one is an exchanged child holding only a grant
+// bound to one environment (db:query on prod alone): the control plane
+// resolves it to the person's org-wide grants, which leave that scope out,
+// and judges each use on its own environment instead. OrgID is the org the
+// token lives in — the one fact a caller confirming where a token landed
+// needs, and no authority.
+type ScopelessTokenError struct {
+	TokenID string
+	OrgID   string
+}
+
+func (e *ScopelessTokenError) Error() string {
+	return "accesstokenclient: token " + e.TokenID + " carries no scope this server recognises"
+}
+
 // principal maps an active introspection onto forge's principal.
 func (out introspectResponse) principal() (*fat.Principal, error) {
 	scopes := wildcardScopes(out.Scopes)
-	if !out.AllScopes {
+	// An empty explicit list is no unknown scope: it is a scopeless token,
+	// reported as one below.
+	if !out.AllScopes && len(out.Scopes) > 0 {
 		var err error
 		if scopes, err = fat.NewSet(out.Scopes); err != nil {
 			// A scope this binary cannot evaluate refuses, rather than
@@ -133,7 +152,7 @@ func (out introspectResponse) principal() (*fat.Principal, error) {
 		}
 	}
 	if len(scopes) == 0 {
-		return nil, fmt.Errorf("accesstokenclient: token %s carries no scope this server recognises", out.TokenID)
+		return nil, &ScopelessTokenError{TokenID: out.TokenID, OrgID: out.OrgID}
 	}
 	p := &fat.Principal{
 		TokenID:      out.TokenID,
