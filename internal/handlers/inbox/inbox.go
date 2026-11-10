@@ -12,6 +12,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"connectrpc.com/connect"
@@ -231,6 +232,7 @@ func (s *Service) readInbox(ctx context.Context, userID string) (*inboxReads, er
 	g.Go(func() error {
 		return lim.do(gctx, func() (err error) {
 			out.pending, err = s.deps.Repo.ListInboxPending(gctx, userID)
+			out.pending = authz.Visible(gctx, userID, out.pending, s.readableItem().pending)
 			return err
 		})
 	})
@@ -240,6 +242,9 @@ func (s *Service) readInbox(ctx context.Context, userID string) (*inboxReads, er
 		var stored []*core.Trigger
 		if err := lim.do(gctx, func() (err error) {
 			stored, err = s.deps.Repo.ListTriggers(gctx, core.TriggerFilters{UserID: userID})
+			// Automation health is the triggers the caller may read: none of
+			// an org they have left.
+			stored = authz.Visible(gctx, userID, stored, authz.CanReadTrigger)
 			return err
 		}); err != nil {
 			return err
@@ -275,6 +280,7 @@ func (s *Service) readInbox(ctx context.Context, userID string) (*inboxReads, er
 			if err != nil {
 				return err
 			}
+			rows = authz.Visible(gctx, userID, rows, s.readableItem().recovery)
 			for _, row := range rows {
 				if row.Phase == "refs_deleted" {
 					continue
@@ -1018,4 +1024,63 @@ func (s *Service) CleanupStorage(
 		activity.Skip(ctx) // every worktree was skipped: nothing is being cleaned up
 	}
 	return connect.NewResponse(resp), nil
+}
+
+// itemReads decides inbox items through authz, reading each chat and project
+// once per inbox read: an item about a chat or project the caller may no
+// longer read (an org they have left, a credential's other org) is not
+// listed. A project that is gone hides nothing: a recovery outlives its
+// source by design, and names no org.
+type itemReads struct {
+	s        *Service
+	mu       sync.Mutex
+	chats    map[string]bool
+	projects map[string]bool
+}
+
+func (s *Service) readableItem() *itemReads {
+	return &itemReads{s: s, chats: map[string]bool{}, projects: map[string]bool{}}
+}
+
+func (r *itemReads) chat(ctx context.Context, userID, id string) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	ok, seen := r.chats[id]
+	if !seen {
+		chat, err := r.s.deps.Repo.GetChat(ctx, id)
+		ok = err == nil && authz.CanReadChat(ctx, userID, chat)
+		r.chats[id] = ok
+	}
+	return ok
+}
+
+func (r *itemReads) project(ctx context.Context, userID, id string) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	ok, seen := r.projects[id]
+	if !seen {
+		project, err := r.s.deps.Repo.GetProject(ctx, id)
+		switch {
+		case svcerr.IsNotFound(err):
+			ok = true
+		default:
+			ok = err == nil && authz.CanReadProject(ctx, userID, project)
+		}
+		r.projects[id] = ok
+	}
+	return ok
+}
+
+func (r *itemReads) pending(ctx context.Context, userID string, p *core.InboxPending) bool {
+	switch {
+	case p.ChatID != "":
+		return r.chat(ctx, userID, p.ChatID)
+	case p.ProjectID != "":
+		return r.project(ctx, userID, p.ProjectID)
+	}
+	return true
+}
+
+func (r *itemReads) recovery(ctx context.Context, userID string, row *core.WorktreeRecovery) bool {
+	return row.ProjectID == "" || r.project(ctx, userID, row.ProjectID)
 }

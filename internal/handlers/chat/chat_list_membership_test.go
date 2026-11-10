@@ -3,14 +3,17 @@ package chat
 import (
 	"context"
 	"sort"
+	"strings"
 	"testing"
 	"time"
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
+	fat "github.com/reliant-labs/forge/pkg/accesstoken"
 	"github.com/stretchr/testify/require"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/accesstokenclient"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -88,4 +91,66 @@ func TestChatCollections_LeaveOutARemovedMembersOrgChats(t *testing.T) {
 	}
 	sort.Strings(archivedIDs)
 	require.Equal(t, []string{home + "-archived", legacy + "-archived"}, archivedIDs, "ListArchivedChats")
+}
+
+// memberOfBoth: alice is a live member of acme and home; home is her default.
+type memberOfBoth struct{}
+
+func (memberOfBoth) ResolveOrgMembership(_ context.Context, _, orgID string) (accesstokenclient.OrgMembership, error) {
+	if orgID == "" {
+		return accesstokenclient.OrgMembership{OrgID: "home", Member: true}, nil
+	}
+	return accesstokenclient.OrgMembership{OrgID: orgID, Member: orgID == "acme" || orgID == "home"}, nil
+}
+
+// ListChats' main workspaces show only projects the caller may read in the
+// list's scope: a removed member, and a credential bound to another org, get
+// none of the other org's, with or without project_id, while the projects
+// they may read keep theirs even with no chat in them.
+func TestListChats_MainWorkspacesFollowTheProjectsAuthz(t *testing.T) {
+	t.Parallel()
+	repo, cleanup := db.SetupTestDB(t)
+	t.Cleanup(cleanup)
+	now := time.Date(2026, 1, 15, 12, 0, 0, 0, time.UTC)
+	bg := context.WithValue(context.Background(), auth.UserIDContextKey, "alice")
+	org := func(s string) *string { return &s }
+	projects := map[string]*string{"p-acme-" + uuid.NewString()[:6]: org("acme"), "p-home-" + uuid.NewString()[:6]: org("home"), "p-legacy-" + uuid.NewString()[:6]: nil}
+	ids := map[string]string{}
+	for id, orgID := range projects {
+		ids[id[:strings.LastIndex(id, "-")]] = id
+		require.NoError(t, repo.CreateProject(authz.WithMembership(bg, authz.NoOrgs{}), &db.Project{
+			ID: id, UserID: "alice", OrgID: orgID, Name: id, Path: "/p/" + id, CreatedAt: now, UpdatedAt: now, LastActive: now,
+		}))
+		require.NoError(t, repo.CreateWorktree(bg, &db.Worktree{
+			ID: "w-" + id, Name: "main", Path: "/p/" + id, Branch: "main", BaseBranch: "main", ProjectID: id,
+			Status: int32(reliantv1.WorktreeStatus_WORKTREE_STATUS_ACTIVE), IsMain: true, CreatedAt: now, UpdatedAt: now, LastActive: now,
+		}))
+	}
+	mains := func(svc *Service, ctx context.Context, projectID string) []string {
+		t.Helper()
+		resp, err := svc.ListChats(ctx, connect.NewRequest(&reliantv1.ListChatsRequest{ProjectId: projectID}))
+		require.NoError(t, err)
+		var out []string
+		for _, w := range resp.Msg.GetMainWorktrees() {
+			out = append(out, w.GetProjectId())
+		}
+		sort.Strings(out)
+		return out
+	}
+	sorted := func(s ...string) []string { sort.Strings(s); return s }
+
+	// A removed member of acme (a member of home only).
+	removed := orgs.New(orgSource{})
+	svc := NewTestChat(t, WithChatDeps(Deps{Repo: repo, Orgs: removed}))
+	ctx := authz.WithMembership(bg, removed)
+	require.Equal(t, sorted(ids["p-home"], ids["p-legacy"]), mains(svc, ctx, ""), "a removed member, no project_id")
+	require.Empty(t, mains(svc, ctx, ids["p-acme"]), "a removed member, the left org's project_id")
+	require.Equal(t, []string{ids["p-home"]}, mains(svc, ctx, ids["p-home"]), "a removed member, a project they may read")
+
+	// A member of both, through a credential bound to home.
+	both := orgs.New(memberOfBoth{})
+	svc = NewTestChat(t, WithChatDeps(Deps{Repo: repo, Orgs: both}))
+	machine := auth.WithMachineToken(authz.WithMembership(bg, both), &fat.Principal{OrgID: "home", ActingUserID: "alice"})
+	require.Equal(t, sorted(ids["p-home"], ids["p-legacy"]), mains(svc, machine, ""), "a home credential, no project_id")
+	require.Empty(t, mains(svc, machine, ids["p-acme"]), "a home credential, acme's project_id")
 }
