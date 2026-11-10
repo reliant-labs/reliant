@@ -13,6 +13,39 @@ Regenerate with: task generate:docs:changelog
 
 Track what's new in each Reliant release.
 
+<Update label="v1.14.0" description="November 10, 2026">
+### 2 new features, 8 fixes and 7 other changes
+
+Every pull request merged since v1.13.0, grouped by its conventional-commit type.
+
+#### Added
+
+- **web: environment Promotions timeline on the env Overview** [#2514](https://github.com/reliant-labs/reliant/pull/2514)
+- **models: add Claude 5.2 Fable on the claude subscription driver** [#2531](https://github.com/reliant-labs/reliant/pull/2531)
+
+#### Changed
+
+- **mcp: EnsureProjectServersLoaded tests start no built-in server (#2424)** [#2516](https://github.com/reliant-labs/reliant/pull/2516)
+- **forge-version tests skip when forge is replaced by a local checkout (forge's consumer canary)** [#2518](https://github.com/reliant-labs/reliant/pull/2518)
+- **daemonruntime: preview forwarder port tests hold their ports so no other process can take them (#2479)** [#2526](https://github.com/reliant-labs/reliant/pull/2526)
+- **toolexec: restore TestTerminalOutputQueue_OverflowEndsWithError (#2228)** [#2528](https://github.com/reliant-labs/reliant/pull/2528)
+- **shell: restore the archived-workspace kill notice assertion, waited for (#2128)** [#2530](https://github.com/reliant-labs/reliant/pull/2530)
+- **authz: one authorization seam for chats, projects, machines, workflows and triggers** [#2533](https://github.com/reliant-labs/reliant/pull/2533)
+- **demo: demo.reliantlabs.io ships with prod's release; the demo env is deprecated** [#2515](https://github.com/reliant-labs/reliant/pull/2515)
+
+#### Fixed
+
+- **proctree: a command prepared alongside another no longer fails to start with ENOENT** [#2517](https://github.com/reliant-labs/reliant/pull/2517)
+- **prove_test: admit files in another git worktree of a workspace repository** [#2520](https://github.com/reliant-labs/reliant/pull/2520)
+- **worktree: a base branch whose local copy is behind origin's starts at origin's** [#2521](https://github.com/reliant-labs/reliant/pull/2521)
+- **store: a NUL in a step's output no longer fails its step_executions insert** [#2522](https://github.com/reliant-labs/reliant/pull/2522)
+- **toolexec: the daemon refusing a credential file is a user error, not an ERROR** [#2523](https://github.com/reliant-labs/reliant/pull/2523)
+- **workflow: a step that cannot run as configured no longer reports "workflow validation failed"** [#2527](https://github.com/reliant-labs/reliant/pull/2527)
+- **web: scrolling back no longer loads a chat's whole history with the view stuck at the top** [#2513](https://github.com/reliant-labs/reliant/pull/2513)
+- **db: allocate chat updates at READ COMMITTED, as user updates already are** [#2524](https://github.com/reliant-labs/reliant/pull/2524)
+
+</Update>
+
 <Update label="v1.13.0" description="November 9, 2026">
 ### 1 new feature, 4 fixes and 3 other changes
 
