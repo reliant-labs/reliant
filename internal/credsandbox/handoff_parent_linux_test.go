@@ -4,6 +4,7 @@ package credsandbox
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -78,5 +79,75 @@ func TestSandbox_AHandOffUnderANamedCacheDirectorySurvivesACd(t *testing.T) {
 		require.NoError(t, err, "%s", out)
 		assert.Contains(t, string(out), "dep\n", "the install's store is visible to the generate the same command runs")
 		assert.NoFileExists(t, filepath.Join(store, "dep"), "and the command's own: discarded when it exits")
+	})
+}
+
+// The control-plane pipeline's slot check (cp #2390): credentialed steps mirror each
+// hand-off slot's lease to a file under the cache root that no node keeps, and every
+// slot-bound credentials:none command reads it first, before any of the PR's code runs.
+// It relies on three things this test holds:
+//   - a none command cannot forge the mirror for a later command: its write is its own,
+//     discarded when it exits, and the next command reads the credentialed value;
+//   - a running none command reads the mirror as it was when it started (the check is
+//     made then, and only then);
+//   - a none command's environment is readable from outside the sandbox
+//     (/proc/<pid>/environ), so a credentialed step can see that a command tagged with a
+//     slot is still running and not hand that slot to another run.
+func TestSandbox_ALeaseMirrorUnderTheCacheIsReadOnlyToANoneCommand(t *testing.T) {
+	testkit.Slow(t, "runs sandboxed commands")
+	requireSandbox(t)
+	home := wrapHome(t)
+	xdg := filepath.Join(filepath.Dir(home), "xdg")
+	project := filepath.Join(filepath.Dir(home), "project")
+	require.NoError(t, os.MkdirAll(project, 0o755))
+	env := "XDG_CACHE_HOME=" + xdg
+	slot := filepath.Join(xdg, "pr-fix", "slot-1")
+	mirror := filepath.Join(xdg, "pipeline-slots", "pr-fix", "slot-1")
+	require.NoError(t, os.MkdirAll(slot, 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Dir(mirror), 0o755))
+	require.NoError(t, os.WriteFile(mirror, []byte("runA 100 3\n"), 0o644))
+
+	t.Run("a forged write is the command's own", func(t *testing.T) {
+		out, err := wrappedWritable(t, project, home, []string{slot},
+			`cat '`+mirror+`' && echo 'runEVIL 9999999999 9' > '`+mirror+`' && cat '`+mirror+`'`, env).CombinedOutput()
+		require.NoError(t, err, "%s", out)
+		assert.Contains(t, string(out), "runA 100 3\nrunEVIL 9999999999 9\n", "the command reads the credentialed value, then its own write")
+		assert.Contains(t, string(out), "credsandbox: discarded")
+		got, err := os.ReadFile(mirror)
+		require.NoError(t, err)
+		assert.Equal(t, "runA 100 3\n", string(got), "the forgery is discarded")
+		out, err = wrappedWritable(t, project, home, []string{slot}, `cat '`+mirror+`'`, env).CombinedOutput()
+		require.NoError(t, err, "%s", out)
+		assert.Equal(t, "runA 100 3\n", string(out), "a later command reads the credentialed value")
+	})
+
+	t.Run("a running command reads the mirror as it started", func(t *testing.T) {
+		cmd := wrappedWritable(t, project, home, []string{slot}, `cat '`+mirror+`'; sleep 2; cat '`+mirror+`'`, env)
+		var out strings.Builder
+		cmd.Stdout, cmd.Stderr = &out, &out
+		require.NoError(t, cmd.Start())
+		time.Sleep(time.Second)
+		require.NoError(t, os.WriteFile(mirror+".new", []byte("runB 200 4\n"), 0o644))
+		require.NoError(t, os.Rename(mirror+".new", mirror))
+		require.NoError(t, cmd.Wait(), "%s", out.String())
+		assert.Equal(t, "runA 100 3\nrunA 100 3\n", out.String())
+	})
+
+	t.Run("its environment is readable from outside", func(t *testing.T) {
+		cmd := wrappedWritable(t, project, home, []string{slot}, `exec /usr/bin/env RELIANT_PIPELINE_SLOT=pr-fix/slot-1:4 sleep 5`, env)
+		require.NoError(t, cmd.Start())
+		t.Cleanup(func() { _ = cmd.Process.Kill(); _ = cmd.Wait() })
+		seen := false
+		for deadline := time.Now().Add(3 * time.Second); !seen && time.Now().Before(deadline); time.Sleep(100 * time.Millisecond) {
+			ents, err := os.ReadDir("/proc")
+			require.NoError(t, err)
+			for _, e := range ents {
+				b, err := os.ReadFile(filepath.Join("/proc", e.Name(), "environ"))
+				if err == nil && strings.Contains("\x00"+string(b), "\x00RELIANT_PIPELINE_SLOT=pr-fix/slot-1:4\x00") {
+					seen = true
+				}
+			}
+		}
+		assert.True(t, seen, "a credentialed step must see a running none command's slot tag")
 	})
 }
