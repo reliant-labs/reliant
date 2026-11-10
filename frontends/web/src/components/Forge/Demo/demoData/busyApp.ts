@@ -6,7 +6,7 @@
  * that what a list shows and what an aggregate says agree.
  *
  *   Requests  one potential request per SLOT_MS per environment, kept with
- *             the story's load (dailyLoad × ENV_TRAFFIC): ~1,200 an hour in
+ *             the story's load (dailyLoad × ENV_TRAFFIC): ~2,400 an hour in
  *             prod at peak, a trickle in staging and dev. Each picks a route
  *             (DEMO_ROUTES) by weight and a log-normal latency around its
  *             base, with a rare outlier.
@@ -668,7 +668,7 @@ function redOf(list: TraceSummary[], seconds: number): TraceRed {
 /** Prod's failed incident requests in [startMs, endMs), newest first (the toured one included): the incident issue's events. */
 export function failedIncidentRequests(now: number, startMs: number, endMs: number, limit: number) {
   const ctx = ctxOf(now);
-  const { requests } = requestsIn(ctx, startMs, endMs, ["env-prod"], 1_200);
+  const { requests } = requestsIn(ctx, startMs, endMs, ["env-prod"], 2_000);
   const out = requests
     .filter((r) => r.failed)
     .map((r) => ({ traceId: r.traceId, startMs: r.startMs, chargeSpanId: hex((r.slot * 3 + r.envIndex) * 64 + 10, 16, 91), method: r.route.op.split("/").pop() ?? "", sessionId: "", userId: r.customer.id }));

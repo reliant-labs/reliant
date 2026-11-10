@@ -43,12 +43,19 @@ import { createDemoTransport } from "../demoTransport";
 import { createShopApi } from "../shop/shopApi";
 import { DEMO_BACKENDS, DEMO_CAST, DEMO_DEPENDENCIES, DEMO_ENV_IDS, DEMO_FRONTEND, DEMO_INCIDENT, DEMO_RELEASES, DEMO_RPC_METHODS, DEMO_SERVICE_NAMES, demoNow, resetDemoNowForTests, RUNNING } from "../shopStory";
 
-// A fixed afternoon (the story's load varies by hour): the same assertions hold whenever the suite runs.
-resetDemoNowForTests(Date.UTC(2026, 10, 10, 15, 0, 0));
-const NOW = demoNow();
 const HOUR = 3_600_000;
-const hour = { startMs: NOW - HOUR, endMs: NOW };
-const day = { startMs: NOW - 24 * HOUR, endMs: NOW };
+/**
+ * The story's load follows the time of day, so it is read at fixed instants:
+ * the afternoon peak and the quietest night hour. The same assertions hold at
+ * both, whenever the suite runs.
+ */
+const WHEN = [
+  ["on a weekday afternoon", Date.UTC(2026, 10, 10, 15, 0, 0)],
+  ["in the middle of the night", Date.UTC(2026, 10, 10, 3, 0, 0)],
+] as const;
+let NOW = 0;
+let hour = { startMs: 0, endMs: 0 };
+let day = { startMs: 0, endMs: 0 };
 const scope = (envIds: string[] = []) => ({ orgId: "org-acme", projectId: "shop", envIds, filters: [] });
 
 const CAST = new Set<string>(DEMO_CAST.map((p) => p.handle));
@@ -92,23 +99,11 @@ const json = (value: unknown) => JSON.stringify(value, (_k, v) => (typeof v === 
 
 let transport: ReturnType<typeof createDemoTransport>;
 let model: ObservabilityApi;
-const answers: unknown[] = [];
+let answers: unknown[] = [];
 const seen = <T>(value: T): T => {
   answers.push(value);
   return value;
 };
-
-beforeAll(() => {
-  setTransport(null);
-  transport = createDemoTransport({ source: "fixtures", url: "" });
-  installShellTransport(transport);
-  model = createShopApi(NOW);
-});
-
-afterAll(() => {
-  installShellTransport(null as never);
-  resetDemoNowForTests();
-});
 
 /** The demo's ObservabilityApi as the demo host composes it: the scenario's reads over the wire, the rest from the model. */
 const obs = (): ObservabilityApi => ({
@@ -121,7 +116,24 @@ const obs = (): ObservabilityApi => ({
   getServiceSignals: controlPlaneObservabilityApi.getServiceSignals,
 });
 
-describe("the demo's one story", () => {
+describe.each(WHEN)("the demo's one story, %s", (_when, at) => {
+  beforeAll(() => {
+    resetDemoNowForTests(at);
+    NOW = demoNow();
+    hour = { startMs: NOW - HOUR, endMs: NOW };
+    day = { startMs: NOW - 24 * HOUR, endMs: NOW };
+    answers = [];
+    setTransport(null);
+    transport = createDemoTransport({ source: "fixtures", url: "" });
+    installShellTransport(transport);
+    model = createShopApi(NOW);
+  });
+
+  afterAll(() => {
+    installShellTransport(null as never);
+    resetDemoNowForTests();
+  });
+
   it("gives each release one commit and each promotion one promoter and one time, everywhere", async () => {
     const deploy = createClient(DeployService, transport);
     const releases = seen(await deploy.listReleases({ project: "shop" })).releases;
@@ -227,6 +239,11 @@ describe("the demo's one story", () => {
     }
     const prod = seen(await api.getServiceOverview({ ...scope(["env-prod"]), window: hour }));
     expect(prod.services.filter((s) => s.errorCount > 0).map((s) => s.name)).toEqual(["api"]);
+    // Whatever the hour, the incident reads clearly: a steady stream of failed charges since v1.8.3.
+    expect(prod.services.find((s) => s.name === "api")!.errorCount).toBeGreaterThanOrEqual(15);
+    const failing = seen(await api.listTraces({ ...scope(["env-prod"]), window: hour, rootSpanName: "", services: [], errorsOnly: true, minDurationMs: 0, limit: 500 }));
+    expect(failing.traces.length).toBeGreaterThanOrEqual(8);
+    expect(issues.issues[0].events).toBeGreaterThanOrEqual(15);
     const errors = seen(await api.searchLogs({ ...scope(), window: hour, query: "", services: [], severities: ["error"], limit: 500 }));
     expect(new Set(errors.records.map((r) => r.body))).toEqual(new Set([DEMO_INCIDENT.error]));
     // The headline, its sparkline and the table read the same number.

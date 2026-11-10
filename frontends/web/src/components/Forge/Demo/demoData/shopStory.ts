@@ -377,15 +377,24 @@ export function demoVersionAt(envId: string, atMs: number, now: number = demoNow
 
 // ── Traffic ──────────────────────────────────────────────────────────────────
 
-/** prod's traffic: one potential request per SLOT_MS, kept with probability dailyLoad (≈ 1,200 an hour at peak). */
-export const SLOT_MS = 3_000;
+/** prod's traffic: one potential request per SLOT_MS, kept with probability dailyLoad (≈ 2,400 an hour at peak, ≈ 1,000 at night). */
+export const SLOT_MS = 1_500;
 /** Each environment's share of prod's traffic. Only prod has real users. */
 export const ENV_TRAFFIC: Record<DemoEnvKey, number> = { "env-prod": 1, "env-staging": 0.04, "env-dev": 0.015 };
 
-/** Load over the day: busier in the (UTC) afternoon, quiet at night. Mean ≈ 0.55. */
+/**
+ * The quietest hour's share of the busiest's. shop sells worldwide, so it is
+ * never idle: whatever the hour a visitor opens the demo, prod has enough
+ * traffic for the incident to read clearly (dozens of failed charges since
+ * v1.8.3, not a handful).
+ */
+export const LOAD_FLOOR = 0.4;
+
+/** Load over the day: busiest in the (UTC) afternoon, quietest at night, never below LOAD_FLOOR. Mean ≈ 0.7. */
 export function dailyLoad(timeMs: number): number {
   const hour = (timeMs / 3_600_000) % 24;
-  return 0.55 + 0.45 * Math.sin(((hour - 9) / 24) * 2 * Math.PI);
+  const wave = (1 + Math.sin(((hour - 9) / 24) * 2 * Math.PI)) / 2;
+  return LOAD_FLOOR + (1 - LOAD_FLOOR) * wave;
 }
 
 /**
@@ -470,6 +479,9 @@ export function demoRouteRate(route: DemoRoute, envId: DemoEnvKey, atMs: number)
 }
 
 export interface DemoStats {
+  /** Unrounded, for callers that split a window and must keep its total (demoTrend). */
+  requestsExact?: number;
+  errorsExact?: number;
   requests: number;
   errors: number;
   errorRate: number;
@@ -607,6 +619,8 @@ function statsOf(q: DemoStatsQuery): { stats: DemoStats; mix: Mixture } {
   const stats = {
     requests: Math.round(requests),
     errors: Math.round(errors),
+    requestsExact: requests,
+    errorsExact: errors,
     errorRate: requests ? errors / requests : 0,
     ratePerSecond: seconds > 0 ? requests / seconds : 0,
     p50Ms: quantileOf(mix, 0.5),
@@ -616,12 +630,27 @@ function statsOf(q: DemoStatsQuery): { stats: DemoStats; mix: Mixture } {
   return { stats, mix };
 }
 
-/** `demoStats` per bucket: a trend of `buckets` points over the window. */
+/**
+ * `demoStats` per bucket: a trend of `buckets` points over the window. Counts
+ * are rounded cumulatively, so the buckets always sum to the window's own
+ * (rounded) total, however few requests each holds.
+ */
 export function demoTrend(q: DemoStatsQuery, buckets = 30): { startMs: number; stats: DemoStats }[] {
   const step = (q.endMs - q.startMs) / buckets;
+  let requests = 0;
+  let errors = 0;
+  let shownRequests = 0;
+  let shownErrors = 0;
   return Array.from({ length: buckets }, (_, i) => {
     const startMs = q.startMs + i * step;
-    return { startMs, stats: demoStats({ ...q, startMs, endMs: startMs + step }) };
+    const stats = demoStats({ ...q, startMs, endMs: startMs + step });
+    requests += stats.requestsExact ?? stats.requests;
+    errors += stats.errorsExact ?? stats.errors;
+    const r = Math.round(requests) - shownRequests;
+    const e = Math.round(errors) - shownErrors;
+    shownRequests += r;
+    shownErrors += e;
+    return { startMs, stats: { ...stats, requests: r, errors: e, errorRate: r ? e / r : 0 } };
   });
 }
 

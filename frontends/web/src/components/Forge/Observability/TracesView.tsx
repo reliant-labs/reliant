@@ -470,7 +470,7 @@ function TraceToolbar({
             type="search"
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
-            placeholder="Root operation contains, e.g. ChatService.SendMessage or GetUser"
+            placeholder="Root operation contains, e.g. a method name or HTTP route"
             aria-invalid={filterError ? true : undefined}
             aria-describedby={filterError ? "obs-trace-query-error" : undefined}
             className={cn(
