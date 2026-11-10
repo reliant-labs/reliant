@@ -15,6 +15,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/analytics"
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/errreason"
 	"github.com/reliant-labs/reliant/internal/launch"
@@ -346,7 +347,7 @@ func (s *Service) SetWorkflowStatus(
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get workflow"))
 	}
-	if draft == nil || draft.UserID != userID {
+	if !authz.CanWriteWorkflow(ctx, userID, draft) {
 		return nil, svcerr.NotFound("workflow")
 	}
 	if req.Msg.ExpectedVersion != nil && draft.Version != *req.Msg.ExpectedVersion {

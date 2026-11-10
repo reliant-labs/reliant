@@ -15,6 +15,7 @@ import (
 	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/automationpolicy"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/llm/models"
@@ -53,6 +54,10 @@ func (r *Repo) GetChatRow(ctx context.Context, id string) (*ChatRow, error) {
 // row: userID's chat, or core.ErrChatNotFound for a chat that is missing or
 // another user's. GetChatWithUserCheck is the same check over the activity
 // view, for a caller that needs a derived field.
+//
+// The store read filters on the owner; the row it returns is then confirmed
+// by authz, the one place the rule lives, as a write (the strict question,
+// since these reads back both reads and changes).
 func (r *Repo) GetChatRowWithUserCheck(ctx context.Context, id, userID string) (*ChatRow, error) {
 	if id == "" {
 		return nil, fmt.Errorf("chat ID cannot be empty")
@@ -60,7 +65,14 @@ func (r *Repo) GetChatRowWithUserCheck(ctx context.Context, id, userID string) (
 	if userID == "" {
 		return nil, fmt.Errorf("user ID cannot be empty")
 	}
-	return store.GetChatRowWithUserCheck(ctx, r.ORM(), id, userID)
+	chat, err := store.GetChatRowWithUserCheck(ctx, r.ORM(), id, userID)
+	if err != nil {
+		return nil, err
+	}
+	if !authz.CanWriteChat(ctx, userID, chat) {
+		return nil, fmt.Errorf("%w: %s", core.ErrChatNotFound, id)
+	}
+	return chat, nil
 }
 
 func (r *Repo) GetChatWithUserCheck(ctx context.Context, id string, userID string) (*Chat, error) {
@@ -71,7 +83,14 @@ func (r *Repo) GetChatWithUserCheck(ctx context.Context, id string, userID strin
 		return nil, fmt.Errorf("user ID cannot be empty")
 	}
 
-	return store.GetChatWithUserCheck(ctx, r.ORM(), id, userID)
+	chat, err := store.GetChatWithUserCheck(ctx, r.ORM(), id, userID)
+	if err != nil {
+		return nil, err
+	}
+	if !authz.CanWriteChat(ctx, userID, chat) {
+		return nil, fmt.Errorf("%w: %s", core.ErrChatNotFound, id)
+	}
+	return chat, nil
 }
 
 // GetLiveChatIDForWorktree returns a non-archived chat bound to this worktree,
@@ -1039,7 +1058,16 @@ func (r *Repo) GetProjectWithUserCheck(ctx context.Context, id string, userID st
 		return nil, fmt.Errorf("user ID cannot be empty")
 	}
 
-	return store.GetProjectWithUserCheck(ctx, r.ORM(), id, userID)
+	// The store read filters on the owner; authz confirms the row it returns,
+	// as GetChatRowWithUserCheck does.
+	project, err := store.GetProjectWithUserCheck(ctx, r.ORM(), id, userID)
+	if err != nil {
+		return nil, err
+	}
+	if !authz.CanWriteProject(ctx, userID, project) {
+		return nil, core.ErrProjectNotFound
+	}
+	return project, nil
 }
 
 // AssignUnassignedOrg gives userID's projects and chats that have no org yet

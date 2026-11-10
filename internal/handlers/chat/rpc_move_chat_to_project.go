@@ -13,6 +13,7 @@ import (
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/daemonchoice"
 	"github.com/reliant-labs/reliant/internal/daemonplacement"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -189,7 +190,7 @@ func (s *Service) ownedProject(ctx context.Context, userID, projectID string) (*
 	if err != nil && !errors.Is(err, svcerr.ErrNotFound) {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to load the project"))
 	}
-	if project == nil || project.UserID != userID {
+	if !authz.CanWriteProject(ctx, userID, project) {
 		return nil, svcerr.NotFound("project")
 	}
 	return project, nil

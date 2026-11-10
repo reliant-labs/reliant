@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/rundiagnostics"
 
 	"connectrpc.com/connect"
@@ -475,7 +476,7 @@ func (s *Service) GetLaunchEvent(
 	if err != nil && !svcerr.IsNotFound(err) {
 		return nil, triggerDBError("get chat", err)
 	}
-	if err != nil || chat == nil || chat.UserID != userID {
+	if err != nil || !authz.CanReadChat(ctx, userID, chat) {
 		return nil, svcerr.NotFound("chat")
 	}
 	ev, err := s.deps.Repo.GetTriggerEventByChatID(ctx, chat.ID)
@@ -485,7 +486,7 @@ func (s *Service) GetLaunchEvent(
 		}
 		return nil, triggerDBError("get launch event", err)
 	}
-	if ev == nil || ev.UserID != userID {
+	if !authz.CanReadTriggerEvent(ctx, userID, ev) {
 		return connect.NewResponse(&reliantv1.GetLaunchEventResponse{}), nil
 	}
 	out, err := triggers.EventToProto(ev)
@@ -610,7 +611,7 @@ func (s *Service) ownedTrigger(ctx context.Context, id string) (*core.Trigger, e
 		// core.ErrTriggerNotFound is a NotFound kind, so it passes as itself.
 		return nil, triggerDBError("get trigger", err)
 	}
-	if trigger.UserID != userID {
+	if !authz.CanWriteTrigger(ctx, userID, trigger) {
 		return nil, svcerr.NotFound("trigger")
 	}
 	return trigger, nil

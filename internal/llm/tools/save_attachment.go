@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/rctx"
 )
@@ -127,7 +128,7 @@ func (t *saveAttachmentTool) Execute(tc *rctx.ToolContext, params SaveAttachment
 	// enforced when the caller's identity is known: paths that build a tool
 	// context by hand have no user on it, and failing closed there would break
 	// legitimate callers rather than any attacker.
-	if callerID := t.callerUserID(tc); callerID != "" && att.UserID != "" && att.UserID != callerID {
+	if callerID := t.callerUserID(tc); callerID != "" && att.UserID != "" && !authz.CanAccessPersonal(callerID, att.UserID) {
 		return NewTextErrorResponse(fmt.Sprintf(
 			"Attachment %s belongs to a different user and cannot be saved.", attachmentID)), nil
 	}

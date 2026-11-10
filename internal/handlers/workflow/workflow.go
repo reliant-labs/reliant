@@ -19,6 +19,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/analytics"
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/daemonerr"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -100,7 +101,7 @@ func (s *Service) SaveWorkflow(
 		if err != nil {
 			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get workflow draft by ID"))
 		}
-		if draft != nil && draft.UserID == userID {
+		if authz.CanWriteWorkflow(ctx, userID, draft) {
 			existingUserWorkflow = draft
 			isUpdate = true
 			isRename = draft.Slug != slug
@@ -391,7 +392,7 @@ func (s *Service) GetWorkflow(
 		if draft == nil {
 			return nil, svcerr.NotFound("workflow")
 		}
-		if draft.UserID != userID {
+		if !authz.CanReadWorkflow(ctx, userID, draft) {
 			return nil, svcerr.NotFound("workflow")
 		}
 

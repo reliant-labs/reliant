@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/rundiagnostics"
 
 	"connectrpc.com/connect"
@@ -49,7 +50,7 @@ func (s *Service) runOwnedBy(ctx context.Context, userID, runID string) (*core.W
 	if err != nil {
 		return nil, nil, svcerr.WrapOr(err, svcerr.Internal("failed to get run"))
 	}
-	if chat == nil || chat.UserID != userID {
+	if !authz.CanWriteChat(ctx, userID, chat) {
 		return nil, nil, svcerr.NotFound("run")
 	}
 
@@ -132,7 +133,7 @@ func (s *Service) startInSession(
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get session"))
 	}
-	if chat == nil || chat.UserID != userID {
+	if !authz.CanWriteChat(ctx, userID, chat) {
 		return nil, svcerr.NotFound("session")
 	}
 
@@ -370,7 +371,7 @@ func (s *Service) ListRuns(
 		if err != nil {
 			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get session"))
 		}
-		if chat == nil || chat.UserID != userID {
+		if !authz.CanReadChat(ctx, userID, chat) {
 			return nil, svcerr.NotFound("session")
 		}
 		runs, err := s.deps.Repo.ListRootWorkflows(ctx, req.Msg.GetSessionId())
