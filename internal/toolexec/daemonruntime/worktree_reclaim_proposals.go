@@ -22,8 +22,12 @@ import (
 // worktree-reclaim inbox item, and the person's approve/decline comes back
 // as worktree.reclaim_decide, recorded exactly as `reliant worktree reclaim
 // approve|decline` records it, bound to the fingerprint the person was shown.
-// The sweep acts on an approval within a minute (diskwatch's approval tick),
-// capturing the worktree before it deletes it.
+// A decline keeps the worktree until its state changes. An approval is
+// recorded with who made it (decided_by), but the sweep does not act on it
+// yet: approvals.json is a file any process running as the user can write,
+// so nothing proves an approval there is a person's
+// (worktreereclaim.SweepOptions.ApprovalsVerified stays false) and the
+// worktree stays proposed ("approved, not verified").
 
 // WorktreeReclaimDecideCommand records a person's decisions about proposals.
 const WorktreeReclaimDecideCommand = "worktree.reclaim_decide"

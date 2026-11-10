@@ -260,7 +260,7 @@ var backgroundCommands = map[string]bool{
 	"terminal.resize": true,
 
 	// worktree.reclaim_decide carries an Inbox decision about the machine
-	// sweep's proposals; the sweep acts on it on its own schedule.
+	// sweep's proposals; it only records the decision.
 	// worktree.reconcile, snapshot_remove and delete_branch are sent by the
 	// worktree sweeper on its own schedule. discover_repos backs the
 	// sidebar's background discovery of worktrees made outside Reliant,
