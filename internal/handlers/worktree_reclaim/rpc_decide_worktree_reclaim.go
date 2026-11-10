@@ -86,16 +86,16 @@ func (s *Service) DecideWorktreeReclaim(
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to read the machine's report"))
 	}
-	shown := map[string]string{}
+	shown := map[string]*pb.WorktreeReclaimProposal{}
 	for _, p := range diskwatch.Decode(raw).GetWorktreeReclaim().GetProposals() {
-		shown[p.Key] = p.Fingerprint
+		shown[p.Key] = p
 	}
 	results := make([]*pb.WorktreeReclaimDecisionResult, len(msg.Decisions))
 	send := decideRequest{DecidedBy: "inbox:" + userID}
 	sentAt := map[string]int{}
 	for i, d := range msg.Decisions {
 		results[i] = &pb.WorktreeReclaimDecisionResult{Key: d.Key}
-		if d.Key == "" || d.Fingerprint == "" || shown[d.Key] != d.Fingerprint {
+		if d.Key == "" || d.Fingerprint == "" || shown[d.Key].GetFingerprint() != d.Fingerprint {
 			results[i].Reason = "not_shown"
 			continue
 		}
@@ -143,5 +143,14 @@ func (s *Service) DecideWorktreeReclaim(
 		}
 	}
 	s.deps.Logger.InfoContext(ctx, "[WorktreeReclaim] decisions sent", "daemon_id", msg.DaemonId, "decisions", len(send.Decisions))
+	var approved []int
+	for i, d := range msg.Decisions {
+		if d.Approve && results[i].Recorded {
+			approved = append(approved, i)
+		}
+	}
+	if len(approved) > 0 {
+		s.sendApprovals(ctx, userID, msg.DaemonId, msg.Decisions, shown, results, approved)
+	}
 	return connect.NewResponse(&pb.DecideWorktreeReclaimResponse{Results: results}), nil
 }

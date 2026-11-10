@@ -394,6 +394,9 @@ func Start(ctx context.Context, opts StartOptions) error {
 	// then reclaimed, or only reported in dry-run (worktree_sweep.go).
 	client.diskWatcher.ConfigureWorktreeSweep(worktreeSweep(opts.WorktreeReclaim))
 	client.reclaimMode = opts.WorktreeReclaim.Mode
+	// An Inbox approval (worktree.reclaim_approve) runs with the same roots,
+	// thresholds and mode.
+	setReclaimSweepConfig(opts.WorktreeReclaim)
 	go client.diskWatcher.RunReaper(ctx)
 	// The disk guard reclaims with the same pass, at once, when a volume
 	// crosses its reclaim threshold — where the routine runs at all: a

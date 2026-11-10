@@ -33,10 +33,11 @@ import (
 //     been idle CleanIdle (24h) is AUTO-SAFE and reclaimed without asking. One
 //     with uncommitted, unpushed or reflog-only work that has been idle
 //     ApprovalIdle (about 5 days: no commit, no file change) NEEDS APPROVAL: it
-//     is only ever proposed, and reclaimed only after a person approves that
-//     exact state (Approvals) and the caller verifies the approval is that
-//     person's (SweepOptions.ApprovalsVerified, which no caller sets yet, so
-//     today such a checkout is only proposed). A checkout with index entries
+//     is only ever proposed, and reclaimed only when a person's approval of
+//     that exact state reaches the daemon as a command from the server
+//     (worktree.reclaim_approve; SweepOptions.Authorized, approval_command.go).
+//     An approval found only in approvals.json, a file any process running as
+//     the user can write, is recorded and never acted on. A checkout with index entries
 //     marked skip-worktree or assume-unchanged is held, never proposed: git
 //     cannot see the edits those flags hide, so no capture could keep them.
 //     Everything else is held, with a reason.
@@ -106,13 +107,14 @@ type SweepOptions struct {
 	// ApprovedOnly evaluates only the worktrees with a pending approval:
 	// the daemon's prompt response to a decision, between scheduled passes.
 	ApprovedOnly bool
-	// ApprovalsVerified says the caller has proven that the approvals in
-	// the state directory are a person's. Nothing proves that yet:
-	// approvals.json is a file any process running as the user can write,
-	// an agent's shell included, so the daemon leaves this false and a
-	// needs-approval worktree is only ever proposed, never deleted. An
-	// approval it finds is reported (awaiting, "approved, not verified").
-	ApprovalsVerified bool
+	// Authorized are the approvals this pass may act on: each one a person
+	// made in the Inbox and the server delivered to the daemon as an
+	// authenticated command (RunApprovalCommand). A pass with any evaluates
+	// only their worktrees. An approval in approvals.json that is not here
+	// is never acted on: that file is one any process running as the user
+	// can write, an agent's shell included, so it is reported (awaiting,
+	// "approved, not delivered by the server") and nothing is deleted.
+	Authorized []AuthorizedApproval
 	// Version is the daemon's, recorded in captures and the journal.
 	Version string
 }
@@ -134,6 +136,11 @@ func (o SweepOptions) withDefaults() SweepOptions {
 		o.Budget = DefaultSweepBudget
 	}
 	o.Capture = o.Capture.withDefaults()
+	if len(o.Authorized) > 0 {
+		// A command's pass looks only at what it authorizes, and amends the
+		// last report rather than replacing it.
+		o.ApprovedOnly = true
+	}
 	return o
 }
 
@@ -180,6 +187,9 @@ const (
 	ReasonGitOperation HeldReason = "git_operation_in_progress"
 	// ReasonSpecialFile: a socket, FIFO or device in the checkout.
 	ReasonSpecialFile HeldReason = "special_file"
+	// ReasonCaptureMissing: the capture a reclaim made is gone (or no longer
+	// the commit it made) before the files were deleted, so nothing was.
+	ReasonCaptureMissing HeldReason = "capture_missing"
 )
 
 // SweepEntry is one worktree in a report.
@@ -305,6 +315,9 @@ func (r *Reclaimer) SweepMachine(ctx context.Context, opts SweepOptions) SweepRe
 		if opts.ApprovedOnly && !approvedKeys[e.Key] {
 			continue
 		}
+		if len(opts.Authorized) > 0 && !opts.authorizesKey(e.Key) {
+			continue
+		}
 		entries = append(entries, e)
 	}
 	// Interrupted reclaims first: a checkout parked by a crash goes home
@@ -404,11 +417,22 @@ func (r *Reclaimer) SweepMachine(ctx context.Context, opts SweepOptions) SweepRe
 		if len(consumed) > 0 || !opts.ApprovedOnly {
 			settleApprovalsLocked(dir, consumed, r.now())
 		}
-		if b, err := json.MarshalIndent(rep, "", "  "); err == nil && (!opts.ApprovedOnly || len(entries) != 0) {
+		amend := rep
+		if len(opts.Authorized) > 0 {
+			// A command's pass amends the report only with what it removed:
+			// one it refused stays proposed, so the Inbox can ask again.
+			amend.Entries = nil
+			for _, e := range rep.Entries {
+				if e.Outcome == OutcomeReclaimed {
+					amend.Entries = append(amend.Entries, e)
+				}
+			}
+		}
+		if b, err := json.MarshalIndent(rep, "", "  "); err == nil && (!opts.ApprovedOnly || len(amend.Entries) != 0) {
 			if opts.ApprovedOnly {
 				// An approved-only pass amends the last full report rather than
 				// replacing it: what it did not look at is still true.
-				b = r.mergeIntoLastReport(dir, rep)
+				b = r.mergeIntoLastReport(dir, amend)
 			}
 			_ = writeFileAtomic(filepath.Join(dir, reportFile), b)
 		}
@@ -416,7 +440,11 @@ func (r *Reclaimer) SweepMachine(ctx context.Context, opts SweepOptions) SweepRe
 	}
 	lines := make([]JournalLine, 0, len(entries))
 	for _, e := range entries {
-		lines = append(lines, JournalLine{At: rep.FinishedAt, Mode: string(opts.Mode), Trigger: opts.Trigger, SweepEntry: e, DaemonVersion: opts.Version})
+		line := JournalLine{At: rep.FinishedAt, Mode: string(opts.Mode), Trigger: opts.Trigger, SweepEntry: e, DaemonVersion: opts.Version}
+		if a, ok := opts.authorized(e.Key, e.Fingerprint, e.Path); ok {
+			line.ApprovedBy, line.CommandID = a.ApprovedBy, a.CommandID
+		}
+		lines = append(lines, line)
 	}
 	_ = appendJournal(dir, lines)
 	return rep
@@ -667,8 +695,8 @@ func (r *Reclaimer) decide(ctx context.Context, e *SweepEntry, opts SweepOptions
 			e.Outcome = OutcomeAwaiting
 		case d.Decision == DecisionDecline:
 			e.Outcome = OutcomeDeclined
-		case !opts.ApprovalsVerified:
-			e.Outcome, e.Detail = OutcomeAwaiting, "approved, but nothing verifies the approval is a person's, so it is not reclaimed; "+e.Detail
+		case !opts.authorizes(e.Key, e.Fingerprint, e.Path):
+			e.Outcome, e.Detail = OutcomeAwaiting, "approved, but the approval did not come from the server (only an Inbox approval it delivers is acted on), so it is not reclaimed; "+e.Detail
 		case opts.Mode != SweepOn:
 			e.Outcome, e.Detail = OutcomeWouldReclaim, "approved; "+e.Detail
 		default:

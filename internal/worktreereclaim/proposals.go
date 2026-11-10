@@ -115,6 +115,7 @@ func allPendingProposals(stateDir string) (ProposalSet, error) {
 	}
 	approvals, _ := readApprovals(dir)
 	notes, _ := readNotes(dir)
+	commands, _ := readApprovalCommands(dir)
 	set := ProposalSet{Mode: rep.Mode, FinishedAt: rep.FinishedAt}
 	for _, e := range rep.Entries {
 		if e.Class != ClassNeedsApproval || !pendingOutcome(e.Outcome) || e.Fingerprint == "" {
@@ -123,6 +124,12 @@ func allPendingProposals(stateDir string) (ProposalSet, error) {
 		p := Proposal{SweepEntry: e}
 		if d, ok := approvals.find(e.Key, e.Fingerprint); ok {
 			p.Decision = d.Decision
+		}
+		// An approval the machine refused to carry out is asked about
+		// again, with why: the person decides afresh, knowing.
+		if c, ok := commands.find(e.Key, e.Fingerprint); ok && c.Status == ApprovalRefused && p.Decision == DecisionApprove {
+			p.Decision = ""
+			p.Detail = "Your approval was not carried out (" + c.Reason + "): " + c.Detail
 		}
 		if n, ok := notes.find(e.Key, e.Fingerprint); ok {
 			p.Note, p.NoteAt = n.Text, n.At

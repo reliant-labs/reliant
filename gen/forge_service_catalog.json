@@ -42747,6 +42747,18 @@
             {
               "name": "reason",
               "kind": "string"
+            },
+            {
+              "name": "removal",
+              "kind": "string"
+            },
+            {
+              "name": "removal_reason",
+              "kind": "string"
+            },
+            {
+              "name": "removal_detail",
+              "kind": "string"
             }
           ]
         },

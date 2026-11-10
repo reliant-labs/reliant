@@ -129,7 +129,7 @@ func TestWorktreeApproveIsRefusedEvenWithoutTheAgentMarker(t *testing.T) {
 			entries, err := decide(t, append([]string{"approve", "p-0123456789abcdef"}, extra...)...)
 			require.Error(t, err, "marker %q %v", marker, extra)
 			if extra == nil {
-				assert.Contains(t, err.Error(), "approving a reclaim is not available")
+				assert.Contains(t, err.Error(), "approving a reclaim here is not available")
 			}
 			assert.Empty(t, entries, "a refused approval wrote state")
 		}

@@ -194,7 +194,18 @@ type WorktreeReclaimDecisionResult struct {
 	// Why not: "changed" (the worktree is no longer in the state shown; the
 	// item will list its new state), "unknown" (the machine no longer proposes
 	// it), "not_shown" (not on the machine's last report).
-	Reason        string `protobuf:"bytes,3,opt,name=reason,proto3" json:"reason,omitempty"`
+	Reason string `protobuf:"bytes,3,opt,name=reason,proto3" json:"reason,omitempty"`
+	// For a recorded approval, what became of the removal (empty otherwise,
+	// and from a server that does not send it): "removing" (the machine
+	// accepted it and is removing it now; the item drops it when done),
+	// "removed", "refused" (nothing was removed; removal_reason says why:
+	// "changed", "live_chat", "reclaim_off", "in_use", "capture_missing", …),
+	// or "not_supported" (the machine's daemon predates removal on approval;
+	// the approval is recorded and nothing is removed).
+	Removal       string `protobuf:"bytes,4,opt,name=removal,proto3" json:"removal,omitempty"`
+	RemovalReason string `protobuf:"bytes,5,opt,name=removal_reason,json=removalReason,proto3" json:"removal_reason,omitempty"`
+	// A sentence for the person.
+	RemovalDetail string `protobuf:"bytes,6,opt,name=removal_detail,json=removalDetail,proto3" json:"removal_detail,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -250,6 +261,27 @@ func (x *WorktreeReclaimDecisionResult) GetReason() string {
 	return ""
 }
 
+func (x *WorktreeReclaimDecisionResult) GetRemoval() string {
+	if x != nil {
+		return x.Removal
+	}
+	return ""
+}
+
+func (x *WorktreeReclaimDecisionResult) GetRemovalReason() string {
+	if x != nil {
+		return x.RemovalReason
+	}
+	return ""
+}
+
+func (x *WorktreeReclaimDecisionResult) GetRemovalDetail() string {
+	if x != nil {
+		return x.RemovalDetail
+	}
+	return ""
+}
+
 var File_reliant_v1_worktree_reclaim_proto protoreflect.FileDescriptor
 
 const file_reliant_v1_worktree_reclaim_proto_rawDesc = "" +
@@ -264,11 +296,14 @@ const file_reliant_v1_worktree_reclaim_proto_rawDesc = "" +
 	"\vfingerprint\x18\x02 \x01(\tR\vfingerprint\x12\x18\n" +
 	"\aapprove\x18\x03 \x01(\bR\aapprove\"d\n" +
 	"\x1dDecideWorktreeReclaimResponse\x12C\n" +
-	"\aresults\x18\x01 \x03(\v2).reliant.v1.WorktreeReclaimDecisionResultR\aresults\"e\n" +
+	"\aresults\x18\x01 \x03(\v2).reliant.v1.WorktreeReclaimDecisionResultR\aresults\"\xcd\x01\n" +
 	"\x1dWorktreeReclaimDecisionResult\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x1a\n" +
 	"\brecorded\x18\x02 \x01(\bR\brecorded\x12\x16\n" +
-	"\x06reason\x18\x03 \x01(\tR\x06reason2\xbd\x01\n" +
+	"\x06reason\x18\x03 \x01(\tR\x06reason\x12\x18\n" +
+	"\aremoval\x18\x04 \x01(\tR\aremoval\x12%\n" +
+	"\x0eremoval_reason\x18\x05 \x01(\tR\rremovalReason\x12%\n" +
+	"\x0eremoval_detail\x18\x06 \x01(\tR\rremovalDetail2\xbd\x01\n" +
 	"\x16WorktreeReclaimService\x12\xa2\x01\n" +
 	"\x15DecideWorktreeReclaim\x12(.reliant.v1.DecideWorktreeReclaimRequest\x1a).reliant.v1.DecideWorktreeReclaimResponse\"4\xa2\xbb\x180:.\n" +
 	"\x17decide_worktree_reclaim\x12\x13\n" +

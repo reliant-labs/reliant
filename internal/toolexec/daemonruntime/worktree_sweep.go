@@ -31,10 +31,11 @@ func worktreeSweep(cfg worktreereclaim.SweepConfig) diskwatch.WorktreeSweep {
 			})
 			logSweep(ctx, rep)
 		},
-		// No ApprovalsSince: an approval in approvals.json is not verified as
-		// a person's (any process running as the user can write it), so the
-		// sweep never acts on one (SweepOptions.ApprovalsVerified stays
-		// false) and an approved-only pass would do nothing.
+		// No ApprovalsSince: an approval in approvals.json is not a person's
+		// as far as this daemon can tell (any process running as the user
+		// can write it), so a scheduled pass never acts on one. An Inbox
+		// approval acts through its own command (worktree.reclaim_approve,
+		// worktree_reclaim_approve.go), which runs its own pass.
 	}
 }
 

@@ -337,6 +337,10 @@ func (r *Reclaimer) reclaimEntry(ctx context.Context, e *SweepEntry, opts SweepO
 	if r.verifyHook != nil {
 		r.verifyHook(q)
 	}
+	if err := captureIntact(ctx, capt); err != nil {
+		putBack(ReasonCaptureMissing, err.Error())
+		return
+	}
 	if err := verifyCapture(ctx, q, capt); err != nil {
 		putBack(ReasonRecentlyActive, "changed after it was captured; nothing was removed: "+err.Error())
 		return
@@ -371,7 +375,12 @@ func (r *Reclaimer) reclaimEntry(ctx context.Context, e *SweepEntry, opts SweepO
 		return
 	}
 
-	// 6. Delete.
+	// 6. Delete, the capture checked once more first: nothing is deleted
+	// whose work is not in the repository.
+	if err := captureIntact(ctx, capt); err != nil {
+		putBack(ReasonCaptureMissing, err.Error())
+		return
+	}
 	if err := persistRetirementState(q+".disposing", []byte(fence)); err != nil {
 		putBack(ReasonUnverified, "could not record the disposal: "+err.Error())
 		return
@@ -416,6 +425,16 @@ func (r *Reclaimer) reclaimEntry(ctx context.Context, e *SweepEntry, opts SweepO
 			Reason: string(class), Restore: "reliant worktree restore " + capt.Ref + " --repo " + capt.CommonDir, ReclaimedAt: r.now().UTC()}, "", "  ")
 		_ = os.WriteFile(orig+TombstoneSuffix, append(ts, '\n'), 0o600)
 	}
+}
+
+// captureIntact checks the capture ref still names the commit the capture
+// made, in the repository it was made in.
+func captureIntact(ctx context.Context, c Capture) error {
+	got, err := git(ctx, "", nil, "--git-dir="+c.CommonDir, "rev-parse", "--verify", "--quiet", c.Ref+"^{commit}")
+	if err != nil || got != c.Commit {
+		return fmt.Errorf("its capture %s is missing or moved, so nothing was removed", c.Ref)
+	}
+	return nil
 }
 
 // headTree is HEAD's tree, or "".

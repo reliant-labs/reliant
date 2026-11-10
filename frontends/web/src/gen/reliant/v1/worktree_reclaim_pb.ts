@@ -14,7 +14,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file reliant/v1/worktree_reclaim.proto.
  */
 export const file_reliant_v1_worktree_reclaim: GenFile = /*@__PURE__*/
-  fileDesc("CiFyZWxpYW50L3YxL3dvcmt0cmVlX3JlY2xhaW0ucHJvdG8SCnJlbGlhbnQudjEiaQocRGVjaWRlV29ya3RyZWVSZWNsYWltUmVxdWVzdBIRCglkYWVtb25faWQYASABKAkSNgoJZGVjaXNpb25zGAIgAygLMiMucmVsaWFudC52MS5Xb3JrdHJlZVJlY2xhaW1EZWNpc2lvbiJMChdXb3JrdHJlZVJlY2xhaW1EZWNpc2lvbhILCgNrZXkYASABKAkSEwoLZmluZ2VycHJpbnQYAiABKAkSDwoHYXBwcm92ZRgDIAEoCCJbCh1EZWNpZGVXb3JrdHJlZVJlY2xhaW1SZXNwb25zZRI6CgdyZXN1bHRzGAEgAygLMikucmVsaWFudC52MS5Xb3JrdHJlZVJlY2xhaW1EZWNpc2lvblJlc3VsdCJOCh1Xb3JrdHJlZVJlY2xhaW1EZWNpc2lvblJlc3VsdBILCgNrZXkYASABKAkSEAoIcmVjb3JkZWQYAiABKAgSDgoGcmVhc29uGAMgASgJMr0BChZXb3JrdHJlZVJlY2xhaW1TZXJ2aWNlEqIBChVEZWNpZGVXb3JrdHJlZVJlY2xhaW0SKC5yZWxpYW50LnYxLkRlY2lkZVdvcmt0cmVlUmVjbGFpbVJlcXVlc3QaKS5yZWxpYW50LnYxLkRlY2lkZVdvcmt0cmVlUmVjbGFpbVJlc3BvbnNlIjSiuxgwOi4KF2RlY2lkZV93b3JrdHJlZV9yZWNsYWltEhMKBmRhZW1vbhIJZGFlbW9uX2lkQjpaOGdpdGh1Yi5jb20vcmVsaWFudC1sYWJzL3JlbGlhbnQvZ2VuL3JlbGlhbnQvdjE7cmVsaWFudHYxYgZwcm90bzM", [file_forge_v1_forge]);
+  fileDesc("CiFyZWxpYW50L3YxL3dvcmt0cmVlX3JlY2xhaW0ucHJvdG8SCnJlbGlhbnQudjEiaQocRGVjaWRlV29ya3RyZWVSZWNsYWltUmVxdWVzdBIRCglkYWVtb25faWQYASABKAkSNgoJZGVjaXNpb25zGAIgAygLMiMucmVsaWFudC52MS5Xb3JrdHJlZVJlY2xhaW1EZWNpc2lvbiJMChdXb3JrdHJlZVJlY2xhaW1EZWNpc2lvbhILCgNrZXkYASABKAkSEwoLZmluZ2VycHJpbnQYAiABKAkSDwoHYXBwcm92ZRgDIAEoCCJbCh1EZWNpZGVXb3JrdHJlZVJlY2xhaW1SZXNwb25zZRI6CgdyZXN1bHRzGAEgAygLMikucmVsaWFudC52MS5Xb3JrdHJlZVJlY2xhaW1EZWNpc2lvblJlc3VsdCKPAQodV29ya3RyZWVSZWNsYWltRGVjaXNpb25SZXN1bHQSCwoDa2V5GAEgASgJEhAKCHJlY29yZGVkGAIgASgIEg4KBnJlYXNvbhgDIAEoCRIPCgdyZW1vdmFsGAQgASgJEhYKDnJlbW92YWxfcmVhc29uGAUgASgJEhYKDnJlbW92YWxfZGV0YWlsGAYgASgJMr0BChZXb3JrdHJlZVJlY2xhaW1TZXJ2aWNlEqIBChVEZWNpZGVXb3JrdHJlZVJlY2xhaW0SKC5yZWxpYW50LnYxLkRlY2lkZVdvcmt0cmVlUmVjbGFpbVJlcXVlc3QaKS5yZWxpYW50LnYxLkRlY2lkZVdvcmt0cmVlUmVjbGFpbVJlc3BvbnNlIjSiuxgwOi4KF2RlY2lkZV93b3JrdHJlZV9yZWNsYWltEhMKBmRhZW1vbhIJZGFlbW9uX2lkQjpaOGdpdGh1Yi5jb20vcmVsaWFudC1sYWJzL3JlbGlhbnQvZ2VuL3JlbGlhbnQvdjE7cmVsaWFudHYxYgZwcm90bzM", [file_forge_v1_forge]);
 
 /**
  * @generated from message reliant.v1.DecideWorktreeReclaimRequest
@@ -118,6 +118,31 @@ export type WorktreeReclaimDecisionResult = Message<"reliant.v1.WorktreeReclaimD
    * @generated from field: string reason = 3;
    */
   reason: string;
+
+  /**
+   * For a recorded approval, what became of the removal (empty otherwise,
+   * and from a server that does not send it): "removing" (the machine
+   * accepted it and is removing it now; the item drops it when done),
+   * "removed", "refused" (nothing was removed; removal_reason says why:
+   * "changed", "live_chat", "reclaim_off", "in_use", "capture_missing", …),
+   * or "not_supported" (the machine's daemon predates removal on approval;
+   * the approval is recorded and nothing is removed).
+   *
+   * @generated from field: string removal = 4;
+   */
+  removal: string;
+
+  /**
+   * @generated from field: string removal_reason = 5;
+   */
+  removalReason: string;
+
+  /**
+   * A sentence for the person.
+   *
+   * @generated from field: string removal_detail = 6;
+   */
+  removalDetail: string;
 };
 
 /**
@@ -130,10 +155,11 @@ export const WorktreeReclaimDecisionResultSchema: GenMessage<WorktreeReclaimDeci
 /**
  * WorktreeReclaimService answers a machine's worktree-reclaim inbox item
  * (INBOX_ITEM_KIND_WORKTREE_RECLAIM). The machine's daemon proposes removing
- * idle worktrees that hold work only they have, and removes none of them
- * (worktreereclaim's SweepOptions.ApprovalsVerified); this is where the
- * person keeps or approves each, bound to the exact state shown. It manages the caller's own machine, so it is not part of the
- * public SDK (proto/public-api.txt), like InboxService.CleanupStorage.
+ * idle worktrees that hold work only they have, and removes one only when the
+ * person approves that exact state here: the approval reaches the daemon as a
+ * command from this server, the only source of authority it acts on. It
+ * manages the caller's own machine, so it is not part of the public SDK
+ * (proto/public-api.txt), like InboxService.CleanupStorage.
  *
  * @generated from service reliant.v1.WorktreeReclaimService
  */
@@ -144,13 +170,16 @@ export const WorktreeReclaimService: GenService<{
    * fingerprint; the server refuses one that is not on the machine's last
    * report ("not_shown"), and the machine records it only while that is
    * still the worktree's state ("changed" otherwise). Declining keeps it
-   * until its state changes. An approval is recorded, with who made it, but
-   * the machine does not remove an approved worktree yet: nothing on the
-   * machine can prove an approval is a person's, so it stays proposed as
-   * approved. When the machine does reclaim one, it first saves everything
-   * git can see of it to a local ref (refs/reliant/reclaimed/...), from which
-   * `reliant worktree restore` brings it back. FAILED_PRECONDITION when the machine is
-   * offline; NOT_FOUND for a machine that is not the caller's.
+   * until its state changes. An approval is recorded, with who made it, and
+   * sent to the machine as worktree.reclaim_approve, which removes exactly
+   * that worktree at exactly that state: first saved, with everything git
+   * can see of it, to a local ref (refs/reliant/reclaimed/...), from which
+   * `reliant worktree restore` brings it back. The machine checks it all
+   * again first (the state, the capture, that nothing is using it), and the
+   * server refuses a Reliant workspace whose chat is still open; a refusal
+   * is in the result's removal fields and puts the proposal back in the
+   * item. FAILED_PRECONDITION when the machine is offline; NOT_FOUND for a
+   * machine the caller may not write.
    *
    * @generated from rpc reliant.v1.WorktreeReclaimService.DecideWorktreeReclaim
    */
