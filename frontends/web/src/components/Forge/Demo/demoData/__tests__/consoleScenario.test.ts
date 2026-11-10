@@ -31,7 +31,8 @@ import { listActivity } from "@/services/controlPlane/observability/activityApi"
 import { getEnvironmentStatus, listEnvironmentPromotions, listProjectEnvironments } from "@/services/forge/cloudEnvs";
 import { listDomains } from "@/services/forge/domains";
 import { getEnvironmentShape, getLiveView } from "@/services/forge/live";
-import { getProjectRelease, getPromotionRollout, listProjectReleases } from "@/services/forge/releases";
+import { getProjectRelease, getPromotionRollout, listProjectReleases, listReleasePromotions } from "@/services/forge/releases";
+import { envPromotionRows } from "@/components/Forge/Releases/envPromotionsModel";
 import { listSecrets } from "@/services/forge/secretStore";
 
 import { DEMO_DOMAINS, DEMO_ENVS, DEMO_PROJECT, DEMO_RELEASES, DEMO_SECRETS, DEMO_WORKLOADS, consoleScenarioHandlers } from "../consoleScenario";
@@ -82,10 +83,46 @@ describe("the console's sample data, on the demo's transport", () => {
     expect(promotions.length).toBeGreaterThanOrEqual(3);
   });
 
+  it("Promotions: every ledger is newest first, of releases the demo cut, after each was cut; staging's holds every kind of row", async () => {
+    const cutAt = new Map<string, number>(DEMO_RELEASES.map((r) => [r.version, Date.now() - r.age]));
+    const ids = new Set<string>();
+    for (const env of DEMO_ENVS) {
+      const ledger = await listReleasePromotions(env.id);
+      expect(ledger.every((p, i) => i === 0 || Date.parse(ledger[i - 1].createdAt!) >= Date.parse(p.createdAt!))).toBe(true);
+      for (const p of ledger) {
+        // A release the demo's list has, so a rollback is judged; never promoted before it was cut.
+        expect(cutAt.has(p.releaseVersion)).toBe(true);
+        expect(Date.parse(p.createdAt!)).toBeGreaterThanOrEqual(cutAt.get(p.releaseVersion)! - 1000);
+        expect(ids.has(p.id)).toBe(false);
+        ids.add(p.id);
+        // Each promotion's rollout is its own, not the running one's.
+        expect((await getPromotionRollout(env.id, p.id))?.promotionId).toBe(p.id);
+      }
+    }
+
+    const rank = new Map(DEMO_RELEASES.map((r, index) => [r.version, index]));
+    const staging = envPromotionRows(await listReleasePromotions("env-staging"), rank, new Map());
+    expect(staging.length).toBeGreaterThan(10);
+    expect(staging[0]).toMatchObject({ version: "v1.8.3", targets: [], rollback: false });
+    // A whole-release rollback, a scoped deploy, a mixed rollback + redeploy, and a row with no health check.
+    expect(staging.some((row) => row.targets.length === 0 && row.rollback && !row.mixed)).toBe(true);
+    expect(staging.some((row) => row.targets.length > 0 && !row.rollback && !row.redeploy)).toBe(true);
+    expect(staging.find((row) => row.mixed)?.moves).toEqual([
+      { target: "api", from: "v1.8.3", change: "rollback" },
+      { target: "shop-web", from: "v1.8.2", change: "redeploy" },
+    ]);
+    expect(staging.some((row) => row.health.verdict === "unknown")).toBe(true);
+    expect(staging.some((row) => row.health.verdict === "regressed")).toBe(true);
+    expect(staging.some((row) => row.health.verdict === "healthy")).toBe(true);
+  });
+
   it("Deploys: one per promotion, newest first, and a staging build that failed before it cut a release", async () => {
     const { listDeployRuns, getDeployRun } = await import("@/services/forge/deployAttempts");
     const runs = await listDeployRuns(DEMO_PROJECT);
-    expect(runs.length).toBe(10);
+    // One per promotion in every env's ledger, plus the failed build.
+    const promotions = (await Promise.all(DEMO_ENVS.map((env) => listReleasePromotions(env.id)))).flat();
+    expect(runs.length).toBe(promotions.length + 1);
+    expect(new Set(runs.map((r) => r.id)).size).toBe(runs.length);
     expect(runs.every((r, i) => i === 0 || Date.parse(runs[i - 1].startedAt!) >= Date.parse(r.startedAt!))).toBe(true);
     expect(runs.slice(0, 2).map((r) => [r.env, r.release, r.state])).toEqual([
       ["dev", "v1.8.4", "succeeded"],

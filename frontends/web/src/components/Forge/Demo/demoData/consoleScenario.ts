@@ -31,6 +31,7 @@ import {
   DeployCustomDomainState,
   DeployEnvironmentKind,
   DeployObservedState,
+  DeployPromotionSchema,
   DeployRolloutPhase,
   DeployRunState,
   DeployServingPath,
@@ -136,21 +137,123 @@ export const DEMO_RELEASES = [
   },
 ] as const;
 
+/**
+ * One promotion in an environment's ledger. Beyond the release, who and when:
+ * `seq` tells apart two promotions of one release in one env (it suffixes the
+ * id), `targets` makes it a scoped deploy, `from: null` a direct deploy (a
+ * rollback is one), and `health` is the `forge obs check` gate it recorded —
+ * "none" records no health gate at all, which the console shows as unknown.
+ */
+interface DemoPromotion {
+  version: string;
+  age: number;
+  by: string;
+  seq?: string;
+  targets?: readonly string[];
+  note?: string;
+  from?: string | null;
+  health?: { status: "passed" | "failed"; summary: string } | "none";
+}
+
 /** Which release each environment runs, and when it got it. */
-export const RUNNING: Record<EnvId, { version: string; age: number; by: string }> = {
+export const RUNNING: Record<EnvId, DemoPromotion> = {
   "env-dev": { version: "v1.8.4", age: 20 * MINUTE, by: "maya" },
   "env-staging": { version: "v1.8.3", age: 3 * HOUR, by: "jon" },
   "env-prod": { version: "v1.8.3", age: 40 * MINUTE, by: "jon" },
 };
 
-/** Earlier promotions, newest first (beyond the one running). */
-const HISTORY: Record<EnvId, { version: string; age: number; by: string }[]> = {
+/**
+ * Earlier promotions, newest first (beyond the one running).
+ *
+ * staging's is the long one, so the environment page's Promotions card shows
+ * every kind of row a real ledger holds (oldest first):
+ *
+ *   9d    v1.8.1 everywhere; then the worker alone re-applied (a scoped redeploy)
+ *   5.8d  v1.8.2 everywhere, rolled back to v1.8.1 four hours later (a whole-
+ *         release rollback), and promoted again once the migration was split
+ *   4.5d  v1.8.2 re-applied by CI after a secret rotation (a redeploy with no
+ *         health check recorded); inventory re-applied alone a day later
+ *   22h   v1.8.3 to the api alone (a canary) — it regressed; the storefront
+ *         re-shipped on v1.8.2; then api went BACK to v1.8.2 with the
+ *         storefront in one scoped deploy: api rolled back, shop-web
+ *         redeployed (a mixed row)
+ *   3h    v1.8.3 everywhere (RUNNING), then on to prod — the release whose
+ *         CreateOrder deadline issue v1.8.4 fixes, as the canary had warned
+ *
+ * Eleven rows with the running one, so the card lists ten and offers the rest.
+ */
+const HISTORY: Record<EnvId, DemoPromotion[]> = {
   "env-dev": [
     { version: "v1.8.3", age: 26 * HOUR, by: "jon" },
     { version: "v1.8.2", age: 6 * DAY, by: "priya" },
   ],
   "env-staging": [
+    {
+      version: "v1.8.2",
+      seq: "api-web",
+      age: 20.5 * HOUR,
+      by: "jon",
+      targets: ["api", "shop-web"],
+      from: null,
+      note: "v1.8.3's api timed out on the payment call; api back on v1.8.2, shop-web re-shipped with it.",
+    },
+    {
+      version: "v1.8.2",
+      seq: "web",
+      age: 21 * HOUR,
+      by: "priya",
+      targets: ["shop-web"],
+      from: null,
+      health: "none",
+      note: "Storefront re-shipped for the /checkout CDN cache rule.",
+    },
+    {
+      version: "v1.8.3",
+      seq: "api",
+      age: 22 * HOUR,
+      by: "jon",
+      targets: ["api"],
+      health: { status: "failed", summary: "release health FAIL: CreateOrder p95 4.1s, up from 380ms" },
+      note: "Canary: the api alone first.",
+    },
+    {
+      version: "v1.8.2",
+      seq: "inventory",
+      age: 3.5 * DAY,
+      by: "priya",
+      targets: ["inventory"],
+      from: null,
+      note: "inventory re-applied once the orders index finished building.",
+    },
+    {
+      version: "v1.8.2",
+      seq: "reapply",
+      age: 4.5 * DAY,
+      by: "github-actions",
+      from: null,
+      health: "none",
+      note: "Re-applied after PAYMENTS_WEBHOOK_SECRET was rotated.",
+    },
+    { version: "v1.8.2", seq: "again", age: 5.2 * DAY, by: "priya", note: "The inventory migration, split into two steps." },
+    {
+      version: "v1.8.1",
+      seq: "rollback",
+      age: 5.6 * DAY,
+      by: "priya",
+      from: null,
+      note: "v1.8.2's inventory migration held a lock on orders for 40s; back to v1.8.1.",
+    },
     { version: "v1.8.2", age: 5.8 * DAY, by: "priya" },
+    {
+      version: "v1.8.1",
+      seq: "worker",
+      age: 8.7 * DAY,
+      by: "maya",
+      targets: ["worker"],
+      from: null,
+      health: "none",
+      note: "worker re-applied with a longer ack timeout.",
+    },
     { version: "v1.8.1", age: 9 * DAY, by: "maya" },
   ],
   "env-prod": [
@@ -247,7 +350,8 @@ export const DEMO_DOMAINS = [
 ] as const;
 
 const releaseOf = (version: string) => DEMO_RELEASES.find((r) => r.version === version) ?? DEMO_RELEASES[0];
-const promotionId = (env: string, version: string) => `promo-${env.replace("env-", "")}-${version.replace(/\./g, "")}`;
+const promotionId = (env: string, version: string, seq?: string) =>
+  `promo-${env.replace("env-", "")}-${version.replace(/\./g, "")}${seq ? `-${seq}` : ""}`;
 const digest = (seed: string) => {
   let h = 0x811c9dc5;
   for (const c of seed) h = Math.imul(h ^ c.charCodeAt(0), 0x01000193) >>> 0;
@@ -285,25 +389,32 @@ function environment(env: (typeof DEMO_ENVS)[number]) {
   };
 }
 
-function promotion(envId: EnvId, p: { version: string; age: number; by: string }, from?: string) {
+function promotion(envId: EnvId, p: DemoPromotion, from?: string): MessageInitShape<typeof DeployPromotionSchema> {
   const r = releaseOf(p.version);
+  const health = p.health ?? { status: "passed", summary: "error rate and p95 within the previous release's window" };
   return {
-    id: promotionId(envId, p.version),
+    id: promotionId(envId, p.version, p.seq),
     environmentId: envId,
     releaseId: `rel-${r.version}`,
     releaseVersion: r.version,
     promotedByActor: p.by,
     createdAt: ago(p.age),
     releaseProvenance: provenance(r.version),
-    fromEnvironmentName: from ?? "",
+    fromEnvironmentName: p.from === undefined ? (from ?? "") : (p.from ?? ""),
+    note: p.note ?? "",
+    targets: [...(p.targets ?? [])],
     resolvedArtifacts: Object.fromEntries(DEMO_WORKLOADS.map((w) => [w.name, digest(`${w.name}@${r.version}`)])),
     gates: [
-      {
-        name: "forge obs check",
-        status: "passed",
-        summary: "error rate and p95 within the previous release's window",
-        finishedAt: ago(p.age - 12 * MINUTE),
-      },
+      ...(health === "none"
+        ? []
+        : [
+            {
+              name: "forge obs check",
+              status: health.status,
+              summary: health.summary,
+              finishedAt: ago(p.age - 12 * MINUTE),
+            },
+          ]),
       {
         name: "ci",
         status: "passed",
@@ -599,7 +710,11 @@ const FAILED_DEPLOY = {
  */
 function deployAttempts() {
   const runs = (Object.keys(RUNNING) as EnvId[]).flatMap((envId) =>
-    [RUNNING[envId], ...HISTORY[envId]].map((p) => ({ envId, ...p, failed: null as typeof FAILED_DEPLOY | null })),
+    [RUNNING[envId], ...HISTORY[envId]].map((p): DemoPromotion & { envId: EnvId; failed: typeof FAILED_DEPLOY | null } => ({
+      envId,
+      ...p,
+      failed: null,
+    })),
   );
   runs.push({ envId: FAILED_DEPLOY.env, version: "", age: FAILED_DEPLOY.age, by: FAILED_DEPLOY.by, failed: FAILED_DEPLOY });
   runs.sort((a, b) => a.age - b.age);
@@ -609,13 +724,13 @@ function deployAttempts() {
     const took = r.failed ? 3 * MINUTE : 6 * MINUTE;
     const phases = r.failed ? DEPLOY_PHASES.slice(0, DEPLOY_PHASES.indexOf("build") + 1) : DEPLOY_PHASES;
     return {
-      id: r.failed ? r.failed.id : `dep-run-${env.name}-${r.version.replace(/\./g, "")}`,
+      id: r.failed ? r.failed.id : `dep-run-${env.name}-${r.version.replace(/\./g, "")}${r.seq ? `-${r.seq}` : ""}`,
       project: DEMO_PROJECT,
       environmentName: env.name,
       mode: "apply",
       source: ci ? "ci" : "terminal",
       releaseVersion: r.version,
-      promotionId: r.failed ? "" : promotionId(r.envId, r.version),
+      promotionId: r.failed ? "" : promotionId(r.envId, r.version, r.seq),
       run: ci ? { url: `https://${REPO}/actions/runs/${9_400_000 + Math.round(r.age / MINUTE)}` } : undefined,
       forgeVersion: FORGE_VERSION,
       startedByUserId: `user-${r.by}`,
@@ -747,7 +862,7 @@ export function consoleScenarioHandlers(): MockHandlers {
           const id = envIdOf(req.environmentId);
           if (!id) return {};
           const p =
-            [RUNNING[id], ...HISTORY[id]].find((candidate) => promotionId(id, candidate.version) === req.promotionId) ?? RUNNING[id];
+            [RUNNING[id], ...HISTORY[id]].find((candidate) => promotionId(id, candidate.version, candidate.seq) === req.promotionId) ?? RUNNING[id];
           return {
             rollout: {
               promotion: promotion(id, p, PROMOTED_FROM[id]),
