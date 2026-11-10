@@ -420,6 +420,17 @@ jobs:
   # Plain -trimpath package compiles only: what a PR can reuse is the compile of
   # everything its change does not reach. Test binaries, -race variants and
   # linked tools would be dead weight that evicts this from the 10 GB budget.
+  #
+  # TRIMMED TO ONE COMMIT'S COMPILES before it is saved (reliant#2061). The job
+  # restores the previous entry, recompiles what changed, and used to save the
+  # union, so every superseded compile of every package stayed in it: 3.26 GB
+  # compressed on 2026-11-09, 3.83 GB a day later, against ~3.5 GB UNcompressed
+  # for a cold compile of one commit. Every Go job restores this entry first
+  # (the merge queue's setup spent 52-147s extracting it, most of its
+  # five-minute budget), and at that size the repository's 10 GB budget evicted
+  # it outright. Go refreshes the mtime of an entry it uses that is over an
+  # hour old, so after the builds everything older than the restore (minus an
+  # hour and five minutes of slack) is a compile this commit did not use.
   go-cache:
     name: Go package cache (main only)
     needs: lanes
@@ -428,6 +439,8 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v6
+      - name: Note when the Go build cache was restored
+        run: echo "GOCACHE_RESTORED_AT=$(date +%s)" >> "$GITHUB_ENV"
       # golangci: its cached binary is saved here, on main, for the merge
       # queue's golangci job to restore.
       - uses: ./.github/actions/setup
@@ -440,6 +453,15 @@ jobs:
       # finds their executables in this cache instead of compiling them.
       - name: task deps:go-protoc-plugins
         run: task deps:go-protoc-plugins
+      # After every build above, right before the save (the header says why).
+      - name: Trim the Go build cache to this commit's compiles
+        run: |
+          set -euo pipefail
+          dir="$(go env GOCACHE)"
+          before="$(du -sh "${dir}" | cut -f1)"
+          stale_minutes=$(( ($(date +%s) - GOCACHE_RESTORED_AT) / 60 + 65 ))
+          find "${dir}" -type f -mmin +"${stale_minutes}" -delete
+          echo "Go build cache: ${before} -> $(du -sh "${dir}" | cut -f1) (dropped entries unused for ${stale_minutes}+ minutes)"
       - name: Save Go build cache
         uses: actions/cache/save@v4
         with:
