@@ -562,6 +562,11 @@ func (s *shellTool) execute(rctx *rctx.ToolContext, params ShellParams, outcome 
 	if err != nil {
 		return NewTextErrorResponse(err.Error()), nil
 	}
+	// A workflow run node starts in its work_dir (rctx.RunWorkDir, which only
+	// the server sets, and only for a run step).
+	if rctx.RunStep && rctx.RunWorkDir != "" && strings.TrimSpace(params.Repo) == "" {
+		workingDir = rctx.RunWorkDir
+	}
 	if workingDir == "" {
 		return NewTextErrorResponse("No project working directory available - ensure you're working within a project"), nil
 	}

@@ -29,6 +29,7 @@ import { useAlerts, useObservabilityOrg } from "@/hooks/observability-queries";
 import { useTitleBarChrome } from "@/hooks/useTitleBarChrome";
 import { getParentRouteNavigateOptions } from "@/lib/routeParent";
 import { useConsoleUser } from "@/components/Forge/Console/consoleHost";
+import { useObsNavOpen } from "@/components/Forge/Console/obsNavOpen";
 
 import { ObsQuotaBanner } from "../Observability/ObsStates";
 import { ForgeCloseButton } from "../ForgeHeader";
@@ -70,6 +71,8 @@ function OrgChrome({ search }: { search: Record<string, unknown> }) {
     });
   }, []);
 
+  const [obsOpen, setObsOpen] = useObsNavOpen();
+
   const user = useConsoleUser();
 
   const { trafficLightPadding, dragRegionStyle } = useTitleBarChrome({ collapsedPadding: "0px" });
@@ -82,6 +85,8 @@ function OrgChrome({ search }: { search: Record<string, unknown> }) {
       apps={apps}
       alertsFiring={alertsFiring}
       search={search}
+      obsOpen={obsOpen}
+      onObsOpenChange={setObsOpen}
       user={user}
       collapsed={collapsed}
       onToggleCollapsed={toggleCollapsed}

@@ -53,6 +53,17 @@ describe("draft attachments across a reload", () => {
     expect(isDraftAttachmentPersisted("chat-2", "a")).toBe(false);
   });
 
+  it("keeps a text upload's bytes, not a blob URL, until it leaves the draft", async () => {
+    api.uploadAttachment.mockResolvedValue(att("a"));
+    const file = new File(["pasted"], "pasted-text.txt", { type: "text/plain" });
+    await useAttachmentStore.getState().attachFile("chat-1", file);
+    expect(useAttachmentStore.getState().localFiles.get("a")).toBe(file);
+    expect(useAttachmentStore.getState().blobUrls.has("a")).toBe(false);
+
+    useAttachmentStore.getState().removeAttachment("chat-1", "a");
+    expect(useAttachmentStore.getState().localFiles.has("a")).toBe(false);
+  });
+
   it("forgets every draft on reset (sign-out)", () => {
     useAttachmentStore.setState({ attachments: new Map([["chat-1", [att("a")]]]) });
     useAttachmentStore.getState().reset();

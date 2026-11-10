@@ -317,6 +317,9 @@ func (s *workflowScope) validateNodeFields(node *reliantv1.Node, basePath []stri
 		args := node.GetRun()
 		tmpl(celString(args.GetCommand()), at("command"), s.loop)
 		tmpl(celString(args.GetWorkDir()), at("work_dir"), s.loop)
+		for i, w := range args.GetWritableCheckouts() {
+			tmpl(w, at("writable_checkouts", fmt.Sprintf("[%d]", i)), s.loop)
+		}
 
 	case node.GetRouter() != nil:
 		tmpl(celString(node.GetRouter().GetSystemPrompt()), at("system_prompt"), s.loop)

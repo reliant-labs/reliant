@@ -113,6 +113,7 @@ export function AttachmentPreview({ attachments, onRemove, onSave, onInsert }: {
   const [previewImage, setPreviewImage] = useState<{ url: string; filename: string } | null>(null);
   const [openText, setOpenText] = useState<Attachment | null>(null);
   const localBlobUrls = useAttachmentStore((state) => state.blobUrls);
+  const localFiles = useAttachmentStore((state) => state.localFiles);
   // A draft restored after a reload has no local bytes: fetch its thumbnails.
   const { blobUrls: fetchedBlobUrls } = useAttachmentBlobUrls(
     attachments
@@ -169,7 +170,7 @@ export function AttachmentPreview({ attachments, onRemove, onSave, onInsert }: {
         <TextAttachmentModal
           attachmentId={openTextAttachment.id}
           filename={openTextAttachment.filename}
-          blobUrl={localBlobUrls.get(openTextAttachment.id)}
+          localFile={localFiles.get(openTextAttachment.id)}
           onClose={() => setOpenText(null)}
           onSave={onSave && ((text) => onSave(openTextAttachment.id, openTextAttachment.filename, text))}
           onInsert={onInsert && ((text) => {

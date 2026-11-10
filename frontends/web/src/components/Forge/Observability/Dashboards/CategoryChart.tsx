@@ -23,6 +23,7 @@ import type React from "react";
 
 import type { Panel, PanelResult, Unit } from "@/services/controlPlane/observability/types";
 import { cn } from "@/lib/utils";
+import Link from "@/components/forge-ui/link";
 
 import { formatPercent, formatValue } from "../format";
 import { groupLabel } from "../obsFilters";
@@ -36,21 +37,36 @@ interface Props {
   unit: Unit;
   keys: string[];
   onDrill?: OnDrill;
+  dataRowHref?: (row: PanelResult["rows"][number]) => string | null;
   height: number;
   compact: boolean;
 }
 
 export function CategoryChart(props: Props) {
   const style = props.panel.display?.style;
-  if (style === "pie" || style === "donut") return <PieChart {...props} donut={style === "donut"} />;
-  return <BarChart {...props} />;
+  return <>
+    {style === "pie" || style === "donut" ? <PieChart {...props} donut={style === "donut"} /> : <BarChart {...props} />}
+    {props.dataRowHref && !props.compact && <ul className="mt-2 space-y-1 text-xs" aria-label="Data links">
+      {props.data.rows.map((row, index) => {
+        const href = props.dataRowHref!(row);
+        const label = groupLabel(row.group, props.keys) || `Row ${index + 1}`;
+        return <li key={index}>{href ? <Link href={href} className="text-primary-ink">{label}: Open in Data</Link>
+          : <span aria-disabled="true" title="Target table, columns or row values are unavailable" className="text-ink-muted">{label}: Data unavailable</span>}</li>;
+      })}
+    </ul>}
+  </>;
 }
 
 type Row = PanelResult["rows"][number];
 
 const positive = (v: number | null | undefined): number => (v !== null && v !== undefined && Number.isFinite(v) && v > 0 ? v : 0);
 
-function BarChart({ panel, data, unit, keys, onDrill, height, compact }: Props) {
+function BarAction({ href, children, disabled, onClick, ...props }: React.ComponentProps<"button"> & { href?: string | null }) {
+  if (href) return <Link href={href} className={props.className} aria-label={props["aria-label"]}>{children}</Link>;
+  return <button {...props} type="button" disabled={disabled} onClick={onClick}>{children}</button>;
+}
+
+function BarChart({ panel, data, unit, keys, onDrill, dataRowHref, height, compact }: Props) {
   const rows = compact ? data.rows.slice(0, 5) : data.rows;
   const columns = data.columns;
   const stack = !!panel.display?.stack && columns.length > 1;
@@ -104,10 +120,10 @@ function BarChart({ panel, data, unit, keys, onDrill, height, compact }: Props) 
               <span className="truncate text-ink" title={labelOf(row)}>
                 {labelOf(row)}
               </span>
-              <button
-                type="button"
-                disabled={!onDrill}
-                onClick={drill(row)}
+              <BarAction
+                href={dataRowHref?.(row)}
+                disabled={dataRowHref ? !dataRowHref(row) : !onDrill}
+                onClick={dataRowHref ? undefined : drill(row)}
                 className="flex h-3.5 min-w-0 items-stretch gap-px rounded-sm text-left hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default disabled:hover:opacity-100"
                 aria-label={`${labelOf(row)}: ${columns.map((c, i) => `${columns.length > 1 ? `${c} ` : ""}${formatValue(row.values[i] ?? null, unit)}`).join(", ")}`}
               >
@@ -122,7 +138,7 @@ function BarChart({ panel, data, unit, keys, onDrill, height, compact }: Props) 
                     ))}
                   </span>
                 )}
-              </button>
+              </BarAction>
               <span className="text-right tabular-nums text-ink-muted">{formatValue(row.values[0] ?? null, unit)}</span>
             </li>
           ))}
@@ -138,10 +154,10 @@ function BarChart({ panel, data, unit, keys, onDrill, height, compact }: Props) 
       <ul className="flex items-stretch gap-1.5" style={{ height }}>
         {rows.map((row, index) => (
           <li key={index} className="flex min-w-0 flex-1 flex-col items-stretch gap-1" data-group={labelOf(row)}>
-            <button
-              type="button"
-              disabled={!onDrill}
-              onClick={drill(row)}
+            <BarAction
+              href={dataRowHref?.(row)}
+              disabled={dataRowHref ? !dataRowHref(row) : !onDrill}
+              onClick={dataRowHref ? undefined : drill(row)}
               className={cn(
                 "flex min-h-0 flex-1 rounded-sm hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default disabled:hover:opacity-100",
                 stack ? "flex-col-reverse items-stretch" : "items-end justify-center gap-px"
@@ -156,7 +172,7 @@ function BarChart({ panel, data, unit, keys, onDrill, height, compact }: Props) 
                       {segment(row, column, "height")}
                     </span>
                   ))}
-            </button>
+            </BarAction>
             {!compact && (
               <span className="truncate text-center text-2xs text-ink-muted" title={labelOf(row)}>
                 {labelOf(row)}

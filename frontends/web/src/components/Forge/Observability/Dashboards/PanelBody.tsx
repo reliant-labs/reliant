@@ -80,6 +80,8 @@ export type { DrillTarget } from "./SeriesChart";
 export { alignShifted, alignTo, seriesLabel, unionTimestamps } from "./seriesModel";
 
 export interface PanelLinks {
+  /** Schema-checked Data targets; null disables the link for this row. */
+  dataRowHref?: (row: PanelResult["rows"][number]) => string | null;
   /** Opens one trace (an issue's sample). */
   traceHref?: (traceId: string) => string;
   /** Opens one browser session (a sessions panel's row): its timeline and replay. */
@@ -252,7 +254,7 @@ export function PanelBody({ panel, query, compare, trend, groupBy, bands, links,
     case "table":
       return (
         <>
-          <PanelTable panel={panel} result={data} groupFields={keys} onDrill={links?.onDrill} compact={compact} />
+          <PanelTable panel={panel} result={data} groupFields={keys} onDrill={links?.onDrill} dataRowHref={links?.dataRowHref} compact={compact} />
           {truncated}
         </>
       );
@@ -276,6 +278,7 @@ export function PanelBody({ panel, query, compare, trend, groupBy, bands, links,
             unit={unit}
             keys={keys}
             onDrill={links?.onDrill}
+            dataRowHref={links?.dataRowHref}
             height={chartHeight}
             compact={compact}
           />
@@ -561,12 +564,14 @@ function PanelTable({
   result,
   groupFields,
   onDrill,
+  dataRowHref,
   compact,
 }: {
   panel: Panel;
   result: PanelResult;
   groupFields: string[];
   onDrill?: PanelLinks["onDrill"];
+  dataRowHref?: PanelLinks["dataRowHref"];
   compact: boolean;
 }) {
   const columnUnit = (index: number): Unit => {
@@ -583,7 +588,13 @@ function PanelTable({
         key: `group:${field}`,
         header: attributeLabel(field),
         className: "max-w-[24rem] truncate",
-        render: (_, { row }) => <span className={cn("text-xs", fieldIndex > 0 && "text-ink-muted")}>{row.group[field] || "—"}</span>,
+        interactive: fieldIndex === 0 && !!dataRowHref,
+        render: (_, { row }) => {
+          const href = fieldIndex === 0 && !compact ? dataRowHref?.(row) : null;
+          const label = row.group[field] || "—";
+          return href ? <Link href={href} className="text-xs text-primary-ink">{label}</Link>
+            : <span className={cn("text-xs", fieldIndex > 0 && "text-ink-muted")}>{label}</span>;
+        },
       })
     ),
     ...result.columns.map(
@@ -594,6 +605,14 @@ function PanelTable({
         render: (_, { row }) => <span className="text-xs">{formatValue(row.values[index], columnUnit(index))}</span>,
       })
     ),
+    ...(dataRowHref && !compact ? [{
+      key: "data", header: "Data", interactive: true,
+      render: (_: unknown, { row }: PanelTableRow) => {
+        const href = dataRowHref(row);
+        return href ? <Link href={href} className="text-xs text-primary-ink">Open in Data</Link>
+          : <span aria-disabled="true" title="Target table, columns or row values are unavailable" className="text-xs text-ink-muted">Data unavailable</span>;
+      },
+    }] : []),
   ];
   return (
     <div className={cn(!compact && "max-h-80 overflow-auto")} data-testid="obs-panel-table">

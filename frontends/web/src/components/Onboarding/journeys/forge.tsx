@@ -222,8 +222,8 @@ export const forgeJourney: Journey = {
       title: "A forge app's console",
       description:
         "Every forge project gets this console: environments, releases, domains, secrets and observability, in one place. shop has an api, a worker and an inventory service in dev, staging and prod. The data here is made up.",
-      // The console's sidebar (forge-ui SidebarLayout's nav, inside ConsoleShell).
-      target: "[data-tour='forge-console'] #sidebar-layout-nav",
+      // The console's sidebar: forge-ui SidebarLayout's one <aside>, inside ConsoleShell (its id is generated).
+      target: "[data-tour='forge-console'] aside",
       tooltipPosition: "right",
       route: demo({ view: "overview", ...CLOSED }),
       // The demo host's short tour leaves it out: the console is there to explore, with a tip per view.
