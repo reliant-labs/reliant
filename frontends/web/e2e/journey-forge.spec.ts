@@ -89,7 +89,8 @@ const endCardCommands = (page: Page, text: string) => page.getByTestId('tour-com
 
 /**
  * Reliant's and the forge shell's eleven steps, intro to Ask an agent, each by its required action. A
- * required action moves the tour on by itself (no Next, no Skip step); fg-logs and fg-ask hold for Next.
+ * required action moves the tour on by itself (no Skip step), and Next stays enabled beside it so a visitor
+ * who cannot find the target is never stuck (#2567); fg-logs and fg-ask hold for Next.
  * Leaves the end card open.
  */
 async function walkToEndCard(page: Page) {
@@ -98,7 +99,7 @@ async function walkToEndCard(page: Page) {
   await expect(page.getByTestId('onboarding-nav-bar')).toHaveCount(0);
   await next(page);
 
-  await atStep(page, 2, T, "A forge app's console");
+  await atStep(page, 2, T, "A Forge app's console");
   await expect(page.locator("[data-tour='forge-console']")).toBeVisible();
   await next(page);
 
@@ -107,7 +108,7 @@ async function walkToEndCard(page: Page) {
   await next(page);
 
   await atStep(page, 4, T, 'One request, end to end');
-  await expect(page.getByTestId('tour-next')).toBeDisabled();
+  await expect(page.getByTestId('tour-next')).toBeEnabled();
   await openTrace(page);
   await expect(page).toHaveURL(new RegExp(`trace=${TRACE_ID}`));
 
