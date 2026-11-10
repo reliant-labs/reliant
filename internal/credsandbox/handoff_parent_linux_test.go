@@ -3,6 +3,7 @@ package credsandbox
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -85,14 +86,17 @@ func TestSandbox_AHandOffUnderANamedCacheDirectorySurvivesACd(t *testing.T) {
 // The control-plane pipeline's slot check (cp #2390): credentialed steps mirror each
 // hand-off slot's lease to a file under the cache root that no node keeps, and every
 // slot-bound credentials:none command reads it first, before any of the PR's code runs.
-// It relies on three things this test holds:
+// It relies on what this test holds:
 //   - a none command cannot forge the mirror for a later command: its write is its own,
 //     discarded when it exits, and the next command reads the credentialed value;
 //   - a running none command reads the mirror as it was when it started (the check is
 //     made then, and only then);
-//   - a none command's environment is readable from outside the sandbox
-//     (/proc/<pid>/environ), so a credentialed step can see that a command tagged with a
-//     slot is still running and not hand that slot to another run.
+//   - a shared flock it takes on its kept slot directory holds against an exclusive one
+//     taken outside (and one on a file in the overlaid cache does not);
+//   - a kept directory is bound by inode when it starts (renamed while it runs, the command
+//     still writes only the old one);
+//   - an undumpable parent is out of reach of what it starts (no ptrace), so the slot
+//     check's lock holder cannot have its lock taken away.
 func TestSandbox_ALeaseMirrorUnderTheCacheIsReadOnlyToANoneCommand(t *testing.T) {
 	testkit.Slow(t, "runs sandboxed commands")
 	requireSandbox(t)
@@ -133,21 +137,71 @@ func TestSandbox_ALeaseMirrorUnderTheCacheIsReadOnlyToANoneCommand(t *testing.T)
 		assert.Equal(t, "runA 100 3\nrunA 100 3\n", out.String())
 	})
 
-	t.Run("its environment is readable from outside", func(t *testing.T) {
-		cmd := wrappedWritable(t, project, home, []string{slot}, `exec /usr/bin/env RELIANT_PIPELINE_SLOT=pr-fix/slot-1:4 sleep 5`, env)
+	// The slot check's lifetime reservation: a shared flock a none command takes on its kept
+	// slot directory conflicts with an exclusive one a credentialed step takes outside (a
+	// lock on a file in the overlaid cache does not: the overlay's inode is not the real one).
+	lockedInside := func(t *testing.T, path string) (outside string) {
+		cmd := wrappedWritable(t, project, home, []string{slot}, `exec 9<'`+path+`' && /usr/bin/flock -s -n 9 && echo locked && sleep 2`, env)
+		var out strings.Builder
+		cmd.Stdout, cmd.Stderr = &out, &out
 		require.NoError(t, cmd.Start())
-		t.Cleanup(func() { _ = cmd.Process.Kill(); _ = cmd.Wait() })
-		seen := false
-		for deadline := time.Now().Add(3 * time.Second); !seen && time.Now().Before(deadline); time.Sleep(100 * time.Millisecond) {
-			ents, err := os.ReadDir("/proc")
-			require.NoError(t, err)
-			for _, e := range ents {
-				b, err := os.ReadFile(filepath.Join("/proc", e.Name(), "environ"))
-				if err == nil && strings.Contains("\x00"+string(b), "\x00RELIANT_PIPELINE_SLOT=pr-fix/slot-1:4\x00") {
-					seen = true
-				}
-			}
+		for deadline := time.Now().Add(5 * time.Second); !strings.Contains(out.String(), "locked") && time.Now().Before(deadline); {
+			time.Sleep(50 * time.Millisecond)
 		}
-		assert.True(t, seen, "a credentialed step must see a running none command's slot tag")
+		o, _ := exec.Command("bash", "-c", `exec 9<'`+path+`' && /usr/bin/flock -x -n 9 && echo free || echo held`).CombinedOutput()
+		require.NoError(t, cmd.Wait(), "%s", out.String())
+		require.Contains(t, out.String(), "locked")
+		return strings.TrimSpace(string(o))
+	}
+	t.Run("a lock on the kept slot directory is held across the sandbox", func(t *testing.T) {
+		assert.Equal(t, "held", lockedInside(t, slot))
+		o, _ := exec.Command("bash", "-c", `exec 9<'`+slot+`' && /usr/bin/flock -x -n 9 && echo free`).CombinedOutput()
+		assert.Equal(t, "free", strings.TrimSpace(string(o)), "and released when the command ends")
 	})
+	t.Run("a lock on a file in the overlaid cache is not", func(t *testing.T) {
+		lock := mirror + ".lock"
+		require.NoError(t, os.WriteFile(lock, nil, 0o644))
+		assert.Equal(t, "free", lockedInside(t, lock))
+	})
+
+	// A kept directory is bound by inode when the command starts: replaced (removed and made
+	// again) or renamed while it runs, the command still writes only the one it was given.
+	t.Run("a kept directory is bound by inode", func(t *testing.T) {
+		cmd := wrappedWritable(t, project, home, []string{slot}, `sleep 1.5; echo late > '`+slot+`/late' && echo wrote`, env)
+		var out strings.Builder
+		cmd.Stdout, cmd.Stderr = &out, &out
+		require.NoError(t, cmd.Start())
+		time.Sleep(500 * time.Millisecond)
+		require.NoError(t, os.Rename(slot, slot+".old"))
+		require.NoError(t, os.MkdirAll(slot, 0o755))
+		require.NoError(t, cmd.Wait(), "%s", out.String())
+		assert.NoFileExists(t, filepath.Join(slot, "late"), "the new directory gets nothing")
+		assert.FileExists(t, filepath.Join(slot+".old", "late"), "the write went to the directory it was bound to")
+		require.NoError(t, os.RemoveAll(slot+".old"))
+	})
+
+	// What a none command starts can ptrace (and so take descriptors from) a dumpable parent
+	// of the same user, and not one that made itself undumpable: the slot check's lock holder
+	// does, so nothing the PR runs can drop its lock early.
+	t.Run("an undumpable parent is out of its children's reach", func(t *testing.T) {
+		py := `/usr/bin/python3 -I -c '
+import ctypes, os, sys
+libc = ctypes.CDLL(None, use_errno=True)
+if sys.argv[1] == "undumpable": libc.prctl(4, 0, 0, 0, 0)
+pid = os.fork()
+if pid == 0:
+    p = os.getppid()
+    r = libc.ptrace(16, p, 0, 0)
+    if r == 0: libc.ptrace(17, p, 0, 0)
+    print("attach=" + ("ok" if r == 0 else "refused"), flush=True)
+    os._exit(0)
+os.waitpid(pid, 0)
+' `
+		for mode, want := range map[string]string{"dumpable": "attach=ok", "undumpable": "attach=refused"} {
+			out, err := wrappedWritable(t, project, home, []string{slot}, py+mode, env).CombinedOutput()
+			require.NoError(t, err, "%s", out)
+			assert.Contains(t, string(out), want, mode)
+		}
+	})
+
 }
