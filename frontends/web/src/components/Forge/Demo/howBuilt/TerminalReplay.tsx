@@ -190,7 +190,7 @@ function Poster({ cast, onPlay }: { cast: ScaffoldCast; onPlay: () => void }) {
         )}
       </ol>
       <div className="mt-auto flex justify-center pt-6">
-        <Button variant="primary" size="lg" leftIcon={<Play />} onClick={onPlay} data-testid="replay-poster-play">
+        <Button variant="primary" size="lg" className="font-sans" leftIcon={<Play />} onClick={onPlay} data-testid="replay-poster-play">
           Play the recording
         </Button>
       </div>

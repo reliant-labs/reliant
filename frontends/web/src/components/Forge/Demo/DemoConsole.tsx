@@ -40,7 +40,7 @@ import { ObservabilityApiProvider } from "@/services/controlPlane/observability/
 
 import { ConsoleShell } from "../Console/ConsoleShell";
 import { ProjectMonogram } from "../Console/ConsoleProjectSwitcher";
-import { ENV_ALL } from "../Console/envScope";
+import { DEFAULT_ENV, ENV_ALL } from "../Console/envScope";
 import { consolePath, isObsNavView, withSearch, type ConsolePage } from "../Console/paths";
 import { isDemoShell } from "@/lib/shell";
 import { AskAgentModeProvider } from "../Observability/AskReliant/askAgentMode";
@@ -122,7 +122,9 @@ export function DemoConsole({ shell: shellProp }: DemoConsoleProps = {}) {
   const api = useMemo(() => createDemoApi(), []);
 
   const view = viewOf(search.view);
-  const env = search.envs?.length === 1 ? search.envs[0] : search.browser ? "staging" : ENV_ALL;
+  // The public demo opens on prod, as its console pages do (Console/envScope DEFAULT_ENV); there `envs: ["all"]` is All.
+  const fallbackEnv = search.browser ? "staging" : isDemoShell() ? DEFAULT_ENV : ENV_ALL;
+  const env = search.envs?.length === 1 ? search.envs[0] : fallbackEnv;
   const browserEnv = FIXTURE_ENVS.find((candidate) => candidate.name === env);
   const browserHref = (next: DataSearch | StorageSearch) => withSearch(FORGE_DEMO_PATH, { browser: search.browser, envs: [env], ...next });
   const navigateBrowser = (next: DataSearch | StorageSearch, options?: { replace?: boolean }) => void navigate({
@@ -166,7 +168,7 @@ export function DemoConsole({ shell: shellProp }: DemoConsoleProps = {}) {
                 envs={NAV_ENVS}
                 alertsFiring={1}
                 scope={SCOPE}
-                onEnvChange={(next) => navigateObs({ envs: next === ENV_ALL ? undefined : [next] }, { replace: true })}
+                onEnvChange={(next) => navigateObs({ envs: next === fallbackEnv ? undefined : [next] }, { replace: true })}
                 linkTo={demoLink}
                 collapsed={collapsed}
                 onToggleCollapsed={() => setCollapsed((prev) => !prev)}
@@ -201,7 +203,7 @@ export function DemoConsole({ shell: shellProp }: DemoConsoleProps = {}) {
                     <>
                       {/* One compact row; the top bar's scope control says which environments. */}
                       <PageHeader density="compact" title={OBS_VIEW_LABELS[view]} className="mb-0" />
-                      <ObservabilityPanel place={PLACE} search={{ ...search, view }} navigate={navigateObs} />
+                      <ObservabilityPanel place={PLACE} search={{ ...search, view, envs: env === ENV_ALL ? undefined : [env] }} navigate={navigateObs} />
                       {/* Last on the page, after the console's views. The public demo has a nav row for it instead. */}
                       {!isDemoShell() && <HowBuiltLink onOpen={openBuilt} />}
                     </>
