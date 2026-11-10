@@ -376,6 +376,7 @@
         "DaemonRoutes",
         "DaemonStatePublisher",
         "Database",
+        "DisconnectSubscriber",
         "FlowHealth",
         "JetStream",
         "ManagedReconciler",
@@ -46012,6 +46013,18 @@
       "source": {
         "path": "internal/app/providers.go",
         "symbol": "NewDebugServer"
+      },
+      "methods": [],
+      "implementation_candidates": []
+    },
+    {
+      "id": "DisconnectSubscriber",
+      "name": "DisconnectSubscriber",
+      "kind": "provider",
+      "type": "*github.com/reliant-labs/reliant/internal/app.DisconnectSubscriber",
+      "source": {
+        "path": "internal/app/nodes_gateway.go",
+        "symbol": "NewDisconnectSubscriber"
       },
       "methods": [],
       "implementation_candidates": []
