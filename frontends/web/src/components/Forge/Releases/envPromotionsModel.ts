@@ -49,12 +49,18 @@ export interface EnvPromotionRow {
   at?: string;
   /** The components a scoped deploy moved; empty for a whole-release deploy. */
   targets: string[];
-  /** The release this promotion replaced for what it moved; null for the first one loaded. */
+  /** Each component it moved, from which release and which way. */
+  moves: TargetMove[];
+  /** The release it replaced, when every component it moved ran the same one; null otherwise or for the first loaded. */
   previousVersion: string | null;
-  /** Put an OLDER release in place than the one it replaced (cut order). Unjudged when either is outside the release list. */
+  /** Put an OLDER release (cut order) in place for at least one component; `rollbackTargets` names which. */
   rollback: boolean;
-  /** The same release again. */
+  /** The components rolled back (REST for a whole-release deploy's remainder). */
+  rollbackTargets: string[];
+  /** The same release again, for every component it moved. */
   redeploy: boolean;
+  /** Its components moved different ways, one of them a rollback or a redeploy. */
+  mixed: boolean;
   /** The environment it was promoted from ("" on a direct deploy). */
   from: string;
   note: string;
@@ -84,19 +90,57 @@ export function promotionHealthOf(gates: readonly ReleaseGate[]): EnvPromotionRo
   }
 }
 
-/** A promotion moved what `p` moved: a whole-release one moved everything; scoped ones overlap by name. */
-function covers(earlier: ReleasePromotion, p: ReleasePromotion): boolean {
-  if (p.targets.length === 0) return earlier.targets.length === 0;
-  return earlier.targets.length === 0 || earlier.targets.some((target) => p.targets.includes(target));
+/**
+ * The rest of a whole-release deploy: every component no scoped deploy since
+ * the previous whole-release one named, which therefore ran that one's release.
+ */
+export const REST = "";
+
+/** What one component went through: from which release, and which way. */
+export interface TargetMove {
+  /** The component, or REST for a whole-release deploy's unnamed remainder. */
+  target: string;
+  /** The release it ran before; null when nothing earlier is loaded. */
+  from: string | null;
+  /** first: nothing earlier loaded. unjudged: a release outside the release list. */
+  change: "redeploy" | "rollback" | "forward" | "unjudged" | "first";
+}
+
+/** Each component's move. One promotion's components can move different ways (a scoped deploy of api and web, where api had a newer release of its own). */
+function movesOf(promotions: readonly ReleasePromotion[], index: number, rank: ReadonlyMap<string, number>): TargetMove[] {
+  const p = promotions[index]!;
+  const earlier = promotions.slice(index + 1);
+  const covering = (target: string) => earlier.find((e) => e.targets.length === 0 || (target !== REST && e.targets.includes(target)));
+  let targets: string[];
+  if (p.targets.length > 0) {
+    targets = [...p.targets];
+  } else {
+    // A whole-release deploy moves the rest from the previous whole-release
+    // one, and each component a scoped deploy named since from its own release.
+    const previousFull = earlier.findIndex((e) => e.targets.length === 0);
+    const since = previousFull < 0 ? earlier : earlier.slice(0, previousFull);
+    targets = [REST, ...new Set(since.flatMap((e) => e.targets))];
+  }
+  const now = rank.get(p.releaseVersion);
+  return targets.map((target) => {
+    const from = covering(target)?.releaseVersion ?? null;
+    if (from === null) return { target, from, change: "first" };
+    if (from === p.releaseVersion) return { target, from, change: "redeploy" };
+    const before = rank.get(from);
+    if (now === undefined || before === undefined) return { target, from, change: "unjudged" };
+    return { target, from, change: now > before ? "rollback" : "forward" };
+  });
 }
 
 /**
  * Every promotion in one environment's ledger (newest first), as timeline
- * rows. What a promotion replaced: for a whole-release one, the whole-release
- * promotion before it (the release the env was on); for a scoped one, the
- * newest earlier promotion that moved any of the same components. A rollback
- * is putting an older release there than that — cut order, `rank` being the
- * release list's index (newest first); a release outside the list is not judged.
+ * rows. What a promotion replaced is judged per component: for a scoped
+ * deploy, each named component against the newest earlier promotion that
+ * moved it; for a whole-release one, the rest against the previous
+ * whole-release promotion and each component a scoped deploy moved since
+ * against that. A rollback is putting an older release in place than the
+ * one a component ran — cut order, `rank` being the release list's index
+ * (newest first); a release outside the list is not judged.
  */
 export function envPromotionRows(
   promotions: readonly ReleasePromotion[],
@@ -104,19 +148,22 @@ export function envPromotionRows(
   names: ReadonlyMap<string, string>
 ): EnvPromotionRow[] {
   return promotions.map((p, index) => {
-    const replaced = promotions.slice(index + 1).find((earlier) => covers(earlier, p));
-    const now = rank.get(p.releaseVersion);
-    const before = replaced ? rank.get(replaced.releaseVersion) : undefined;
-    const redeploy = !!replaced && replaced.releaseVersion === p.releaseVersion;
+    const moves = movesOf(promotions, index, rank);
+    const froms = new Set(moves.map((move) => move.from));
+    const kinds = new Set(moves.map((move) => move.change));
+    const only = kinds.size === 1 ? [...kinds][0] : undefined;
     return {
       id: p.id,
       version: p.releaseVersion,
       by: promoterOf(p, names),
       at: p.createdAt,
       targets: [...p.targets],
-      previousVersion: replaced?.releaseVersion ?? null,
-      rollback: !redeploy && now !== undefined && before !== undefined && now > before,
-      redeploy,
+      moves,
+      previousVersion: froms.size === 1 ? [...froms][0]! : null,
+      rollback: kinds.has("rollback"),
+      rollbackTargets: moves.filter((move) => move.change === "rollback").map((move) => move.target),
+      redeploy: only === "redeploy",
+      mixed: kinds.size > 1 && (kinds.has("rollback") || kinds.has("redeploy")),
       from: p.fromEnvironmentName,
       note: p.note,
       checks: checksOf(p.gates.filter((gate) => !isHealthGate(gate))),

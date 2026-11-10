@@ -77,6 +77,52 @@ describe("envPromotionRows", () => {
     expect(rows[2]).toMatchObject({ previousVersion: "v1.41", rollback: false });
   });
 
+  it("judges each target of a scoped deploy against its own predecessor: api rolls back while web only redeploys", () => {
+    const rows = envPromotionRows(
+      [
+        promo("v1.41", { targets: ["api", "web"] }),
+        promo("v1.41", { targets: ["web"] }),
+        promo("v1.42", { targets: ["api"] }),
+        promo("v1.40"),
+      ],
+      RANK,
+      new Map()
+    );
+    expect(rows[0]!.moves).toEqual([
+      { target: "api", from: "v1.42", change: "rollback" },
+      { target: "web", from: "v1.41", change: "redeploy" },
+    ]);
+    // Never a blanket redeploy, never a whole rollback: mixed, naming api.
+    expect(rows[0]).toMatchObject({ redeploy: false, rollback: true, rollbackTargets: ["api"], mixed: true, previousVersion: null });
+  });
+
+  it("calls a single-target scoped deploy a rollback, a redeploy or neither, from that target alone", () => {
+    const ledger = (version: string) => [promo(version, { targets: ["api"] }), promo("v1.42", { targets: ["web"] }), promo("v1.41")];
+    const [back] = envPromotionRows([promo("v1.40", { targets: ["api"] }), promo("v1.42", { targets: ["web"] }), promo("v1.41")], RANK, new Map());
+    expect(back).toMatchObject({ rollback: true, rollbackTargets: ["api"], mixed: false, redeploy: false, previousVersion: "v1.41" });
+    const [same] = envPromotionRows(ledger("v1.41"), RANK, new Map());
+    expect(same).toMatchObject({ rollback: false, redeploy: true, mixed: false, previousVersion: "v1.41" });
+    const [ahead] = envPromotionRows(ledger("v1.42"), RANK, new Map());
+    expect(ahead).toMatchObject({ rollback: false, redeploy: false, mixed: false, previousVersion: "v1.41" });
+  });
+
+  it("judges a full deploy per component a scoped deploy moved since the last full one, and the rest against that full one", () => {
+    // prod ran v1.40, then api alone went to v1.42; v1.41 everywhere moves
+    // the rest forward and api back.
+    const [mixed] = envPromotionRows([promo("v1.41"), promo("v1.42", { targets: ["api"] }), promo("v1.40")], RANK, new Map());
+    expect(mixed!.moves).toEqual([
+      { target: "", from: "v1.40", change: "forward" },
+      { target: "api", from: "v1.42", change: "rollback" },
+    ]);
+    expect(mixed).toMatchObject({ rollback: true, rollbackTargets: ["api"], mixed: true, redeploy: false });
+    // A plain full rollback: every component back, no scoped deploy in between.
+    const [whole] = envPromotionRows([promo("v1.40"), promo("v1.41")], RANK, new Map());
+    expect(whole).toMatchObject({ rollback: true, rollbackTargets: [""], mixed: false, previousVersion: "v1.41" });
+    // A scoped deploy before the previous full one no longer counts: that full one reset it.
+    const [reset] = envPromotionRows([promo("v1.41"), promo("v1.41"), promo("v1.42", { targets: ["api"] })], RANK, new Map());
+    expect(reset).toMatchObject({ redeploy: true, rollback: false, mixed: false });
+  });
+
   it("keeps a redeploy as its own row, and does not judge a release outside the list", () => {
     const rows = envPromotionRows([promo("v1.41"), promo("v1.41"), promo("v0.9"), promo("v1.42")], RANK, new Map());
     expect(rows).toHaveLength(4);

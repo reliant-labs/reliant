@@ -23,7 +23,7 @@ import Tag from "@/components/forge-ui/tag";
 import { useEnvPromotions, useProjectReleases } from "@/hooks/release-queries";
 import { PROMOTIONS_PAGE } from "@/services/forge/releases";
 
-import { envPromotionRows, type EnvPromotionRow } from "../Releases/envPromotionsModel";
+import { envPromotionRows, REST, type EnvPromotionRow, type TargetMove } from "../Releases/envPromotionsModel";
 import { PromotionHealthMark, PromotionItem } from "../Releases/PromotionItem";
 import { INK_BUTTON, INK_LINK, scopedLabel } from "../Releases/releaseParts";
 import { shortVersion } from "../Releases/releaseModel";
@@ -126,12 +126,47 @@ export function EnvPromotions({ project, env, releaseHref, releasesHref }: EnvPr
   );
 }
 
+/** A component's name in a sentence: a whole-release deploy's remainder is "the rest". */
+function targetName(target: string): string {
+  return target === REST ? "the rest" : target;
+}
+
+/** How one move reads: "rolled back from v1.42", "the same release again", "replaced v1.40". */
+function moveWords(move: TargetMove): string {
+  const from = move.from ? shortVersion(move.from) : null;
+  switch (move.change) {
+    case "rollback":
+      return `rolled back from ${from}`;
+    case "redeploy":
+      return "the same release again";
+    case "first":
+      return "";
+    default:
+      return `replaced ${from}`;
+  }
+}
+
+/**
+ * What the promotion replaced. When every component moved the same way from
+ * the same release, one phrase; otherwise one per way, naming its components
+ * ("rolled back from v1.42: api · the same release again: web"), so a mixed
+ * deploy never reads as a blanket redeploy or a whole rollback.
+ */
+function replacedLine(row: EnvPromotionRow): string {
+  const groups = new Map<string, string[]>();
+  for (const move of row.moves) {
+    const words = moveWords(move);
+    if (words) groups.set(words, [...(groups.get(words) ?? []), move.target]);
+  }
+  if (groups.size <= 1) return [...groups.keys()][0] ?? "";
+  return [...groups].map(([words, targets]) => `${words}: ${targets.map(targetName).join(", ")}`).join(" · ");
+}
+
 function EnvPromotionItem({ row, releaseHref }: { row: EnvPromotionRow; releaseHref: (version: string) => string }) {
-  const previous = row.previousVersion ? shortVersion(row.previousVersion) : null;
-  const context = [
-    row.rollback && previous ? `rolled back from ${previous}` : row.redeploy ? "the same release again" : previous ? `replaced ${previous}` : "",
-    row.from && `promoted from ${row.from}`,
-  ].filter(Boolean);
+  const context = [replacedLine(row), row.from && `promoted from ${row.from}`].filter(Boolean);
+  const partial = row.mixed;
+  const rolledBack = row.rollbackTargets.map(targetName);
+  const redeployed = row.moves.filter((move) => move.change === "redeploy").map((move) => targetName(move.target));
   return (
     <PromotionItem
       testId="env-promotion-row"
@@ -141,8 +176,8 @@ function EnvPromotionItem({ row, releaseHref }: { row: EnvPromotionRow; releaseH
       marks={
         <>
           {row.rollback && (
-            <Tag tone="warning" title={`Put ${row.version} back in place of the newer ${row.previousVersion}`}>
-              rollback
+            <Tag tone="warning" title={`Put ${row.version} back in place of a newer release for ${rolledBack.join(", ")}`}>
+              {partial ? `rollback: ${scopedLabel(rolledBack)}` : "rollback"}
             </Tag>
           )}
           {row.targets.length > 0 ? (
@@ -150,7 +185,11 @@ function EnvPromotionItem({ row, releaseHref }: { row: EnvPromotionRow; releaseH
           ) : (
             <Tag title="A whole-release deploy: it moved every component">full</Tag>
           )}
-          {row.redeploy && <Tag>redeploy</Tag>}
+          {row.redeploy ? (
+            <Tag>redeploy</Tag>
+          ) : (
+            partial && redeployed.length > 0 && <Tag title={`The same release again for ${redeployed.join(", ")}`}>redeploy: {scopedLabel(redeployed)}</Tag>
+          )}
         </>
       }
       by={row.by}
@@ -174,11 +213,16 @@ function EnvPromotionItem({ row, releaseHref }: { row: EnvPromotionRow; releaseH
   );
 }
 
-/** The bundle the promotion applied, and how many artifact digests it froze (each one in the title). */
+/**
+ * The bundle the promotion applied, else the first artifact digest it froze,
+ * with how many more (each one in the title): a digest is always on screen
+ * when one was recorded.
+ */
 function DigestSummary({ row }: { row: EnvPromotionRow }) {
   const images = row.artifacts.length;
   const list = row.artifacts.map(([name, digest]) => `${name}: ${digest}`).join("\n");
   if (!row.bundleDigest && images === 0) return <>digests not recorded</>;
+  const [first] = row.artifacts;
   return (
     <>
       {row.bundleDigest && (
@@ -186,15 +230,15 @@ function DigestSummary({ row }: { row: EnvPromotionRow }) {
           bundle <Mono value={row.bundleDigest} />
         </>
       )}
-      {images > 0 && (
+      {first && (
         <span title={list} data-testid="env-promotion-artifacts">
-          {row.bundleDigest ? " · " : ""}
-          {images === 1 ? (
-            <>
-              {row.artifacts[0]![0]} <Mono value={row.artifacts[0]![1]} />
-            </>
+          {row.bundleDigest ? (
+            ` · ${images} ${images === 1 ? "artifact" : "artifacts"} pinned`
           ) : (
-            `${images} artifacts pinned`
+            <>
+              {first[0]} <Mono value={first[1]} />
+              {images > 1 && ` +${images - 1} more`}
+            </>
           )}
         </span>
       )}

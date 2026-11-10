@@ -81,7 +81,12 @@ describe("EnvPromotions", () => {
       promo(OLD, { promotedByActor: "bot", gates: [health("failed")] }),
       promo(NEW, { promotedByActor: "alice", gates: [health("passed")], targets: ["admin-web"] }),
       promo(NEW, { promotedByActor: "alice", targets: ["api"] }),
-      promo(OLD, { promotedByActor: "ci", fromEnvironmentName: "staging" }),
+      promo(OLD, {
+        promotedByActor: "ci",
+        fromEnvironmentName: "staging",
+        bundleDigest: "",
+        resolvedArtifacts: { web: `sha256:${"e".repeat(64)}`, api: `sha256:${"a".repeat(64)}` },
+      }),
     ]);
     const rows = await screen.findAllByTestId("env-promotion-row");
     // Unfiltered by workload: admin-web's scoped deploy and api's are both here.
@@ -96,6 +101,10 @@ describe("EnvPromotions", () => {
     expect(within(rows[0]!).getByRole("link", { name: /./ })).toHaveAttribute("href", `/releases/${OLD}?env=prod`);
     expect(rows[0]).toHaveTextContent("bot");
     expect(rows[0]).toHaveTextContent("bundle");
+    // No bundle recorded: a frozen artifact digest is still on screen, not just a count.
+    const artifacts = within(rows[3]!).getByTestId("env-promotion-artifacts");
+    expect(artifacts).toHaveTextContent(/^api sha256:a+.*\+1 more$/);
+    expect(artifacts).toHaveAttribute("title", expect.stringContaining(`web: sha256:${"e".repeat(64)}`));
   });
 
   it("marks the rollback, and its health as recorded — unknown when none was, never healthy", async () => {
@@ -134,6 +143,18 @@ describe("EnvPromotions", () => {
     expect(rows[0]).toHaveTextContent("staging-bot");
     expect(screen.getByTestId("env-promotions")).not.toHaveTextContent("prod-bot");
     expect(within(rows[0]!).getByRole("link")).toHaveAttribute("href", `/releases/${OLD}?env=staging`);
+  });
+
+  it("labels a scoped deploy that rolls one target back and redeploys another as mixed, naming each", async () => {
+    renderCard(async () => [promo(OLD, { targets: ["api", "web"] }), promo(OLD, { targets: ["web"] }), promo(NEW, { targets: ["api"] }), promo(OLD)]);
+    const [row] = await screen.findAllByTestId("env-promotion-row");
+    await waitFor(() => expect(row).toHaveAttribute("data-rollback"));
+    expect(within(row!).getByText("rollback: api")).toBeInTheDocument();
+    expect(within(row!).getByText("redeploy: web")).toBeInTheDocument();
+    expect(within(row!).queryByText("redeploy")).toBeNull();
+    expect(within(row!).queryByText("rollback")).toBeNull();
+    expect(within(row!).getByTestId("env-promotion-context")).toHaveTextContent("rolled back from");
+    expect(within(row!).getByTestId("env-promotion-context")).toHaveTextContent(": api · the same release again: web");
   });
 
   it("shows a loading state, then an empty one", async () => {
