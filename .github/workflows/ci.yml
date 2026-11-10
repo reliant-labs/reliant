@@ -454,6 +454,25 @@ jobs:
       - name: task deps:go-protoc-plugins
         run: task deps:go-protoc-plugins
       # After every build above, right before the save (the header says why).
+      #
+      # CHECKING IT AFTER THE MERGE. (1) The first push to main: this step's
+      # "Go build cache: <before> -> <after>" line; expect <after> near 3.5 GB
+      # (one commit's compiles, uncompressed). (2) Its `Save Go build cache`
+      # "Cache Size": ~0.7-0.8 GB, against 3.3-3.8 GB before. (3) The next
+      # merge-queue runs (merge-queue.yml, `CI result`): the go-build-trimpath
+      # restore's "Cache Size" matches (2), the setup step falls from ~170s to
+      # ~70s, and the gate's `build` phase in the merge-gate summary takes no
+      # longer than it did on comparable groups before (a longer one means the
+      # gate is compiling what the old cache held).
+      #
+      # ROLLING IT BACK, when (1) shows <after> under ~2 GB (the trim dropped
+      # compiles this commit used), or (3) shows the `build` phase or
+      # `task ci:merge` slower on comparable groups: revert the commit that
+      # added this step and the "Note when ..." step above. The next push to
+      # main then saves the untrimmed union again. If a bad trimmed entry is
+      # what the jobs keep restoring, also delete it so that push starts cold
+      # and saves a whole one: `gh cache list -R reliant-labs/reliant --key
+      # go-build-trimpath-` and `gh cache delete <key>` for each listed key.
       - name: Trim the Go build cache to this commit's compiles
         run: |
           set -euo pipefail
