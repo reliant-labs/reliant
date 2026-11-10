@@ -109,23 +109,33 @@ func TestNamed(t *testing.T) {
 }
 
 // A machine credential acts in exactly one org: its own, named or not, and
-// naming another is refused without asking control-plane.
+// only while its acting user is a live member of it; naming another is
+// refused without asking control-plane.
 func TestNamedMachineCredentialActsInItsOrg(t *testing.T) {
 	src := newFake()
 	r, _ := newResolver(src)
 	ctx := auth.WithMachineToken(context.Background(), &fat.Principal{OrgID: "acme", ActingUserID: "alice"})
+	_, err := r.Named(ctx, "alice", "home")
+	if svcerr.Code(err) != connect.CodePermissionDenied || reasonOf(err) != ReasonOrgMismatch {
+		t.Fatalf("another org: %v, want PermissionDenied %s", err, ReasonOrgMismatch)
+	}
+	if src.calls != 0 {
+		t.Fatalf("asked control-plane %d times about another org; the credential already says", src.calls)
+	}
 	if got, err := r.Named(ctx, "alice", ""); got != "acme" || err != nil {
 		t.Fatalf("unnamed: %q, %v; want the credential's org", got, err)
 	}
 	if got, err := r.Named(ctx, "alice", "acme"); got != "acme" || err != nil {
 		t.Fatalf("own org: %q, %v", got, err)
 	}
-	_, err := r.Named(ctx, "alice", "home")
-	if svcerr.Code(err) != connect.CodePermissionDenied || reasonOf(err) != ReasonOrgMismatch {
-		t.Fatalf("another org: %v, want PermissionDenied %s", err, ReasonOrgMismatch)
-	}
-	if src.calls != 0 {
-		t.Fatalf("asked control-plane %d times; the credential already says", src.calls)
+
+	// The acting user has left the credential's org: the credential acts
+	// nowhere.
+	left := newFake()
+	delete(left.members["alice"], "acme")
+	r, _ = newResolver(left)
+	if _, err := r.Named(ctx, "alice", ""); svcerr.Code(err) != connect.CodePermissionDenied || reasonOf(err) != ReasonNotOrgMember {
+		t.Fatalf("a credential whose user left its org: %v, want PermissionDenied %s", err, ReasonNotOrgMember)
 	}
 }
 
@@ -276,6 +286,18 @@ func TestListScopeMachineCredentialIsItsOrg(t *testing.T) {
 	}
 	if _, err := r.ListScope(ctx, "alice", "acme", nil); svcerr.Code(err) != connect.CodePermissionDenied || reasonOf(err) != ReasonOrgMismatch {
 		t.Fatalf("another org: %v, want PermissionDenied %s", err, ReasonOrgMismatch)
+	}
+
+	// The acting user has left the credential's org: it lists nothing of it,
+	// named or not.
+	left := newFake()
+	delete(left.members["alice"], "acme")
+	r, _ = newResolver(left)
+	ctx = auth.WithMachineToken(context.Background(), &fat.Principal{OrgID: "acme", ActingUserID: "alice"})
+	for _, named := range []string{"", "acme"} {
+		if _, err := r.ListScope(ctx, "alice", named, nil); svcerr.Code(err) != connect.CodePermissionDenied || reasonOf(err) != ReasonNotOrgMember {
+			t.Fatalf("a credential whose user left its org, org_id %q: %v, want PermissionDenied %s", named, err, ReasonNotOrgMember)
+		}
 	}
 }
 

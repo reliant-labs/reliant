@@ -182,12 +182,21 @@ func (r *Resolver) Named(ctx context.Context, userID, requested string) (string,
 			return "", svcerr.WithReason(svcerr.PermissionDenied(
 				"this credential acts in organization "+p.OrgID+" only; it cannot act in "+requested), ReasonOrgMismatch)
 		}
-		return p.OrgID, nil
+		// The credential's org, while its acting user is still a member of
+		// it: a token outlives a removal no longer than a session does.
+		return r.liveMember(ctx, userID, p.OrgID)
 	}
 	if requested == "" {
 		return "", nil
 	}
-	member, ok, err := r.IsMember(ctx, userID, requested)
+	return r.liveMember(ctx, userID, requested)
+}
+
+// liveMember is orgID when userID is a live member of it, "" when the
+// deployment has no answer, and PermissionDenied (ReasonNotOrgMember)
+// otherwise; an outage is Unavailable.
+func (r *Resolver) liveMember(ctx context.Context, userID, orgID string) (string, error) {
+	member, ok, err := r.IsMember(ctx, userID, orgID)
 	if err != nil {
 		return "", svcerr.WithCause(svcerr.Unavailable("could not verify the organization; try again"), err)
 	}
@@ -196,9 +205,9 @@ func (r *Resolver) Named(ctx context.Context, userID, requested string) (string,
 		return "", nil
 	}
 	if !member {
-		return "", NotMember(requested)
+		return "", NotMember(orgID)
 	}
-	return requested, nil
+	return orgID, nil
 }
 
 // NotMember is the refusal of a request naming an org its caller is not a
@@ -256,20 +265,13 @@ func (r *Resolver) ListScope(ctx context.Context, userID, requested string, stam
 			return nil, svcerr.WithReason(svcerr.PermissionDenied(
 				"this credential acts in organization "+p.OrgID+" only; it cannot list "+requested), ReasonOrgMismatch)
 		}
-	} else {
-		if requested == "" {
-			return nil, nil
-		}
-		member, ok, err := r.IsMember(ctx, userID, requested)
-		if err != nil {
-			return nil, svcerr.WithCause(svcerr.Unavailable("could not verify the organization; try again"), err)
-		}
-		if !ok {
-			return nil, nil
-		}
-		if !member {
-			return nil, NotMember(requested)
-		}
+	} else if requested == "" {
+		return nil, nil
+	}
+	// A named org, or a credential's, lists only while the caller (the
+	// credential's acting user) is still a live member of it.
+	if named, err := r.liveMember(ctx, userID, requested); err != nil || named == "" {
+		return nil, err
 	}
 	def, err := r.DefaultOrg(ctx, userID)
 	if err != nil {
