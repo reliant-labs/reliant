@@ -251,6 +251,15 @@ func ListUnlaunchedTriggerEvents(ctx context.Context, db orm.Context, filters co
 	if len(filters.Workflows) > 0 {
 		q = q.Where("t.workflow = ANY(?)", pgdialect.Array(filters.Workflows))
 	}
+	// An event's org is its trigger's: the org-scoped run log lists only
+	// that org's events (with the caller's unassigned ones in their default).
+	if filters.Org != nil {
+		if filters.Org.IncludeUnassigned {
+			q = q.Where("(t.org_id = ? OR t.org_id IS NULL)", filters.Org.OrgID)
+		} else {
+			q = q.Where("t.org_id = ?", filters.Org.OrgID)
+		}
+	}
 	if filters.TriggerID != nil {
 		q = q.Where("te.trigger_id = ?", *filters.TriggerID)
 	}
