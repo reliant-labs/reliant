@@ -8,7 +8,8 @@
  * token; an invitation that can never be used says why and is forgotten.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { screen, waitFor } from "@testing-library/react";
+import { render as rtlRender, screen, waitFor } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import userEvent from "@testing-library/user-event";
 import { Code, ConnectError } from "@connectrpc/connect";
 import { timestampFromDate } from "@bufbuild/protobuf/wkt";
@@ -131,6 +132,47 @@ describe("AcceptInvitePage", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "Open Acme" }));
     expect(navigate).toHaveBeenCalledWith({ to: "/" });
+  });
+
+  it("a second invitation in the same app never shows the first one's preview", async () => {
+    const tokenOf = (input: unknown) => (input as { token?: string }).token;
+    const TOKEN_B = "rinv_BbBbQeAbCdEfGhIjKlMnOpQrStUvWxYz0123456789-_";
+    signIn({ id: "u_bob", email: "bob@example.com" });
+    const accept = vi.fn((input: unknown) => ({
+      organization: tokenOf(input) === TOKEN_B ? { id: "org-beta", name: "Beta", slug: "beta", role: "member" } : { id: "org-acme", name: "Acme", slug: "acme", role: "admin" },
+      userId: "u_bob",
+    }));
+    const preview = vi.fn((input: unknown) => (tokenOf(input) === TOKEN_B ? { ...PREVIEW, orgName: "Beta", role: "member" } : PREVIEW));
+    setTransport(
+      mockTransport({
+        "OrganizationService.GetInvitation": preview,
+        "OrganizationService.AcceptInvitation": accept,
+        "OrganizationService.ListMyOrganizations": { response: { organizations: [], defaultOrgId: "" } },
+      }),
+    );
+    // One client for both visits, keeping its cache the way the app's does.
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const page = () => (
+      <QueryClientProvider client={client}>
+        <AcceptInvitePage />
+      </QueryClientProvider>
+    );
+
+    withLink();
+    const first = rtlRender(page());
+    expect(await screen.findByTestId("accept-invite-org")).toHaveTextContent("Acme");
+    first.unmount();
+
+    // Another tab stores invitation B; this tab comes back to /accept-invite.
+    window.history.replaceState(null, "", `/accept-invite#${TOKEN_B}`);
+    captureInviteLinkFromUrl();
+    rtlRender(page());
+    expect(await screen.findByTestId("accept-invite-org")).toHaveTextContent("Beta");
+    expect(preview).toHaveBeenLastCalledWith(expect.objectContaining({ token: TOKEN_B }));
+
+    await userEvent.click(screen.getByTestId("accept-invite-submit"));
+    await waitFor(() => expect(accept).toHaveBeenCalledWith(expect.objectContaining({ token: TOKEN_B })));
+    expect(await screen.findByTestId("accept-invite-joined")).toHaveTextContent("You're in Beta");
   });
 
   it("a different account is told so before there is anything to press", async () => {

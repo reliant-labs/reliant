@@ -115,6 +115,25 @@ export function captureInviteLinkFromUrl(): string | null {
   return changed ? token : null;
 }
 
+/**
+ * A non-secret identity for one invitation: a cache key, never the token.
+ *
+ * The accept page keys its preview query by it, so a preview fetched for one
+ * invitation can never be shown while another invitation's token is the one
+ * accepted. FNV-1a, 53 bits: a lookup key that cannot be turned back into
+ * the 256-bit token, and distinct for any invitations one browser will hold.
+ */
+export function inviteCacheId(token: string): string {
+  let h1 = 0x811c9dc5;
+  let h2 = 0x01000193;
+  for (let i = 0; i < token.length; i++) {
+    const c = token.charCodeAt(i);
+    h1 = Math.imul(h1 ^ c, 0x01000193) >>> 0;
+    h2 = Math.imul(h2 ^ c, 0x5bd1e995) >>> 0;
+  }
+  return (h2 & 0x1fffff).toString(16).padStart(6, "0") + h1.toString(16).padStart(8, "0");
+}
+
 /** Test seam: forget the in-memory fallback. */
 export function resetInviteLinkMemoryForTests(): void {
   memory = null;

@@ -27,7 +27,7 @@ import { Code, ConnectError } from "@connectrpc/connect";
 
 import { hasErrorReason } from "@/lib/errorReasons";
 import { hardNavigate } from "@/lib/hardNavigate";
-import { ACCEPT_INVITE_PATH, clearPendingInvite, readPendingInvite } from "@/lib/inviteLink";
+import { ACCEPT_INVITE_PATH, clearPendingInvite, inviteCacheId, readPendingInvite } from "@/lib/inviteLink";
 import { logger } from "@/lib/logger";
 import {
   acceptInvitation,
@@ -91,12 +91,16 @@ export function useAcceptInvite(): AcceptInviteFlow {
   const signOut = useAuthStore((s) => s.signOut);
   const signedIn = !!user && user.is_anonymous !== true;
 
+  // Keyed by the invitation as well as the person: the preview shown is
+  // always the preview of the token accept() sends. gcTime 0 drops it when
+  // the page unmounts, so returning here re-reads whatever is pending then.
   const preview = useQuery({
-    queryKey: ["orgs-invite", "preview", user?.id ?? ""],
+    queryKey: ["orgs-invite", "preview", user?.id ?? "", token ? inviteCacheId(token) : ""],
     queryFn: () => getInvitation(token as string),
     enabled: !!token && initialized && signedIn,
     retry: false,
     staleTime: Infinity,
+    gcTime: 0,
     refetchOnWindowFocus: false,
   });
 

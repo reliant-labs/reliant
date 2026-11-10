@@ -82,3 +82,13 @@ describe("inviteLink", () => {
     expect(link.readPendingInvite()).toBeNull();
   });
 });
+
+describe("inviteCacheId", () => {
+  it("is stable, distinct per invitation, and holds no part of the token", async () => {
+    const { inviteCacheId } = await import("../inviteLink");
+    expect(inviteCacheId(TOKEN)).toBe(inviteCacheId(TOKEN));
+    expect(inviteCacheId(TOKEN)).not.toBe(inviteCacheId(OTHER));
+    expect(inviteCacheId(TOKEN)).toMatch(/^[0-9a-f]{14}$/);
+    expect(TOKEN).not.toContain(inviteCacheId(TOKEN));
+  });
+});
