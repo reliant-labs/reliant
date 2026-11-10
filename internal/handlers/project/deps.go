@@ -5,14 +5,26 @@ package project
 
 import (
 	"context"
+	"time"
 
 	"github.com/reliant-labs/reliant/internal/controlplane"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/orgs"
 )
+
+// OrgResolver answers the org questions of project rpcs. *orgs.Resolver is
+// one.
+type OrgResolver interface {
+	ActingOrg(ctx context.Context, userID, requested string) (string, error)
+	ListScope(ctx context.Context, userID, requested string, stamp orgs.Backfill) (*core.OrgScope, error)
+}
 
 // Repository is the slice of *db.Repo the project handlers use.
 type Repository interface {
+	// AssignUnassignedOrg stamps the caller's projects and chats that have
+	// no org with their default org (the lazy backfill, orgs.ListScope).
+	AssignUnassignedOrg(ctx context.Context, userID, orgID string) error
 	CreateProject(ctx context.Context, project *db.Project) error
 	GetProject(ctx context.Context, id string) (*db.Project, error)
 	GetProjectByPathAndUser(ctx context.Context, path, userID string) (*db.Project, error)
@@ -45,6 +57,11 @@ type Repository interface {
 	CreateWorktree(ctx context.Context, worktree *db.Worktree) error
 	ListWorktrees(ctx context.Context, filters db.WorktreeFilters) ([]*db.Worktree, error)
 	UpdateWorktree(ctx context.Context, worktree *db.Worktree) error
+	// ListFailedWorktreesForDaemon and MergeWorktreeCleanupMetadata complete
+	// workspacecreate.FailedCreateStore: a connecting machine is asked to
+	// remove what its failed creates left behind.
+	ListFailedWorktreesForDaemon(ctx context.Context, daemonID string, since time.Time, limit int) ([]*db.Worktree, error)
+	MergeWorktreeCleanupMetadata(ctx context.Context, id string, fn func(m *db.CleanupMetadata, archived bool) bool) error
 
 	UpsertProjectConfigRecord(ctx context.Context, record *db.ProjectConfigRecord) error
 

@@ -87,6 +87,11 @@ type ToolContext struct {
 	// never from tool input, so a model cannot claim it.
 	RunStep bool
 
+	// RunWorkDir is a run step's working directory: the run node's work_dir
+	// (resolved against its checkout), else the checkout. Set only with
+	// RunStep, from the request's server-built context, never tool input.
+	RunWorkDir string
+
 	// BoundParams names the tool's parameters that the run's configuration
 	// (the workflow's tool_params, a preset, a global setting) bound for this
 	// call. Their values are in the tool input, merged there by

@@ -89,6 +89,7 @@ function useObservabilityHrefs(): DashboardHrefs {
   const { href, env } = useForgeConsole();
   return useMemo(
     () => ({
+      data: (search) => href({ kind: "data" }, { ...search }),
       logs: (search: ObsSearch = {}) => href({ kind: "obs-view", view: "logs" }, { ...search }),
       traces: (search: ObsSearch = {}) => href({ kind: "obs-view", view: "traces" }, { ...search }),
       profiles: (search: ObsSearch = {}) => href({ kind: "obs-view", view: "profiles" }, { ...search }),

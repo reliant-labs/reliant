@@ -10,6 +10,7 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 
+	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/integrations/httpaction"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -171,7 +172,7 @@ func (p *TriggerPoller) Poll(ctx context.Context, in PollInput) (*PollOutput, er
 	// poll through anything else would read an account the owner does not
 	// hold.
 	conn, err := p.repo.GetConnection(ctx, trigger.UserID, *trigger.ConnectionID)
-	if err != nil || conn == nil || conn.UserID != trigger.UserID || conn.IntegrationID != cfg.Integration {
+	if err != nil || conn == nil || !authz.CanAccessPersonal(trigger.UserID, conn.UserID) || conn.IntegrationID != cfg.Integration {
 		return &PollOutput{Skipped: true, Reason: "the trigger's connection is unavailable"}, nil
 	}
 

@@ -439,6 +439,30 @@ models:
       temperature_mode: omit
       thinking_mode: adaptive
 
+  # Claude 5.2 Fable is served on the Claude subscription driver only, from the
+  # .dev/claude/fable-5.2.{curl,json} capture (max_tokens 128000). It carries no
+  # tags: `powerful` stays on fable-5.1 until moving it is an explicit decision.
+  # It is served at the 1M window: the driver sends the context-1m beta.
+  - id: claude-5.2-fable
+    name: Claude 5.2 Fable
+    visibility: user
+    capabilities:
+      can_reason: true
+      supports_tools: true
+      supports_attachments: true
+      supports_streaming: true
+      supports_caching: true
+      max_context_window: 1000000
+      max_output_tokens: 128000
+      thinking_levels: [low, medium, high, xhigh]
+      supported_file_types: [image, pdf, text]
+    providers:
+      - driver: claude
+        api_model: claude-fable-5-2
+    driver_settings:
+      temperature_mode: omit
+      thinking_mode: adaptive
+
   - id: claude-4.8-opus
     name: Claude 4.8 Opus
     visibility: user

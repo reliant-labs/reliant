@@ -82,6 +82,8 @@ const UpgradeAccount = lazyRoute(
   () => import('./components/UpgradeAccount'), 'UpgradeAccount')
 const ClaimPage = lazyRoute(
   () => import('./components/Claim/ClaimPage'), 'ClaimPage')
+const AcceptInvitePage = lazyRoute(
+  () => import('./components/Orgs/AcceptInvitePage'), 'AcceptInvitePage')
 const DesignSandboxPage = lazyRoute(
   () => import('./components/DesignSandbox/DesignSandboxPage'), 'DesignSandboxPage')
 // Proving harness for the forge → reliant token bridge (see index.css).
@@ -117,6 +119,8 @@ const DataPreview = lazyRoute(
   () => import('./components/Forge/Data/__preview__/DataPreview'), 'default')
 const WorkloadsPreview = lazyRoute(
   () => import('./components/Forge/Workloads/__preview__/WorkloadsPreview'), 'default')
+const StoragePreview = lazyRoute(
+  () => import('./components/Forge/Storage/__preview__/StoragePreview'), 'default')
 const SettingsPage = lazyRoute(
   () => import('./components/Settings/SettingsPage'), 'SettingsPage')
 const ConnectorConsentPage = lazyRoute(
@@ -197,6 +201,8 @@ const ForgeConsoleDashboardsPage = lazyRoute(
   () => import('./components/Forge/Observability/Dashboards/DashboardsPages'), 'DashboardsPage')
 const ForgeConsoleDashboardPage = lazyRoute(
   () => import('./components/Forge/Observability/Dashboards/DashboardsPages'), 'DashboardPage')
+const ForgeConsoleStoragePage = lazyRoute(
+  () => import('./components/Forge/Storage/StoragePage'), 'StoragePage')
 const ForgeConsoleDataPage = lazyRoute(
   () => import('./components/Forge/Data/DataPage'), 'DataPage')
 const ForgeConsoleSecretsPage = lazyRoute(
@@ -485,6 +491,16 @@ const claimRoute = createRoute({
   component: ClaimPage,
 })
 
+// Accept an org invitation (`/accept-invite#rinv_<token>`, from an invitation
+// email or a link an admin copied). Root-level and unguarded like /claim: a
+// signed-out invitee is sent through sign-in from the page, which returns
+// here. lib/inviteLinkBoot moves the token out of the fragment first.
+const acceptInviteRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/accept-invite',
+  component: AcceptInvitePage,
+})
+
 // Pathless layout route that owns the App shell + its shared search schema.
 // Children `/` and `/project/$projectId` both render <App />; placing the
 // validateSearch + AuthGuard on the parent means components inside App can
@@ -625,6 +641,15 @@ const forgeWorkloadsPreviewRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/forge-workloads-preview',
   component: () => <DevOnlyRoute><WorkloadsPreview /></DevOnlyRoute>,
+})
+
+// The storage browser (buckets, a level, an object's preview and download),
+// inside the real console chrome, against the fixture buckets — every state
+// in every scheme, no backend.
+const forgeStoragePreviewRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/forge-storage-preview',
+  component: () => <DevOnlyRoute><StoragePreview /></DevOnlyRoute>,
 })
 
 // The data browser (databases, tables, a grid, a row and its Related), inside
@@ -770,6 +795,7 @@ const forgeConsoleRoutes = createForgeConsoleRoutes(() => authenticatedLayoutRou
   observabilityView: gated(ForgeConsoleObservabilityViewPage),
   dashboards: gated(ForgeConsoleDashboardsPage),
   dashboard: gated(ForgeConsoleDashboardPage),
+  storage: gated(ForgeConsoleStoragePage),
   data: gated(ForgeConsoleDataPage),
   environments: gated(ForgeEnvironmentsPage),
   environment: gated(ForgeEnvPage),
@@ -990,6 +1016,7 @@ const routeTree = rootRoute.addChildren([
   verifyEmailRoute,
   upgradeRoute,
   claimRoute,
+  acceptInviteRoute,
   designSandboxRoute,
   forgeTokenSandboxRoute,
   setupSurfacesPreviewRoute,
@@ -1000,6 +1027,7 @@ const routeTree = rootRoute.addChildren([
   consolePrimitivesPreviewRoute,
   forgeReleasesPreviewRoute,
   forgeWorkloadsPreviewRoute,
+  forgeStoragePreviewRoute,
   forgeDataPreviewRoute,
   forgeDashboardsPreviewRoute,
   forgeMetricsPreviewRoute,

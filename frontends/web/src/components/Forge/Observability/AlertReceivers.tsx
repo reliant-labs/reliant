@@ -239,7 +239,7 @@ export function AlertReceivers({ orgId, environments, readOnly, onDenied }: Aler
         <div className="space-y-2 rounded-lg border border-warning-border bg-surface-sunken px-4 py-3" role="status" data-testid="obs-receivers-missing">
           <p className="flex items-center gap-1.5 text-sm font-medium text-ink">
             <AlertTriangle className="h-4 w-4 text-warning-ink" aria-hidden="true" />
-            {missing.length === 1 ? "A route names a receiver" : `${missing.length} routes name receivers`} that isn&apos;t set up
+            {missing.length === 1 ? "A route names a receiver that isn't set up" : `${missing.length} routes name receivers that aren't set up`}
           </p>
           <ul className="space-y-1.5">
             {missing.map(([name, envs]) => (

@@ -22,16 +22,25 @@ import (
 // for resultRetainTTL after its acknowledgement, and tool.status resends it
 // for a "delivered" request, saying so (ToolStatusResponse.Resent). Only run
 // steps: they are the calls a retry reattaches to (handlers.ExecuteRunStep),
-// and a model's tool calls are far more numerous. Memory only: a daemon that
-// restarts loses them, and the retry then refuses as it always did.
+// and a model's tool calls are far more numerous.
+//
+// A retained result is kept on disk as well, when the outbox has a store: the
+// acknowledged result file is renamed to <request id>.retained rather than
+// removed, and a restarted daemon loads it back as delivered-and-retained. So
+// a command that finished, was delivered to a worker that was going away, and
+// whose daemon then restarted (a release that restarts both, the rc-train's
+// prod deploy) still hands its retry the real result instead of a refusal.
 
-// The retained-result bounds. The window covers a retry that comes up after
-// the previous worker's heartbeat timeout (60s) and the step's retry backoff
-// (at most a minute), with room for a machine that is reconnecting meanwhile;
-// a retry later than that refuses. The budget is a handful of run steps at
+// The retained-result bounds. The window is the outbox's own hold window
+// (resultHoldTTL): a retry can come up long after the attempt that sent the
+// command when the whole worker fleet is replaced, or crash-loops, while the
+// command finishes — the rc-train's prod deploy restarts the very workers
+// running it — and a result kept that long for an unacknowledged call is kept
+// as long for an acknowledged one nobody got. A retry later than that
+// refuses. The budget is a handful of run steps at
 // tools.MaxRunStepOutputSize.
 const (
-	resultRetainTTL    = 10 * time.Minute
+	resultRetainTTL    = resultHoldTTL
 	resultRetainBudget = 16 << 20
 )
 
@@ -70,6 +79,7 @@ func (o *resultOutbox) expireRetainedLocked(now time.Time) {
 		if now.Sub(h.heldAt) > resultRetainTTL {
 			delete(o.retained, id)
 			o.retainedBytes -= h.size
+			o.store.removeRetained(id)
 		}
 	}
 	for o.retainedBytes > resultRetainBudget && len(o.retained) > 0 {
@@ -81,14 +91,38 @@ func (o *resultOutbox) expireRetainedLocked(now time.Time) {
 		}
 		delete(o.retained, oldest.requestID)
 		o.retainedBytes -= oldest.size
+		o.store.removeRetained(oldest.requestID)
 	}
+}
+
+// restoreRetainedLocked puts back the retained results a previous process
+// left on disk: each is delivered, and retained for the rest of its window
+// from its acknowledgement. Must hold o.mu.
+func (o *resultOutbox) restoreRetainedLocked(retained []*heldResult, now time.Time) {
+	for _, h := range retained {
+		if _, held := o.held[h.requestID]; held {
+			// Held again (its rename was lost): the held result answers.
+			o.store.removeRetained(h.requestID)
+			continue
+		}
+		if o.retained == nil {
+			o.retained = make(map[string]*heldResult)
+		}
+		if o.delivered == nil {
+			o.delivered = make(map[string]time.Time)
+		}
+		o.retained[h.requestID] = h
+		o.retainedBytes += h.size
+		o.delivered[h.requestID] = h.heldAt
+	}
+	o.expireRetainedLocked(now)
 }
 
 // retainedResult returns requestID's retained result, if it still has one.
 func (o *resultOutbox) retainedResult(requestID string) *heldResult {
 	o.mu.Lock()
 	defer o.mu.Unlock()
-	o.expireLocked(time.Now())
+	o.expireLocked(o.now())
 	return o.retained[requestID]
 }
 

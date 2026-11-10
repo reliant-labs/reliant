@@ -9,13 +9,13 @@
  * links there.
  */
 
-import Link from "@/components/forge-ui/link";
 import Mono from "@/components/forge-ui/mono";
 import Tag from "@/components/forge-ui/tag";
 import Status from "@/components/forge-ui/status";
 import { usePromotionBundle, usePromotionRollout, useWorkloadReleaseComparison } from "@/hooks/release-queries";
 
-import { Ago, ChecksMark, INK_LINK, Panel } from "../Releases/releaseParts";
+import { PromotionItem } from "../Releases/PromotionItem";
+import { Panel } from "../Releases/releaseParts";
 import { shortVersion } from "../Releases/releaseModel";
 import { workloadChange, workloadDigestOf, type WorkloadChange, type WorkloadReleaseRow } from "./workloadModel";
 
@@ -87,27 +87,25 @@ function ReleaseRow({
   const digest = pinned || observed?.pinnedDigest || workloadDigestOf(row, change, workload);
   const verdict = observed?.verdict ?? "unknown";
   return (
-    <li className="space-y-1 py-2.5 text-xs first:pt-0 last:pb-0" data-testid="workload-release-row" data-version={row.version} {...(row.rollback ? { "data-rollback": "" } : {})}>
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-        <Link href={releaseHref(row.version)} className={`${INK_LINK} text-sm`} title={row.version}>
-          {shortVersion(row.version)}
-        </Link>
-        {row.rollback && <Tag tone="warning">rollback</Tag>}
-        {row.scoped && <Tag>scoped</Tag>}
-        <span className="text-ink-muted">
-          {row.by ? `${row.by} · ` : ""}
-          <Ago at={row.at} />
-        </span>
-        <span className="inline-flex items-center gap-1 text-ink-muted">
-          checks <ChecksMark checks={row.checks} />
-        </span>
-        <Status tone={verdict === "converged" ? "success" : verdict === "degraded" || verdict === "diverged" ? "danger" : "neutral"} label={`health: ${verdict}`} />
-        <span className="inline-flex items-center gap-1 text-ink-muted">
-          image {digest ? <Mono value={digest} /> : "not recorded"}
-        </span>
-      </div>
+    <PromotionItem
+      testId="workload-release-row"
+      version={row.version}
+      href={releaseHref(row.version)}
+      rollback={row.rollback}
+      marks={
+        <>
+          {row.rollback && <Tag tone="warning">rollback</Tag>}
+          {row.scoped && <Tag>scoped</Tag>}
+        </>
+      }
+      by={row.by}
+      at={row.at}
+      checks={row.checks}
+      health={<Status tone={verdict === "converged" ? "success" : verdict === "degraded" || verdict === "diverged" ? "danger" : "neutral"} label={`health: ${verdict}`} />}
+      digest={<>image {digest ? <Mono value={digest} /> : "not recorded"}</>}
+    >
       <ChangeLine change={change} loading={comparison.isLoading} failed={!!comparison.error} previous={row.previousVersion} version={row.version} workload={workload} />
-    </li>
+    </PromotionItem>
   );
 }
 

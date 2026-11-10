@@ -359,6 +359,13 @@ func workspaceNoticeText(n *toolexec.WorkspaceNotice, mainPath string) string {
 	var b strings.Builder
 	switch n.Kind {
 	case toolexec.NoticeRepaired:
+		if n.RestoredWork != "" {
+			// The machine sweep reclaimed it while idle and kept a capture.
+			fmt.Fprintf(&b, "[Workspace recreated] %s %s was reclaimed from disk while idle and has been recreated from branch `%s`%s; %s. "+
+				"Build outputs and ignored files (node_modules, caches) are gone and must be rebuilt: check `git status` before relying on earlier results.",
+				subject, n.WorkspacePath, n.Branch, checkoutList(n.Checkouts), strings.TrimSpace(n.RestoredWork))
+			break
+		}
 		fmt.Fprintf(&b, "[Workspace recreated] %s %s had disappeared from disk, so it was recreated from branch `%s`%s. "+
 			"Committed work on the branch is intact. Uncommitted changes, untracked files (.env and the like) and build outputs "+
 			"that were in the old directory are gone: check `git status` and `git log` before relying on earlier results.",

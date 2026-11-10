@@ -1,5 +1,5 @@
 /**
- * The "Explore a forge app" journey (journeys-spec.md §3).
+ * The "Explore a Forge app" journey (journeys-spec.md §3).
  *
  * A short, optional walk through the forge demo console (`/forge/demo`,
  * components/Forge/Demo): a made-up app called shop, on sample observability
@@ -12,7 +12,9 @@
  * Drawn with the engine's callout controls (Step X of Y, Back, Next, Exit; no
  * bottom bar, no Skip step). Most required actions move the tour on as soon
  * as they're done (`autoAdvance`), so an action step's explanation sits
- * BEFORE the action, or on the step after it.
+ * BEFORE the action, or on the step after it. Next stays enabled throughout
+ * (`showNext`): it moves to the next stop, whose route opens what the action
+ * would have, so a visitor who cannot find the target is never stuck.
  *
  * Cuts (isAvailable; lib/demoTour.ts, runtime config DEMO_TOUR):
  *  - the public demo host, `short` (default), 10 steps: intro, instrumented,
@@ -34,12 +36,12 @@
 import { lazy, Suspense } from "react";
 
 import { FORGE_DEMO_PATH } from "../../Forge/Demo/demoPath";
-import { FORGE_ONE_LINER, FORGE_REPO_URL, FORGE_WHAT_IT_DOES } from "../../Forge/Demo/demoCopy";
+import { FORGE_ONE_LINER } from "../../Forge/Demo/demoCopy";
 import { trackEvent } from "../../../lib/analytics";
 import { isForgeUIEnabled } from "../../../lib/forgeFeature";
 import { isDemoShell } from "../../../lib/shell";
 import { notOnShortDemo, onDemo, onDemoFull } from "../../../lib/demoTour";
-import { DemoCta, InstallForgeLink } from "../../Forge/Demo/DemoCta";
+import { DemoCta } from "../../Forge/Demo/DemoCta";
 import type { Journey, JourneyRoute, RouteTarget } from "../types";
 import { TourCommands } from "./TourCommand";
 
@@ -65,7 +67,7 @@ const QUICK_START_URL = "https://docs.reliantlabs.io/forge/quick-start";
  */
 function demo(search: Record<string, unknown>): JourneyRoute {
   const open: RouteTarget = { to: FORGE_DEMO_PATH, search: { section: undefined, ...search } };
-  return { path: FORGE_DEMO_PATH, open, label: "Open the demo console", message: "This step is on the forge demo console." };
+  return { path: FORGE_DEMO_PATH, open, label: "Open the demo console", message: "This step is on the Forge demo console." };
 }
 
 // The panel's keys a step clears, so arriving at it (Back included) starts from its list, not an open item.
@@ -84,29 +86,37 @@ function AgentLine({ children }: { children: React.ReactNode }) {
   return <p className="mt-2 text-xs text-muted-foreground">{children}</p>;
 }
 
+/** Two sentences: what Forge is, and what the tour shows. */
 function WhatIsForge() {
   return (
-    <>
-      <p>{FORGE_ONE_LINER}</p>
-      <p className="mt-2">{FORGE_WHAT_IT_DOES}</p>
-      <p className="mt-2">
-        This is the console forge gives every app, for a sample app called shop. A few steps follow one failing request through it.
-      </p>
-      <p className="mt-3 flex flex-wrap gap-x-4 gap-y-1">
-        <InstallForgeLink placement="tour_intro" />
-        <ExternalLink href={FORGE_REPO_URL}>It&apos;s open source</ExternalLink>
-      </p>
-    </>
+    <p>
+      {FORGE_ONE_LINER} This is the console it gives every app, here for a sample shop: the next stops follow one failing request
+      through it.
+    </p>
   );
 }
 
 const ONCALL_LEAD =
-  "Configure notifications by text, email or Slack where supported. An alert can trigger a configured Reliant workflow to investigate, test a fix and propose or release it under your chosen approvals.";
+  "Alerts reach you by text, email or Slack. An alert can also trigger a configured Reliant workflow to investigate, test a fix and propose or release it under your chosen approvals.";
 
 const tryCommands = (cli: string) => [`${cli} obs status prod`, `${cli} obs issues prod`, `${cli} obs traces prod --errors`];
 const scaffoldCommands = (cli: string) => [`${cli} scaffold service inventory`, `${cli} scaffold worker fulfilment`, `${cli} lint --tracing`];
 
 function TryOnYourApp({ cli }: { cli: string }) {
+  // The public demo hands off here: one call to action, not a command list for someone who has not installed it.
+  if (isDemoShell()) {
+    return (
+      <>
+        <p>
+          That&apos;s the tour. Sign up to get this console for your own app, or install Forge and run <code>forge start</code>. The rest of
+          the console is yours to explore.
+        </p>
+        <div className="mt-3">
+          <DemoCta placement="end_card" />
+        </div>
+      </>
+    );
+  }
   return (
     <>
       <p>The tour uses sample data to show the monitoring Forge sets up for an app. In your own project:</p>
@@ -118,15 +128,8 @@ function TryOnYourApp({ cli }: { cli: string }) {
       </p>
       <TourCommands commands={tryCommands(cli)} />
       <p className="mt-3">
-        New to forge? <ExternalLink href={QUICK_START_URL}>Quick start</ExternalLink>. The rest of the console is yours to explore: each
-        view has a short tip the first time you open it.
+        New to Forge? <ExternalLink href={QUICK_START_URL}>Quick start</ExternalLink>. The rest of the console is yours to explore.
       </p>
-      {/* The public demo's way out: install it, or make an account. */}
-      {isDemoShell() && (
-        <div className="mt-3">
-          <DemoCta placement="end_card" />
-        </div>
-      )}
     </>
   );
 }
@@ -143,10 +146,10 @@ function WhatYourAgentReads({ cli }: { cli: string }) {
         on. <code>obs trace</code> collapses repeated spans, marks the slowest path, and points out time no span accounts for.
       </p>
       <TourCommands commands={agentCommands(cli)} />
-      <p className="mt-3">Give it forge&apos;s playbook and tools once:</p>
+      <p className="mt-3">Give it Forge&apos;s playbook and tools once:</p>
       <TourCommands commands={agentSetup(cli)} />
       <p className="mt-2 text-xs text-muted-foreground">
-        The MCP server gives an agent forge&apos;s skills, lint and code generation; it runs <code>forge obs</code> in its own shell. The
+        The MCP server gives an agent Forge&apos;s skills, lint and code generation; it runs <code>forge obs</code> in its own shell. The
         trace id is the sample&apos;s.
       </p>
     </>
@@ -172,7 +175,7 @@ function Logs({ cli }: { cli: string }) {
   return (
     <>
       <p>
-        Every log line forge&apos;s logger writes carries its trace id, so one click gives you exactly what this request logged, in every
+        Every log line Forge&apos;s logger writes carries its trace id, so one click gives you exactly what this request logged, in every
         service, with no search to write.
       </p>
       <AgentLine>
@@ -187,7 +190,7 @@ function Issue({ cli }: { cli: string }) {
     <>
       <p>
         Forge groups repeated failures so you can see affected users and follow a failure to its request and release.
-        Because forge manages releases, it can tie a first occurrence or regression to a release and help your agent focus on changed code.
+        Because Forge manages releases, it can tie a first occurrence or regression to a release and help your agent focus on changed code.
       </p>
       <AgentLine>
         Your agent runs <code>{cli} obs issue &lt;id&gt; prod</code>: the latest event, the release it first appeared in, and the suspect
@@ -201,7 +204,7 @@ export const forgeJourney: Journey = {
   id: "forge",
   // v3: the short, optional tour with compact controls and the "What is forge?" intro (v2 was the 9-step console tour).
   version: 3,
-  title: "Explore a forge app",
+  title: "Explore a Forge app",
   description:
     "Walk through a running app's console: one request across three services, its logs and its error, and how an agent gets the problem.",
   controls: "callout",
@@ -213,17 +216,17 @@ export const forgeJourney: Journey = {
   steps: [
     {
       id: "fg-intro",
-      title: "What is forge?",
+      title: "What is Forge?",
       description: <WhatIsForge />,
       route: demo({ view: "overview", ...CLOSED }),
     },
     {
       id: "fg-console",
-      title: "A forge app's console",
+      title: "A Forge app's console",
       description:
-        "Every forge project gets this console: environments, releases, domains, secrets and observability, in one place. shop has an api, a worker and an inventory service in dev, staging and prod. The data here is made up.",
-      // The console's sidebar (forge-ui SidebarLayout's nav, inside ConsoleShell).
-      target: "[data-tour='forge-console'] #sidebar-layout-nav",
+        "Every Forge project gets this console: environments, releases, domains, secrets and observability, in one place. shop has an api, a worker and an inventory service in dev, staging and prod. The data here is made up.",
+      // The console's sidebar: forge-ui SidebarLayout's one <aside>, inside ConsoleShell (its id is generated).
+      target: "[data-tour='forge-console'] aside",
       tooltipPosition: "right",
       route: demo({ view: "overview", ...CLOSED }),
       // The demo host's short tour leaves it out: the console is there to explore, with a tip per view.
@@ -241,6 +244,7 @@ export const forgeJourney: Journey = {
     },
     {
       id: "fg-trace",
+      showNext: true,
       title: "One request, end to end",
       description: "Find exactly where an error happens or time is spent in a user’s journey—even when the request crosses several services. Open the failed CreateOrder request to see its timeline; your agent reads the same evidence.",
       target: `[data-testid='obs-trace-row'][data-trace-id='${DEMO_TRACE_ID}']`,
@@ -252,6 +256,7 @@ export const forgeJourney: Journey = {
     },
     {
       id: "fg-hops",
+      showNext: true,
       title: "Across services",
       description: <Hops cli="reliant forge" />,
       copyByShell: { forge: { description: <Hops cli="forge" /> } },
@@ -285,6 +290,7 @@ export const forgeJourney: Journey = {
     },
     {
       id: "fg-logs",
+      showNext: true,
       title: "What that request logged",
       description: <Logs cli="reliant forge" />,
       copyByShell: { forge: { description: <Logs cli="forge" /> } },
@@ -310,6 +316,7 @@ export const forgeJourney: Journey = {
     },
     {
       id: "fg-profile",
+      showNext: true,
       title: "Where the CPU went",
       description:
         "Profiles are linked to traces, so the flamegraph shows the CPU the api spent inside this request: each bar is a function, and wider means more time.",
@@ -327,7 +334,7 @@ export const forgeJourney: Journey = {
       id: "fg-graph",
       title: "Who calls whom",
       description:
-        "Because every hop carries the trace, forge can draw the app from its spans. The browser calls the api; the api uses the database, the payment provider and a queue; the worker calls inventory. Nobody drew this map. Point at a line to see its requests and errors.",
+        "Because every hop carries the trace, Forge can draw the app from its spans. The browser calls the api; the api uses the database, the payment provider and a queue; the worker calls inventory. Nobody drew this map. Point at a line to see its requests and errors.",
       // The demo host's full tour only (DEMO_TOUR=full).
       isAvailable: onDemoFull,
       target: "[data-testid='graph-view']",
@@ -335,6 +342,7 @@ export const forgeJourney: Journey = {
     },
     {
       id: "fg-issue",
+      showNext: true,
       title: "Errors, grouped by release",
       description: <Issue cli="reliant forge" />,
       copyByShell: { forge: { description: <Issue cli="forge" /> } },
@@ -395,13 +403,14 @@ export const forgeJourney: Journey = {
     },
     {
       id: "fg-ask",
+      showNext: true,
       title: "Hand it to an agent",
       description:
         "On your own app, Investigate in chat opens a new chat with this issue written up, and Fix with agent starts one on its own branch. This is sample data, so here it shows what the agent is given: ids and the commands to fetch the rest. It's never the log text itself.",
       copyByShell: {
         forge: {
           description:
-            "This issue is a good one to hand to your own agent: Claude Code, Codex or Cursor. The prompt holds ids and forge commands, not log text, so your agent fetches the details with its own login.",
+            "This issue is a good one to hand to your own agent: Claude Code, Codex or Cursor. The prompt holds ids and Forge commands, not log text, so your agent fetches the details with its own login.",
         },
       },
       route: demo({ view: "errors", issue: DEMO_ISSUE_ID, trace: undefined, span: undefined }),
@@ -422,7 +431,7 @@ export const forgeJourney: Journey = {
     },
     {
       id: "fg-built",
-      title: "How this app was built",
+      title: "How it was built",
       // The recorded forge run as the step's own view: a wide modal card holding the player (no spotlight, the
       // page behind scroll-locked), so the player can't be scrolled out from under the step. It plays by itself.
       description: (

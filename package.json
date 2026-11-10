@@ -28,26 +28,11 @@
     "package:electron": "cd electron && npm run package",
     "test:web": "cd frontends/web && npm run test",
     "test:e2e": "cd frontends/web && npm run test:e2e",
-    "postinstall": "cd frontends/web && pnpm install && cd ../../electron && npm install",
-    "android": "expo run:android",
-    "ios": "expo run:ios"
-  },
-  "dependencies": {
-    "expo": "^57.0.26",
-    "react": "19.1.0",
-    "react-native": "^0.87.1",
-    "ws": "^8.18.3"
-  },
-  "devDependencies": {
-    "cross-env": "^10.1.0"
+    "postinstall": "cd frontends/web && pnpm install && cd ../../electron && npm install"
   },
   "engines": {
-    "node": ">=22.12.0 <25",
+    "node": ">=22.12.0 <27",
     "go": ">=1.24.0"
-  },
-  "//overrides note": "Transitive-only pin. uuid: GHSA-w5hq-g745-h8pq (missing buffer bounds check in v3/v5/v6 when `buf` is provided), reached only through xcode -> @expo/config-plugins, which pins uuid ^7. xcode calls uuid.v4() exclusively and never passes `buf`, so the vulnerable path is unreachable here; the override is to keep `npm audit` clean rather than to close real exposure. uuid 11 keeps the named v4 export xcode uses. Remove once xcode's own range reaches >=11.1.1.",
-  "overrides": {
-    "uuid": "^11.1.1"
   },
   "packageManager": "pnpm@12.15.0+sha512.b3951d6d6ff4a9f13dc7cf56cd28d2b8eb37dbcc9c68e52e1e1191873ea9f82a017287ab50baadc5ccc494f036c67c0e47eb13608c2fa36f47711b61ea128e61"
 }

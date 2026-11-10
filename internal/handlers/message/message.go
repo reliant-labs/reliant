@@ -10,6 +10,7 @@ import (
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/messageproto"
@@ -43,7 +44,7 @@ func (s *Service) GetMessage(
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get message"))
 	}
-	if chat == nil || chat.UserID != userID {
+	if !authz.CanReadChat(ctx, userID, chat) {
 		return nil, svcerr.NotFound("message")
 	}
 

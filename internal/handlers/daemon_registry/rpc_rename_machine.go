@@ -11,6 +11,7 @@ import (
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/logging"
 )
@@ -47,7 +48,7 @@ func (s *Service) RenameMachine(
 		return nil, svcerr.Unimplemented("renaming a machine needs the Reliant control plane, which owns machine names")
 	}
 	d, err := s.deps.Repo.GetDaemon(ctx, daemonID)
-	if err != nil || d == nil || d.UserID != userID {
+	if err != nil || !authz.CanWriteMachine(ctx, userID, d) {
 		return nil, svcerr.NotFound("machine")
 	}
 	if d.Name == name {

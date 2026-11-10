@@ -338,7 +338,7 @@ jobs:
           path: |
             gen
             internal/workflow/v3/reference
-            internal/workflow/v2/schema/field_descriptions.go
+            internal/workflow/runtime/schema/field_descriptions.go
           retention-days: 1
           compression-level: 0
 

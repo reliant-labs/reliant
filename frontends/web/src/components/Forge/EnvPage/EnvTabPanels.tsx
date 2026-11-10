@@ -105,6 +105,8 @@ export interface OverviewTabProps {
   checkoutMissing?: ProjectCheckoutMissing | null;
   /** The Reliant project's name, for the checkout-missing sentence. */
   projectName?: string;
+  /** The Promotions card (EnvPromotions), under State; omitted for an env with no ledger (local). */
+  promotions?: ReactNode;
 }
 
 export function OverviewTab(props: OverviewTabProps) {
@@ -200,6 +202,9 @@ export function OverviewTab(props: OverviewTabProps) {
           </div>
         )}
       </Panel>
+
+      {/* What was put here, and when: the ledger as a timeline. */}
+      {props.promotions}
 
       {/* Frontends: the sites people open. Each is live at its generated
           address already; a custom domain only adds a second one. Omitted for

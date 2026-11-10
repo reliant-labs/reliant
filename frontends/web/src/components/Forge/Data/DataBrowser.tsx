@@ -28,7 +28,9 @@ import Card from "@/components/forge-ui/card";
 import type { BrowsableDb, DataAccessConfirmation } from "@/services/controlPlane/observability/appDatabaseApi";
 import { dataBrowserErrorKind } from "@/services/controlPlane/observability/errors";
 
-import { AccessReasonDialog } from "./AccessReasonDialog";
+import { AccessReasonDialog } from "../AuditedAccess/AccessReasonDialog";
+import { isCurrentReader, useReaderSession } from "../AuditedAccess/readerSession";
+import { useReaderCacheCleanup } from "../AuditedAccess/useReaderCacheCleanup";
 import { clearAccess, isDenied, needsConfirmation, readAccess, writeAccess } from "./dataAccess-model";
 import { DatabaseSelector, PolicyTag } from "./DatabaseSelector";
 import { DataGrid } from "./DataGrid";
@@ -54,7 +56,15 @@ export function defaultDatabase(databases: readonly BrowsableDb[]): BrowsableDb 
   return databases.find((db) => db.reachable && !isDenied(db.policy)) ?? databases[0] ?? null;
 }
 
-export function DataBrowser({ env, search, onNavigate, href }: DataBrowserProps) {
+export function DataBrowser(props: DataBrowserProps) {
+  const reader = useReaderSession();
+  useReaderCacheCleanup("data-browser");
+  if (!reader.principalId) return <DataNote testId="data-reader-required" title="Sign in to browse data"><p>Data reads need an authenticated reader.</p></DataNote>;
+  return <ReaderDataBrowser key={`${reader.epoch}:${props.env.id}`} {...props} />;
+}
+
+function ReaderDataBrowser({ env, search, onNavigate, href }: DataBrowserProps) {
+  const reader = useReaderSession();
   const databases = useBrowsableDatabases(env.id);
   const list = useMemo(() => databases.data ?? [], [databases.data]);
   const named = list.find((db) => db.name === search.db) ?? null;
@@ -68,15 +78,18 @@ export function DataBrowser({ env, search, onNavigate, href }: DataBrowserProps)
     }
   }, [databases.data, selected, search, onNavigate]);
 
-  const [access, setAccess] = useState<DataAccessConfirmation | null>(() => readAccess(env.id));
+  const [access, setAccess] = useState<DataAccessConfirmation | null>(() => readAccess(env.id, reader));
   const [asking, setAsking] = useState(false);
+  const [confirmationRequired, setConfirmationRequired] = useState(false);
   const confirmationLost = useCallback(() => {
-    clearAccess(env.id);
+    if (!isCurrentReader(reader)) return;
+    clearAccess(env.id, reader);
     setAccess(null);
+    setConfirmationRequired(true);
     setAsking(true);
-  }, [env.id]);
+  }, [env.id, reader]);
 
-  const audited = !!selected && needsConfirmation(selected.policy);
+  const audited = (!!selected && needsConfirmation(selected.policy)) || confirmationRequired;
   const waitingForReason = audited && !access;
   useEffect(() => {
     if (waitingForReason) setAsking(true);
@@ -141,9 +154,13 @@ export function DataBrowser({ env, search, onNavigate, href }: DataBrowserProps)
         <AccessReasonDialog
           open
           env={env.name}
+          subject="data"
+          testIdPrefix="data"
+          description="Each database and table you open is recorded with your reason. You are asked once for this reader and tab session."
           initialReason={access?.reason ?? ""}
           onConfirm={(reason) => {
-            setAccess(writeAccess(env.id, reason));
+            if (!isCurrentReader(reader)) return;
+            setAccess(writeAccess(env.id, reason, reader));
             setAsking(false);
           }}
           onCancel={() => setAsking(false)}

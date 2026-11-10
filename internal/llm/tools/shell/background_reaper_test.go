@@ -341,6 +341,20 @@ func TestReaper_ArchivedWorkspaceStopsItsProcessesAtOnce(t *testing.T) {
 		return busy.StatusSafe() == "killed" && server.StatusSafe() == "killed"
 	}, 10*time.Second, 10*time.Millisecond)
 	require.Equal(t, "running", other.StatusSafe())
+	// The reaper writes why into the output once the kill returns, just after
+	// the status flips, so it is waited for, not read at once (reliant #2128).
+	require.Eventually(t, func() bool {
+		out, err := m.GetCombinedOutput(server.ID)
+		if err != nil {
+			return false
+		}
+		for _, line := range out {
+			if strings.Contains(line.Text, "its workspace was archived") {
+				return true
+			}
+		}
+		return false
+	}, 10*time.Second, 10*time.Millisecond, "the archived workspace's server says in its output why it stopped")
 }
 
 // The daemon removing a workspace directory stops what runs inside it, and

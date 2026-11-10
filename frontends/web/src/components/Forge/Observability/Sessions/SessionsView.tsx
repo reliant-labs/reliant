@@ -326,7 +326,8 @@ function SessionTable({ sessions, onOpen }: { sessions: SessionSummary[]; onOpen
     {
       key: "entry",
       header: "Entry",
-      className: "max-w-[16rem] truncate",
+      // 12rem: the table fits a 1440px laptop beside the nav without a sideways scrollbar.
+      className: "max-w-[12rem] truncate",
       render: (_, { session: s }) => (
         <span className="font-mono text-xs" title={s.entryPath}>
           {s.entryPath || "/"}

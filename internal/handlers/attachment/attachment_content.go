@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/reliant-labs/reliant/internal/authz"
 )
 
 // AttachmentContentPathPrefix is where AttachmentContentHandler is mounted.
@@ -36,7 +38,7 @@ func AttachmentContentHandler(repo Repository, authenticate func(*http.Request) 
 			return
 		}
 		att, err := repo.GetAttachment(r.Context(), id)
-		if err != nil || att == nil || att.UserID != userID || att.Content == nil {
+		if err != nil || att == nil || !authz.CanAccessPersonal(userID, att.UserID) || att.Content == nil {
 			http.NotFound(w, r)
 			return
 		}

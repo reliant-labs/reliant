@@ -14,6 +14,7 @@ import (
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/daemon"
 	"github.com/reliant-labs/reliant/internal/daemoncmd"
 	"github.com/reliant-labs/reliant/internal/daemonplacement"
@@ -94,7 +95,7 @@ func (s *Service) requestedMachine(ctx context.Context, userID string, daemonID 
 		return "", nil
 	}
 	d, err := s.deps.Repo.GetDaemon(ctx, *daemonID)
-	if err != nil || d == nil || d.UserID != userID {
+	if err != nil || !authz.CanWriteMachine(ctx, userID, d) {
 		return "", svcerr.NotFound("machine")
 	}
 	return *daemonID, nil
@@ -282,7 +283,7 @@ func (s *Service) listEverywhere(ctx context.Context, userID string) []*reliantv
 		wg  sync.WaitGroup
 	)
 	for _, d := range daemons {
-		if d == nil || d.UserID != userID || !s.online(ctx, userID, d.ID) {
+		if !authz.CanReadMachine(ctx, userID, d) || !s.online(ctx, userID, d.ID) {
 			continue
 		}
 		wg.Add(1)

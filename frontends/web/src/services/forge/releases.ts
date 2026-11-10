@@ -621,8 +621,11 @@ export async function compareProjectReleases(req: {
   return toReleaseComparison(res);
 }
 
+/** How many promotions one ledger read loads: a ledger this long may hold older ones. */
+export const PROMOTIONS_PAGE = 100;
+
 /** One environment's promotion ledger, newest first. */
-export async function listReleasePromotions(environmentId: string, limit = 100): Promise<ReleasePromotion[]> {
+export async function listReleasePromotions(environmentId: string, limit = PROMOTIONS_PAGE): Promise<ReleasePromotion[]> {
   const res = await client().listPromotions({ environmentId, limit });
   return (res.promotions ?? []).map(toReleasePromotion);
 }

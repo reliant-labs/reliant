@@ -15,6 +15,7 @@ import (
 	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/automationpolicy"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/llm/models"
@@ -53,6 +54,10 @@ func (r *Repo) GetChatRow(ctx context.Context, id string) (*ChatRow, error) {
 // row: userID's chat, or core.ErrChatNotFound for a chat that is missing or
 // another user's. GetChatWithUserCheck is the same check over the activity
 // view, for a caller that needs a derived field.
+//
+// The store read filters on the owner; the row it returns is then confirmed
+// by authz, the one place the rule lives, as a write (the strict question,
+// since these reads back both reads and changes).
 func (r *Repo) GetChatRowWithUserCheck(ctx context.Context, id, userID string) (*ChatRow, error) {
 	if id == "" {
 		return nil, fmt.Errorf("chat ID cannot be empty")
@@ -60,7 +65,14 @@ func (r *Repo) GetChatRowWithUserCheck(ctx context.Context, id, userID string) (
 	if userID == "" {
 		return nil, fmt.Errorf("user ID cannot be empty")
 	}
-	return store.GetChatRowWithUserCheck(ctx, r.ORM(), id, userID)
+	chat, err := store.GetChatRowWithUserCheck(ctx, r.ORM(), id, userID)
+	if err != nil {
+		return nil, err
+	}
+	if !authz.CanWriteChat(ctx, userID, chat) {
+		return nil, fmt.Errorf("%w: %s", core.ErrChatNotFound, id)
+	}
+	return chat, nil
 }
 
 func (r *Repo) GetChatWithUserCheck(ctx context.Context, id string, userID string) (*Chat, error) {
@@ -71,7 +83,14 @@ func (r *Repo) GetChatWithUserCheck(ctx context.Context, id string, userID strin
 		return nil, fmt.Errorf("user ID cannot be empty")
 	}
 
-	return store.GetChatWithUserCheck(ctx, r.ORM(), id, userID)
+	chat, err := store.GetChatWithUserCheck(ctx, r.ORM(), id, userID)
+	if err != nil {
+		return nil, err
+	}
+	if !authz.CanWriteChat(ctx, userID, chat) {
+		return nil, fmt.Errorf("%w: %s", core.ErrChatNotFound, id)
+	}
+	return chat, nil
 }
 
 // GetLiveChatIDForWorktree returns a non-archived chat bound to this worktree,
@@ -1039,7 +1058,23 @@ func (r *Repo) GetProjectWithUserCheck(ctx context.Context, id string, userID st
 		return nil, fmt.Errorf("user ID cannot be empty")
 	}
 
-	return store.GetProjectWithUserCheck(ctx, r.ORM(), id, userID)
+	// The store read filters on the owner; authz confirms the row it returns,
+	// as GetChatRowWithUserCheck does.
+	project, err := store.GetProjectWithUserCheck(ctx, r.ORM(), id, userID)
+	if err != nil {
+		return nil, err
+	}
+	if !authz.CanWriteProject(ctx, userID, project) {
+		return nil, core.ErrProjectNotFound
+	}
+	return project, nil
+}
+
+// AssignUnassignedOrg gives userID's projects and chats that have no org yet
+// orgID (their default org), in bounded batches, each its own transaction:
+// the lazy backfill of rows written before orgs (internal/orgs ListScope).
+func (r *Repo) AssignUnassignedOrg(ctx context.Context, userID, orgID string) error {
+	return store.AssignUnassignedOrg(ctx, r.ORM(), userID, orgID)
 }
 
 func (r *Repo) ListProjects(ctx context.Context, filters ProjectFilters) ([]*Project, error) {
@@ -1813,6 +1848,16 @@ func (r *Repo) ListWorktreesByBranch(ctx context.Context, projectID, branch stri
 		return nil, nil
 	}
 	return store.ListWorktreesByBranch(ctx, r.ORM(), projectID, branch)
+}
+
+// ListFailedWorktreesForDaemon returns daemonID's FAILED workspaces created
+// since `since` whose leftover checkouts are not yet known to be gone, newest
+// first, at most limit (store.ListFailedWorktreesForDaemon).
+func (r *Repo) ListFailedWorktreesForDaemon(ctx context.Context, daemonID string, since time.Time, limit int) ([]*Worktree, error) {
+	if daemonID == "" {
+		return nil, nil
+	}
+	return store.ListFailedWorktreesForDaemon(ctx, r.ORM(), daemonID, since, limit)
 }
 
 func (r *Repo) ListWorktrees(ctx context.Context, filters WorktreeFilters) ([]*Worktree, error) {
@@ -3054,11 +3099,35 @@ func mapTriggerNameConflict(err error, name string) error {
 	return err
 }
 
+// OrgRead is the org a write's decision read from one row (store.OrgRead):
+// the write re-checks it under its owner's org lock.
+type OrgRead = store.OrgRead
+
+// ErrOrgChanged refuses a write whose org decision a backfill changed before
+// it committed (store.ErrOrgChanged).
+var ErrOrgChanged = store.ErrOrgChanged
+
+// LockUserOrgs takes userID's org lock for the rest of the surrounding
+// transaction and re-checks each read (store.LockUserOrgs). Call it inside a
+// transaction, before any row lock of it.
+func (r *Repo) LockUserOrgs(ctx context.Context, userID string, reads ...OrgRead) error {
+	return store.LockUserOrgs(ctx, r.ORM(), userID, reads...)
+}
+
 func (r *Repo) CreateTrigger(ctx context.Context, t *core.Trigger) error {
+	return r.CreateTriggerInOrg(ctx, t)
+}
+
+// CreateTriggerInOrg inserts t, under its owner's org lock, only while each
+// read (the org t's was decided from: its project's) still holds.
+func (r *Repo) CreateTriggerInOrg(ctx context.Context, t *core.Trigger, reads ...OrgRead) error {
 	if t == nil {
 		return fmt.Errorf("trigger cannot be nil")
 	}
 	return r.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
+		if err := store.LockUserOrgs(ctx, r.ORM(), t.UserID, reads...); err != nil {
+			return err
+		}
 		if err := store.InsertTrigger(ctx, r.ORM(), t); err != nil {
 			return mapTriggerNameConflict(err, t.Name)
 		}
@@ -3096,7 +3165,19 @@ func (r *Repo) LockTrigger(ctx context.Context, id string) error {
 	return store.LockTrigger(ctx, r.ORM(), id)
 }
 
+// UpdateTrigger is UpdateTriggerInOrg with no org reads: a write back of a
+// row as it was (restoreActivation).
 func (r *Repo) UpdateTrigger(ctx context.Context, t *core.Trigger) error {
+	return r.UpdateTriggerInOrg(ctx, t)
+}
+
+// UpdateTriggerInOrg replaces the trigger's definition under its owner's org
+// lock, only while each read still holds: the orgs the update's decision read
+// (the trigger's, its project's, the target project's). A backfill that
+// stamped any of them between the decision and this write makes it
+// ErrOrgChanged, and nothing is written; a NULL org read is compared like
+// any other.
+func (r *Repo) UpdateTriggerInOrg(ctx context.Context, t *core.Trigger, reads ...OrgRead) error {
 	if t == nil {
 		return fmt.Errorf("trigger cannot be nil")
 	}
@@ -3104,6 +3185,10 @@ func (r *Repo) UpdateTrigger(ctx context.Context, t *core.Trigger) error {
 		return fmt.Errorf("trigger ID cannot be empty")
 	}
 	return r.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
+		// The org lock first, then the trigger's row (store/org_lock.go).
+		if err := store.LockUserOrgs(ctx, r.ORM(), t.UserID, reads...); err != nil {
+			return err
+		}
 		if err := store.LockTrigger(ctx, r.ORM(), t.ID); err != nil {
 			return err
 		}
@@ -3855,6 +3940,11 @@ func (r *Repo) CreateWorkflowDraft(ctx context.Context, draft *WorkflowDraft) er
 		return fmt.Errorf("draft cannot be nil")
 	}
 	return r.runWorkflowDraftTx(ctx, func(txCtx context.Context) error {
+		// Every draft write takes its owner's org lock first, so inserts
+		// and upserts of one user's slugs serialize (store/org_lock.go).
+		if err := store.LockUserOrgs(txCtx, r.ORM(), draft.UserID); err != nil {
+			return err
+		}
 		if err := store.InsertWorkflowDraft(txCtx, r.ORM(), draft); err != nil {
 			return mapWorkflowSlugConflict(err, draft.Slug)
 		}
@@ -3868,7 +3958,24 @@ func (r *Repo) UpsertWorkflowDraft(ctx context.Context, draft *WorkflowDraft) (*
 	}
 	var saved *WorkflowDraft
 	err := r.runWorkflowDraftTx(ctx, func(txCtx context.Context) error {
-		row, err := store.UpsertWorkflowDraftBySlug(txCtx, r.ORM(), draft)
+		// Under the owner's org lock nothing stamps or inserts this user's
+		// drafts; the slug's row is locked and decided on as it is now. A
+		// denied draft's slug is taken: the upsert never overwrites it.
+		if err := store.LockUserOrgs(txCtx, r.ORM(), draft.UserID); err != nil {
+			return err
+		}
+		existing, err := store.LockWorkflowDraftBySlug(txCtx, r.ORM(), draft.UserID, draft.Slug)
+		if err != nil {
+			return err
+		}
+		over := ""
+		if existing != nil {
+			if !authz.CanWriteWorkflow(txCtx, draft.UserID, existing) {
+				return fmt.Errorf("%w: %q", ErrWorkflowSlugTaken, draft.Slug)
+			}
+			over = existing.ID
+		}
+		row, err := store.UpsertWorkflowDraftBySlug(txCtx, r.ORM(), draft, over)
 		if err != nil {
 			return mapWorkflowSlugConflict(err, draft.Slug)
 		}
@@ -3930,12 +4037,52 @@ func (r *Repo) GetWorkflowDraft(ctx context.Context, id string) (*WorkflowDraft,
 	return row, nil
 }
 
+// visibleWorkflowDraft confirms a draft an owner-filtered read returned
+// through authz: a draft of an org its owner has left reads as no draft, so
+// no lookup by slug or name (the handlers', the tools', the launch path's)
+// can reach what the lookup by id refuses.
+func visibleWorkflowDraft(ctx context.Context, userID string, draft *WorkflowDraft, err error) (*WorkflowDraft, error) {
+	if err != nil || draft == nil {
+		return draft, err
+	}
+	if !authz.CanReadWorkflow(ctx, userID, draft) {
+		return nil, nil
+	}
+	return draft, nil
+}
+
+// lockWritableDraft takes the draft's owner's org lock, then its row, and
+// decides on the locked row: it may be written only while its owner may
+// still change it (authz.CanWriteWorkflow). Saved workflows are owner-only,
+// so every caller of a by-id write has already shown it is the owner; this
+// is the decision made again where no backfill can stamp the row under it.
+// A denied draft is NotFound, as a missing one.
+func (r *Repo) lockWritableDraft(ctx context.Context, id string) (*WorkflowDraft, error) {
+	owner, err := store.WorkflowDraftOwner(ctx, r.ORM(), id)
+	if err != nil {
+		return nil, err
+	}
+	if err := store.LockUserOrgs(ctx, r.ORM(), owner); err != nil {
+		return nil, err
+	}
+	row, err := store.LockWorkflowDraft(ctx, r.ORM(), id)
+	if err != nil {
+		return nil, err
+	}
+	if !authz.CanWriteWorkflow(ctx, owner, row) {
+		return nil, svcerr.NotFound("workflow draft")
+	}
+	return row, nil
+}
+
 func (r *Repo) GetWorkflowDraftBySlug(ctx context.Context, userID, slug string) (*WorkflowDraft, error) {
-	return store.FindWorkflowDraftBySlug(ctx, r.ORM(), userID, slug)
+	draft, err := store.FindWorkflowDraftBySlug(ctx, r.ORM(), userID, slug)
+	return visibleWorkflowDraft(ctx, userID, draft, err)
 }
 
 func (r *Repo) GetWorkflowDraftByName(ctx context.Context, userID, name string) (*WorkflowDraft, error) {
-	return store.FindWorkflowDraftByName(ctx, r.ORM(), userID, name)
+	draft, err := store.FindWorkflowDraftByName(ctx, r.ORM(), userID, name)
+	return visibleWorkflowDraft(ctx, userID, draft, err)
 }
 
 // GetUsableWorkflowBySlug returns the runnable (complete, visible) workflow
@@ -3944,10 +4091,15 @@ func (r *Repo) GetWorkflowDraftByName(ctx context.Context, userID, name string) 
 // "not found": the workflow exists, and the fix is to mark it complete.
 func (r *Repo) GetUsableWorkflowBySlug(ctx context.Context, userID, slug string) (*WorkflowDraft, error) {
 	usable, err := store.FindUsableWorkflowBySlug(ctx, r.ORM(), userID, slug)
-	if err != nil || usable != nil {
-		return usable, err
+	if err != nil {
+		return nil, err
 	}
-	draft, err := store.FindWorkflowDraftBySlug(ctx, r.ORM(), userID, slug)
+	if usable != nil {
+		// A runnable draft the caller may no longer see is no workflow:
+		// nil, nil, the same as a slug nobody has.
+		return visibleWorkflowDraft(ctx, userID, usable, nil)
+	}
+	draft, err := r.GetWorkflowDraftBySlug(ctx, userID, slug)
 	if err != nil {
 		return nil, err
 	}
@@ -3957,8 +4109,14 @@ func (r *Repo) GetUsableWorkflowBySlug(ctx context.Context, userID, slug string)
 	return nil, nil
 }
 
+// ListWorkflowDraftsByUser is the drafts userID owns and may still see: a
+// draft of an org they have left is not listed (authz decides each row).
 func (r *Repo) ListWorkflowDraftsByUser(ctx context.Context, userID string) ([]*WorkflowDraft, error) {
-	return store.ListUserWorkflowDrafts(ctx, r.ORM(), userID)
+	drafts, err := store.ListUserWorkflowDrafts(ctx, r.ORM(), userID)
+	if err != nil {
+		return nil, err
+	}
+	return authz.Visible(ctx, userID, drafts, authz.CanReadWorkflow), nil
 }
 
 func (r *Repo) UpdateWorkflowDraft(ctx context.Context, draft *WorkflowDraft) error {
@@ -3966,6 +4124,9 @@ func (r *Repo) UpdateWorkflowDraft(ctx context.Context, draft *WorkflowDraft) er
 		return fmt.Errorf("draft cannot be nil")
 	}
 	return r.runWorkflowDraftTx(ctx, func(txCtx context.Context) error {
+		if _, err := r.lockWritableDraft(txCtx, draft.ID); err != nil {
+			return err
+		}
 		if err := store.ReplaceWorkflowDraft(txCtx, r.ORM(), draft); err != nil {
 			return mapWorkflowSlugConflict(err, draft.Slug)
 		}
@@ -3975,6 +4136,9 @@ func (r *Repo) UpdateWorkflowDraft(ctx context.Context, draft *WorkflowDraft) er
 
 func (r *Repo) UpdateWorkflowDraftDefinition(ctx context.Context, id string, name string, slug string, definition string, status WorkflowDraftStatus) error {
 	return r.runWorkflowDraftTx(ctx, func(txCtx context.Context) error {
+		if _, err := r.lockWritableDraft(txCtx, id); err != nil {
+			return err
+		}
 		if err := store.SetWorkflowDraftDefinition(txCtx, r.ORM(), id, name, slug, definition, status); err != nil {
 			return mapWorkflowSlugConflict(err, slug)
 		}
@@ -3985,6 +4149,9 @@ func (r *Repo) UpdateWorkflowDraftDefinition(ctx context.Context, id string, nam
 func (r *Repo) SetWorkflowDraftStatus(ctx context.Context, id string, status WorkflowDraftStatus) (*WorkflowDraft, error) {
 	var saved *WorkflowDraft
 	err := r.runWorkflowDraftTx(ctx, func(txCtx context.Context) error {
+		if _, err := r.lockWritableDraft(txCtx, id); err != nil {
+			return err
+		}
 		row, err := store.SetWorkflowDraftStatus(txCtx, r.ORM(), id, status)
 		if err != nil {
 			return err
@@ -4001,6 +4168,9 @@ func (r *Repo) SetWorkflowDraftStatus(ctx context.Context, id string, status Wor
 func (r *Repo) SetWorkflowDraftHidden(ctx context.Context, id string, isHidden bool) (*WorkflowDraft, error) {
 	var saved *WorkflowDraft
 	err := r.runWorkflowDraftTx(ctx, func(txCtx context.Context) error {
+		if _, err := r.lockWritableDraft(txCtx, id); err != nil {
+			return err
+		}
 		row, err := store.SetWorkflowDraftHidden(txCtx, r.ORM(), id, isHidden)
 		if err != nil {
 			return err
@@ -4016,7 +4186,17 @@ func (r *Repo) SetWorkflowDraftHidden(ctx context.Context, id string, isHidden b
 
 func (r *Repo) DeleteWorkflowDraftBySlug(ctx context.Context, userID, slug string) error {
 	return r.runWorkflowDraftTx(ctx, func(txCtx context.Context) error {
-		deleted, err := store.RemoveWorkflowDraftBySlug(txCtx, r.ORM(), userID, slug)
+		// Under the owner's org lock, the slug's row is locked and decided
+		// on as it is now. A denied draft is deleted like a missing one: not
+		// at all.
+		if err := store.LockUserOrgs(txCtx, r.ORM(), userID); err != nil {
+			return err
+		}
+		existing, err := store.LockWorkflowDraftBySlug(txCtx, r.ORM(), userID, slug)
+		if err != nil || existing == nil || !authz.CanWriteWorkflow(txCtx, userID, existing) {
+			return err
+		}
+		deleted, err := store.RemoveWorkflowDraft(txCtx, r.ORM(), existing.ID)
 		if svcerr.IsNotFound(err) {
 			return nil
 		}
@@ -4034,6 +4214,9 @@ func (r *Repo) WorkflowSlugExists(ctx context.Context, userID, slug string) (boo
 func (r *Repo) UpdateWorkflowForkedFrom(ctx context.Context, draftID string, forkedFrom string) (*WorkflowDraft, error) {
 	var saved *WorkflowDraft
 	err := r.runWorkflowDraftTx(ctx, func(txCtx context.Context) error {
+		if _, err := r.lockWritableDraft(txCtx, draftID); err != nil {
+			return err
+		}
 		row, err := store.SetWorkflowDraftForkedFrom(txCtx, r.ORM(), draftID, forkedFrom)
 		if err != nil {
 			return err

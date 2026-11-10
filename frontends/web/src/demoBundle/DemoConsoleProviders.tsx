@@ -19,6 +19,8 @@ import { useMemo, type ReactNode } from "react";
 import { Code, ConnectError } from "@connectrpc/connect";
 
 import { createDemoApi } from "@/components/Forge/Demo/demoData/demoApi";
+import { DemoBrowserProviders } from "@/components/Forge/Demo/DemoBrowserProviders";
+import { DemoNavExtras } from "@/components/Forge/Demo/DemoNavExtras";
 import { AskAgentModeProvider } from "@/components/Forge/Observability/AskReliant/askAgentMode";
 import { ObservabilityBillingApiContext } from "@/hooks/observability-billing-queries";
 import { ObservabilityApiProvider } from "@/services/controlPlane/observability/ObservabilityApiContext";
@@ -38,9 +40,13 @@ export function DemoConsoleProviders({ children }: { children: ReactNode }) {
   const api = useMemo(() => createDemoApi(), []);
   return (
     <AskAgentModeProvider mode="handoff" cli="forge" demo>
-      <ObservabilityApiProvider api={api}>
-        <ObservabilityBillingApiContext.Provider value={usageApi}>{children}</ObservabilityBillingApiContext.Provider>
-      </ObservabilityApiProvider>
+      <DemoBrowserProviders>
+        <ObservabilityApiProvider api={api}>
+          <ObservabilityBillingApiContext.Provider value={usageApi}>
+            <DemoNavExtras>{children}</DemoNavExtras>
+          </ObservabilityBillingApiContext.Provider>
+        </ObservabilityApiProvider>
+      </DemoBrowserProviders>
     </AskAgentModeProvider>
   );
 }
