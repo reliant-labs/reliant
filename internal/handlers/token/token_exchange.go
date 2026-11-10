@@ -39,7 +39,9 @@ import (
 // ── ATTENUATION, NEVER ESCALATION ────────────────────────────────────
 //
 // The granted scopes are the intersection of what was requested, what is
-// exchangeable, and what the CALLING token holds. A token may never grant
+// exchangeable, and what the CALLING token holds (for a wildcard credential,
+// its ceiling: see exchangeCeiling, which also names the environment-bindable
+// scopes for the control plane to keep or clip). A token may never grant
 // authority it does not hold (forge/pkg/accesstoken), so a credential issued
 // without deploy permission cannot become one that has it — and the scope list
 // Settings shows for a token stays the truth about what it can do, directly or
@@ -87,6 +89,54 @@ var exchangeableScopes = func() []fat.Scope {
 	}
 	return scopes
 }()
+
+// environmentBindableScopes are the control-plane permissions a person may
+// hold bound to ONE deploy environment (control-plane orggrants.EnvScopes,
+// docs/design/orgs-and-members.md §4): a release manager's deploy:write on
+// prod alone, say. Named as strings and kept only when this binary's forge
+// knows the scope (storage:read and deploy:config:read arrive with a newer
+// pin), so the set grows with the catalog and never names a scope that could
+// not be minted.
+var environmentBindableScopes = func() fat.Set {
+	out := fat.Set{}
+	for _, raw := range []string{"deploy:write", "secret:write", "db:query", "storage:read", "deploy:config:read"} {
+		if scope, ok := fat.ParseScope(raw); ok {
+			out[scope] = struct{}{}
+		}
+	}
+	return out
+}()
+
+// exchangeCeiling is what the calling session may hand on: what it resolved to,
+// plus — for a wildcard credential (a daemon's or a CLI login's, which hold
+// every scope their person holds) — the environment-bindable scopes.
+//
+// WHY THE WILDCARD ADDS THEM. The control plane resolves a credential that may
+// act on every environment to its person's ORG-WIDE grants only, so a grant
+// bound to prod never shows in subject.Scopes. Intersecting with that alone
+// would mint the helper's child without it, and the child could never spend it.
+// A wildcard's ceiling holds every scope, so naming a bindable one is no
+// widening of the ceiling; and it is never authority either: the control
+// plane's MintForUser keeps it only when the person holds it on some
+// environment (and the daemon's policy allows it), resolves the child to
+// org-wide grants, and judges every use on its own environment. A control
+// plane that predates that rule clips it away at the mint, so against an older
+// control plane the child stays as narrow as before, never wider. An explicit-
+// list credential's ceiling is not visible here, so it hands on only what it
+// resolved to.
+func exchangeCeiling(subject *fat.Principal) fat.Set {
+	if !subject.AllScopes {
+		return subject.Scopes
+	}
+	out := make(fat.Set, len(subject.Scopes)+len(environmentBindableScopes))
+	for scope := range subject.Scopes {
+		out[scope] = struct{}{}
+	}
+	for scope := range environmentBindableScopes {
+		out[scope] = struct{}{}
+	}
+	return out
+}
 
 // TokenControlPlane is what TokenService knows about the deployment's control
 // plane.
@@ -140,9 +190,10 @@ func (s *Service) ExchangeToken(
 			"a token bound to a %s cannot be exchanged", subject.Resource.Kind))
 	}
 
+	ceiling := exchangeCeiling(subject)
 	granted := make([]fat.Scope, 0, len(requested))
 	for _, scope := range requested {
-		if subject.Scopes.Has(scope) {
+		if ceiling.Has(scope) {
 			granted = append(granted, scope)
 		}
 	}
