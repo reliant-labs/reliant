@@ -191,6 +191,8 @@ func (g *Graph) newDaemonListener() (*grpcserver.DaemonListener, error) {
 		Chain:   g.DaemonChain(),
 		Routes:  g.DaemonRoutes(),
 		Logger:  g.Log,
+		// Every request's context carries membership (authz).
+		Membership: g.OrgResolver(),
 	})
 }
 
@@ -563,6 +565,8 @@ func (g *Graph) newTemporalWorker() (*workersetup.Worker, error) {
 		WorkflowTaskPollers: g.WorkerConfig.GetWorkflowTaskPollers(),
 		Worker:              g.WorkerConfig,
 		NATS:                g.NATSConn(),
+		// Every activity's context carries membership (authz).
+		Membership: g.OrgResolver(),
 	})
 }
 
@@ -646,6 +650,8 @@ func (g *Graph) newAPIListener() (*grpcserver.APIListener, error) {
 		Routes: g.UserRoutes(),
 		HTTP:   g.HTTPRoutes(),
 		Logger: g.Log,
+		// Every request's context carries membership (authz).
+		Membership: g.OrgResolver(),
 	})
 }
 

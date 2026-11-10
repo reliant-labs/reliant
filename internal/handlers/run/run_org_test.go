@@ -10,6 +10,7 @@ import (
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 
 	"github.com/reliant-labs/reliant/internal/accesstokenclient"
+	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/db"
 	run "github.com/reliant-labs/reliant/internal/handlers/run"
 	"github.com/reliant-labs/reliant/internal/orgs"
@@ -40,8 +41,10 @@ func TestListRuns_SessionAndParentHonourTheOrg(t *testing.T) {
 		ListRootWorkflowsFunc:  func(context.Context, string) ([]*db.Workflow, error) { return runs, nil },
 		ListChildWorkflowsFunc: func(context.Context, string) ([]*db.Workflow, error) { return runs, nil },
 	}
-	svc := run.NewTestRun(t, run.WithRunDeps(run.Deps{Repo: repo, Orgs: orgs.New(orgSource{})}))
-	ctx := run.AuthedContext(t)
+	resolver := orgs.New(orgSource{})
+	svc := run.NewTestRun(t, run.WithRunDeps(run.Deps{Repo: repo, Orgs: resolver}))
+	// A request through a listener carries the membership authz decides with.
+	ctx := authz.WithMembership(run.AuthedContext(t), resolver)
 	str := func(s string) *string { return &s }
 
 	for name, req := range map[string]func(org *string) *pb.ListRunsRequest{
