@@ -254,6 +254,10 @@ type SweepReport struct {
 	Totals        SweepTotals  `json:"totals"`
 	Entries       []SweepEntry `json:"entries"`
 	Clones        []SweepClone `json:"clones,omitempty"`
+	// Blockers are the processes of this user that held reclaim because they
+	// cannot be inspected (undumpable), one per process. Each holds every
+	// worktree it meets until it ends; ending it is a person's call.
+	Blockers []ReclaimBlocker `json:"blockers,omitempty"`
 }
 
 // SweepMachine runs one pass over every linked worktree on the machine and
@@ -388,6 +392,7 @@ func (r *Reclaimer) SweepMachine(ctx context.Context, opts SweepOptions) SweepRe
 	}
 	rep.Entries = entries
 	rep.Totals = totals(entries)
+	rep.Blockers = Blockers()
 	rep.FinishedAt = r.now().UTC()
 
 	// The report is rewritten under the approvals lock, which a decision or
