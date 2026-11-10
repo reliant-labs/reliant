@@ -60,7 +60,7 @@ func New(cfg Config) *Limiter {
 	}
 	// Leftovers of an earlier daemon, made before the commands cgroup
 	// existed or in it.
-	sweep(l.root, true)
+	sweep(l.root, true, nil)
 	commands, err := makeCommandsCgroup(l.root, commandsName, l.size.Shared)
 	if err != nil {
 		l.commands = l.root
@@ -68,7 +68,7 @@ func New(cfg Config) *Limiter {
 		return l
 	}
 	l.commands = commands
-	sweep(l.commands, true)
+	sweep(l.commands, true, nil)
 	if err := enableCPU(l.root, l.commands); err != nil {
 		logging.Warn("proctree: cannot enable the cpu controller for command cgroups; heavy commands are bounded by GOMAXPROCS alone", "error", err)
 	}
@@ -169,22 +169,22 @@ func delegatedRoot() (dir, why string) {
 
 func (t *Tree) prepareCgroup(cmd *exec.Cmd, seq uint64) {
 	l := t.l
-	sweep(l.commands, false)
 	// A command entering new namespaces (credsandbox) is left in the
 	// daemon's cgroup: clone3 into a cgroup together with CLONE_NEWUSER is
 	// not a combination worth risking on a command that must start. It gets
 	// the RLIMIT_NPROC reserve instead.
 	if cmd.SysProcAttr != nil && cmd.SysProcAttr.Cloneflags != 0 {
+		l.sweepOwn()
 		return
 	}
 	dir := filepath.Join(l.commands, fmt.Sprintf("%s%d-%d", cmdPrefix, os.Getpid(), seq))
-	if err := os.Mkdir(dir, 0o755); err != nil {
+	if err := l.hold(dir); err != nil {
 		logging.Warn("proctree: cannot create a command cgroup; the command runs bounded only by RLIMIT_NPROC", "dir", dir, "error", err)
 		return
 	}
 	if err := os.WriteFile(filepath.Join(dir, "pids.max"), []byte(strconv.Itoa(l.size.PerCommand)), 0); err != nil {
 		logging.Warn("proctree: cannot set pids.max; the command runs bounded only by RLIMIT_NPROC", "dir", dir, "error", err)
-		_ = os.Remove(dir)
+		l.drop(dir)
 		return
 	}
 	if l.commands != l.root {
@@ -193,12 +193,47 @@ func (t *Tree) prepareCgroup(cmd *exec.Cmd, seq uint64) {
 	fd, err := unix.Open(dir, unix.O_RDONLY|unix.O_DIRECTORY|unix.O_CLOEXEC, 0)
 	if err != nil {
 		logging.Warn("proctree: cannot open a command cgroup; the command runs unbounded", "dir", dir, "error", err)
-		_ = os.Remove(dir)
+		l.drop(dir)
 		return
 	}
 	cmd.SysProcAttr.UseCgroupFD = true
 	cmd.SysProcAttr.CgroupFD = fd
 	t.dir, t.fd = dir, fd
+}
+
+// hold sweeps this process's empty command cgroups and creates dir, held
+// until drop: under one lock, so a concurrent Prepare's sweep can never take
+// a cgroup between its creation and its command's start.
+func (l *Limiter) hold(dir string) error {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	sweep(l.commands, false, l.held)
+	if err := os.Mkdir(dir, 0o755); err != nil {
+		return err
+	}
+	if l.held == nil {
+		l.held = map[string]struct{}{}
+	}
+	l.held[dir] = struct{}{}
+	return nil
+}
+
+// drop releases a cgroup hold made, and removes the cgroup once empty. One
+// its command left processes in stays until they exit; a later sweep takes it.
+func (l *Limiter) drop(dir string) {
+	l.mu.Lock()
+	delete(l.held, dir)
+	l.mu.Unlock()
+	if err := os.Remove(dir); err != nil && !errors.Is(err, os.ErrNotExist) && !errors.Is(err, syscall.EBUSY) {
+		logging.Debug("proctree: cannot remove a command cgroup", "dir", dir, "error", err)
+	}
+}
+
+// sweepOwn sweeps this process's empty command cgroups, sparing the held ones.
+func (l *Limiter) sweepOwn() {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	sweep(l.commands, false, l.held)
 }
 
 func (t *Tree) closeFD() {
@@ -277,9 +312,7 @@ func (t *Tree) Release() {
 				"command_limit", t.l.size.PerCommand, "shared_limit", t.l.size.Shared)
 		}
 	}
-	if err := os.Remove(t.dir); err != nil && !errors.Is(err, os.ErrNotExist) && !errors.Is(err, syscall.EBUSY) {
-		logging.Debug("proctree: cannot remove a command cgroup", "dir", t.dir, "error", err)
-	}
+	t.l.drop(t.dir)
 }
 
 // limitNote reads the refusals at the command's own limit and, made while it
@@ -331,8 +364,9 @@ func refusals(dir string) (n uint64, exact bool) {
 // still running (a daemon an agent started for development makes its command
 // cgroups beside the ones of the daemon that runs the agent); afterwards only
 // this daemon's, whose commands may have left processes behind when they were
-// released.
-func sweep(dir string, all bool) {
+// released. It spares the cgroups in keep (Limiter.held): those of trees not
+// yet released, which are empty until their command starts.
+func sweep(dir string, all bool, keep map[string]struct{}) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return
@@ -352,7 +386,11 @@ func sweep(dir string, all bool) {
 		if pid != self && (!all || !errors.Is(unix.Kill(pid, 0), unix.ESRCH)) {
 			continue
 		}
-		if sub := filepath.Join(dir, name); !populated(sub) {
+		sub := filepath.Join(dir, name)
+		if _, held := keep[sub]; held {
+			continue
+		}
+		if !populated(sub) {
 			_ = os.Remove(sub)
 		}
 	}
