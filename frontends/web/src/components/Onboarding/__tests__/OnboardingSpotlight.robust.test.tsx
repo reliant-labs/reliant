@@ -104,6 +104,41 @@ describe("when the page changes under it", () => {
   });
 });
 
+describe("a target outside the window", () => {
+  it("brings a journey step's target into view on arrival", async () => {
+    const el = addTarget("target-below", { top: 1400, left: 300, width: 400, height: 40 });
+    const scrollIntoView = vi.fn();
+    el.scrollIntoView = scrollIntoView;
+    spotlight("[data-testid='target-below']");
+    await waitFor(() => expect(scrollIntoView).toHaveBeenCalledWith({ block: "center", behavior: "auto" }));
+  });
+
+  it("leaves the page alone when told to, and waits in the corner with no dim", async () => {
+    const el = addTarget("target-below", { top: 1400, left: 300, width: 400, height: 40 });
+    const scrollIntoView = vi.fn();
+    el.scrollIntoView = scrollIntoView;
+    render(
+      React.createElement(OnboardingSpotlight, {
+        targetSelector: "[data-testid='target-below']",
+        title: "A tip",
+        description: "What this is",
+        stepNumber: 1,
+        totalSteps: 1,
+        onNext: vi.fn(),
+        onSkipAll: vi.fn(),
+        keyboardNav: false,
+        callout: { footer: null, autoScroll: false },
+      })
+    );
+    await waitFor(() => expect(card()).toHaveAttribute("data-target-offscreen", "true"));
+    expect(scrollIntoView).not.toHaveBeenCalled();
+    expect(screen.getByTestId("onboarding-spotlight-dim").getAttribute("class")).toContain("opacity-0");
+    const { top, left } = cardBox();
+    expect(top + cardSize.height).toBeLessThanOrEqual(900 - 16);
+    expect(left + cardSize.width).toBeLessThanOrEqual(1440 - 16);
+  });
+});
+
 describe("it always fits the viewport", () => {
   it.each([
     ["a tall card on a short window", { w: 1024, h: 500 }, { top: 200, left: 300, width: 200, height: 40 }, { width: 320, height: 900 }],

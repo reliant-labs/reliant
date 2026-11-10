@@ -180,6 +180,11 @@ function cornerPosition(tooltipSize: ElementSize, bottomReserve: number, viewpor
   };
 }
 
+/** Whether a target's box lies wholly outside the window (scrolled away). */
+function isOffscreen(rect: TargetRect): boolean {
+  return rect.top + rect.height < 0 || rect.top > window.innerHeight || rect.left + rect.width < 0 || rect.left > window.innerWidth;
+}
+
 /** Below this width a callout is a bottom sheet (tailwind `sm`). */
 export const SHEET_MAX_WIDTH = 640;
 /** The sheet's tallest, as a share of the viewport: the target keeps the rest. */
@@ -274,6 +279,10 @@ export function OnboardingSpotlight({
   const stepAside = sheet && handsOff;
   // Read by the placement effect below, which must not re-run (and re-scroll) when they flip.
   const handsOffRef = useRef({ handsOff, stepAside });
+  const autoScrollRef = useRef(callout?.autoScroll !== false);
+  useEffect(() => {
+    autoScrollRef.current = callout?.autoScroll !== false;
+  }, [callout?.autoScroll]);
   useEffect(() => {
     handsOffRef.current = { handsOff, stepAside };
   }, [handsOff, stepAside]);
@@ -395,10 +404,12 @@ export function OnboardingSpotlight({
     scheduleTimeout(() => setHighlightVisible(true), 50);
   }, [targetSelector, spotlightConfig, shouldDetectBorderRadius, scheduleTimeout]);
 
+  // A target scrolled out of the window: nothing to ring or dim around, so the card waits in the corner.
+  const offscreen = !!spotlightRect && isOffscreen(spotlightRect);
   useEffect(() => {
     const bottomReserve = compact ? 0 : NAV_BAR_CLEARANCE;
-    if (!spotlightRect) {
-      if (targetMissing) setTooltipPos(cornerPosition(tooltipSize, bottomReserve, callout?.viewportLeft ?? 0, callout?.viewportTop ?? 0));
+    if (!spotlightRect || offscreen) {
+      if (targetMissing || offscreen) setTooltipPos(cornerPosition(tooltipSize, bottomReserve, callout?.viewportLeft ?? 0, callout?.viewportTop ?? 0));
       return;
     }
     setTooltipPos(
@@ -406,7 +417,7 @@ export function OnboardingSpotlight({
         ? calculateTooltipPosition(spotlightRect, tooltipPosition, tooltipSize, tooltipPadding, 0, BESIDE_FIRST, callout?.viewportLeft ?? 0, callout?.viewportTop ?? 0)
         : calculateTooltipPosition(spotlightRect, tooltipPosition, tooltipSize, tooltipPadding)
     );
-  }, [spotlightRect, targetMissing, tooltipPosition, tooltipSize, tooltipPadding, compact, callout?.viewportLeft, callout?.viewportTop]);
+  }, [spotlightRect, offscreen, targetMissing, tooltipPosition, tooltipSize, tooltipPadding, compact, callout?.viewportLeft, callout?.viewportTop]);
 
   useEffect(() => {
     const frame = requestAnimationFrame(measureTooltip);
@@ -416,10 +427,23 @@ export function OnboardingSpotlight({
   useEffect(() => {
     // Initial position update with retry logic for elements that appear after navigation
     let unroom: (() => void) | null = null;
+    // Desktop: a step arriving at a target outside the window brings it into view, once, unless the
+    // reader already scrolled or the caller asked to leave the page alone (autoScroll: false).
+    let readerScrolledHere = false;
+    const stopWatching = sheet ? null : watchUserScroll(() => { readerScrolledHere = true; });
+    let arrived = false;
     const attemptUpdate = () => {
       const target = findVisibleTarget(targetSelector);
       if (target) {
         if (sheet && !handsOffRef.current.handsOff) unroom = scrollAboveSheet(target);
+        if (!sheet && !arrived && autoScrollRef.current && !readerScrolledHere && isOffscreen(target.getBoundingClientRect())) {
+          try {
+            target.scrollIntoView({ block: "center", behavior: "auto" });
+          } catch {
+            // jsdom: nothing to scroll.
+          }
+        }
+        arrived = true;
         updatePosition();
         setIsVisible(true);
         return true;
@@ -503,6 +527,7 @@ export function OnboardingSpotlight({
       if (settleTimeout) clearTimeout(settleTimeout);
       if (frame !== null) cancelAnimationFrame(frame);
       observer?.disconnect();
+      stopWatching?.();
       window.removeEventListener("resize", reposition);
       window.removeEventListener("scroll", reposition, true);
       window.visualViewport?.removeEventListener("resize", reposition);
@@ -576,7 +601,7 @@ export function OnboardingSpotlight({
     >
       {/* Semi-transparent overlay with cutout */}
       <svg
-        className={cn("absolute inset-0 w-full h-full pointer-events-none transition-opacity duration-300", (stepAside || (compact && !cutoutRect)) && "opacity-0")}
+        className={cn("absolute inset-0 w-full h-full pointer-events-none transition-opacity duration-300", (stepAside || (compact && (!cutoutRect || offscreen))) && "opacity-0")}
         data-testid="onboarding-spotlight-dim"
         data-stepped-aside={stepAside ? "true" : undefined}
       >
@@ -615,7 +640,7 @@ export function OnboardingSpotlight({
       {/* Click blockers — only while a required action is pending (see
        * blockOutside), and only around a target that was found. Four panes
        * around the cutout, so the target itself stays clickable. */}
-      {blockOutside && cutoutRect && (
+      {blockOutside && cutoutRect && !offscreen && (
         <>
           {[
             { top: 0, left: 0, width: "100%", height: cutoutRect.y },
@@ -675,6 +700,7 @@ export function OnboardingSpotlight({
         data-testid="tour-callout"
         data-side={sheet ? "sheet" : tooltipPos.actualPosition}
         data-target-missing={targetMissing && !cutoutRect ? "true" : undefined}
+        data-target-offscreen={offscreen ? "true" : undefined}
         style={
           sheet
             ? { left: 0, right: 0, bottom: 0, top: "auto", width: "100%", maxHeight: `${SHEET_MAX_VH}dvh`, overflowY: "auto", overscrollBehavior: "contain", borderBottomLeftRadius: 0, borderBottomRightRadius: 0 }
