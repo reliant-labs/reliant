@@ -27,6 +27,8 @@ type Repository interface {
 
 	// The chat and user update logs a stream replays and tails.
 	GetLatestUpdateSequence(ctx context.Context, chatID string) (int64, error)
+	// The compaction watermark: a replay from below it would skip rows.
+	GetChatCompactedThrough(ctx context.Context, chatID string) (int64, error)
 	GetUpdatesSince(ctx context.Context, chatID string, sinceSeq int64, limit int) ([]db.ChatUpdate, error)
 	GetLatestNonMessageUpdatesPerEntity(ctx context.Context, chatID string) ([]db.ChatUpdate, error)
 	GetLatestUserUpdateSequence(ctx context.Context, userID string) (int64, error)

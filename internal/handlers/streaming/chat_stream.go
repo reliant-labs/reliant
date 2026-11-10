@@ -249,9 +249,14 @@ func (s *Service) sendInitialChatSync(ctx context.Context, chat *db.ChatRow, sin
 		if err != nil {
 			return 0, svcerr.WrapOr(err, svcerr.Internal("failed to read the latest chat update sequence"))
 		}
-		if chatCursorNeedsSnapshot(sinceSeq, chatLatestSeq) {
+		compactedThrough, err := s.deps.Repo.GetChatCompactedThrough(ctx, chatID)
+		if err != nil {
+			return 0, svcerr.WrapOr(err, svcerr.Internal("failed to read the chat's compaction watermark"))
+		}
+		if chatCursorNeedsSnapshot(sinceSeq, chatLatestSeq, compactedThrough) {
 			logging.DebugContext(ctx, LOG_PREFIX_STREAM_CHAT+" Cursor not replayable, sending snapshot",
-				"chatID", shortID(chatID), "chatSinceSeq", sinceSeq, "chatLatestSeq", chatLatestSeq)
+				"chatID", shortID(chatID), "chatSinceSeq", sinceSeq, "chatLatestSeq", chatLatestSeq,
+				"chatCompactedThrough", compactedThrough)
 			useSnapshot = true
 		}
 	}
@@ -273,6 +278,23 @@ func (s *Service) sendInitialChatSync(ctx context.Context, chat *db.ChatRow, sin
 		if err := s.sendChatUpdateBatches(ctx, chatID, sinceSeq, chatLatestSeq, toolBodies, stream); err != nil {
 			return 0, svcerr.WrapOr(err, svcerr.Internal("failed to send chat updates"))
 		}
+		// Compaction raises the watermark before it deletes anything under
+		// it. If it rose past the cursor while the replay was reading, the
+		// replay may have missed rows the delete took; a snapshot now
+		// replaces whatever the replay built. If it did not, nothing above
+		// the cursor was deleted, and the replay is complete.
+		compactedThrough, err := s.deps.Repo.GetChatCompactedThrough(ctx, chatID)
+		if err != nil {
+			logging.WarnContext(ctx, LOG_PREFIX_STREAM_CHAT+" Could not re-check the compaction watermark after a replay",
+				"chatID", shortID(chatID), "error", err)
+		} else if compactedThrough > sinceSeq {
+			span.SetAttributes(attribute.String("chat_stream.sync", "replay+snapshot"))
+			snapshotSeq, err := s.sendChatSnapshot(ctx, chat, toolBodies, stream)
+			if err != nil {
+				return 0, svcerr.WrapOr(err, svcerr.Internal("failed to send chat snapshot"))
+			}
+			return snapshotSeq, nil
+		}
 	}
 	return chatLatestSeq, nil
 }
@@ -287,8 +309,13 @@ func (s *Service) sendInitialChatSync(ctx context.Context, chat *db.ChatRow, sin
 //     cursor belongs to another database, or to a chat whose update log was
 //     rebuilt; "replay nothing" sent no chat state at all, leaving the client
 //     on its stale cache with no signal that it was wrong.
-func chatCursorNeedsSnapshot(chatSinceSeq, chatLatestSeq int64) bool {
-	return chatSinceSeq > chatLatestSeq || chatLatestSeq-chatSinceSeq > maxChatReplayGap
+//   - The cursor is BELOW the chat's compaction watermark: the ledger there
+//     keeps only each entity's newest update (store.CompactChatUpdates), so a
+//     replay would skip rows — a message update, a tool call's progress —
+//     and the client could not tell. A small gap on an idle chat is exactly
+//     this case: the cap above does not catch it.
+func chatCursorNeedsSnapshot(chatSinceSeq, chatLatestSeq, chatCompactedThrough int64) bool {
+	return chatSinceSeq > chatLatestSeq || chatLatestSeq-chatSinceSeq > maxChatReplayGap || chatSinceSeq < chatCompactedThrough
 }
 
 // chatUpdateToProto converts a persisted chat update to its wire form.

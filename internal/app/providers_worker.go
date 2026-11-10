@@ -6,8 +6,13 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/nats-io/nats.go"
+	"github.com/reliant-labs/forge/pkg/observe"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
 
 	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
 	"github.com/reliant-labs/reliant/internal/agentruns"
@@ -806,4 +811,101 @@ func NewWriteLedgerPrune(d WriteLedgerPruneDeps) (*WriteLedgerPrune, error) {
 func (p *WriteLedgerPrune) Run(ctx context.Context) error {
 	p.ledger.PruneLoop(ctx, p.writes)
 	return nil
+}
+
+// ledgerRetentionInterval is how often the ledger retention pass runs. Each
+// pass covers only what aged out since the last one, so an hour keeps it
+// small once the first pass has worked off the backlog.
+const ledgerRetentionInterval = time.Hour
+
+// ledgerRetentionPause paces a pass's batches (db.LedgerRetentionPause).
+const ledgerRetentionPause = db.LedgerRetentionPause(20 * time.Millisecond)
+
+// LedgerRetention compacts chat update logs and prunes finished runs' internal
+// steps past their retention (internal/db/ledger_retention.go), hourly. Every
+// replica runs it: the work is idempotent and skips what another replica is
+// deleting.
+type LedgerRetention struct {
+	repo        *db.Repo
+	chatUpdates time.Duration
+	steps       time.Duration
+	deleted     metric.Int64Counter
+}
+
+// LedgerRetentionDeps is the repository and the two retention periods (0: off).
+type LedgerRetentionDeps struct {
+	DB                     *db.Repo
+	ChatUpdateRetention    time.Duration
+	StepExecutionRetention time.Duration
+}
+
+// NewLedgerRetention builds the retention loop.
+//
+//forge:root-only worker
+func NewLedgerRetention(d LedgerRetentionDeps) (*LedgerRetention, error) {
+	deleted, err := otel.Meter("github.com/reliant-labs/reliant/internal/app/ledger_retention").Int64Counter(
+		"reliant.ledger_retention.rows_deleted",
+		metric.WithUnit("{row}"),
+		metric.WithDescription("Rows the ledger retention pass deleted, by table."))
+	// An instrument the SDK refuses still comes back usable (a no-op).
+	otel.Handle(err)
+	return &LedgerRetention{repo: d.DB, chatUpdates: d.ChatUpdateRetention, steps: d.StepExecutionRetention, deleted: deleted}, nil
+}
+
+// Run runs a pass, then one an hour, until ctx ends.
+func (l *LedgerRetention) Run(ctx context.Context) error {
+	if l.chatUpdates <= 0 && l.steps <= 0 {
+		logging.InfoContext(ctx, "ledger retention is off: both retention periods are 0")
+		return nil
+	}
+	ticker := time.NewTicker(ledgerRetentionInterval)
+	defer ticker.Stop()
+	for {
+		l.pass(ctx, time.Now())
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-ticker.C:
+		}
+	}
+}
+
+// pass is one retention pass at now. A failure is logged and retried by the
+// next pass: everything it records (watermarks, the step cursor) is recorded
+// only for work that is done.
+func (l *LedgerRetention) pass(ctx context.Context, now time.Time) {
+	if l.chatUpdates > 0 {
+		cutoff := now.Add(-l.chatUpdates)
+		var res db.ChatCompactionResult
+		err := observe.RunRoot(ctx, "worker.ledger_retention.chat_updates", func(ctx context.Context) error {
+			var err error
+			res, err = l.repo.CompactChatUpdates(ctx, cutoff, ledgerRetentionPause)
+			return err
+		})
+		l.deleted.Add(context.WithoutCancel(ctx), res.Deleted, metric.WithAttributes(attribute.String("table", "chat_updates")))
+		attrs := []any{"chats", res.Chats, "examined", res.Examined, "deleted", res.Deleted, "cutoff", cutoff}
+		switch {
+		case err != nil && ctx.Err() == nil:
+			logging.WarnContext(ctx, "ledger retention: compacting chat updates failed", append(attrs, "error", err)...)
+		case res.Chats > 0:
+			logging.InfoContext(ctx, "ledger retention: compacted chat updates", attrs...)
+		}
+	}
+	if l.steps > 0 {
+		cutoff := now.Add(-l.steps)
+		var res db.StepRetentionResult
+		err := observe.RunRoot(ctx, "worker.ledger_retention.step_executions", func(ctx context.Context) error {
+			var err error
+			res, err = l.repo.PruneStepExecutions(ctx, cutoff, ledgerRetentionPause)
+			return err
+		})
+		l.deleted.Add(context.WithoutCancel(ctx), res.Deleted, metric.WithAttributes(attribute.String("table", "step_executions")))
+		attrs := []any{"runs", res.Runs, "deleted", res.Deleted, "cutoff", cutoff}
+		switch {
+		case err != nil && ctx.Err() == nil:
+			logging.WarnContext(ctx, "ledger retention: pruning step executions failed", append(attrs, "error", err)...)
+		case res.Runs > 0:
+			logging.InfoContext(ctx, "ledger retention: pruned step executions", attrs...)
+		}
+	}
 }

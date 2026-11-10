@@ -580,6 +580,14 @@ func (g *Graph) newWriteLedgerPrune() (*WriteLedgerPrune, error) {
 	})
 }
 
+func (g *Graph) newLedgerRetention() (*LedgerRetention, error) {
+	return NewLedgerRetention(LedgerRetentionDeps{
+		DB:                     g.Database(),
+		ChatUpdateRetention:    g.WorkerConfig.GetChatUpdateRetention().AsDuration(),
+		StepExecutionRetention: g.WorkerConfig.GetStepExecutionRetention().AsDuration(),
+	})
+}
+
 // newDaemonRoutes constructs the daemon-audience route set (routes_gen.go).
 func (g *Graph) newDaemonRoutes() (*DaemonRoutes, error) {
 	return NewDaemonRoutes(DaemonRoutesDeps{

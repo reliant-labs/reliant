@@ -176,4 +176,23 @@ message WorkerConfig {
     },
     (buf.validate.field).int32 = {gte: 1}
   ];
+
+  // Ledger retention (internal/db/ledger_retention.go): every replica's
+  // hourly pass. A chat's updates older than chat_update_retention are
+  // compacted to what a snapshot reads (each entity's newest update), and a
+  // client reconnecting from before that gets a fresh snapshot instead of a
+  // replay. The internal steps (CallLLM, ExecuteTools, SaveMessage, …) of a
+  // run that completed or was cancelled more than step_execution_retention ago
+  // are deleted; the steps the chat timeline renders are kept. 0 turns either
+  // off.
+  google.protobuf.Duration chat_update_retention = 32 [(forge.v1.config) = {
+    env_var: "RELIANT_WORKER_CHAT_UPDATE_RETENTION"
+    default_value: "168h"
+    description: "Age past which a chat's update log is compacted to each entity's newest update (0: never)"
+  }];
+  google.protobuf.Duration step_execution_retention = 33 [(forge.v1.config) = {
+    env_var: "RELIANT_WORKER_STEP_EXECUTION_RETENTION"
+    default_value: "720h"
+    description: "Age past which a finished run's internal step records are deleted (0: never)"
+  }];
 }

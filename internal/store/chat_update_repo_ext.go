@@ -8,6 +8,7 @@ package store
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sort"
 	"time"
@@ -273,6 +274,190 @@ const ErrorUpdatesInRangeSQL = `
 // attempt it has (the web client's applyHistoricalErrors).
 func ErrorUpdatesInRange(ctx context.Context, db orm.Context, chatID string, from *time.Time, thread string, beforeSeq int64) ([]core.ChatUpdate, error) {
 	return scanChatUpdates(ctx, db, ErrorUpdatesInRangeSQL, chatID, from, thread, beforeSeq)
+}
+
+// ─── Compaction ──────────────────────────────────────────────────────────────
+//
+// A chat's ledger is append-only, and it was never pruned: on prod
+// (2026-11-10) 7.7M rows / 10 GB, more than half of them NODE_EXECUTION churn
+// and MESSAGE / TOOL_CALL / STREAM_FINALIZED rows nothing reads after the live
+// stream has delivered them. Compaction deletes an aged row only when no
+// reader can need it, which is a statement about each reader:
+//
+//   - the snapshot heads (SnapshotHeadsSQL): the newest update per entity of
+//     the types it walks, plus the newest THREAD / QUESTION per re-key;
+//   - a run-status view's node heads (WorkflowNodeHeadsSQL): the newest
+//     NODE_EXECUTION per node;
+//   - an approval's announced state (listUnannouncedResolutionsSQL): the newest
+//     APPROVAL update per approval;
+//   - scroll-back's errors (ErrorUpdatesInRangeSQL): every ERROR attempt,
+//     because it picks the newest one INSIDE a page's range;
+//   - a polling follower (GetChatUpdates, sdk/go/reliant/follow): the run's
+//     WORKFLOW_STATUS rows, its verdict;
+//   - the chat's high-water mark (LatestChatUpdateSequence): its newest row.
+//
+// So THREAD, QUESTION, ERROR and WORKFLOW_STATUS are kept whole (together
+// about 2% of rows); MESSAGE, TOOL_CALL, STREAM_FINALIZED and
+// AGENT_MESSAGES_DRAINED, which no reader takes from the log, are deleted; and
+// every other type keeps its newest row per (type, entity) — a superset of
+// each head reader above, so each reads exactly what it read before (a type
+// added later lands in this class, which is the safe default). Nothing is
+// deleted that is the chat's newest row.
+//
+// Rows at or below the chat's compaction watermark
+// (update_stream_counters.compacted_through_seq) are what is left; a replay
+// from a cursor below it would skip rows, so a reconnect there gets a snapshot.
+// CompactChatUpdates raises the watermark BEFORE it deletes, so it never
+// under-states what is gone.
+
+// ChatCompactionDue is a chat whose ledger has rows above its compaction
+// watermark that have aged past the cutoff.
+type ChatCompactionDue struct {
+	ChatID  string `bun:"stream_id"`
+	Through int64  `bun:"compacted_through_seq"`
+}
+
+// chatsDueForCompactionSQL finds them, after ?2 in chat id order, at most ?1.
+// Every chat's counter row is read (the table holds one row per chat and per
+// user), but only one with rows past its watermark costs a probe: the first
+// row past it, on chat_updates_chat_sequence_key. A chat idle since its last
+// compaction has its watermark at its newest row and is skipped by the first
+// predicate alone.
+const chatsDueForCompactionSQL = `
+SELECT c.stream_id, c.compacted_through_seq
+  FROM update_stream_counters c
+ WHERE c.stream_kind = 'chat'
+   AND c.last_assigned_seq > c.compacted_through_seq
+   AND c.stream_id > ?2
+   AND (SELECT u.created_at FROM chat_updates u
+         WHERE u.chat_id = c.stream_id AND u.sequence_number > c.compacted_through_seq
+         ORDER BY u.sequence_number
+         LIMIT 1) < ?0
+ ORDER BY c.stream_id
+ LIMIT ?1`
+
+// ChatsDueForCompaction returns up to limit chats, after afterChatID in id
+// order, whose first update past their compaction watermark was written
+// before cutoff.
+func ChatsDueForCompaction(ctx context.Context, db orm.Context, cutoff time.Time, afterChatID string, limit int) ([]ChatCompactionDue, error) {
+	var out []ChatCompactionDue
+	if err := db.Bun().NewRaw(chatsDueForCompactionSQL, cutoff.UTC(), limit, afterChatID).Scan(ctx, &out); err != nil {
+		return nil, fmt.Errorf("chats due for compaction: %w", err)
+	}
+	return out, nil
+}
+
+// ChatCompactedThrough is a chat's compaction watermark: a replay must start
+// at or above it. 0 for a chat never compacted, or with no counter row.
+func ChatCompactedThrough(ctx context.Context, db orm.Context, chatID string) (int64, error) {
+	var through int64
+	err := db.QueryRow(ctx, `SELECT COALESCE((SELECT compacted_through_seq FROM update_stream_counters WHERE stream_kind = 'chat' AND stream_id = $1), 0)`, chatID).Scan(&through)
+	if err != nil {
+		return 0, fmt.Errorf("chat compaction watermark: %w", err)
+	}
+	return through, nil
+}
+
+// raiseChatWatermarkSQL raises a chat's compaction watermark, never lowers it.
+// It is its own statement, committed before the delete it covers: the counter
+// row is the chat's sequence allocator, and holding its lock across a delete
+// would stall every writer of the chat for as long.
+const raiseChatWatermarkSQL = `
+UPDATE update_stream_counters SET compacted_through_seq = GREATEST(compacted_through_seq, $2)
+ WHERE stream_kind = 'chat' AND stream_id = $1`
+
+// CompactChatUpdatesSQL deletes the rows of chat $1 in ($2, $3] that no reader
+// needs (the section comment above). Each kept class is probed through the
+// partial index its own reader uses, and the update types are LITERALS for
+// SnapshotHeadsSQL's reason: a generic plan cannot prove a partial index
+// applies through a bound parameter. TestChatCompactionClassesMatchTheReaders
+// pins the lists to the enum and to SnapshotHeadsSQL's exclusion list.
+//
+//	3 THREAD, 5 WORKFLOW_STATUS, 6 ERROR, 18 QUESTION    kept whole
+//	1 MESSAGE, 4 TOOL_CALL, 19 STREAM_FINALIZED,
+//	20 AGENT_MESSAGES_DRAINED                            deleted
+//	9 NODE_EXECUTION                                     newest per node (idx_chat_updates_workflow_heads)
+//	everything else                                      newest per (type, entity) (idx_chat_updates_snapshot_entity_heads)
+const CompactChatUpdatesSQL = `
+DELETE FROM chat_updates c
+ WHERE c.chat_id = $1 AND c.sequence_number > $2 AND c.sequence_number <= $3
+   AND c.update_type NOT IN (3, 5, 6, 18)
+   AND EXISTS (SELECT 1 FROM chat_updates n
+                WHERE n.chat_id = c.chat_id AND n.sequence_number > c.sequence_number)
+   AND (
+        c.update_type IN (1, 4, 19, 20)
+     OR (c.update_type = 9 AND EXISTS (
+            SELECT 1 FROM chat_updates n
+             WHERE n.chat_id = c.chat_id AND n.update_type = 9
+               AND n.entity_id COLLATE "C" = c.entity_id COLLATE "C"
+               AND n.sequence_number > c.sequence_number))
+     OR (c.update_type NOT IN (1, 3, 4, 5, 9, 18, 19, 20) AND EXISTS (
+            SELECT 1 FROM chat_updates n
+             WHERE n.chat_id = c.chat_id AND n.update_type NOT IN (1, 3, 4, 5, 9, 18, 19, 20)
+               AND n.entity_id = c.entity_id AND n.update_type = c.update_type
+               AND n.sequence_number > c.sequence_number))
+   )`
+
+// ChatCompactionBatch is what one CompactChatUpdates call did.
+type ChatCompactionBatch struct {
+	// Examined is how many aged rows the batch covered.
+	Examined int
+	// Deleted is how many of them it deleted.
+	Deleted int64
+	// Through is the chat's compaction watermark after the batch.
+	Through int64
+	// Done is true when the chat has no aged row past Through.
+	Done bool
+}
+
+// CompactChatUpdates compacts the next run of at most limit aged rows of a
+// chat after its watermark `after`: rows are aged when written before cutoff,
+// and the run stops at the first row that is not, so the watermark never
+// passes a row younger than the cutoff. It runs outside any transaction:
+// raising the watermark commits first, then the delete.
+func CompactChatUpdates(ctx context.Context, db orm.Context, chatID string, after int64, cutoff time.Time, limit int) (ChatCompactionBatch, error) {
+	batch := ChatCompactionBatch{Through: after}
+	if limit <= 0 {
+		return batch, errors.New("compact chat updates: limit must be positive")
+	}
+	rows, err := db.Query(ctx, `SELECT sequence_number, created_at FROM chat_updates
+		WHERE chat_id = $1 AND sequence_number > $2 ORDER BY sequence_number LIMIT $3`, chatID, after, limit)
+	if err != nil {
+		return batch, fmt.Errorf("compact chat updates: read: %w", err)
+	}
+	read, young := 0, false
+	for rows.Next() {
+		var seq int64
+		var createdAt time.Time
+		if err := rows.Scan(&seq, &createdAt); err != nil {
+			rows.Close()
+			return batch, fmt.Errorf("compact chat updates: scan: %w", err)
+		}
+		read++
+		if young || !createdAt.Before(cutoff) {
+			young = true
+			continue
+		}
+		batch.Through = seq
+		batch.Examined++
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return batch, fmt.Errorf("compact chat updates: read: %w", err)
+	}
+	batch.Done = young || read < limit
+	if batch.Examined == 0 {
+		return batch, nil
+	}
+	if _, err := db.Exec(ctx, raiseChatWatermarkSQL, chatID, batch.Through); err != nil {
+		return batch, fmt.Errorf("compact chat updates: raise watermark: %w", err)
+	}
+	res, err := db.Exec(ctx, CompactChatUpdatesSQL, chatID, after, batch.Through)
+	if err != nil {
+		return batch, fmt.Errorf("compact chat updates: delete: %w", err)
+	}
+	batch.Deleted, err = res.RowsAffected()
+	return batch, err
 }
 
 // scanChatUpdates runs a statement selecting chat_updates' columns in table

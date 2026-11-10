@@ -23,6 +23,7 @@ func TestWorkerStopsTakingWorkFirst(t *testing.T) {
 		"workflow_event_relay",
 		"account_usage_poller",
 		"write_ledger_prune",
+		"ledger_retention",
 		"account_recorder",
 		"streaming_hub",
 		"temporal_client",
@@ -42,7 +43,7 @@ func TestWorkerStopsTakingWorkFirst(t *testing.T) {
 			require.True(t, n.Run, "the Temporal worker polls")
 			require.True(t, n.Drain, "the Temporal worker drains: that is what releases activities")
 			require.True(t, n.Ready, "the Temporal worker gates readiness")
-		case "workflow_event_relay", "account_usage_poller", "write_ledger_prune":
+		case "workflow_event_relay", "account_usage_poller", "write_ledger_prune", "ledger_retention":
 			require.True(t, n.Run, "%s runs", n.Name)
 		case "account_recorder":
 			require.True(t, n.Close, "the recorder flushes on close")

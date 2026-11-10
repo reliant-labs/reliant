@@ -34,14 +34,27 @@ type replayGapRepo struct {
 
 	latestChatSeq int64
 	replayReads   atomic.Int64
+
+	// compactedThrough is the chat's compaction watermark; compactDuringReplay,
+	// when set, is the watermark compaction raises it to once the first
+	// replay read has run.
+	compactedThrough    atomic.Int64
+	compactDuringReplay int64
 }
 
 func (r *replayGapRepo) GetLatestUpdateSequence(context.Context, string) (int64, error) {
 	return r.latestChatSeq, nil
 }
 
+func (r *replayGapRepo) GetChatCompactedThrough(context.Context, string) (int64, error) {
+	return r.compactedThrough.Load(), nil
+}
+
 func (r *replayGapRepo) GetUpdatesSince(_ context.Context, _ string, sinceSeq int64, limit int) ([]db.ChatUpdate, error) {
 	r.replayReads.Add(1)
+	if r.compactDuringReplay > 0 {
+		r.compactedThrough.Store(r.compactDuringReplay)
+	}
 	updates := make([]db.ChatUpdate, 0, limit)
 	for seq := sinceSeq + 1; seq <= r.latestChatSeq && len(updates) < limit; seq++ {
 		updates = append(updates, db.ChatUpdate{
@@ -143,4 +156,69 @@ func TestStreamChatUpdates_ReplayGapWithinCapReplays(t *testing.T) {
 	require.NotNil(t, batch, "a gap of exactly maxChatReplayGap must replay; got %T", event.GetEvent())
 	require.Equal(t, int64(cursor+1), batch.GetUpdates()[0].GetSequenceNumber())
 	require.Positive(t, repo.replayReads.Load())
+}
+
+// Retention compacts a chat's ledger below its watermark to each entity's
+// newest update. A cursor there is a small gap on a chat that went idle — well
+// inside the cap — but replaying from it would silently skip the rows
+// compaction deleted. It gets a snapshot.
+func TestStreamChatUpdates_CursorBelowCompactionWatermarkSendsSnapshot(t *testing.T) {
+	repo := newReplayGapRepo(120)
+	repo.compactedThrough.Store(100)
+
+	event := firstChatSyncEvent(t, repo, 99)
+
+	snapshot := event.GetSnapshot()
+	require.NotNil(t, snapshot,
+		"a cursor below the compaction watermark must get a snapshot, not a replay with holes; got %T", event.GetEvent())
+	require.Equal(t, int64(120), snapshot.GetLatestSequence())
+	require.Zero(t, repo.replayReads.Load(), "no replay reads should run once the snapshot is chosen")
+}
+
+// AT the watermark nothing the replay reads was compacted: (cursor, latest]
+// is whole, and the cheap path stays.
+func TestStreamChatUpdates_CursorAtCompactionWatermarkReplays(t *testing.T) {
+	repo := newReplayGapRepo(120)
+	repo.compactedThrough.Store(100)
+
+	event := firstChatSyncEvent(t, repo, 100)
+
+	batch := event.GetUpdates()
+	require.NotNil(t, batch, "a cursor at the watermark must replay; got %T", event.GetEvent())
+	require.Equal(t, int64(101), batch.GetUpdates()[0].GetSequenceNumber())
+}
+
+// Compaction raises the watermark before it deletes. When it passes the
+// cursor while the replay is reading, the replay may be missing rows, so the
+// stream follows it with a snapshot, which replaces whatever the replay built.
+func TestStreamChatUpdates_CompactionDuringReplayFollowsWithSnapshot(t *testing.T) {
+	const cursor = 10
+	repo := newReplayGapRepo(cursor + 3*chatReplayBatchSize)
+	repo.compactDuringReplay = cursor + 50
+
+	svc := NewTestStreaming(t, WithStreamingDeps(Deps{Repo: repo, Deltas: noopHub{}}))
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	t.Cleanup(cancel)
+	stream, err := streamingTestClient(t, svc).
+		StreamChatUpdates(ctx, connect.NewRequest(&reliantv1.StreamChatUpdatesRequest{
+			ChatId:   raceTestChatID,
+			SinceSeq: cursor,
+		}))
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = stream.Close() })
+
+	batches := 0
+	for stream.Receive() {
+		msg := stream.Msg()
+		if msg.GetUpdates() != nil {
+			batches++
+			continue
+		}
+		if snapshot := msg.GetSnapshot(); snapshot != nil {
+			require.Positive(t, batches, "the replay ran first: the watermark was below the cursor when it started")
+			require.Equal(t, repo.latestChatSeq, snapshot.GetLatestSequence())
+			return
+		}
+	}
+	t.Fatalf("no snapshot followed a replay the watermark overtook: %v", stream.Err())
 }

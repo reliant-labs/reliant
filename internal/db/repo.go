@@ -675,6 +675,13 @@ func (r *Repo) GetLatestUpdateSequence(ctx context.Context, chatID string) (int6
 	return store.LatestChatUpdateSequence(ctx, r.ORM(), chatID)
 }
 
+// GetChatCompactedThrough returns a chat's compaction watermark: at or below
+// it the ledger holds only what a snapshot reads, so a replay must start at or
+// above it (store.CompactChatUpdates). 0 for a chat never compacted.
+func (r *Repo) GetChatCompactedThrough(ctx context.Context, chatID string) (int64, error) {
+	return store.ChatCompactedThrough(ctx, r.ORM(), chatID)
+}
+
 // CreateChatUpdate creates a new chat update (for dual-write pattern)
 // This operation is atomic - the sequence number generation and insert happen in a transaction
 // to prevent race conditions when multiple parallel operations try to create updates.

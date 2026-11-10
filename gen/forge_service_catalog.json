@@ -421,6 +421,7 @@
         "Database",
         "DebugServer",
         "IntegrationSettings",
+        "LedgerRetention",
         "NATSConn",
         "PauseService",
         "PayloadStore",
@@ -46144,6 +46145,18 @@
       "source": {
         "path": "internal/app/providers_api.go",
         "symbol": "NewLLMUsageRetention"
+      },
+      "methods": [],
+      "implementation_candidates": []
+    },
+    {
+      "id": "LedgerRetention",
+      "name": "LedgerRetention",
+      "kind": "provider",
+      "type": "*github.com/reliant-labs/reliant/internal/app.LedgerRetention",
+      "source": {
+        "path": "internal/app/providers_worker.go",
+        "symbol": "NewLedgerRetention"
       },
       "methods": [],
       "implementation_candidates": []
