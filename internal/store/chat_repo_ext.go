@@ -227,6 +227,15 @@ type ChatMove struct {
 	// DaemonID pins the chat's machine; nil clears the pin. Pinning one puts a
 	// no-machine chat on a machine, as UpdateChatActiveDaemon does.
 	DaemonID *string
+	// OrgID is the org the move was decided in: the chat's own org, else its
+	// project's, else DefaultOrgID. The statement moves the chat only while
+	// the chat and the target project still resolve to it, and stamps it on a
+	// chat with none, so the backfill cannot later give the moved chat
+	// another org. nil decides nothing: neither side had an org yet.
+	OrgID *string
+	// DefaultOrgID is the caller's default org, what a side with no org
+	// resolves to; nil when the decision did not need it.
+	DefaultOrgID *string
 }
 
 // Chat activities (reliantv1.ChatActivity) a chat may be moved in: IDLE and
@@ -249,6 +258,7 @@ UPDATE chats SET
     worktree_id = ?1,
     active_daemon_id = ?2,
     no_machine = no_machine AND ?2::text IS NULL,
+    org_id = COALESCE(org_id, ?7::text),
     updated_at = NOW()
 WHERE id = ?3
   AND project_id = ?4
@@ -256,6 +266,10 @@ WHERE id = ?3
       SELECT 1 FROM chats_with_activity v
       WHERE v.id = ?3 AND v.activity IN (?5, ?6)
   )
+  AND (?7::text IS NULL OR (
+      COALESCE(org_id, (SELECT p.org_id FROM projects p WHERE p.id = ?4), ?8::text) = ?7::text
+      AND COALESCE((SELECT p.org_id FROM projects p WHERE p.id = ?0), ?8::text) = ?7::text
+  ))
 RETURNING id`
 
 // moveChatPlansSQL moves the chat's plans with it: plans.project_id cascades
@@ -275,7 +289,7 @@ func MoveChatToProject(ctx context.Context, db orm.Context, m ChatMove) (moved b
 		var ids []string
 		if err := db.Bun().NewRaw(moveChatToProjectSQL,
 			m.ToProjectID, m.WorktreeID, m.DaemonID, m.ChatID, m.FromProjectID,
-			chatActivityIdle, chatActivityError,
+			chatActivityIdle, chatActivityError, m.OrgID, m.DefaultOrgID,
 		).Scan(ctx, &ids); err != nil && !errors.Is(err, sql.ErrNoRows) {
 			return fmt.Errorf("failed to move chat: %w", recoveryAdmissionError(err))
 		}
