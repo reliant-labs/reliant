@@ -338,10 +338,10 @@ const file_services_organization_v1_organization_proto_rawDesc = "" +
 	"\n" +
 	"created_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x127\n" +
 	"\tjoined_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\bjoinedAt\"\x1c\n" +
-	"\x1aListMyOrganizationsRequest\"\x8a\x01\n" +
+	"\x1aListMyOrganizationsRequest\"\xbc\x01\n" +
 	"\x1bListMyOrganizationsResponse\x12E\n" +
 	"\rorganizations\x18\x01 \x03(\v2\x1f.controlplane.v1.MyOrganizationR\rorganizations\x12$\n" +
-	"\x0edefault_org_id\x18\x02 \x01(\tR\fdefaultOrgId\"6\n" +
+	"\x0edefault_org_id\x18\x02 \x01(\tR\fdefaultOrgIdJ\x04\b\x03\x10\x04J\x04\b\x04\x10\x05R\x0ebilling_org_idR\x14billing_org_explicit\"6\n" +
 	"\x1dSetDefaultOrganizationRequest\x12\x15\n" +
 	"\x06org_id\x18\x01 \x01(\tR\x05orgId\"F\n" +
 	"\x1eSetDefaultOrganizationResponse\x12$\n" +

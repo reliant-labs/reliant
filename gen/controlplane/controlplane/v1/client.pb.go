@@ -233,6 +233,74 @@ func (x *ServiceBuild) GetVersion() string {
 	return ""
 }
 
+// InstanceScope is a read's acknowledgement that it was narrowed to dev
+// instances: the `forge env up` stacks whose telemetry the OTLP gateway stamped,
+// from the dev token it accepted, with reliant.instance.id (the instance) and
+// reliant.instance.user (the user id of the person who ran it). Shared by
+// ObservabilityService, IssuesService and RumService, whose requests carry
+// instance_ids / instance_users.
+//
+// A response carries it ONLY when the server applied the narrowing to every
+// row the response holds, and it echoes the request's values exactly (an
+// instance user as the email the client sent, not the user id it resolved
+// to). A response to a narrowed request WITHOUT it was not narrowed: a server
+// that predates the fields drops them, and a read that cannot narrow (a sql
+// panel, the service graph, the usage meter) answers for the whole scope. A client must not present such an answer as the instance's.
+//
+// Both lists empty never happens: a read that narrowed nothing carries no
+// InstanceScope at all.
+type InstanceScope struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	InstanceIds   []string               `protobuf:"bytes,1,rep,name=instance_ids,json=instanceIds,proto3" json:"instance_ids,omitempty"`
+	InstanceUsers []string               `protobuf:"bytes,2,rep,name=instance_users,json=instanceUsers,proto3" json:"instance_users,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *InstanceScope) Reset() {
+	*x = InstanceScope{}
+	mi := &file_controlplane_v1_client_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *InstanceScope) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*InstanceScope) ProtoMessage() {}
+
+func (x *InstanceScope) ProtoReflect() protoreflect.Message {
+	mi := &file_controlplane_v1_client_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use InstanceScope.ProtoReflect.Descriptor instead.
+func (*InstanceScope) Descriptor() ([]byte, []int) {
+	return file_controlplane_v1_client_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *InstanceScope) GetInstanceIds() []string {
+	if x != nil {
+		return x.InstanceIds
+	}
+	return nil
+}
+
+func (x *InstanceScope) GetInstanceUsers() []string {
+	if x != nil {
+		return x.InstanceUsers
+	}
+	return nil
+}
+
 var File_controlplane_v1_client_proto protoreflect.FileDescriptor
 
 const file_controlplane_v1_client_proto_rawDesc = "" +
@@ -256,7 +324,10 @@ const file_controlplane_v1_client_proto_rawDesc = "" +
 	"\rscreen_height\x18\f \x01(\x05R\fscreenHeight\"B\n" +
 	"\fServiceBuild\x12\x18\n" +
 	"\aservice\x18\x01 \x01(\tR\aservice\x12\x18\n" +
-	"\aversion\x18\x02 \x01(\tR\aversionB\xd0\x01\n" +
+	"\aversion\x18\x02 \x01(\tR\aversion\"Y\n" +
+	"\rInstanceScope\x12!\n" +
+	"\finstance_ids\x18\x01 \x03(\tR\vinstanceIds\x12%\n" +
+	"\x0einstance_users\x18\x02 \x03(\tR\rinstanceUsersB\xd0\x01\n" +
 	"\x13com.controlplane.v1B\vClientProtoP\x01ZOgithub.com/reliant-labs/reliant/gen/controlplane/controlplane/v1;controlplanev1\xa2\x02\x03CXX\xaa\x02\x0fControlplane.V1\xca\x02\x0fControlplane\\V1\xe2\x02\x1bControlplane\\V1\\GPBMetadata\xea\x02\x10Controlplane::V1b\x06proto3"
 
 var (
@@ -271,10 +342,11 @@ func file_controlplane_v1_client_proto_rawDescGZIP() []byte {
 	return file_controlplane_v1_client_proto_rawDescData
 }
 
-var file_controlplane_v1_client_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
+var file_controlplane_v1_client_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
 var file_controlplane_v1_client_proto_goTypes = []any{
 	(*ClientContext)(nil), // 0: controlplane.v1.ClientContext
 	(*ServiceBuild)(nil),  // 1: controlplane.v1.ServiceBuild
+	(*InstanceScope)(nil), // 2: controlplane.v1.InstanceScope
 }
 var file_controlplane_v1_client_proto_depIdxs = []int32{
 	0, // [0:0] is the sub-list for method output_type
@@ -295,7 +367,7 @@ func file_controlplane_v1_client_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_controlplane_v1_client_proto_rawDesc), len(file_controlplane_v1_client_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   2,
+			NumMessages:   3,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

@@ -70,6 +70,10 @@ message ListMyOrganizationsResponse {
   repeated MyOrganization organizations = 1;
   // The org requests that name none act in. "" when organizations is empty.
   string default_org_id = 2;
+  // 3 and 4 carried a per-person billing org (#2397); the owner dropped that
+  // design (2026-11-09) and approved removing them (breaking:approved).
+  reserved 3, 4;
+  reserved "billing_org_id", "billing_org_explicit";
 }
 
 message SetDefaultOrganizationRequest {
