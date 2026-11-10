@@ -191,3 +191,98 @@ func TestAssignUnassignedOrg_SpansBatches(t *testing.T) {
 		}
 	}
 }
+
+// A project a concurrent write holds is skipped by a pass, and so are its
+// chats: they never take that pass's default while their project may later
+// take another. A later pass with a different default stamps the project and
+// its chats alike.
+func TestAssignUnassignedOrg_ChatsWaitForTheirProject(t *testing.T) {
+	env := storetest.New(t)
+	ctx := context.Background()
+	at := time.Date(2026, 1, 15, 12, 0, 0, 0, time.UTC)
+	user := storetest.SeedUserID
+	for _, id := range []string{"p-held", "p-free"} {
+		if err := env.Repo.CreateProject(ctx, &core.Project{ID: id, UserID: user, Name: id, Path: "/srv/" + id,
+			CreatedAt: at, UpdatedAt: at, LastActive: at}); err != nil {
+			t.Fatal(err)
+		}
+		for j := range 2 {
+			if err := store.InsertChat(ctx, env.ORM, &core.Chat{ID: fmt.Sprintf("c-%s-%d", id, j), ProjectID: id, UserID: user,
+				Title: "x", CreatedAt: at, UpdatedAt: at, LastActive: at}); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	org := func(get func() (*string, error)) string {
+		t.Helper()
+		got, err := get()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got == nil {
+			return ""
+		}
+		return *got
+	}
+	projectOrg := func(id string) string {
+		return org(func() (*string, error) {
+			p, err := env.Repo.GetProject(ctx, id)
+			if err != nil {
+				return nil, err
+			}
+			return p.OrgID, nil
+		})
+	}
+	chatOrg := func(id string) string {
+		return org(func() (*string, error) {
+			c, err := env.Repo.GetChatRow(ctx, id)
+			if err != nil {
+				return nil, err
+			}
+			return c.OrgID, nil
+		})
+	}
+
+	// Another transaction holds p-held while a pass with default home runs.
+	held, err := env.SQL.BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := held.ExecContext(ctx, `SELECT id FROM projects WHERE id = 'p-held' FOR UPDATE`); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.AssignUnassignedOrg(ctx, env.ORM, user, "home"); err != nil {
+		t.Fatal(err)
+	}
+	if got := projectOrg("p-held"); got != "" {
+		t.Fatalf("the held project was stamped %q", got)
+	}
+	for j := range 2 {
+		if got := chatOrg(fmt.Sprintf("c-p-held-%d", j)); got != "" {
+			t.Fatalf("a chat of the held project took %q before its project", got)
+		}
+		if got := chatOrg(fmt.Sprintf("c-p-free-%d", j)); got != "home" {
+			t.Fatalf("a chat of the free project has %q, want its project's home", got)
+		}
+	}
+	if err := held.Rollback(); err != nil {
+		t.Fatal(err)
+	}
+
+	// The default has changed by the next pass: the project and its chats
+	// still agree.
+	if err := store.AssignUnassignedOrg(ctx, env.ORM, user, "acme"); err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range []string{"p-held", "p-free"} {
+		want := projectOrg(id)
+		if want == "" {
+			t.Fatalf("project %s was never stamped", id)
+		}
+		for j := range 2 {
+			if got := chatOrg(fmt.Sprintf("c-%s-%d", id, j)); got != want {
+				t.Fatalf("chat %d of %s has %q, its project %q", j, id, got, want)
+			}
+		}
+	}
+}
