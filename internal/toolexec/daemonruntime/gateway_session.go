@@ -457,7 +457,8 @@ func (o *resultOutbox) holdBudget() int {
 // outbox is shared, at construction.
 func (o *resultOutbox) restore(store *outboxStore) outboxLoadReport {
 	o.store = store
-	held, report := store.load(time.Now(), o.holdTTL(), o.holdBudget())
+	now := time.Now()
+	held, retained, report := store.load(now, o.holdTTL(), o.holdBudget())
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	if o.held == nil {
@@ -467,6 +468,7 @@ func (o *resultOutbox) restore(store *outboxStore) outboxLoadReport {
 		o.held[h.requestID] = h
 		o.heldBytes += h.size
 	}
+	o.restoreRetainedLocked(retained, now)
 	return report
 }
 
@@ -554,9 +556,11 @@ func (o *resultOutbox) ack(requestID string) *heldResult {
 	o.delivered[requestID] = now
 	if h.retain {
 		o.retainLocked(h, now)
+		o.store.retainResult(requestID, now)
+	} else {
+		o.store.removeResult(requestID)
 	}
 	o.expireLocked(now)
-	o.store.removeResult(requestID)
 	return h
 }
 
@@ -565,6 +569,11 @@ func (o *resultOutbox) state(requestID string) toolexec.ToolRequestState {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	o.expireLocked(time.Now())
+	return o.stateLocked(requestID)
+}
+
+// stateLocked is state without the sweep. Must hold o.mu.
+func (o *resultOutbox) stateLocked(requestID string) toolexec.ToolRequestState {
 	if _, ok := o.running[requestID]; ok {
 		return toolexec.ToolRequestRunning
 	}

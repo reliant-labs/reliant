@@ -1321,8 +1321,13 @@ func (d *daemonClient) handleServerMessage(ctx context.Context, s *gatewaySessio
 			return nil
 		}
 		// Recorded before the goroutine starts, so a status question that
-		// arrives right behind the request already finds it running.
-		d.results.start(m.ToolRequest.RequestId)
+		// arrives right behind the request already finds it running. A
+		// request id this daemon already ran is never run again
+		// (result_once.go).
+		if known, fresh := d.results.begin(m.ToolRequest.RequestId); !fresh {
+			d.answerRepeatedRequest(s, m.ToolRequest.RequestId, known)
+			return nil
+		}
 		if s != nil && m.ToolRequest.RequestId != "" {
 			s.inFlight.Add(1) // until a gateway acknowledges the result
 		}
