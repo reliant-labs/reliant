@@ -27,7 +27,7 @@ RELIANT_ALLOW_PRIVATE_EGRESS kind=bool flag="" default="" required=false optiona
 RELIANT_ANALYTICS_DISABLED kind=bool flag="" default="" required=false optional=false sensitive=false allowed=[] aliases=[]
 RELIANT_API_BASE_URL kind=string flag="" default="" required=false optional=false sensitive=false allowed=[] aliases=[]
 RELIANT_CONTROL_PLANE_URL kind=string flag="" default="" required=false optional=false sensitive=false allowed=[] aliases=[CONTROL_PLANE_API_URL(deprecated=true values=map[]) CONTROL_PLANE_BASE_URL(deprecated=true values=map[])]
-RELIANT_DB_MAX_IDLE_CONNS kind=int32 flag="" default="10" required=false optional=false sensitive=false allowed=[] aliases=[]
+RELIANT_DB_MAX_IDLE_CONNS kind=int32 flag="" default="20" required=false optional=false sensitive=false allowed=[] aliases=[]
 RELIANT_DB_MAX_OPEN_CONNS kind=int32 flag="" default="25" required=false optional=false sensitive=false allowed=[] aliases=[]
 RELIANT_DB_SCHEMA_WAIT_SECONDS kind=int32 flag="" default="300" required=false optional=false sensitive=false allowed=[] aliases=[]
 RELIANT_DEBUG_OPENAI_RESPONSES_INPUT kind=bool flag="" default="" required=false optional=false sensitive=false allowed=[] aliases=[]

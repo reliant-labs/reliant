@@ -844,7 +844,7 @@ daemonRegisterConfigEnvMap = lambda c: DaemonRegisterConfig, config_secrets: [st
 }
 
 # forge:section schema DatabaseConfig
-# forge:hash=0b18e3231319a69f74e91e8918d150168330001d6afdb56f14bf6532d6faa124
+# forge:hash=b80c6cb6b3980082dbcb5a35eaa72e1ae9ab2bab2e54860b260c381ed38bd768
 schema DatabaseConfig:
     # Postgres connection URL
     database_url: ConfigSecretRef = ConfigSecretRef { name = "reliant-secrets", key = "database_url" }
@@ -855,7 +855,7 @@ schema DatabaseConfig:
     # Most open database connections
     db_max_open_conns: int = 25
     # Most idle database connections kept open
-    db_max_idle_conns: int = 10
+    db_max_idle_conns: int = 20
     # How long the startup ping retries a database that is not up yet
     db_connect_timeout: str = ""
     # Seconds to wait for the schema to be migrated

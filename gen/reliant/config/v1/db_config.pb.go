@@ -48,8 +48,14 @@ type DatabaseConfig struct {
 	DatabaseDirectUrl string `protobuf:"bytes,2,opt,name=database_direct_url,json=databaseDirectUrl,proto3" json:"database_direct_url,omitempty"`
 	// The only driver is postgres; the knob remains because deployments set it.
 	DatabaseDriver string `protobuf:"bytes,3,opt,name=database_driver,json=databaseDriver,proto3" json:"database_driver,omitempty"`
-	// The connection pool's size. Dev caps both low: its Postgres is shared by
-	// every parallel stack on the machine.
+	// The connection pool's size. These defaults are what prod runs (it sets
+	// neither): 25 open, 20 idle, and a server keeps the idle ones dialled
+	// (internal/db keepIdleWarm), so a chat open's fan-out of reads finds
+	// connections already open instead of paying a dial each. They match
+	// internal/db's defaultMaxOpenConns / defaultMaxIdleConns, which only a
+	// caller with no config reaches. Dev caps both low (control-plane
+	// deploy/kcl/dev/main.k: 8 / 2): its Postgres is shared by every parallel
+	// stack on the machine.
 	DbMaxOpenConns int32 `protobuf:"varint,4,opt,name=db_max_open_conns,json=dbMaxOpenConns,proto3" json:"db_max_open_conns,omitempty"`
 	DbMaxIdleConns int32 `protobuf:"varint,5,opt,name=db_max_idle_conns,json=dbMaxIdleConns,proto3" json:"db_max_idle_conns,omitempty"`
 	// How long the startup ping keeps retrying a database that is not up yet.
@@ -157,7 +163,7 @@ const file_reliant_config_v1_db_config_proto_rawDesc = "" +
 	"\x11db_max_open_conns\x18\x04 \x01(\x05BJ\xbaH\x04\x1a\x02(\x01\x82\xce\x18?\n" +
 	"\x19RELIANT_DB_MAX_OPEN_CONNS\x1a\x0225*\x1eMost open database connectionsR\x0edbMaxOpenConns\x12\x7f\n" +
 	"\x11db_max_idle_conns\x18\x05 \x01(\x05BT\xbaH\x04\x1a\x02(\x01\x82\xce\x18I\n" +
-	"\x19RELIANT_DB_MAX_IDLE_CONNS\x1a\x0210*(Most idle database connections kept openR\x0edbMaxIdleConns\x12\xaa\x01\n" +
+	"\x19RELIANT_DB_MAX_IDLE_CONNS\x1a\x0220*(Most idle database connections kept openR\x0edbMaxIdleConns\x12\xaa\x01\n" +
 	"\x12db_connect_timeout\x18\x06 \x01(\v2\x19.google.protobuf.DurationBa\xbaH\x05\xaa\x01\x02*\x00\x82\xce\x18U\n" +
 	"\x12DB_CONNECT_TIMEOUT*?How long the startup ping retries a database that is not up yetR\x10dbConnectTimeout\x12\x94\x01\n" +
 	"\x16db_schema_wait_seconds\x18\a \x01(\x05B_\xbaH\x04\x1a\x02(\x01\x82\xce\x18T\n" +
