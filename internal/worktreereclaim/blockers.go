@@ -2,6 +2,7 @@ package worktreereclaim
 
 import (
 	"fmt"
+	"hash/fnv"
 	"log/slog"
 	"sort"
 	"strconv"
@@ -46,12 +47,20 @@ type ReclaimBlocker struct {
 	LastSeen   time.Time `json:"last_seen"`
 	// Worktrees is how many distinct workspaces it has held since FirstSeen.
 	Worktrees int `json:"worktrees"`
+	// Unidentified marks one observation of a process whose start time could
+	// not be read. Without it a pid does not name one process (pids are
+	// reused), so such observations are never aggregated: each is its own
+	// entry, holding the one workspace it was met on.
+	Unidentified bool `json:"unidentified,omitempty"`
 }
 
 // String is the one line a person or agent acts on.
 func (b ReclaimBlocker) String() string {
 	who := "pid " + strconv.Itoa(b.PID)
 	switch {
+	case b.Unidentified:
+		return fmt.Sprintf("%s (identity unreadable; one observation at %s) blocked worktree reclaim of 1 worktree; its %s cannot be read, so nothing proves it is not using it",
+			who, b.LastSeen.UTC().Format(time.RFC3339), b.Unreadable)
 	case b.Comm != "" && !b.StartedAt.IsZero():
 		who += fmt.Sprintf(" (%s, up %s)", b.Comm, b.LastSeen.Sub(b.StartedAt).Round(time.Minute))
 	case b.Comm != "":
@@ -67,17 +76,24 @@ const blockerTTL = time.Hour
 // blockerWarnEvery bounds the daemon's warning about one blocker.
 const blockerWarnEvery = time.Hour
 
-// maxBlockerRoots bounds the workspaces remembered per blocker.
-const maxBlockerRoots = 10_000
+// maxUnidentified bounds the unaggregated observations kept; the oldest goes
+// first. Each is one workspace held at one moment, so dropping one loses an
+// old observation, never part of a count.
+const maxUnidentified = 64
 
+// blockerKey names one process: its pid and start time. An observation with
+// no start time is keyed by its own sequence number instead (Unidentified).
 type blockerKey struct {
 	pid     int
 	started time.Time
+	seq     uint64
 }
 
 type blockerState struct {
 	ReclaimBlocker
-	roots  map[string]bool
+	// roots is every distinct workspace held, by 64-bit hash: exact (a
+	// collision is ~2^-64) at 8 bytes each, so the count is never capped.
+	roots  map[uint64]struct{}
 	warned time.Time
 }
 
@@ -85,6 +101,13 @@ type blockerSet struct {
 	mu  sync.Mutex
 	now func() time.Time
 	m   map[blockerKey]*blockerState
+	seq uint64
+}
+
+func rootHash(root string) uint64 {
+	h := fnv.New64a()
+	_, _ = h.Write([]byte(root))
+	return h.Sum64()
 }
 
 // blockers is every check's record in this process: the daemon's retirement,
@@ -99,10 +122,15 @@ func (s *blockerSet) note(e *UninspectableProcessError, roots []string) {
 		s.m = map[blockerKey]*blockerState{}
 	}
 	s.expireLocked(now)
-	k := blockerKey{e.PID, e.Started}
+	k := blockerKey{pid: e.PID, started: e.Started}
+	if e.Started.IsZero() {
+		s.seq++
+		k.seq = s.seq
+		s.dropOldestUnidentifiedLocked()
+	}
 	b := s.m[k]
 	if b == nil {
-		b = &blockerState{ReclaimBlocker: ReclaimBlocker{PID: e.PID, StartedAt: e.Started, FirstSeen: now}, roots: map[string]bool{}}
+		b = &blockerState{ReclaimBlocker: ReclaimBlocker{PID: e.PID, StartedAt: e.Started, FirstSeen: now, Unidentified: e.Started.IsZero()}, roots: map[uint64]struct{}{}}
 		s.m[k] = b
 	}
 	b.LastSeen, b.Unreadable = now, e.What
@@ -111,8 +139,8 @@ func (s *blockerSet) note(e *UninspectableProcessError, roots []string) {
 	}
 	// One check is one workspace: its first root is the workspace, any other
 	// is that workspace's own (its quarantine).
-	if len(roots) > 0 && len(b.roots) < maxBlockerRoots {
-		b.roots[roots[0]] = true
+	if len(roots) > 0 {
+		b.roots[rootHash(roots[0])] = struct{}{}
 	}
 	b.Worktrees = len(b.roots)
 	warn := now.Sub(b.warned) >= blockerWarnEvery
@@ -123,6 +151,26 @@ func (s *blockerSet) note(e *UninspectableProcessError, roots []string) {
 	s.mu.Unlock()
 	if warn {
 		slog.Warn("worktreereclaim: "+line, "pid", e.PID, "comm", e.Comm, "unreadable", e.What)
+	}
+}
+
+// dropOldestUnidentifiedLocked makes room for one more unidentified
+// observation.
+func (s *blockerSet) dropOldestUnidentifiedLocked() {
+	var oldest *blockerKey
+	n := 0
+	for k, b := range s.m {
+		if !b.Unidentified {
+			continue
+		}
+		n++
+		if oldest == nil || k.seq < oldest.seq {
+			kk := k
+			oldest = &kk
+		}
+	}
+	if n >= maxUnidentified && oldest != nil {
+		delete(s.m, *oldest)
 	}
 }
 

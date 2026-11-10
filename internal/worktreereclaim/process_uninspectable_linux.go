@@ -184,7 +184,13 @@ func judgeUninspectable(ctx context.Context, base, pid, what string, roots []str
 		}
 		slog.DebugContext(ctx, "worktreereclaim: uninspectable process holds: its identity is unreadable",
 			"pid", pid, "unreadable", what, "error", err)
-		return held(&UninspectableProcessError{PID: n, What: what, Err: cause})
+		// readProcIdentity parses stat first: when only status or cmdline
+		// failed, the start time still names this one process.
+		e := &UninspectableProcessError{PID: n, What: what, Err: cause}
+		if id.start != 0 {
+			e.Comm, e.Started = id.comm, procStarted(id.start)
+		}
+		return held(e)
 	}
 	hold := &UninspectableProcessError{PID: n, Comm: id.comm, What: what, Started: procStarted(id.start), Err: cause}
 	if p, ok := procledger.Lookup(n); ok && p.Pgid == id.pgrp && p.Start == id.start {
