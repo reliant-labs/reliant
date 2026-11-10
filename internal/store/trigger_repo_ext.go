@@ -121,9 +121,17 @@ func GetTrigger(ctx context.Context, db orm.Context, id string) (*core.Trigger, 
 // user" can never be reached by passing an empty string.
 func ListTriggersForUser(ctx context.Context, db orm.Context, f core.TriggerFilters) ([]*core.Trigger, error) {
 	var rows []namedTrigger
+	// ?2 is the org a list names (NULL: no org filter); ?3 also lists the
+	// triggers with no org yet (the caller's default org, core.OrgScope).
+	var orgID *string
+	unassigned := false
+	if f.Org != nil {
+		orgID, unassigned = &f.Org.OrgID, f.Org.IncludeUnassigned
+	}
 	err := db.Bun().NewRaw(namedTriggerSQL+`WHERE t.user_id = ?0
 	AND (?1::text IS NULL OR t.project_id = ?1::text)
-ORDER BY t.created_at DESC, t.id`, f.UserID, f.ProjectID).Scan(ctx, &rows)
+	AND (?2::text IS NULL OR t.org_id = ?2::text OR (?3 AND t.org_id IS NULL))
+ORDER BY t.created_at DESC, t.id`, f.UserID, f.ProjectID, orgID, unassigned).Scan(ctx, &rows)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list triggers: %w", err)
 	}
@@ -383,6 +391,7 @@ func triggerFromCore(t *core.Trigger) (*Trigger, error) {
 	row := &Trigger{
 		ID:               t.ID,
 		UserID:           t.UserID,
+		OrgID:            t.OrgID,
 		ProjectID:        t.ProjectID,
 		WorktreeID:       t.WorktreeID,
 		Name:             t.Name,
@@ -431,6 +440,7 @@ func triggerToCore(row *Trigger) (*core.Trigger, error) {
 	t := &core.Trigger{
 		ID:               row.ID,
 		UserID:           row.UserID,
+		OrgID:            row.OrgID,
 		ProjectID:        row.ProjectID,
 		WorktreeID:       row.WorktreeID,
 		Name:             row.Name,

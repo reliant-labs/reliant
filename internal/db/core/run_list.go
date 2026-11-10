@@ -54,7 +54,10 @@ type UnlaunchedTriggerEvent struct {
 // Slices and pointers mean "unset" when empty or nil, so an unset filter never
 // narrows the result.
 type RunListFilters struct {
-	UserID        string
+	UserID string
+	// Org narrows the list to one organization's runs (a run's is its
+	// chat's); nil lists every run UserID owns (every client before orgs).
+	Org           *OrgScope
 	ProjectID     *string
 	Workflows     []string
 	TriggerID     *string

@@ -284,15 +284,23 @@ func (s *Service) SaveWorkflow(
 
 	now := time.Now().UTC()
 	var draftID string
+	// A saved workflow's org is fixed at creation; an update keeps it.
+	var orgID *string
 	if existing != nil {
 		draftID = existing.ID
+		orgID = existing.OrgID
 	} else {
 		draftID = uuid.New().String()
+		var err error
+		if orgID, err = s.actingOrg(ctx, userID, req.Msg.GetOrgId()); err != nil {
+			return nil, err
+		}
 	}
 
 	draft := &db.WorkflowDraft{
 		ID:          draftID,
 		UserID:      userID,
+		OrgID:       orgID,
 		Name:        protoWf.Name,
 		Slug:        slug,
 		Description: ptr.StringIfNotEmpty(protoWf.Description),

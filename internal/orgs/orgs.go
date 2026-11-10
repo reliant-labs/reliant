@@ -297,3 +297,24 @@ func (r *Resolver) forgetStamp(userID string) {
 	delete(r.stamped, userID)
 	r.mu.Unlock()
 }
+
+// InProject is the org of a new row that lives in a project (a chat, a
+// trigger): the project's when it has one, since a row and its project are in
+// one org, so a request naming another org is FailedPrecondition. Otherwise
+// the org the request named (Named), else the caller's default (def), else
+// none.
+func InProject(projectOrg *string, named, def string) (*string, error) {
+	if projectOrg != nil && *projectOrg != "" {
+		if named != "" && named != *projectOrg {
+			return nil, svcerr.FailedPrecondition("the project belongs to another organization: open it from that organization")
+		}
+		org := *projectOrg
+		return &org, nil
+	}
+	for _, org := range []string{named, def} {
+		if org != "" {
+			return &org, nil
+		}
+	}
+	return nil, nil
+}

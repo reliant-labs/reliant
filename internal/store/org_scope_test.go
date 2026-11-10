@@ -134,3 +134,118 @@ func TestOrgScopedListsAndBackfill(t *testing.T) {
 		t.Fatal("a blank org_id was stored")
 	}
 }
+
+// Triggers, saved workflows and runs carry their org too: a run inherits its
+// chat's on insert (workflows_inherit_chat_org), lists by org include only
+// that org's rows, and the backfill gives a trigger its project's org, a saved
+// workflow the default org, and a run its chat's.
+func TestOrgOfTriggersSavedWorkflowsAndRuns(t *testing.T) {
+	env := storetest.New(t)
+	ctx := context.Background()
+	at := time.Now().UTC().Truncate(time.Microsecond).Add(-time.Hour)
+	user := storetest.SeedUserID
+
+	if err := env.Repo.CreateProject(ctx, &core.Project{ID: "p-acme", UserID: user, Name: "acme", Path: "/srv/acme",
+		OrgID: orgp("acme"), CreatedAt: at, UpdatedAt: at, LastActive: at}); err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []*core.Chat{
+		{ID: "c-acme", ProjectID: "p-acme", OrgID: orgp("acme")},
+		{ID: "c-legacy", ProjectID: storetest.SeedProjectID},
+	} {
+		c.UserID, c.Title, c.CreatedAt, c.UpdatedAt, c.LastActive = user, c.ID, at, at, at
+		if err := store.InsertChat(ctx, env.ORM, c); err != nil {
+			t.Fatal(err)
+		}
+	}
+	convWorkflow(t, env, "w-acme", "c-acme", core.WorkflowStateActive, core.StopReasonUnspecified)
+	convWorkflow(t, env, "w-legacy", "c-legacy", core.WorkflowStateActive, core.StopReasonUnspecified)
+	runOrg := func(id string) *string {
+		t.Helper()
+		w, err := env.Repo.GetWorkflow(ctx, id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return w.OrgID
+	}
+	if org := runOrg("w-acme"); org == nil || *org != "acme" {
+		t.Fatalf("a run in an acme chat has org %v, want acme (inherited on insert)", org)
+	}
+	if org := runOrg("w-legacy"); org != nil {
+		t.Fatalf("a run in a chat with no org has org %q, want none", *org)
+	}
+
+	acmeTrigger := newStoreTrigger("t-acme", "acme", at)
+	acmeTrigger.ProjectID, acmeTrigger.OrgID = "p-acme", orgp("acme")
+	legacyTrigger := newStoreTrigger("t-legacy", "legacy", at)
+	legacyTrigger.ProjectID = "p-acme" // written before orgs, in a project that has one now
+	for _, tr := range []*core.Trigger{acmeTrigger, legacyTrigger} {
+		if err := env.Repo.CreateTrigger(ctx, tr); err != nil {
+			t.Fatalf("CreateTrigger(%s): %v", tr.ID, err)
+		}
+	}
+	got, err := env.Repo.GetTrigger(ctx, "t-acme")
+	if err != nil || got.OrgID == nil || *got.OrgID != "acme" {
+		t.Fatalf("GetTrigger org = %v, %v; want acme", got, err)
+	}
+	triggerIDs := func(scope *core.OrgScope) []string {
+		t.Helper()
+		ts, err := env.Repo.ListTriggers(ctx, core.TriggerFilters{UserID: user, Org: scope})
+		if err != nil {
+			t.Fatal(err)
+		}
+		var ids []string
+		for _, tr := range ts {
+			ids = append(ids, tr.ID)
+		}
+		sort.Strings(ids)
+		return ids
+	}
+	if ids := triggerIDs(&core.OrgScope{OrgID: "acme"}); len(ids) != 1 || ids[0] != "t-acme" {
+		t.Fatalf("triggers of acme = %v, want t-acme", ids)
+	}
+	if ids := triggerIDs(nil); len(ids) != 2 {
+		t.Fatalf("triggers, no org = %v, want both", ids)
+	}
+
+	runChats := func(scope *core.OrgScope) []string {
+		t.Helper()
+		items, _, err := store.ListRuns(ctx, env.ORM, core.RunListFilters{UserID: user, Org: scope, Limit: 50, IncludeArchived: true})
+		if err != nil {
+			t.Fatal(err)
+		}
+		var ids []string
+		for _, it := range items {
+			ids = append(ids, it.ChatID)
+		}
+		sort.Strings(ids)
+		return ids
+	}
+	if ids := runChats(&core.OrgScope{OrgID: "acme"}); len(ids) != 1 || ids[0] != "c-acme" {
+		t.Fatalf("runs of acme = %v, want c-acme", ids)
+	}
+	if ids := runChats(&core.OrgScope{OrgID: "home", IncludeUnassigned: true}); len(ids) != 1 || ids[0] != "c-legacy" {
+		t.Fatalf("runs of home, the default = %v, want the unassigned c-legacy", ids)
+	}
+
+	if err := env.Repo.CreateWorkflowDraft(ctx, &core.WorkflowDraft{ID: "d-legacy", UserID: user, Name: "d", Slug: "d",
+		Definition: "name: d", CreatedAt: at, UpdatedAt: at}); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := env.Repo.AssignUnassignedOrg(ctx, user, "home"); err != nil {
+		t.Fatalf("AssignUnassignedOrg: %v", err)
+	}
+	if tr, _ := env.Repo.GetTrigger(ctx, "t-legacy"); tr.OrgID == nil || *tr.OrgID != "acme" {
+		t.Fatalf("legacy trigger org = %v, want its project's (acme)", tr.OrgID)
+	}
+	if d, _ := env.Repo.GetWorkflowDraft(ctx, "d-legacy"); d.OrgID == nil || *d.OrgID != "home" {
+		t.Fatalf("legacy saved workflow org = %v, want the default org", d.OrgID)
+	}
+	if org := runOrg("w-legacy"); org == nil || *org != "home" {
+		t.Fatalf("legacy run org = %v, want its chat's stamped org (home)", org)
+	}
+	if org := runOrg("w-acme"); org == nil || *org != "acme" {
+		t.Fatalf("an assigned run moved to %v", org)
+	}
+}

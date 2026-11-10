@@ -88,6 +88,14 @@ func (s *Service) CreateTrigger(
 	if trigger.Kind == core.TriggerKindSchedule && s.deps.Syncer == nil {
 		return nil, svcerr.Unavailable("the schedule backend is unavailable; cannot create a trigger that would never fire")
 	}
+	// Fixed at creation: every chat the trigger launches belongs to it.
+	project, err := s.deps.Repo.GetProjectWithUserCheck(ctx, trigger.ProjectID, userID)
+	if err != nil {
+		return nil, triggerDBError("get project", err)
+	}
+	if trigger.OrgID, err = s.triggerOrg(ctx, userID, req.Msg.GetOrgId(), project); err != nil {
+		return nil, err
+	}
 	trigger.ID = uuid.NewString()
 	// nil enabled means true: a create that omits the field wants a working
 	// trigger, not a disabled one.
@@ -195,7 +203,11 @@ func (s *Service) ListTriggers(
 
 	// The filter carries the caller's id, so this can never return another
 	// user's triggers regardless of what project id was asked for.
-	filters := core.TriggerFilters{UserID: userID, ProjectID: req.Msg.ProjectId}
+	scope, err := s.listScope(ctx, userID, req.Msg.GetOrgId())
+	if err != nil {
+		return nil, err
+	}
+	filters := core.TriggerFilters{UserID: userID, ProjectID: req.Msg.ProjectId, Org: scope}
 	stored, err := s.deps.Repo.ListTriggers(ctx, filters)
 	if err != nil {
 		return nil, triggerDBError("list triggers", err)
@@ -257,6 +269,18 @@ func (s *Service) UpdateTrigger(
 	}
 	updated.ID = existing.ID
 	updated.CreatedAt = existing.CreatedAt
+	// A trigger's org is fixed (no moving between orgs): it may move only to
+	// a project of the same org.
+	updated.OrgID = existing.OrgID
+	if updated.ProjectID != existing.ProjectID && existing.OrgID != nil {
+		target, err := s.deps.Repo.GetProjectWithUserCheck(ctx, updated.ProjectID, existing.UserID)
+		if err != nil {
+			return nil, triggerDBError("get project", err)
+		}
+		if target.OrgID != nil && *target.OrgID != *existing.OrgID {
+			return nil, svcerr.FailedPrecondition("that project belongs to another organization; a trigger stays in its organization")
+		}
+	}
 	// nil enabled on update means "leave it as it is": an update of the
 	// schedule should not silently resume a trigger the owner paused.
 	updated.Enabled = existing.Enabled
