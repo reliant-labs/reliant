@@ -276,6 +276,8 @@ func TestListScopeMachineCredentialIsItsOrg(t *testing.T) {
 	}
 	if _, err := r.ListScope(ctx, "alice", "acme", nil); svcerr.Code(err) != connect.CodePermissionDenied || reasonOf(err) != ReasonOrgMismatch {
 		t.Fatalf("another org: %v, want PermissionDenied %s", err, ReasonOrgMismatch)
+	}
+}
 
 func TestInProject(t *testing.T) {
 	acme := "acme"

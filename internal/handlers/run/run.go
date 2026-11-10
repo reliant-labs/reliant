@@ -353,12 +353,23 @@ func (s *Service) ListRuns(
 	req *connect.Request[reliantv1.ListRunsRequest],
 ) (*connect.Response[reliantv1.ListRunsResponse], error) {
 	userID := auth.MustGetUserID(ctx)
+	// The org a request names is verified (and a machine credential's applied)
+	// before any branch: one chat's runs are its chat's org's, so a session or
+	// parent outside the scope lists nothing.
+	scope, err := s.listScope(ctx, userID, req.Msg.GetOrgId())
+	if err != nil {
+		return nil, err
+	}
 
 	switch {
 	case req.Msg.GetParentId() != "":
 		// Ownership is checked via the parent, which resolves to a chat.
-		if _, _, err := s.runOwnedBy(ctx, userID, req.Msg.GetParentId()); err != nil {
+		_, chat, err := s.runOwnedBy(ctx, userID, req.Msg.GetParentId())
+		if err != nil {
 			return nil, err
+		}
+		if !scope.Includes(chat.OrgID) {
+			return connect.NewResponse(filterRunsToProto(nil, req.Msg)), nil
 		}
 		children, err := s.deps.Repo.ListChildWorkflows(ctx, req.Msg.GetParentId())
 		if err != nil {
@@ -374,6 +385,9 @@ func (s *Service) ListRuns(
 		if !authz.CanReadChat(ctx, userID, chat) {
 			return nil, svcerr.NotFound("session")
 		}
+		if !scope.Includes(chat.OrgID) {
+			return connect.NewResponse(filterRunsToProto(nil, req.Msg)), nil
+		}
 		runs, err := s.deps.Repo.ListRootWorkflows(ctx, req.Msg.GetSessionId())
 		if err != nil {
 			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list runs"))
@@ -381,7 +395,7 @@ func (s *Service) ListRuns(
 		return connect.NewResponse(filterRunsToProto(runs, req.Msg)), nil
 
 	default:
-		return s.listAllRuns(ctx, userID, req.Msg)
+		return s.listAllRuns(ctx, userID, scope, req.Msg)
 	}
 }
 
@@ -393,6 +407,7 @@ const (
 func (s *Service) listAllRuns(
 	ctx context.Context,
 	userID string,
+	scope *core.OrgScope,
 	req *reliantv1.ListRunsRequest,
 ) (*connect.Response[reliantv1.ListRunsResponse], error) {
 	limit := int(req.Limit)
@@ -403,10 +418,6 @@ func (s *Service) listAllRuns(
 		limit = maxRunsPageSize
 	}
 
-	scope, err := s.listScope(ctx, userID, req.GetOrgId())
-	if err != nil {
-		return nil, err
-	}
 	filters := db.RunListFilters{
 		UserID:          userID,
 		Org:             scope,

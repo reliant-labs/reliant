@@ -284,6 +284,36 @@ func TestOrgOfTriggersSavedWorkflowsAndRuns(t *testing.T) {
 		t.Fatalf("runs of home, the default = %v, want the unassigned c-legacy", ids)
 	}
 
+	// The run log's unlaunched trigger events are their trigger's org's.
+	for _, tr := range []string{"t-acme", "t-legacy"} {
+		if _, err := env.SQL.Exec(`INSERT INTO trigger_events (id, user_id, kind, dedupe_key, occurred_at, outcome, trigger_id)
+			VALUES ($1, $2, 'schedule', $1, NOW(), 'skipped', $3)`, "ev-"+tr, user, tr); err != nil {
+			t.Fatalf("insert skipped event of %s: %v", tr, err)
+		}
+	}
+	eventTriggers := func(scope *core.OrgScope) []string {
+		t.Helper()
+		evs, _, err := store.ListUnlaunchedTriggerEvents(ctx, env.ORM, core.RunListFilters{UserID: user, Org: scope, Limit: 50})
+		if err != nil {
+			t.Fatal(err)
+		}
+		var ids []string
+		for _, ev := range evs {
+			ids = append(ids, ev.TriggerID)
+		}
+		sort.Strings(ids)
+		return ids
+	}
+	if ids := eventTriggers(&core.OrgScope{OrgID: "acme"}); len(ids) != 1 || ids[0] != "t-acme" {
+		t.Fatalf("unlaunched events of acme = %v, want t-acme's only", ids)
+	}
+	if ids := eventTriggers(&core.OrgScope{OrgID: "home", IncludeUnassigned: true}); len(ids) != 1 || ids[0] != "t-legacy" {
+		t.Fatalf("unlaunched events of home, the default = %v, want the unassigned t-legacy's", ids)
+	}
+	if ids := eventTriggers(nil); len(ids) != 2 {
+		t.Fatalf("unlaunched events, no org = %v, want both", ids)
+	}
+
 	if err := env.Repo.CreateWorkflowDraft(ctx, &core.WorkflowDraft{ID: "d-legacy", UserID: user, Name: "d", Slug: "d",
 		Definition: "name: d", CreatedAt: at, UpdatedAt: at}); err != nil {
 		t.Fatal(err)

@@ -497,3 +497,18 @@ func TestDispatch_LaunchCarriesTheActivationsActingIdentity(t *testing.T) {
 	assert.Equal(t, "on-review-done", spec.Automation)
 	assert.True(t, spec.Unattended)
 }
+
+// A workflow-event activation launches into its trigger's org, like every
+// other trigger kind: this path builds its own launch spec.
+func TestDispatch_LaunchCarriesTheTriggersOrg(t *testing.T) {
+	f := newFixture(t)
+	tr := f.addTrigger(f.userID, f.projectID, "on-review-done-org", "builtin://agent",
+		Source{Workflows: []string{"code-review"}, Outcomes: []string{"finished"}})
+	acme := "acme"
+	tr.OrgID = &acme
+
+	spec, err := f.dispatcher.buildSpec(tr, &core.RunEvent{WorkflowName: "code-review", Outcome: core.RunEventFinished},
+		launch.Event{DedupeKey: "d-org"}, Spec{}, triggerspec.Scope{})
+	require.NoError(t, err)
+	assert.Equal(t, "acme", spec.OrgID)
+}
