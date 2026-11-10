@@ -40,6 +40,8 @@ import { DEMO_DEFAULT_SERVICES } from "../demoServiceDefaults";
 import { outsideDemo } from "../demoScope";
 import { createDemoTransport, isDemoRead } from "../demoTransport";
 import { FIXTURE_ENVS, FIXTURE_PROJECT } from "../../../Observability/__fixtures__/fixtureApi";
+import { fixtureLedger } from "../../../Observability/__fixtures__/fixtureDelivery";
+import { describePromotion } from "../../../Observability/releaseMarkers";
 
 const { OPTIONAL: LABEL_OPTIONAL, REPEATED: LABEL_REPEATED } = FieldDescriptorProto_Label;
 const { MESSAGE: TYPE_MESSAGE, STRING: TYPE_STRING } = FieldDescriptorProto_Type;
@@ -57,6 +59,22 @@ describe("the console's sample data, on the demo's transport", () => {
   it("is the observability fixtures' app: same project, same environments", () => {
     expect(DEMO_PROJECT).toBe(FIXTURE_PROJECT);
     expect(DEMO_ENVS.map((e) => [e.id, e.name])).toEqual(FIXTURE_ENVS.map((e) => [e.id, e.name]));
+  });
+
+  it("puts the same commit and promoter on the charts' release markers as on the console's releases", async () => {
+    const markers = fixtureLedger(Date.parse("2026-11-10T12:00:00Z"));
+    // Every release the console cut carries its own commit on every marker.
+    for (const release of DEMO_RELEASES) {
+      for (const marker of markers.filter((m) => m.version === release.version)) expect(marker.gitCommit, `${release.version} in ${marker.envName}`).toBe(release.commit);
+    }
+    // v1.8.3's promotions are attributed as the console's ledger attributes them.
+    for (const env of DEMO_ENVS) {
+      const marker = markers.filter((m) => m.envId === env.id && m.version === "v1.8.3").at(-1);
+      const promotion = (await listReleasePromotions(env.id)).find((p) => p.releaseVersion === "v1.8.3" && p.targets.length === 0);
+      expect(marker?.promotedBy, `v1.8.3 in ${env.name}`).toBe(promotion?.promotedByActor);
+    }
+    const prod = markers.filter((m) => m.envName === "prod" && m.version === "v1.8.3").at(-1)!;
+    expect(describePromotion(prod)).toBe("v1.8.3 (commit e7d93a2) promoted to prod by jon");
   });
 
   it("Environments: three deployed envs, prod and staging on v1.8.3, dev on the fix", async () => {
@@ -84,20 +102,28 @@ describe("the console's sample data, on the demo's transport", () => {
   });
 
   it("Promotions: every ledger is newest first, of releases the demo cut, after each was cut; staging's holds every kind of row", async () => {
-    const cutAt = new Map<string, number>(DEMO_RELEASES.map((r) => [r.version, Date.now() - r.age]));
-    const ids = new Set<string>();
-    for (const env of DEMO_ENVS) {
-      const ledger = await listReleasePromotions(env.id);
-      expect(ledger.every((p, i) => i === 0 || Date.parse(ledger[i - 1].createdAt!) >= Date.parse(p.createdAt!))).toBe(true);
-      for (const p of ledger) {
-        // A release the demo's list has, so a rollback is judged; never promoted before it was cut.
-        expect(cutAt.has(p.releaseVersion)).toBe(true);
-        expect(Date.parse(p.createdAt!)).toBeGreaterThanOrEqual(cutAt.get(p.releaseVersion)! - 1000);
-        expect(ids.has(p.id)).toBe(false);
-        ids.add(p.id);
-        // Each promotion's rollout is its own, not the running one's.
-        expect((await getPromotionRollout(env.id, p.id))?.promotionId).toBe(p.id);
+    // The scenario dates everything relative to the clock (`ago`), so the
+    // clock is frozen: the cut times and the promotion times below are the
+    // same instant minus their ages, compared exactly, however long the run.
+    vi.useFakeTimers({ toFake: ["Date"], now: Date.parse("2026-11-10T12:00:00Z") });
+    try {
+      const cutAt = new Map<string, number>(DEMO_RELEASES.map((r) => [r.version, Date.now() - r.age]));
+      const ids = new Set<string>();
+      for (const env of DEMO_ENVS) {
+        const ledger = await listReleasePromotions(env.id);
+        expect(ledger.every((p, i) => i === 0 || Date.parse(ledger[i - 1].createdAt!) >= Date.parse(p.createdAt!))).toBe(true);
+        for (const p of ledger) {
+          // A release the demo's list has, so a rollback is judged; never promoted before it was cut.
+          expect(cutAt.has(p.releaseVersion)).toBe(true);
+          expect(Date.parse(p.createdAt!), `${p.id} is dated before ${p.releaseVersion} was cut`).toBeGreaterThanOrEqual(cutAt.get(p.releaseVersion)!);
+          expect(ids.has(p.id)).toBe(false);
+          ids.add(p.id);
+          // Each promotion's rollout is its own, not the running one's.
+          expect((await getPromotionRollout(env.id, p.id))?.promotionId).toBe(p.id);
+        }
       }
+    } finally {
+      vi.useRealTimers();
     }
 
     const rank = new Map(DEMO_RELEASES.map((r, index) => [r.version, index]));
