@@ -52,6 +52,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/toolexec/daemonstate"
 	"github.com/reliant-labs/reliant/internal/toolexec/transport"
 	"github.com/reliant-labs/reliant/internal/workflow/workflowref"
+	"github.com/reliant-labs/reliant/internal/worktreereclaim"
 )
 
 const (
@@ -240,6 +241,9 @@ type StartOptions struct {
 	// StorageReaper schedules forge's storage reaper on this machine; the zero
 	// value leaves it off (diskwatch.ReaperConfig).
 	StorageReaper diskwatch.ReaperConfig
+	// WorktreeReclaim is the machine-wide worktree reclaim, which rides the
+	// storage reaper's schedule; the zero value is off.
+	WorktreeReclaim worktreereclaim.SweepConfig
 	// Host is what the platform declares about where this daemon runs; zero
 	// off a workspace pod.
 	Host Host
@@ -383,6 +387,9 @@ func Start(ctx context.Context, opts StartOptions) error {
 	// And the reaper that keeps the build caches inside their budget: forge's
 	// storage pass, on a schedule and under pressure, when opts enables it.
 	client.diskWatcher.ConfigureReaper(opts.StorageReaper)
+	// Every linked worktree on the machine, on the same schedule: captured,
+	// then reclaimed, or only reported in dry-run (worktree_sweep.go).
+	client.diskWatcher.ConfigureWorktreeSweep(worktreeSweep(opts.WorktreeReclaim))
 	go client.diskWatcher.RunReaper(ctx)
 	// The disk guard reclaims with the same pass, at once, when a volume
 	// crosses its reclaim threshold — where the routine runs at all: a

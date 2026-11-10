@@ -478,6 +478,14 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant workflow validate-tree`](#reliant-workflow-validate-tree) | Validate a workflow tree with preset-aware cross-workflow checks |
 | [`reliant workflow wait-for-gate`](#reliant-workflow-wait-for-gate) | Block until the workflow needs you — the next open question/approval |
 | [`reliant workflow watch`](#reliant-workflow-watch) | Watch a workflow execution and print meaningful boundaries as they happen |
+| [`reliant worktree`](#reliant-worktree) | Inspect and restore the worktrees the daemon reclaims |
+| [`reliant worktree reclaim`](#reliant-worktree-reclaim) | The daemon's last reclaim report, and decisions about proposed worktrees |
+| [`reliant worktree reclaim approve`](#reliant-worktree-reclaim-approve) | Approve reclaiming proposed worktrees |
+| [`reliant worktree reclaim decline`](#reliant-worktree-reclaim-decline) | Decline reclaiming proposed worktrees |
+| [`reliant worktree reclaim report`](#reliant-worktree-reclaim-report) | Show the daemon's last reclaim report |
+| [`reliant worktree reclaim scan`](#reliant-worktree-reclaim-scan) | Run a dry-run pass now and write its report |
+| [`reliant worktree reclaimed`](#reliant-worktree-reclaimed) | List the captures of reclaimed worktrees |
+| [`reliant worktree restore`](#reliant-worktree-restore) | Recreate a reclaimed worktree from its capture |
 
 ## Global Flags
 
@@ -20035,6 +20043,213 @@ reliant workflow watch <execution-id> [flags]
 | `--interval` | `duration` | `2s` | Poll interval |
 | `--tail` | `bool` | - | Skip historical events and follow from now |
 | `--timeout` | `duration` | `0s` | Stop following after this long (exit code 2); 0 means no timeout |
+
+---
+
+## reliant worktree
+
+Inspect and restore the worktrees the daemon reclaims
+
+The daemon reclaims the disk of linked git worktrees nobody is using, on
+every machine it runs on: worktrees Reliant made and ones agents made with
+`git worktree add` alike. Before it deletes one it commits everything
+git can see of it (HEAD, the staged index, unstaged edits, untracked files,
+commits only its reflog reached) into a local ref of the repository,
+refs/reliant/reclaimed/<key>/<time>, and checks that ref against the files
+immediately before deleting them.
+
+A clean worktree whose HEAD is on a remote is reclaimed after a day idle.
+One with work only it holds is never reclaimed: after about five days idle
+it is proposed in the report, for a person to free by hand.
+
+RELIANT_WORKTREE_RECLAIM sets the mode: off, dry-run (report only) or on.
+
+```
+reliant worktree
+```
+
+**Subcommands:**
+
+| Command | Description |
+|---------|-------------|
+| [`reclaim`](#reliant-worktree-reclaim) | The daemon's last reclaim report, and decisions about proposed worktrees |
+| [`reclaimed`](#reliant-worktree-reclaimed) | List the captures of reclaimed worktrees |
+| [`restore`](#reliant-worktree-restore) | Recreate a reclaimed worktree from its capture |
+
+---
+
+### reliant worktree reclaim
+
+The daemon's last reclaim report, and decisions about proposed worktrees
+
+```
+reliant worktree reclaim
+```
+
+**Subcommands:**
+
+| Command | Description |
+|---------|-------------|
+| [`approve`](#reliant-worktree-reclaim-approve) | Approve reclaiming proposed worktrees |
+| [`decline`](#reliant-worktree-reclaim-decline) | Decline reclaiming proposed worktrees |
+| [`report`](#reliant-worktree-reclaim-report) | Show the daemon's last reclaim report |
+| [`scan`](#reliant-worktree-reclaim-scan) | Run a dry-run pass now and write its report |
+
+---
+
+#### reliant worktree reclaim approve
+
+Approve reclaiming proposed worktrees
+
+Record a person's decision about worktrees the last report proposes
+(class needs_approval), by key. The decision binds to the worktree's
+fingerprint in that report: one that changes after it (a commit, an edit, a
+new file) is proposed again.
+
+Approving is not available yet: nothing can show that an approval came from
+a person rather than an agent running as the same user, so the daemon never
+deletes a proposed worktree, and approve refuses. Free one yourself, after
+checking its work, with `git worktree remove`. Decline records that a
+proposed worktree is to be kept; an agent's shell is refused that too.
+
+```
+reliant worktree reclaim approve <key>... [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--state-dir` | `string` | - | the reclaim state directory (default ~/.reliant/reclaim) |
+
+---
+
+#### reliant worktree reclaim decline
+
+Decline reclaiming proposed worktrees
+
+Record a person's decision about worktrees the last report proposes
+(class needs_approval), by key. The decision binds to the worktree's
+fingerprint in that report: one that changes after it (a commit, an edit, a
+new file) is proposed again.
+
+Approving is not available yet: nothing can show that an approval came from
+a person rather than an agent running as the same user, so the daemon never
+deletes a proposed worktree, and approve refuses. Free one yourself, after
+checking its work, with `git worktree remove`. Decline records that a
+proposed worktree is to be kept; an agent's shell is refused that too.
+
+```
+reliant worktree reclaim decline <key>... [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--state-dir` | `string` | - | the reclaim state directory (default ~/.reliant/reclaim) |
+
+---
+
+#### reliant worktree reclaim report
+
+Show the daemon's last reclaim report
+
+Show the last pass's report: every linked worktree found, its class
+(auto_safe, needs_approval, held), what was done with it and why, and its
+size. --class needs_approval lists the worktrees awaiting a decision, with
+the key and fingerprint `approve` and `decline` take.
+
+```
+reliant worktree reclaim report [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--class` | `string` | - | only entries of this class: auto_safe, needs_approval or held |
+| `--json` | `bool` | - | print the report as JSON |
+| `--state-dir` | `string` | - | the reclaim state directory (default ~/.reliant/reclaim) |
+
+---
+
+#### reliant worktree reclaim scan
+
+Run a dry-run pass now and write its report
+
+Run one dry-run pass in this process: discover every linked worktree,
+classify it, and write the report and journal the daemon's passes write. It
+captures nothing and deletes nothing.
+
+```
+reliant worktree reclaim scan [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--json` | `bool` | - | print the report as JSON |
+| `--roots` | `string` | - | directories to walk, comma-separated path[:depth] (default: the daemon's) |
+| `--state-dir` | `string` | - | the reclaim state directory (default ~/.reliant/reclaim) |
+
+---
+
+### reliant worktree reclaimed
+
+List the captures of reclaimed worktrees
+
+List every capture (refs/reliant/reclaimed/...) in the repositories the
+reclaim journal names, or in --repo, newest first. A capture is kept until it
+is restored or deleted by hand; none expires.
+
+```
+reliant worktree reclaimed [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--json` | `bool` | - | print the list as JSON |
+| `--repo` | `string` | - | list this repository's captures (a checkout or git dir) |
+| `--state-dir` | `string` | - | the reclaim state directory (default ~/.reliant/reclaim) |
+
+---
+
+### reliant worktree restore
+
+Recreate a reclaimed worktree from its capture
+
+Recreate a reclaimed worktree as a new linked worktree: HEAD at the
+captured commit, the files on disk as they were (untracked files untracked
+again), and the index as it was staged. Commits only the old worktree's
+reflog reached stay reachable from the capture ref, which is kept.
+
+Name the capture by its ref (with --repo, unless the journal or a tombstone
+names its repository), or by the path the worktree had. It is restored at
+that path unless --to names another; the path must not exist. The branch is
+reattached when that changes no file, otherwise the worktree is left on a
+detached HEAD and the output says why.
+
+Plain git does the same:
+  git -C <repo> worktree add --detach --no-checkout <dir> <ref>^1
+  git -C <dir> read-tree --reset -u <ref>^{tree}
+  git -C <dir> read-tree <ref>^2^{tree}
+
+```
+reliant worktree restore <capture-ref | reclaimed path> [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--branch` | `string` | - | put the restored worktree on this branch (default: the one it was on) |
+| `--repo` | `string` | - | the capture's repository (a checkout or git dir) |
+| `--state-dir` | `string` | - | the reclaim state directory (default ~/.reliant/reclaim) |
+| `--to` | `string` | - | restore into this directory instead of the original path |
 
 ---
 
