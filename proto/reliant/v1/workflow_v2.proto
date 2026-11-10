@@ -527,6 +527,16 @@ message CallLLMArgs {
     visibility_contexts: "advanced"
     category: "Prompt"
   }];
+  // Opt out of the configured skill catalog for THIS call only. Omits the
+  // announcement and automatic skill preloads. Nonempty skills is rejected.
+  // Does not redact history or restrict tools (including explicit skill loads);
+  // strict no-skill workflows must set this on every call and offer no tools.
+  bool exclude_skill_catalog = 17 [(reliant) = {
+    description: "Exclude configured skills for this call (default false); rejects skill preloads, does not redact history or restrict other tools"
+    label: "Exclude skill catalog"
+    visibility_contexts: "advanced"
+    category: "Prompt"
+  }];
 }
 
 // ResponseTool defines a custom tool for structured LLM output.
