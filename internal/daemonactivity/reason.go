@@ -190,8 +190,11 @@ var backgroundCommands = map[string]bool{
 
 	// Automatic preservation/verification/reclamation is housekeeping, not
 	// evidence of a human or agent actively using the machine.
-	"git.recovery_publish":       true,
-	"git.recovery_verify":        true,
+	"git.recovery_publish": true,
+	"git.recovery_verify":  true,
+	// The server settling a remove/reclone it is no longer waiting on: a
+	// read (plus a tombstone), never work anyone asked for.
+	"git.teardown_status":        true,
 	"worktree.recovery_observe":  true,
 	"worktree.recovery_capture":  true,
 	"worktree.recovery_finalize": true,

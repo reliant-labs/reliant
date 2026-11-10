@@ -4,6 +4,7 @@ package daemonruntime
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -16,6 +17,7 @@ func init() {
 	RegisterCommand("git.pull", handleGitPull)
 	RegisterCommand("git.remove", handleGitRemove)
 	RegisterCommand("git.reclone", handleGitReclone)
+	RegisterCommand("git.teardown_status", handleGitTeardownStatus)
 }
 
 // =============================================================================
@@ -259,15 +261,23 @@ func handleGitPull(ctx context.Context, payload []byte) ([]byte, error) {
 
 type gitRemoveRequest struct {
 	Path string `json:"path"`
+	// OpID, when set, runs the remove as a durable operation acknowledged by
+	// this id (checkout_teardown.go). An older server sends none.
+	OpID string `json:"op_id,omitempty"`
 }
 
 type gitRemoveResponse struct {
 	Success bool   `json:"success"`
 	Removed bool   `json:"removed"`
 	Error   string `json:"error,omitempty"`
+	// OpID and OpState acknowledge an op_id request: OpState is the op's
+	// state (done, failed, running, interrupted, fenced). Their presence is
+	// how the server knows this daemon acknowledges teardowns.
+	OpID    string `json:"op_id,omitempty"`
+	OpState string `json:"op_state,omitempty"`
 }
 
-func handleGitRemove(_ context.Context, payload []byte) ([]byte, error) {
+func handleGitRemove(ctx context.Context, payload []byte) ([]byte, error) {
 	var req gitRemoveRequest
 	if err := json.Unmarshal(payload, &req); err != nil {
 		return nil, fmt.Errorf("invalid payload: %w", err)
@@ -275,23 +285,46 @@ func handleGitRemove(_ context.Context, payload []byte) ([]byte, error) {
 	if req.Path == "" {
 		return nil, fmt.Errorf("path is required")
 	}
+	if req.OpID == "" {
+		removed, err := removeCheckout(req.Path)
+		if err != nil {
+			return nil, err
+		}
+		return json.Marshal(gitRemoveResponse{Success: true, Removed: removed})
+	}
+	rec, err := currentTeardownJournal().run(ctx, req.OpID, "remove", req.Path, func(context.Context) (bool, error) {
+		return removeCheckout(req.Path)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return json.Marshal(gitRemoveResponse{
+		Success: rec.State == teardownDone, Removed: rec.Removed, Error: rec.Error,
+		OpID: rec.OpID, OpState: rec.State,
+	})
+}
+
+// removeCheckout deletes the clone at path. Idempotent: a missing path is
+// success with removed false.
+func removeCheckout(path string) (removed bool, err error) {
 	// Refuse to remove paths that aren't clearly project clones to avoid
 	// turning a misconfigured path into `rm -rf /` style damage. We require
 	// the path to either not exist OR contain a .git directory/file.
-	if info, err := os.Stat(req.Path); err == nil {
-		if !info.IsDir() {
-			return nil, fmt.Errorf("path is not a directory: %s", req.Path)
-		}
-		if _, err := os.Stat(filepath.Join(req.Path, ".git")); err != nil {
-			return nil, fmt.Errorf("refusing to remove non-clone path (no .git): %s", req.Path)
-		}
-		if err := os.RemoveAll(req.Path); err != nil {
-			return nil, fmt.Errorf("remove clone: %w", err)
-		}
-		return json.Marshal(gitRemoveResponse{Success: true, Removed: true})
+	info, err := os.Stat(path)
+	if err != nil {
+		// Path doesn't exist — idempotent success.
+		return false, nil
 	}
-	// Path doesn't exist — idempotent success.
-	return json.Marshal(gitRemoveResponse{Success: true, Removed: false})
+	if !info.IsDir() {
+		return false, fmt.Errorf("path is not a directory: %s", path)
+	}
+	if _, err := os.Stat(filepath.Join(path, ".git")); err != nil {
+		return false, fmt.Errorf("refusing to remove non-clone path (no .git): %s", path)
+	}
+	if err := os.RemoveAll(path); err != nil {
+		return false, fmt.Errorf("remove clone: %w", err)
+	}
+	return true, nil
 }
 
 // =============================================================================
@@ -311,12 +344,18 @@ type gitRecloneRequest struct {
 	Repo string `json:"repo"`
 	// Branch is the branch to check out (default "main").
 	Branch string `json:"branch,omitempty"`
+	// OpID, when set, runs the reclone as a durable operation acknowledged by
+	// this id (checkout_teardown.go). An older server sends none.
+	OpID string `json:"op_id,omitempty"`
 }
 
 type gitRecloneResponse struct {
 	Success bool   `json:"success"`
 	Path    string `json:"path,omitempty"`
 	Error   string `json:"error,omitempty"`
+	// OpID and OpState acknowledge an op_id request (see gitRemoveResponse).
+	OpID    string `json:"op_id,omitempty"`
+	OpState string `json:"op_state,omitempty"`
 }
 
 func handleGitReclone(ctx context.Context, payload []byte) ([]byte, error) {
@@ -331,26 +370,37 @@ func handleGitReclone(ctx context.Context, payload []byte) ([]byte, error) {
 	if branch == "" {
 		branch = "main"
 	}
-
-	// Best-effort remove: if the directory doesn't exist this is fine. We
-	// only enforce the "must contain .git" guard when the directory does
-	// exist (mirrors handleGitRemove).
-	if info, err := os.Stat(req.Path); err == nil {
-		if !info.IsDir() {
-			return nil, fmt.Errorf("path is not a directory: %s", req.Path)
+	if req.OpID == "" {
+		if err := recloneCheckout(ctx, req.Repo, branch, req.Path); err != nil {
+			return nil, err
 		}
-		if _, err := os.Stat(filepath.Join(req.Path, ".git")); err != nil {
-			return nil, fmt.Errorf("refusing to remove non-clone path (no .git): %s", req.Path)
-		}
-		if err := os.RemoveAll(req.Path); err != nil {
-			return nil, fmt.Errorf("remove existing clone: %w", err)
-		}
+		return json.Marshal(gitRecloneResponse{Success: true, Path: req.Path})
 	}
-
-	if err := cloneAtomically(ctx, req.Repo, branch, req.Path); err != nil {
+	rec, err := currentTeardownJournal().run(ctx, req.OpID, "reclone", req.Path, func(opCtx context.Context) (bool, error) {
+		return true, recloneCheckout(opCtx, req.Repo, branch, req.Path)
+	})
+	if err != nil {
 		return nil, err
 	}
-	return json.Marshal(gitRecloneResponse{Success: true, Path: req.Path})
+	resp := gitRecloneResponse{Success: rec.State == teardownDone, Error: rec.Error, OpID: rec.OpID, OpState: rec.State}
+	if resp.Success {
+		resp.Path = req.Path
+	}
+	return json.Marshal(resp)
+}
+
+// recloneCheckout removes the clone at path, if any, and clones repo at
+// branch there.
+func recloneCheckout(ctx context.Context, repo, branch, path string) error {
+	// Best-effort remove: if the directory doesn't exist this is fine. The
+	// "must contain .git" guard applies when it does (removeCheckout).
+	if _, err := removeCheckout(path); err != nil {
+		if strings.HasPrefix(err.Error(), "remove clone: ") {
+			return fmt.Errorf("remove existing clone: %w", errors.Unwrap(err))
+		}
+		return err
+	}
+	return cloneAtomically(ctx, repo, branch, path)
 }
 
 // truncateGitOutput keeps git pull/clone output bounded so a noisy upstream
