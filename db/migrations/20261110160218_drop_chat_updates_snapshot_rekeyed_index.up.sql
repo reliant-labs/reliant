@@ -8,6 +8,9 @@
 -- the same rows (20261101165219, which said this index is dropped by a later
 -- migration: this is it). Prod's last scan of it was 2026-11-02 01:28.
 --
+-- After deploy, check the plans and undo a regression by recreating the index:
+-- dev-docs/redundant-index-drop-rollout.md.
+--
 -- CONCURRENTLY cannot run in a transaction block, so this is the only
 -- statement in the file.
 DROP INDEX CONCURRENTLY IF EXISTS public.idx_chat_updates_snapshot_rekeyed;

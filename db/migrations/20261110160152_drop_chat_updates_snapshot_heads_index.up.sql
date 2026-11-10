@@ -11,6 +11,9 @@
 -- it; its 431k scans all predate that. It indexed every NODE_EXECUTION update
 -- (54% of the table) and cost 907MB of cache and a write on most inserts.
 --
+-- After deploy, check the plans and undo a regression by recreating the index:
+-- dev-docs/redundant-index-drop-rollout.md.
+--
 -- CONCURRENTLY cannot run in a transaction block, so this is the only
 -- statement in the file.
 DROP INDEX CONCURRENTLY IF EXISTS public.idx_chat_updates_snapshot_heads;

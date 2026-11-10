@@ -8,6 +8,9 @@
 -- references these columns. Prod counted 0 scans of it in 69 days, against
 -- 20MB and an index write on every content block.
 --
+-- After deploy, check the plans and undo a regression by recreating the index:
+-- dev-docs/redundant-index-drop-rollout.md.
+--
 -- CONCURRENTLY cannot run in a transaction block, so this is the only
 -- statement in the file.
 DROP INDEX CONCURRENTLY IF EXISTS public.idx_content_blocks_activity;

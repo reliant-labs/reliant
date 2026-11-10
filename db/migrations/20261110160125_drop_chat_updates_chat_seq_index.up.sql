@@ -11,6 +11,9 @@
 -- identically on either). It cost 921MB of a 2.4GB buffer cache and a second
 -- index write on every chat update.
 --
+-- After deploy, check the plans and undo a regression by recreating the index:
+-- dev-docs/redundant-index-drop-rollout.md.
+--
 -- CONCURRENTLY cannot run in a transaction block, so this is the only
 -- statement in the file.
 DROP INDEX CONCURRENTLY IF EXISTS public.idx_chat_updates_chat_seq;

@@ -7,6 +7,9 @@
 -- cache: every message insert maintained both (147MB each). Prod: 1.1k scans
 -- against the key's 1.77M.
 --
+-- After deploy, check the plans and undo a regression by recreating the index:
+-- dev-docs/redundant-index-drop-rollout.md.
+--
 -- CONCURRENTLY cannot run in a transaction block, so this is the only
 -- statement in the file.
 DROP INDEX CONCURRENTLY IF EXISTS public.idx_messages_thread_ordinal;
