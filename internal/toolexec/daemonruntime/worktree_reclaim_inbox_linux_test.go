@@ -212,7 +212,8 @@ func TestInboxApprovalIsTheOnlyApprovalTheDaemonActsOn(t *testing.T) {
 		t.Fatalf("command results %+v, %v", results, err)
 	}
 	done := results[0]
-	if done.Status != worktreereclaim.ApprovalReclaimed || done.ApprovedBy != "inbox:"+userID || done.CaptureRef == "" {
+	if done.Status != worktreereclaim.ApprovalReclaimed || done.ApprovedBy != "inbox:"+userID || done.CaptureRef == "" ||
+		done.CommandID == "" || done.IssuedAt.IsZero() {
 		t.Fatalf("command result %+v, want reclaimed, approved by the person, with its capture", done)
 	}
 	if _, err := os.Stat(filepath.Join(f.root, ".git")); !os.IsNotExist(err) {
@@ -226,10 +227,11 @@ func TestInboxApprovalIsTheOnlyApprovalTheDaemonActsOn(t *testing.T) {
 		t.Fatalf("capture ref %s does not resolve", capture.Ref)
 	}
 
-	// The same approve command again (a retried delivery) is answered from
-	// the record and removes nothing again.
-	again, err := handleWorktreeReclaimApprove(ctx, []byte(fmt.Sprintf(`{"approvals":[{"key":%q,"fingerprint":%q,"path":%q}],"approved_by":"inbox:%s","command_id":"retry"}`,
-		shown.Key, shown.Fingerprint, shown.Path, userID)))
+	// The same approve command again (a retried delivery: the id and issue
+	// time the server sent) is answered from the record and removes nothing
+	// again.
+	again, err := handleWorktreeReclaimApprove(ctx, []byte(fmt.Sprintf(`{"approvals":[{"key":%q,"fingerprint":%q,"path":%q}],"approved_by":"inbox:%s","command_id":%q,"issued_at_ms":%d}`,
+		shown.Key, shown.Fingerprint, shown.Path, userID, done.CommandID, done.IssuedAt.UnixMilli())))
 	if err != nil {
 		t.Fatal(err)
 	}

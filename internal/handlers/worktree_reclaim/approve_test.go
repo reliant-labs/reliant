@@ -100,6 +100,7 @@ func TestDecideWorktreeReclaim_ApprovalIsSentAsTheApproveCommand(t *testing.T) {
 	require.Len(t, m.approved, 1)
 	assert.Equal(t, "inbox:"+testUser, m.approved[0].ApprovedBy)
 	assert.NotEmpty(t, m.approved[0].CommandID)
+	assert.Positive(t, m.approved[0].IssuedAtMs, "the machine orders decisions by when they were issued")
 	assert.Equal(t, []approveItem{{Key: "a", Fingerprint: "fa", Path: "/w/a"}, {Key: "b", Fingerprint: "fb", Path: "/w/b"}}, m.approved[0].Approvals)
 	for i, want := range []string{removalRemoving, removalRemoving, ""} {
 		assert.Equal(t, want, got.Results[i].Removal, got.Results[i].Key)

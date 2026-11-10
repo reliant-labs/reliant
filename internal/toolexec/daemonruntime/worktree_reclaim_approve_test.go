@@ -4,8 +4,10 @@ package daemonruntime
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/reliant-labs/reliant/internal/worktreereclaim"
 )
@@ -50,7 +52,7 @@ func TestReclaimApproveCommandWithReclaimOffRemovesNothing(t *testing.T) {
 		startApprovalRun = prev
 		setReclaimSweepConfig(worktreereclaim.SweepConfig{Mode: worktreereclaim.SweepOff})
 	})
-	raw, err := handleWorktreeReclaimApprove(context.Background(), []byte(`{"approvals":[{"key":"p-1","fingerprint":"fp-1","path":"/tmp/p-1"}],"approved_by":"inbox:u1"}`))
+	raw, err := handleWorktreeReclaimApprove(context.Background(), []byte(fmt.Sprintf(`{"approvals":[{"key":"p-1","fingerprint":"fp-1","path":"/tmp/p-1"}],"approved_by":"inbox:u1","command_id":"c-1","issued_at_ms":%d}`, time.Now().UnixMilli())))
 	if err != nil {
 		t.Fatal(err)
 	}

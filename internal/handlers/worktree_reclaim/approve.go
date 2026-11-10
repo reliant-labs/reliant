@@ -3,6 +3,7 @@ package worktree_reclaim
 import (
 	"context"
 	"encoding/json"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -34,6 +35,9 @@ type approveRequest struct {
 	Approvals  []approveItem `json:"approvals"`
 	ApprovedBy string        `json:"approved_by"`
 	CommandID  string        `json:"command_id"`
+	// IssuedAtMs orders this decision against others about the same
+	// worktree: the machine never acts on one older than one it answered.
+	IssuedAtMs int64 `json:"issued_at_ms"`
 }
 
 type approveItem struct {
@@ -62,7 +66,7 @@ type approveResponse struct {
 func (s *Service) sendApprovals(ctx context.Context, userID, daemonID string, decisions []*pb.WorktreeReclaimDecision,
 	shown map[string]*pb.WorktreeReclaimProposal, results []*pb.WorktreeReclaimDecisionResult, approved []int,
 ) {
-	send := approveRequest{ApprovedBy: "inbox:" + userID, CommandID: uuid.NewString()}
+	send := approveRequest{ApprovedBy: "inbox:" + userID, CommandID: uuid.NewString(), IssuedAtMs: time.Now().UnixMilli()}
 	sentAt := map[string]int{}
 	for _, i := range approved {
 		p := shown[decisions[i].Key]

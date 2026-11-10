@@ -6,6 +6,7 @@ package worktreereclaim
 import (
 	"context"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -26,7 +27,12 @@ func newApprovalFixture(t *testing.T, names ...string) (*approvalFixture, map[st
 	s := newSweepFixture(t)
 	// One fixed clock for the whole test, pinned after git wrote the
 	// fixture: ten days past its last write, the same for every pass and
-	// every command, so no assertion depends on when it runs.
+	// every command, so no assertion depends on when it runs. This is the
+	// test's only wall-clock read, and it is boundary-free: git stamped the
+	// fixture's files and reflogs with the real time, so the instant must be
+	// taken from it, and every threshold compared against it (24h clean
+	// idle, 5d approval idle, 1h staleness, 30d command age) is days or hours
+	// away from the 10-day offset and the commands' issue times.
 	at := s.r.now()
 	s.r.Now = func() time.Time { return at }
 	a := &approvalFixture{sweepFixture: s, ctx: context.Background(), at: at}
@@ -48,8 +54,19 @@ func newApprovalFixture(t *testing.T, names ...string) (*approvalFixture, map[st
 	return a, got
 }
 
-func commandFor(e SweepEntry) ApprovalCommand {
-	return ApprovalCommand{Key: e.Key, Fingerprint: e.Fingerprint, Path: e.Path, ApprovedBy: "inbox:u1", CommandID: "cmd-" + e.Key}
+func (a *approvalFixture) commandFor(e SweepEntry) ApprovalCommand {
+	return a.commandAt(e, "cmd-"+e.Key, approvalIssued)
+}
+
+// approvalIssued is when a fixture's first command for a worktree is issued,
+// relative to the fixture's instant (approvalFixture.at): an hour before, well
+// inside approvalCommandTTL. Later Inbox decisions are issued after it.
+const approvalIssued = -time.Hour
+
+// commandAt is an Inbox decision about e delivered as command id, issued at
+// offset from the fixture's instant.
+func (a *approvalFixture) commandAt(e SweepEntry, id string, offset time.Duration) ApprovalCommand {
+	return ApprovalCommand{Key: e.Key, Fingerprint: e.Fingerprint, Path: e.Path, ApprovedBy: "inbox:u1", CommandID: id, IssuedAt: a.at.Add(offset)}
 }
 
 // approve runs the command the way the daemon does: answer, then remove.
@@ -78,7 +95,7 @@ func TestApprovalCommandRemovesExactlyTheApprovedWorktree(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	first, done := a.approve(t, commandFor(e["approved"]))
+	first, done := a.approve(t, a.commandFor(e["approved"]))
 	if first.Status != ApprovalAccepted || done.Status != ApprovalReclaimed || done.CaptureRef == "" {
 		t.Fatalf("answer %+v, then %+v; want accepted, then reclaimed with its capture", first, done)
 	}
@@ -207,7 +224,7 @@ func TestApprovalCommandRefuses(t *testing.T) {
 			a, es := newApprovalFixture(t, "wip")
 			e := es["wip"]
 			tc.before(t, a, e)
-			first, done := a.approve(t, commandFor(e))
+			first, done := a.approve(t, a.commandFor(e))
 			if first.Status != ApprovalAccepted || done.Status != ApprovalRefused || done.Reason != tc.reason {
 				t.Fatalf("answer %+v, then %+v; want accepted, then refused (%s)", first, done, tc.reason)
 			}
@@ -241,7 +258,7 @@ func TestPrepareApprovalCommandRefusesAtOnce(t *testing.T) {
 	a, es := newApprovalFixture(t, "wip")
 	e := es["wip"]
 	now := a.at
-	for _, tc := range []struct {
+	for i, tc := range []struct {
 		mut    func(*ApprovalCommand)
 		mode   SweepMode
 		reason string
@@ -252,7 +269,8 @@ func TestPrepareApprovalCommandRefusesAtOnce(t *testing.T) {
 		{func(c *ApprovalCommand) { c.ApprovedBy = " " }, SweepOn, RefusedInvalid},
 		{func(*ApprovalCommand) {}, SweepDryRun, RefusedModeOff},
 	} {
-		cmd := commandFor(e)
+		// Each case is its own Inbox decision, issued after the one before.
+		cmd := a.commandAt(e, fmt.Sprintf("cmd-%d", i), time.Duration(i)*time.Minute-time.Hour)
 		tc.mut(&cmd)
 		res, err := PrepareApprovalCommand(a.ctx, a.state, tc.mode, cmd, now)
 		if err != nil || res.Status != ApprovalRefused || res.Reason != tc.reason {
@@ -270,7 +288,7 @@ func TestApprovalCommandReplayIsIdempotent(t *testing.T) {
 	t.Parallel()
 	heavyUnderShort(t, "~90 git processes")
 	a, es := newApprovalFixture(t, "wip")
-	cmd := commandFor(es["wip"])
+	cmd := a.commandFor(es["wip"])
 	first, err := PrepareApprovalCommand(a.ctx, a.state, SweepOn, cmd, a.at)
 	if err != nil || first.Status != ApprovalAccepted {
 		t.Fatalf("%+v, %v", first, err)
@@ -301,7 +319,7 @@ func TestApprovalCommandAuthorizesTheStateNotTheKey(t *testing.T) {
 	heavyUnderShort(t, "~90 git processes")
 	a, es := newApprovalFixture(t, "wip")
 	e := es["wip"]
-	cmd := commandFor(e)
+	cmd := a.commandFor(e)
 	first, err := PrepareApprovalCommand(a.ctx, a.state, SweepOn, cmd, a.at)
 	if err != nil || first.Status != ApprovalAccepted {
 		t.Fatalf("%+v, %v", first, err)
@@ -372,7 +390,7 @@ func TestApprovalCommandAmendsOnlyItsOwnProposals(t *testing.T) {
 	}
 	untouchedBefore, _ := proposalByKey(e["untouched"].Key)
 
-	if _, done := a.approve(t, commandFor(e["removed"])); done.Status != ApprovalReclaimed {
+	if _, done := a.approve(t, a.commandFor(e["removed"])); done.Status != ApprovalReclaimed {
 		t.Fatalf("approved: %+v, want reclaimed", done)
 	}
 	refusedPath := e["refused"].Path
@@ -384,7 +402,7 @@ func TestApprovalCommandAmendsOnlyItsOwnProposals(t *testing.T) {
 		}
 		return nil
 	}
-	if _, done := a.approve(t, commandFor(e["refused"])); done.Status != ApprovalRefused || done.Reason != string(ReasonInUse) {
+	if _, done := a.approve(t, a.commandFor(e["refused"])); done.Status != ApprovalRefused || done.Reason != string(ReasonInUse) {
 		t.Fatalf("refused: %+v, want refused (in_use)", done)
 	}
 
@@ -422,5 +440,107 @@ func TestApprovalCommandAmendsOnlyItsOwnProposals(t *testing.T) {
 	}
 	if !exists(filepath.Join(refusedPath, "a.txt")) || !exists(filepath.Join(e["untouched"].Path, "a.txt")) {
 		t.Fatal("a worktree that was not removed lost its files")
+	}
+}
+
+// A command acts at most once. Refused while it was carried out, it is
+// answered with that refusal however often it is delivered again, even once
+// the cause has gone; the authority it carried is spent. A new Inbox decision,
+// a new command issued after it, is what removes the worktree.
+func TestApprovalCommandRefusalIsFinalForItsCommand(t *testing.T) {
+	t.Parallel()
+	heavyUnderShort(t, "~110 git processes")
+	a, es := newApprovalFixture(t, "wip")
+	e := es["wip"]
+	a.r.ProcessUse = func(context.Context, []string) error { return errors.New("open by process 4242 (vim)") }
+	first := a.commandFor(e)
+	if _, done := a.approve(t, first); done.Status != ApprovalRefused || done.Reason != string(ReasonInUse) {
+		t.Fatalf("%+v, want refused (in_use)", done)
+	}
+	// The refused pass captured before it found the process (a capture is
+	// kept, never removed); a replay must add nothing to it.
+	refs := captureRefs(t, a.project)
+	a.r.ProcessUse = func(context.Context, []string) error { return nil } // the cause clears
+	for range 2 {
+		again, err := PrepareApprovalCommand(a.ctx, a.state, SweepOn, first, a.at)
+		if err != nil || !again.Replayed || again.Status != ApprovalRefused || again.Reason != string(ReasonInUse) {
+			t.Fatalf("the refused command again: %+v, %v; want its refusal, replayed, and no removal started", again, err)
+		}
+	}
+	if !exists(filepath.Join(e.Path, "a.txt")) || captureRefs(t, a.project) != refs {
+		t.Fatal("a replayed refused command removed or captured the worktree")
+	}
+
+	fresh := a.commandAt(e, "cmd-fresh", -time.Minute)
+	accepted, done := a.approve(t, fresh)
+	if accepted.Status != ApprovalAccepted || accepted.Replayed || done.Status != ApprovalReclaimed {
+		t.Fatalf("a new decision: %+v, then %+v; want accepted, then reclaimed", accepted, done)
+	}
+	if exists(e.Path) {
+		t.Fatal("the newly approved worktree is still there")
+	}
+}
+
+// An older decision delivered after a newer one never acts: not after the
+// newer one was refused, and not while it is being carried out.
+func TestApprovalCommandOlderThanTheNewestIsSuperseded(t *testing.T) {
+	t.Parallel()
+	heavyUnderShort(t, "~110 git processes")
+	a, es := newApprovalFixture(t, "refused", "running")
+
+	// The newer decision is refused; the older one arrives after the cause
+	// cleared.
+	r := es["refused"]
+	older, newer := a.commandAt(r, "cmd-older", -2*time.Minute), a.commandAt(r, "cmd-newer", -time.Minute)
+	a.r.ProcessUse = func(context.Context, []string) error { return errors.New("open by process 4242 (vim)") }
+	if _, done := a.approve(t, newer); done.Status != ApprovalRefused {
+		t.Fatalf("newer: %+v, want refused", done)
+	}
+	a.r.ProcessUse = func(context.Context, []string) error { return nil }
+	late, err := PrepareApprovalCommand(a.ctx, a.state, SweepOn, older, a.at)
+	if err != nil || late.Status != ApprovalRefused || late.Reason != RefusedSuperseded {
+		t.Fatalf("older after a refused newer: %+v, %v; want refused (superseded)", late, err)
+	}
+	if again, _ := PrepareApprovalCommand(a.ctx, a.state, SweepOn, older, a.at); !again.Replayed || again.Reason != RefusedSuperseded {
+		t.Fatalf("the older one again: %+v, want its refusal, replayed", again)
+	}
+	if !exists(filepath.Join(r.Path, "a.txt")) {
+		t.Fatal("a superseded decision removed the worktree")
+	}
+
+	// The newer decision is accepted and not yet carried out; the older one
+	// arrives meanwhile.
+	w := es["running"]
+	older, newer = a.commandAt(w, "cmd-older-2", -2*time.Minute), a.commandAt(w, "cmd-newer-2", -time.Minute)
+	if got, err := PrepareApprovalCommand(a.ctx, a.state, SweepOn, newer, a.at); err != nil || got.Status != ApprovalAccepted {
+		t.Fatalf("newer: %+v, %v; want accepted", got, err)
+	}
+	if late, err := PrepareApprovalCommand(a.ctx, a.state, SweepOn, older, a.at); err != nil || late.Status != ApprovalRefused || late.Reason != RefusedSuperseded {
+		t.Fatalf("older while the newer runs: %+v, %v; want refused (superseded)", late, err)
+	}
+	// What the Inbox shows follows the newest decision, not the late one.
+	set, err := PendingProposals(a.state)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range set.Proposals {
+		if p.Key == w.Key && p.Decision != DecisionApprove {
+			t.Fatalf("Inbox after a late older decision: %+v, want still approved (removing)", p)
+		}
+	}
+	if done := a.r.RunApprovalCommand(a.ctx, a.opts(SweepOn), newer); done.Status != ApprovalReclaimed {
+		t.Fatalf("newer carried out: %+v, want reclaimed", done)
+	}
+	if exists(w.Path) {
+		t.Fatal("the newer decision's worktree is still there")
+	}
+	var mine []string
+	for _, ref := range strings.Fields(captureRefs(t, a.project)) {
+		if strings.Contains(ref, "/"+sanitizeRefComponent(w.Key)+"/") {
+			mine = append(mine, ref)
+		}
+	}
+	if len(mine) != 1 {
+		t.Fatalf("capture refs of %s: %v, want exactly one (the newer decision's)", w.Key, mine)
 	}
 }

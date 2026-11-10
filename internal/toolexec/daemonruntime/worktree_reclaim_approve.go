@@ -33,8 +33,12 @@ type worktreeReclaimApproveRequest struct {
 	Approvals []worktreeReclaimApproveItem `json:"approvals"`
 	// ApprovedBy names the person, "inbox:<user id>".
 	ApprovedBy string `json:"approved_by"`
-	// CommandID identifies this delivery, for the journal.
-	CommandID string `json:"command_id,omitempty"`
+	// CommandID identifies this Inbox decision's delivery: a command acts at
+	// most once, and its answer is its answer forever. IssuedAtMs is when
+	// the server issued it; a command issued no later than one already
+	// answered about the same worktree never acts.
+	CommandID  string `json:"command_id"`
+	IssuedAtMs int64  `json:"issued_at_ms"`
 }
 
 type worktreeReclaimApproveItem struct {
@@ -97,6 +101,9 @@ func handleWorktreeReclaimApprove(ctx context.Context, payload []byte) ([]byte, 
 	var accepted []worktreereclaim.ApprovalCommand
 	for _, a := range req.Approvals {
 		cmd := worktreereclaim.ApprovalCommand{Key: a.Key, Fingerprint: a.Fingerprint, Path: a.Path, ApprovedBy: by, CommandID: req.CommandID}
+		if req.IssuedAtMs > 0 {
+			cmd.IssuedAt = time.UnixMilli(req.IssuedAtMs).UTC()
+		}
 		res, err := worktreereclaim.PrepareApprovalCommand(ctx, dir, cfg.Mode, cmd, now)
 		if err != nil {
 			return nil, err

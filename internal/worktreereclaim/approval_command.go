@@ -133,20 +133,32 @@ const (
 // Reasons an approval command is refused, beside the HeldReasons a pass can
 // hold the worktree for (in_use, capture_missing, …).
 const (
-	RefusedInvalid     = "invalid"
-	RefusedChanged     = "changed"       // not the state the person approved
-	RefusedUnknown     = "unknown"       // the last report does not propose it
-	RefusedPath        = "path_mismatch" // the report has it at another path
-	RefusedNotLinked   = "not_a_linked_worktree"
-	RefusedModeOff     = "reclaim_off" // the machine's reclaim is off or dry-run
-	RefusedNotFound    = "not_found"   // the pass did not find it
-	RefusedDeferred    = "deferred"    // busy or out of time; send it again
+	RefusedInvalid   = "invalid"
+	RefusedChanged   = "changed"       // not the state the person approved
+	RefusedUnknown   = "unknown"       // the last report does not propose it
+	RefusedPath      = "path_mismatch" // the report has it at another path
+	RefusedNotLinked = "not_a_linked_worktree"
+	RefusedModeOff   = "reclaim_off" // the machine's reclaim is off or dry-run
+	RefusedNotFound  = "not_found"   // the pass did not find it
+	RefusedDeferred  = "deferred"    // busy or out of time; approve it again
+	// RefusedSuperseded: a command issued no later than one this machine
+	// already answered about the same worktree (a delayed or repeated
+	// delivery of an older decision). Only a newer Inbox decision acts.
+	RefusedSuperseded = "superseded"
+	// RefusedExpired: a command issued longer ago than approvalCommandTTL.
+	RefusedExpired     = "expired"
 	approvalCommandTTL = 30 * 24 * time.Hour
+	// approvalCommandKeep is how long a command's result, and the latest
+	// issue time per worktree, are kept: longer than approvalCommandTTL, so a
+	// command still young enough to act is never one whose record is gone.
+	approvalCommandKeep = approvalCommandTTL + 24*time.Hour
 	// approvalStaleAfter: an accepted command whose removal never reported
-	// (the daemon stopped mid-way) may be sent again after this.
+	// (the daemon stopped mid-way) is shown to the person as not carried
+	// out after this, so they can decide again; the command itself never
+	// acts again.
 	approvalStaleAfter   = time.Hour
 	approvalCommandsFile = "approval-commands.json"
-	maxApprovalCommands  = 200
+	maxApprovalCommands  = 500
 )
 
 // ApprovalCommand is worktree.reclaim_approve's request about one proposal.
@@ -155,7 +167,12 @@ type ApprovalCommand struct {
 	Fingerprint string `json:"fingerprint"`
 	Path        string `json:"path"`
 	ApprovedBy  string `json:"approved_by"`
-	CommandID   string `json:"command_id,omitempty"`
+	// CommandID identifies the delivery of one Inbox decision; IssuedAt is
+	// when the server issued it. Every command is answered once: a result
+	// recorded for its id is its answer forever, and a command issued no
+	// later than the newest one answered about the same worktree never acts.
+	CommandID string    `json:"command_id"`
+	IssuedAt  time.Time `json:"issued_at"`
 }
 
 // ApprovalResult is what became of one approval command.
@@ -170,15 +187,20 @@ type ApprovalResult struct {
 	FreedBytes  int64          `json:"freed_bytes,omitempty"`
 	ApprovedBy  string         `json:"approved_by,omitempty"`
 	CommandID   string         `json:"command_id,omitempty"`
+	IssuedAt    time.Time      `json:"issued_at,omitempty"`
 	At          time.Time      `json:"at"`
-	// Replayed: the command was already answered for this exact state, and
-	// this is that answer; nothing was done again.
+	// Replayed: the command was already answered, and this is that answer;
+	// nothing was done again.
 	Replayed bool `json:"replayed,omitempty"`
 }
 
 type approvalCommands struct {
 	Version int              `json:"version"`
 	Results []ApprovalResult `json:"results"`
+	// Latest is, per worktree key, the issue time of the newest command
+	// answered about it: what a command must be newer than to act. Kept
+	// apart from Results, so trimming results never re-arms an old command.
+	Latest map[string]time.Time `json:"latest,omitempty"`
 }
 
 func readApprovalCommands(dir string) (approvalCommands, error) {
@@ -196,17 +218,31 @@ func readApprovalCommands(dir string) (approvalCommands, error) {
 	return c, nil
 }
 
+// find is the result of the newest command (by issue time) about this state.
 func (c approvalCommands) find(key, fingerprint string) (ApprovalResult, bool) {
+	var out ApprovalResult
+	found := false
+	for _, r := range c.Results {
+		if r.Key == key && r.Fingerprint == fingerprint && (!found || !r.IssuedAt.Before(out.IssuedAt)) {
+			out, found = r, true
+		}
+	}
+	return out, found
+}
+
+// answered is the result recorded for this command about this key.
+func (c approvalCommands) answered(commandID, key string) (ApprovalResult, bool) {
 	for i := len(c.Results) - 1; i >= 0; i-- {
-		if r := c.Results[i]; r.Key == key && r.Fingerprint == fingerprint {
+		if r := c.Results[i]; r.CommandID == commandID && r.Key == key {
 			return r, true
 		}
 	}
 	return ApprovalResult{}, false
 }
 
-// storeApprovalResultLocked records res, replacing any earlier result for
-// the same proposal state. The caller holds approvalsLock.
+// storeApprovalResultLocked records res as its command's answer about its
+// key (replacing an accepted answer with the outcome), and raises the key's
+// latest issue time. The caller holds approvalsLock.
 func storeApprovalResultLocked(dir string, res ApprovalResult, now time.Time) error {
 	cur, err := readApprovalCommands(dir)
 	if err != nil {
@@ -214,7 +250,7 @@ func storeApprovalResultLocked(dir string, res ApprovalResult, now time.Time) er
 	}
 	kept := cur.Results[:0]
 	for _, r := range cur.Results {
-		if (r.Key == res.Key && r.Fingerprint == res.Fingerprint) || now.Sub(r.At) > approvalCommandTTL {
+		if (r.CommandID == res.CommandID && r.Key == res.Key) || now.Sub(r.At) > approvalCommandKeep {
 			continue
 		}
 		kept = append(kept, r)
@@ -223,7 +259,16 @@ func storeApprovalResultLocked(dir string, res ApprovalResult, now time.Time) er
 	if len(kept) > maxApprovalCommands {
 		kept = kept[len(kept)-maxApprovalCommands:]
 	}
-	cur.Version, cur.Results = 1, kept
+	latest := map[string]time.Time{}
+	for k, t := range cur.Latest {
+		if now.Sub(t) <= approvalCommandKeep {
+			latest[k] = t
+		}
+	}
+	if t, ok := latest[res.Key]; !ok || res.IssuedAt.After(t) {
+		latest[res.Key] = res.IssuedAt
+	}
+	cur.Version, cur.Results, cur.Latest = 1, kept, latest
 	b, err := json.MarshalIndent(cur, "", "  ")
 	if err != nil {
 		return err
@@ -245,9 +290,14 @@ func ApprovalCommandResults(stateDir string) ([]ApprovalResult, error) {
 // what it can tell is wrong without walking the checkout (a state that is not
 // the one approved, a path that is not the proposal's, a main checkout, a
 // machine whose reclaim is not on), records the approval (for audit, and as
-// what the pass checks), and accepts the rest for RunApprovalCommand. A
-// command already answered for the same state returns that answer (Replayed)
-// and does nothing: sending the same approval twice removes nothing twice.
+// what the pass checks), and accepts the rest for RunApprovalCommand.
+//
+// A command acts at most once. One already answered (accepted, reclaimed or
+// refused) returns that answer, Replayed, and does nothing: a refusal revokes
+// the authority the command carried, and only a new Inbox decision, a new
+// command issued after it, can act. A command issued no later than the newest
+// one answered about the same worktree (an older decision delivered late) is
+// refused as superseded, and so is one older than approvalCommandTTL.
 func PrepareApprovalCommand(ctx context.Context, stateDir string, mode SweepMode, cmd ApprovalCommand, now time.Time) (ApprovalResult, error) {
 	dir, err := stateDirOr(stateDir)
 	if err != nil {
@@ -258,8 +308,10 @@ func PrepareApprovalCommand(ctx context.Context, stateDir string, mode SweepMode
 		res.Status, res.Reason, res.Detail = ApprovalRefused, reason, detail
 		return res, nil
 	}
-	if cmd.Key == "" || cmd.Fingerprint == "" || cmd.Path == "" || strings.TrimSpace(cmd.ApprovedBy) == "" {
-		return refuse(RefusedInvalid, "an approval names its proposal's key, fingerprint and path, and who approved it")
+	res.IssuedAt = cmd.IssuedAt
+	if cmd.Key == "" || cmd.Fingerprint == "" || cmd.Path == "" || strings.TrimSpace(cmd.ApprovedBy) == "" ||
+		cmd.CommandID == "" || cmd.IssuedAt.IsZero() {
+		return refuse(RefusedInvalid, "an approval names its proposal's key, fingerprint and path, who approved it, and the command that carries it")
 	}
 
 	unlock, err := approvalsLock(ctx, dir)
@@ -271,17 +323,29 @@ func PrepareApprovalCommand(ctx context.Context, stateDir string, mode SweepMode
 	if err != nil {
 		return ApprovalResult{}, err
 	}
-	if p, ok := prior.find(cmd.Key, cmd.Fingerprint); ok {
-		switch {
-		case p.Status == ApprovalReclaimed,
-			p.Status == ApprovalAccepted && now.Sub(p.At) < approvalStaleAfter:
-			p.Replayed = true
-			return p, nil
-		}
+	if p, ok := prior.answered(cmd.CommandID, cmd.Key); ok {
+		p.Replayed = true
+		return p, nil
+	}
+	// Every answer from here on is recorded: it is this command's, forever.
+	refuseRecorded := func(reason, detail string) (ApprovalResult, error) {
+		res, _ = refuse(reason, detail)
+		return res, storeApprovalResultLocked(dir, res, now)
+	}
+	if latest, ok := prior.Latest[cmd.Key]; ok && !cmd.IssuedAt.After(latest) {
+		return refuseRecorded(RefusedSuperseded, "a newer decision about it was already received; this older one does nothing")
+	}
+	if now.Sub(cmd.IssuedAt) > approvalCommandTTL {
+		return refuseRecorded(RefusedExpired, "the approval is too old to act on; approve it again")
+	}
+	if p, ok := prior.find(cmd.Key, cmd.Fingerprint); ok && p.Status == ApprovalReclaimed {
+		// Already removed by an earlier command: nothing left to remove.
+		p.Replayed = true
+		return p, nil
 	}
 	rep, err := ReadSweepReport(dir)
 	if err != nil {
-		return refuse(RefusedUnknown, "this machine has no reclaim report")
+		return refuseRecorded(RefusedUnknown, "this machine has no reclaim report")
 	}
 	var entry *SweepEntry
 	for i := range rep.Entries {
@@ -291,13 +355,13 @@ func PrepareApprovalCommand(ctx context.Context, stateDir string, mode SweepMode
 	}
 	switch {
 	case entry == nil:
-		return refuse(RefusedUnknown, "this machine no longer proposes it")
+		return refuseRecorded(RefusedUnknown, "this machine no longer proposes it")
 	case entry.Fingerprint != cmd.Fingerprint:
-		return refuse(RefusedChanged, "it changed after it was proposed; it is proposed again in its new state")
+		return refuseRecorded(RefusedChanged, "it changed after it was proposed; it is proposed again in its new state")
 	case !samePath(entry.Path, cmd.Path):
-		return refuse(RefusedPath, fmt.Sprintf("the proposal is at %s, not %s", entry.Path, cmd.Path))
+		return refuseRecorded(RefusedPath, fmt.Sprintf("the proposal is at %s, not %s", entry.Path, cmd.Path))
 	case !isLinkedWorktree(cmd.Path):
-		return refuse(RefusedNotLinked, "it is not a linked worktree (a main checkout is never removed)")
+		return refuseRecorded(RefusedNotLinked, "it is not a linked worktree (a main checkout is never removed)")
 	}
 	// Recorded for audit whatever happens next: who approved which state.
 	if err := storeApprovalsLocked(dir, []Approval{{Key: cmd.Key, Path: entry.Path, Fingerprint: cmd.Fingerprint,
@@ -305,8 +369,7 @@ func PrepareApprovalCommand(ctx context.Context, stateDir string, mode SweepMode
 		return ApprovalResult{}, err
 	}
 	if mode != SweepOn {
-		res, _ = refuse(RefusedModeOff, "worktree reclaim is "+string(mode)+" on this machine; the approval is recorded and nothing is removed")
-		return res, storeApprovalResultLocked(dir, res, now)
+		return refuseRecorded(RefusedModeOff, "worktree reclaim is "+string(mode)+" on this machine; the approval is recorded and nothing is removed")
 	}
 	res.Status = ApprovalAccepted
 	return res, storeApprovalResultLocked(dir, res, now)
@@ -320,7 +383,7 @@ func PrepareApprovalCommand(ctx context.Context, stateDir string, mode SweepMode
 func (r *Reclaimer) RunApprovalCommand(ctx context.Context, opts SweepOptions, cmd ApprovalCommand) ApprovalResult {
 	opts.Authorized = []AuthorizedApproval{{Key: cmd.Key, Fingerprint: cmd.Fingerprint, Path: cmd.Path, ApprovedBy: cmd.ApprovedBy, CommandID: cmd.CommandID}}
 	opts.Trigger = "approval"
-	res := ApprovalResult{Key: cmd.Key, Fingerprint: cmd.Fingerprint, Path: cmd.Path, ApprovedBy: cmd.ApprovedBy, CommandID: cmd.CommandID}
+	res := ApprovalResult{Key: cmd.Key, Fingerprint: cmd.Fingerprint, Path: cmd.Path, ApprovedBy: cmd.ApprovedBy, CommandID: cmd.CommandID, IssuedAt: cmd.IssuedAt}
 	rep := r.SweepMachine(ctx, opts)
 	res.Status, res.Reason, res.Detail = ApprovalRefused, RefusedNotFound, "the pass did not find it at its path"
 	for _, e := range rep.Entries {

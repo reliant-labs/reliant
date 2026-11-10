@@ -127,7 +127,13 @@ func allPendingProposals(stateDir string) (ProposalSet, error) {
 		}
 		// An approval the machine refused to carry out is asked about
 		// again, with why: the person decides afresh, knowing.
-		if c, ok := commands.find(e.Key, e.Fingerprint); ok && c.Status == ApprovalRefused && p.Decision == DecisionApprove {
+		c, ok := commands.find(e.Key, e.Fingerprint)
+		if ok && c.Status == ApprovalAccepted && time.Since(c.At) > approvalStaleAfter {
+			// Its removal never reported (the daemon stopped mid-way): the
+			// command never acts again, so the person is asked again.
+			c.Status, c.Reason, c.Detail = ApprovalRefused, "interrupted", "the machine stopped before it finished; approve it again"
+		}
+		if ok && c.Status == ApprovalRefused && p.Decision == DecisionApprove {
 			p.Decision = ""
 			if !strings.HasPrefix(p.Detail, "Your approval was not carried out") {
 				// The report was not amended (no pass reached it): say why
