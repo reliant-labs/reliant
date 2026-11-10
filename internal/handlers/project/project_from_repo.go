@@ -99,7 +99,10 @@ func (s *Service) CreateProjectFromRepo(
 	// failure announcement, and it is the only thing that can find this
 	// project's install row again. Settling it here persists nothing — the
 	// row is written only after the control plane accepts the clone.
-	existing := s.existingProjectForRepo(ctx, userID, path, cloneURL)
+	existing, err := s.existingProjectForRepo(ctx, userID, path, cloneURL)
+	if err != nil {
+		return nil, err
+	}
 	projectID := uuid.New().String()
 	if existing != nil {
 		projectID = existing.ID
@@ -186,14 +189,16 @@ func (s *Service) CreateProjectFromRepo(
 // putting it on a SECOND machine — so the add is find-or-create rather than an
 // error. Matching on remote URL first and path second mirrors how the old
 // client chain recovered from AlreadyExists.
-func (s *Service) existingProjectForRepo(ctx context.Context, userID, path, cloneURL string) *core.Project {
+// A found project the caller may no longer act in is refused
+// (reusableProject), never re-added.
+func (s *Service) existingProjectForRepo(ctx context.Context, userID, path, cloneURL string) (*core.Project, error) {
 	if existing, err := s.deps.Repo.GetProjectByRemoteURLAndUser(ctx, cloneURL, userID); err == nil && existing != nil {
-		return existing
+		return existing, reusableProject(ctx, userID, existing)
 	}
 	if existing, err := s.deps.Repo.GetProjectByPathAndUser(ctx, path, userID); err == nil && existing != nil {
-		return existing
+		return existing, reusableProject(ctx, userID, existing)
 	}
-	return nil
+	return nil, nil
 }
 
 // createProjectForRepo creates the project row for a repo being added, under

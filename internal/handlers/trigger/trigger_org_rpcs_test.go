@@ -4,6 +4,7 @@ package trigger
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"sort"
 	"testing"
 
@@ -101,14 +102,19 @@ func TestEveryTriggerMutationActsInItsOrg(t *testing.T) {
 			}))
 			return err
 		},
-		// DisableWorkflow reports each activation it could not pause rather
-		// than failing; the unchanged store is what proves the refusal.
+		// DisableWorkflow with no project names every project's activations,
+		// and pauses and reports only those the caller may still change: an
+		// answer that names none of acme's, and the unchanged store, are the
+		// refusal.
 		"DisableWorkflow": func(ctx context.Context) error {
 			resp, err := env.svc.DisableWorkflow(ctx, connect.NewRequest(&reliantv1.DisableWorkflowRequest{Workflow: "nightly"}))
-			if err == nil && len(resp.Msg.GetFailed()) > 0 {
-				return svcerr.NotFound("trigger")
+			if err != nil {
+				return err
 			}
-			return err
+			if n := len(resp.Msg.GetPaused()) + len(resp.Msg.GetFailed()); n > 0 {
+				return fmt.Errorf("DisableWorkflow reported %d of acme's activations", n)
+			}
+			return svcerr.NotFound("trigger")
 		},
 	}
 

@@ -18,6 +18,7 @@ import (
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/launch"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -97,8 +98,10 @@ func (s *Service) EnableWorkflow(
 	activations := map[string]*core.Trigger{}
 	taken := map[string]bool{}
 	for _, t := range mine {
+		// Every stored name is taken, but only a trigger the caller may
+		// still change is an activation to update.
 		taken[t.Name] = true
-		if t.WorkflowTrigger != nil && sameWorkflowRef(t.Workflow, msg.Workflow) {
+		if t.WorkflowTrigger != nil && sameWorkflowRef(t.Workflow, msg.Workflow) && authz.CanWriteTrigger(ctx, userID, t) {
 			activations[*t.WorkflowTrigger] = t
 		}
 	}
@@ -622,7 +625,9 @@ func (s *Service) DisableWorkflow(
 		return nil, triggerDBError("list triggers", err)
 	}
 	resp := &reliantv1.DisableWorkflowResponse{}
-	for _, t := range mine {
+	// With no project named this is every project's: only activations the
+	// caller may still change are paused or reported.
+	for _, t := range authz.Visible(ctx, userID, mine, authz.CanWriteTrigger) {
 		if t.WorkflowTrigger == nil || !sameWorkflowRef(t.Workflow, req.Msg.Workflow) {
 			continue
 		}

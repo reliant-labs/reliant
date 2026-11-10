@@ -30,7 +30,9 @@ const maxOrgGateEntries = 4096
 // (user_updates.org_id, stamped on insert), so a deleted resource's history
 // keeps its org. An update with none (written before orgs, or a live update
 // not read back) falls back to the resource's current org, read once per
-// stream once it has one. When neither establishes an org (the resource is
+// stream once it has one; a resource of no org is decided by authz too, so a
+// credential bound to another org gets none of its owner's unassigned
+// resources' updates. When neither is readable (the resource is
 // gone, or a read failed), the update is withheld (authz fails closed),
 // except that a deletion still reaches the client as a bare marker, its id
 // and kind and nothing else, so the client can drop the item. The cursor
@@ -101,14 +103,19 @@ func (g *orgGate) allows(ctx context.Context, update *db.UserUpdate) bool {
 					"userID", g.userID, "resource", key, "error", err)
 			}
 			return deletionMarker(update)
-		case got == nil || *got == "":
-			return true
+		case got != nil:
+			org = *got
 		}
 		if len(g.orgs) >= maxOrgGateEntries {
 			g.orgs = map[string]string{}
 		}
-		org = *got
 		g.orgs[key] = org
+	}
+	if org == "" {
+		// A resource of no org yet is decided as authz decides one: a
+		// credential bound to an org reaches it only when that org is its
+		// owner's default (credentialReaches).
+		return authz.CanReadOwn(ctx, g.userID, nil)
 	}
 	return authz.CanReadOwn(ctx, g.userID, &org)
 }

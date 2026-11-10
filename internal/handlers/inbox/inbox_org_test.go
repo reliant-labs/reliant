@@ -29,8 +29,8 @@ func (memberOf) DefaultOrg(context.Context, string) (string, error) { return "ho
 
 // ListInbox leaves out every item about a chat or project the caller may no
 // longer read: a removed member's left org, and the other org of a
-// credential bound to one. Items of no org, and a recovery whose project is
-// gone, stay listed.
+// credential bound to one. A recovery whose project is gone stays listed for
+// its owner.
 func TestListInbox_LeavesOutItemsOfAnOrgTheCallerMayNotRead(t *testing.T) {
 	org := func(s string) *string { return &s }
 	chatOrgs := map[string]*string{"c-acme": org("acme"), "c-home": org("home")}
@@ -88,5 +88,11 @@ func TestListInbox_LeavesOutItemsOfAnOrgTheCallerMayNotRead(t *testing.T) {
 	require.Equal(t, want, itemIDs(removed), "a removed member of acme")
 
 	both := authz.WithMembership(userCtx(), memberOf{"home": true, "acme": true})
-	require.Equal(t, want, itemIDs(authz.WithCredentialOrg(both, "home")), "a credential bound to home")
+	require.Equal(t, want, itemIDs(authz.WithCredentialOrg(both, "home")), "a credential bound to home, the default org")
+
+	// A recovery whose project is gone is a row of no org: a credential
+	// bound to an org other than the owner's default does not reach it.
+	acmeOnly := []string{inboxApprovalPrefix + "chat-acme", inboxApprovalPrefix + "run-acme", "recovery:acme"}
+	sort.Strings(acmeOnly)
+	require.Equal(t, acmeOnly, itemIDs(authz.WithCredentialOrg(both, "acme")), "a credential bound to acme, not the default org")
 }

@@ -1029,8 +1029,10 @@ func (s *Service) CleanupStorage(
 // itemReads decides inbox items through authz, reading each chat and project
 // once per inbox read: an item about a chat or project the caller may no
 // longer read (an org they have left, a credential's other org) is not
-// listed. A project that is gone hides nothing: a recovery outlives its
-// source by design, and names no org.
+// listed. An item of no org (its project is gone: a recovery outlives its
+// source by design; or it names none) is decided as authz decides a row of
+// no org: the owner's, reached by a credential only through its owner's
+// default org.
 type itemReads struct {
 	s        *Service
 	mu       sync.Mutex
@@ -1062,7 +1064,7 @@ func (r *itemReads) project(ctx context.Context, userID, id string) bool {
 		project, err := r.s.deps.Repo.GetProject(ctx, id)
 		switch {
 		case svcerr.IsNotFound(err):
-			ok = true
+			ok = authz.CanReadOwn(ctx, userID, nil)
 		default:
 			ok = err == nil && authz.CanReadProject(ctx, userID, project)
 		}
@@ -1078,9 +1080,12 @@ func (r *itemReads) pending(ctx context.Context, userID string, p *core.InboxPen
 	case p.ProjectID != "":
 		return r.project(ctx, userID, p.ProjectID)
 	}
-	return true
+	return authz.CanReadOwn(ctx, userID, nil)
 }
 
 func (r *itemReads) recovery(ctx context.Context, userID string, row *core.WorktreeRecovery) bool {
-	return row.ProjectID == "" || r.project(ctx, userID, row.ProjectID)
+	if row.ProjectID == "" {
+		return authz.CanReadOwn(ctx, userID, nil)
+	}
+	return r.project(ctx, userID, row.ProjectID)
 }

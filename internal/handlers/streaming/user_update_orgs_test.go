@@ -24,7 +24,8 @@ import (
 )
 
 // orgUpdatesRepo serves one user's update log and the orgs of what it is
-// about: chats, projects and saved workflows in acme, home and globex.
+// about: chats, projects and saved workflows in acme, home and globex, or
+// unassigned (an id starting "u": no org yet).
 type orgUpdatesRepo struct {
 	Repository
 	log []db.UserUpdate
@@ -32,6 +33,9 @@ type orgUpdatesRepo struct {
 
 func orgRow(id string) *string {
 	org := map[byte]string{'a': "acme", 'h': "home", 'g': "globex"}[id[0]]
+	if org == "" {
+		return nil
+	}
 	return &org
 }
 
@@ -65,11 +69,15 @@ func (orgUpdatesRepo) GetWorkflowDraft(_ context.Context, id string) (*db.Workfl
 }
 
 // orgMembers is a live membership of the orgs it holds; an org can be
-// removed while a stream is open.
+// removed while a stream is open. def is the caller's default org, which a
+// credential bound to an org reaches unassigned rows through.
 type orgMembers struct {
 	mu   sync.Mutex
 	orgs map[string]bool
+	def  string
 }
+
+func (m *orgMembers) DefaultOrg(context.Context, string) (string, error) { return m.def, nil }
 
 func (m *orgMembers) IsMember(_ context.Context, _, orgID string) (bool, bool, error) {
 	m.mu.Lock()
@@ -102,12 +110,19 @@ func update(seq int64, about string) db.UserUpdate {
 
 func orgUserStream(t *testing.T, repo Repository, hub streaming.UpdateHub[db.UserUpdate], m authz.Membership) <-chan *reliantv1.UserStreamEvent {
 	t.Helper()
+	return credentialUserStream(t, repo, hub, m, "")
+}
+
+// credentialUserStream is orgUserStream through a credential bound to org
+// bound ("" for none), as auth.WithMachineToken installs one.
+func credentialUserStream(t *testing.T, repo Repository, hub streaming.UpdateHub[db.UserUpdate], m authz.Membership, bound string) <-chan *reliantv1.UserStreamEvent {
+	t.Helper()
 	svc := NewTestStreaming(t, WithStreamingDeps(Deps{Repo: repo, Deltas: noopHub{}, UserUpdates: hub}))
 	mux := http.NewServeMux()
 	path, handler := reliantv1connect.NewStreamingServiceHandler(svc, connect.WithInterceptors(svcerr.Interceptor()))
 	// A request through a listener carries the membership authz decides with.
 	mux.Handle(path, authInjector(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		handler.ServeHTTP(w, r.WithContext(authz.WithMembership(r.Context(), m)))
+		handler.ServeHTTP(w, r.WithContext(authz.WithCredentialOrg(authz.WithMembership(r.Context(), m), bound)))
 	})))
 	srv := httptest.NewUnstartedServer(h2c.NewHandler(mux, &http2.Server{}))
 	srv.EnableHTTP2 = true
@@ -208,4 +223,61 @@ func TestStreamUserUpdates_ReplayOfADeletedOrgDraft(t *testing.T) {
 	require.Equal(t, int64(3), marker.GetSequenceNumber())
 	require.JSONEq(t, `{"draft_id":"gone-draft","deleted":true}`, marker.GetDataJson(), "the marker carries nothing of the draft")
 	require.Equal(t, "personal", batch.GetUpdates()[1].GetId())
+}
+
+// An update about a resource of no org yet (written before orgs, never
+// stamped) is decided as authz decides the resource: the owner gets it, and
+// a credential bound to an org only when that org is the owner's default. So
+// a credential bound to another org replays none of the default org's
+// unassigned history.
+func TestStreamUserUpdates_ReplayOfUnassignedResourcesFollowsTheCredential(t *testing.T) {
+	repo := orgUpdatesRepo{log: []db.UserUpdate{
+		update(1, "c:unassigned-chat"), update(2, "p:unassigned-project"), update(3, "d:unassigned-draft"),
+		update(4, "c:home-chat"), update(5, "c:acme-chat"), update(6, "personal"),
+	}}
+	members := func() *orgMembers { return &orgMembers{orgs: map[string]bool{"acme": true, "home": true}, def: "home"} }
+	for _, tc := range []struct {
+		name  string
+		bound string
+		want  []string
+	}{
+		{"the owner, no credential", "", []string{"c:unassigned-chat", "p:unassigned-project", "d:unassigned-draft", "c:home-chat", "c:acme-chat", "personal"}},
+		{"a credential bound to the default org", "home", []string{"c:unassigned-chat", "p:unassigned-project", "d:unassigned-draft", "c:home-chat", "personal"}},
+		{"a credential bound to another org", "acme", []string{"c:acme-chat", "personal"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			events := credentialUserStream(t, repo, nil, members(), tc.bound)
+			nextEvent(t, events, "sync", func(ev *reliantv1.UserStreamEvent) bool { return ev.GetSync() != nil })
+			ids, latest := nextBatch(t, events)
+			require.Equal(t, tc.want, ids)
+			require.Equal(t, int64(6), latest, "the cursor moves past the withheld rows")
+		})
+	}
+}
+
+// Live, the same: a credential bound to another org gets no update about its
+// owner's unassigned resources, while its own org's and personal ones arrive.
+func TestStreamUserUpdates_LiveUnassignedResourcesFollowTheCredential(t *testing.T) {
+	hub := newChanUserHub()
+	events := credentialUserStream(t, orgUpdatesRepo{}, hub, &orgMembers{orgs: map[string]bool{"acme": true, "home": true}, def: "home"}, "acme")
+	nextEvent(t, events, "sync", func(ev *reliantv1.UserStreamEvent) bool { return ev.GetSync() != nil })
+	<-hub.subscribed
+
+	send := func(u db.UserUpdate) {
+		hub.events <- streaming.UpdateEvent[db.UserUpdate]{SequenceNumber: u.SequenceNumber, Payload: u}
+	}
+	send(update(1, "c:unassigned-chat"))
+	send(update(2, "p:unassigned-project"))
+	send(update(3, "d:unassigned-draft"))
+	send(update(4, "c:acme-chat"))
+	var got []string
+	var latest int64
+	for latest < 4 {
+		ids, l := nextBatch(t, events)
+		got, latest = append(got, ids...), l
+	}
+	require.Equal(t, []string{"c:acme-chat"}, got, "none of the default org's unassigned resources")
+	send(update(5, "personal"))
+	ids, _ := nextBatch(t, events)
+	require.Equal(t, []string{"personal"}, ids)
 }

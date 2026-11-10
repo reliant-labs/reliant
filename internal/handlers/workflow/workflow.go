@@ -594,6 +594,9 @@ func (s *Service) automationsOfDeletedWorkflow(ctx context.Context, userID, slug
 	if err != nil {
 		return nil, fmt.Errorf("list automations: %w", err)
 	}
+	// Only automations the caller may still change are removed with it: one
+	// in an org they have left is the org's, and fails at launch instead.
+	all = authz.Visible(ctx, userID, all, authz.CanWriteTrigger)
 	shadowed := map[string]bool{}
 	var out []*core.Trigger
 	for _, t := range all {

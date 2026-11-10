@@ -222,16 +222,25 @@ func (s *Service) startWithNewSession(
 // — a headless run does not belong to a project in any meaningful sense, and
 // giving callers a knob here would make a temporary coupling look intentional.
 // The branch disappears with the run container.
+//
+// Only a project the caller may still run work in hosts it: not one of an org
+// they have left, nor of a credential's other org.
 func (s *Service) defaultProjectID(ctx context.Context, userID string) (string, error) {
-	projects, err := s.deps.Repo.ListProjects(ctx, db.ProjectFilters{UserID: userID, Limit: 1})
+	projects, err := s.deps.Repo.ListProjects(ctx, db.ProjectFilters{UserID: userID, Limit: defaultProjectScan})
 	if err != nil {
 		return "", svcerr.WrapOr(err, svcerr.Internal("failed to list projects"))
 	}
-	if len(projects) == 0 {
-		return "", svcerr.FailedPrecondition("no project available to host the run; supply session_id or create a project first")
+	for _, p := range projects {
+		if authz.CanWriteProject(ctx, userID, p) {
+			return p.ID, nil
+		}
 	}
-	return projects[0].ID, nil
+	return "", svcerr.FailedPrecondition("no project available to host the run; supply session_id or create a project first")
 }
+
+// defaultProjectScan bounds how many of the caller's most recently active
+// projects defaultProjectID reads to find one it may host a run in.
+const defaultProjectScan = 200
 
 // respondWithSessionRun reads the session's current run and returns it.
 func (s *Service) respondWithSessionRun(
