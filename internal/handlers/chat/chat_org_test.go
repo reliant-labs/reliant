@@ -39,9 +39,11 @@ func TestNewChatOrgs_ProjectOrgNeedsLiveMembership(t *testing.T) {
 	ctx := context.Background()
 	acme, home := "acme", "home"
 
-	_, _, err := orgService(t, &acme).newChatOrgs(ctx, "alice", "p-1", "")
-	if svcerr.Code(err) != connect.CodePermissionDenied {
-		t.Fatalf("a project of an org the caller left, no org named: %v, want PermissionDenied", err)
+	for _, blank := range []string{"", " ", "\t\n"} {
+		_, _, err := orgService(t, &acme).newChatOrgs(ctx, "alice", "p-1", blank)
+		if svcerr.Code(err) != connect.CodePermissionDenied {
+			t.Fatalf("a project of an org the caller left, org_id %q: %v, want PermissionDenied", blank, err)
+		}
 	}
 	named, _, err := orgService(t, &home).newChatOrgs(ctx, "alice", "p-1", "")
 	if err != nil || named != "home" {
