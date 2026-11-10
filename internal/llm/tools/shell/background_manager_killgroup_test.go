@@ -37,7 +37,7 @@ func startGrandchildCommand(t *testing.T, exitShell bool) (*BackgroundManager, *
 	if exitShell {
 		tail = "exit 0"
 	}
-	command := `( trap "" TERM; echo $BASHPID > ` + pidFile + `; : > ` + ready + `; while true; do sleep 0.05; done ) >/dev/null 2>&1 &
+	command := `( trap "" TERM; echo $(exec sh -c 'echo $PPID') > ` + pidFile + `; : > ` + ready + `; while true; do sleep 0.05; done ) >/dev/null 2>&1 &
 ` + tail
 
 	m := &BackgroundManager{processes: map[string]*BackgroundProcess{}}
