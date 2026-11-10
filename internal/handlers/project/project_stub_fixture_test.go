@@ -108,7 +108,7 @@ func ownedProjectRepo(t *testing.T) *project.MockRepository {
 
 // withTeardowns gives store an in-memory checkout teardown book behaving as
 // db.Repo's: one pending op per checkout, reused by a retry of the same
-// teardown; a settle is final, and a done remove drops the checkout row (here:
+// teardown (marked Reused, as db.Repo marks it); a settle is final, and a done remove drops the checkout row (here:
 // calls DeleteProjectDaemonFunc). It returns the book, by op id.
 func withTeardowns(store *project.MockRepository) map[string]*db.CheckoutTeardown {
 	var mu sync.Mutex
@@ -121,7 +121,9 @@ func withTeardowns(store *project.MockRepository) map[string]*db.CheckoutTeardow
 				if op.Kind != kind || op.Path != path {
 					return nil, &db.CheckoutTeardownBusyError{Teardown: op}
 				}
-				return op, nil
+				retry := *op
+				retry.Reused = true
+				return &retry, nil
 			}
 		}
 		if guard != nil {

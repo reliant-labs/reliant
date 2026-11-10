@@ -614,9 +614,13 @@ func (s *Service) RemoveProjectFromDaemon(
 	machine := s.machineName(ctx, req.Msg.DaemonId)
 	// Recorded before it is sent, and holding back workspace creation on the
 	// checkout until the machine says how it ended (checkout_teardown.go).
-	op, err := s.beginTeardown(ctx, userID, project, pd, req.Msg.DaemonId, db.CheckoutTeardownRemove, machine)
+	op, done, err := s.beginTeardown(ctx, userID, project, pd, req.Msg.DaemonId, db.CheckoutTeardownRemove, machine)
 	if err != nil {
 		return nil, err
+	}
+	if done {
+		// A retry of a remove the machine has since finished.
+		return connect.NewResponse(&reliantv1.RemoveProjectFromDaemonResponse{}), nil
 	}
 	// The row goes only once the machine has removed the checkout, in the
 	// same step that records the op done (db.Repo.SettleCheckoutTeardown). It
@@ -663,9 +667,13 @@ func (s *Service) RecloneProjectOnDaemon(
 		branch = *project.DefaultBranch
 	}
 	machine := s.machineName(ctx, req.Msg.DaemonId)
-	op, err := s.beginTeardown(ctx, userID, project, pd, req.Msg.DaemonId, db.CheckoutTeardownReclone, machine)
+	op, done, err := s.beginTeardown(ctx, userID, project, pd, req.Msg.DaemonId, db.CheckoutTeardownReclone, machine)
 	if err != nil {
 		return nil, err
+	}
+	if done {
+		// A retry of a reclone the machine has since finished.
+		return connect.NewResponse(&reliantv1.RecloneProjectOnDaemonResponse{Path: pd.Path}), nil
 	}
 	var reply teardownReply
 	payload := map[string]string{

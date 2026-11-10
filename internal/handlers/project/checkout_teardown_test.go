@@ -3,6 +3,7 @@ package project_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -97,13 +98,15 @@ func TestRemove_AnAcknowledgedRemoveSettlesTheOp(t *testing.T) {
 }
 
 // The answer is lost (the server stopped waiting). The op stays pending —
-// workspace creation stays held — and the retry sends the SAME op id, which
-// the machine answers from its journal instead of deleting again.
+// workspace creation stays held — and the retry first asks the machine how it
+// ended: still running there, so the SAME op id is sent again, which the
+// machine answers from its journal instead of deleting again.
 func TestRemove_ALostAckIsRetriedWithTheSameOp(t *testing.T) {
 	t.Parallel()
 	store, book, deleted := teardownStore(t)
 	d := &scriptedDaemon{answers: []func(string, map[string]string) ([]byte, error){
 		fail(fmt.Errorf("send: %w", toolexec.ErrDaemonTimeout)),
+		reply(`{"op_id":"%s","op_state":"running"}`),
 		reply(`{"success":true,"removed":true,"op_id":"%s","op_state":"done"}`),
 	}}
 	svc := newService(t, store, fakeDaemon(d.answer))
@@ -116,10 +119,100 @@ func TestRemove_ALostAckIsRetriedWithTheSameOp(t *testing.T) {
 	assert.Zero(t, *deleted)
 
 	require.NoError(t, remove(t, svc))
-	assert.Equal(t, []string{"op-1", "op-1"}, d.opIDs, "the retry reuses the op")
+	assert.Equal(t, []string{"git.remove", "git.teardown_status", "git.remove"}, d.sent, "the retry asks before it sends")
+	assert.Equal(t, []string{"op-1", "op-1", "op-1"}, d.opIDs, "the retry reuses the op")
 	assert.Len(t, book, 1)
 	assert.Equal(t, db.CheckoutTeardownDone, book["op-1"].State)
 	assert.Equal(t, 1, *deleted)
+}
+
+// A retry of a remove the machine has meanwhile finished sends nothing: the
+// status answer settles it, and the row goes with it.
+func TestRemove_ARetryOfAFinishedRemoveSendsNothing(t *testing.T) {
+	t.Parallel()
+	store, book, deleted := teardownStore(t)
+	d := &scriptedDaemon{answers: []func(string, map[string]string) ([]byte, error){
+		fail(fmt.Errorf("send: %w", toolexec.ErrDaemonTimeout)),
+		reply(`{"op_id":"%s","op_state":"done","removed":true}`),
+	}}
+	svc := newService(t, store, fakeDaemon(d.answer))
+	require.Error(t, remove(t, svc))
+	require.NoError(t, remove(t, svc))
+	assert.Equal(t, []string{"git.remove", "git.teardown_status"}, d.sent)
+	assert.Equal(t, db.CheckoutTeardownDone, book["op-1"].State)
+	assert.Equal(t, 1, *deleted)
+}
+
+// Delivery succeeded but the transport failed on the way back (a dropped
+// connection, not a timeout): that is no answer from the machine, which may be
+// deleting, so the op stays pending. The machine, asked, says it is still
+// running: still pending.
+func TestRemove_ATransportFailureIsNoOutcome(t *testing.T) {
+	t.Parallel()
+	store, book, deleted := teardownStore(t)
+	d := &scriptedDaemon{answers: []func(string, map[string]string) ([]byte, error){
+		fail(errors.New("daemon command git.remove via NATS failed: nats: connection closed")),
+		reply(`{"op_id":"%s","op_state":"running"}`),
+		reply(`{"success":false,"op_id":"%s","op_state":"running"}`),
+	}}
+	svc := newService(t, store, fakeDaemon(d.answer))
+
+	err := remove(t, svc)
+	require.Error(t, err)
+	assert.Equal(t, connect.CodeUnavailable, svcerr.Code(err))
+	assert.Contains(t, svcerr.ToConnect(err).Message(), "answer was lost")
+	assert.NotContains(t, svcerr.ToConnect(err).Message(), "nats", "the transport's words stay off the wire")
+	assert.Equal(t, db.CheckoutTeardownPending, book["op-1"].State, "a lost answer releases nothing")
+
+	err = remove(t, svc)
+	require.Error(t, err)
+	assert.Equal(t, db.CheckoutTeardownPending, book["op-1"].State, "the machine says running: still held")
+	assert.Zero(t, *deleted)
+}
+
+// The daemon's own failure IS an outcome: it reported it after (an older
+// daemon) or instead of (one that knows ids) running the delete.
+func TestRemove_ADaemonReportedFailureSettlesTheOpFailed(t *testing.T) {
+	t.Parallel()
+	store, book, deleted := teardownStore(t)
+	d := &scriptedDaemon{answers: []func(string, map[string]string) ([]byte, error){
+		fail(toolexec.DaemonReportedFailure("git.remove", "refusing to remove non-clone path (no .git): /clone")),
+	}}
+	err := remove(t, newService(t, store, fakeDaemon(d.answer)))
+	require.Error(t, err)
+	assert.Contains(t, svcerr.ToConnect(err).Message(), "refusing to remove non-clone path")
+	assert.Equal(t, db.CheckoutTeardownFailed, book["op-1"].State)
+	assert.Zero(t, *deleted)
+}
+
+// An older daemon whose reply to a remove was lost: the retry asks first,
+// learns the machine cannot say (git.teardown_status is unknown there), and
+// sends nothing until the grace has passed — an older daemon does not dedupe,
+// so a resend would be a second delete beside a first that may still run.
+// Only after the grace does a single new remove go out.
+func TestRemove_AnOlderDaemonsSameKindRetrySendsOneDeleteAtATime(t *testing.T) {
+	t.Parallel()
+	store, book, _ := teardownStore(t)
+	d := &scriptedDaemon{answers: []func(string, map[string]string) ([]byte, error){
+		fail(fmt.Errorf("send: %w", toolexec.ErrDaemonTimeout)), // the remove's reply is lost
+		fail(outdated), // the retry asks how it ended: unknown command
+	}}
+	svc := newService(t, store, fakeDaemon(d.answer))
+	require.Error(t, remove(t, svc))
+
+	err := remove(t, svc)
+	require.Error(t, err)
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
+	assert.Contains(t, svcerr.ToConnect(err).Message(), "too old to confirm")
+	assert.Equal(t, []string{"git.remove", "git.teardown_status"}, d.sent, "one destructive command inside the grace")
+	assert.Equal(t, db.CheckoutTeardownPending, book["op-1"].State)
+
+	book["op-1"].CreatedAt = book["op-1"].CreatedAt.Add(-checkoutteardown.LegacyGrace - time.Minute)
+	d.answers = append(d.answers, fail(outdated), reply(`{"success":true,"removed":true}`))
+	require.NoError(t, remove(t, svc))
+	assert.Equal(t, []string{"git.remove", "git.teardown_status", "git.teardown_status", "git.remove"}, d.sent)
+	assert.Equal(t, db.CheckoutTeardownExpired, book["op-1"].State)
+	assert.Equal(t, db.CheckoutTeardownDone, book["op-2"].State)
 }
 
 // The machine reports the op still running (it answered after the server's
@@ -182,7 +275,7 @@ func TestReclone_AnOlderDaemonsLostReplyFallsBackToTheGrace(t *testing.T) {
 
 	err := remove(t, svc)
 	require.Error(t, err)
-	assert.Contains(t, svcerr.ToConnect(err).Message(), "has not finished yet")
+	assert.Contains(t, svcerr.ToConnect(err).Message(), "too old to confirm")
 	assert.Equal(t, db.CheckoutTeardownPending, book["op-1"].State, "inside the grace an old machine's op still holds")
 
 	// Past the grace the op expires, and the remove goes ahead.

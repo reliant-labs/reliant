@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -15,10 +16,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// testTeardownNow is the fixed load time of the journals these tests open.
+var testTeardownNow = time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC)
+
 func newTestTeardownJournal(t *testing.T) (*teardownJournal, string) {
 	t.Helper()
 	dir := filepath.Join(t.TempDir(), checkoutTeardownDirName)
-	j, err := loadTeardownJournal(dir, time.Now())
+	j, err := loadTeardownJournal(dir, testTeardownNow)
 	require.NoError(t, err)
 	return j, dir
 }
@@ -113,7 +117,7 @@ func TestTeardownStatusFencesAnUnknownOp(t *testing.T) {
 	assert.False(t, ran, "a fenced op never runs")
 
 	// The tombstone is durable: a restarted daemon still refuses it.
-	reloaded, err := loadTeardownJournal(dir, time.Now())
+	reloaded, err := loadTeardownJournal(dir, testTeardownNow)
 	require.NoError(t, err)
 	late, err = reloaded.run(context.Background(), "op-4", "remove", "/clone", func(context.Context) (bool, error) { ran = true; return true, nil })
 	require.NoError(t, err)
@@ -127,10 +131,10 @@ func TestTeardownRunningAtRestartIsInterrupted(t *testing.T) {
 	t.Parallel()
 	dir := filepath.Join(t.TempDir(), checkoutTeardownDirName)
 	require.NoError(t, os.MkdirAll(dir, 0o700))
-	data, _ := json.Marshal(teardownRecord{OpID: "op-5", Kind: "remove", Path: "/clone", State: teardownRunning, UpdatedAt: time.Now()})
+	data, _ := json.Marshal(teardownRecord{OpID: "op-5", Kind: "remove", Path: "/clone", State: teardownRunning, UpdatedAt: testTeardownNow})
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "op-5.json"), data, 0o600))
 
-	j, err := loadTeardownJournal(dir, time.Now())
+	j, err := loadTeardownJournal(dir, testTeardownNow)
 	require.NoError(t, err)
 	st, err := j.status("op-5")
 	require.NoError(t, err)
@@ -150,18 +154,109 @@ func TestTeardownOutcomeSurvivesARestart(t *testing.T) {
 	_, err := j.run(context.Background(), "op-6", "remove", "/clone", func(context.Context) (bool, error) { return false, assert.AnError })
 	require.NoError(t, err)
 
-	reloaded, err := loadTeardownJournal(dir, time.Now())
+	reloaded, err := loadTeardownJournal(dir, testTeardownNow)
 	require.NoError(t, err)
 	st, err := reloaded.status("op-6")
 	require.NoError(t, err)
 	assert.Equal(t, teardownFailed, st.State)
 	assert.Equal(t, assert.AnError.Error(), st.Error)
 
-	// Past the retention it is forgotten (and a query would fence it).
-	later, err := loadTeardownJournal(dir, time.Now().Add(teardownRetention+time.Hour))
+}
+
+// Records are never collected: a server can retry an op whose answer was
+// lost, and a fenced op's delivery can arrive, any time later. Forgotten,
+// either would run as new — a second delete, or a fenced op running after
+// the server released workspace creation.
+func TestTeardownRecordsOutliveAnyRetryOrLateDelivery(t *testing.T) {
+	t.Parallel()
+	dir := filepath.Join(t.TempDir(), checkoutTeardownDirName)
+	require.NoError(t, os.MkdirAll(dir, 0o700))
+	longAgo := time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
+	for _, rec := range []teardownRecord{
+		{OpID: "op-done", Kind: "remove", Path: "/clone", State: teardownDone, Removed: true, UpdatedAt: longAgo},
+		{OpID: "op-fenced", State: teardownFenced, UpdatedAt: longAgo},
+	} {
+		data, _ := json.Marshal(rec)
+		require.NoError(t, os.WriteFile(filepath.Join(dir, rec.OpID+".json"), data, 0o600))
+	}
+	j, err := loadTeardownJournal(dir, time.Date(2030, 1, 1, 0, 0, 0, 0, time.UTC))
 	require.NoError(t, err)
-	_, known := later.records["op-6"]
-	assert.False(t, known)
+
+	ran := false
+	fn := func(context.Context) (bool, error) { ran = true; return true, nil }
+	retry, err := j.run(context.Background(), "op-done", "remove", "/clone", fn)
+	require.NoError(t, err)
+	assert.Equal(t, teardownDone, retry.State, "a retry years later is answered, not run")
+	late, err := j.run(context.Background(), "op-fenced", "remove", "/clone", fn)
+	require.NoError(t, err)
+	assert.Equal(t, teardownFenced, late.State, "a fenced op's late delivery is refused years later")
+	assert.False(t, ran)
+}
+
+// A journal that cannot be loaded is never stood in for by a memory-only
+// one: acknowledged teardowns and fences are refused (nothing is deleted,
+// nothing falsely fenced) until a daemon loads the journal, and then the ids
+// it already held are honoured again.
+func TestTeardownsAreRefusedUntilTheJournalLoads(t *testing.T) {
+	prev, prevErr := checkoutTeardowns.j, checkoutTeardowns.err
+	t.Cleanup(func() { setTeardownJournal(prev, prevErr) })
+
+	dataDir := t.TempDir()
+	dir := filepath.Join(dataDir, checkoutTeardownDirName)
+	require.NoError(t, os.MkdirAll(dir, 0o700))
+	clone := filepath.Join(t.TempDir(), "proj")
+	require.NoError(t, os.MkdirAll(filepath.Join(clone, ".git"), 0o755))
+	data, _ := json.Marshal(teardownRecord{OpID: "op-known", Kind: "remove", State: teardownDone, Path: clone, UpdatedAt: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)})
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "op-known.json"), data, 0o600))
+	// An unreadable record: the journal cannot vouch for every id it saw.
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "op-torn.json"), []byte("{not json"), 0o600))
+
+	initializeCheckoutTeardowns(context.Background(), dataDir)
+	remove, _ := json.Marshal(gitRemoveRequest{Path: clone, OpID: "op-known"})
+	_, err := handleGitRemove(context.Background(), remove)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "cannot record removes and reclones durably")
+	assert.DirExists(t, clone, "nothing is deleted without the durable journal")
+	status, _ := json.Marshal(gitTeardownStatusRequest{OpID: "op-unseen"})
+	_, err = handleGitTeardownStatus(context.Background(), status)
+	require.Error(t, err, "nothing is fenced without the durable journal either")
+
+	// The "restart" with a readable journal: the known op is answered, not
+	// run, and the id never seen is fenced durably.
+	require.NoError(t, os.Remove(filepath.Join(dir, "op-torn.json")))
+	initializeCheckoutTeardowns(context.Background(), dataDir)
+	out, err := handleGitRemove(context.Background(), remove)
+	require.NoError(t, err)
+	var resp gitRemoveResponse
+	require.NoError(t, json.Unmarshal(out, &resp))
+	assert.Equal(t, teardownDone, resp.OpState)
+	assert.DirExists(t, clone, "the known op already ran; it is not run again")
+	out, err = handleGitTeardownStatus(context.Background(), status)
+	require.NoError(t, err)
+	var st gitTeardownStatusResponse
+	require.NoError(t, json.Unmarshal(out, &st))
+	assert.Equal(t, teardownFenced, st.OpState)
+	assert.FileExists(t, filepath.Join(dir, "op-unseen.json"))
+
+	// No data dir at all is refused the same way.
+	initializeCheckoutTeardowns(context.Background(), "")
+	_, err = handleGitRemove(context.Background(), remove)
+	assert.Error(t, err)
+}
+
+var installTestTeardownJournalOnce sync.Once
+
+// installTestTeardownJournal gives the handlers a durable journal, shared by
+// the parallel handler tests (they use distinct op ids).
+func installTestTeardownJournal(t *testing.T) {
+	t.Helper()
+	installTestTeardownJournalOnce.Do(func() {
+		dir, err := os.MkdirTemp("", "teardown-journal-")
+		require.NoError(t, err)
+		j, err := loadTeardownJournal(dir, time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC))
+		require.NoError(t, err)
+		setTeardownJournal(j, nil)
+	})
 }
 
 // Nothing is deleted unless the op is journaled first.
@@ -191,6 +286,7 @@ func TestTeardownOpIDNamesOneTeardown(t *testing.T) {
 // answers exactly as before.
 func TestGitRemoveAcknowledgesAnOpID(t *testing.T) {
 	t.Parallel()
+	installTestTeardownJournal(t)
 	clone := filepath.Join(t.TempDir(), "proj")
 	require.NoError(t, os.MkdirAll(filepath.Join(clone, ".git"), 0o755))
 	opID := uuid.NewString()
@@ -219,6 +315,7 @@ func TestGitRemoveAcknowledgesAnOpID(t *testing.T) {
 
 func TestGitTeardownStatusAnswersAndFences(t *testing.T) {
 	t.Parallel()
+	installTestTeardownJournal(t)
 	opID := uuid.NewString()
 	payload, _ := json.Marshal(gitTeardownStatusRequest{OpID: opID})
 	out, err := handleGitTeardownStatus(context.Background(), payload)

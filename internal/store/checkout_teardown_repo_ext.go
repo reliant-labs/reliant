@@ -111,4 +111,8 @@ func SettleCheckoutTeardownRow(ctx context.Context, db orm.Context, id, state, d
 // persist them — `bun:"-"` is Bun's own idiom for a field it must never
 // bind or scan.
 type CheckoutTeardownExtra struct {
+	// Reused is set by db.BeginCheckoutTeardown on a pending op it returned
+	// for a retry instead of recording a new one: the caller must learn how
+	// that op ended before sending it again.
+	Reused bool `bun:"-"`
 }

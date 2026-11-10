@@ -292,7 +292,11 @@ func handleGitRemove(ctx context.Context, payload []byte) ([]byte, error) {
 		}
 		return json.Marshal(gitRemoveResponse{Success: true, Removed: removed})
 	}
-	rec, err := currentTeardownJournal().run(ctx, req.OpID, "remove", req.Path, func(context.Context) (bool, error) {
+	j, err := currentTeardownJournal()
+	if err != nil {
+		return nil, err
+	}
+	rec, err := j.run(ctx, req.OpID, "remove", req.Path, func(context.Context) (bool, error) {
 		return removeCheckout(req.Path)
 	})
 	if err != nil {
@@ -376,7 +380,11 @@ func handleGitReclone(ctx context.Context, payload []byte) ([]byte, error) {
 		}
 		return json.Marshal(gitRecloneResponse{Success: true, Path: req.Path})
 	}
-	rec, err := currentTeardownJournal().run(ctx, req.OpID, "reclone", req.Path, func(opCtx context.Context) (bool, error) {
+	j, err := currentTeardownJournal()
+	if err != nil {
+		return nil, err
+	}
+	rec, err := j.run(ctx, req.OpID, "reclone", req.Path, func(opCtx context.Context) (bool, error) {
 		return true, recloneCheckout(opCtx, req.Repo, branch, req.Path)
 	})
 	if err != nil {

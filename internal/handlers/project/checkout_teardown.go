@@ -65,9 +65,15 @@ func (m teardownMachine) Send(ctx context.Context, commandType string, payload, 
 }
 
 // beginTeardown records a kind teardown of pd on daemonID and returns the op
-// to send. A pending op of the same kind is reused (a retry). One of another
-// kind is asked how it ended first, and refused while it has not.
-func (s *Service) beginTeardown(ctx context.Context, userID string, project *db.Project, pd *core.ProjectDaemon, daemonID, kind, machine string) (*db.CheckoutTeardown, error) {
+// to send, or done=true when a pending op it would have retried turns out to
+// have finished (nothing is to be sent). A pending op of the same kind is a
+// retry; one of another kind blocks this teardown. Either way the machine is
+// asked how the pending op ended BEFORE anything is sent: an older daemon
+// ignores op ids, so resending to it would start a second delete beside a
+// first that may still be running, and it is refused instead until the op's
+// grace has passed. A daemon that knows ids answers from its journal, and
+// resending to it only waits for the op it already has.
+func (s *Service) beginTeardown(ctx context.Context, userID string, project *db.Project, pd *core.ProjectDaemon, daemonID, kind, machine string) (op *db.CheckoutTeardown, done bool, err error) {
 	before := "removing the project from that machine"
 	if kind == db.CheckoutTeardownReclone {
 		before = "recloning the project there"
@@ -75,22 +81,63 @@ func (s *Service) beginTeardown(ctx context.Context, userID string, project *db.
 	guard := func(txCtx context.Context) error {
 		return s.requireNoWorkspacesOn(txCtx, project, daemonID, machine, before)
 	}
-	for attempt := 0; ; attempt++ {
+	m := teardownMachine{s: s, userID: userID, daemonID: daemonID}
+	for attempt := 0; attempt < 3; attempt++ {
 		op, err := s.deps.Repo.BeginCheckoutTeardown(ctx, project.ID, daemonID, kind, pd.Path, guard)
 		var busy *db.CheckoutTeardownBusyError
-		if !errors.As(err, &busy) {
-			if err != nil {
-				// The guard's refusal keeps its code and sentence.
-				return nil, svcerr.WrapOr(err, svcerr.Internal("failed to record the teardown"))
-			}
-			return op, nil
+		var pending *db.CheckoutTeardown
+		switch {
+		case errors.As(err, &busy):
+			pending = busy.Teardown
+		case err != nil:
+			// The guard's refusal keeps its code and sentence.
+			return nil, false, svcerr.WrapOr(err, svcerr.Internal("failed to record the teardown"))
+		case op.Reused:
+			pending = op
+		default:
+			return op, false, nil
 		}
-		settled, qerr := checkoutteardown.Query(ctx, s.deps.Repo, teardownMachine{s: s, userID: userID, daemonID: daemonID}, busy.Teardown, time.Now())
-		if attempt > 0 || qerr != nil || settled.State == db.CheckoutTeardownPending {
-			return nil, svcerr.WithClass(svcerr.FailedPrecondition(fmt.Sprintf(
-				"a %s of %q on %s has not finished yet; try again once it has", busy.Teardown.Kind, project.Name, machine)), svcerr.ClassUser)
+		settled, qerr := checkoutteardown.Query(ctx, s.deps.Repo, m, pending, time.Now())
+		if qerr != nil {
+			return nil, false, s.unsettledRefusal(pending, project, machine, qerr)
 		}
+		switch {
+		case settled.State == db.CheckoutTeardownPending && busy == nil:
+			// The machine has this very op and is still running it: send
+			// it again, which waits for it there and deletes nothing more.
+			return settled, false, nil
+		case settled.State == db.CheckoutTeardownPending:
+			return nil, false, s.unsettledRefusal(pending, project, machine, nil)
+		case settled.State == db.CheckoutTeardownDone && busy == nil:
+			return settled, true, nil
+		}
+		// Settled otherwise (failed, not run, expired, or another kind
+		// that finished): record a new op.
 	}
+	return nil, false, svcerr.WithClass(svcerr.Aborted(fmt.Sprintf(
+		"the checkout of %q on %s kept changing while this was being started; try again", project.Name, machine)), svcerr.ClassUser)
+}
+
+// unsettledRefusal is the refusal for a teardown that must wait for pending,
+// whose outcome the machine could not (cause) or did not yet give.
+func (s *Service) unsettledRefusal(pending *db.CheckoutTeardown, project *db.Project, machine string, cause error) error {
+	what := fmt.Sprintf("a %s of %q on %s", pending.Kind, project.Name, machine)
+	var legacy *checkoutteardown.LegacyPendingError
+	switch {
+	case errors.As(cause, &legacy):
+		return svcerr.WithCause(svcerr.WithClass(svcerr.FailedPrecondition(fmt.Sprintf(
+			"%s was sent to a machine whose Reliant is too old to confirm it finished, so nothing more is sent to it "+
+				"until %s; try again then, or as soon as the machine is updated",
+			what, legacy.Until.UTC().Format("15:04 MST"))), svcerr.ClassUser), cause)
+	case cause != nil && daemonerr.Unreachable(cause):
+		return svcerr.WithCause(svcerr.WithClass(svcerr.Unavailable(fmt.Sprintf(
+			"%s has not been confirmed finished and the machine is offline; bring it online and try again", what)), svcerr.ClassUser), cause)
+	case cause != nil:
+		return svcerr.WithCause(svcerr.WithClass(svcerr.Unavailable(fmt.Sprintf(
+			"%s has not been confirmed finished and the machine could not say how it ended; nothing was sent, try again", what)), svcerr.ClassUser), cause)
+	}
+	return svcerr.WithClass(svcerr.FailedPrecondition(fmt.Sprintf(
+		"%s has not finished yet; try again once it has", what)), svcerr.ClassUser)
 }
 
 // teardownReply is the part of a git.remove / git.reclone reply the settle
@@ -108,29 +155,34 @@ type teardownReply struct {
 func (s *Service) settleTeardown(ctx context.Context, op *db.CheckoutTeardown, project *db.Project, machine string, reply teardownReply, sendErr error) error {
 	what := fmt.Sprintf("the %s of %q on %s", op.Kind, project.Name, machine)
 	if sendErr != nil {
+		// Only the daemon's own failure is an outcome: a daemon that knows
+		// ids reports one only before it journaled the op (nothing ran), an
+		// older one after its synchronous attempt. Every other failure —
+		// unreachable, a timeout, a dropped connection, the caller going
+		// away, an unreadable reply — says nothing about whether the
+		// machine is deleting, so the op stays pending and holds
+		// creation until the machine says (a retry, or a status query).
+		if text, ok := toolexec.DaemonReportedText(sendErr); ok {
+			if _, err := s.deps.Repo.SettleCheckoutTeardown(ctx, op.ID, db.CheckoutTeardownFailed, text); err != nil {
+				return svcerr.WrapOr(err, svcerr.Internal("failed to record the teardown"))
+			}
+			return daemonerr.Error(teardownVerb(op.Kind), sendErr)
+		}
 		switch {
 		case daemonerr.Unreachable(sendErr):
-			// Nothing ran. The op stays pending: the machine is offline,
-			// so no workspace is created there anyway, and the first
-			// question asked once it is back fences it.
 			if op.Kind == db.CheckoutTeardownRemove {
 				return svcerr.WithReason(svcerr.WithCause(svcerr.WithClass(
 					svcerr.Unavailable(removeFromOfflineMachine), svcerr.ClassUser), sendErr), errreason.DaemonNotConnected)
 			}
 			return daemonerr.Error(teardownVerb(op.Kind), sendErr)
 		case toolexec.IsDaemonTimeout(sendErr):
-			// The machine may still be at it: pending, and said so.
 			return svcerr.WithCause(svcerr.WithClass(svcerr.DeadlineExceeded(fmt.Sprintf(
 				"%s is still running; workspaces are not created there until it finishes. Try again to see how it ended",
 				what)), svcerr.ClassUser), sendErr)
 		}
-		// The machine answered with an error. A daemon that knows ids does
-		// that only before it journals the op (nothing was removed); an older
-		// one, after its synchronous attempt. Either way it is over.
-		if _, err := s.deps.Repo.SettleCheckoutTeardown(ctx, op.ID, db.CheckoutTeardownFailed, sendErr.Error()); err != nil {
-			return svcerr.WrapOr(err, svcerr.Internal("failed to record the teardown"))
-		}
-		return daemonerr.Error(teardownVerb(op.Kind), sendErr)
+		return svcerr.WithCause(svcerr.WithClass(svcerr.Unavailable(fmt.Sprintf(
+			"%s was sent, but its answer was lost; workspaces are not created there until the machine says how it ended. Try again to see",
+			what)), svcerr.ClassUser), sendErr)
 	}
 
 	var settled *db.CheckoutTeardown

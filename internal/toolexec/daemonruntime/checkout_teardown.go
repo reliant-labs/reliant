@@ -57,10 +57,12 @@ const (
 // repository included). A package var so a test can shrink it.
 var teardownMaxDuration = 30 * time.Minute
 
-// teardownRetention is how long a settled op is remembered. The server settles
-// an op within seconds to minutes of sending it; a month covers a machine that
-// was off in between.
-const teardownRetention = 30 * 24 * time.Hour
+// Settled records are never collected. A server row whose answer was lost
+// can be retried at any time later, and a late delivery of a fenced op can
+// arrive at any time later: an id this daemon forgot would be run as new,
+// deleting twice, or let a fenced op run after the server released
+// workspace creation. A record is a few hundred bytes per remove or reclone,
+// so the journal stays small for the life of the data dir.
 
 // teardownOpIDPattern keeps an op id usable as a file name.
 var teardownOpIDPattern = regexp.MustCompile(`^[A-Za-z0-9-]{1,64}$`)
@@ -99,37 +101,54 @@ func newTeardownJournal(dir string) *teardownJournal {
 }
 
 // checkoutTeardowns is the runtime's journal. Command handlers are package
-// functions, so it lives here; initializeCheckoutTeardowns gives it the data
-// dir at startup. Until then (and in a runtime with no data dir) it is
-// in-memory, which still dedupes within the process.
+// functions, so it lives here; initializeCheckoutTeardowns opens it under the
+// data dir at startup. Until it has loaded — before startup, in a runtime with
+// no data dir, or when the journal could not be read — acknowledged teardowns
+// are refused (err says why), never run on a memory-only stand-in: a record
+// that a restart forgets is exactly a delete that could run twice, or a fence
+// that stops holding.
 var checkoutTeardowns = struct {
 	sync.Mutex
-	j *teardownJournal
-}{j: newTeardownJournal("")}
+	j   *teardownJournal
+	err error
+}{err: errors.New("the daemon has not opened its data directory yet")}
 
-func currentTeardownJournal() *teardownJournal {
+// currentTeardownJournal is the durable journal, or why there is none.
+func currentTeardownJournal() (*teardownJournal, error) {
 	checkoutTeardowns.Lock()
 	defer checkoutTeardowns.Unlock()
-	return checkoutTeardowns.j
+	if checkoutTeardowns.j == nil {
+		return nil, fmt.Errorf("this machine cannot record removes and reclones durably (%v), so it refuses them rather than risk "+
+			"deleting a checkout twice; restart the daemon once its data directory is readable and writable", checkoutTeardowns.err)
+	}
+	return checkoutTeardowns.j, nil
+}
+
+// setTeardownJournal installs j, or with j nil records err as why acknowledged
+// teardowns are refused.
+func setTeardownJournal(j *teardownJournal, err error) {
+	checkoutTeardowns.Lock()
+	defer checkoutTeardowns.Unlock()
+	checkoutTeardowns.j, checkoutTeardowns.err = j, err
 }
 
 // initializeCheckoutTeardowns loads the journal under dataDir: an op the last
-// daemon left running is now interrupted, and settled ops past the retention
-// are forgotten. A journal that cannot be read is reported and replaced by an
-// in-memory one; it never stops the daemon.
+// daemon left running is now interrupted. A journal that cannot be loaded is
+// reported, and acknowledged teardowns are refused until a daemon loads it;
+// it never stops the daemon.
 func initializeCheckoutTeardowns(ctx context.Context, dataDir string) {
 	dataDir = strings.TrimSpace(dataDir)
 	if dataDir == "" {
+		setTeardownJournal(nil, errors.New("this daemon has no data directory"))
 		return
 	}
 	j, err := loadTeardownJournal(filepath.Join(dataDir, checkoutTeardownDirName), time.Now())
 	if err != nil {
-		logging.WarnContext(ctx, logPrefix+" Checkout teardown journal unavailable; a remove or reclone is not remembered across a restart", "error", err)
+		logging.WarnContext(ctx, logPrefix+" Checkout teardown journal unavailable; removes and reclones the server acknowledges are refused until it loads", "error", err)
+		setTeardownJournal(nil, fmt.Errorf("its journal could not be loaded: %w", err))
 		return
 	}
-	checkoutTeardowns.Lock()
-	checkoutTeardowns.j = j
-	checkoutTeardowns.Unlock()
+	setTeardownJournal(j, nil)
 }
 
 func loadTeardownJournal(dir string, now time.Time) (*teardownJournal, error) {
@@ -152,10 +171,11 @@ func loadTeardownJournal(dir string, now time.Time) (*teardownJournal, error) {
 			return nil, err
 		}
 		var rec teardownRecord
-		if err := json.Unmarshal(data, &rec); err != nil || !teardownOpIDPattern.MatchString(rec.OpID) {
-			// A torn write of a running record cannot happen (writes are
-			// atomic renames); anything unreadable is not ours.
-			continue
+		if err := json.Unmarshal(data, &rec); err != nil || !teardownOpIDPattern.MatchString(rec.OpID) || name != rec.OpID+".json" {
+			// Writes are atomic renames, so a record of ours is never torn:
+			// an unreadable one means the journal cannot be trusted to
+			// remember every id, which is the one thing it is for.
+			return nil, fmt.Errorf("unreadable teardown record %s", name)
 		}
 		if rec.State == teardownRunning {
 			rec.State = teardownInterrupted
@@ -164,9 +184,6 @@ func loadTeardownJournal(dir string, now time.Time) (*teardownJournal, error) {
 			if err := j.persist(&rec); err != nil {
 				return nil, err
 			}
-		} else if now.Sub(rec.UpdatedAt) > teardownRetention {
-			_ = os.Remove(path)
-			continue
 		}
 		j.records[rec.OpID] = &rec
 	}
@@ -311,7 +328,11 @@ func handleGitTeardownStatus(_ context.Context, payload []byte) ([]byte, error) 
 	if err := json.Unmarshal(payload, &req); err != nil {
 		return nil, fmt.Errorf("invalid payload: %w", err)
 	}
-	rec, err := currentTeardownJournal().status(req.OpID)
+	j, err := currentTeardownJournal()
+	if err != nil {
+		return nil, err
+	}
+	rec, err := j.status(req.OpID)
 	if err != nil {
 		return nil, err
 	}

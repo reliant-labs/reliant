@@ -51,6 +51,8 @@ func TestBeginCheckoutTeardown_ARetryReusesThePendingOp(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.Equal(t, first.ID, retry.ID)
+	assert.False(t, first.Reused)
+	assert.True(t, retry.Reused, "the caller must ask the machine before resending a retry")
 	assert.False(t, guardRan, "the barrier has held since the first began; nothing new to guard")
 
 	_, err = f.repo.BeginCheckoutTeardown(ctx, f.pid, f.here, CheckoutTeardownReclone, "/clone", nil)

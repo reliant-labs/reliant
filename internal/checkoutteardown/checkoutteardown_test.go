@@ -45,7 +45,7 @@ func TestSettleRefusesAnotherOpsAck(t *testing.T) {
 // holds it for LegacyGrace, then releases it expired.
 func TestQueryOnAMachineThatCannotSay(t *testing.T) {
 	t.Parallel()
-	now := time.Now()
+	now := time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC)
 	outdated := errors.New(`this machine is running an older version of Reliant (v1) that doesn't support "git.teardown_status"`)
 	for name, tc := range map[string]struct {
 		err       error
@@ -84,7 +84,7 @@ func TestQuerySkipsASettledOp(t *testing.T) {
 		t.Fatal("asked the machine about a settled op")
 		return nil
 	}}
-	got, err := Query(context.Background(), &MockStore{}, m, op, time.Now())
+	got, err := Query(context.Background(), &MockStore{}, m, op, time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC))
 	require.NoError(t, err)
 	assert.Equal(t, db.CheckoutTeardownDone, got.State)
 }

@@ -61,7 +61,10 @@ func (e *CheckoutTeardownBusyError) Error() string {
 // machine, before the command is sent, and returns it. A pending teardown of
 // the same kind and path is a retry: it is returned as is, so the retry sends
 // the same operation id and the machine runs it at most once. A pending one of
-// another kind or path is a CheckoutTeardownBusyError.
+// another kind or path is a CheckoutTeardownBusyError. A returned retry has
+// Reused set: whether the first delivery ran, and on which kind of daemon, is
+// unknown, so the caller asks the machine (checkoutteardown.Query) before
+// sending anything.
 //
 // guard, when not nil, runs inside the transaction, under the exclusive side
 // of the checkout lock a workspace insert takes shared (CreateWorktree), so its
@@ -88,6 +91,7 @@ func (r *Repo) BeginCheckoutTeardown(ctx context.Context, projectID, daemonID, k
 			if pending.Kind != kind || pending.Path != path {
 				return &CheckoutTeardownBusyError{Teardown: pending}
 			}
+			pending.Reused = true
 			op = pending
 			return nil
 		}
