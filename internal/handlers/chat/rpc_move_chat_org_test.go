@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/accesstokenclient"
+	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/orgs"
 	"github.com/stretchr/testify/assert"
@@ -30,6 +31,8 @@ func (moveOrgSource) ResolveOrgMembership(_ context.Context, _, orgID string) (a
 func (f *moveFixture) withOrgs() *moveFixture {
 	resolver := orgs.New(moveOrgSource{})
 	f.service.deps.Orgs = resolver
+	// A request through a listener carries the membership authz decides with.
+	f.ctx = authz.WithMembership(f.ctx, resolver)
 	return f
 }
 

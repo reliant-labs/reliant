@@ -16,6 +16,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/accesstokenclient"
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/orgs"
@@ -35,7 +36,10 @@ func (triggerOrgSource) ResolveOrgMembership(_ context.Context, _, orgID string)
 // withOrgs makes env's deployment one with orgs, through the real resolver.
 func (e *triggerTestEnv) withOrgs(t *testing.T) *triggerTestEnv {
 	t.Helper()
-	e.configure(t, func(d *Deps) { d.Orgs = orgs.New(triggerOrgSource{}) })
+	resolver := orgs.New(triggerOrgSource{})
+	e.configure(t, func(d *Deps) { d.Orgs = resolver })
+	// A request through a listener carries the membership authz decides with.
+	e.ctx = authz.WithMembership(e.ctx, resolver)
 	return e
 }
 
@@ -95,9 +99,11 @@ func TestCreateTrigger_OrgIsVerified(t *testing.T) {
 	_, err = env.createIn(machine, env.projectID, &home)
 	requireDenied(t, err, connect.CodePermissionDenied, orgs.ReasonOrgMismatch)
 
+	// A project of an org the caller is not in is not theirs to see at all
+	// (authz), before its org is ever asked about.
 	for _, blank := range []*string{nil, new(string)} {
 		_, err = env.createIn(env.ctx, globexProject, blank)
-		requireDenied(t, err, connect.CodePermissionDenied, orgs.ReasonNotOrgMember)
+		requireDenied(t, err, connect.CodeNotFound, "")
 	}
 	_, err = env.createIn(env.ctx, acmeProject, &home)
 	requireDenied(t, err, connect.CodeFailedPrecondition, "")
