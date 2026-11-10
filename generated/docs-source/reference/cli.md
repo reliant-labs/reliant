@@ -668,7 +668,8 @@ API tokens authenticate automation against the Reliant API without a browser
 login. 'reliant auth login' already stores one for this CLI; 'create' mints an
 additional, separately named token to hand to a script or CI (RELIANT_TOKEN).
 
-Creating a token is a consented browser login: a token never mints a token.
+Creating a token is a consented login (browser or device code): a token never
+mints a token.
 Listing and revoking use the resolved credential (RELIANT_TOKEN or your login).
 
 ```
@@ -690,11 +691,17 @@ reliant auth token
 Create a new API token
 
 Mints an API token (reliant:api, 90 days) named reliant-cli@<name> through a
-browser login you approve, and prints it once. It is NOT stored: this CLI
-keeps using its own login. Hand the printed token to automation as
-RELIANT_TOKEN.
+login you approve, and prints it once. It is NOT stored: this CLI keeps using
+its own login. Hand the printed token to automation as RELIANT_TOKEN.
 
 Re-running with the same --name replaces that token.
+
+You approve it the way you approve 'reliant auth login': in a browser that
+calls back to a loopback port of THIS machine, or with a device code (RFC 8628)
+you approve on any device. The browser is the default, except where its
+callback cannot reach your browser: a Reliant cloud machine, an ssh session, a
+Linux host with no display, or a Reliant agent's shell. There the device code
+is used. --device or --browser chooses explicitly.
 
 --scope narrows the token to part of the API instead of all of it. Repeat it, or
 give a comma-separated list. Without it the token is reliant:api, the whole
@@ -710,6 +717,8 @@ reliant auth token create [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
+| `--browser` | `bool` | - | Approve in a browser that calls back to this machine (the default on a desktop) |
+| `--device` | `bool` | - | Approve with a device code on any device (the default where a browser cannot reach this machine) |
 | `--name` | `string` | - | Label for the token, e.g. ci-deploy (required) |
 | `--scope` | `stringSlice` | `[]` | Narrow the token to a scope; repeatable or comma-separated, e.g. --scope runs:read --scope triggers:fire (default reliant:api) |
 
