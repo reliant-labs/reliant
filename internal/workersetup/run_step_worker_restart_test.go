@@ -37,6 +37,7 @@ import (
 	reliantgrpc "github.com/reliant-labs/reliant/internal/grpc"
 	"github.com/reliant-labs/reliant/internal/handlers/tools_daemon"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
+	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 	"github.com/reliant-labs/reliant/internal/tokenauthority"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/internal/toolexec/bootstrap"
@@ -416,7 +417,7 @@ func (r *restartRig) dispatch(t *testing.T, c *stepCommand) client.WorkflowRun {
 	t.Helper()
 	shimQueue := c.queue + "-workflow"
 	activityQueue := workersetup.TaskQueueName(c.queue)
-	shim := worker.New(r.temporal, shimQueue, worker.Options{})
+	shim := worker.New(r.temporal, shimQueue, temporaltest.WorkerOptions(worker.Options{}))
 	shim.RegisterWorkflowWithOptions(func(ctx workflow.Context, in handlers.ExecuteRunStepInput) (handlers.ExecuteRunStepOutput, error) {
 		// A graph step's options (StepExecutor.activityOptionsWithSlack and
 		// stepActivityRetryPolicy, internal/workflow/runtime).
