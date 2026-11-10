@@ -18,12 +18,13 @@ import (
 // The worktree-reclaim service answers a machine's worktree-reclaim inbox
 // item. The item is built from the proposals the machine's daemon put on its
 // last disk report (DiskReport.worktree_reclaim, stored in
-// daemons.storage_state); a decision about one is sent back to that daemon as
+// daemons.storage_state). Each decision is sent back to that daemon as
 // worktree.reclaim_decide, which records it exactly as `reliant worktree
-// reclaim approve|decline` does. Only the daemon could remove a worktree,
-// and it does not act on an approval yet (worktreereclaim's
-// SweepOptions.ApprovalsVerified), so an approval is recorded and the
-// worktree stays.
+// reclaim approve|decline` does; each recorded approval is then sent as
+// worktree.reclaim_approve, the authenticated command that is the only thing
+// that makes the daemon remove a worktree with work only it holds (owner
+// decision 2026-11-10). The daemon, not this server, removes it, capture
+// first and every check made again.
 
 // Repository is what the service reads: the caller's machine, its stored
 // report, and whether it is connected.
@@ -31,6 +32,9 @@ type Repository interface {
 	GetDaemon(ctx context.Context, id string) (*core.Daemon, error)
 	GetDaemonStorageState(ctx context.Context, daemonID string) (string, error)
 	ListAttachedDaemonIDsForUser(ctx context.Context, userID string, staleThreshold time.Duration) ([]string, error)
+	// GetLiveChatIDForWorktree is a non-archived chat bound to a Reliant
+	// workspace, "" when none: its checkout is never removed on approval.
+	GetLiveChatIDForWorktree(ctx context.Context, worktreeID string) (string, error)
 }
 
 // Sender sends one command to one of the user's daemons and returns its

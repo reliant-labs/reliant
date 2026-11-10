@@ -3,7 +3,12 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { InboxWorktreeReclaimSchema } from "@/gen/reliant/v1/inbox_pb";
 import { WorktreeReclaimProposalSchema } from "@/gen/reliant/v1/tools_daemon_pb";
-import { reclaimDetail, WorktreeReclaimAction } from "../WorktreeReclaimAction";
+import {
+  reclaimDetail,
+  removalSummary,
+  WorktreeReclaimAction,
+} from "../WorktreeReclaimAction";
+import { WorktreeReclaimDecisionResultSchema } from "@/gen/reliant/v1/worktree_reclaim_pb";
 
 const api = vi.hoisted(() => ({ mutate: vi.fn() }));
 vi.mock("@/hooks/inbox-queries", () => ({
@@ -67,6 +72,33 @@ describe("worktree reclaim review", () => {
         { key: "b", fingerprint: "fp-b", approve: false },
       ],
     });
+  });
+
+  it("says what became of each removal", () => {
+    const r = (
+      extra: Parameters<
+        typeof create<typeof WorktreeReclaimDecisionResultSchema>
+      >[1],
+    ) =>
+      create(WorktreeReclaimDecisionResultSchema, { recorded: true, ...extra });
+    expect(
+      removalSummary([
+        r({ key: "a", removal: "removing" }),
+        r({
+          key: "b",
+          removal: "refused",
+          removalReason: "in_use",
+          removalDetail: "open by process 42",
+        }),
+        r({ key: "c", recorded: false, reason: "changed" }),
+      ]),
+    ).toBe(
+      "1 worktree is being saved to a local git ref, then removed. 1 not removed: open by process 42. 1 changed since you saw it and will be proposed again.",
+    );
+    expect(removalSummary([r({ key: "a", removal: "not_supported" })])).toMatch(
+      /too old to remove approved worktrees/,
+    );
+    expect(removalSummary([r({ key: "a" })])).toBe("");
   });
 
   it("cannot be reviewed while the machine is offline", () => {

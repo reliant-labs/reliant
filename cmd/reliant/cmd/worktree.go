@@ -144,20 +144,22 @@ func newWorktreeDecideCmd(decision worktreereclaim.Decision) *cobra.Command {
 fingerprint in that report: one that changes after it (a commit, an edit, a
 new file) is proposed again.
 
-Approving is not available yet: nothing can show that an approval came from
-a person rather than an agent running as the same user, so the daemon never
-deletes a proposed worktree, and approve refuses. Free one yourself, after
-checking its work, with ` + "`git worktree remove`" + `. Decline records that a
-proposed worktree is to be kept; an agent's shell is refused that too.`,
+Approve here refuses: nothing a command on this machine can check shows that
+an approval came from a person rather than an agent running as the same user.
+Approve a proposed worktree in the machine's Inbox item instead: the server
+delivers that approval to the daemon, which removes the worktree after
+saving it to a local ref. Or free one yourself, after checking its work, with
+` + "`git worktree remove`" + `. Decline records that a proposed worktree is to be
+kept; an agent's shell is refused that too.`,
 		Args: cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if decision == worktreereclaim.DecisionApprove {
 				// Refused whoever runs it: any check made here (an environment
 				// marker, a tty) is one an agent's shell can defeat, and the
 				// approvals file it would write is one an agent can write
-				// directly. The sweep does not act on approvals for the same
-				// reason (SweepOptions.ApprovalsVerified).
-				return fmt.Errorf("approving a reclaim is not available: nothing can verify the approval is a person's, so the daemon never deletes a proposed worktree; to free one, check its work and run `git worktree remove` yourself (keys: %s)", strings.Join(args, " "))
+				// directly. The daemon acts only on an approval the server
+				// delivers (worktree.reclaim_approve; SweepOptions.Authorized).
+				return fmt.Errorf("approving a reclaim here is not available: nothing on this machine can verify the approval is a person's; approve it in the machine's Inbox item, or check its work and run `git worktree remove` yourself (keys: %s)", strings.Join(args, " "))
 			}
 			agent := os.Getenv(daemonpolicy.AgentShellEnv) != "" //nolint:forbidigo // the marker the daemon sets on agent shells (daemonpolicy.AgentShellEnv), a process signal, not configuration
 			if agent {

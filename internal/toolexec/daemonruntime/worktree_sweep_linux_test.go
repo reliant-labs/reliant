@@ -22,7 +22,7 @@ func (sweepTestLease) Check(context.Context) error { return nil }
 func (sweepTestLease) Release()                    {}
 
 // A Reliant workspace whose chat is still open is reclaimed by the machine
-// sweep (here with its uncommitted work approved by a person), and the
+// sweep (here with its uncommitted work approved by a person in the Inbox), and the
 // chat's next tool call gets it back: worktree.ensure recreates the checkout
 // from its branch and puts the captured work back, staged and unstaged
 // apart, and the notice says so.
@@ -51,6 +51,11 @@ func TestSweepReclaimedWorkspaceIsRestoredWithItsCaptureByEnsure(t *testing.T) {
 	r := worktreereclaim.NewReclaimer(root)
 	r.Acquire = func(context.Context, []string) (worktreereclaim.RecoveryLease, error) { return sweepTestLease{}, nil }
 	r.PRMerged, r.FetchBase = nil, nil
+	// Process inspection fails closed on any process of this user it cannot
+	// read, which on a shared host is another agent's; worktreereclaim tests
+	// it. Stubbed here so the restore is always asserted.
+	r.ProcessUse = func(context.Context, []string) error { return nil }
+	r.Cwds = func(context.Context) ([]string, error) { return nil, nil }
 	r.Now = func() time.Time { return time.Now().Add(10 * 24 * time.Hour) }
 	state := t.TempDir()
 	opts := worktreereclaim.SweepOptions{Mode: worktreereclaim.SweepOn, StateDir: state, Anchors: []string{f.project},
@@ -69,7 +74,8 @@ func TestSweepReclaimedWorkspaceIsRestoredWithItsCaptureByEnsure(t *testing.T) {
 	if _, err := worktreereclaim.RecordDecisions(ctx, state, worktreereclaim.DecisionApprove, []string{entry.Key}, "test"); err != nil {
 		t.Fatal(err)
 	}
-	opts.ApprovedOnly, opts.ApprovalsVerified = true, true
+	// The approval as the server delivers it (worktree.reclaim_approve).
+	opts.Authorized = []worktreereclaim.AuthorizedApproval{{Key: entry.Key, Fingerprint: entry.Fingerprint, Path: entry.Path, ApprovedBy: "inbox:u1"}}
 	pass := r.SweepMachine(ctx, opts)
 	if len(pass.Entries) != 1 || pass.Entries[0].Outcome != worktreereclaim.OutcomeReclaimed {
 		t.Fatalf("approved pass %+v, want the workspace reclaimed", pass.Entries)

@@ -20110,11 +20110,13 @@ Record a person's decision about worktrees the last report proposes
 fingerprint in that report: one that changes after it (a commit, an edit, a
 new file) is proposed again.
 
-Approving is not available yet: nothing can show that an approval came from
-a person rather than an agent running as the same user, so the daemon never
-deletes a proposed worktree, and approve refuses. Free one yourself, after
-checking its work, with `git worktree remove`. Decline records that a
-proposed worktree is to be kept; an agent's shell is refused that too.
+Approve here refuses: nothing a command on this machine can check shows that
+an approval came from a person rather than an agent running as the same user.
+Approve a proposed worktree in the machine's Inbox item instead: the server
+delivers that approval to the daemon, which removes the worktree after
+saving it to a local ref. Or free one yourself, after checking its work, with
+`git worktree remove`. Decline records that a proposed worktree is to be
+kept; an agent's shell is refused that too.
 
 ```
 reliant worktree reclaim approve <key>... [flags]
@@ -20137,11 +20139,13 @@ Record a person's decision about worktrees the last report proposes
 fingerprint in that report: one that changes after it (a commit, an edit, a
 new file) is proposed again.
 
-Approving is not available yet: nothing can show that an approval came from
-a person rather than an agent running as the same user, so the daemon never
-deletes a proposed worktree, and approve refuses. Free one yourself, after
-checking its work, with `git worktree remove`. Decline records that a
-proposed worktree is to be kept; an agent's shell is refused that too.
+Approve here refuses: nothing a command on this machine can check shows that
+an approval came from a person rather than an agent running as the same user.
+Approve a proposed worktree in the machine's Inbox item instead: the server
+delivers that approval to the daemon, which removes the worktree after
+saving it to a local ref. Or free one yourself, after checking its work, with
+`git worktree remove`. Decline records that a proposed worktree is to be
+kept; an agent's shell is refused that too.
 
 ```
 reliant worktree reclaim decline <key>... [flags]
