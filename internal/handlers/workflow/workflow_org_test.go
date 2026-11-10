@@ -15,6 +15,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/accesstokenclient"
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/orgs"
 )
@@ -45,14 +46,16 @@ func TestSavedWorkflows_OrgIsVerifiedAndListed(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 	userID := "org-user-" + uuid.NewString()[:8]
-	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, userID)
+	resolver := orgs.New(workflowOrgSource{})
+	// A request through a listener carries the membership authz decides with.
+	ctx := authz.WithMembership(context.WithValue(context.Background(), auth.UserIDContextKey, userID), resolver)
 	now := time.Now().UTC()
 	projectID := "org-project-" + uuid.NewString()
 	require.NoError(t, repo.CreateProject(ctx, &db.Project{
 		ID: projectID, UserID: userID, Name: "P", Path: t.TempDir(),
 		CreatedAt: now, UpdatedAt: now, LastActive: now,
 	}))
-	svc := NewTestWorkflow(t, WithWorkflowDeps(Deps{Repo: repo, Orgs: orgs.New(workflowOrgSource{})}))
+	svc := NewTestWorkflow(t, WithWorkflowDeps(Deps{Repo: repo, Orgs: resolver}))
 	acme, home, globex := "acme", "home", "globex"
 	machine := auth.WithMachineToken(ctx, &fat.Principal{OrgID: acme, ActingUserID: userID})
 
