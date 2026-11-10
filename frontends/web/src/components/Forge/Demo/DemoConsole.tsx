@@ -28,7 +28,7 @@
  * have (Releases, Environments, …) open its overview.
  */
 
-import { lazy, Suspense, useCallback, useMemo, useState } from "react";
+import { lazy, Suspense, useCallback, useMemo, useState, type ReactNode } from "react";
 import { Code, ConnectError } from "@connectrpc/connect";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useNavigate, useSearch } from "@tanstack/react-router";
@@ -40,7 +40,7 @@ import { ObservabilityApiProvider } from "@/services/controlPlane/observability/
 
 import { ConsoleShell } from "../Console/ConsoleShell";
 import { ProjectMonogram } from "../Console/ConsoleProjectSwitcher";
-import { ENV_ALL } from "../Console/envScope";
+import { DEFAULT_ENV, ENV_ALL } from "../Console/envScope";
 import { consolePath, isObsNavView, withSearch, type ConsolePage } from "../Console/paths";
 import { isDemoShell } from "@/lib/shell";
 import { AskAgentModeProvider } from "../Observability/AskReliant/askAgentMode";
@@ -56,6 +56,7 @@ import type { DataSearch } from "../Data/dataUrl-model";
 import { StorageBrowser } from "../Storage/StorageBrowser";
 import type { StorageSearch } from "../Storage/storageUrl-model";
 import { DemoBanner } from "./DemoBanner";
+import { DemoNavExtras } from "./DemoNavExtras";
 import { DemoWelcome } from "./DemoWelcome";
 import { DEMO_SECTION_BUILT, FORGE_DEMO_PATH } from "./demoPath";
 import { HowBuiltLink } from "./howBuilt/HowBuiltLink";
@@ -99,6 +100,11 @@ function pageOf(view: ObsView): ConsolePage {
   return view !== "overview" && isObsNavView(view) ? { kind: "obs-view", view } : { kind: "overview" };
 }
 
+/** The public demo's nav additions (DemoNavExtras); the other shells keep the console's own nav. */
+function MaybeDemoNav({ builtActive, children }: { builtActive: boolean; children: ReactNode }) {
+  return isDemoShell() ? <DemoNavExtras builtActive={builtActive}>{children}</DemoNavExtras> : <>{children}</>;
+}
+
 export interface DemoConsoleProps {
   /** Which shell hosts it; default the tour's (the hostname, or setTourShell at the forge shell's boot). */
   shell?: TourShell;
@@ -116,7 +122,9 @@ export function DemoConsole({ shell: shellProp }: DemoConsoleProps = {}) {
   const api = useMemo(() => createDemoApi(), []);
 
   const view = viewOf(search.view);
-  const env = search.envs?.length === 1 ? search.envs[0] : search.browser ? "staging" : ENV_ALL;
+  // The public demo opens on prod, as its console pages do (Console/envScope DEFAULT_ENV); there `envs: ["all"]` is All.
+  const fallbackEnv = search.browser ? "staging" : isDemoShell() ? DEFAULT_ENV : ENV_ALL;
+  const env = search.envs?.length === 1 ? search.envs[0] : fallbackEnv;
   const browserEnv = FIXTURE_ENVS.find((candidate) => candidate.name === env);
   const browserHref = (next: DataSearch | StorageSearch) => withSearch(FORGE_DEMO_PATH, { browser: search.browser, envs: [env], ...next });
   const navigateBrowser = (next: DataSearch | StorageSearch, options?: { replace?: boolean }) => void navigate({
@@ -152,6 +160,7 @@ export function DemoConsole({ shell: shellProp }: DemoConsoleProps = {}) {
           <DemoBrowserProviders>
           <ObservabilityApiProvider api={api}>
             <ObservabilityBillingApiContext.Provider value={legacyBillingApi}>
+              <MaybeDemoNav builtActive={search.section === DEMO_SECTION_BUILT}>
               <ConsoleShell
                 project={FIXTURE_PROJECT}
                 page={search.browser ? { kind: search.browser } : pageOf(view)}
@@ -159,7 +168,7 @@ export function DemoConsole({ shell: shellProp }: DemoConsoleProps = {}) {
                 envs={NAV_ENVS}
                 alertsFiring={1}
                 scope={SCOPE}
-                onEnvChange={(next) => navigateObs({ envs: next === ENV_ALL ? undefined : [next] }, { replace: true })}
+                onEnvChange={(next) => navigateObs({ envs: next === fallbackEnv ? undefined : [next] }, { replace: true })}
                 linkTo={demoLink}
                 collapsed={collapsed}
                 onToggleCollapsed={() => setCollapsed((prev) => !prev)}
@@ -171,7 +180,8 @@ export function DemoConsole({ shell: shellProp }: DemoConsoleProps = {}) {
                 }
                 brandCollapsed={<ProjectMonogram name={FIXTURE_PROJECT} />}
               >
-                {!(isDemoShell() && search.section === DEMO_SECTION_BUILT) && <DemoBanner shell={shell} />}
+                {/* The public demo says "sample, read-only" once, in its action row (DemoScreenActions). */}
+                {!isDemoShell() && <DemoBanner shell={shell} />}
                 <div className="space-y-4" data-testid="forge-demo">
                   {search.section === DEMO_SECTION_BUILT ? (
                     <>
@@ -193,13 +203,14 @@ export function DemoConsole({ shell: shellProp }: DemoConsoleProps = {}) {
                     <>
                       {/* One compact row; the top bar's scope control says which environments. */}
                       <PageHeader density="compact" title={OBS_VIEW_LABELS[view]} className="mb-0" />
-                      <ObservabilityPanel place={PLACE} search={{ ...search, view }} navigate={navigateObs} />
-                      {/* Last on the page, after the console's views. */}
-                      <HowBuiltLink onOpen={openBuilt} />
+                      <ObservabilityPanel place={PLACE} search={{ ...search, view, envs: env === ENV_ALL ? undefined : [env] }} navigate={navigateObs} />
+                      {/* Last on the page, after the console's views. The public demo has a nav row for it instead. */}
+                      {!isDemoShell() && <HowBuiltLink onOpen={openBuilt} />}
                     </>
                   )}
                 </div>
               </ConsoleShell>
+              </MaybeDemoNav>
             </ObservabilityBillingApiContext.Provider>
           </ObservabilityApiProvider>
           </DemoBrowserProviders>
