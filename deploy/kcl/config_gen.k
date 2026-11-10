@@ -1513,7 +1513,7 @@ vaultMaintenanceConfigEnvMap = lambda c: VaultMaintenanceConfig, config_secrets:
 }
 
 # forge:section schema WorkerConfig
-# forge:hash=ebdcf4c507caea1b4a0c2a1c4c00af854ddffab5aba3e39646da6447bdfba5e2
+# forge:hash=0b7f78a98f66323358d33d5aabab52f1d8075ab55a58bf07a6aa12be8a5eb12a
 schema WorkerConfig:
     # Private HTTPS workspace-controller endpoint for fixed hosted actions
     hosted_actions_url: str = ""
@@ -1551,6 +1551,8 @@ schema WorkerConfig:
     chat_update_retention: str = "168h"
     # Age past which a finished run's internal step records are deleted (0: never)
     step_execution_retention: str = "720h"
+    # Wait after worker start before the first ledger retention pass, so an api-server rollout completes first (0: at once)
+    ledger_retention_start_delay: str = "1h"
 
     check:
         pre_stop_delay != "", "pre_stop_delay = \"\" cannot reach the process: an empty PRE_STOP_DELAY counts as unset, so it would load the default \"5s\" — set a value"
@@ -1559,6 +1561,7 @@ schema WorkerConfig:
         readiness_paths != "", "readiness_paths = \"\" cannot reach the process: an empty READINESS_PATHS counts as unset, so it would load the default \"/ready,/readyz\" — set a value, or change its default in the proto"
         chat_update_retention != "", "chat_update_retention = \"\" cannot reach the process: an empty RELIANT_WORKER_CHAT_UPDATE_RETENTION counts as unset, so it would load the default \"168h\" — set a value"
         step_execution_retention != "", "step_execution_retention = \"\" cannot reach the process: an empty RELIANT_WORKER_STEP_EXECUTION_RETENTION counts as unset, so it would load the default \"720h\" — set a value"
+        ledger_retention_start_delay != "", "ledger_retention_start_delay = \"\" cannot reach the process: an empty RELIANT_WORKER_LEDGER_RETENTION_START_DELAY counts as unset, so it would load the default \"1h\" — set a value"
 
 # forge:section env-map workerConfigEnvMap
 # forge:hash=73c8553dedb9f5b3bcefc972bda5c8ae27cb0bf15a6e1addcc5f36ef1a92c4d7
@@ -1605,7 +1608,7 @@ workerConfigEnvMap = lambda c: WorkerConfig, config_secrets: [str] -> {str: str 
         "workerConfigEnvMap: config_secrets names ${[_n for _n in config_secrets if _n not in _sensitive]}, which is not a `sensitive` field of WorkerConfig. Sensitive fields: ${sorted([_k for _k in _sensitive])}. Add `sensitive: true` to the field's (forge.v1.config) annotation in its config proto, or drop the name from this workload's config_secrets."
     {
         # forge:section workerConfigEnvMap values (root)
-        # forge:hash=3c03d97eb568ed50af044cf138232861851f72d571798f29ebb051846210828d
+        # forge:hash=dd30d3a5fea347b0bc051e9c5a037bcde4685d3aee23340bed4ffd6f2ab21445
         if c.hosted_actions_url != "":
             "RELIANT_WORKER_HOSTED_ACTIONS_URL" = c.hosted_actions_url
         if c.hosted_actions_ca_file != "":
@@ -1626,6 +1629,7 @@ workerConfigEnvMap = lambda c: WorkerConfig, config_secrets: [str] -> {str: str 
         "RELIANT_WORKER_EGRESS_TURN_MAX_PARALLEL" = str(c.egress_turn_max_parallel)
         "RELIANT_WORKER_CHAT_UPDATE_RETENTION" = c.chat_update_retention
         "RELIANT_WORKER_STEP_EXECUTION_RETENTION" = c.step_execution_retention
+        "RELIANT_WORKER_LEDGER_RETENTION_START_DELAY" = c.ledger_retention_start_delay
 
         # forge:section workerConfigEnvMap values (end)
         # forge:hash=fa178fe4044cdbd75d3e720bd63a7af32e878a5551d581a0f83e855bb2cb706b
@@ -1633,7 +1637,7 @@ workerConfigEnvMap = lambda c: WorkerConfig, config_secrets: [str] -> {str: str 
 }
 
 # forge:section process-selector ReliantProcess
-# forge:hash=bbb08d3dc4f55eec2beaf179bf2128ac632a83668b46de965252f809cf800ce1
+# forge:hash=f46a8f152c7f8e6008215cc84e7460c6249602159309d2d48ecfdc8e52fb82ea
 # The `reliant` binary binds a config per subcommand, so a workload's env is the
 # binary's root config PLUS the config of the subcommand its process runs.
 # ReliantProcess carries the instances (config.k declares one); reliantProcessEnvMap
@@ -1765,7 +1769,7 @@ ROOTS: {str: Root} = {
     }
     "worker" = Root {
         args = ["server", "worker"]
-        env = ["RELIANT_LOG_LEVEL", "LOG_FORMAT", "RELIANT_ENV", "RELIANT_STORAGE_REAPER", "RELIANT_STORAGE_REAPER_INTERVAL", "RELIANT_STORAGE_REAPER_PRESSURE_INTERVAL", "FORGE_STORAGE_POLICY", "RELIANT_STORAGE_REAPER_GOCACHE_INTERVAL", "RELIANT_TRANSCRIPT_TOOL_BODY_STUBS", "DATABASE_DRIVER", "RELIANT_DB_MAX_OPEN_CONNS", "RELIANT_DB_MAX_IDLE_CONNS", "DB_CONNECT_TIMEOUT", "RELIANT_DB_SCHEMA_WAIT_SECONDS", "RELIANT_CONTROL_PLANE_URL", "NATS_USER", "TEMPORAL_HOST", "TEMPORAL_PORT", "TEMPORAL_NAMESPACE", "DATA_DIR", "STREAMING_DRIVER", "PUBLIC_URL", "RELIANT_GITHUB_APP_SLUG", "RELIANT_GITHUB_BOT_USER_ID", "RELIANT_GITHUB_BOT_LOGIN", "OTEL_EXPORTER_OTLP_ENDPOINT", "OTEL_ENABLED", "PROMETHEUS_ENABLED", "ENVIRONMENT", "RELIANT_ANALYTICS_DISABLED", "RELIANT_API_BASE_URL", "VERTEXAI_PROJECT", "VERTEXAI_LOCATION", "RELIANT_LLM_STREAM_IDLE_TIMEOUT", "RELIANT_LLM_STREAM_CONTENT_STALL_TIMEOUT", "RELIANT_LLM_STREAM_PROGRESS_TIMEOUT", "RELIANT_LLM_STREAM_MID_BLOCK_STALL_TIMEOUT", "RELIANT_DEBUG_OPENAI_RESPONSES_INPUT", "RELIANT_DEBUG_OPENAI_TOOL_SCHEMAS", "PROXY_HOST", "WORKSPACE_BASE_DOMAIN", "WORKSPACE_URL_SCHEME", "WORKSPACE_URL_PORT", "RELIANT_ALLOW_PRIVATE_EGRESS", "RELIANT_WORKER_HOSTED_ACTIONS_URL", "RELIANT_WORKER_HOSTED_ACTIONS_CA_FILE", "HEALTH_PORT", "PPROF_PORT", "PRE_STOP_DELAY", "SHUTDOWN_TIMEOUT", "LIVENESS_PATHS", "READINESS_PATHS", "RELIANT_WORKER_MAX_CONCURRENT_WORKFLOW_TASKS", "RELIANT_WORKER_WORKFLOW_TASK_POLLERS", "RELIANT_WORKER_EGRESS_REPLICAS", "RELIANT_WORKER_EGRESS_USER_PER_MINUTE", "RELIANT_WORKER_EGRESS_USER_BURST", "RELIANT_WORKER_EGRESS_USER_MAX_CONCURRENT", "RELIANT_WORKER_EGRESS_HOST_MAX_CONCURRENT", "RELIANT_WORKER_EGRESS_TURN_MAX_PARALLEL", "RELIANT_WORKER_CHAT_UPDATE_RETENTION", "RELIANT_WORKER_STEP_EXECUTION_RETENTION"]
+        env = ["RELIANT_LOG_LEVEL", "LOG_FORMAT", "RELIANT_ENV", "RELIANT_STORAGE_REAPER", "RELIANT_STORAGE_REAPER_INTERVAL", "RELIANT_STORAGE_REAPER_PRESSURE_INTERVAL", "FORGE_STORAGE_POLICY", "RELIANT_STORAGE_REAPER_GOCACHE_INTERVAL", "RELIANT_TRANSCRIPT_TOOL_BODY_STUBS", "DATABASE_DRIVER", "RELIANT_DB_MAX_OPEN_CONNS", "RELIANT_DB_MAX_IDLE_CONNS", "DB_CONNECT_TIMEOUT", "RELIANT_DB_SCHEMA_WAIT_SECONDS", "RELIANT_CONTROL_PLANE_URL", "NATS_USER", "TEMPORAL_HOST", "TEMPORAL_PORT", "TEMPORAL_NAMESPACE", "DATA_DIR", "STREAMING_DRIVER", "PUBLIC_URL", "RELIANT_GITHUB_APP_SLUG", "RELIANT_GITHUB_BOT_USER_ID", "RELIANT_GITHUB_BOT_LOGIN", "OTEL_EXPORTER_OTLP_ENDPOINT", "OTEL_ENABLED", "PROMETHEUS_ENABLED", "ENVIRONMENT", "RELIANT_ANALYTICS_DISABLED", "RELIANT_API_BASE_URL", "VERTEXAI_PROJECT", "VERTEXAI_LOCATION", "RELIANT_LLM_STREAM_IDLE_TIMEOUT", "RELIANT_LLM_STREAM_CONTENT_STALL_TIMEOUT", "RELIANT_LLM_STREAM_PROGRESS_TIMEOUT", "RELIANT_LLM_STREAM_MID_BLOCK_STALL_TIMEOUT", "RELIANT_DEBUG_OPENAI_RESPONSES_INPUT", "RELIANT_DEBUG_OPENAI_TOOL_SCHEMAS", "PROXY_HOST", "WORKSPACE_BASE_DOMAIN", "WORKSPACE_URL_SCHEME", "WORKSPACE_URL_PORT", "RELIANT_ALLOW_PRIVATE_EGRESS", "RELIANT_WORKER_HOSTED_ACTIONS_URL", "RELIANT_WORKER_HOSTED_ACTIONS_CA_FILE", "HEALTH_PORT", "PPROF_PORT", "PRE_STOP_DELAY", "SHUTDOWN_TIMEOUT", "LIVENESS_PATHS", "READINESS_PATHS", "RELIANT_WORKER_MAX_CONCURRENT_WORKFLOW_TASKS", "RELIANT_WORKER_WORKFLOW_TASK_POLLERS", "RELIANT_WORKER_EGRESS_REPLICAS", "RELIANT_WORKER_EGRESS_USER_PER_MINUTE", "RELIANT_WORKER_EGRESS_USER_BURST", "RELIANT_WORKER_EGRESS_USER_MAX_CONCURRENT", "RELIANT_WORKER_EGRESS_HOST_MAX_CONCURRENT", "RELIANT_WORKER_EGRESS_TURN_MAX_PARALLEL", "RELIANT_WORKER_CHAT_UPDATE_RETENTION", "RELIANT_WORKER_STEP_EXECUTION_RETENTION", "RELIANT_WORKER_LEDGER_RETENTION_START_DELAY"]
         secrets = ["DATABASE_URL", "DATABASE_DIRECT_URL", "INTERNAL_SERVICE_SECRET", "NATS_URL", "NATS_PASSWORD", "RELIANT_VAULT_KEY", "RELIANT_SLACK_SIGNING_SECRET", "RELIANT_GITHUB_WEBHOOK_SECRET", "RELIANT_TEST_INTEGRATION_SECRET"]
         required_secrets = ["DATABASE_URL", "NATS_URL"]
         families = [RootFamily {prefix = "RELIANT_OAUTH_", suffix = "_CLIENT_ID"}, RootFamily {prefix = "RELIANT_OAUTH_", suffix = "_CLIENT_SECRET", sensitive = True}]

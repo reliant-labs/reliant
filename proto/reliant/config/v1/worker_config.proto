@@ -195,4 +195,14 @@ message WorkerConfig {
     default_value: "720h"
     description: "Age past which a finished run's internal step records are deleted (0: never)"
   }];
+  // How long after the worker starts its first retention pass waits. An
+  // api-server of a release before the compaction watermark does not read it,
+  // and would replay a reconnect straight through compacted rows; waiting
+  // past a rollout means the api-servers are all on a release that reads it
+  // before anything is deleted. 0 runs the first pass at once.
+  google.protobuf.Duration ledger_retention_start_delay = 34 [(forge.v1.config) = {
+    env_var: "RELIANT_WORKER_LEDGER_RETENTION_START_DELAY"
+    default_value: "1h"
+    description: "Wait after worker start before the first ledger retention pass, so an api-server rollout completes first (0: at once)"
+  }];
 }

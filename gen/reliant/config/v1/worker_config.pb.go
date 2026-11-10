@@ -90,8 +90,14 @@ type WorkerConfig struct {
 	// off.
 	ChatUpdateRetention    *durationpb.Duration `protobuf:"bytes,32,opt,name=chat_update_retention,json=chatUpdateRetention,proto3" json:"chat_update_retention,omitempty"`
 	StepExecutionRetention *durationpb.Duration `protobuf:"bytes,33,opt,name=step_execution_retention,json=stepExecutionRetention,proto3" json:"step_execution_retention,omitempty"`
-	unknownFields          protoimpl.UnknownFields
-	sizeCache              protoimpl.SizeCache
+	// How long after the worker starts its first retention pass waits. An
+	// api-server of a release before the compaction watermark does not read it,
+	// and would replay a reconnect straight through compacted rows; waiting
+	// past a rollout means the api-servers are all on a release that reads it
+	// before anything is deleted. 0 runs the first pass at once.
+	LedgerRetentionStartDelay *durationpb.Duration `protobuf:"bytes,34,opt,name=ledger_retention_start_delay,json=ledgerRetentionStartDelay,proto3" json:"ledger_retention_start_delay,omitempty"`
+	unknownFields             protoimpl.UnknownFields
+	sizeCache                 protoimpl.SizeCache
 }
 
 func (x *WorkerConfig) Reset() {
@@ -250,11 +256,18 @@ func (x *WorkerConfig) GetStepExecutionRetention() *durationpb.Duration {
 	return nil
 }
 
+func (x *WorkerConfig) GetLedgerRetentionStartDelay() *durationpb.Duration {
+	if x != nil {
+		return x.LedgerRetentionStartDelay
+	}
+	return nil
+}
+
 var File_reliant_config_v1_worker_config_proto protoreflect.FileDescriptor
 
 const file_reliant_config_v1_worker_config_proto_rawDesc = "" +
 	"\n" +
-	"%reliant/config/v1/worker_config.proto\x12\x11reliant.config.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\x1a\x1egoogle/protobuf/duration.proto\"\x98\x19\n" +
+	"%reliant/config/v1/worker_config.proto\x12\x11reliant.config.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\x1a\x1egoogle/protobuf/duration.proto\"\xa5\x1b\n" +
 	"\fWorkerConfig\x12\x9d\x01\n" +
 	"\x12hosted_actions_url\x18\x1e \x01(\tBo\x82\xce\x18k\n" +
 	"!RELIANT_WORKER_HOSTED_ACTIONS_URL*DPrivate HTTPS workspace-controller endpoint for fixed hosted actionsP\x01R\x10hostedActionsUrl\x12\xbd\x01\n" +
@@ -295,7 +308,9 @@ const file_reliant_config_v1_worker_config_proto_rawDesc = "" +
 	"\x15chat_update_retention\x18  \x01(\v2\x19.google.protobuf.DurationB\x8c\x01\x82\xce\x18\x87\x01\n" +
 	"$RELIANT_WORKER_CHAT_UPDATE_RETENTION\x1a\x04168h*YAge past which a chat's update log is compacted to each entity's newest update (0: never)R\x13chatUpdateRetention\x12\xd7\x01\n" +
 	"\x18step_execution_retention\x18! \x01(\v2\x19.google.protobuf.DurationB\x81\x01\x82\xce\x18}\n" +
-	"'RELIANT_WORKER_STEP_EXECUTION_RETENTION\x1a\x04720h*LAge past which a finished run's internal step records are deleted (0: never)R\x16stepExecutionRetention:\x1d\xca\xc1\x18\x19\n" +
+	"'RELIANT_WORKER_STEP_EXECUTION_RETENTION\x1a\x04720h*LAge past which a finished run's internal step records are deleted (0: never)R\x16stepExecutionRetention\x12\x8a\x02\n" +
+	"\x1cledger_retention_start_delay\x18\" \x01(\v2\x19.google.protobuf.DurationB\xad\x01\x82\xce\x18\xa8\x01\n" +
+	"+RELIANT_WORKER_LEDGER_RETENTION_START_DELAY\x1a\x021h*uWait after worker start before the first ledger retention pass, so an api-server rollout completes first (0: at once)R\x19ledgerRetentionStartDelay:\x1d\xca\xc1\x18\x19\n" +
 	"\areliant\x12\x06server\x12\x06workerJ\x04\b\x01\x10\x02J\x04\b\n" +
 	"\x10\vJ\x04\b\v\x10\fJ\x04\b\f\x10\rJ\x04\b\r\x10\x0eJ\x04\b\x10\x10\x11J\x04\b\x11\x10\x12J\x04\b(\x10)J\x04\b2\x103J\x04\b3\x104J\x04\b<\x10=J\x04\bF\x10GJ\x04\bZ\x10[R\rcontrol_planeR\bdatabaseR\x04natsR\btemporalR\x05drainR\bdata_dirR\x10streaming_driverR\fintegrationsR\robservabilityR\x06sentryR\tanalyticsR\x03llmR\apreviewB@Z>github.com/reliant-labs/reliant/gen/reliant/config/v1;configv1b\x06proto3"
 
@@ -321,11 +336,12 @@ var file_reliant_config_v1_worker_config_proto_depIdxs = []int32{
 	1, // 1: reliant.config.v1.WorkerConfig.shutdown_timeout:type_name -> google.protobuf.Duration
 	1, // 2: reliant.config.v1.WorkerConfig.chat_update_retention:type_name -> google.protobuf.Duration
 	1, // 3: reliant.config.v1.WorkerConfig.step_execution_retention:type_name -> google.protobuf.Duration
-	4, // [4:4] is the sub-list for method output_type
-	4, // [4:4] is the sub-list for method input_type
-	4, // [4:4] is the sub-list for extension type_name
-	4, // [4:4] is the sub-list for extension extendee
-	0, // [0:4] is the sub-list for field type_name
+	1, // 4: reliant.config.v1.WorkerConfig.ledger_retention_start_delay:type_name -> google.protobuf.Duration
+	5, // [5:5] is the sub-list for method output_type
+	5, // [5:5] is the sub-list for method input_type
+	5, // [5:5] is the sub-list for extension type_name
+	5, // [5:5] is the sub-list for extension extendee
+	0, // [0:5] is the sub-list for field type_name
 }
 
 func init() { file_reliant_config_v1_worker_config_proto_init() }

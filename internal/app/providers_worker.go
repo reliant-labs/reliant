@@ -829,14 +829,21 @@ type LedgerRetention struct {
 	repo        *db.Repo
 	chatUpdates time.Duration
 	steps       time.Duration
+	startDelay  time.Duration
 	deleted     metric.Int64Counter
+
+	// after and runPass are time.After and pass; a test replaces them.
+	after   func(time.Duration) <-chan time.Time
+	runPass func(ctx context.Context, now time.Time)
 }
 
-// LedgerRetentionDeps is the repository and the two retention periods (0: off).
+// LedgerRetentionDeps is the repository, the two retention periods (0: off)
+// and how long after start the first pass waits (0: at once).
 type LedgerRetentionDeps struct {
 	DB                     *db.Repo
 	ChatUpdateRetention    time.Duration
 	StepExecutionRetention time.Duration
+	StartDelay             time.Duration
 }
 
 // NewLedgerRetention builds the retention loop.
@@ -849,19 +856,42 @@ func NewLedgerRetention(d LedgerRetentionDeps) (*LedgerRetention, error) {
 		metric.WithDescription("Rows the ledger retention pass deleted, by table."))
 	// An instrument the SDK refuses still comes back usable (a no-op).
 	otel.Handle(err)
-	return &LedgerRetention{repo: d.DB, chatUpdates: d.ChatUpdateRetention, steps: d.StepExecutionRetention, deleted: deleted}, nil
+	l := &LedgerRetention{
+		repo: d.DB, chatUpdates: d.ChatUpdateRetention, steps: d.StepExecutionRetention,
+		startDelay: d.StartDelay, deleted: deleted, after: time.After,
+	}
+	l.runPass = l.pass
+	return l, nil
 }
 
-// Run runs a pass, then one an hour, until ctx ends.
+// Run waits out the start delay, then runs a pass, then one an hour, until
+// ctx ends.
+//
+// The delay is what keeps compaction from racing a rollout. An api-server
+// of a release before the compaction watermark existed does not read it, so
+// it would replay a stale reconnect straight through compacted rows. A worker
+// that starts in the same rollout deletes nothing until the delay is over, by
+// which time the api-servers are on a release that reads the watermark. A
+// rollout longer than the delay re-opens that window, and only the rollout
+// that introduces the watermark has such servers at all: every later release
+// reads it.
 func (l *LedgerRetention) Run(ctx context.Context) error {
 	if l.chatUpdates <= 0 && l.steps <= 0 {
 		logging.InfoContext(ctx, "ledger retention is off: both retention periods are 0")
 		return nil
 	}
+	if l.startDelay > 0 {
+		logging.InfoContext(ctx, "ledger retention: first pass waits out the start delay", "delay", l.startDelay)
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-l.after(l.startDelay):
+		}
+	}
 	ticker := time.NewTicker(ledgerRetentionInterval)
 	defer ticker.Stop()
 	for {
-		l.pass(ctx, time.Now())
+		l.runPass(ctx, time.Now())
 		select {
 		case <-ctx.Done():
 			return nil
