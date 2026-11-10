@@ -271,15 +271,21 @@ func (s *Service) UpdateTrigger(
 	updated.ID = existing.ID
 	updated.CreatedAt = existing.CreatedAt
 	// A trigger's org is fixed (no moving between orgs): it may move only to
-	// a project of the same org.
+	// a project of the same org (movedTriggerOrg).
 	updated.OrgID = existing.OrgID
-	if updated.ProjectID != existing.ProjectID && existing.OrgID != nil {
+	if updated.ProjectID != existing.ProjectID {
 		target, err := s.deps.Repo.GetProjectWithUserCheck(ctx, updated.ProjectID, existing.UserID)
 		if err != nil {
 			return nil, triggerDBError("get project", err)
 		}
-		if target.OrgID != nil && *target.OrgID != *existing.OrgID {
-			return nil, svcerr.FailedPrecondition("that project belongs to another organization; a trigger stays in its organization")
+		var source *core.Project
+		if existing.OrgID == nil {
+			if source, err = s.deps.Repo.GetProjectWithUserCheck(ctx, existing.ProjectID, existing.UserID); err != nil && !svcerr.IsNotFound(err) {
+				return nil, triggerDBError("get project", err)
+			}
+		}
+		if updated.OrgID, err = s.movedTriggerOrg(ctx, existing.UserID, existing, source, target); err != nil {
+			return nil, err
 		}
 	}
 	// nil enabled on update means "leave it as it is": an update of the

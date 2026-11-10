@@ -1,0 +1,156 @@
+// Copyright (c) 2025 Reliant Labs
+package trigger
+
+import (
+	"context"
+	"testing"
+	"time"
+
+	"connectrpc.com/connect"
+	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	fat "github.com/reliant-labs/forge/pkg/accesstoken"
+	"github.com/reliant-labs/forge/pkg/svcerr"
+	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/accesstokenclient"
+	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/orgs"
+)
+
+// triggerOrgSource: every caller is a live member of acme and home, not of
+// globex; home is the default.
+type triggerOrgSource struct{}
+
+func (triggerOrgSource) ResolveOrgMembership(_ context.Context, _, orgID string) (accesstokenclient.OrgMembership, error) {
+	if orgID == "" {
+		return accesstokenclient.OrgMembership{OrgID: "home", Member: true}, nil
+	}
+	return accesstokenclient.OrgMembership{OrgID: orgID, Member: orgID == "acme" || orgID == "home"}, nil
+}
+
+// withOrgs makes env's deployment one with orgs, through the real resolver.
+func (e *triggerTestEnv) withOrgs(t *testing.T) *triggerTestEnv {
+	t.Helper()
+	e.configure(t, func(d *Deps) { d.Orgs = orgs.New(triggerOrgSource{}) })
+	return e
+}
+
+// orgProject is a project of env's user in orgID (nil: none yet).
+func (e *triggerTestEnv) orgProject(t *testing.T, orgID *string) string {
+	t.Helper()
+	id := uuid.NewString()
+	now := time.Now().UTC()
+	require.NoError(t, e.repo.CreateProject(context.Background(), &db.Project{
+		ID: id, UserID: e.userID, OrgID: orgID, Name: "p-" + id[:6], Path: t.TempDir(), IsGitRepo: true,
+		CreatedAt: now, UpdatedAt: now, LastActive: now,
+	}))
+	return id
+}
+
+func (e *triggerTestEnv) createIn(ctx context.Context, projectID string, org *string) (*reliantv1.Trigger, error) {
+	resp, err := e.svc.CreateTrigger(ctx, connect.NewRequest(&reliantv1.CreateTriggerRequest{
+		Trigger: e.definition(func(d *reliantv1.TriggerDefinition) { d.ProjectId = projectID }),
+		OrgId:   org,
+	}))
+	if err != nil {
+		return nil, err
+	}
+	return resp.Msg.GetTrigger(), nil
+}
+
+func (e *triggerTestEnv) userTriggers(t *testing.T) []*core.Trigger {
+	t.Helper()
+	stored, err := e.repo.ListTriggers(context.Background(), core.TriggerFilters{UserID: e.userID})
+	require.NoError(t, err)
+	return stored
+}
+
+func requireDenied(t *testing.T, err error, code connect.Code, reason string) {
+	t.Helper()
+	require.Error(t, err)
+	assert.Equal(t, code, svcerr.Code(err), "error: %v", err)
+	if reason != "" {
+		assert.Equal(t, reason, svcerr.ToConnect(err).Meta().Get(svcerr.ReasonHeader), "error: %v", err)
+	}
+}
+
+// A trigger's org is verified where it is created: an org the caller is not
+// in, another org than a machine credential's, or a project of an org the
+// caller is not in is refused and stores nothing; a project of a member org
+// gives the trigger that org.
+func TestCreateTrigger_OrgIsVerified(t *testing.T) {
+	t.Parallel()
+	env := setupTriggerTest(t).withOrgs(t)
+	acme, home, globex := "acme", "home", "globex"
+	acmeProject, globexProject := env.orgProject(t, &acme), env.orgProject(t, &globex)
+
+	_, err := env.createIn(env.ctx, env.projectID, &globex)
+	requireDenied(t, err, connect.CodePermissionDenied, orgs.ReasonNotOrgMember)
+
+	machine := auth.WithMachineToken(env.ctx, &fat.Principal{OrgID: acme, ActingUserID: env.userID})
+	_, err = env.createIn(machine, env.projectID, &home)
+	requireDenied(t, err, connect.CodePermissionDenied, orgs.ReasonOrgMismatch)
+
+	for _, blank := range []*string{nil, new(string)} {
+		_, err = env.createIn(env.ctx, globexProject, blank)
+		requireDenied(t, err, connect.CodePermissionDenied, orgs.ReasonNotOrgMember)
+	}
+	_, err = env.createIn(env.ctx, acmeProject, &home)
+	requireDenied(t, err, connect.CodeFailedPrecondition, "")
+	require.Empty(t, env.userTriggers(t), "a refused create stores no trigger")
+
+	created, err := env.createIn(env.ctx, acmeProject, nil)
+	require.NoError(t, err)
+	assert.Equal(t, acme, created.GetOrgId(), "a project's org is the trigger's")
+	legacy, err := env.createIn(env.ctx, env.projectID, nil)
+	require.NoError(t, err)
+	assert.Equal(t, home, legacy.GetOrgId(), "no project org and none named: the default")
+}
+
+// A trigger stays in its org: an update cannot move it to a project of
+// another org, including a trigger with no org yet, whose org is its
+// project's.
+func TestUpdateTrigger_StaysInItsOrg(t *testing.T) {
+	t.Parallel()
+	env := setupTriggerTest(t).withOrgs(t)
+	acme, home := "acme", "home"
+	acmeProject, acmeOther, homeProject := env.orgProject(t, &acme), env.orgProject(t, &acme), env.orgProject(t, &home)
+	legacyProject := env.orgProject(t, nil)
+
+	move := func(id, projectID string) error {
+		_, err := env.svc.UpdateTrigger(env.ctx, connect.NewRequest(&reliantv1.UpdateTriggerRequest{
+			Id:      id,
+			Trigger: env.definition(func(d *reliantv1.TriggerDefinition) { d.ProjectId = projectID }),
+		}))
+		return err
+	}
+	stored := func(id string) *core.Trigger {
+		tr, err := env.repo.GetTrigger(context.Background(), id)
+		require.NoError(t, err)
+		return tr
+	}
+
+	assigned, err := env.createIn(env.ctx, acmeProject, nil)
+	require.NoError(t, err)
+	requireDenied(t, move(assigned.GetId(), homeProject), connect.CodeFailedPrecondition, "")
+	requireDenied(t, move(assigned.GetId(), legacyProject), connect.CodeFailedPrecondition, "")
+	assert.Equal(t, acmeProject, stored(assigned.GetId()).ProjectID)
+	require.NoError(t, move(assigned.GetId(), acmeOther), "within its org")
+	assert.Equal(t, acmeOther, stored(assigned.GetId()).ProjectID)
+
+	// A trigger written before orgs, in an acme project: acme's.
+	unassigned, err := env.createIn(env.ctx, acmeProject, nil)
+	require.NoError(t, err)
+	_, err = env.repo.ORM().Bun().NewRaw(`UPDATE triggers SET org_id = NULL WHERE id = ?`, unassigned.GetId()).Exec(context.Background())
+	require.NoError(t, err)
+	requireDenied(t, move(unassigned.GetId(), legacyProject), connect.CodeFailedPrecondition, "")
+	acmeThird := env.orgProject(t, &acme)
+	require.NoError(t, move(unassigned.GetId(), acmeThird))
+	row := stored(unassigned.GetId())
+	require.NotNil(t, row.OrgID, "the move stamps the org it was decided in")
+	assert.Equal(t, acme, *row.OrgID)
+}
