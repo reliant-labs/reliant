@@ -25,6 +25,10 @@ func reclaimMachine(t *testing.T) (*inboxFixture, string) {
 	return f, daemonID
 }
 
+// reclaimAt is the fixed instant the proposals are made at: what the item
+// shows is computed from the report alone, so no test here reads the clock.
+var reclaimAt = time.Date(2026, 3, 4, 5, 6, 7, 890_000_000, time.UTC)
+
 func reclaimProposal(key, fp, decision string, proposedAt time.Time) *reliantv1.WorktreeReclaimProposal {
 	return &reliantv1.WorktreeReclaimProposal{Key: key, Fingerprint: fp, Path: "/tmp/" + key, Branch: "feat/" + key, Reason: "dirty",
 		WorkSummary: " M a.txt", IdleSeconds: 6 * 86400, SizeBytes: 1 << 20, ProposedAtMs: proposedAt.UnixMilli(), Decision: decision}
@@ -48,9 +52,9 @@ func (f *inboxFixture) reclaimItems(t *testing.T) []*reliantv1.InboxItem {
 // disk there is no storage item beside it.
 func TestListInbox_WorktreeReclaimItemListsTheMachinesProposals(t *testing.T) {
 	f, daemonID := reclaimMachine(t)
-	old := time.Now().Add(-3 * time.Hour)
+	old := reclaimAt.Add(-3 * time.Hour)
 	putProposals(t, f, daemonID,
-		reclaimProposal("p-a", "fp-a", "", time.Now()),
+		reclaimProposal("p-a", "fp-a", "", reclaimAt),
 		reclaimProposal("p-b", "fp-b", "", old),
 		reclaimProposal("p-c", "fp-c", "approve", old),
 		reclaimProposal("p-d", "fp-d", "decline", old))
@@ -70,7 +74,7 @@ func TestListInbox_WorktreeReclaimItemListsTheMachinesProposals(t *testing.T) {
 		keys = append(keys, p.Key)
 	}
 	assert.Equal(t, []string{"p-a", "p-b", "p-c"}, keys)
-	assert.Equal(t, old.UTC().Truncate(time.Millisecond).Format(time.RFC3339Nano), it.WaitingSince, "waiting since the oldest undecided proposal")
+	assert.Equal(t, "2026-03-04T02:06:07.89Z", it.WaitingSince, "waiting since the oldest undecided proposal")
 	assert.Contains(t, it.ItemId, "worktree_reclaim:"+daemonID+":")
 
 	// Project-scoped lists show it too: a machine is not any project's.
@@ -84,7 +88,7 @@ func TestListInbox_WorktreeReclaimItemListsTheMachinesProposals(t *testing.T) {
 // changed, is a new item; once every proposal is decided, there is none.
 func TestListInbox_WorktreeReclaimItemIsOnePerSetOfProposals(t *testing.T) {
 	f, daemonID := reclaimMachine(t)
-	now := time.Now()
+	now := reclaimAt
 	putProposals(t, f, daemonID, reclaimProposal("p-a", "fp-a", "", now))
 	first := f.reclaimItems(t)
 	require.Len(t, first, 1)

@@ -11,11 +11,13 @@ import (
 	"unicode"
 )
 
-// Production alerting is assembled by forge from the alert-service parts under
+// The default alert rules of an env built from this project (`forge env shape
+// <env>`: dev, demo) are assembled by forge from the alert-service parts under
 // deploy/observability/spec (one per RPC service, read by a glob, never listed
-// anywhere else). A service a process serves but that has no part, or whose
-// part names another service, gets no default alerts in prod, and nothing else
-// would notice. So every service the generated catalog says a process serves
+// anywhere else). Prod is control-plane's env: its rules come from
+// control-plane's own parts, not these. A service a process serves but that
+// has no part, or whose part names another service, gets no default alerts,
+// and nothing else would notice. So every service the generated catalog says a process serves
 // must have exactly one part, named after the service, whose rpc_service is
 // that service; and no part may name a service nothing serves.
 //

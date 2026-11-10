@@ -69,7 +69,13 @@ func TestInboxApprovalReachesTheDaemonWhichRecordsItAndDeletesNothing(t *testing
 	r := worktreereclaim.NewReclaimer(root)
 	r.Acquire = func(context.Context, []string) (worktreereclaim.RecoveryLease, error) { return sweepTestLease{}, nil }
 	r.PRMerged, r.FetchBase = nil, nil
-	r.Now = func() time.Time { return time.Now().Add(10 * 24 * time.Hour) }
+	// One fixed clock for the whole test. The checkout's activity (mtimes,
+	// reflog) is what git wrote while building the fixture, so the clock is
+	// pinned once, after that: every sweep runs at the same instant, ten
+	// days past the last write, and the server's rows are stamped at built.
+	built := time.Now().UTC()
+	sweptAt := built.Add(10 * 24 * time.Hour)
+	r.Now = func() time.Time { return sweptAt }
 	opts := worktreereclaim.SweepOptions{Mode: worktreereclaim.SweepOn, StateDir: state, Anchors: []string{f.project},
 		Roots: []worktreereclaim.SweepRoot{{Path: filepath.Dir(f.root), Depth: 2}}}
 	ctx := context.Background()
@@ -88,7 +94,7 @@ func TestInboxApprovalReachesTheDaemonWhichRecordsItAndDeletesNothing(t *testing
 	userID := uuid.NewString()
 	daemonID := "d-" + uuid.NewString()
 	userCtx := auth.WithUser(ctx, userID, "user", "u@example.com")
-	now := time.Now().UTC()
+	now := built
 	if err := repo.CreateProject(userCtx, &db.Project{ID: "p-" + userID, UserID: userID, Name: "proj", Path: f.project,
 		CreatedAt: now, UpdatedAt: now, LastActive: now}); err != nil {
 		t.Fatal(err)
@@ -188,6 +194,12 @@ func TestInboxApprovalReachesTheDaemonWhichRecordsItAndDeletesNothing(t *testing
 	// captured into a local ref, then removed.
 	opts.ApprovedOnly, opts.ApprovalsVerified = true, true
 	pass := r.SweepMachine(ctx, opts)
+	if len(pass.Entries) == 1 && pass.Entries[0].Reason == worktreereclaim.ReasonInUse && strings.Contains(pass.Entries[0].Detail, "cwd unreadable") {
+		// The host, not the code: a process whose cwd this user cannot read
+		// (an undumpable one) might be inside the checkout, so the sweep
+		// holds it, as it must.
+		t.Skipf("host has a process whose cwd is unreadable, so the verified pass holds every worktree: %s", pass.Entries[0].Detail)
+	}
 	if len(pass.Entries) != 1 || pass.Entries[0].Outcome != worktreereclaim.OutcomeReclaimed {
 		t.Fatalf("verified pass %+v, want the workspace reclaimed", pass.Entries)
 	}
