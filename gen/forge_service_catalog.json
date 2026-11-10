@@ -42195,6 +42195,11 @@
               "type_name": "reliant.v1.Workflow"
             },
             {
+              "name": "finally",
+              "kind": "message",
+              "type_name": "reliant.v1.Workflow"
+            },
+            {
               "name": "requires",
               "kind": "message",
               "type_name": "reliant.v1.WorkflowRequirements"
