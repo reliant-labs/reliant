@@ -19,6 +19,7 @@
 
 import type { GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
 import { fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
+import { file_buf_validate_validate } from "../../../buf/validate/validate_pb";
 import { file_forge_v1_forge } from "../../../forge/v1/forge_pb";
 import type { Timestamp } from "@bufbuild/protobuf/wkt";
 import { file_google_protobuf_timestamp } from "@bufbuild/protobuf/wkt";
@@ -28,7 +29,704 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file services/organization/v1/organization.proto.
  */
 export const file_services_organization_v1_organization: GenFile = /*@__PURE__*/
-  fileDesc("CitzZXJ2aWNlcy9vcmdhbml6YXRpb24vdjEvb3JnYW5pemF0aW9uLnByb3RvEg9jb250cm9scGxhbmUudjEiywEKDk15T3JnYW5pemF0aW9uEgoKAmlkGAEgASgJEgwKBG5hbWUYAiABKAkSDAoEc2x1ZxgDIAEoCRIMCgRyb2xlGAQgASgJEhIKCmlzX2RlZmF1bHQYBSABKAgSEAoIaXNfb3duZXIYBiABKAgSLgoKY3JlYXRlZF9hdBgHIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLQoJam9pbmVkX2F0GAggASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCIcChpMaXN0TXlPcmdhbml6YXRpb25zUmVxdWVzdCKfAQobTGlzdE15T3JnYW5pemF0aW9uc1Jlc3BvbnNlEjYKDW9yZ2FuaXphdGlvbnMYASADKAsyHy5jb250cm9scGxhbmUudjEuTXlPcmdhbml6YXRpb24SFgoOZGVmYXVsdF9vcmdfaWQYAiABKAlKBAgDEARKBAgEEAVSDmJpbGxpbmdfb3JnX2lkUhRiaWxsaW5nX29yZ19leHBsaWNpdCIvCh1TZXREZWZhdWx0T3JnYW5pemF0aW9uUmVxdWVzdBIOCgZvcmdfaWQYASABKAkiOAoeU2V0RGVmYXVsdE9yZ2FuaXphdGlvblJlc3BvbnNlEhYKDmRlZmF1bHRfb3JnX2lkGAEgASgJMu8CChNPcmdhbml6YXRpb25TZXJ2aWNlEngKE0xpc3RNeU9yZ2FuaXphdGlvbnMSKy5jb250cm9scGxhbmUudjEuTGlzdE15T3JnYW5pemF0aW9uc1JlcXVlc3QaLC5jb250cm9scGxhbmUudjEuTGlzdE15T3JnYW5pemF0aW9uc1Jlc3BvbnNlIgaiuxgCCAES3QEKFlNldERlZmF1bHRPcmdhbml6YXRpb24SLi5jb250cm9scGxhbmUudjEuU2V0RGVmYXVsdE9yZ2FuaXphdGlvblJlcXVlc3QaLy5jb250cm9scGxhbmUudjEuU2V0RGVmYXVsdE9yZ2FuaXphdGlvblJlc3BvbnNlImKiuxheCAE6WjpYYSBwZXJzb25hbCBwcmVmZXJlbmNlIGFib3V0IHdoaWNoIG9yZyByZXF1ZXN0cyBkZWZhdWx0IHRvOyBpdCBjaGFuZ2VzIG5vdGhpbmcgaW4gYW55IG9yZ0LfAQoTY29tLmNvbnRyb2xwbGFuZS52MUIRT3JnYW5pemF0aW9uUHJvdG9QAVpYZ2l0aHViLmNvbS9yZWxpYW50LWxhYnMvcmVsaWFudC9nZW4vY29udHJvbHBsYW5lL3NlcnZpY2VzL29yZ2FuaXphdGlvbi92MTtjb250cm9scGxhbmV2MaICA0NYWKoCD0NvbnRyb2xwbGFuZS5WMcoCD0NvbnRyb2xwbGFuZVxWMeICG0NvbnRyb2xwbGFuZVxWMVxHUEJNZXRhZGF0YeoCEENvbnRyb2xwbGFuZTo6VjFiBnByb3RvMw", [file_forge_v1_forge, file_google_protobuf_timestamp]);
+  fileDesc("CitzZXJ2aWNlcy9vcmdhbml6YXRpb24vdjEvb3JnYW5pemF0aW9uLnByb3RvEg9jb250cm9scGxhbmUudjEingEKCU9yZ01lbWJlchIPCgd1c2VyX2lkGAEgASgJEg0KBWVtYWlsGAIgASgJEgwKBG5hbWUYAyABKAkSEgoKYXZhdGFyX3VybBgEIAEoCRIMCgRyb2xlGAUgASgJEi0KCWpvaW5lZF9hdBgGIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASEgoKaXNfZm91bmRlchgHIAEoCCJICglTZWF0VXNhZ2USDwoHbWVtYmVycxgBIAEoBRIbChNwZW5kaW5nX2ludml0YXRpb25zGAIgASgFEg0KBWxpbWl0GAMgASgFIpACCg1PcmdJbnZpdGF0aW9uEgoKAmlkGAEgASgJEg0KBWVtYWlsGAIgASgJEgwKBHJvbGUYAyABKAkSGgoSaW52aXRlZF9ieV91c2VyX2lkGAQgASgJEhgKEGludml0ZWRfYnlfZW1haWwYBSABKAkSDgoGc3RhdHVzGAYgASgJEi4KCmNyZWF0ZWRfYXQYByABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi4KCmV4cGlyZXNfYXQYCCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEjAKDGxhc3Rfc2VudF9hdBgJIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAiRQoZQ3JlYXRlT3JnYW5pemF0aW9uUmVxdWVzdBIMCgRuYW1lGAEgASgJEhEKBHNsdWcYAiABKAlIAIgBAUIHCgVfc2x1ZyJTChpDcmVhdGVPcmdhbml6YXRpb25SZXNwb25zZRI1Cgxvcmdhbml6YXRpb24YASABKAsyHy5jb250cm9scGxhbmUudjEuTXlPcmdhbml6YXRpb24iUwoSTGlzdE1lbWJlcnNSZXF1ZXN0EhYKBm9yZ19pZBgBIAEoCUIGukgDyAEBEhEKCXBhZ2Vfc2l6ZRgCIAEoBRISCgpwYWdlX3Rva2VuGAMgASgJIoYBChNMaXN0TWVtYmVyc1Jlc3BvbnNlEisKB21lbWJlcnMYASADKAsyGi5jb250cm9scGxhbmUudjEuT3JnTWVtYmVyEhcKD25leHRfcGFnZV90b2tlbhgCIAEoCRIpCgVzZWF0cxgDIAEoCzIaLmNvbnRyb2xwbGFuZS52MS5TZWF0VXNhZ2UiSgoTSW52aXRlTWVtYmVyUmVxdWVzdBIWCgZvcmdfaWQYASABKAlCBrpIA8gBARINCgVlbWFpbBgCIAEoCRIMCgRyb2xlGAMgASgJIoIBChRJbnZpdGVNZW1iZXJSZXNwb25zZRIyCgppbnZpdGF0aW9uGAEgASgLMh4uY29udHJvbHBsYW5lLnYxLk9yZ0ludml0YXRpb24SEgoKZW1haWxfc2VudBgCIAEoCBISCgphY2NlcHRfdXJsGAMgASgJEg4KBnJlc2VudBgEIAEoCCKLAQoWTGlzdEludml0YXRpb25zUmVxdWVzdBIWCgZvcmdfaWQYASABKAlCBrpIA8gBARIdChBpbmNsdWRlX3Jlc29sdmVkGAIgASgISACIAQESEQoJcGFnZV9zaXplGAMgASgFEhIKCnBhZ2VfdG9rZW4YBCABKAlCEwoRX2luY2x1ZGVfcmVzb2x2ZWQiZwoXTGlzdEludml0YXRpb25zUmVzcG9uc2USMwoLaW52aXRhdGlvbnMYASADKAsyHi5jb250cm9scGxhbmUudjEuT3JnSW52aXRhdGlvbhIXCg9uZXh0X3BhZ2VfdG9rZW4YAiABKAkiSAoXUmV2b2tlSW52aXRhdGlvblJlcXVlc3QSFgoGb3JnX2lkGAEgASgJQga6SAPIAQESFQoNaW52aXRhdGlvbl9pZBgCIAEoCSIaChhSZXZva2VJbnZpdGF0aW9uUmVzcG9uc2UiJQoUR2V0SW52aXRhdGlvblJlcXVlc3QSDQoFdG9rZW4YASABKAki2wEKFUdldEludml0YXRpb25SZXNwb25zZRIQCghvcmdfbmFtZRgBIAEoCRIMCgRyb2xlGAIgASgJEhcKD2ludml0ZWRfYnlfbmFtZRgDIAEoCRIaChJpbnZpdGVlX2VtYWlsX2hpbnQYBCABKAkSDgoGc3RhdHVzGAUgASgJEi4KCmV4cGlyZXNfYXQYBiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhUKDWVtYWlsX21hdGNoZXMYByABKAgSFgoOYWxyZWFkeV9tZW1iZXIYCCABKAgiKAoXQWNjZXB0SW52aXRhdGlvblJlcXVlc3QSDQoFdG9rZW4YASABKAkieQoYQWNjZXB0SW52aXRhdGlvblJlc3BvbnNlEjUKDG9yZ2FuaXphdGlvbhgBIAEoCzIfLmNvbnRyb2xwbGFuZS52MS5NeU9yZ2FuaXphdGlvbhIPCgd1c2VyX2lkGAIgASgJEhUKDWludml0YXRpb25faWQYAyABKAkiPgoTUmVtb3ZlTWVtYmVyUmVxdWVzdBIWCgZvcmdfaWQYASABKAlCBrpIA8gBARIPCgd1c2VyX2lkGAIgASgJIjMKFFJlbW92ZU1lbWJlclJlc3BvbnNlEhsKE3Jldm9rZWRfdG9rZW5fY291bnQYASABKAUiMgoYTGVhdmVPcmdhbml6YXRpb25SZXF1ZXN0EhYKBm9yZ19pZBgBIAEoCUIGukgDyAEBImEKGUxlYXZlT3JnYW5pemF0aW9uUmVzcG9uc2USFgoOZGVmYXVsdF9vcmdfaWQYASABKAkSDwoHdXNlcl9pZBgCIAEoCRIbChNyZXZva2VkX3Rva2VuX2NvdW50GAMgASgFIlAKF1VwZGF0ZU1lbWJlclJvbGVSZXF1ZXN0EhYKBm9yZ19pZBgBIAEoCUIGukgDyAEBEg8KB3VzZXJfaWQYAiABKAkSDAoEcm9sZRgDIAEoCSJWChhVcGRhdGVNZW1iZXJSb2xlUmVzcG9uc2USKgoGbWVtYmVyGAEgASgLMhouY29udHJvbHBsYW5lLnYxLk9yZ01lbWJlchIOCgZzY29wZXMYAiADKAkiywEKDk15T3JnYW5pemF0aW9uEgoKAmlkGAEgASgJEgwKBG5hbWUYAiABKAkSDAoEc2x1ZxgDIAEoCRIMCgRyb2xlGAQgASgJEhIKCmlzX2RlZmF1bHQYBSABKAgSEAoIaXNfb3duZXIYBiABKAgSLgoKY3JlYXRlZF9hdBgHIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLQoJam9pbmVkX2F0GAggASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCIcChpMaXN0TXlPcmdhbml6YXRpb25zUmVxdWVzdCKfAQobTGlzdE15T3JnYW5pemF0aW9uc1Jlc3BvbnNlEjYKDW9yZ2FuaXphdGlvbnMYASADKAsyHy5jb250cm9scGxhbmUudjEuTXlPcmdhbml6YXRpb24SFgoOZGVmYXVsdF9vcmdfaWQYAiABKAlKBAgDEARKBAgEEAVSDmJpbGxpbmdfb3JnX2lkUhRiaWxsaW5nX29yZ19leHBsaWNpdCIvCh1TZXREZWZhdWx0T3JnYW5pemF0aW9uUmVxdWVzdBIOCgZvcmdfaWQYASABKAkiOAoeU2V0RGVmYXVsdE9yZ2FuaXphdGlvblJlc3BvbnNlEhYKDmRlZmF1bHRfb3JnX2lkGAEgASgJMr8PChNPcmdhbml6YXRpb25TZXJ2aWNlEngKE0xpc3RNeU9yZ2FuaXphdGlvbnMSKy5jb250cm9scGxhbmUudjEuTGlzdE15T3JnYW5pemF0aW9uc1JlcXVlc3QaLC5jb250cm9scGxhbmUudjEuTGlzdE15T3JnYW5pemF0aW9uc1Jlc3BvbnNlIgaiuxgCCAES3QEKFlNldERlZmF1bHRPcmdhbml6YXRpb24SLi5jb250cm9scGxhbmUudjEuU2V0RGVmYXVsdE9yZ2FuaXphdGlvblJlcXVlc3QaLy5jb250cm9scGxhbmUudjEuU2V0RGVmYXVsdE9yZ2FuaXphdGlvblJlc3BvbnNlImKiuxheCAE6WjpYYSBwZXJzb25hbCBwcmVmZXJlbmNlIGFib3V0IHdoaWNoIG9yZyByZXF1ZXN0cyBkZWZhdWx0IHRvOyBpdCBjaGFuZ2VzIG5vdGhpbmcgaW4gYW55IG9yZxL+AQoSQ3JlYXRlT3JnYW5pemF0aW9uEiouY29udHJvbHBsYW5lLnYxLkNyZWF0ZU9yZ2FuaXphdGlvblJlcXVlc3QaKy5jb250cm9scGxhbmUudjEuQ3JlYXRlT3JnYW5pemF0aW9uUmVzcG9uc2UijgGiuxiJAQgBOoQBCgpjcmVhdGVfb3JnEj4KBm1lbWJlchIYcmVzcG9uc2Uub3JnYW5pemF0aW9uLmlkGhpyZXNwb25zZS5vcmdhbml6YXRpb24ubmFtZSIYcmVzcG9uc2Uub3JnYW5pemF0aW9uLmlkKhpyZXNwb25zZS5vcmdhbml6YXRpb24uc2x1ZzACEmIKC0xpc3RNZW1iZXJzEiMuY29udHJvbHBsYW5lLnYxLkxpc3RNZW1iZXJzUmVxdWVzdBokLmNvbnRyb2xwbGFuZS52MS5MaXN0TWVtYmVyc1Jlc3BvbnNlIgiiuxgECAEYARKwAQoMSW52aXRlTWVtYmVyEiQuY29udHJvbHBsYW5lLnYxLkludml0ZU1lbWJlclJlcXVlc3QaJS5jb250cm9scGxhbmUudjEuSW52aXRlTWVtYmVyUmVzcG9uc2UiU6K7GE8IATpLCgZpbnZpdGUSIAoGbWVtYmVyEhZyZXNwb25zZS5pbnZpdGF0aW9uLmlkIgZvcmdfaWQqBHJvbGUqD3Jlc3BvbnNlLnJlc2VudDACEm4KD0xpc3RJbnZpdGF0aW9ucxInLmNvbnRyb2xwbGFuZS52MS5MaXN0SW52aXRhdGlvbnNSZXF1ZXN0GiguY29udHJvbHBsYW5lLnYxLkxpc3RJbnZpdGF0aW9uc1Jlc3BvbnNlIgiiuxgECAEYARKjAQoQUmV2b2tlSW52aXRhdGlvbhIoLmNvbnRyb2xwbGFuZS52MS5SZXZva2VJbnZpdGF0aW9uUmVxdWVzdBopLmNvbnRyb2xwbGFuZS52MS5SZXZva2VJbnZpdGF0aW9uUmVzcG9uc2UiOqK7GDYIAToyCg1yZXZva2VfaW52aXRlEhcKBm1lbWJlchINaW52aXRhdGlvbl9pZCIGb3JnX2lkMAISaAoNR2V0SW52aXRhdGlvbhIlLmNvbnRyb2xwbGFuZS52MS5HZXRJbnZpdGF0aW9uUmVxdWVzdBomLmNvbnRyb2xwbGFuZS52MS5HZXRJbnZpdGF0aW9uUmVzcG9uc2UiCKK7GAQIARgBEuMBChBBY2NlcHRJbnZpdGF0aW9uEiguY29udHJvbHBsYW5lLnYxLkFjY2VwdEludml0YXRpb25SZXF1ZXN0GikuY29udHJvbHBsYW5lLnYxLkFjY2VwdEludml0YXRpb25SZXNwb25zZSJ6orsYdggBOnIKBGpvaW4SGgoGbWVtYmVyEhByZXNwb25zZS51c2VyX2lkIhhyZXNwb25zZS5vcmdhbml6YXRpb24uaWQqGnJlc3BvbnNlLm9yZ2FuaXphdGlvbi5yb2xlKhZyZXNwb25zZS5pbnZpdGF0aW9uX2lkMAISigEKDFJlbW92ZU1lbWJlchIkLmNvbnRyb2xwbGFuZS52MS5SZW1vdmVNZW1iZXJSZXF1ZXN0GiUuY29udHJvbHBsYW5lLnYxLlJlbW92ZU1lbWJlclJlc3BvbnNlIi2iuxgpCAE6JQoGcmVtb3ZlEhEKBm1lbWJlchIHdXNlcl9pZCIGb3JnX2lkMAISoQEKEUxlYXZlT3JnYW5pemF0aW9uEikuY29udHJvbHBsYW5lLnYxLkxlYXZlT3JnYW5pemF0aW9uUmVxdWVzdBoqLmNvbnRyb2xwbGFuZS52MS5MZWF2ZU9yZ2FuaXphdGlvblJlc3BvbnNlIjWiuxgxCAE6LQoFbGVhdmUSGgoGbWVtYmVyEhByZXNwb25zZS51c2VyX2lkIgZvcmdfaWQwAhKeAQoQVXBkYXRlTWVtYmVyUm9sZRIoLmNvbnRyb2xwbGFuZS52MS5VcGRhdGVNZW1iZXJSb2xlUmVxdWVzdBopLmNvbnRyb2xwbGFuZS52MS5VcGRhdGVNZW1iZXJSb2xlUmVzcG9uc2UiNaK7GDEIATotCghzZXRfcm9sZRIRCgZtZW1iZXISB3VzZXJfaWQiBm9yZ19pZCoEcm9sZTACQt8BChNjb20uY29udHJvbHBsYW5lLnYxQhFPcmdhbml6YXRpb25Qcm90b1ABWlhnaXRodWIuY29tL3JlbGlhbnQtbGFicy9yZWxpYW50L2dlbi9jb250cm9scGxhbmUvc2VydmljZXMvb3JnYW5pemF0aW9uL3YxO2NvbnRyb2xwbGFuZXYxogIDQ1hYqgIPQ29udHJvbHBsYW5lLlYxygIPQ29udHJvbHBsYW5lXFYx4gIbQ29udHJvbHBsYW5lXFYxXEdQQk1ldGFkYXRh6gIQQ29udHJvbHBsYW5lOjpWMWIGcHJvdG8z", [file_buf_validate_validate, file_forge_v1_forge, file_google_protobuf_timestamp]);
+
+/**
+ * OrgMember is one member of an org, as its roster shows them.
+ *
+ * @generated from message controlplane.v1.OrgMember
+ */
+export type OrgMember = Message<"controlplane.v1.OrgMember"> & {
+  /**
+   * @generated from field: string user_id = 1;
+   */
+  userId: string;
+
+  /**
+   * @generated from field: string email = 2;
+   */
+  email: string;
+
+  /**
+   * "" when the person set none.
+   *
+   * @generated from field: string name = 3;
+   */
+  name: string;
+
+  /**
+   * @generated from field: string avatar_url = 4;
+   */
+  avatarUrl: string;
+
+  /**
+   * "owner", "admin" or "member".
+   *
+   * @generated from field: string role = 5;
+   */
+  role: string;
+
+  /**
+   * @generated from field: google.protobuf.Timestamp joined_at = 6;
+   */
+  joinedAt?: Timestamp | undefined;
+
+  /**
+   * True for the org's founding, accountable owner (organizations.owner_id).
+   * It confers no authority; role does.
+   *
+   * @generated from field: bool is_founder = 7;
+   */
+  isFounder: boolean;
+};
+
+/**
+ * Describes the message controlplane.v1.OrgMember.
+ * Use `create(OrgMemberSchema)` to create a new message.
+ */
+export const OrgMemberSchema: GenMessage<OrgMember> = /*@__PURE__*/
+  messageDesc(file_services_organization_v1_organization, 0);
+
+/**
+ * SeatUsage is how many of the org's seats are taken.
+ *
+ * @generated from message controlplane.v1.SeatUsage
+ */
+export type SeatUsage = Message<"controlplane.v1.SeatUsage"> & {
+  /**
+   * Live members (deleted accounts excluded).
+   *
+   * @generated from field: int32 members = 1;
+   */
+  members: number;
+
+  /**
+   * Pending, unexpired invitations.
+   *
+   * @generated from field: int32 pending_invitations = 2;
+   */
+  pendingInvitations: number;
+
+  /**
+   * The seat limit; -1 = unlimited.
+   *
+   * @generated from field: int32 limit = 3;
+   */
+  limit: number;
+};
+
+/**
+ * Describes the message controlplane.v1.SeatUsage.
+ * Use `create(SeatUsageSchema)` to create a new message.
+ */
+export const SeatUsageSchema: GenMessage<SeatUsage> = /*@__PURE__*/
+  messageDesc(file_services_organization_v1_organization, 1);
+
+/**
+ * OrgInvitation is one invitation, as an org admin sees it.
+ *
+ * @generated from message controlplane.v1.OrgInvitation
+ */
+export type OrgInvitation = Message<"controlplane.v1.OrgInvitation"> & {
+  /**
+   * @generated from field: string id = 1;
+   */
+  id: string;
+
+  /**
+   * @generated from field: string email = 2;
+   */
+  email: string;
+
+  /**
+   * @generated from field: string role = 3;
+   */
+  role: string;
+
+  /**
+   * @generated from field: string invited_by_user_id = 4;
+   */
+  invitedByUserId: string;
+
+  /**
+   * @generated from field: string invited_by_email = 5;
+   */
+  invitedByEmail: string;
+
+  /**
+   * "pending", "accepted", "revoked" or "expired" (pending past expires_at).
+   *
+   * @generated from field: string status = 6;
+   */
+  status: string;
+
+  /**
+   * @generated from field: google.protobuf.Timestamp created_at = 7;
+   */
+  createdAt?: Timestamp | undefined;
+
+  /**
+   * @generated from field: google.protobuf.Timestamp expires_at = 8;
+   */
+  expiresAt?: Timestamp | undefined;
+
+  /**
+   * @generated from field: google.protobuf.Timestamp last_sent_at = 9;
+   */
+  lastSentAt?: Timestamp | undefined;
+};
+
+/**
+ * Describes the message controlplane.v1.OrgInvitation.
+ * Use `create(OrgInvitationSchema)` to create a new message.
+ */
+export const OrgInvitationSchema: GenMessage<OrgInvitation> = /*@__PURE__*/
+  messageDesc(file_services_organization_v1_organization, 2);
+
+/**
+ * @generated from message controlplane.v1.CreateOrganizationRequest
+ */
+export type CreateOrganizationRequest = Message<"controlplane.v1.CreateOrganizationRequest"> & {
+  /**
+   * 1-80 characters after trimming.
+   *
+   * @generated from field: string name = 1;
+   */
+  name: string;
+
+  /**
+   * ^[a-z][a-z0-9-]{1,48}[a-z0-9]$. Unset: derived from the name plus a short
+   * random suffix.
+   *
+   * @generated from field: optional string slug = 2;
+   */
+  slug?: string | undefined;
+};
+
+/**
+ * Describes the message controlplane.v1.CreateOrganizationRequest.
+ * Use `create(CreateOrganizationRequestSchema)` to create a new message.
+ */
+export const CreateOrganizationRequestSchema: GenMessage<CreateOrganizationRequest> = /*@__PURE__*/
+  messageDesc(file_services_organization_v1_organization, 3);
+
+/**
+ * @generated from message controlplane.v1.CreateOrganizationResponse
+ */
+export type CreateOrganizationResponse = Message<"controlplane.v1.CreateOrganizationResponse"> & {
+  /**
+   * @generated from field: controlplane.v1.MyOrganization organization = 1;
+   */
+  organization?: MyOrganization | undefined;
+};
+
+/**
+ * Describes the message controlplane.v1.CreateOrganizationResponse.
+ * Use `create(CreateOrganizationResponseSchema)` to create a new message.
+ */
+export const CreateOrganizationResponseSchema: GenMessage<CreateOrganizationResponse> = /*@__PURE__*/
+  messageDesc(file_services_organization_v1_organization, 4);
+
+/**
+ * @generated from message controlplane.v1.ListMembersRequest
+ */
+export type ListMembersRequest = Message<"controlplane.v1.ListMembersRequest"> & {
+  /**
+   * @generated from field: string org_id = 1;
+   */
+  orgId: string;
+
+  /**
+   * Unset or 0 = 50; max 200.
+   *
+   * @generated from field: int32 page_size = 2;
+   */
+  pageSize: number;
+
+  /**
+   * next_page_token from the previous page.
+   *
+   * @generated from field: string page_token = 3;
+   */
+  pageToken: string;
+};
+
+/**
+ * Describes the message controlplane.v1.ListMembersRequest.
+ * Use `create(ListMembersRequestSchema)` to create a new message.
+ */
+export const ListMembersRequestSchema: GenMessage<ListMembersRequest> = /*@__PURE__*/
+  messageDesc(file_services_organization_v1_organization, 5);
+
+/**
+ * @generated from message controlplane.v1.ListMembersResponse
+ */
+export type ListMembersResponse = Message<"controlplane.v1.ListMembersResponse"> & {
+  /**
+   * Oldest member first.
+   *
+   * @generated from field: repeated controlplane.v1.OrgMember members = 1;
+   */
+  members: OrgMember[];
+
+  /**
+   * Empty on the last page.
+   *
+   * @generated from field: string next_page_token = 2;
+   */
+  nextPageToken: string;
+
+  /**
+   * @generated from field: controlplane.v1.SeatUsage seats = 3;
+   */
+  seats?: SeatUsage | undefined;
+};
+
+/**
+ * Describes the message controlplane.v1.ListMembersResponse.
+ * Use `create(ListMembersResponseSchema)` to create a new message.
+ */
+export const ListMembersResponseSchema: GenMessage<ListMembersResponse> = /*@__PURE__*/
+  messageDesc(file_services_organization_v1_organization, 6);
+
+/**
+ * @generated from message controlplane.v1.InviteMemberRequest
+ */
+export type InviteMemberRequest = Message<"controlplane.v1.InviteMemberRequest"> & {
+  /**
+   * @generated from field: string org_id = 1;
+   */
+  orgId: string;
+
+  /**
+   * @generated from field: string email = 2;
+   */
+  email: string;
+
+  /**
+   * Required: "member", "admin" or "owner".
+   *
+   * @generated from field: string role = 3;
+   */
+  role: string;
+};
+
+/**
+ * Describes the message controlplane.v1.InviteMemberRequest.
+ * Use `create(InviteMemberRequestSchema)` to create a new message.
+ */
+export const InviteMemberRequestSchema: GenMessage<InviteMemberRequest> = /*@__PURE__*/
+  messageDesc(file_services_organization_v1_organization, 7);
+
+/**
+ * @generated from message controlplane.v1.InviteMemberResponse
+ */
+export type InviteMemberResponse = Message<"controlplane.v1.InviteMemberResponse"> & {
+  /**
+   * @generated from field: controlplane.v1.OrgInvitation invitation = 1;
+   */
+  invitation?: OrgInvitation | undefined;
+
+  /**
+   * False when mail is not configured on this deployment or the send failed;
+   * accept_url is then the delivery.
+   *
+   * @generated from field: bool email_sent = 2;
+   */
+  emailSent: boolean;
+
+  /**
+   * The link the invitee opens. Returned only here, never listed again.
+   *
+   * @generated from field: string accept_url = 3;
+   */
+  acceptUrl: string;
+
+  /**
+   * True when this re-sent an existing pending invitation.
+   *
+   * @generated from field: bool resent = 4;
+   */
+  resent: boolean;
+};
+
+/**
+ * Describes the message controlplane.v1.InviteMemberResponse.
+ * Use `create(InviteMemberResponseSchema)` to create a new message.
+ */
+export const InviteMemberResponseSchema: GenMessage<InviteMemberResponse> = /*@__PURE__*/
+  messageDesc(file_services_organization_v1_organization, 8);
+
+/**
+ * @generated from message controlplane.v1.ListInvitationsRequest
+ */
+export type ListInvitationsRequest = Message<"controlplane.v1.ListInvitationsRequest"> & {
+  /**
+   * @generated from field: string org_id = 1;
+   */
+  orgId: string;
+
+  /**
+   * Also list accepted, revoked and expired invitations.
+   *
+   * @generated from field: optional bool include_resolved = 2;
+   */
+  includeResolved?: boolean | undefined;
+
+  /**
+   * Unset or 0 = 50; max 200.
+   *
+   * @generated from field: int32 page_size = 3;
+   */
+  pageSize: number;
+
+  /**
+   * @generated from field: string page_token = 4;
+   */
+  pageToken: string;
+};
+
+/**
+ * Describes the message controlplane.v1.ListInvitationsRequest.
+ * Use `create(ListInvitationsRequestSchema)` to create a new message.
+ */
+export const ListInvitationsRequestSchema: GenMessage<ListInvitationsRequest> = /*@__PURE__*/
+  messageDesc(file_services_organization_v1_organization, 9);
+
+/**
+ * @generated from message controlplane.v1.ListInvitationsResponse
+ */
+export type ListInvitationsResponse = Message<"controlplane.v1.ListInvitationsResponse"> & {
+  /**
+   * Newest first.
+   *
+   * @generated from field: repeated controlplane.v1.OrgInvitation invitations = 1;
+   */
+  invitations: OrgInvitation[];
+
+  /**
+   * @generated from field: string next_page_token = 2;
+   */
+  nextPageToken: string;
+};
+
+/**
+ * Describes the message controlplane.v1.ListInvitationsResponse.
+ * Use `create(ListInvitationsResponseSchema)` to create a new message.
+ */
+export const ListInvitationsResponseSchema: GenMessage<ListInvitationsResponse> = /*@__PURE__*/
+  messageDesc(file_services_organization_v1_organization, 10);
+
+/**
+ * @generated from message controlplane.v1.RevokeInvitationRequest
+ */
+export type RevokeInvitationRequest = Message<"controlplane.v1.RevokeInvitationRequest"> & {
+  /**
+   * @generated from field: string org_id = 1;
+   */
+  orgId: string;
+
+  /**
+   * @generated from field: string invitation_id = 2;
+   */
+  invitationId: string;
+};
+
+/**
+ * Describes the message controlplane.v1.RevokeInvitationRequest.
+ * Use `create(RevokeInvitationRequestSchema)` to create a new message.
+ */
+export const RevokeInvitationRequestSchema: GenMessage<RevokeInvitationRequest> = /*@__PURE__*/
+  messageDesc(file_services_organization_v1_organization, 11);
+
+/**
+ * @generated from message controlplane.v1.RevokeInvitationResponse
+ */
+export type RevokeInvitationResponse = Message<"controlplane.v1.RevokeInvitationResponse"> & {
+};
+
+/**
+ * Describes the message controlplane.v1.RevokeInvitationResponse.
+ * Use `create(RevokeInvitationResponseSchema)` to create a new message.
+ */
+export const RevokeInvitationResponseSchema: GenMessage<RevokeInvitationResponse> = /*@__PURE__*/
+  messageDesc(file_services_organization_v1_organization, 12);
+
+/**
+ * @generated from message controlplane.v1.GetInvitationRequest
+ */
+export type GetInvitationRequest = Message<"controlplane.v1.GetInvitationRequest"> & {
+  /**
+   * The rinv_ token from the accept link.
+   *
+   * @generated from field: string token = 1;
+   */
+  token: string;
+};
+
+/**
+ * Describes the message controlplane.v1.GetInvitationRequest.
+ * Use `create(GetInvitationRequestSchema)` to create a new message.
+ */
+export const GetInvitationRequestSchema: GenMessage<GetInvitationRequest> = /*@__PURE__*/
+  messageDesc(file_services_organization_v1_organization, 13);
+
+/**
+ * @generated from message controlplane.v1.GetInvitationResponse
+ */
+export type GetInvitationResponse = Message<"controlplane.v1.GetInvitationResponse"> & {
+  /**
+   * @generated from field: string org_name = 1;
+   */
+  orgName: string;
+
+  /**
+   * @generated from field: string role = 2;
+   */
+  role: string;
+
+  /**
+   * The inviter's name, else their email.
+   *
+   * @generated from field: string invited_by_name = 3;
+   */
+  invitedByName: string;
+
+  /**
+   * The invited address, masked: "a***@example.com".
+   *
+   * @generated from field: string invitee_email_hint = 4;
+   */
+  inviteeEmailHint: string;
+
+  /**
+   * "pending", "accepted", "revoked" or "expired".
+   *
+   * @generated from field: string status = 5;
+   */
+  status: string;
+
+  /**
+   * @generated from field: google.protobuf.Timestamp expires_at = 6;
+   */
+  expiresAt?: Timestamp | undefined;
+
+  /**
+   * True when the caller's verified email is the invited one.
+   *
+   * @generated from field: bool email_matches = 7;
+   */
+  emailMatches: boolean;
+
+  /**
+   * True when the caller is already a member of the org.
+   *
+   * @generated from field: bool already_member = 8;
+   */
+  alreadyMember: boolean;
+};
+
+/**
+ * Describes the message controlplane.v1.GetInvitationResponse.
+ * Use `create(GetInvitationResponseSchema)` to create a new message.
+ */
+export const GetInvitationResponseSchema: GenMessage<GetInvitationResponse> = /*@__PURE__*/
+  messageDesc(file_services_organization_v1_organization, 14);
+
+/**
+ * @generated from message controlplane.v1.AcceptInvitationRequest
+ */
+export type AcceptInvitationRequest = Message<"controlplane.v1.AcceptInvitationRequest"> & {
+  /**
+   * @generated from field: string token = 1;
+   */
+  token: string;
+};
+
+/**
+ * Describes the message controlplane.v1.AcceptInvitationRequest.
+ * Use `create(AcceptInvitationRequestSchema)` to create a new message.
+ */
+export const AcceptInvitationRequestSchema: GenMessage<AcceptInvitationRequest> = /*@__PURE__*/
+  messageDesc(file_services_organization_v1_organization, 15);
+
+/**
+ * @generated from message controlplane.v1.AcceptInvitationResponse
+ */
+export type AcceptInvitationResponse = Message<"controlplane.v1.AcceptInvitationResponse"> & {
+  /**
+   * The org the caller joined.
+   *
+   * @generated from field: controlplane.v1.MyOrganization organization = 1;
+   */
+  organization?: MyOrganization | undefined;
+
+  /**
+   * The caller, who is the member that joined.
+   *
+   * @generated from field: string user_id = 2;
+   */
+  userId: string;
+
+  /**
+   * The invitation that was accepted.
+   *
+   * @generated from field: string invitation_id = 3;
+   */
+  invitationId: string;
+};
+
+/**
+ * Describes the message controlplane.v1.AcceptInvitationResponse.
+ * Use `create(AcceptInvitationResponseSchema)` to create a new message.
+ */
+export const AcceptInvitationResponseSchema: GenMessage<AcceptInvitationResponse> = /*@__PURE__*/
+  messageDesc(file_services_organization_v1_organization, 16);
+
+/**
+ * @generated from message controlplane.v1.RemoveMemberRequest
+ */
+export type RemoveMemberRequest = Message<"controlplane.v1.RemoveMemberRequest"> & {
+  /**
+   * @generated from field: string org_id = 1;
+   */
+  orgId: string;
+
+  /**
+   * @generated from field: string user_id = 2;
+   */
+  userId: string;
+};
+
+/**
+ * Describes the message controlplane.v1.RemoveMemberRequest.
+ * Use `create(RemoveMemberRequestSchema)` to create a new message.
+ */
+export const RemoveMemberRequestSchema: GenMessage<RemoveMemberRequest> = /*@__PURE__*/
+  messageDesc(file_services_organization_v1_organization, 17);
+
+/**
+ * @generated from message controlplane.v1.RemoveMemberResponse
+ */
+export type RemoveMemberResponse = Message<"controlplane.v1.RemoveMemberResponse"> & {
+  /**
+   * Access tokens revoked: the member's own in this org (daemon-bound ones
+   * included) and the org-automation tokens they minted.
+   *
+   * @generated from field: int32 revoked_token_count = 1;
+   */
+  revokedTokenCount: number;
+};
+
+/**
+ * Describes the message controlplane.v1.RemoveMemberResponse.
+ * Use `create(RemoveMemberResponseSchema)` to create a new message.
+ */
+export const RemoveMemberResponseSchema: GenMessage<RemoveMemberResponse> = /*@__PURE__*/
+  messageDesc(file_services_organization_v1_organization, 18);
+
+/**
+ * @generated from message controlplane.v1.LeaveOrganizationRequest
+ */
+export type LeaveOrganizationRequest = Message<"controlplane.v1.LeaveOrganizationRequest"> & {
+  /**
+   * @generated from field: string org_id = 1;
+   */
+  orgId: string;
+};
+
+/**
+ * Describes the message controlplane.v1.LeaveOrganizationRequest.
+ * Use `create(LeaveOrganizationRequestSchema)` to create a new message.
+ */
+export const LeaveOrganizationRequestSchema: GenMessage<LeaveOrganizationRequest> = /*@__PURE__*/
+  messageDesc(file_services_organization_v1_organization, 19);
+
+/**
+ * @generated from message controlplane.v1.LeaveOrganizationResponse
+ */
+export type LeaveOrganizationResponse = Message<"controlplane.v1.LeaveOrganizationResponse"> & {
+  /**
+   * The caller's default org now; "" when they belong to no org.
+   *
+   * @generated from field: string default_org_id = 1;
+   */
+  defaultOrgId: string;
+
+  /**
+   * The caller, who is the member that left.
+   *
+   * @generated from field: string user_id = 2;
+   */
+  userId: string;
+
+  /**
+   * Access tokens revoked, as RemoveMemberResponse.revoked_token_count.
+   *
+   * @generated from field: int32 revoked_token_count = 3;
+   */
+  revokedTokenCount: number;
+};
+
+/**
+ * Describes the message controlplane.v1.LeaveOrganizationResponse.
+ * Use `create(LeaveOrganizationResponseSchema)` to create a new message.
+ */
+export const LeaveOrganizationResponseSchema: GenMessage<LeaveOrganizationResponse> = /*@__PURE__*/
+  messageDesc(file_services_organization_v1_organization, 20);
+
+/**
+ * @generated from message controlplane.v1.UpdateMemberRoleRequest
+ */
+export type UpdateMemberRoleRequest = Message<"controlplane.v1.UpdateMemberRoleRequest"> & {
+  /**
+   * @generated from field: string org_id = 1;
+   */
+  orgId: string;
+
+  /**
+   * @generated from field: string user_id = 2;
+   */
+  userId: string;
+
+  /**
+   * "member", "admin" or "owner".
+   *
+   * @generated from field: string role = 3;
+   */
+  role: string;
+};
+
+/**
+ * Describes the message controlplane.v1.UpdateMemberRoleRequest.
+ * Use `create(UpdateMemberRoleRequestSchema)` to create a new message.
+ */
+export const UpdateMemberRoleRequestSchema: GenMessage<UpdateMemberRoleRequest> = /*@__PURE__*/
+  messageDesc(file_services_organization_v1_organization, 21);
+
+/**
+ * @generated from message controlplane.v1.UpdateMemberRoleResponse
+ */
+export type UpdateMemberRoleResponse = Message<"controlplane.v1.UpdateMemberRoleResponse"> & {
+  /**
+   * @generated from field: controlplane.v1.OrgMember member = 1;
+   */
+  member?: OrgMember | undefined;
+
+  /**
+   * The org permissions the member holds after the change.
+   *
+   * @generated from field: repeated string scopes = 2;
+   */
+  scopes: string[];
+};
+
+/**
+ * Describes the message controlplane.v1.UpdateMemberRoleResponse.
+ * Use `create(UpdateMemberRoleResponseSchema)` to create a new message.
+ */
+export const UpdateMemberRoleResponseSchema: GenMessage<UpdateMemberRoleResponse> = /*@__PURE__*/
+  messageDesc(file_services_organization_v1_organization, 22);
 
 /**
  * MyOrganization is one org the caller belongs to, as they see it. It
@@ -68,8 +766,10 @@ export type MyOrganization = Message<"controlplane.v1.MyOrganization"> & {
   isDefault: boolean;
 
   /**
-   * True when the caller is the org's owner (organizations.owner_id). An org
-   * has exactly one owner. Their membership role is normally "owner" too.
+   * True when the caller's role in this org is "owner". An org may have
+   * several owners; this is the same fact as role == "owner", kept for old
+   * clients. (Before several owners existed it meant
+   * organizations.owner_id == caller, which was the same for every org.)
    *
    * @generated from field: bool is_owner = 6;
    */
@@ -93,7 +793,7 @@ export type MyOrganization = Message<"controlplane.v1.MyOrganization"> & {
  * Use `create(MyOrganizationSchema)` to create a new message.
  */
 export const MyOrganizationSchema: GenMessage<MyOrganization> = /*@__PURE__*/
-  messageDesc(file_services_organization_v1_organization, 0);
+  messageDesc(file_services_organization_v1_organization, 23);
 
 /**
  * @generated from message controlplane.v1.ListMyOrganizationsRequest
@@ -106,7 +806,7 @@ export type ListMyOrganizationsRequest = Message<"controlplane.v1.ListMyOrganiza
  * Use `create(ListMyOrganizationsRequestSchema)` to create a new message.
  */
 export const ListMyOrganizationsRequestSchema: GenMessage<ListMyOrganizationsRequest> = /*@__PURE__*/
-  messageDesc(file_services_organization_v1_organization, 1);
+  messageDesc(file_services_organization_v1_organization, 24);
 
 /**
  * @generated from message controlplane.v1.ListMyOrganizationsResponse
@@ -132,7 +832,7 @@ export type ListMyOrganizationsResponse = Message<"controlplane.v1.ListMyOrganiz
  * Use `create(ListMyOrganizationsResponseSchema)` to create a new message.
  */
 export const ListMyOrganizationsResponseSchema: GenMessage<ListMyOrganizationsResponse> = /*@__PURE__*/
-  messageDesc(file_services_organization_v1_organization, 2);
+  messageDesc(file_services_organization_v1_organization, 25);
 
 /**
  * @generated from message controlplane.v1.SetDefaultOrganizationRequest
@@ -149,7 +849,7 @@ export type SetDefaultOrganizationRequest = Message<"controlplane.v1.SetDefaultO
  * Use `create(SetDefaultOrganizationRequestSchema)` to create a new message.
  */
 export const SetDefaultOrganizationRequestSchema: GenMessage<SetDefaultOrganizationRequest> = /*@__PURE__*/
-  messageDesc(file_services_organization_v1_organization, 3);
+  messageDesc(file_services_organization_v1_organization, 26);
 
 /**
  * @generated from message controlplane.v1.SetDefaultOrganizationResponse
@@ -166,7 +866,7 @@ export type SetDefaultOrganizationResponse = Message<"controlplane.v1.SetDefault
  * Use `create(SetDefaultOrganizationResponseSchema)` to create a new message.
  */
 export const SetDefaultOrganizationResponseSchema: GenMessage<SetDefaultOrganizationResponse> = /*@__PURE__*/
-  messageDesc(file_services_organization_v1_organization, 4);
+  messageDesc(file_services_organization_v1_organization, 27);
 
 /**
  * @generated from service controlplane.v1.OrganizationService
@@ -200,6 +900,141 @@ export const OrganizationService: GenService<{
     methodKind: "unary";
     input: typeof SetDefaultOrganizationRequestSchema;
     output: typeof SetDefaultOrganizationResponseSchema;
+  },
+  /**
+   * CreateOrganization creates an org owned by the caller, with them as its
+   * owner member. It becomes their default only when they have none. Anyone
+   * with a verified email may create one (reason "email_unverified"
+   * otherwise), up to a per-person cap (ResourceExhausted, "owned_org_limit").
+   * A taken slug is AlreadyExists, "slug_taken".
+   *
+   * forge:custom — not the generic CRUD of the shared Organization message:
+   * it creates the owner membership and grant preset in the same transaction.
+   *
+   * @generated from rpc controlplane.v1.OrganizationService.CreateOrganization
+   */
+  createOrganization: {
+    methodKind: "unary";
+    input: typeof CreateOrganizationRequestSchema;
+    output: typeof CreateOrganizationResponseSchema;
+  },
+  /**
+   * ListMembers lists the org's members (roster fields only) and its seat
+   * usage. Any member may call it. Which permissions each member holds stays
+   * on AccessTokenService.ListOrgMemberGrants.
+   *
+   * @generated from rpc controlplane.v1.OrganizationService.ListMembers
+   */
+  listMembers: {
+    methodKind: "unary";
+    input: typeof ListMembersRequestSchema;
+    output: typeof ListMembersResponseSchema;
+  },
+  /**
+   * InviteMember invites an email address into the org with a role. Admin or
+   * owner; only an owner may invite an owner. Idempotent per (org, email): a
+   * second invite of an address with a pending invitation rotates its token,
+   * extends its expiry, re-sends it and answers resent=true (that is the
+   * "resend" action). accept_url is returned to the inviter as a copy-link
+   * fallback; it is useless to anyone whose verified email does not match.
+   *
+   * @generated from rpc controlplane.v1.OrganizationService.InviteMember
+   */
+  inviteMember: {
+    methodKind: "unary";
+    input: typeof InviteMemberRequestSchema;
+    output: typeof InviteMemberResponseSchema;
+  },
+  /**
+   * ListInvitations lists the org's invitations, pending ones by default.
+   * Admin or owner: they are other people's email addresses.
+   *
+   * @generated from rpc controlplane.v1.OrganizationService.ListInvitations
+   */
+  listInvitations: {
+    methodKind: "unary";
+    input: typeof ListInvitationsRequestSchema;
+    output: typeof ListInvitationsResponseSchema;
+  },
+  /**
+   * RevokeInvitation revokes a pending invitation. Admin or owner; only an
+   * owner may revoke an owner invitation.
+   *
+   * @generated from rpc controlplane.v1.OrganizationService.RevokeInvitation
+   */
+  revokeInvitation: {
+    methodKind: "unary";
+    input: typeof RevokeInvitationRequestSchema;
+    output: typeof RevokeInvitationResponseSchema;
+  },
+  /**
+   * GetInvitation previews an invitation from its token, for the accept page.
+   * It discloses little: the org's name, the role, the inviter, a masked
+   * address and whether it matches the caller's verified email. An unknown
+   * token is NotFound.
+   *
+   * @generated from rpc controlplane.v1.OrganizationService.GetInvitation
+   */
+  getInvitation: {
+    methodKind: "unary";
+    input: typeof GetInvitationRequestSchema;
+    output: typeof GetInvitationResponseSchema;
+  },
+  /**
+   * AcceptInvitation joins the caller to the invitation's org with its role.
+   * The caller's VERIFIED email must equal the invitation's
+   * (PermissionDenied, "invite_email_mismatch", and the invitation stays
+   * pending). The seat limit is enforced here, under the org's membership
+   * lock (ResourceExhausted, "seat_limit_reached").
+   *
+   * @generated from rpc controlplane.v1.OrganizationService.AcceptInvitation
+   */
+  acceptInvitation: {
+    methodKind: "unary";
+    input: typeof AcceptInvitationRequestSchema;
+    output: typeof AcceptInvitationResponseSchema;
+  },
+  /**
+   * RemoveMember removes another member. Admin or owner; only an owner may
+   * remove an owner; not yourself (FailedPrecondition, "cannot_remove_self":
+   * use LeaveOrganization). The last owner cannot be removed ("last_owner").
+   * Removal deletes their grants, revokes their tokens in this org (the
+   * daemon-bound tokens of machines they operate here included: the machine
+   * is the org's and stops) and the org-automation tokens they minted, and
+   * retires their LLM gateway keys in this org.
+   *
+   * @generated from rpc controlplane.v1.OrganizationService.RemoveMember
+   */
+  removeMember: {
+    methodKind: "unary";
+    input: typeof RemoveMemberRequestSchema;
+    output: typeof RemoveMemberResponseSchema;
+  },
+  /**
+   * LeaveOrganization removes the caller from the org, with the same cleanup
+   * as RemoveMember. The last owner cannot leave ("last_owner"). Returns the
+   * caller's default org afterwards ("" when they belong to none).
+   *
+   * @generated from rpc controlplane.v1.OrganizationService.LeaveOrganization
+   */
+  leaveOrganization: {
+    methodKind: "unary";
+    input: typeof LeaveOrganizationRequestSchema;
+    output: typeof LeaveOrganizationResponseSchema;
+  },
+  /**
+   * UpdateMemberRole changes a member's role. Admin or owner; only an owner
+   * may promote to or demote from owner. The current role is a no-op that
+   * leaves grants alone; a real change resets the member's grants to the new
+   * role's preset, and scopes says what they hold now. Demoting the last
+   * owner is refused ("last_owner").
+   *
+   * @generated from rpc controlplane.v1.OrganizationService.UpdateMemberRole
+   */
+  updateMemberRole: {
+    methodKind: "unary";
+    input: typeof UpdateMemberRoleRequestSchema;
+    output: typeof UpdateMemberRoleResponseSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_services_organization_v1_organization, 0);

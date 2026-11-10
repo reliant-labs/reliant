@@ -112,6 +112,12 @@ type Runner struct {
 
 	// onRunStep is Options.OnRunStep.
 	onRunStep func(nodePath, command string)
+
+	// cancelAtRunStep, when set, is the path of a `run` node whose dispatch
+	// cancels the whole run, the way control_run cancel does, while the
+	// command is still running — a test seam for what a cancel runs
+	// (finally) and what it leaves alone (on_failure).
+	cancelAtRunStep string
 }
 
 // versionOverride is what GetVersion(changeID, DefaultVersion, max) returns.
@@ -979,6 +985,16 @@ func (r *Runner) RunContext(ctx context.Context, sc *scenario.Scenario) (result 
 		}
 	}
 
+	// And the finally handler.
+	var finally *scenario.FinallyObserved
+	if r.workflow.GetFinally() != nil {
+		finally = &scenario.FinallyObserved{}
+		var rec runtime.FinallyRecord
+		if q, qErr := env.QueryWorkflow(runtime.FinallyQuery); qErr == nil && q.Get(&rec) == nil {
+			*finally = scenario.FinallyObserved{Ran: rec.Ran, Status: rec.Status, HandlerError: rec.HandlerError}
+		}
+	}
+
 	execution := scenario.ExecutionDetails{
 		NodesReached:   rec.reached,
 		NodesCompleted: rec.completed,
@@ -990,6 +1006,7 @@ func (r *Runner) RunContext(ctx context.Context, sc *scenario.Scenario) (result 
 		// saved" is a real answer (see scenario.checkMessageExpectations).
 		SavedMessages: append([]scenario.SavedMessage{}, rec.saved...),
 		OnFailure:     onFailure,
+		Finally:       finally,
 	}
 
 	if runErr := env.GetWorkflowError(); runErr != nil {
@@ -2112,7 +2129,7 @@ func (r *Runner) registerActivities(
 		// reached node. Register the shape the runtime actually sends.
 		if activityName == "ExecuteRunStep" {
 			env.RegisterActivityWithOptions(
-				func(_ context.Context, in map[string]interface{}) (map[string]interface{}, error) {
+				func(ctx context.Context, in map[string]interface{}) (map[string]interface{}, error) {
 					if err := guard.check(); err != nil {
 						return nil, err
 					}
@@ -2138,6 +2155,13 @@ func (r *Runner) registerActivities(
 					if r.onRunStep != nil {
 						command, _ := in["command"].(string)
 						r.onRunStep(id, command)
+					}
+					if r.cancelAtRunStep != "" && id == r.cancelAtRunStep {
+						// The command is in flight when the run is cancelled:
+						// it ends only when Temporal cancels it.
+						env.CancelWorkflow()
+						<-ctx.Done()
+						return nil, ctx.Err()
 					}
 					out := normalizeOutput(events.next(id), activityName)
 					var req *types.SaveMessageRequest

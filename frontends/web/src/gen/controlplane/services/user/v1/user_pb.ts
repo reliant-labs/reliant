@@ -131,7 +131,9 @@ export const CompleteOnboardingResponseSchema: GenMessage<CompleteOnboardingResp
  */
 export type AccountDeletionBlocker = Message<"controlplane.v1.AccountDeletionBlocker"> & {
   /**
-   * Machine-readable reason: "paid_subscription".
+   * Machine-readable reason: "paid_subscription", or
+   * "sole_owner_of_shared_org" (the caller is the only owner of an org with
+   * other members; they make someone else an owner, or leave, first).
    *
    * @generated from field: string reason = 1;
    */

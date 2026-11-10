@@ -3,14 +3,12 @@
 /**
  * The demo console's banner: this is sample data, and changes are off.
  *
- *  - In every shell: "Guided tour" (hidden while a step is open), and
- *    "How this app was built" (the recorded forge run, `?section=built`).
- *  - Reliant and the forge shell: "Leave the demo" (forge's Apps / the project
- *    picker).
- *  - The public demo (lib/shell.ts `demo`): Install forge and Sign up instead
- *    (there is nowhere to leave to), and one line saying what it records
- *    (lib/demoTelemetry.ts), and where its data comes from when that is not
- *    the built-in sample (DEMO_DATA_SOURCE, demoData/demoDataStatus.ts).
+ *  - "Take the tour" (hidden while a step is open), and "How it was built"
+ *    (the recorded forge run, `?section=built`).
+ *  - "Leave the demo" (forge's Apps / the project picker).
+ *
+ * Reliant and the forge shell only: the public demo (lib/shell.ts `demo`) says
+ * the same once, in its action row (DemoScreenActions), with what it records.
  */
 
 import { useNavigate, useSearch } from "@tanstack/react-router";
@@ -19,12 +17,8 @@ import { Compass, FlaskConical, Hammer } from "lucide-react";
 import { parseTourParam } from "@/components/Onboarding/tourParam";
 import type { TourShell } from "@/components/Onboarding/tourShell";
 import { useTourNavigation } from "@/components/Onboarding/useTourNavigation";
-import { PRIVACY_POLICY_URL } from "@/lib/privacyLinks";
 import { trackEvent } from "@/lib/analytics";
-import { browserOptedOut, demoTelemetry, demoTelemetryNotice } from "@/lib/demoTelemetry";
-import { isDemoShell } from "@/lib/shell";
 
-import { useDemoDataStatus } from "./demoData/demoDataStatus";
 import { DEMO_SECTION_BUILT, FORGE_DEMO_PATH } from "./demoPath";
 
 /** Where "Leave the demo" goes: forge's Apps in Reliant, the project picker in the forge shell. */
@@ -37,10 +31,6 @@ export function DemoBanner({ shell }: { shell: TourShell }) {
   const { startJourney } = useTourNavigation();
   const search = useSearch({ strict: false }) as { tour?: unknown; section?: unknown };
   const tour = parseTourParam(search.tour);
-  const demo = isDemoShell();
-  const optedOut = demo && browserOptedOut();
-  const notice = demo ? demoTelemetryNotice(demoTelemetry(optedOut), optedOut) : null;
-  const data = useDemoDataStatus();
 
   return (
     <div
@@ -53,14 +43,8 @@ export function DemoBanner({ shell }: { shell: TourShell }) {
           <FlaskConical className="h-4 w-4" aria-hidden="true" />
           Demo data
         </span>
-        <span className="min-w-0 flex-1 basis-56 text-ink-muted" data-testid="forge-demo-data" data-source={demo ? data : "fixtures"}>
-          {!demo
-            ? "Sample data from a made-up app called shop. Nothing here touches your projects."
-            : data === "live"
-              ? "Live data from shop, a sample forge app. Nothing you click here changes anything."
-              : data === "fallback"
-                ? "Showing sample data: the live demo did not answer. Nothing you click here changes anything."
-                : "Sample data from a made-up app called shop. Nothing you click here changes anything."}
+        <span className="min-w-0 flex-1 basis-56 text-ink-muted" data-testid="forge-demo-data" data-source="fixtures">
+          Sample data from a made-up app called shop. Nothing here touches your projects.
         </span>
         {!tour && (
           <button
@@ -68,12 +52,12 @@ export function DemoBanner({ shell }: { shell: TourShell }) {
             className={LINK}
             onClick={() => {
               trackEvent("demo_tour_restarted", {});
-              startJourney("forge", demo ? "demo" : "menu");
+              startJourney("forge", "menu");
             }}
             data-testid="forge-demo-restart"
           >
             <Compass className="h-3.5 w-3.5" aria-hidden="true" />
-            Guided tour
+            Take the tour
           </button>
         )}
         {search.section !== DEMO_SECTION_BUILT && (
@@ -90,33 +74,23 @@ export function DemoBanner({ shell }: { shell: TourShell }) {
             data-testid="forge-demo-how-built"
           >
             <Hammer className="h-3.5 w-3.5" aria-hidden="true" />
-            How this app was built
+            How it was built
           </button>
         )}
-        {!demo && (
-          <a
-            href={exitHref(shell)}
-            onClick={(event) => {
-              if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-              event.preventDefault();
-              // Leaving the demo leaves its tour too: the root keeps `?tour=` unless told otherwise.
-              void navigate({ to: exitHref(shell), search: { tour: undefined } } as never);
-            }}
-            className={LINK}
-            data-testid="forge-demo-exit"
-          >
-            Leave the demo
-          </a>
-        )}
+        <a
+          href={exitHref(shell)}
+          onClick={(event) => {
+            if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+            event.preventDefault();
+            // Leaving the demo leaves its tour too: the root keeps `?tour=` unless told otherwise.
+            void navigate({ to: exitHref(shell), search: { tour: undefined } } as never);
+          }}
+          className={LINK}
+          data-testid="forge-demo-exit"
+        >
+          Leave the demo
+        </a>
       </div>
-      {notice && (
-        <p className="text-xs text-ink-muted" data-testid="forge-demo-telemetry-notice">
-          {notice}{" "}
-          <a href={PRIVACY_POLICY_URL} target="_blank" rel="noopener noreferrer" className="underline underline-offset-2">
-            Privacy
-          </a>
-        </p>
-      )}
     </div>
   );
 }

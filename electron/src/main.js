@@ -1888,60 +1888,6 @@ ipcMain.handle("restart-backend", async () => {
   return { success: false, error: "Backend manager not initialized" };
 });
 
-// Mock driver configuration handlers
-ipcMain.handle("get-mock-driver-config", async () => {
-  try {
-    const configPath = path.join(
-      app.getPath("userData"),
-      "mock-driver-config.json"
-    );
-    if (fs.existsSync(configPath)) {
-      const data = fs.readFileSync(configPath, "utf8");
-      return JSON.parse(data);
-    }
-    return null;
-  } catch (error) {
-    log.error("[IPC] Failed to load mock driver config:", error);
-    return null;
-  }
-});
-
-ipcMain.handle("set-mock-driver-config", async (event, config) => {
-  try {
-    const configPath = path.join(
-      app.getPath("userData"),
-      "mock-driver-config.json"
-    );
-    fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
-
-    // Store in backend manager for next restart
-    if (backendManager) {
-      // mockDriverConfig removed — daemon mode doesn't support mock drivers
-    }
-
-    return true;
-  } catch (error) {
-    log.error("[IPC] Failed to save mock driver config:", error);
-    throw error;
-  }
-});
-
-ipcMain.handle("browse-mock-file", async () => {
-  const result = await dialog.showOpenDialog({
-    properties: ["openFile"],
-    title: "Select Mock Driver Replay File",
-    filters: [
-      { name: "JSON Files", extensions: ["json"] },
-      { name: "All Files", extensions: ["*"] },
-    ],
-  });
-
-  if (!result.cancelled && result.filePaths.length > 0) {
-    return result.filePaths[0];
-  }
-  return null;
-});
-
 ipcMain.handle("select-directory", async (event) => {
   const result = await dialog.showOpenDialog({
     properties: ["openDirectory", "createDirectory"],

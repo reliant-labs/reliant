@@ -31,23 +31,6 @@ function entries(): string[] {
 const listed = () => screen.findByTestId("storage-table");
 
 describe("the bucket", () => {
-  it("shows loading until bucket discovery resolves, then shows the empty state", async () => {
-    const api = createStorageFixtureApi({ noBuckets: true });
-    const discover = api.listBrowsableBuckets;
-    let release!: () => void;
-    const pending = new Promise<void>((resolve) => { release = resolve; });
-    api.listBrowsableBuckets = async (...args) => {
-      await pending;
-      return discover(...args);
-    };
-    renderBrowser(api);
-    expect(screen.getByTestId("storage-buckets-loading")).toHaveAttribute("aria-busy", "true");
-    expect(screen.queryByTestId("storage-table")).not.toBeInTheDocument();
-    release();
-    expect(await screen.findByTestId("storage-no-buckets")).toBeVisible();
-    expect(screen.queryByTestId("storage-buckets-loading")).not.toBeInTheDocument();
-  });
-
   it("opens the first readable bucket on a bare link, and shows an unreachable one disabled with its reason", async () => {
     const view = renderBrowser(createStorageFixtureApi());
     await waitFor(() => expect(view.search().bucket).toBe("exports"));

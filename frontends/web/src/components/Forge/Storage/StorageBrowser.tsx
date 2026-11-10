@@ -22,7 +22,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { HardDrive, ShieldCheck } from "lucide-react";
+import { ShieldCheck } from "lucide-react";
 
 import Button from "@/components/forge-ui/button";
 import Card from "@/components/forge-ui/card";
@@ -36,7 +36,7 @@ import { BucketSelector, StoragePolicyTag } from "./BucketSelector";
 import { ObjectListing } from "./ObjectListing";
 import { ObjectPane } from "./ObjectPane";
 import { clearStorageAccess, readStorageAccess, writeStorageAccess } from "./storageAccess-model";
-import { StorageDenied, StorageError, StorageLoading, StorageNote } from "./StorageStates";
+import { StorageDenied, StorageError, StorageLoading, StorageNoBuckets, StorageNote } from "./StorageStates";
 import { isBucketName, objectOf, patchStorageSearch, prefixOf, type StorageSearch } from "./storageUrl-model";
 import { useBrowsableBuckets } from "./useStorageBrowser";
 
@@ -126,16 +126,9 @@ function ReaderStorageBrowser({ env, search, onNavigate, href, onDownloadUrl = n
       </Card>
     );
   }
-  if (buckets.length === 0) {
-    return (
-      <StorageNote testId="storage-no-buckets" icon={<HardDrive className="h-4 w-4" />} title={`${env.name} has no buckets`}>
-        <p>
-          The browser shows the buckets an environment declares: each <code className="font-mono text-ink">forge.Bucket</code> in its last
-          recorded release. {env.name}&apos;s declares none.
-        </p>
-      </StorageNote>
-    );
-  }
+  // Only now is "none" known: the list was read and came back empty. With no
+  // bucket there is nothing to read, so an audited environment asks no reason.
+  if (buckets.length === 0) return <StorageNoBuckets env={env.name} />;
 
   const objectKey = objectOf(search);
   // Wait for the URL correction before starting reads: a missing bucket's

@@ -1,11 +1,12 @@
 // Copyright (c) 2025 Reliant Labs
-import { afterEach, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createMemoryHistory, createRootRoute, createRoute, createRouter, Outlet, RouterProvider } from "@tanstack/react-router";
 import { ForgeLayout } from "../../ForgeLayout";
 import { DemoTips } from "../tips/DemoTips";
 import { hasOpenEscapeLayer } from "@/hooks/useEscapeLayer";
+import { resetDemoSessionForTests } from "../demoSession";
 
 function mount(width: number) {
   vi.stubGlobal("matchMedia", (query: string) => ({ matches: query.includes("1023px") && width <= 1023, media: query, onchange: null, addListener: vi.fn(), removeListener: vi.fn(), addEventListener: vi.fn(), removeEventListener: vi.fn(), dispatchEvent: vi.fn() }));
@@ -17,39 +18,40 @@ function mount(width: number) {
   render(<RouterProvider router={router} />);
   return router;
 }
+beforeEach(() => resetDemoSessionForTests());
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
-it.each([360, 390, 768, 1023, 1440])("keeps Escape local after Done/About reopening with ForgeLayout capture at %ipx", async (width) => {
+it.each([1024, 1440])("keeps Escape local after Done/? reopening with ForgeLayout capture at %ipx", async (width) => {
   const router = mount(width);
   await screen.findByTestId("tour-callout");
   const original = router.state.location.href;
   fireEvent.click(screen.getByTestId("tour-next"));
-  fireEvent.click(await screen.findByTestId("demo-page-info"));
+  const about = await screen.findByTestId("demo-page-info");
+  about.focus();
+  fireEvent.click(about);
   expect(await screen.findByTestId("tour-callout")).toBeVisible();
   expect(hasOpenEscapeLayer()).toBe(true);
   const escape = new KeyboardEvent("keydown", {key:"Escape", bubbles:true, cancelable:true});
+  screen.getByTestId("tour-next").focus();
   fireEvent(screen.getByTestId("tour-next"), escape);
   await waitFor(() => expect(screen.queryByTestId("tour-callout")).toBeNull());
   expect(router.state.location.href).toBe(original);
-  expect(screen.getByTestId("demo-start-tour")).toHaveFocus();
+  // Focus was in the card: it returns to "?", never to an unrelated control.
+  expect(screen.getByTestId("demo-page-info")).toHaveFocus();
   expect(hasOpenEscapeLayer()).toBe(false);
 });
 
-it.each([390, 1440])("closes contextual How before the underlying page explanation at %ipx", async (width) => {
+it.each([360, 390, 768, 1023])("on a phone at %ipx, the tip is a closed one-line disclosure in the page", async (width) => {
   const router = mount(width);
-  const card = await screen.findByTestId("tour-callout");
-  const original = router.state.location.href;
-  const trigger = within(card).getByRole("button", {name:"How Forge builds this"});
-  trigger.focus(); fireEvent.click(trigger);
-  const dialog = await screen.findByRole("dialog", {name:"How Forge builds this"});
-  await within(dialog).findByTestId("how-built");
-  fireEvent.keyDown(within(dialog).getByRole("button", {name:"Back to exploring"}), {key:"Escape"});
-  expect(screen.queryByRole("dialog")).toBeNull();
-  expect(screen.getByTestId("tour-callout")).toBeVisible();
-  expect(trigger).toHaveFocus();
-  expect(router.state.location.href).toBe(original);
-  fireEvent.keyDown(trigger, {key:"Escape"});
+  const about = await screen.findByTestId("demo-page-info");
+  expect(about).toHaveTextContent("About this page");
+  expect(about).toHaveAttribute("aria-expanded", "false");
+  expect(screen.queryByTestId("tour-callout")).toBeNull();
+  fireEvent.click(about);
+  expect(await screen.findByTestId("tour-callout")).toBeVisible();
+  // In the page's flow: no layer of its own over the page.
+  expect(hasOpenEscapeLayer()).toBe(false);
+  fireEvent.click(about);
   await waitFor(() => expect(screen.queryByTestId("tour-callout")).toBeNull());
-  expect(router.state.location.href).toBe(original);
-  expect(screen.getByTestId("demo-start-tour")).toHaveFocus();
+  expect(router.state.location.pathname).toBe("/forge/p/shop");
 });

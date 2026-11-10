@@ -377,3 +377,76 @@ func TestKindForScopes_DaemonWinsWhereverItSits(t *testing.T) {
 		t.Errorf("an exchanged deploy token is no session kind; got %v", got)
 	}
 }
+
+// wildcardAuthority answers the parent's introspection as the control plane
+// does for a daemon or login credential: the WILDCARD, resolved to the
+// person's org-wide grants only, so a grant bound to one environment is
+// absent from Scopes.
+type wildcardAuthority struct {
+	*recordingMint
+	parentToken string
+	resolved    fat.Set
+	all         bool
+}
+
+func (a wildcardAuthority) Introspect(ctx context.Context, token string) (*fat.Principal, error) {
+	p, err := a.Memory.Introspect(ctx, token)
+	if err != nil || token != a.parentToken {
+		return p, err
+	}
+	shown := *p
+	shown.Scopes, shown.AllScopes = a.resolved, a.all
+	return &shown, nil
+}
+
+// A prod-only release manager's daemon or login credential resolves to
+// org-wide grants, which leave deploy:write and secret:write out. The helper's
+// exchange still NAMES the environment-bindable ones it asks for, because a
+// wildcard's ceiling holds them, and the control plane's MintForUser decides
+// (it keeps one only when the person holds it on some environment). An
+// explicit-list parent hands on only what it resolved to, and a scope that
+// cannot be bound to an environment is never added.
+func TestExchangeToken_WildcardHandsOnEnvironmentBindableScopes(t *testing.T) {
+	resolved := fat.SetOf(fat.ScopeDaemonConnect, fat.ScopeDeployRead, fat.ScopeSecretRead)
+	for _, tc := range []struct {
+		name   string
+		all    bool
+		ask    []string
+		code   connect.Code
+		minted []fat.Scope
+	}{
+		{name: "wildcard: bound secret:write is asked for", all: true,
+			ask: []string{"secret:read", "secret:write"}, minted: []fat.Scope{fat.ScopeSecretRead, fat.ScopeSecretWrite}},
+		{name: "wildcard: db:query too", all: true,
+			ask: []string{"db:query"}, minted: []fat.Scope{fat.ScopeDBQuery}},
+		{name: "wildcard: a scope that cannot be bound is not added", all: true,
+			ask: []string{"domain:write"}, code: connect.CodePermissionDenied},
+		{name: "explicit list: only what it resolved to", all: false,
+			ask: []string{"secret:write"}, code: connect.CodePermissionDenied},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			rec := &recordingMint{Memory: tokenauthority.NewMemory()}
+			bearer := mintSession(t, rec.Memory, "user-1", tokenauthority.MintRequest{Scopes: fullDaemon})
+			svc := newTokenService(t, wildcardAuthority{recordingMint: rec, parentToken: bearer, resolved: resolved, all: tc.all},
+				TokenControlPlane{Issuer: testControlPlane})
+			_, err := svc.ExchangeToken(context.Background(), exchangeReq(bearer, &reliantv1.ExchangeTokenRequest{
+				Audience: testControlPlane, Scopes: tc.ask,
+			}))
+			if tc.code != 0 {
+				if svcerr.Code(err) != tc.code {
+					t.Fatalf("err = %v, want %v", err, tc.code)
+				}
+				if len(rec.asked) != 0 {
+					t.Fatalf("a refused exchange asked the authority for %v", rec.asked)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(rec.asked) != 1 || !reflect.DeepEqual(fat.SetOf(rec.asked[0]...), fat.SetOf(tc.minted...)) {
+				t.Fatalf("asked the authority for %v, want %v", rec.asked, tc.minted)
+			}
+		})
+	}
+}

@@ -3,8 +3,8 @@
 // CEL reference generator - validates CEL namespace and function documentation.
 //
 // SOURCE OF TRUTH:
-//   - internal/workflow/v2cel/types.go (namespace constants)
-//   - internal/workflow/v2cel/env.go (custom functions)
+//   - internal/workflow/cel/types.go (namespace constants)
+//   - internal/workflow/cel/env.go (custom functions)
 //   - Proto annotations [(reliant)] for node output types
 //
 // Previously this tool generated cel_reference.go with hardcoded CEL type registries.

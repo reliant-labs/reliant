@@ -330,21 +330,21 @@ func inCommits(ctx context.Context, checkout, head string, bases []string, memo 
 	if merged, ok := memo.get(key); ok {
 		return merged, nil
 	}
-	merged, err := inBaseUncached(ctx, checkout, head, bases)
+	merged, err := inBaseUncached(ctx, checkout, head, bases, memo)
 	if err == nil {
 		memo.put(key, merged)
 	}
 	return merged, err
 }
 
-func inBaseUncached(ctx context.Context, checkout, head string, bases []string) (bool, error) {
+func inBaseUncached(ctx context.Context, checkout, head string, bases []string, memo *commitMemo) (bool, error) {
 	for _, base := range bases {
 		if _, err := git(ctx, checkout, nil, "merge-base", "--is-ancestor", head, base); err == nil {
 			return true, nil
 		}
 	}
 	for _, base := range bases {
-		merged, err := patchesOnBase(ctx, checkout, base, head)
+		merged, err := patchesOnBaseWith(ctx, checkout, base, head, memo)
 		if err != nil {
 			return false, err
 		}
@@ -372,6 +372,12 @@ func inBaseUncached(ctx context.Context, checkout, head string, bases []string) 
 // the bytes; a merge commit inside head, whose changes `git cherry` skips; or
 // histories with no common ancestor.
 func patchesOnBase(ctx context.Context, checkout, base, head string) (bool, error) {
+	return patchesOnBaseWith(ctx, checkout, base, head, nil)
+}
+
+// patchesOnBaseWith is patchesOnBase whose squash check reads the base's
+// patch-ids from memo (commitMemo.basePatchIDs) when it has them.
+func patchesOnBaseWith(ctx context.Context, checkout, base, head string, memo *commitMemo) (bool, error) {
 	mb, err := git(ctx, checkout, nil, "merge-base", base, head)
 	if err != nil || mb == "" {
 		return false, nil
@@ -392,7 +398,7 @@ func patchesOnBase(ctx context.Context, checkout, base, head string) (bool, erro
 			return true, nil
 		}
 	}
-	return squashedOnto(ctx, checkout, base, head, mb)
+	return squashedOnto(ctx, checkout, base, head, mb, memo)
 }
 
 // touchesBinary reports whether the change from..to includes a binary file
@@ -415,7 +421,7 @@ func touchesBinary(ctx context.Context, checkout, from, to string) (bool, error)
 // squash merge of head's branch produces. The base side is one `git log -p`
 // piped through one `git patch-id`, bounded to maxSquashScan commits so a busy
 // base is not scanned back to its root.
-func squashedOnto(ctx context.Context, checkout, base, head, mb string) (bool, error) {
+func squashedOnto(ctx context.Context, checkout, base, head, mb string, memo *commitMemo) (bool, error) {
 	diff, err := gitRaw(ctx, checkout, nil, "diff", "--no-ext-diff", mb, head)
 	if err != nil {
 		return false, err
@@ -426,6 +432,9 @@ func squashedOnto(ctx context.Context, checkout, base, head, mb string) (bool, e
 	want, err := patchID(ctx, checkout, diff)
 	if err != nil || want == "" {
 		return false, err
+	}
+	if found, ok := memo.squashedFromCache(ctx, checkout, base, mb, want); ok {
+		return found, nil
 	}
 	log, err := gitRaw(ctx, checkout, nil, "log", "-p", "--no-merges", "--no-ext-diff", "--max-count="+strconv.Itoa(maxSquashScan), mb+".."+base)
 	if err != nil {
@@ -671,6 +680,93 @@ type commitMemo struct {
 	mu      sync.Mutex
 	answers map[string]memoAnswer
 	now     func() time.Time
+	// patches holds, per repository and base commit, the patch-id of each of
+	// the base's newest maxSquashScan non-merge commits: what squashedOnto
+	// compares a branch's whole diff with. One `git log -p` of a busy base
+	// took ~25s, and the machine sweep asked it of every unpushed worktree of
+	// the repository, all sharing that base.
+	patches map[string]map[string]string
+	// building serializes table builds, so concurrent sweep workers asking
+	// about one base build its table once.
+	building sync.Mutex
+}
+
+// basePatchCap bounds how many (repository, base commit) patch tables a memo
+// keeps.
+const basePatchCap = 8
+
+// squashedFromCache answers squashedOnto from the base's patch table: ok is
+// false when there is no memo, the table cannot be built, or some commit of
+// mb..base is not in it (then the caller scans as before).
+func (m *commitMemo) squashedFromCache(ctx context.Context, checkout, base, mb, want string) (found, ok bool) {
+	if m == nil {
+		return false, false
+	}
+	tip, err := git(ctx, checkout, nil, "rev-parse", "--verify", base+"^{commit}")
+	if err != nil {
+		return false, false
+	}
+	key := commonDirKey(ctx, checkout) + "\x00" + tip
+	table, err := m.basePatches(ctx, checkout, key, tip)
+	if err != nil {
+		return false, false
+	}
+	commits, err := git(ctx, checkout, nil, "rev-list", "--no-merges", "--max-count="+strconv.Itoa(maxSquashScan), mb+".."+tip)
+	if err != nil {
+		return false, false
+	}
+	for _, c := range strings.Fields(commits) {
+		id, in := table[c]
+		if !in {
+			return false, false
+		}
+		if id != "" && id == want {
+			return true, true
+		}
+	}
+	return false, true
+}
+
+// basePatches is the patch table of base commit tip, built once.
+func (m *commitMemo) basePatches(ctx context.Context, checkout, key, tip string) (map[string]string, error) {
+	m.building.Lock()
+	defer m.building.Unlock()
+	m.mu.Lock()
+	table, have := m.patches[key]
+	m.mu.Unlock()
+	if !have {
+		log, err := gitRaw(ctx, checkout, nil, "log", "-p", "--no-merges", "--no-ext-diff", "--max-count="+strconv.Itoa(maxSquashScan), tip)
+		if err != nil {
+			return nil, err
+		}
+		ids, err := gitStdin(ctx, checkout, string(log), "patch-id", "--stable")
+		if err != nil {
+			return nil, err
+		}
+		// Every commit in the window has an entry: one with an empty patch
+		// (an --allow-empty commit) gets no patch-id line, and matches
+		// nothing.
+		listed, err := git(ctx, checkout, nil, "rev-list", "--no-merges", "--max-count="+strconv.Itoa(maxSquashScan), tip)
+		if err != nil {
+			return nil, err
+		}
+		table = map[string]string{}
+		for _, c := range strings.Fields(listed) {
+			table[c] = ""
+		}
+		for _, line := range strings.Split(ids, "\n") {
+			if f := strings.Fields(line); len(f) == 2 {
+				table[f[1]] = f[0]
+			}
+		}
+		m.mu.Lock()
+		if m.patches == nil || len(m.patches) >= basePatchCap {
+			m.patches = map[string]map[string]string{}
+		}
+		m.patches[key] = table
+		m.mu.Unlock()
+	}
+	return table, nil
 }
 
 type memoAnswer struct {

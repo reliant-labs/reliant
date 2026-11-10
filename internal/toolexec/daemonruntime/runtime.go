@@ -52,6 +52,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/toolexec/daemonstate"
 	"github.com/reliant-labs/reliant/internal/toolexec/transport"
 	"github.com/reliant-labs/reliant/internal/workflow/workflowref"
+	"github.com/reliant-labs/reliant/internal/worktreereclaim"
 )
 
 const (
@@ -145,6 +146,9 @@ type daemonClient struct {
 	// DiskReport, and explains ENOSPC failures in tool results. The
 	// process-wide diskwatch.Default(), shared with the exec paths.
 	diskWatcher *diskwatch.Watcher
+	// reclaimMode is the machine sweep's mode; the heartbeat carries its
+	// proposals while it is dry-run or on (worktree_reclaim_proposals.go).
+	reclaimMode worktreereclaim.SweepMode
 
 	// diskGuard acts on the volumes diskWatcher reports: it reclaims past
 	// one threshold and refuses new heavy commands past another
@@ -240,6 +244,9 @@ type StartOptions struct {
 	// StorageReaper schedules forge's storage reaper on this machine; the zero
 	// value leaves it off (diskwatch.ReaperConfig).
 	StorageReaper diskwatch.ReaperConfig
+	// WorktreeReclaim is the machine-wide worktree reclaim, which rides the
+	// storage reaper's schedule; the zero value is off.
+	WorktreeReclaim worktreereclaim.SweepConfig
 	// Host is what the platform declares about where this daemon runs; zero
 	// off a workspace pod.
 	Host Host
@@ -383,6 +390,13 @@ func Start(ctx context.Context, opts StartOptions) error {
 	// And the reaper that keeps the build caches inside their budget: forge's
 	// storage pass, on a schedule and under pressure, when opts enables it.
 	client.diskWatcher.ConfigureReaper(opts.StorageReaper)
+	// Every linked worktree on the machine, on the same schedule: captured,
+	// then reclaimed, or only reported in dry-run (worktree_sweep.go).
+	client.diskWatcher.ConfigureWorktreeSweep(worktreeSweep(opts.WorktreeReclaim))
+	client.reclaimMode = opts.WorktreeReclaim.Mode
+	// An Inbox approval (worktree.reclaim_approve) runs with the same roots,
+	// thresholds and mode.
+	setReclaimSweepConfig(opts.WorktreeReclaim)
 	go client.diskWatcher.RunReaper(ctx)
 	// The disk guard reclaims with the same pass, at once, when a volume
 	// crosses its reclaim threshold — where the routine runs at all: a
@@ -1331,8 +1345,13 @@ func (d *daemonClient) handleServerMessage(ctx context.Context, s *gatewaySessio
 			return nil
 		}
 		// Recorded before the goroutine starts, so a status question that
-		// arrives right behind the request already finds it running.
-		d.results.start(m.ToolRequest.RequestId)
+		// arrives right behind the request already finds it running. A
+		// request id this daemon already ran is never run again
+		// (result_once.go).
+		if known, fresh := d.results.begin(m.ToolRequest.RequestId); !fresh {
+			d.answerRepeatedRequest(s, m.ToolRequest.RequestId, known)
+			return nil
+		}
 		if s != nil && m.ToolRequest.RequestId != "" {
 			s.inFlight.Add(1) // until a gateway acknowledges the result
 		}
@@ -1878,6 +1897,7 @@ func (d *daemonClient) runHeartbeats(ctx context.Context, s *gatewaySession, liv
 		if rep, ok := d.diskWatcher.Report(); ok {
 			d.diskGuard.Annotate(rep)
 			rep.Processes = d.procGuard.Report()
+			rep.WorktreeReclaim = worktreeReclaimProposals(d.reclaimMode)
 			hb.Disk = rep
 		}
 		hb.ToolCallsInFlight = uint32(d.results.runningCount())
@@ -2001,9 +2021,17 @@ func (d *daemonClient) executeTool(s *gatewaySession, req *reliantv1.ToolRequest
 		contextMap["user_id"] = d.currentUserID()
 	}
 	// A run step's result outlives its acknowledgement for a while, so a
-	// retry whose worker went away can still reattach to it (result_retain.go).
+	// retry whose worker went away can still reattach to it
+	// (result_retain.go), and its id is tombstoned so it never runs twice
+	// (result_once.go). Before the command runs; a tombstone that cannot be
+	// made durable means the command does not run at all (fail closed).
 	if runStep, _ := contextMap[toolexec.RunStepContextKey].(bool); runStep {
-		d.results.markRetain(req.RequestId)
+		if err := d.results.markRunStep(req.RequestId, time.Duration(req.TimeoutMs)*time.Millisecond); err != nil {
+			logging.Warn(logPrefix+" Not running a run step: its tombstone could not be persisted",
+				"request_id", req.RequestId, "error", err)
+			d.sendToolResult(s, req.RequestId, failClosedRunStep(req.RequestId, err))
+			return
+		}
 	}
 
 	// The worktree or project this call works in: recorded the first time it
