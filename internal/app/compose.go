@@ -1329,3 +1329,10 @@ func (g *Graph) newWorktreeReclaim() (*worktree_reclaim.Service, error) {
 		Sender: g.APIDaemonRouter().NATSDaemonRouter,
 	})
 }
+
+// newChatUpdateHeadsBackfill constructs the ChatUpdateHeadsBackfill provider (NewChatUpdateHeadsBackfill, internal/app/providers_api.go).
+func (g *Graph) newChatUpdateHeadsBackfill() (*ChatUpdateHeadsBackfill, error) {
+	return NewChatUpdateHeadsBackfill(ChatUpdateHeadsBackfillDeps{
+		DB: g.Database(),
+	})
+}
