@@ -23,7 +23,7 @@ export interface InputProps extends Omit<React.InputHTMLAttributes<HTMLInputElem
 }
 
 const sizeStyles: Record<InputSize, string> = {
-  sm: "h-8 px-2.5 text-xs",
+  sm: "h-8 px-2.5 text-sm",
   md: "h-10 px-3 text-sm",
   lg: "h-12 px-3.5 text-base",
 };
@@ -40,12 +40,12 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(function Input(
 
   const composed = [
     "block w-full rounded-md border bg-surface",
-    "placeholder:text-ink-subtle",
-    "focus:outline-none focus:ring-1",
+    "text-ink placeholder:text-ink-muted transition-colors",
+    "focus:outline-none focus-visible:ring-2",
     "disabled:cursor-not-allowed disabled:bg-surface-muted disabled:text-ink-muted",
     invalid
-      ? "border-danger focus:border-danger focus:ring-danger"
-      : "border-border-strong focus:border-accent focus:ring-accent",
+      ? "border-danger focus-visible:ring-danger"
+      : "border-border-strong hover:border-ink-muted focus-visible:ring-ring",
     sizeStyles[inputSize],
     className ?? "",
   ]

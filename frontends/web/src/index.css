@@ -208,6 +208,10 @@
   --color-ink: hsl(var(--foreground));
   --color-ink-muted: hsl(var(--muted-foreground));
   --color-ink-subtle: hsl(var(--muted-foreground) / 0.72);
+  /* Focus — the app's one focus ring (web-styling: "Focus: one recipe"). The
+     installed inputs and filter bar draw `ring-ring` so a forge field focuses
+     exactly like every other control; reliant's config declares the same. */
+  --color-ring: hsl(var(--ring));
   /* Accent — resolves through --forge-accent-src; scoped, see above. */
   --color-accent: hsl(var(--forge-accent-src));
   --color-accent-hover: hsl(var(--forge-accent-src) / 0.85);
