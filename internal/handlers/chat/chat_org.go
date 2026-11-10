@@ -14,9 +14,21 @@ import (
 // none, the caller's default. A default that cannot be resolved is "": the
 // chat takes its project's org, or none, and is stamped later (orgs.ListScope),
 // so starting a chat never fails over an org the request did not name.
-func (s *Service) newChatOrgs(ctx context.Context, userID, requested string) (named, def string, err error) {
+//
+// A chat in a project that belongs to an org belongs to that org, so a
+// request that names none is treated as naming the project's org: the caller
+// must be a live member of it (Named), whatever client sent the request.
+// Owning the project row is not authority in its org.
+func (s *Service) newChatOrgs(ctx context.Context, userID, projectID, requested string) (named, def string, err error) {
 	if s.deps.Orgs == nil {
 		return "", "", nil
+	}
+	if requested == "" && projectID != "" {
+		project, err := s.deps.Repo.GetProjectWithUserCheck(ctx, projectID, userID)
+		if err == nil && project.OrgID != nil {
+			requested = *project.OrgID
+		}
+		// A missing project is the launcher's to report.
 	}
 	if named, err = s.deps.Orgs.Named(ctx, userID, requested); err != nil || named != "" {
 		return named, "", err
