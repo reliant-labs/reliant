@@ -3,12 +3,14 @@ package workersetup_test
 
 import (
 	"context"
+	"encoding/json"
 	"log/slog"
 	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -21,6 +23,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	enums "go.temporal.io/api/enums/v1"
+	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/testsuite"
@@ -74,12 +77,12 @@ func TestRunStepSurvivesAWorkerRestart(t *testing.T) {
 		cmd.waitFor(t, "started")
 		a.drain(t)
 
+		// The retry reattaches while the command still runs: it asks the
+		// daemon what became of the request, and the daemon answers
+		// "running". Only then is the command let finish.
+		questions := rig.watchToolStatus(t)
 		rig.startWorker(t, cmd.queue)
-		// The retry is in flight, and reattaches to the command while it
-		// still runs (it asks the daemon within milliseconds of starting);
-		// only then does the command finish.
-		rig.awaitAttempt(t, run, 2)
-		time.Sleep(2 * time.Second)
+		questions.awaitState(t, toolexec.ToolRequestRunning)
 		_, err := os.Stat(filepath.Join(cmd.dir, "finished"))
 		require.True(t, os.IsNotExist(err), "the command is still running while the retry waits for it")
 		cmd.release(t)
@@ -179,7 +182,7 @@ func newRestartRig(t *testing.T) *restartRig {
 	rig.startDaemon(t)
 	rig.daemonID = rig.awaitAttached(t, "")
 	ctx := context.Background()
-	now := time.Now().UTC()
+	now := time.Date(2026, 11, 10, 12, 0, 0, 0, time.UTC) // row timestamps only; nothing reads them
 	projectID := uuid.NewString()
 	require.NoError(t, rig.repo.CreateProject(ctx, &db.Project{ID: projectID, Name: "restart-rig", Path: rig.checkout,
 		UserID: rig.userID, CreatedAt: now, UpdatedAt: now, LastActive: now}))
@@ -271,12 +274,15 @@ func (r *restartRig) startDaemon(t *testing.T) {
 // directory, and waits until it is the same machine, attached again.
 func (r *restartRig) restartDaemon(t *testing.T) {
 	t.Helper()
+	before, err := daemonstate.Read(r.dataDir)
+	require.NoError(t, err)
 	r.stopAgent()
-	restartedAt := time.Now()
 	r.startDaemon(t)
+	// The restarted process's own record (a new start), connected: an event
+	// of the new process, not a comparison of clocks.
 	require.Eventually(t, func() bool {
 		state, err := daemonstate.Read(r.dataDir)
-		return err == nil && state.Stream.Established() && state.ConnectedAt.After(restartedAt)
+		return err == nil && !state.StartedAt.Equal(before.StartedAt) && state.Stream.Established()
 	}, time.Minute, 50*time.Millisecond, "the restarted daemon connects to the gateway")
 	require.Equal(t, r.daemonID, r.awaitAttached(t, r.daemonID), "the restarted daemon is the same machine")
 }
@@ -444,24 +450,6 @@ func (r *restartRig) dispatch(t *testing.T, c *stepCommand) client.WorkflowRun {
 	return run
 }
 
-// awaitAttempt waits until run's step activity is executing its attempt-th
-// attempt.
-func (r *restartRig) awaitAttempt(t *testing.T, run client.WorkflowRun, attempt int32) {
-	t.Helper()
-	require.Eventually(t, func() bool {
-		desc, err := r.temporal.DescribeWorkflowExecution(context.Background(), run.GetID(), run.GetRunID())
-		if err != nil {
-			return false
-		}
-		for _, pending := range desc.GetPendingActivities() {
-			if pending.GetAttempt() >= attempt && pending.GetState() == enums.PENDING_ACTIVITY_STATE_STARTED {
-				return true
-			}
-		}
-		return false
-	}, time.Minute, 20*time.Millisecond, "the step's attempt %d is executing", attempt)
-}
-
 // requireRanOnceAndDelivered waits for run and holds it to the contract: the
 // step completed with the command's own output and exit code, the command ran
 // once, and the result came from the second attempt — the retry on the new
@@ -480,15 +468,105 @@ func (c *stepCommand) requireRanOnceAndDelivered(t *testing.T, r *restartRig, ru
 	require.NoError(t, err)
 	assert.Equal(t, "ran\n", string(runs), "the command ran exactly once")
 
-	var attempt int32
+	// The history's own record: the attempt that delivered the result is a
+	// retry, the attempt before it was released by the drain, and the
+	// activity completed. How many retries that took is Temporal's timing,
+	// not the contract.
+	var started *historypb.ActivityTaskStartedEventAttributes
+	completed := false
 	history := r.temporal.GetWorkflowHistory(ctx, run.GetID(), run.GetRunID(), false, enums.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
 	for history.HasNext() {
 		event, err := history.Next()
 		require.NoError(t, err)
-		if started := event.GetActivityTaskStartedEventAttributes(); started != nil {
-			attempt = started.GetAttempt()
+		if attrs := event.GetActivityTaskStartedEventAttributes(); attrs != nil {
+			started = attrs
+		}
+		if event.GetActivityTaskCompletedEventAttributes() != nil {
+			completed = true
 		}
 	}
-	assert.Equal(t, int32(2), attempt, "the drained worker's attempt ended, and the retry on the new worker delivered the result")
+	require.NotNil(t, started)
+	assert.True(t, completed, "the step's activity completed")
+	assert.Greater(t, started.GetAttempt(), int32(1), "the result came from a retry, not the drained attempt")
+	assert.Contains(t, started.GetLastFailure().GetMessage(), "worker shut down",
+		"the attempt before it was released by the worker's drain")
 	assert.False(t, strings.Contains(out.Stderr, "not run again"), "the retry reattached; it did not refuse: %s", out.Stderr)
+}
+
+// statusWatch sees the daemon's answers to tool.status, the question a
+// reattaching retry asks first: the explicit event that the retry reached
+// the daemon about the command its first attempt started.
+type statusWatch struct {
+	states chan toolexec.ToolRequestState
+}
+
+// watchToolStatus starts watching, on NATS, every tool.status question to
+// the rig's daemon and its answer.
+func (r *restartRig) watchToolStatus(t *testing.T) *statusWatch {
+	t.Helper()
+	nc := r.connectNATS(t)
+	w := &statusWatch{states: make(chan toolexec.ToolRequestState, 16)}
+	var mu sync.Mutex
+	questions := map[string]bool{}                    // reply subject -> asked
+	answers := map[string]toolexec.ToolRequestState{} // reply subject -> answered
+	match := func(reply string) {
+		if questions[reply] {
+			if state, ok := answers[reply]; ok {
+				delete(questions, reply)
+				delete(answers, reply)
+				w.states <- state
+			}
+		}
+	}
+	commands, err := nc.Subscribe("daemon.command."+r.userID+"."+r.daemonID, func(msg *nats.Msg) {
+		var cmd struct {
+			CommandType string `json:"command_type"`
+		}
+		if json.Unmarshal(msg.Data, &cmd) != nil || cmd.CommandType != toolexec.ToolStatusCommand || msg.Reply == "" {
+			return
+		}
+		mu.Lock()
+		defer mu.Unlock()
+		questions[msg.Reply] = true
+		match(msg.Reply)
+	})
+	require.NoError(t, err)
+	replies, err := nc.Subscribe("_INBOX.>", func(msg *nats.Msg) {
+		var resp struct {
+			Success bool   `json:"success"`
+			Payload []byte `json:"payload"`
+		}
+		var status toolexec.ToolStatusResponse
+		if json.Unmarshal(msg.Data, &resp) != nil || !resp.Success || json.Unmarshal(resp.Payload, &status) != nil || status.State == "" {
+			return
+		}
+		mu.Lock()
+		defer mu.Unlock()
+		answers[msg.Subject] = status.State
+		match(msg.Subject)
+	})
+	require.NoError(t, err)
+	require.NoError(t, nc.Flush())
+	t.Cleanup(func() {
+		_ = commands.Unsubscribe()
+		_ = replies.Unsubscribe()
+	})
+	return w
+}
+
+// awaitState waits until the daemon has answered a tool.status question with
+// want.
+func (w *statusWatch) awaitState(t *testing.T, want toolexec.ToolRequestState) {
+	t.Helper()
+	deadline := time.After(2 * time.Minute)
+	for {
+		select {
+		case got := <-w.states:
+			if got == want {
+				return
+			}
+		case <-deadline:
+			t.Fatalf("the daemon never answered a tool.status question with %q", want)
+		}
+	}
 }

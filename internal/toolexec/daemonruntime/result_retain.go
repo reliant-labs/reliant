@@ -122,7 +122,7 @@ func (o *resultOutbox) restoreRetainedLocked(retained []*heldResult, now time.Ti
 func (o *resultOutbox) retainedResult(requestID string) *heldResult {
 	o.mu.Lock()
 	defer o.mu.Unlock()
-	o.expireLocked(time.Now())
+	o.expireLocked(o.now())
 	return o.retained[requestID]
 }
 

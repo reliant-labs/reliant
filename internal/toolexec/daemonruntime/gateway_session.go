@@ -429,12 +429,28 @@ type resultOutbox struct {
 	retained      map[string]*heldResult
 	retainedBytes int
 
+	// seen holds a tombstone for every run step's request id this daemon
+	// began, with when it may be forgotten: what keeps a request id from
+	// running twice after its result is gone (result_once.go).
+	seen        map[string]time.Time
+	seenSweptAt time.Time
+
 	// store mirrors running calls and held results to disk so they outlive
 	// the process (result_outbox_store.go). Nil keeps the outbox in memory.
 	store *outboxStore
 	// ttl and budget override resultHoldTTL and resultHoldBudget when set.
 	ttl    time.Duration
 	budget int
+	// clock is the outbox's time; nil is time.Now. Tests fix it.
+	clock func() time.Time
+}
+
+// now is the outbox's current time.
+func (o *resultOutbox) now() time.Time {
+	if o.clock != nil {
+		return o.clock()
+	}
+	return time.Now()
 }
 
 func (o *resultOutbox) holdTTL() time.Duration {
@@ -457,7 +473,7 @@ func (o *resultOutbox) holdBudget() int {
 // outbox is shared, at construction.
 func (o *resultOutbox) restore(store *outboxStore) outboxLoadReport {
 	o.store = store
-	now := time.Now()
+	now := o.now()
 	held, retained, report := store.load(now, o.holdTTL(), o.holdBudget())
 	o.mu.Lock()
 	defer o.mu.Unlock()
@@ -469,6 +485,9 @@ func (o *resultOutbox) restore(store *outboxStore) outboxLoadReport {
 		o.heldBytes += h.size
 	}
 	o.restoreRetainedLocked(retained, now)
+	seen, expired := store.loadSeen(now)
+	o.seen = seen
+	report.Seen, report.Expired = len(seen), report.Expired+expired
 	return report
 }
 
@@ -500,7 +519,7 @@ func (o *resultOutbox) persistRunning(requestID string) {
 // missing and then see it written — so a result a gateway could have seen
 // survives a restart.
 func (o *resultOutbox) hold(requestID string, msg *reliantv1.DaemonMessage, origin *gatewaySession) {
-	now := time.Now()
+	now := o.now()
 	persisted := o.store.putResult(requestID, msg, now) == nil
 
 	o.mu.Lock()
@@ -541,7 +560,7 @@ func (o *resultOutbox) markSent(requestID string, s *gatewaySession) {
 
 // ack forgets a held result and returns it, the first time only.
 func (o *resultOutbox) ack(requestID string) *heldResult {
-	now := time.Now()
+	now := o.now()
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	h, ok := o.held[requestID]
@@ -568,7 +587,7 @@ func (o *resultOutbox) ack(requestID string) *heldResult {
 func (o *resultOutbox) state(requestID string) toolexec.ToolRequestState {
 	o.mu.Lock()
 	defer o.mu.Unlock()
-	o.expireLocked(time.Now())
+	o.expireLocked(o.now())
 	return o.stateLocked(requestID)
 }
 
@@ -583,6 +602,10 @@ func (o *resultOutbox) stateLocked(requestID string) toolexec.ToolRequestState {
 	if _, ok := o.delivered[requestID]; ok {
 		return toolexec.ToolRequestDelivered
 	}
+	if _, ok := o.seen[requestID]; ok {
+		// A run step that ran here and whose result is gone (result_once.go).
+		return toolexec.ToolRequestDelivered
+	}
 	return toolexec.ToolRequestUnknown
 }
 
@@ -590,7 +613,7 @@ func (o *resultOutbox) stateLocked(requestID string) toolexec.ToolRequestState {
 func (o *resultOutbox) matching(pick func(*heldResult) bool) []*heldResult {
 	o.mu.Lock()
 	defer o.mu.Unlock()
-	o.expireLocked(time.Now())
+	o.expireLocked(o.now())
 	var out []*heldResult
 	for _, h := range o.held {
 		if pick(h) {
@@ -640,6 +663,7 @@ func (o *resultOutbox) expireLocked(now time.Time) {
 		}
 	}
 	o.expireRetainedLocked(now)
+	o.expireSeenLocked(now)
 }
 
 // messageSize approximates a held result's memory: its payload strings.

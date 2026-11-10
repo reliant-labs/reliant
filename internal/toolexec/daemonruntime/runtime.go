@@ -2006,9 +2006,11 @@ func (d *daemonClient) executeTool(s *gatewaySession, req *reliantv1.ToolRequest
 		contextMap["user_id"] = d.currentUserID()
 	}
 	// A run step's result outlives its acknowledgement for a while, so a
-	// retry whose worker went away can still reattach to it (result_retain.go).
+	// retry whose worker went away can still reattach to it
+	// (result_retain.go), and its id is tombstoned so it never runs twice
+	// (result_once.go). Before the command runs.
 	if runStep, _ := contextMap[toolexec.RunStepContextKey].(bool); runStep {
-		d.results.markRetain(req.RequestId)
+		d.results.markRunStep(req.RequestId, time.Duration(req.TimeoutMs)*time.Millisecond)
 	}
 
 	// The worktree or project this call works in: recorded the first time it

@@ -3,8 +3,8 @@ package daemonruntime
 
 import (
 	"context"
-	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -13,6 +13,7 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/toolexec"
+	activitytypes "github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 )
 
 // toolRequestMessage is a tool request as a gateway forwards it.
@@ -122,25 +123,193 @@ func TestRetainedResultSurvivesADaemonRestart(t *testing.T) {
 // is gone after a restart, and one dropped from memory leaves no file.
 func TestRetainedResultFilesFollowTheirBounds(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "outbox")
-	o, _ := newStoredOutbox(t, dir)
-	for _, id := range []string{"old", "new"} {
-		o.markRetain(id)
-		startRunning(o, id)
-		o.hold(id, resultMsg(id, id), nil)
-		require.NotNil(t, o.ack(id))
-	}
-	past := time.Now().Add(-resultRetainTTL - time.Minute)
-	o.mu.Lock()
-	o.retained["old"].heldAt = past
-	o.mu.Unlock()
+	clock := newOutboxClock()
+	o, _ := newClockedOutbox(t, dir, clock)
+	o.markRetain("old")
+	startRunning(o, "old")
+	o.hold("old", resultMsg("old", "old"), nil)
+	require.NotNil(t, o.ack("old"))
+	clock.advance(resultRetainTTL / 2)
+	o.markRetain("new")
+	startRunning(o, "new")
+	o.hold("new", resultMsg("new", "new"), nil)
+	require.NotNil(t, o.ack("new"))
+
+	clock.advance(resultRetainTTL/2 + time.Minute) // past "old"'s window, inside "new"'s
 	assert.Nil(t, o.retainedResult("old"))
+	assert.NotNil(t, o.retainedResult("new"))
 	assert.Equal(t, []string{"new.retained"}, outboxFiles(t, dir), "an expired retained result leaves no file")
 
 	// A file whose window ended while the daemon was down is not reloaded.
-	require.NoError(t, os.Chtimes(filepath.Join(dir, "new.retained"), past, past))
-	again, report := newStoredOutbox(t, dir)
+	clock.advance(resultRetainTTL)
+	again, report := newClockedOutbox(t, dir, clock)
 	assert.Zero(t, report.Retained)
 	assert.Equal(t, 1, report.Expired)
 	assert.Equal(t, toolexec.ToolRequestUnknown, again.state("new"))
 	assert.Empty(t, outboxFiles(t, dir))
+}
+
+// outboxClock is the outbox's time in a test: it moves only when told to.
+type outboxClock struct {
+	mu sync.Mutex
+	t  time.Time
+}
+
+func newOutboxClock() *outboxClock {
+	return &outboxClock{t: time.Date(2026, 11, 10, 12, 0, 0, 0, time.UTC)}
+}
+
+func (c *outboxClock) now() time.Time {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.t
+}
+
+func (c *outboxClock) advance(d time.Duration) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.t = c.t.Add(d)
+}
+
+// newClockedOutbox is newStoredOutbox on clock (dir "" keeps it in memory).
+func newClockedOutbox(t *testing.T, dir string, clock *outboxClock) (*resultOutbox, outboxLoadReport) {
+	t.Helper()
+	o := &resultOutbox{clock: clock.now}
+	if dir == "" {
+		return o, outboxLoadReport{}
+	}
+	store, err := openOutboxStore(dir)
+	require.NoError(t, err)
+	return o, o.restore(store)
+}
+
+// runStepDelivered is a run step that ran to the end here: tombstoned before
+// it ran, its result held, then delivered and retained.
+func runStepDelivered(t *testing.T, o *resultOutbox, id string, size int) {
+	t.Helper()
+	_, fresh := o.begin(id)
+	require.True(t, fresh)
+	o.persistRunning(id)
+	o.markRunStep(id, 5*time.Minute)
+	o.hold(id, (&daemonClient{}).toolResponse(id, finished(string(make([]byte, size)))), nil)
+	require.NotNil(t, o.ack(id))
+}
+
+// requireNeverRunsAgain: id is not fresh, and a repeat is answered as one
+// that already ran.
+func requireNeverRunsAgain(t *testing.T, o *resultOutbox, id string) {
+	t.Helper()
+	known, fresh := o.begin(id)
+	assert.False(t, fresh, "a run step's request id never runs twice")
+	assert.Equal(t, toolexec.ToolRequestDelivered, known)
+}
+
+// [B1] A run step's id stays "already ran" after everything that held its
+// result is gone — its retention window, the retained-result budget, a
+// daemon restart — for as long as any copy of it can still be sent
+// (runStepSeenFor), and only then is forgotten.
+func TestRunStepRequestIDOutlivesItsResult(t *testing.T) {
+	t.Run("after its result's retention window", func(t *testing.T) {
+		clock := newOutboxClock()
+		o, _ := newClockedOutbox(t, "", clock)
+		runStepDelivered(t, o, "run-1", 10)
+		clock.advance(resultRetainTTL + time.Minute)
+		require.Nil(t, o.retainedResult("run-1"), "the result is gone")
+		requireNeverRunsAgain(t, o, "run-1")
+	})
+
+	t.Run("after the retained-result budget evicted its result", func(t *testing.T) {
+		clock := newOutboxClock()
+		o, _ := newClockedOutbox(t, "", clock)
+		third := resultRetainBudget / 3
+		for _, id := range []string{"a", "b", "c", "d"} {
+			runStepDelivered(t, o, id, third)
+			clock.advance(time.Second)
+		}
+		require.Nil(t, o.retainedResult("a"), "the oldest result was evicted for room")
+		requireNeverRunsAgain(t, o, "a")
+	})
+
+	t.Run("after a daemon restart, with only the tombstone left", func(t *testing.T) {
+		dir := filepath.Join(t.TempDir(), "outbox")
+		clock := newOutboxClock()
+		first, _ := newClockedOutbox(t, dir, clock)
+		runStepDelivered(t, first, "run-1", 10)
+		clock.advance(resultRetainTTL + time.Minute)
+		require.Nil(t, first.retainedResult("run-1"))
+		require.Equal(t, []string{"run-1.seen"}, outboxFiles(t, dir), "only the tombstone outlives the result")
+
+		second, report := newClockedOutbox(t, dir, clock)
+		assert.Equal(t, 1, report.Seen)
+		requireNeverRunsAgain(t, second, "run-1")
+	})
+
+	t.Run("and is forgotten once no copy can arrive", func(t *testing.T) {
+		dir := filepath.Join(t.TempDir(), "outbox")
+		clock := newOutboxClock()
+		o, _ := newClockedOutbox(t, dir, clock)
+		runStepDelivered(t, o, "run-1", 10)
+		clock.advance(runStepSeenFor(5*time.Minute) - time.Minute)
+		requireNeverRunsAgain(t, o, "run-1")
+
+		// Down past its expiry: a restart does not reload it.
+		clock.advance(time.Minute)
+		again, report := newClockedOutbox(t, dir, clock)
+		assert.Zero(t, report.Seen)
+		assert.Equal(t, 1, report.Expired)
+		assert.Empty(t, outboxFiles(t, dir))
+		_, fresh := again.begin("run-1")
+		assert.True(t, fresh)
+
+		// And a running daemon sweeps it too.
+		clock.advance(runStepSeenSweep)
+		_, fresh = o.begin("run-1")
+		assert.True(t, fresh)
+	})
+
+	t.Run("a model's tool call keeps no tombstone", func(t *testing.T) {
+		clock := newOutboxClock()
+		o, _ := newClockedOutbox(t, "", clock)
+		o.begin("tool-1")
+		o.hold("tool-1", resultMsg("tool-1", "x"), nil)
+		require.NotNil(t, o.ack("tool-1"))
+		clock.advance(resultHoldTTL + time.Minute)
+		_, fresh := o.begin("tool-1")
+		assert.True(t, fresh, "unchanged: only a run step's id is remembered past its result")
+	})
+}
+
+// The tombstone lasts as long as a copy of the id can still be sent: the
+// command's timeout plus the attempt's machine wait and send overhead, and
+// never less than the floor.
+func TestRunStepSeenForFollowsTheSendContract(t *testing.T) {
+	assert.Equal(t, runStepSeenFloor, runStepSeenFor(5*time.Minute))
+	long := 48 * time.Hour
+	assert.Equal(t, long+activitytypes.RunStepMachineWaitBudget+activitytypes.RunStepSendOverhead, runStepSeenFor(long))
+}
+
+// [B1] through the daemon: a run step that ran, whose result has since been
+// evicted, arrives again; the daemon answers "already ran" and runs nothing.
+func TestDaemonNeverRerunsARunStepWhoseResultIsGone(t *testing.T) {
+	clock := newOutboxClock()
+	d := newTestDaemonClient("d-once", "u-once")
+	d.results.clock = clock.now
+	s := useTestSession(d, 16)
+
+	msg := toolRequestMessage("run-1")
+	msg.GetToolRequest().TimeoutMs = int32((5 * time.Minute).Milliseconds())
+	_, fresh := d.results.begin("run-1")
+	require.True(t, fresh)
+	d.executeTool(s, msg.GetToolRequest())
+	require.Equal(t, "run-1", sentToolResponse(t, s).RequestId)
+	d.handleToolResultAck("run-1")
+	clock.advance(resultRetainTTL + time.Minute) // its result is gone
+
+	inFlight := s.inFlight.Load()
+	require.NoError(t, d.handleServerMessage(context.Background(), s, msg))
+	got := sentToolResponse(t, s)
+	assert.Equal(t, toolexec.ErrorCodeDaemonRestarted, got.ErrorCode)
+	assert.Contains(t, got.Content, "already ran on this machine")
+	assert.Equal(t, inFlight, s.inFlight.Load(), "nothing was started: a started call holds its stream")
+	assert.Equal(t, toolexec.ToolRequestDelivered, d.results.state("run-1"))
 }

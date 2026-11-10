@@ -60,6 +60,7 @@ import (
 const (
 	resultFileExt   = ".result"
 	retainedFileExt = ".retained"
+	seenFileExt     = ".seen"
 	runningFileExt  = ".running"
 	tempInfix       = ".tmp-"
 
@@ -174,6 +175,65 @@ func (s *outboxStore) retainResult(requestID string, at time.Time) {
 	_ = os.Chtimes(retained, at, at)
 }
 
+// markSeen durably records that a run step's request id began here, until
+// expires: an empty <request id>.seen whose modification time is its expiry.
+// It is synced before the call runs, so no crash can leave a command that ran
+// without its tombstone. A failure is logged; the tombstone is then held in
+// memory only.
+func (s *outboxStore) markSeen(requestID string, expires time.Time) {
+	if !s.storable(requestID) {
+		return
+	}
+	name := requestID + seenFileExt
+	if err := writeFileDurably(s.dir, name, nil); err != nil {
+		logging.Warn(logPrefix+" Could not persist a run step's tombstone; a restart will not remember it ran",
+			"request_id", requestID, "error", err)
+		return
+	}
+	_ = os.Chtimes(filepath.Join(s.dir, name), expires, expires)
+}
+
+// removeSeen deletes a run step's tombstone, once it expires.
+func (s *outboxStore) removeSeen(requestID string) {
+	if s.storable(requestID) {
+		_ = os.Remove(s.path(requestID, seenFileExt))
+	}
+}
+
+// loadSeen reads back the tombstones still in force at now, each with its
+// expiry, and removes the expired ones, counting them.
+func (s *outboxStore) loadSeen(now time.Time) (seen map[string]time.Time, expired int) {
+	seen = make(map[string]time.Time)
+	if s == nil {
+		return seen, 0
+	}
+	entries, err := os.ReadDir(s.dir)
+	if err != nil {
+		return seen, 0
+	}
+	for _, e := range entries {
+		name := e.Name()
+		if e.IsDir() || strings.Contains(name, tempInfix) || !strings.HasSuffix(name, seenFileExt) {
+			continue
+		}
+		id := strings.TrimSuffix(name, seenFileExt)
+		if !requestIDFile.MatchString(id) {
+			continue
+		}
+		info, err := e.Info()
+		if err != nil {
+			continue
+		}
+		if !now.Before(info.ModTime()) {
+			expired++
+			_ = os.Remove(filepath.Join(s.dir, name))
+			continue
+		}
+		seen[id] = info.ModTime()
+	}
+	return seen, expired
+}
+
 // removeRetained deletes a retained result's file, once its window ends.
 func (s *outboxStore) removeRetained(requestID string) {
 	if s.storable(requestID) {
@@ -198,6 +258,8 @@ type outboxLoadReport struct {
 	// Retained is the number of acknowledged run-step results reloaded for a
 	// retry that may still reattach to them (result_retain.go).
 	Retained int
+	// Seen is the number of run-step tombstones reloaded (result_once.go).
+	Seen int
 }
 
 // load reads the directory back at startup. It returns every result the

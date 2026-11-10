@@ -8,6 +8,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/toolexec"
+	activitytypes "github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 )
 
 // A request id runs once.
@@ -23,10 +24,72 @@ import (
 // the request already ran and its outcome is unknown.
 //
 // Request ids that are not a run step's are fresh per call (a UUID the router
-// mints), so this changes nothing for them. The memory is the outbox's: a
-// running call, a held result, or a delivery inside resultHoldTTL, which a
-// restart keeps for held and retained results and turns into "interrupted by
-// daemon restart" for running ones.
+// mints), so this changes nothing for them.
+//
+// What the daemon knows of an id is the outbox's — a running call, a held
+// result, a delivery inside resultHoldTTL, a retained result — and every one
+// of those ends: by age, or by a byte budget that drops results to make room.
+// None of them can be what keeps a deploy from running twice. So a run step's
+// id also leaves a tombstone, independent of its result and of any budget: a
+// <request id>.seen file, synced before the command starts, whose
+// modification time is when it may be forgotten, reloaded by a restart.
+//
+// How long that is follows from who can send the id again. The worker sends a
+// run step's command only from the activity attempt that first sent it, and
+// only while it can prove the earlier sends never reached a machine
+// (handlers.executeUntilDelivered); a retry never sends it, it reattaches.
+// That attempt starts its last send within RunStepMachineWaitBudget of its
+// first, and a send is over within the command's timeout plus
+// RunStepSendOverhead. So no copy of the id can arrive later than command
+// timeout + RunStepMachineWaitBudget + RunStepSendOverhead after the first;
+// the tombstone lasts that long, and never less than runStepSeenFloor, a
+// margin for clock steps and for whatever the contract becomes.
+
+// runStepSeenFloor is the shortest a run step's tombstone lasts.
+const runStepSeenFloor = 24 * time.Hour
+
+// runStepSeenSweep is how often expired tombstones are swept; between sweeps
+// an expired one still answers "already ran", which is only ever safer.
+const runStepSeenSweep = time.Minute
+
+// runStepSeenFor is how long a run step's tombstone lasts, for a command
+// whose timeout is commandTimeout.
+func runStepSeenFor(commandTimeout time.Duration) time.Duration {
+	return max(runStepSeenFloor, commandTimeout+activitytypes.RunStepMachineWaitBudget+activitytypes.RunStepSendOverhead)
+}
+
+// markRunStep records that requestID is a run step's command, before it runs:
+// its result is retained after delivery (markRetain), and its id is
+// tombstoned for runStepSeenFor(commandTimeout), on disk first.
+func (o *resultOutbox) markRunStep(requestID string, commandTimeout time.Duration) {
+	if requestID == "" {
+		return
+	}
+	o.markRetain(requestID)
+	expires := o.now().Add(runStepSeenFor(commandTimeout))
+	o.store.markSeen(requestID, expires)
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	if o.seen == nil {
+		o.seen = make(map[string]time.Time)
+	}
+	o.seen[requestID] = expires
+}
+
+// expireSeenLocked forgets the tombstones past their expiry, at most once per
+// runStepSeenSweep. Must hold o.mu.
+func (o *resultOutbox) expireSeenLocked(now time.Time) {
+	if len(o.seen) == 0 || now.Sub(o.seenSweptAt) < runStepSeenSweep {
+		return
+	}
+	o.seenSweptAt = now
+	for id, expires := range o.seen {
+		if !now.Before(expires) {
+			delete(o.seen, id)
+			o.store.removeSeen(id)
+		}
+	}
+}
 
 // begin records a tool call that arrived to run, unless the outbox already
 // knows requestID: then fresh is false, known is what became of it, and the
@@ -37,7 +100,7 @@ func (o *resultOutbox) begin(requestID string) (known toolexec.ToolRequestState,
 	}
 	o.mu.Lock()
 	defer o.mu.Unlock()
-	o.expireLocked(time.Now())
+	o.expireLocked(o.now())
 	if known = o.stateLocked(requestID); known != toolexec.ToolRequestUnknown {
 		return known, false
 	}
