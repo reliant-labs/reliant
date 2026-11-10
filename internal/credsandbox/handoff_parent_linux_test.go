@@ -192,7 +192,9 @@ pid = os.fork()
 if pid == 0:
     p = os.getppid()
     r = libc.ptrace(16, p, 0, 0)
-    if r == 0: libc.ptrace(17, p, 0, 0)
+    if r == 0:
+        os.waitpid(p, 0x40000000)  # __WALL: the attach has stopped it
+        libc.ptrace(17, p, 0, 0)   # detach: it runs on
     print("attach=" + ("ok" if r == 0 else "refused"), flush=True)
     os._exit(0)
 os.waitpid(pid, 0)
