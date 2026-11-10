@@ -13,7 +13,7 @@
  * focus, Escape, restoration and portalling.
  */
 
-import { useLayoutEffect, useState, type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 import { Link } from "@tanstack/react-router";
 import { formatDistanceToNow } from "date-fns";
 import {
@@ -31,7 +31,7 @@ import {
   Workflow as WorkflowIcon,
 } from "lucide-react";
 import Modal from "../forge-ui/modal";
-import { focusDialogOpener } from "../../lib/dialogOpener";
+import { dialogOpener } from "../../lib/dialogOpener";
 import { cn } from "../../lib/utils";
 import { WorkflowState, WorkflowStopReason } from "../../gen/reliant/v1/chat_pb";
 import type { WorkflowExecutionData } from "../../types/chat";
@@ -107,9 +107,11 @@ export function MobileChatSheet({
   contextUsage,
   onOpenWorkspace,
 }: MobileChatSheetProps) {
-  // Safari never focuses a button on tap, so Forge's Modal would record <body>
-  // as the opener; focusing the tapped control first makes it restore there.
-  useLayoutEffect(focusDialogOpener, []);
+  // Safari never focuses a button on tap, so Forge's Modal finds <body> focused
+  // and has no opener to restore. Read the tapped control while rendering, in
+  // the tap's task; the Modal's fallbackFocus focuses it on close (an effect
+  // here would run after the Modal recorded its opener).
+  const [opener] = useState(dialogOpener);
   const actions = useChatActions(chatId, worktreeId);
   const [renameDraft, setRenameDraft] = useState<string | null>(null);
   const [showThreads, setShowThreads] = useState(false);
@@ -147,6 +149,7 @@ export function MobileChatSheet({
   return (
     <Modal
       open
+      fallbackFocus={() => opener?.focus()}
       title={title}
       description={summary || undefined}
       onClose={onClose}

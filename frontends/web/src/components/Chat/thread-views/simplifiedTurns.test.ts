@@ -14,7 +14,13 @@ import {
 /** Message fields a fixture may override (a protobuf init, not a full message). */
 type MessageExtra = Omit<Partial<Message>, "$typeName" | "$unknown">;
 import type { ToolExecution } from "../../../lib/messageProcessor";
-import { buildSimplifiedTimeline, createSegmentReader, isSurfacedMediaTool } from "./simplifiedTurns";
+import {
+  buildSimplifiedTimeline,
+  createFoldKeys,
+  createSegmentReader,
+  isSurfacedMediaTool,
+  type FoldKeys,
+} from "./simplifiedTurns";
 
 type Block = { t: string } | { call: string; tool?: string };
 type Item =
@@ -187,6 +193,81 @@ describe("buildSimplifiedTimeline", () => {
     const items = [row(asst("a1", [{ call: "c1" }])), row(asst("a2", [{ t: "ok" }]))];
     expect(summarize(build(items))).toEqual(summarize(build(items)));
     expect((build(items)[0] as { work: { key: string } }).work.key).toBe("work-a1-0");
+  });
+
+  describe("fold keys across rebuilds", () => {
+    const buildWith = (items: Item[], foldKeys: FoldKeys) =>
+      buildSimplifiedTimeline(items, {
+        segmentsOf: createSegmentReader(),
+        workflowOf: (item) => item.workflow,
+        isSurfaced: (e) => SURFACED.has(e.call.name),
+        foldKeys,
+      });
+    const workKeys = (out: ReturnType<typeof build>) => out.flatMap((o) => (o.type === "work" ? [o.work.key] : []));
+
+    // The regression: a scroll-back page cut the run at the top in half, the
+    // older page renamed its fold, the virtualizer could not re-find the
+    // reader's row, and every page loaded the next with the reader at the top.
+    it("keeps the key of a run whose older half a scroll-back page brings", () => {
+      const foldKeys = createFoldKeys();
+      const a1 = asst("a1", [{ t: "Looking" }, { call: "c1" }]);
+      const a2 = asst("a2", [{ call: "c2" }]);
+      const a3 = asst("a3", [{ t: "done" }]);
+      expect(workKeys(buildWith([row(a2), row(a3)], foldKeys))).toEqual(["work-a2-0"]);
+
+      const user = row(msg("u1", MessageRole.USER, [{ t: "go" }]));
+      const withOlder = buildWith([user, row(a1), row(a2), row(a3)], foldKeys);
+      expect(summarize(withOlder)).toEqual(["msg:u1", "prose:a1:0*", "work:work-a2-0[a1:1 a2:0]", "msg:a3"]);
+    });
+
+    it("keeps the key when the older half opens on mail", () => {
+      const foldKeys = createFoldKeys();
+      const a2 = asst("a2", [{ call: "c2" }]);
+      expect(workKeys(buildWith([row(a2)], foldKeys))).toEqual(["work-a2-0"]);
+      expect(summarize(buildWith([mail("m1"), row(a2)], foldKeys))).toEqual(["work:work-a2-0[a2:0]+m1@0"]);
+    });
+
+    it("names a fold of only new work afresh", () => {
+      const foldKeys = createFoldKeys();
+      const a1 = asst("a1", [{ call: "c1" }]);
+      buildWith([row(a1)], foldKeys);
+      const out = buildWith(
+        [row(a1), row(msg("u2", MessageRole.USER, [{ t: "more" }])), row(asst("b1", [{ call: "c2" }]))],
+        foldKeys,
+      );
+      expect(workKeys(out)).toEqual(["work-a1-0", "work-b1-0"]);
+    });
+
+    it("remembers per call, so a message feeding two folds keeps both keys", () => {
+      const foldKeys = createFoldKeys();
+      const a1 = asst("a1", [{ call: "c1" }, { t: "midway" }, { call: "c2" }]);
+      expect(workKeys(buildWith([row(a1)], foldKeys))).toEqual(["work-a1-0", "work-a1-2"]);
+      // An older page brings a0, whose call joins a1's first fold: that fold
+      // keeps work-a1-0, and the second, of the same message, keeps work-a1-2.
+      const a0 = asst("a0", [{ call: "c0" }]);
+      expect(workKeys(buildWith([row(a0), row(a1)], foldKeys))).toEqual(["work-a1-0", "work-a1-2"]);
+    });
+
+    it("never gives two folds one key when a run splits in two", () => {
+      const foldKeys = createFoldKeys();
+      const a1 = asst("a1", [{ call: "c1" }]);
+      const a2 = asst("a2", [{ call: "c2" }]);
+      expect(workKeys(buildWith([row(a1), row(a2)], foldKeys))).toEqual(["work-a1-0"]);
+      // A late error row lands between the two messages: two runs now.
+      expect(workKeys(buildWith([row(a1), { type: "error" }, row(a2)], foldKeys))).toEqual(["work-a1-0", "work-a2-0"]);
+    });
+
+    it("suffixes a fresh key that a remembered one already took", () => {
+      const foldKeys = createFoldKeys();
+      const a1 = asst("a1", [{ call: "c1" }]);
+      const a2 = asst("a2", [{ call: "c2" }]);
+      // a2's call remembers work-a1-0; a run opening at a1 later must not reuse it.
+      buildWith([row(a1), row(a2)], foldKeys);
+      expect(workKeys(buildWith([row(a2), { type: "error" }, row(a1)], foldKeys))).toEqual([
+        "work-a1-0",
+        "work-a1-0~2",
+      ]);
+    });
   });
 
   describe("boundaries", () => {

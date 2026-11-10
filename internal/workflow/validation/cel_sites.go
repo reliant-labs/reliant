@@ -115,6 +115,9 @@ type workflowScope struct {
 	// failure is set for an on_failure handler and the bodies nested in it,
 	// where the runtime injects the `failure` namespace.
 	failure bool
+	// run is set for a finally handler and the bodies nested in it, where the
+	// runtime injects the `run` namespace.
+	run bool
 }
 
 func newWorkflowScope(wf *reliantv1.Workflow, basePath []string, typeCtx *WorkflowTypeContext, loop *loopFrame) *workflowScope {
@@ -164,6 +167,9 @@ func (s *workflowScope) env(site celSite, inLoop bool, frame *loopFrame, outputN
 	namespaces := siteNamespaces(site, inLoop)
 	if s.failure {
 		namespaces = append(namespaces[:len(namespaces):len(namespaces)], wfcel.CELFailure)
+	}
+	if s.run {
+		namespaces = append(namespaces[:len(namespaces):len(namespaces)], wfcel.CELRun)
 	}
 	if typeCtx != nil {
 		typeCtx.OutputsUndeclared = !containsNamespace(namespaces, wfcel.CELOutputs)
@@ -317,6 +323,9 @@ func (s *workflowScope) validateNodeFields(node *reliantv1.Node, basePath []stri
 		args := node.GetRun()
 		tmpl(celString(args.GetCommand()), at("command"), s.loop)
 		tmpl(celString(args.GetWorkDir()), at("work_dir"), s.loop)
+		for i, w := range args.GetWritableCheckouts() {
+			tmpl(w, at("writable_checkouts", fmt.Sprintf("[%d]", i)), s.loop)
+		}
 
 	case node.GetRouter() != nil:
 		tmpl(celString(node.GetRouter().GetSystemPrompt()), at("system_prompt"), s.loop)
@@ -332,6 +341,7 @@ func (s *workflowScope) validateNodeFields(node *reliantv1.Node, basePath []stri
 			// as its parent node, with its own node namespace.
 			child := newWorkflowScope(inline, at("inline"), inlineTypeContext(inline, s.typeCtx.valueTypes()), s.loop)
 			child.failure = s.failure
+			child.run = s.run
 			validateWorkflowScope(child, result)
 		}
 
@@ -361,6 +371,7 @@ func (s *workflowScope) validateNodeFields(node *reliantv1.Node, basePath []stri
 		if inline := args.GetInline(); inline != nil {
 			child := newWorkflowScope(inline, at("inline"), inlineTypeContext(inline, s.typeCtx.valueTypes()), frame)
 			child.failure = s.failure
+			child.run = s.run
 			validateWorkflowScope(child, result)
 		}
 

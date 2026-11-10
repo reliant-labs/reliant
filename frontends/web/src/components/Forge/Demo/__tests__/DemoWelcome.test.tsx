@@ -79,14 +79,15 @@ it("mobile explanations AND their collapsed control are in flow, hidden behind t
   const about = await screen.findByTestId("demo-page-info");
   expect(about.closest("main")).not.toBeNull();
   fireEvent.click(about);
-  const drawer = document.createElement("nav"); drawer.id="sidebar-layout-nav"; document.body.appendChild(drawer);
+  const trigger = document.createElement("button"); trigger.setAttribute("aria-controls", "drawer-welcome-unique"); trigger.setAttribute("aria-expanded", "true");
+  const drawer = document.createElement("aside"); drawer.id="drawer-welcome-unique"; drawer.setAttribute("role", "dialog"); drawer.append(document.createElement("nav")); document.body.append(trigger, drawer);
   try {
     act(() => drawer.setAttribute("aria-modal", "true"));
     await waitFor(() => expect(screen.queryByTestId("tour-callout")).toBeNull());
     expect(screen.queryByTestId("demo-screen-actions")).toBeNull();
     act(() => drawer.removeAttribute("aria-modal"));
     expect(await screen.findByTestId("tour-callout")).toBeVisible();
-  } finally { drawer.remove(); }
+  } finally { drawer.remove(); trigger.remove(); }
 });
 it("every page explanation includes the shared How CTA", async () => {
   const paths = ["/forge/p/shop", "/forge/p/shop/releases", "/forge/p/shop/releases/v1", "/forge/p/shop/environments", "/forge/p/shop/environments/prod", "/forge/p/shop/secrets", "/forge/p/shop/domains", "/forge/p/shop/activity", "/forge/p/shop/workloads/prod/api", ...["dashboards","errors","traces","logs","profiles","alerts","sessions","metrics","rpc","graph"].map(view=>`/forge/demo?view=${view}`), "/forge/demo?view=traces&trace=demo"];

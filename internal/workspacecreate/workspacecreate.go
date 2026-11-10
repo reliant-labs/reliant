@@ -403,6 +403,17 @@ func Finish(ctx context.Context, store Store, m Machine, req Request, wt *db.Wor
 			payload.FetchBranch, payload.ExpectedHead = req.FetchBranch, req.ExpectedHead
 		}
 		err := m.Send(ctx, "worktree.create", payload, &createResp, commandTimeoutMs)
+		// The branch may be held by the checkout of an earlier create of it
+		// whose answer was lost (failed_create.go): the retry this is. That
+		// checkout is removed when it is provably the untouched leftover,
+		// and the create is tried once more; anything else keeps the
+		// refusal below.
+		if err == nil && !createResp.Success && !adopting &&
+			createResp.ErrorCode == worktreeerr.BranchCheckedOut &&
+			freeBranchFromFailedCreates(ctx, store, m, wt, repoPath) {
+			createResp = checkoutResponse{}
+			err = m.Send(ctx, "worktree.create", payload, &createResp, commandTimeoutMs)
+		}
 		if err != nil {
 			cause, away := machineFailure("checking out "+repo.Name, err)
 			logging.LogContext(ctx, sendFailureLevel(away), "Failed to create git worktree via daemon", "error", cause, "repo", repo.ID)

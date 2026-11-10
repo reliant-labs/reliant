@@ -10,6 +10,7 @@ import (
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/planproto"
@@ -45,7 +46,7 @@ func (s *Service) planBelongsToUser(ctx context.Context, planID string, userID s
 		return svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}
 
-	if chat.UserID != userID {
+	if !authz.CanWriteChat(ctx, userID, chat) {
 		return svcerr.PermissionDenied("access denied")
 	}
 
@@ -68,7 +69,7 @@ func (s *Service) CreatePlan(
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}
-	if chat.UserID != userID {
+	if !authz.CanWriteChat(ctx, userID, chat) {
 		return nil, svcerr.PermissionDenied("access denied")
 	}
 
@@ -173,7 +174,7 @@ func (s *Service) GetPlanByChatId(
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}
 
-	if chat.UserID != userID {
+	if !authz.CanReadChat(ctx, userID, chat) {
 		return nil, svcerr.PermissionDenied("access denied")
 	}
 

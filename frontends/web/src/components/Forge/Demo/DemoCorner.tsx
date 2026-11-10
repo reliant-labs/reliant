@@ -7,7 +7,7 @@
  *
  * On a phone it is a full-width stack at the bottom (a bottom sheet), and it
  * steps aside while the console's nav drawer is open (forge-ui SidebarLayout:
- * `#sidebar-layout-nav[aria-modal]`), so it never sits over the drawer's rows.
+ * a portalled modal aside), so it never sits over the drawer's rows.
  */
 
 import { useEffect, useState, type ReactNode } from "react";
@@ -27,14 +27,22 @@ function corner(): HTMLElement {
   return el;
 }
 
-const drawerOpen = () => document.querySelector("#sidebar-layout-nav[aria-modal='true']") !== null;
+// SidebarLayout portals a uniquely identified aside on narrow screens. Observe
+// its semantic modal state, not the historical fixed id or its former location.
+const drawerOpen = () => {
+  for (const trigger of document.querySelectorAll("button[aria-controls][aria-expanded='true']")) {
+    const panel = document.getElementById(trigger.getAttribute("aria-controls")!);
+    if (panel?.matches("aside[role='dialog'][aria-modal='true']") && panel.querySelector("nav")) return true;
+  }
+  return false;
+};
 
 /** Whether the console's nav drawer is open (phones). */
 export function useConsoleDrawerOpen(): boolean {
   const [open, setOpen] = useState(drawerOpen);
   useEffect(() => {
     const observer = new MutationObserver(() => setOpen(drawerOpen()));
-    observer.observe(document.body, { subtree: true, attributes: true, attributeFilter: ["aria-modal"] });
+    observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["aria-modal", "aria-expanded", "aria-controls"] });
     return () => observer.disconnect();
   }, []);
   return open;

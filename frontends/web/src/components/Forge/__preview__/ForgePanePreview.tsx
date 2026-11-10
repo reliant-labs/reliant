@@ -56,6 +56,7 @@ import {
 } from "../Console/ConsolePages";
 import { DataPage } from "../Data/DataPage";
 import { ReleasePage, ReleasesPage } from "../Releases/ReleasesPages";
+import { StoragePage } from "../Storage/StoragePage";
 import { OverviewPage, WorkloadPage } from "../Workloads/WorkloadPages";
 import {
   ForgeLandingRoute,
@@ -439,6 +440,7 @@ function buildRouter(path: string) {
     observabilityView: ObservabilityViewPage,
     dashboards: DashboardsPage,
     dashboard: DashboardPage,
+    storage: StoragePage,
     data: DataPage,
     environments: EnvironmentsPage,
     environment: ForgeEnvPage,

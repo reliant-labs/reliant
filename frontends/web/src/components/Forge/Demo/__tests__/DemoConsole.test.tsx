@@ -103,7 +103,7 @@ describe("the forge demo console", () => {
     expect(screen.getByTestId("forge-demo-banner").className).not.toMatch(/sticky|fixed|bg-warning-surface/);
     expect(await screen.findByTestId("obs-overview")).toBeInTheDocument();
     // The console's nav (the journey's first spotlight), every row kept on the demo.
-    const nav = document.querySelector<HTMLElement>("[data-tour='forge-console'] #sidebar-layout-nav");
+    const nav = document.querySelector<HTMLElement>("[data-tour='forge-console'] aside");
     expect(nav).not.toBeNull();
     expect(within(nav!).getByRole("link", { name: /Overview/ })).toHaveAttribute("href", "/forge/demo");
     expect(within(nav!).getByRole("link", { name: /Releases/ })).toHaveAttribute("href", "/forge/demo");

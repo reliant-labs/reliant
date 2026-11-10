@@ -20,6 +20,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/daemonpolicy"
 	"github.com/reliant-labs/reliant/internal/diskwatch"
 	"github.com/reliant-labs/reliant/internal/fileutil"
+	"github.com/reliant-labs/reliant/internal/ghshim"
 	"github.com/reliant-labs/reliant/internal/heavyjob"
 	"github.com/reliant-labs/reliant/internal/llm/tools/shell"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -817,6 +818,8 @@ func (c *LocalClient) RunCommand(ctx context.Context, req *RunCommandRequest) (*
 			cmd.Env = append(cmd.Env, k+"="+v)
 		}
 	}
+	// A chat's command finds the gh shim first on PATH (internal/ghshim).
+	cmd.Env = ghshim.Default().Env(cmd.Env)
 
 	// A heavy command runs under the slot wrapper, waiting for one of the
 	// machine's heavy slots first; its timeout counts the wait. On a nearly

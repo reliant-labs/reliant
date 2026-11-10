@@ -69,6 +69,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/handlers/usage"
 	workflowhandler "github.com/reliant-labs/reliant/internal/handlers/workflow"
 	"github.com/reliant-labs/reliant/internal/handlers/worktree"
+	"github.com/reliant-labs/reliant/internal/handlers/worktree_reclaim"
 	"github.com/reliant-labs/reliant/internal/integrations/ghaccess"
 	"github.com/reliant-labs/reliant/internal/integrations/inputoptions"
 	"github.com/reliant-labs/reliant/internal/integrations/webhook"
@@ -240,6 +241,13 @@ func (g *Graph) newConnectionListeners() (*ConnectionListeners, error) {
 
 func (g *Graph) newActivitySubscriber() (*ActivitySubscriber, error) {
 	return NewActivitySubscriber(ActivitySubscriberDeps{
+		NATS:        g.NATSConn(),
+		ToolsDaemon: g.ToolsDaemon(),
+	})
+}
+
+func (g *Graph) newDisconnectSubscriber() (*DisconnectSubscriber, error) {
+	return NewDisconnectSubscriber(DisconnectSubscriberDeps{
 		NATS:        g.NATSConn(),
 		ToolsDaemon: g.ToolsDaemon(),
 	})
@@ -885,6 +893,7 @@ func (g *Graph) newUserRoutes() (*UserRoutes, error) {
 		Logger:          g.Log,
 		Options:         apiMountOptions(g.ApiServerConfig.GetDisableForgeApi()),
 		Usage:           g.Usage(),
+		WorktreeReclaim: g.WorktreeReclaim(),
 	})
 }
 
@@ -1308,5 +1317,15 @@ func (g *Graph) newUsage() (*usage.Service, error) {
 		Config: g.Cfg,
 		Store:  g.Database(),
 		Now:    nil, // optional — no provider
+	})
+}
+
+// newWorktreeReclaim constructs the worktree-reclaim handler (internal/handlers/worktree_reclaim).
+func (g *Graph) newWorktreeReclaim() (*worktree_reclaim.Service, error) {
+	return worktree_reclaim.New(worktree_reclaim.Deps{
+		Logger: g.Log,
+		Config: g.Cfg,
+		Repo:   g.Database(),
+		Sender: g.APIDaemonRouter().NATSDaemonRouter,
 	})
 }

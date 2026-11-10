@@ -11,6 +11,7 @@ package store
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/reliant-labs/forge/pkg/orm"
@@ -29,18 +30,53 @@ func InsertStepExecution(ctx context.Context, db orm.Context, exec *core.StepExe
 		WorkflowID:    exec.WorkflowID,
 		StepID:        exec.StepID,
 		ActivityName:  exec.ActivityName,
-		OutputJSON:    exec.OutputJSON,
+		OutputJSON:    jsonbStorable(exec.OutputJSON),
 		ExitCode:      exec.ExitCode,
 		Success:       successFlag(exec.Success),
 		DurationMs:    exec.DurationMs,
 		CreatedAt:     exec.CreatedAt,
 		LoopNodeID:    exec.LoopNodeID,
 		LoopIteration: exec.LoopIteration,
-		InputJSON:     exec.InputJSON,
-		ErrorMessage:  exec.ErrorMessage,
+		InputJSON:     jsonbStorable(exec.InputJSON),
+		ErrorMessage:  validUTF8Ptr(exec.ErrorMessage),
 		Attempt:       exec.Attempt,
 		NodePath:      exec.NodePath,
 	})
+}
+
+// jsonbStorable makes JSON text castable to jsonb. encoding/json writes a NUL
+// in a string as the escape \u0000, which a text column stores but jsonb
+// refuses ("unsupported Unicode escape sequence", SQLSTATE 22P05). The
+// step_executions row casts output_json to jsonb in its generated
+// saved_message_id column, so in prod one NUL in a SaveMessage step's tool
+// output failed the whole INSERT and the step's history was lost; the run
+// diagnostics read casts it too. Each escaped NUL becomes \ufffd (U+FFFD, as
+// validUTF8 does for a raw NUL); an escaped backslash followed by "u0000" is
+// text, not a NUL, and is kept. Anything else returns unchanged.
+func jsonbStorable(text *string) *string {
+	if text == nil || !strings.Contains(*text, `\u0000`) {
+		return text
+	}
+	in := *text
+	var b strings.Builder
+	b.Grow(len(in))
+	for i := 0; i < len(in); i++ {
+		if in[i] != '\\' || i+1 == len(in) {
+			b.WriteByte(in[i])
+			continue
+		}
+		if strings.HasPrefix(in[i:], `\u0000`) {
+			b.WriteString(`\ufffd`)
+			i += len(`\u0000`) - 1
+			continue
+		}
+		// Any other escape: copy it whole so its second byte (an escaped
+		// backslash, say) is never read as the start of another escape.
+		b.WriteString(in[i : i+2])
+		i++
+	}
+	out := b.String()
+	return &out
 }
 
 // LoadStepExecution reads one step attempt by id.

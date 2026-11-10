@@ -126,6 +126,8 @@ func TestSemverAdmits(t *testing.T) {
 		{">=22.12.0 <25", "24.13.0", true},
 		{">=22.12.0 <25", "22.11.9", false},
 		{">=22.12.0 <25", "25.0.0", false},
+		{">=22.12.0 <27", "26.8.2", true},
+		{">=22.12.0 <27", "27.0.0", false},
 		{">=12.15.0 <13", "12.15.0", true},
 		{"<22 || >=24", "23.1.0", false},
 		{"<22 || >=24", "24.0.0", true},
@@ -212,24 +214,36 @@ const (
 	prodWebBuildNodeWhere = "control-plane cut-release.yml, which builds reliant-web for prod on Node 22"
 )
 
+// newestNodeMajor is the newest Node release line engines.node admits, the
+// one a contributor's package manager (Homebrew) installs. It is in no CI
+// setup, so it is named here to get the same real install as CI's majors.
+const (
+	newestNodeMajor = "26"
+	newestNodeWhere = "Node 26, the newest release line (Homebrew's node)"
+)
+
 // TestNodeEnginesAdmitSupportedNodes pins engines.node against the Node
 // releases installs actually run on. engineStrict turns that range into a
 // refusal, so a range that drifts away from CI's Node fails every CI install.
 func TestNodeEnginesAdmitSupportedNodes(t *testing.T) {
 	// 22.12.0 is the oldest supported release (vite 7's floor on the 22 line);
-	// 24 is CI's, .nvmrc's and Electron 41's bundled Node. Each CI major is
-	// checked at a late patch, the release setup-node resolves "24" to.
+	// 24 is CI's, .nvmrc's and Electron 41's bundled Node; 26 is the newest
+	// release line, what Homebrew installs. Each CI major is checked at a late
+	// patch, the release setup-node resolves "24" to.
 	admit := map[string]string{
 		"22.12.0":                        "the oldest supported Node 22",
 		"24.0.0":                         "the first Node 24",
+		newestNodeMajor + ".0.0":         "the first " + newestNodeWhere,
+		newestNodeMajor + ".999.0":       newestNodeWhere,
 		prodWebBuildNodeMajor + ".999.0": prodWebBuildNodeWhere,
 	}
 	for major, where := range ciNodeMajors(t) {
 		admit[major+".999.0"] = where
 	}
-	// 26 has no better-sqlite3 prebuild and fails in node-gyp; 25 is an
-	// unsupported odd release; 22.11 is below vite 7's floor.
-	reject := []string{"22.11.0", "25.0.0", "26.0.0"}
+	// 22.11 is below vite 7's floor; 27 is a major no install has been run on.
+	// The range is contiguous: the odd releases between the supported lines
+	// (23, 25) are admitted, not tested.
+	reject := []string{"22.11.0", "27.0.0"}
 
 	for _, rel := range nodeManifests {
 		rng := readManifest(t, rel).Engines.Node
@@ -260,7 +274,7 @@ func TestNodeEnginesAdmitSupportedNodes(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !ws.EngineStrict {
-		t.Error("frontends/web/pnpm-workspace.yaml must set engineStrict: true; without it pnpm only warns, and Node 26 fails a minute later in node-gyp")
+		t.Error("frontends/web/pnpm-workspace.yaml must set engineStrict: true; without it pnpm only warns, and an unsupported Node fails later with an error that never names its version")
 	}
 }
 
@@ -471,27 +485,32 @@ func fetchNode(t *testing.T, spec string) (bin, version string) {
 // TestPnpmFrozenInstallRunsItsBuildsOnSupportedNodes is the install a
 // contributor or CI actually does, under a real runtime of every supported
 // Node line: the oldest engines.node admits (22.12.0), the latest 22 the prod
-// web build runs on (prodWebBuildNodeMajor), and each major CI, .nvmrc and
-// release.yml name (24), each major at its latest patch, as setup-node
-// resolves it. Each runtime is fetched for the test (fetchNode), so it does
-// not depend on the host's Node, and CI needs no setup-node step per major.
+// web build runs on (prodWebBuildNodeMajor), each major CI, .nvmrc and
+// release.yml name (24), and the newest line engines.node admits
+// (newestNodeMajor), each major at its latest patch, as setup-node resolves
+// it. Each runtime is fetched for the test (fetchNode), so it does not depend
+// on the host's Node, and CI needs no setup-node step per major.
 //
 // Under each one, a frozen install of the committed web inputs with lifecycle
-// scripts on must pass engineStrict, run the allowed builds (better-sqlite3's
-// native addon among them: what failed on Node 26), leave every committed
-// input byte-identical, and produce an addon that loads on that Node. The
-// load is ABI-specific, so an addon built for, or reused from, another Node
-// fails it.
+// scripts on must pass engineStrict (which also holds every dependency's own
+// engines.node), run the allowed builds, leave every committed input
+// byte-identical, and leave an esbuild that transforms TypeScript when that
+// Node loads it: esbuild is the one allowed build that installs a platform
+// binary, and vite drives it for every dev server, build and test run.
 //
 // Each install uses a store of its own: a shared store's side-effects cache
 // would let one runtime's build stand in for another's.
 func TestPnpmFrozenInstallRunsItsBuildsOnSupportedNodes(t *testing.T) {
-	testkit.Slow(t, "fetches Node runtimes and does full pnpm installs from the registry, with native builds",
+	testkit.Slow(t, "fetches Node runtimes and does full pnpm installs from the registry, with lifecycle scripts",
 		testkit.Inputs(append([]string{"package.json", ".nvmrc", "frontends/web/.nvmrc", setupDir + "/action.yml", ".github/workflows/release.yml"},
 			webInstallInputs...)...))
 	requireTool(t, "pnpm")
 
-	specs := map[string]string{"22.12.0": "the oldest supported Node", prodWebBuildNodeMajor: prodWebBuildNodeWhere}
+	specs := map[string]string{
+		"22.12.0":             "the oldest supported Node",
+		prodWebBuildNodeMajor: prodWebBuildNodeWhere,
+		newestNodeMajor:       newestNodeWhere,
+	}
 	for major, where := range ciNodeMajors(t) {
 		specs[major] = where
 	}
@@ -516,11 +535,13 @@ func TestPnpmFrozenInstallRunsItsBuildsOnSupportedNodes(t *testing.T) {
 				}
 			}
 
-			load := exec.Command(filepath.Join(bin, "node"), "-e", `const db = require("better-sqlite3")(":memory:");
-if (db.prepare("select 1 as one").get().one !== 1) process.exit(1);`)
+			// esbuild is vite's dependency, not the app's, so it resolves from vite.
+			load := exec.Command(filepath.Join(bin, "node"), "-e", `const esbuild = require("module").createRequire(require.resolve("vite/package.json"))("esbuild");
+const { code } = esbuild.transformSync("const n: number = 1;", { loader: "ts" });
+if (code.trim() !== "const n = 1;") { console.error(JSON.stringify(code)); process.exit(1); }`)
 			load.Dir = web
 			if out, err := load.CombinedOutput(); err != nil {
-				t.Errorf("better-sqlite3 built by the install does not load on Node %s: %v\n%s", node, err, out)
+				t.Errorf("esbuild installed by the install does not transform TypeScript on Node %s: %v\n%s", node, err, out)
 			}
 		})
 	}
@@ -539,7 +560,7 @@ func TestPnpmAdmitsSupportedNodeAndRefusesOthers(t *testing.T) {
 
 	// Supported Node: the frozen install's check passes (offline, lockfile
 	// only, so it needs no store) and writes nothing.
-	for _, node := range []string{"22.12.0", "24.0.0"} {
+	for _, node := range []string{"22.12.0", "24.0.0", newestNodeMajor + ".0.0"} {
 		out, err := pnpm("install", "--frozen-lockfile", "--lockfile-only", "--ignore-scripts", "--offline", "--config.node-version="+node)
 		if err != nil {
 			t.Errorf("frozen install on Node %s refused: %v\n%s", node, err, out)
@@ -554,7 +575,7 @@ func TestPnpmAdmitsSupportedNodeAndRefusesOthers(t *testing.T) {
 
 	// Unsupported Node: a full install (lifecycle scripts enabled) stops at
 	// the engine check, before anything is installed or any script runs.
-	for _, node := range []string{"22.11.0", "26.0.0"} {
+	for _, node := range []string{"22.11.0", "27.0.0"} {
 		out, err := pnpm("install", "--frozen-lockfile", "--offline", "--config.node-version="+node)
 		if err == nil || !strings.Contains(out, "ERR_PNPM_UNSUPPORTED_ENGINE") {
 			t.Errorf("install on Node %s: err %v, want ERR_PNPM_UNSUPPORTED_ENGINE\n%s", node, err, out)

@@ -294,7 +294,7 @@ describe("the forge journey", () => {
   });
 
   it("spotlights the anchors the demo renders", () => {
-    expect(step("fg-console").target).toBe("[data-tour='forge-console'] #sidebar-layout-nav");
+    expect(step("fg-console").target).toBe("[data-tour='forge-console'] aside");
     expect(step("fg-trace").target).toBe(`[data-testid='obs-trace-row'][data-trace-id='${DEMO_TRACE_ID}']`);
     expect(step("fg-ask").phases?.map((p) => p.target)).toEqual(["[data-testid='ask-reliant-actions']", "[data-testid='ask-agent-sheet']"]);
     expect(step("fg-inside").target).toBe(`[data-testid='trace-span-row'][data-span-id='${DEMO_INSIDE_SPAN_IDS.method}']`);

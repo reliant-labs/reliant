@@ -16,6 +16,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/daemonpolicy"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
+	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/nomachine"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
@@ -46,6 +47,10 @@ type ExecuteRunStepInput struct {
 	// WritableCheckouts is the node's `writable_checkouts`: the shared
 	// checkouts a credentials-none command may write (credsandbox.Wrap).
 	WritableCheckouts []string `json:"writable_checkouts,omitempty"`
+	// WorkDir is the node's `work_dir`, resolved: the directory the command
+	// starts in. A relative one is relative to the run's checkout; empty is
+	// the checkout itself.
+	WorkDir string `json:"work_dir,omitempty"`
 	// SaveMessage delegates the run node's save_message to the ActivityWrapper
 	// (see types.SaveMessageRequest). The handler never reads it.
 	SaveMessage *activitytypes.SaveMessageRequest `json:"save_message,omitempty" reliant:"-"`
@@ -276,13 +281,16 @@ func (a *ExecuteRunStepActivity) execute(ctx context.Context, input ExecuteRunSt
 			Duration: time.Since(startTime).Milliseconds()}, nil
 	}
 
-	// Determine working directory
+	// Determine working directory: the run's checkout, where its log file is
+	// resolved, and the directory the command starts in, the node's work_dir
+	// when it names one (relative to the checkout).
 	workingDir := execCtx.ProjectPath
 	worktreeID := execCtx.WorktreeID
 	worktreePath := execCtx.WorktreePath
 	if worktreePath != "" {
 		workingDir = worktreePath
 	}
+	commandDir := runCommandDir(workingDir, input.WorkDir)
 
 	// Pick executor: test override or remote via daemon
 	executor := a.runExecutor
@@ -315,8 +323,9 @@ func (a *ExecuteRunStepActivity) execute(ctx context.Context, input ExecuteRunSt
 			"exit_code", result.ExitCode, "error", err)
 	} else {
 		observe := a.observeMachine(execCtx)
-		result, err = executeUntilDelivered(withRunRequestID(ctx, requestID), executor, wait, observe, input.Command, workingDir, timeout)
+		result, err = executeUntilDelivered(withRunRequestID(ctx, requestID), executor, wait, observe, input.Command, commandDir, timeout)
 	}
+	a.stopCommandIfCancelled(ctx, execCtx, input, requestID)
 	stdout, stderr, exitCode, interrupted := result.Stdout, result.Stderr, result.ExitCode, result.Interrupted
 	if err != nil {
 		// The machine never took the command within the wait (or is gone):
@@ -435,6 +444,54 @@ func (a *ExecuteRunStepActivity) execute(ctx context.Context, input ExecuteRunSt
 // ============================================================================
 // HELPERS
 // ============================================================================
+
+// runStepCancelReason is what the machine is told when a cancelled run step's
+// command is stopped.
+const runStepCancelReason = "run step cancelled"
+
+// runStepCancelPushTimeout bounds the push that tells the machine to stop a
+// cancelled step's command; the activity is already over.
+const runStepCancelPushTimeout = 10 * time.Second
+
+// stopCommandIfCancelled tells the machine to stop the step's command when
+// Temporal cancelled the step: its run was cancelled (control_run cancel,
+// CancelRun, archiving the chat) or paused.
+//
+// The machine runs the command decoupled from the request that sent it, so
+// that a dropped connection cannot kill a healthy command; the cost is that
+// nothing about the activity's context reaches it. An agent's tool call is
+// stopped by the executor's abandon push, keyed by its tool call id. A run
+// step has none, so before this its command ran on to completion after the
+// run was cancelled, holding whatever it held. The machine registers the
+// command under the request id too, which is what this push names; stopping
+// it signals the command's process group.
+//
+// ONLY a cancel. A worker that stops (a drain, a deploy) or an attempt the
+// server timed out also cancels this context, and then the command must keep
+// running: the retry reattaches to it by the same request id and returns its
+// real result (execute's IDEMPOTENCY note). The SDK tells them apart by the
+// cause: a server cancel is a temporal CanceledError; a timed-out attempt is a
+// NotFound, a pause ErrActivityPaused and a worker stop a plain cancel.
+func (a *ExecuteRunStepActivity) stopCommandIfCancelled(ctx context.Context, execCtx RunExecutorContext, input ExecuteRunStepInput, requestID string) {
+	if a.router == nil || requestID == "" || !cancelledByServer(ctx) {
+		return
+	}
+	pushCtx, cancel := context.WithTimeout(toolexec.WithDaemonSelector(context.WithoutCancel(ctx), execCtx.DaemonSelector), runStepCancelPushTimeout)
+	defer cancel()
+	if err := a.router.SendToolExecutionCancel(pushCtx, execCtx.UserID, requestID, runStepCancelReason); err != nil {
+		logging.WarnContext(pushCtx, "[RunStep] could not tell the machine to stop a cancelled step's command; it may run to completion",
+			"chat_id", input.ChatID, "step_id", input.StepID, "request_id", requestID, "error", err)
+		return
+	}
+	logging.InfoContext(pushCtx, "[RunStep] step cancelled; told the machine to stop its command",
+		"chat_id", input.ChatID, "step_id", input.StepID, "request_id", requestID)
+}
+
+// cancelledByServer reports whether ctx ended because Temporal asked for the
+// activity to be cancelled (see stopCommandIfCancelled).
+func cancelledByServer(ctx context.Context) bool {
+	return errors.Is(ctx.Err(), context.Canceled) && temporal.IsCanceledError(context.Cause(ctx))
+}
 
 // writeRunOutput writes a run_output update to chat_updates for UI display
 // This allows run step output to appear in the UI without polluting LLM context
@@ -738,4 +795,20 @@ func runStepTransportFailure(transportErr *toolexec.TransportError) error {
 // shellQuote wraps a string in single quotes, escaping any embedded single quotes.
 func shellQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", "'\"'\"'") + "'"
+}
+
+// runCommandDir is the directory a run node's command starts in: workDir (the
+// node's resolved `work_dir`) when it names one, joined onto checkout when it
+// is relative; else checkout. A directory that does not exist fails the
+// command on its machine, saying so, rather than running it elsewhere.
+func runCommandDir(checkout, workDir string) string {
+	workDir = strings.TrimSpace(workDir)
+	switch {
+	case workDir == "":
+		return checkout
+	case filepath.IsAbs(workDir) || checkout == "":
+		return filepath.Clean(workDir)
+	default:
+		return filepath.Join(checkout, workDir)
+	}
 }

@@ -118,6 +118,10 @@ func (s *Service) StartDaemonEventConsumer(ctx context.Context, nc *nats.Conn) e
 			}
 		}
 		_ = msg.Ack()
+		// A machine that is back may hold checkouts of workspace creates
+		// whose answer was lost; they are removed now rather than when a
+		// retry trips over one (reliant #2413).
+		s.startFailedCreateCleanup(evt.UserID, evt.DaemonID)
 	})
 	if err != nil {
 		return fmt.Errorf("start consuming %s: %w", daemonevents.SubjectConnected, err)
