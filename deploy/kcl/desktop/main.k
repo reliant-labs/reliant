@@ -6,7 +6,7 @@ have nothing to do. It exists for one command, which release.yml's
 `renderer-sourcemaps` job runs (scripts/release-sourcemaps.sh):
 
     forge frontend sourcemaps push frontends/web/dist --frontend desktop \
-        --build-id <release version> --env desktop --project control-plane
+        --build-id <release version> --env desktop --project control-plane --org <org>
 
 WHY AN ENV. `forge frontend sourcemaps push` takes the control plane, the
 registry and the credential from an env's declaration (`--env`) like every
@@ -14,8 +14,10 @@ forge command that talks to a control plane. reliant's only other env is
 `dev`, which is this machine's stack and holds no CI credential.
 
 WHAT IT NAMES. Reliant cloud (the default `forge.ControlPlane {}`), with the
-credential read from RELIANT_DESKTOP_SOURCEMAPS_TOKEN, a repository secret of
-the same name. Observability is hosted by default, so the maps go to the
+credential read from RELIANT_DESKTOP_SOURCEMAPS_TOKEN: an environment secret of
+the `desktop-sourcemaps` GitHub environment, a registry-only token carrying
+sourcemaps:write alone (forge#2059). The control plane refuses it on every RPC,
+so the push names the org (--org, RELIANT_DESKTOP_SOURCEMAPS_ORG). Observability is hosted by default, so the maps go to the
 platform registry as `<org>/control-plane/desktop-sourcemaps:<version>`. The
 issues worker looks them up there: the renderer reports `forge.frontend =
 desktop` and service.version = the release version (frontends/web/src/lib/

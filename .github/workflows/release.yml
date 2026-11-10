@@ -385,15 +385,22 @@ jobs:
   # its own renderer build is not what ships. The script files nothing for a
   # version that is not a release (a dev dispatch).
   #
-  # THE CREDENTIAL is RELIANT_DESKTOP_SOURCEMAPS_TOKEN, a Reliant org token for
-  # tenant zero that deploy/kcl/desktop names (token_env). Unset, the step only
-  # warns. This job holds no other secret and reads nothing but the repository.
+  # THE CREDENTIAL is RELIANT_DESKTOP_SOURCEMAPS_TOKEN, deploy/kcl/desktop's
+  # token_env: a REGISTRY-ONLY org automation token for tenant zero carrying
+  # sourcemaps:write and nothing else (forge#2059, control-plane#2493). The
+  # registry grants it push on `*-sourcemaps` repositories only and the control
+  # plane refuses it on every RPC, so RELIANT_DESKTOP_SOURCEMAPS_ORG (a repository
+  # variable, not a secret) names its org. It is an environment secret of the
+  # `desktop-sourcemaps` environment, whose deployment branch policy admits only
+  # `v*` tags. Unset, the step only warns. This job holds no other secret and
+  # reads nothing but the repository.
   renderer-sourcemaps:
     name: File Renderer Source Maps
     needs: prepare
     if: needs.prepare.outputs.prebuilt_run == ''
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    environment: desktop-sourcemaps
     permissions:
       contents: read
     steps:
@@ -419,6 +426,7 @@ jobs:
         env:
           VERSION: ${{ needs.prepare.outputs.version }}
           RELIANT_DESKTOP_SOURCEMAPS_TOKEN: ${{ secrets.RELIANT_DESKTOP_SOURCEMAPS_TOKEN }}
+          RELIANT_DESKTOP_SOURCEMAPS_ORG: ${{ vars.RELIANT_DESKTOP_SOURCEMAPS_ORG }}
           # The pinned forge is a commit pseudo-version the module proxy may
           # not have yet (Taskfile.yml's GOPRIVATE note).
           GOPRIVATE: github.com/reliant-labs/*

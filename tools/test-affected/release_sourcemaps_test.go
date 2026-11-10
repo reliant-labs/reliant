@@ -74,10 +74,20 @@ func TestReleaseFilesRendererSourcemaps(t *testing.T) {
 			if s.Env["RELIANT_DESKTOP_SOURCEMAPS_TOKEN"] != "${{ secrets.RELIANT_DESKTOP_SOURCEMAPS_TOKEN }}" {
 				t.Errorf("filing step token = %q, want the RELIANT_DESKTOP_SOURCEMAPS_TOKEN secret", s.Env["RELIANT_DESKTOP_SOURCEMAPS_TOKEN"])
 			}
+			// A registry-only token cannot look its org up: the org is a variable.
+			if s.Env["RELIANT_DESKTOP_SOURCEMAPS_ORG"] != "${{ vars.RELIANT_DESKTOP_SOURCEMAPS_ORG }}" {
+				t.Errorf("filing step org = %q, want the RELIANT_DESKTOP_SOURCEMAPS_ORG variable", s.Env["RELIANT_DESKTOP_SOURCEMAPS_ORG"])
+			}
 		}
 	}
 	if !downloaded || !filed {
 		t.Errorf("renderer-sourcemaps: downloads web-dist=%v, runs the script=%v; want both", downloaded, filed)
+	}
+
+	// The secret is an ENVIRONMENT secret: only a job in the desktop-sourcemaps
+	// environment (whose branch policy admits v* tags) can read it.
+	if j.Environment != "desktop-sourcemaps" {
+		t.Errorf("renderer-sourcemaps environment = %q, want desktop-sourcemaps", j.Environment)
 	}
 
 	// The step continues on error: a shipped release is never marked failed for its maps.

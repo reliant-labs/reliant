@@ -19,18 +19,20 @@ printf '%s\n' "$*" >> "$FORGE_CALLS"
 [ "${FAKE_FAIL:-}" = 1 ] && { echo "Error: push refused"; exit 1; }
 id=""; prev=""
 for a in "$@"; do [ "$prev" = --build-id ] && id="$a"; prev="$a"; done
-echo "  [sourcemaps] desktop: 3 source map(s) filed as registry.reliantapi.com/org-1/${FAKE_PROJECT:-control-plane}/desktop-sourcemaps:$id (sha256:abc)"
+org=""; prev=""
+for a in "$@"; do [ "$prev" = --org ] && org="$a"; prev="$a"; done
+echo "  [sourcemaps] desktop: 3 source map(s) filed as registry.reliantapi.com/${FAKE_ORG:-$org}/${FAKE_PROJECT:-control-plane}/desktop-sourcemaps:$id (sha256:abc)"
 FORGE
 chmod +x "$fx/forge"
 mkdir -p "$fx/dist"
 echo '{"version":"1.2.3"}' > "$fx/dist/version.json"
-export FORGE="$fx/forge" FORGE_CALLS="$fx/calls"
+export FORGE="$fx/forge" FORGE_CALLS="$fx/calls" RELIANT_DESKTOP_SOURCEMAPS_ORG=org-1
 
 run() { : > "$fx/calls"; bash "$src" "$@" > "$fx/out" 2>&1; }
 
 # 1. A release with the credential: one push, with exactly these arguments.
 RELIANT_DESKTOP_SOURCEMAPS_TOKEN=rlat_test run v1.2.3 "$fx/dist" || fail "a release push failed: $(cat "$fx/out")"
-want="frontend sourcemaps push $fx/dist --frontend desktop --build-id 1.2.3 --env desktop --project control-plane"
+want="frontend sourcemaps push $fx/dist --frontend desktop --build-id 1.2.3 --env desktop --project control-plane --org org-1"
 [ "$(cat "$fx/calls")" = "$want" ] || fail "pushed with '$(cat "$fx/calls")', want '$want'"
 echo "ok: a release files its maps as desktop:<version> under control-plane"
 
@@ -65,8 +67,15 @@ echo "ok: a failed push fails and shows why"
 
 # 7. Maps filed outside control-plane's subtree (a forge ignoring --project) fail.
 ! FAKE_PROJECT=reliant RELIANT_DESKTOP_SOURCEMAPS_TOKEN=rlat_test run v1.2.3 "$fx/dist" || fail "maps filed under reliant/ passed"
-grep -q 'not filed under control-plane/desktop-sourcemaps' "$fx/out" || fail "unexplained failure: $(cat "$fx/out")"
+grep -q 'not filed under org-1/control-plane/desktop-sourcemaps' "$fx/out" || fail "unexplained failure: $(cat "$fx/out")"
+! FAKE_ORG=org-2 RELIANT_DESKTOP_SOURCEMAPS_TOKEN=rlat_test run v1.2.3 "$fx/dist" || fail "maps filed under another org passed"
 echo "ok: maps filed where the issues worker does not look fail"
+
+# 7b. No org: a registry-only token cannot look it up, so nothing is filed, with a warning.
+RELIANT_DESKTOP_SOURCEMAPS_ORG="" RELIANT_DESKTOP_SOURCEMAPS_TOKEN=rlat_test run v1.2.3 "$fx/dist" || fail "a missing org failed the step: $(cat "$fx/out")"
+[ ! -s "$fx/calls" ] || fail "pushed without an org"
+grep -q '::warning::RELIANT_DESKTOP_SOURCEMAPS_ORG is not set' "$fx/out" || fail "no warning without an org: $(cat "$fx/out")"
+echo "ok: a missing org warns and files nothing"
 
 # 8. Without FORGE, the forge forge.yaml pins (never one from PATH).
 mkdir -p "$fx/repo"
@@ -74,7 +83,7 @@ echo 'forge_version: v9.9.9-0.20261110000000-abcdefabcdef' > "$fx/repo/forge.yam
 cat > "$fx/go" << 'GO'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >> "$FORGE_CALLS"
-echo "  [sourcemaps] desktop: 1 source map(s) filed as r/o/control-plane/desktop-sourcemaps:1.2.3 (sha256:x)"
+echo "  [sourcemaps] desktop: 1 source map(s) filed as r/org-1/control-plane/desktop-sourcemaps:1.2.3 (sha256:x)"
 GO
 chmod +x "$fx/go"
 : > "$fx/calls"

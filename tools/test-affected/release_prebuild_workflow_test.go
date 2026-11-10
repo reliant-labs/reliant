@@ -21,10 +21,11 @@ type releaseWorkflow struct {
 }
 
 type releaseJob struct {
-	Needs   any               `yaml:"needs"`
-	If      string            `yaml:"if"`
-	Outputs map[string]string `yaml:"outputs"`
-	Steps   []releaseStep     `yaml:"steps"`
+	Needs       any               `yaml:"needs"`
+	If          string            `yaml:"if"`
+	Environment string            `yaml:"environment"`
+	Outputs     map[string]string `yaml:"outputs"`
+	Steps       []releaseStep     `yaml:"steps"`
 }
 
 type releaseStep struct {
