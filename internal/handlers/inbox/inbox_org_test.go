@@ -47,7 +47,7 @@ func TestListInbox_LeavesOutItemsOfAnOrgTheCallerMayNotRead(t *testing.T) {
 			return &db.Project{ID: id, UserID: "user-1", OrgID: projectOrgs[id]}, nil
 		}
 		repo.ListInboxPendingFunc = func(context.Context, string) ([]*core.InboxPending, error) {
-			now := time.Now()
+			now := time.Date(2026, 1, 15, 12, 0, 0, 0, time.UTC)
 			return []*core.InboxPending{
 				{Kind: core.InboxPendingApproval, ItemKey: "chat-acme", ChatID: "c-acme", ProjectID: "p-acme", WaitingSince: now},
 				{Kind: core.InboxPendingApproval, ItemKey: "chat-home", ChatID: "c-home", ProjectID: "p-home", WaitingSince: now},
@@ -56,7 +56,7 @@ func TestListInbox_LeavesOutItemsOfAnOrgTheCallerMayNotRead(t *testing.T) {
 			}, nil
 		}
 		repo.ListWorktreeRecoveriesFunc = func(context.Context, string, string) ([]*core.WorktreeRecovery, error) {
-			now := time.Now()
+			now := time.Date(2026, 1, 15, 12, 0, 0, 0, time.UTC)
 			return []*core.WorktreeRecovery{
 				{ID: "acme", ProjectID: "p-acme", Phase: "held", CreatedAt: now},
 				{ID: "home", ProjectID: "p-home", Phase: "held", CreatedAt: now},

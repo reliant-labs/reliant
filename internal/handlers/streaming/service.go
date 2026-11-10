@@ -93,6 +93,12 @@ type Service struct {
 	// defaultReauthorizeInterval in production; a field so a test can watch
 	// a removal end a stream without waiting for it.
 	reauthorizeInterval time.Duration
+
+	// unassignedOrgRecheck bounds how often the user stream's org gate
+	// re-reads a resource it last found with no org (orgGate). Always
+	// defaultUnassignedOrgRecheck in production; a field so a test can
+	// watch a stamp take effect without waiting for it.
+	unassignedOrgRecheck time.Duration
 }
 
 // New creates a new streaming service instance with the supplied Deps.
@@ -101,7 +107,7 @@ func New(deps Deps) (*Service, error) {
 	if err := deps.validateDeps(); err != nil {
 		return nil, err
 	}
-	return &Service{deps: deps, heartbeatInterval: defaultHeartbeatInterval, reauthorizeInterval: defaultReauthorizeInterval}, nil
+	return &Service{deps: deps, heartbeatInterval: defaultHeartbeatInterval, reauthorizeInterval: defaultReauthorizeInterval, unassignedOrgRecheck: defaultUnassignedOrgRecheck}, nil
 }
 
 // Name returns the service name for logging and registry.

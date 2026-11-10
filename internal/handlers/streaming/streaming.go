@@ -38,6 +38,9 @@ const (
 	// production: an open chat stream of a removed org member ends within
 	// orgs.CacheTTL (30s) plus this.
 	defaultReauthorizeInterval = 10 * time.Second
+	// defaultUnassignedOrgRecheck is how long the user stream's org gate
+	// trusts that a resource has no org yet before reading it again.
+	defaultUnassignedOrgRecheck = 3 * time.Second
 
 	// chatReplayBatchSize is how many chat updates one replay read returns
 	// and one replay frame carries. Every batch is a serial database round
@@ -93,7 +96,7 @@ func (s *Service) StreamUserUpdates(
 	}
 
 	sinceSeq := req.Msg.SinceSeq
-	filter := userUpdateFilter{projectID: req.Msg.GetProjectId(), orgs: newOrgGate(s.deps.Repo, userID)}
+	filter := userUpdateFilter{projectID: req.Msg.GetProjectId(), orgs: newOrgGate(s.deps.Repo, userID, s.unassignedOrgRecheck)}
 
 	// --- User-level initialization ---
 	latestSeq, err := s.deps.Repo.GetLatestUserUpdateSequence(ctx, userID)

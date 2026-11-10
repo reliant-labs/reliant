@@ -4,6 +4,7 @@ package streaming
 import (
 	"context"
 	"encoding/json"
+	"time"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
@@ -30,7 +31,9 @@ const maxOrgGateEntries = 4096
 // (user_updates.org_id, stamped on insert), so a deleted resource's history
 // keeps its org. An update with none (written before orgs, or a live update
 // not read back) falls back to the resource's current org, read once per
-// stream once it has one; a resource of no org is decided by authz too, so a
+// stream once it has one (until then, again at most once per
+// unassignedOrgRecheck); a resource of no org
+// is decided by authz too, so a
 // credential bound to another org gets none of its owner's unassigned
 // resources' updates. When neither is readable (the resource is
 // gone, or a read failed), the update is withheld (authz fails closed),
@@ -41,10 +44,17 @@ type orgGate struct {
 	repo   Repository
 	userID string
 	orgs   map[string]string
+	// unassigned is when each resource was last read as having no org. It
+	// is read again only once recheck has passed, so a chatty legacy chat
+	// costs one read per recheck, and a stamp the backfill writes is seen
+	// within that bound.
+	unassigned map[string]time.Time
+	recheck    time.Duration
+	now        func() time.Time
 }
 
-func newOrgGate(repo Repository, userID string) *orgGate {
-	return &orgGate{repo: repo, userID: userID, orgs: map[string]string{}}
+func newOrgGate(repo Repository, userID string, recheck time.Duration) *orgGate {
+	return &orgGate{repo: repo, userID: userID, orgs: map[string]string{}, unassigned: map[string]time.Time{}, recheck: recheck, now: time.Now}
 }
 
 // allows reports whether update may be delivered, stripping it to a
@@ -94,7 +104,7 @@ func (g *orgGate) allows(ctx context.Context, update *db.UserUpdate) bool {
 	}
 
 	org, cached := g.orgs[key]
-	if !cached {
+	if at, seen := g.unassigned[key]; !cached && (!seen || g.now().Sub(at) >= g.recheck) {
 		got, err := read()
 		switch {
 		case err != nil:
@@ -106,10 +116,21 @@ func (g *orgGate) allows(ctx context.Context, update *db.UserUpdate) bool {
 		case got != nil:
 			org = *got
 		}
-		if len(g.orgs) >= maxOrgGateEntries {
-			g.orgs = map[string]string{}
+		// An established org is cached for the stream. A resource of none
+		// yet may be stamped with one later (the lazy backfill), so it is
+		// read again, at most once per recheck, until it has one.
+		if org != "" {
+			if len(g.orgs) >= maxOrgGateEntries {
+				g.orgs = map[string]string{}
+			}
+			g.orgs[key] = org
+			delete(g.unassigned, key)
+		} else {
+			if len(g.unassigned) >= maxOrgGateEntries {
+				g.unassigned = map[string]time.Time{}
+			}
+			g.unassigned[key] = g.now()
 		}
-		g.orgs[key] = org
 	}
 	if org == "" {
 		// A resource of no org yet is decided as authz decides one: a

@@ -114,10 +114,14 @@ func orgUserStream(t *testing.T, repo Repository, hub streaming.UpdateHub[db.Use
 }
 
 // credentialUserStream is orgUserStream through a credential bound to org
-// bound ("" for none), as auth.WithMachineToken installs one.
-func credentialUserStream(t *testing.T, repo Repository, hub streaming.UpdateHub[db.UserUpdate], m authz.Membership, bound string) <-chan *reliantv1.UserStreamEvent {
+// bound ("" for none), as auth.WithMachineToken installs one; each tune
+// adjusts the service before it serves.
+func credentialUserStream(t *testing.T, repo Repository, hub streaming.UpdateHub[db.UserUpdate], m authz.Membership, bound string, tune ...func(*Service)) <-chan *reliantv1.UserStreamEvent {
 	t.Helper()
 	svc := NewTestStreaming(t, WithStreamingDeps(Deps{Repo: repo, Deltas: noopHub{}, UserUpdates: hub}))
+	for _, f := range tune {
+		f(svc)
+	}
 	mux := http.NewServeMux()
 	path, handler := reliantv1connect.NewStreamingServiceHandler(svc, connect.WithInterceptors(svcerr.Interceptor()))
 	// A request through a listener carries the membership authz decides with.
@@ -280,4 +284,110 @@ func TestStreamUserUpdates_LiveUnassignedResourcesFollowTheCredential(t *testing
 	send(update(5, "personal"))
 	ids, _ := nextBatch(t, events)
 	require.Equal(t, []string{"personal"}, ids)
+}
+
+// stampingRepo is orgUpdatesRepo whose chats can be stamped with an org while
+// a stream is open, as the lazy backfill stamps an unassigned one.
+type stampingRepo struct {
+	orgUpdatesRepo
+	mu      sync.Mutex
+	stamped map[string]string
+}
+
+func (r *stampingRepo) stamp(chatID, org string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.stamped[chatID] = org
+}
+
+func (r *stampingRepo) GetChatRow(ctx context.Context, id string) (*db.ChatRow, error) {
+	r.mu.Lock()
+	org, ok := r.stamped[id]
+	r.mu.Unlock()
+	if ok {
+		return &db.ChatRow{ID: id, UserID: raceTestUserID, OrgID: &org}, nil
+	}
+	return r.orgUpdatesRepo.GetChatRow(ctx, id)
+}
+
+// An unassigned resource stamped with an org while a stream is open is
+// decided by that org from its next update on: a credential bound to the
+// owner's default org, and a member who has left the org, stop receiving it.
+func TestStreamUserUpdates_AnUnassignedResourceStampedWhileOpenFollowsItsNewOrg(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		members map[string]bool
+		bound   string
+	}{
+		{"a credential bound to the default org", map[string]bool{"acme": true, "home": true}, "home"},
+		{"a member who has left the org", map[string]bool{"home": true}, ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := &stampingRepo{stamped: map[string]string{}}
+			hub := newChanUserHub()
+			// Re-read an unassigned resource on every update, so the stamp
+			// takes effect on the next one rather than after the recheck.
+			events := credentialUserStream(t, repo, hub, &orgMembers{orgs: tc.members, def: "home"}, tc.bound,
+				func(s *Service) { s.unassignedOrgRecheck = 0 })
+			nextEvent(t, events, "sync", func(ev *reliantv1.UserStreamEvent) bool { return ev.GetSync() != nil })
+			<-hub.subscribed
+			send := func(u db.UserUpdate) {
+				hub.events <- streaming.UpdateEvent[db.UserUpdate]{SequenceNumber: u.SequenceNumber, Payload: u}
+			}
+
+			send(update(1, "c:unassigned-chat"))
+			ids, _ := nextBatch(t, events)
+			require.Equal(t, []string{"c:unassigned-chat"}, ids, "unassigned, it is the default org's")
+
+			repo.stamp("unassigned-chat", "acme")
+			send(update(2, "c:unassigned-chat"))
+			send(update(3, "personal"))
+			var got []string
+			for latest := int64(1); latest < 3; {
+				var batch []string
+				batch, latest = nextBatch(t, events)
+				got = append(got, batch...)
+			}
+			require.Equal(t, []string{"personal"}, got, "stamped acme, its updates are acme's")
+		})
+	}
+}
+
+// countingChatRepo counts its chat reads; its chats have no org until stamped.
+type countingChatRepo struct {
+	orgUpdatesRepo
+	reads int
+	org   *string
+}
+
+func (r *countingChatRepo) GetChatRow(_ context.Context, id string) (*db.ChatRow, error) {
+	r.reads++
+	return &db.ChatRow{ID: id, UserID: raceTestUserID, OrgID: r.org}, nil
+}
+
+// The gate re-reads a resource it found with no org at most once per
+// recheck, and caches it for good once it has one.
+func TestOrgGate_ReReadsAnUnassignedResourceOncePerRecheck(t *testing.T) {
+	repo := &countingChatRepo{}
+	gate := newOrgGate(repo, raceTestUserID, 3*time.Second)
+	clock := time.Date(2026, 1, 15, 12, 0, 0, 0, time.UTC)
+	gate.now = func() time.Time { return clock }
+	ctx := authz.WithMembership(context.Background(), &orgMembers{orgs: map[string]bool{"home": true}, def: "home"})
+	allows := func() bool {
+		u := update(1, "c:legacy-chat")
+		return gate.allows(ctx, &u)
+	}
+
+	require.True(t, allows(), "unassigned: the owner's")
+	require.True(t, allows())
+	require.Equal(t, 1, repo.reads, "within the recheck the resource is not read again")
+
+	acme := "acme"
+	repo.org = &acme
+	clock = clock.Add(3 * time.Second)
+	require.False(t, allows(), "past the recheck the stamp is read: acme, which the caller is not in")
+	require.Equal(t, 2, repo.reads)
+	clock = clock.Add(time.Hour)
+	require.False(t, allows())
+	require.Equal(t, 2, repo.reads, "an established org is cached")
 }
