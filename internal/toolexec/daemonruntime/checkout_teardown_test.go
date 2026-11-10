@@ -244,6 +244,57 @@ func TestTeardownsAreRefusedUntilTheJournalLoads(t *testing.T) {
 	assert.Error(t, err)
 }
 
+// A journal directory is durable before the journal accepts an op: the
+// parent of every directory it created is synced (the journal's own parent
+// even when it already existed), before any record is written, any checkout
+// deleted or any fence answered. Otherwise a power loss can take the whole
+// journal directory, and a restart on an empty journal would delete again.
+func TestTheJournalDirectoryIsDurableBeforeItAcceptsAnOp(t *testing.T) {
+	// Not parallel: it swaps the package's directory-sync seam.
+	var mu sync.Mutex
+	var events []string
+	record := func(e string) { mu.Lock(); defer mu.Unlock(); events = append(events, e) }
+	prev := syncTeardownDir
+	t.Cleanup(func() { syncTeardownDir = prev })
+	syncTeardownDir = func(path string) error { record("sync " + path); return prev(path) }
+
+	base := t.TempDir()
+	dataDir := filepath.Join(base, "a", "b")
+	dir := filepath.Join(dataDir, checkoutTeardownDirName)
+	j, err := loadTeardownJournal(dir, testTeardownNow)
+	require.NoError(t, err)
+	loaded := len(events)
+	assert.ElementsMatch(t, []string{"sync " + dataDir, "sync " + filepath.Join(base, "a"), "sync " + base}, events[:loaded],
+		"each created directory's entry is synced into its parent")
+
+	clone := filepath.Join(t.TempDir(), "proj")
+	_, err = j.run(context.Background(), "op-durable", "remove", clone, func(context.Context) (bool, error) {
+		record("delete")
+		return true, nil
+	})
+	require.NoError(t, err)
+	_, err = j.status("op-fenced")
+	require.NoError(t, err)
+	assert.Equal(t, []string{"sync " + dir, "delete", "sync " + dir, "sync " + dir}, events[loaded:],
+		"the record is synced before the delete, the outcome and the fence after")
+
+	// Reloading an existing journal still syncs its parent first.
+	events = nil
+	_, err = loadTeardownJournal(dir, testTeardownNow)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"sync " + dataDir}, events)
+
+	// A parent that cannot be synced leaves no journal, so nothing is accepted.
+	syncTeardownDir = func(path string) error {
+		if path == dataDir {
+			return os.ErrPermission
+		}
+		return prev(path)
+	}
+	_, err = loadTeardownJournal(dir, testTeardownNow)
+	require.ErrorIs(t, err, os.ErrPermission)
+}
+
 var installTestTeardownJournalOnce sync.Once
 
 // installTestTeardownJournal gives the handlers a durable journal, shared by

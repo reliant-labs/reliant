@@ -80,6 +80,9 @@ export function shouldRedirectToMobile(env: MobileRedirectEnv): boolean {
     // A claim link is opened from wherever the agent's human reads their
     // messages, often a phone, and its page is built to fit one.
     "/claim",
+    // An org invitation is opened from an email, often on a phone; its page
+    // fits one, and its token was already moved into storage at boot.
+    "/accept-invite",
     "/design-sandbox",
     "/forge",
     "/apps",

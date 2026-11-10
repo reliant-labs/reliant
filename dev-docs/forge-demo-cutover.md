@@ -97,9 +97,14 @@ The smoke script loads `/` and 12 console tabs in headless Chrome. It exits 1 on
 - a request to another origin, or a 4xx/5xx response;
 - a page error, or a CORS console error;
 - `/` not landing on `/forge/demo`;
-- a page without `data-shell="demo"`.
+- a page without `data-shell="demo"`;
+- Data or Storage on prod (the demo's audited environment) not asking for a
+  reason, reading before it is given, or not reading after it.
 
-It also counts "Sample data isn't available" per tab.
+It answers that dialog as a visitor would, with the reason `demo smoke <run id>`
+(`DEMO_SMOKE_RUN_ID`, default the start time). The demo records nothing: its
+reads go over the mock transport. It also clicks every nav item at desktop and
+phone sizes. It also counts "Sample data isn't available" per tab.
 
 **The tour on landing.** `/` lands on `/forge/demo`. Since the UX change (feat/demo-ux), the tour no longer starts by itself: a toast offers it ("Take the guided tour"), and per-view tips show. The original ask was "the tour running"; this follows the newer "explore first" direction. Say if you want auto-start back.
 

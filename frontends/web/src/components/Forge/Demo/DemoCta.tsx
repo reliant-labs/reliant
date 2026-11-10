@@ -2,7 +2,7 @@
 
 /**
  * The public demo's calls to action: **Sign up** (the primary, large) and
- * **Install forge** (secondary, opens InstallForgeSheet). They sit in the
+ * **Install Forge** (secondary, opens InstallForgeSheet). They sit in the
  * banner, on the tour's end card, in every page card's footer and, once a
  * page's card is closed, in the corner beside "Show me around". Each click
  * records `demo_cta_clicked{cta, placement}`.
@@ -38,12 +38,19 @@ export function signupHref(placement: DemoCtaPlacement): string {
   }
 }
 
+/**
+ * Where the public demo shows no CTA: its action row carries them, so a page
+ * explanation or a mid-tour card never repeats them. The tour's end card does:
+ * it is where the tour hands off.
+ */
+const OFF_ON_DEMO: readonly DemoCtaPlacement[] = ["page_card", "toast", "tour_intro", "corner"];
+
 const tracked = (cta: "signup" | "install", placement: DemoCtaPlacement) => trackEvent("demo_cta_clicked", { cta, placement });
 
-/** "Install forge" as a text link (the tour's intro, the toast), opening the same sheet. */
-export function InstallForgeLink({ placement, children = "Install forge" }: { placement: DemoCtaPlacement; children?: React.ReactNode }) {
+/** "Install Forge" as a text link (the tour's intro, the toast), opening the same sheet. */
+export function InstallForgeLink({ placement, children = "Install Forge" }: { placement: DemoCtaPlacement; children?: React.ReactNode }) {
   const [installing, setInstalling] = useState(false);
-  if (isDemoShell() && ["page_card", "end_card", "toast", "tour_intro", "corner"].includes(placement)) return null;
+  if (isDemoShell() && OFF_ON_DEMO.includes(placement)) return null;
   return (
     <>
       <button
@@ -64,7 +71,7 @@ export function InstallForgeLink({ placement, children = "Install forge" }: { pl
 
 /** Sign up, as the page's primary button. */
 export function SignUpButton({ placement, size = "lg", className }: { placement: DemoCtaPlacement; size?: "md" | "lg"; className?: string }) {
-  if (isDemoShell() && ["page_card", "end_card", "toast", "tour_intro", "corner"].includes(placement)) return null;
+  if (isDemoShell() && OFF_ON_DEMO.includes(placement)) return null;
   return (
     <a
       href={signupHref(placement)}
@@ -84,12 +91,12 @@ export function SignUpButton({ placement, size = "lg", className }: { placement:
   );
 }
 
-/** Sign up (primary) and Install forge (secondary). */
+/** Sign up (primary) and Install Forge (secondary). */
 export function DemoCta({ placement, size = "lg" }: { placement: DemoCtaPlacement; size?: "md" | "lg" }) {
   const [installing, setInstalling] = useState(false);
   // The public demo keeps sales actions in its persistent screen action row,
   // never inside a page explanation or journey callout.
-  if (isDemoShell() && ["page_card", "end_card", "toast", "tour_intro", "corner"].includes(placement)) return null;
+  if (isDemoShell() && OFF_ON_DEMO.includes(placement)) return null;
   return (
     <span className="inline-flex flex-wrap items-center gap-2" data-testid={`demo-cta-${placement}`}>
       <SignUpButton placement={placement} size={size} />
@@ -106,7 +113,7 @@ export function DemoCta({ placement, size = "lg" }: { placement: DemoCtaPlacemen
         data-testid="demo-cta-install"
       >
         <Download className="h-3.5 w-3.5" aria-hidden="true" />
-        Install forge
+        Install Forge
       </button>
       <InstallForgeSheet open={installing} onClose={() => setInstalling(false)} />
     </span>

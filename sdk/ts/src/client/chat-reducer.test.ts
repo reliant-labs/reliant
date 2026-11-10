@@ -604,6 +604,30 @@ describe("tool bodies a stub read left out", () => {
     expect(s.toolResults["call-1"]).toMatchObject({ content: STUB_OUTPUT, elided: true, block_id: "r-1-r9" });
   });
 
+  it("partial arguments held from a stream that dropped never displace a finished call's elided input", () => {
+    const PARTIAL_INPUT = FULL_INPUT.slice(0, 100);
+    const streaming = updateData(ChatUpdateType.MESSAGE, 1, "a-1", {
+      message: {
+        id: "a-1",
+        chat_id: CHAT,
+        role: 2,
+        seq: 1,
+        thread: "",
+        streaming_state: 1,
+        content_blocks: [
+          { id: "a-1-b0", type: 2, index: 0, tool_call_id: "call-1", tool_name: "write", input: PARTIAL_INPUT },
+        ],
+      },
+    });
+    const held = apply(fresh(), streaming);
+    expect(callBlock(held).input).toBe(PARTIAL_INPUT);
+
+    const s = snapshot(held, call(10, { elided: true }));
+    expect(callBlock(s)).toMatchObject({ input: SKELETON, bodyElided: true, bodySize: BigInt(FULL_INPUT.length) });
+    const t = apply(held, call(10, { elided: true }));
+    expect(callBlock(t)).toMatchObject({ input: SKELETON, bodyElided: true });
+  });
+
   it("a full read hands back the incoming messages untouched", () => {
     const live = watchedLive();
     const incoming = decode(call(3)).map((u) => (u as unknown as { message: Message }).message);

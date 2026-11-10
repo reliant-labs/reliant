@@ -96,4 +96,14 @@ describe("placeCallout", () => {
     expect(placed.overlaps).toBe(true);
     expect(onScreen(box(placed))).toBe(true);
   });
+
+  it.each([
+    ["below the fold", { top: 1021, left: 255, width: 1155, height: 370 }],
+    ["above the window", { top: -600, left: 300, width: 400, height: 200 }],
+    ["right of the window", { top: 300, left: 1600, width: 200, height: 40 }],
+  ])("stays wholly on screen for a target %s", (_name, target) => {
+    for (const preferred of ["auto", "top", "bottom", "left", "right"] as const) {
+      expect(onScreen(box(placeCallout(target, CARD, VIEWPORT, { preferred }))), preferred).toBe(true);
+    }
+  });
 });

@@ -11,8 +11,9 @@
  *
  * ── The no-trial reality ──────────────────────────────────────────────
  *
- * `buildPersonalOrg` grants a new account NOTHING. There is no compute free
- * trial and no signup wallet credit; entitlement arrives only from a redeemed
+ * The org a new account gets at signup (control-plane `buildFirstOrg`) is
+ * granted NOTHING. There is no compute free trial and no signup wallet
+ * credit; entitlement arrives only from a redeemed
  * coupon or a completed checkout. So the truth table below is not "payment is
  * the exception" — for a new user choosing cloud compute, payment is the
  * NORMAL path, and the only genuinely free way through onboarding is local

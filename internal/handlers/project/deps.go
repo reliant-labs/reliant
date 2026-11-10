@@ -10,10 +10,21 @@ import (
 	"github.com/reliant-labs/reliant/internal/controlplane"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/orgs"
 )
+
+// OrgResolver answers the org questions of project rpcs. *orgs.Resolver is
+// one.
+type OrgResolver interface {
+	ActingOrg(ctx context.Context, userID, requested string) (string, error)
+	ListScope(ctx context.Context, userID, requested string, stamp orgs.Backfill) (*core.OrgScope, error)
+}
 
 // Repository is the slice of *db.Repo the project handlers use.
 type Repository interface {
+	// AssignUnassignedOrg stamps the caller's projects and chats that have
+	// no org with their default org (the lazy backfill, orgs.ListScope).
+	AssignUnassignedOrg(ctx context.Context, userID, orgID string) error
 	CreateProject(ctx context.Context, project *db.Project) error
 	GetProject(ctx context.Context, id string) (*db.Project, error)
 	GetProjectByPathAndUser(ctx context.Context, path, userID string) (*db.Project, error)

@@ -326,9 +326,17 @@ func (x *GetDaemonResponse) GetWorkspaceBaseDomain() string {
 }
 
 type ListDaemonsRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	DaemonType    *v1.DaemonType         `protobuf:"varint,1,opt,name=daemon_type,json=daemonType,proto3,enum=controlplane.v1.DaemonType,oneof" json:"daemon_type,omitempty"`
-	Status        *v1.DaemonStatus       `protobuf:"varint,2,opt,name=status,proto3,enum=controlplane.v1.DaemonStatus,oneof" json:"status,omitempty"`
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	DaemonType *v1.DaemonType         `protobuf:"varint,1,opt,name=daemon_type,json=daemonType,proto3,enum=controlplane.v1.DaemonType,oneof" json:"daemon_type,omitempty"`
+	Status     *v1.DaemonStatus       `protobuf:"varint,2,opt,name=status,proto3,enum=controlplane.v1.DaemonStatus,oneof" json:"status,omitempty"`
+	// The organization to list machines in: only the machines that org owns
+	// (Daemon.org_id) and that you run. Naming your default organization also
+	// lists the machines you run that were recorded before machines had an
+	// owning org, because that org is the one billed for them. You must be a
+	// member of the org; a machine credential may name only its own org.
+	// Unset: every machine you run, in every organization, which is what
+	// clients that predate this field get.
+	OrgId         *string `protobuf:"bytes,3,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -375,6 +383,13 @@ func (x *ListDaemonsRequest) GetStatus() v1.DaemonStatus {
 		return *x.Status
 	}
 	return v1.DaemonStatus(0)
+}
+
+func (x *ListDaemonsRequest) GetOrgId() string {
+	if x != nil && x.OrgId != nil {
+		return *x.OrgId
+	}
+	return ""
 }
 
 type ListDaemonsResponse struct {
@@ -1463,13 +1478,15 @@ const file_services_daemon_v1_daemon_proto_rawDesc = "" +
 	"\tdaemon_id\x18\x01 \x01(\tR\bdaemonId\"x\n" +
 	"\x11GetDaemonResponse\x12/\n" +
 	"\x06daemon\x18\x01 \x01(\v2\x17.controlplane.v1.DaemonR\x06daemon\x122\n" +
-	"\x15workspace_base_domain\x18\x02 \x01(\tR\x13workspaceBaseDomain\"\xae\x01\n" +
+	"\x15workspace_base_domain\x18\x02 \x01(\tR\x13workspaceBaseDomain\"\xd5\x01\n" +
 	"\x12ListDaemonsRequest\x12A\n" +
 	"\vdaemon_type\x18\x01 \x01(\x0e2\x1b.controlplane.v1.DaemonTypeH\x00R\n" +
 	"daemonType\x88\x01\x01\x12:\n" +
-	"\x06status\x18\x02 \x01(\x0e2\x1d.controlplane.v1.DaemonStatusH\x01R\x06status\x88\x01\x01B\x0e\n" +
+	"\x06status\x18\x02 \x01(\x0e2\x1d.controlplane.v1.DaemonStatusH\x01R\x06status\x88\x01\x01\x12\x1a\n" +
+	"\x06org_id\x18\x03 \x01(\tH\x02R\x05orgId\x88\x01\x01B\x0e\n" +
 	"\f_daemon_typeB\t\n" +
-	"\a_status\"H\n" +
+	"\a_statusB\t\n" +
+	"\a_org_id\"H\n" +
 	"\x13ListDaemonsResponse\x121\n" +
 	"\adaemons\x18\x01 \x03(\v2\x17.controlplane.v1.DaemonR\adaemons\"\xd3\x01\n" +
 	"\x13UpdateDaemonRequest\x12\x1b\n" +

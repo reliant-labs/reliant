@@ -78,7 +78,7 @@ export const StartClaimableDeployRequestSchema: GenMessage<StartClaimableDeployR
  */
 export type StartClaimableDeployResponse = Message<"controlplane.v1.StartClaimableDeployResponse"> & {
   /**
-   * An ordinary `rlat_` token for the anonymous user's personal org, scoped
+   * An ordinary `rlat_` token for the anonymous user's first org, scoped
    * to deploy:read and deploy:write only, expiring at purge_after. The CLI
    * stores it under the credential client id "forge-cli-claimable", never
    * under "forge-cli".
@@ -88,7 +88,7 @@ export type StartClaimableDeployResponse = Message<"controlplane.v1.StartClaimab
   accessToken: string;
 
   /**
-   * The anonymous user's personal org: the org every deploy lands in.
+   * The anonymous user's first org: the org every deploy lands in.
    *
    * @generated from field: string org_id = 2;
    */
@@ -975,7 +975,7 @@ export const ClaimableService: GenService<{
   /**
    * StartClaimableDeploy mints (or, idempotently, finds) the anonymous
    * identity for one (device_id, project, env): an anonymous GoTrue user that
-   * owns an ordinary personal org, plus a narrow `rlat_` token the CLI deploys
+   * owns an ordinary org, plus a narrow `rlat_` token the CLI deploys
    * with, plus the claim link.
    *
    * IDEMPOTENT per (device_id, project, env) while the row is live or

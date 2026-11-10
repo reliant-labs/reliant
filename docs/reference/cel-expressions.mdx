@@ -293,6 +293,16 @@ What failed, for the nodes of a workflow's [`on_failure` handler](/workflows/pat
 
 All five are always present, so a handler never fails reporting a failure. Reads of the main graph's `nodes.*` inside the handler must be guarded (`has()` or `.?`): the nodes after the failed one never ran.
 
+`failure` is also declared inside a [`finally` handler](/workflows/patterns#however-a-run-ends-finally). There every key is empty (and `attempt` is 1) unless `run.status` is `'failed'`.
+
+### run.*
+
+How the run ended, for the nodes of a workflow's [`finally` handler](/workflows/patterns#however-a-run-ends-finally) and nowhere else: `run` anywhere else is a compile error.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `run.status` | string | `'completed'`, `'failed'` or `'cancelled'` |
+
 ### trigger.*
 
 The event that started the run, fixed at launch. Also the only namespace a trigger's `filter`, `origin_filter`, `inputs` and `prompt` can read. A chat started by a person has `trigger.kind` of `chat.start`.

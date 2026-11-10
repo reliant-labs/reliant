@@ -93,6 +93,7 @@ func (r *Runs) StartRun(ctx context.Context, req tools.StartRunRequest) (tools.S
 
 	spec := launch.Spec{
 		OwnerUserID: req.OwnerUserID,
+		OrgID:       req.OrgID,
 		ProjectID:   req.ProjectID,
 		Workflow:    req.Workflow,
 		Presets:     req.Presets,

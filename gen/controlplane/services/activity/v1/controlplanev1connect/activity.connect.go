@@ -36,6 +36,9 @@ const (
 	// ActivityServiceListActivityProcedure is the fully-qualified name of the ActivityService's
 	// ListActivity RPC.
 	ActivityServiceListActivityProcedure = "/controlplane.v1.ActivityService/ListActivity"
+	// ActivityServiceListMembershipActivityProcedure is the fully-qualified name of the
+	// ActivityService's ListMembershipActivity RPC.
+	ActivityServiceListMembershipActivityProcedure = "/controlplane.v1.ActivityService/ListMembershipActivity"
 )
 
 // ActivityServiceClient is a client for the controlplane.v1.ActivityService service.
@@ -44,6 +47,12 @@ type ActivityServiceClient interface {
 	// Paging is by keyset, so a page never repeats or skips an event while new
 	// ones arrive.
 	ListActivity(context.Context, *connect.Request[v1.ListActivityRequest]) (*connect.Response[v1.ListActivityResponse], error)
+	// ListMembershipActivity is the org-admin audit view of membership: who
+	// created the org, invited, joined, left, was removed or changed role
+	// (target kind "member"), newest first. Caller: a person whose role in
+	// org_id is admin or owner (PermissionDenied, reason "admin_required"
+	// otherwise); a machine credential is refused ("human_only").
+	ListMembershipActivity(context.Context, *connect.Request[v1.ListMembershipActivityRequest]) (*connect.Response[v1.ListActivityResponse], error)
 }
 
 // NewActivityServiceClient constructs a client for the controlplane.v1.ActivityService service. By
@@ -63,17 +72,29 @@ func NewActivityServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			connect.WithSchema(activityServiceMethods.ByName("ListActivity")),
 			connect.WithClientOptions(opts...),
 		),
+		listMembershipActivity: connect.NewClient[v1.ListMembershipActivityRequest, v1.ListActivityResponse](
+			httpClient,
+			baseURL+ActivityServiceListMembershipActivityProcedure,
+			connect.WithSchema(activityServiceMethods.ByName("ListMembershipActivity")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // activityServiceClient implements ActivityServiceClient.
 type activityServiceClient struct {
-	listActivity *connect.Client[v1.ListActivityRequest, v1.ListActivityResponse]
+	listActivity           *connect.Client[v1.ListActivityRequest, v1.ListActivityResponse]
+	listMembershipActivity *connect.Client[v1.ListMembershipActivityRequest, v1.ListActivityResponse]
 }
 
 // ListActivity calls controlplane.v1.ActivityService.ListActivity.
 func (c *activityServiceClient) ListActivity(ctx context.Context, req *connect.Request[v1.ListActivityRequest]) (*connect.Response[v1.ListActivityResponse], error) {
 	return c.listActivity.CallUnary(ctx, req)
+}
+
+// ListMembershipActivity calls controlplane.v1.ActivityService.ListMembershipActivity.
+func (c *activityServiceClient) ListMembershipActivity(ctx context.Context, req *connect.Request[v1.ListMembershipActivityRequest]) (*connect.Response[v1.ListActivityResponse], error) {
+	return c.listMembershipActivity.CallUnary(ctx, req)
 }
 
 // ActivityServiceHandler is an implementation of the controlplane.v1.ActivityService service.
@@ -82,6 +103,12 @@ type ActivityServiceHandler interface {
 	// Paging is by keyset, so a page never repeats or skips an event while new
 	// ones arrive.
 	ListActivity(context.Context, *connect.Request[v1.ListActivityRequest]) (*connect.Response[v1.ListActivityResponse], error)
+	// ListMembershipActivity is the org-admin audit view of membership: who
+	// created the org, invited, joined, left, was removed or changed role
+	// (target kind "member"), newest first. Caller: a person whose role in
+	// org_id is admin or owner (PermissionDenied, reason "admin_required"
+	// otherwise); a machine credential is refused ("human_only").
+	ListMembershipActivity(context.Context, *connect.Request[v1.ListMembershipActivityRequest]) (*connect.Response[v1.ListActivityResponse], error)
 }
 
 // NewActivityServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -97,10 +124,18 @@ func NewActivityServiceHandler(svc ActivityServiceHandler, opts ...connect.Handl
 		connect.WithSchema(activityServiceMethods.ByName("ListActivity")),
 		connect.WithHandlerOptions(opts...),
 	)
+	activityServiceListMembershipActivityHandler := connect.NewUnaryHandler(
+		ActivityServiceListMembershipActivityProcedure,
+		svc.ListMembershipActivity,
+		connect.WithSchema(activityServiceMethods.ByName("ListMembershipActivity")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/controlplane.v1.ActivityService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case ActivityServiceListActivityProcedure:
 			activityServiceListActivityHandler.ServeHTTP(w, r)
+		case ActivityServiceListMembershipActivityProcedure:
+			activityServiceListMembershipActivityHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -112,4 +147,8 @@ type UnimplementedActivityServiceHandler struct{}
 
 func (UnimplementedActivityServiceHandler) ListActivity(context.Context, *connect.Request[v1.ListActivityRequest]) (*connect.Response[v1.ListActivityResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.ActivityService.ListActivity is not implemented"))
+}
+
+func (UnimplementedActivityServiceHandler) ListMembershipActivity(context.Context, *connect.Request[v1.ListMembershipActivityRequest]) (*connect.Response[v1.ListActivityResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.ActivityService.ListMembershipActivity is not implemented"))
 }

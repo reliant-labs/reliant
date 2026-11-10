@@ -12,6 +12,7 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/svcerr"
+	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -80,6 +81,29 @@ func teardownStore(t *testing.T) (*project.MockRepository, map[string]*db.Checko
 	store.DeleteProjectDaemonFunc = func(context.Context, string, string) error { deleted++; return nil }
 	store.UpsertProjectDaemonFunc = func(context.Context, string, string, string, *string) error { return nil }
 	return store, book, &deleted
+}
+
+// A caller who does not own the project can neither remove nor reclone its
+// checkout: nothing is recorded, nothing is sent to the machine, and no row
+// goes. The project reads as missing, so the answer never says it exists.
+func TestTeardown_AnotherUsersProjectIsNeverTornDown(t *testing.T) {
+	t.Parallel()
+	store, book, deleted := teardownStore(t)
+	d := &scriptedDaemon{}
+	svc := newService(t, store, fakeDaemon(d.answer))
+	stranger := project.AuthedContext(t, testkit.WithUserID("someone-else"))
+
+	_, err := svc.RemoveProjectFromDaemon(stranger,
+		connect.NewRequest(&pb.RemoveProjectFromDaemonRequest{ProjectId: "p-1", DaemonId: "d-1"}))
+	require.NoError(t, err, "a project the caller cannot see is already gone, as far as they can tell")
+	_, err = svc.RecloneProjectOnDaemon(stranger,
+		connect.NewRequest(&pb.RecloneProjectOnDaemonRequest{ProjectId: "p-1", DaemonId: "d-1"}))
+	require.Error(t, err)
+	assert.Equal(t, connect.CodeNotFound, svcerr.Code(err))
+
+	assert.Empty(t, d.sent, "nothing reaches the owner's machine")
+	assert.Empty(t, book, "no teardown is recorded, so the owner's workspace creation is not held")
+	assert.Zero(t, *deleted)
 }
 
 // The daemon acknowledges the op it was sent: done settles it and the

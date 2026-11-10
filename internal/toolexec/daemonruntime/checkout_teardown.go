@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -152,7 +153,7 @@ func initializeCheckoutTeardowns(ctx context.Context, dataDir string) {
 }
 
 func loadTeardownJournal(dir string, now time.Time) (*teardownJournal, error) {
-	if err := os.MkdirAll(dir, 0o700); err != nil {
+	if err := mkdirAllDurable(dir); err != nil {
 		return nil, err
 	}
 	entries, err := os.ReadDir(dir)
@@ -203,12 +204,60 @@ func (j *teardownJournal) persist(rec *teardownRecord) error {
 		return err
 	}
 	// The rename is durable only once the directory is.
-	d, err := os.Open(j.dir)
+	return syncTeardownDir(j.dir)
+}
+
+// syncTeardownDir fsyncs a directory, which makes the entries in it durable. A
+// package var so a test can observe when each directory is synced.
+var syncTeardownDir = func(path string) error {
+	d, err := os.Open(path)
 	if err != nil {
 		return err
 	}
 	defer d.Close()
 	return d.Sync()
+}
+
+// mkdirAllDurable creates dir and any missing ancestors, and syncs the parent
+// of each so that their entries survive a power loss. Syncing only the
+// records and dir itself is not enough: a journal directory whose own entry
+// was never synced can vanish whole, and a daemon that restarts on an empty
+// journal would run a finished op again or let a fenced one run. dir's parent
+// is synced even when dir already exists, since the daemon that created it
+// may have stopped before syncing; the journal loads, and so accepts ops, only
+// once every sync succeeded.
+func mkdirAllDurable(dir string) error {
+	dir = filepath.Clean(dir)
+	// The directories that do not exist yet, deepest first.
+	var missing []string
+	for p := dir; ; p = filepath.Dir(p) {
+		_, err := os.Stat(p)
+		if err == nil {
+			break
+		}
+		if !errors.Is(err, fs.ErrNotExist) {
+			return err
+		}
+		missing = append(missing, p)
+		if filepath.Dir(p) == p {
+			break
+		}
+	}
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return err
+	}
+	parents := []string{filepath.Dir(dir)}
+	for _, p := range missing {
+		if p != dir {
+			parents = append(parents, filepath.Dir(p))
+		}
+	}
+	for _, p := range parents {
+		if err := syncTeardownDir(p); err != nil {
+			return fmt.Errorf("sync %s: %w", p, err)
+		}
+	}
+	return nil
 }
 
 // errTeardownMismatch is a known op id asked for a different checkout or kind.

@@ -73,6 +73,7 @@ message ReliantConfig {
   RuntimeConfig runtime = 2;
   StorageReaperConfig storage_reaper = 3;
   TranscriptConfig transcript = 4;
+  WorktreeReclaimConfig worktree_reclaim = 5;
 }
 
 // TranscriptConfig is how the transcript read paths (ListMessages,
@@ -185,5 +186,52 @@ message StorageReaperConfig {
     env_var: "RELIANT_STORAGE_REAPER_GOCACHE_INTERVAL"
     default_value: "10m"
     description: "Interval of the Go-cache trim between full storage reaper passes (Go duration, minimum 2m; off disables)"
+  }];
+}
+
+// WorktreeReclaimConfig is the daemon's machine-wide worktree reclaim
+// (internal/worktreereclaim/sweep.go): every linked git worktree on the
+// machine, whether Reliant made it or an agent ran `git worktree add`, is
+// captured into a local ref of its own repository
+// (refs/reliant/reclaimed/...) before it is deleted. It rides the storage
+// reaper's schedule and single-flight (RELIANT_STORAGE_REAPER), so it runs
+// only where that does. Durations are Go durations; a value the daemon cannot
+// use is named in a warning and replaced by its default.
+message WorktreeReclaimConfig {
+  // off never runs it. dry-run records what it would reclaim, and the bytes,
+  // in ~/.reliant/reclaim/report.json and its journal, captures and deletes
+  // nothing, and leaves forge's worktree reaper running as before. on
+  // reclaims clean, pushed, idle worktrees after capturing them, proposes
+  // the rest for a person's approval, and replaces forge's worktree reaper.
+  string mode = 1 [(forge.v1.config) = {
+    env_var: "RELIANT_WORKTREE_RECLAIM"
+    default_value: "dry-run"
+    allowed_values: ["off", "dry-run", "on"]
+    description: "Machine-wide worktree reclaim: off, dry-run (report only) or on (capture, then reclaim)"
+  }];
+
+  // Where discovery looks for repositories besides the ones it knows:
+  // comma-separated path[:depth] entries. Unset: the worktree root (depth
+  // 4), the temp dir, the user cache dir and $HOME (depth 3 each).
+  string roots = 2 [(forge.v1.config) = {
+    env_var: "RELIANT_WORKTREE_RECLAIM_ROOTS"
+    description: "Directories the worktree reclaim walks for repositories, comma-separated path[:depth] (default: worktree root, temp, cache and home dirs)"
+  }];
+
+  // How long a clean worktree whose HEAD is on a remote must have had no
+  // commit and no file change before it is reclaimed without asking.
+  string clean_idle = 3 [(forge.v1.config) = {
+    env_var: "RELIANT_WORKTREE_RECLAIM_CLEAN_IDLE"
+    default_value: "24h"
+    description: "Idle time before a clean, pushed worktree is reclaimed (Go duration, minimum 1h)"
+  }];
+
+  // How long a worktree with uncommitted, unpushed or reflog-only work must
+  // have had no commit and no file change before it is proposed for a
+  // person's approval. It is never reclaimed without one.
+  string approval_idle = 4 [(forge.v1.config) = {
+    env_var: "RELIANT_WORKTREE_RECLAIM_APPROVAL_IDLE"
+    default_value: "120h"
+    description: "Idle time before a worktree with unsaved work is proposed for approval (Go duration, minimum 24h)"
   }];
 }

@@ -90,6 +90,10 @@ type Reclaimer struct {
 	// damage; the daemon logs it. Nil discards them.
 	OnRepair func(RepairReport)
 
+	// verifyHook runs on a parked checkout just before the machine sweep
+	// verifies it against its capture (tests).
+	verifyHook func(parked string)
+
 	mu       sync.Mutex
 	netCache map[string]netEntry
 	sizes    map[string]cachedSize

@@ -123,6 +123,21 @@ describe("the demo shell's routes", () => {
     expect(router.state.location.pathname).toBe(path);
   });
 
+  it("says a shop URL with no page is not found, instead of silently showing the Overview", async () => {
+    const router = renderDemoShell("/forge/p/shop/nope")
+    expect(await screen.findByTestId("demo-not-found")).toHaveTextContent("No page here")
+    expect(router.state.location.pathname).toBe("/forge/p/shop/nope")
+    fireEvent.click(screen.getByRole("link", { name: "Go to the Overview" }))
+    await waitFor(() => expect(router.state.location.pathname).toBe("/forge/p/shop"))
+  });
+
+  it("opens another project's link on shop, the demo's one project, at the same page", async () => {
+    const router = renderDemoShell("/forge/p/other/releases?env=prod")
+    expect(await screen.findByTestId("console-releases")).toBeInTheDocument()
+    expect(router.state.location.pathname).toBe("/forge/p/shop/releases")
+    expect(searchOf(router)).toMatchObject({ env: "prod" })
+  });
+
   it("keeps /forge/demo (the tour's console) and sends /demo there", async () => {
     const router = renderDemoShell("/demo?view=traces");
     expect(await screen.findByTestId("demo-console")).toBeInTheDocument();
