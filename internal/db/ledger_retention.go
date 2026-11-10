@@ -77,7 +77,7 @@ func (r *Repo) CompactChatUpdates(ctx context.Context, cutoff time.Time, pause L
 			return res, err
 		}
 		for _, chat := range due {
-			through := chat.Through
+			through := chat.Done
 			for {
 				if err := ctx.Err(); err != nil {
 					return res, err
@@ -110,18 +110,40 @@ func (r *Repo) CompactChatUpdates(ctx context.Context, cutoff time.Time, pause L
 
 // StepRetentionResult is what one PruneStepExecutions pass did.
 type StepRetentionResult struct {
-	// Runs is how many root runs it pruned, Deleted how many step rows.
-	Runs    int
-	Deleted int64
+	// Runs is how many root runs it visited (new and deferred), Deferred how
+	// many of them still hold a workflow that is not prunable yet, and
+	// Deleted how many step rows it deleted.
+	Runs     int
+	Deferred int
+	Deleted  int64
 }
 
 // PruneStepExecutions deletes the internal steps of every root run that
-// completed or was cancelled before cutoff (store.PruneRunSteps), resuming
-// where the last pass stopped, and returns what it did, also on error. A run
-// is recorded done only once all of it is pruned, so an error retries it.
+// completed or was cancelled before cutoff (store.PruneRunSteps): first the
+// runs an earlier pass deferred, then the new ones after the cursor. It
+// returns what it did, also on error. A run is recorded — deferred or done —
+// before the cursor passes it, so an error or a stop retries it.
 func (r *Repo) PruneStepExecutions(ctx context.Context, cutoff time.Time, pause LedgerRetentionPause) (StepRetentionResult, error) {
 	var res StepRetentionResult
 	ctx = orm.Detached(ctx)
+
+	after := ""
+	for {
+		deferred, err := store.DeferredStepRetentionRoots(ctx, r.ORM(), after, stepRetentionPage)
+		if err != nil {
+			return res, err
+		}
+		for _, root := range deferred {
+			if err := r.pruneRunSteps(ctx, root, cutoff, pause, &res); err != nil {
+				return res, err
+			}
+			after = root
+		}
+		if len(deferred) < stepRetentionPage {
+			break
+		}
+	}
+
 	at, id, err := store.ReadLedgerRetentionCursor(ctx, r.ORM(), stepRetentionCursorName)
 	if err != nil {
 		return res, err
@@ -132,30 +154,54 @@ func (r *Repo) PruneStepExecutions(ctx context.Context, cutoff time.Time, pause 
 			return res, err
 		}
 		for _, root := range roots {
-			for {
-				if err := ctx.Err(); err != nil {
-					return res, err
-				}
-				n, err := store.PruneRunSteps(ctx, r.ORM(), root.ID, stepPruneBatch)
-				res.Deleted += n
-				if err != nil {
-					return res, fmt.Errorf("prune run %s: %w", root.ID, err)
-				}
-				if n < stepPruneBatch {
-					break
-				}
-				if err := pause.wait(ctx); err != nil {
-					return res, err
-				}
+			if err := r.pruneRunSteps(ctx, root.ID, cutoff, pause, &res); err != nil {
+				return res, err
 			}
 			if err := store.AdvanceLedgerRetentionCursor(ctx, r.ORM(), stepRetentionCursorName, root.CompletedAt, root.ID); err != nil {
 				return res, err
 			}
-			res.Runs++
 			at, id = root.CompletedAt, root.ID
 		}
 		if len(roots) < stepRetentionPage {
 			return res, nil
 		}
 	}
+}
+
+// pruneRunSteps prunes one root run's tree until none of its prunable steps
+// is left, then records it deferred (part of the tree is not prunable yet) or
+// done.
+func (r *Repo) pruneRunSteps(ctx context.Context, rootID string, cutoff time.Time, pause LedgerRetentionPause, res *StepRetentionResult) error {
+	for {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		n, err := store.PruneRunSteps(ctx, r.ORM(), rootID, cutoff, stepPruneBatch)
+		res.Deleted += n
+		if err != nil {
+			return fmt.Errorf("prune run %s: %w", rootID, err)
+		}
+		if n < stepPruneBatch {
+			left, err := store.RunStepsLeft(ctx, r.ORM(), rootID, cutoff)
+			if err != nil {
+				return fmt.Errorf("prune run %s: %w", rootID, err)
+			}
+			if !left {
+				break
+			}
+		}
+		if err := pause.wait(ctx); err != nil {
+			return err
+		}
+	}
+	pending, err := store.RunHasUnprunableWorkflows(ctx, r.ORM(), rootID, cutoff)
+	if err != nil {
+		return fmt.Errorf("prune run %s: %w", rootID, err)
+	}
+	res.Runs++
+	if pending {
+		res.Deferred++
+		return store.DeferStepRetentionRoot(ctx, r.ORM(), rootID)
+	}
+	return store.ClearStepRetentionRoot(ctx, r.ORM(), rootID)
 }

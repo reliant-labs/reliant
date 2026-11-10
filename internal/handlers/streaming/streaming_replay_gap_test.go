@@ -2,6 +2,7 @@ package streaming
 
 import (
 	"context"
+	"errors"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -35,11 +36,14 @@ type replayGapRepo struct {
 	latestChatSeq int64
 	replayReads   atomic.Int64
 
-	// compactedThrough is the chat's compaction watermark; compactDuringReplay,
-	// when set, is the watermark compaction raises it to once the first
-	// replay read has run.
-	compactedThrough    atomic.Int64
-	compactDuringReplay int64
+	// compactedThrough is the chat's compaction watermark. compactAfterReads,
+	// when set, makes compaction raise it to compactTo once that many replay
+	// reads have run; watermarkFailsAfterReads, when set, makes reading it
+	// fail once that many replay reads have run.
+	compactedThrough         atomic.Int64
+	compactAfterReads        int64
+	compactTo                int64
+	watermarkFailsAfterReads int64
 }
 
 func (r *replayGapRepo) GetLatestUpdateSequence(context.Context, string) (int64, error) {
@@ -47,13 +51,15 @@ func (r *replayGapRepo) GetLatestUpdateSequence(context.Context, string) (int64,
 }
 
 func (r *replayGapRepo) GetChatCompactedThrough(context.Context, string) (int64, error) {
+	if r.watermarkFailsAfterReads > 0 && r.replayReads.Load() >= r.watermarkFailsAfterReads {
+		return 0, errors.New("watermark read failed")
+	}
 	return r.compactedThrough.Load(), nil
 }
 
 func (r *replayGapRepo) GetUpdatesSince(_ context.Context, _ string, sinceSeq int64, limit int) ([]db.ChatUpdate, error) {
-	r.replayReads.Add(1)
-	if r.compactDuringReplay > 0 {
-		r.compactedThrough.Store(r.compactDuringReplay)
+	if reads := r.replayReads.Add(1); r.compactAfterReads > 0 && reads >= r.compactAfterReads {
+		r.compactedThrough.Store(r.compactTo)
 	}
 	updates := make([]db.ChatUpdate, 0, limit)
 	for seq := sinceSeq + 1; seq <= r.latestChatSeq && len(updates) < limit; seq++ {
@@ -188,14 +194,10 @@ func TestStreamChatUpdates_CursorAtCompactionWatermarkReplays(t *testing.T) {
 	require.Equal(t, int64(101), batch.GetUpdates()[0].GetSequenceNumber())
 }
 
-// Compaction raises the watermark before it deletes. When it passes the
-// cursor while the replay is reading, the replay may be missing rows, so the
-// stream follows it with a snapshot, which replaces whatever the replay built.
-func TestStreamChatUpdates_CompactionDuringReplayFollowsWithSnapshot(t *testing.T) {
-	const cursor = 10
-	repo := newReplayGapRepo(cursor + 3*chatReplayBatchSize)
-	repo.compactDuringReplay = cursor + 50
-
+// replayEvents opens a chat stream at cursor and collects what it sends
+// until the first snapshot or the end of the stream.
+func replayEvents(t *testing.T, repo *replayGapRepo, cursor int64) (batches []*reliantv1.ChatUpdateBatch, snapshot *reliantv1.ChatSyncSnapshot, streamErr error) {
+	t.Helper()
 	svc := NewTestStreaming(t, WithStreamingDeps(Deps{Repo: repo, Deltas: noopHub{}}))
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	t.Cleanup(cancel)
@@ -206,19 +208,50 @@ func TestStreamChatUpdates_CompactionDuringReplayFollowsWithSnapshot(t *testing.
 		}))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = stream.Close() })
-
-	batches := 0
 	for stream.Receive() {
 		msg := stream.Msg()
-		if msg.GetUpdates() != nil {
-			batches++
+		if b := msg.GetUpdates(); b != nil {
+			batches = append(batches, b)
 			continue
 		}
-		if snapshot := msg.GetSnapshot(); snapshot != nil {
-			require.Positive(t, batches, "the replay ran first: the watermark was below the cursor when it started")
-			require.Equal(t, repo.latestChatSeq, snapshot.GetLatestSequence())
-			return
+		if s := msg.GetSnapshot(); s != nil {
+			return batches, s, nil
 		}
 	}
-	t.Fatalf("no snapshot followed a replay the watermark overtook: %v", stream.Err())
+	return batches, nil, stream.Err()
+}
+
+// Compaction raises the watermark before it deletes. When it passes the
+// replay's position while the replay reads, the batch just read may be
+// missing rows: it is never sent, and a snapshot is, replacing whatever the
+// replay built. The batches sent before it were verified whole.
+func TestStreamChatUpdates_CompactionDuringReplayFollowsWithSnapshot(t *testing.T) {
+	const cursor = 10
+	repo := newReplayGapRepo(cursor + 3*chatReplayBatchSize)
+	repo.compactAfterReads, repo.compactTo = 2, cursor+chatReplayBatchSize+50
+
+	batches, snapshot, err := replayEvents(t, repo, cursor)
+
+	require.NoError(t, err)
+	require.NotNil(t, snapshot, "no snapshot followed a replay the watermark overtook")
+	require.Equal(t, repo.latestChatSeq, snapshot.GetLatestSequence())
+	require.Len(t, batches, 1, "only the batch read before the watermark rose may be sent")
+	require.Equal(t, int64(cursor+chatReplayBatchSize), batches[0].GetLatestSequence())
+}
+
+// When the watermark cannot be read to verify a batch, the batch is not sent
+// and the stream fails: the client keeps the cursor of the last verified
+// batch and its reconnect replays (or snapshots) from there, instead of
+// having been moved past rows compaction may have deleted.
+func TestStreamChatUpdates_UnverifiableReplayBatchFailsTheStream(t *testing.T) {
+	const cursor = 10
+	repo := newReplayGapRepo(cursor + 3*chatReplayBatchSize)
+	repo.watermarkFailsAfterReads = 2
+
+	batches, snapshot, err := replayEvents(t, repo, cursor)
+
+	require.Error(t, err, "an unverifiable batch must end the stream")
+	require.Nil(t, snapshot)
+	require.Len(t, batches, 1, "the unverified batch must not be sent")
+	require.Equal(t, int64(cursor+chatReplayBatchSize), batches[0].GetLatestSequence())
 }

@@ -309,36 +309,43 @@ func ErrorUpdatesInRange(ctx context.Context, db orm.Context, chatID string, fro
 // from a cursor below it would skip rows, so a reconnect there gets a snapshot.
 // CompactChatUpdates raises the watermark BEFORE it deletes, so it never
 // under-states what is gone.
+//
+// The watermark is a replay floor, never progress. Progress is
+// compaction_done_seq, recorded only AFTER a batch's delete has committed, and
+// a pass resumes from it: a batch whose delete failed, or whose worker stopped
+// between the two statements, is simply done again by the next pass (the
+// delete is idempotent). Done never passes the watermark.
 
-// ChatCompactionDue is a chat whose ledger has rows above its compaction
-// watermark that have aged past the cutoff.
+// ChatCompactionDue is a chat whose ledger has rows past where compaction
+// finished that have aged past the cutoff.
 type ChatCompactionDue struct {
-	ChatID  string `bun:"stream_id"`
-	Through int64  `bun:"compacted_through_seq"`
+	ChatID string `bun:"stream_id"`
+	// Done is where compaction finished: the next batch starts after it.
+	Done int64 `bun:"compaction_done_seq"`
 }
 
 // chatsDueForCompactionSQL finds them, after ?2 in chat id order, at most ?1.
 // Every chat's counter row is read (the table holds one row per chat and per
-// user), but only one with rows past its watermark costs a probe: the first
+// user), but only one with rows past its done mark costs a probe: the first
 // row past it, on chat_updates_chat_sequence_key. A chat idle since its last
-// compaction has its watermark at its newest row and is skipped by the first
+// compaction is done through its newest row and is skipped by the first
 // predicate alone.
 const chatsDueForCompactionSQL = `
-SELECT c.stream_id, c.compacted_through_seq
+SELECT c.stream_id, c.compaction_done_seq
   FROM update_stream_counters c
  WHERE c.stream_kind = 'chat'
-   AND c.last_assigned_seq > c.compacted_through_seq
+   AND c.last_assigned_seq > c.compaction_done_seq
    AND c.stream_id > ?2
    AND (SELECT u.created_at FROM chat_updates u
-         WHERE u.chat_id = c.stream_id AND u.sequence_number > c.compacted_through_seq
+         WHERE u.chat_id = c.stream_id AND u.sequence_number > c.compaction_done_seq
          ORDER BY u.sequence_number
          LIMIT 1) < ?0
  ORDER BY c.stream_id
  LIMIT ?1`
 
 // ChatsDueForCompaction returns up to limit chats, after afterChatID in id
-// order, whose first update past their compaction watermark was written
-// before cutoff.
+// order, whose first update past where compaction finished was written before
+// cutoff.
 func ChatsDueForCompaction(ctx context.Context, db orm.Context, cutoff time.Time, afterChatID string, limit int) ([]ChatCompactionDue, error) {
 	var out []ChatCompactionDue
 	if err := db.Bun().NewRaw(chatsDueForCompactionSQL, cutoff.UTC(), limit, afterChatID).Scan(ctx, &out); err != nil {
@@ -364,6 +371,14 @@ func ChatCompactedThrough(ctx context.Context, db orm.Context, chatID string) (i
 // would stall every writer of the chat for as long.
 const raiseChatWatermarkSQL = `
 UPDATE update_stream_counters SET compacted_through_seq = GREATEST(compacted_through_seq, $2)
+ WHERE stream_kind = 'chat' AND stream_id = $1`
+
+// recordChatCompactionDoneSQL records that compaction finished deleting
+// through $2, once that delete has committed. Its own short statement for the
+// watermark's reason; LEAST keeps it from ever passing the watermark.
+const recordChatCompactionDoneSQL = `
+UPDATE update_stream_counters
+   SET compaction_done_seq = GREATEST(compaction_done_seq, LEAST($2, compacted_through_seq))
  WHERE stream_kind = 'chat' AND stream_id = $1`
 
 // CompactChatUpdatesSQL deletes the rows of chat $1 in ($2, $3] that no reader
@@ -404,17 +419,20 @@ type ChatCompactionBatch struct {
 	Examined int
 	// Deleted is how many of them it deleted.
 	Deleted int64
-	// Through is the chat's compaction watermark after the batch.
+	// Through is how far the batch compacted: the watermark it raised, and
+	// where compaction is now finished.
 	Through int64
 	// Done is true when the chat has no aged row past Through.
 	Done bool
 }
 
 // CompactChatUpdates compacts the next run of at most limit aged rows of a
-// chat after its watermark `after`: rows are aged when written before cutoff,
-// and the run stops at the first row that is not, so the watermark never
-// passes a row younger than the cutoff. It runs outside any transaction:
-// raising the watermark commits first, then the delete.
+// chat after `after`, where compaction last finished: rows are aged when
+// written before cutoff, and the run stops at the first row that is not, so
+// the watermark never passes a row younger than the cutoff. It runs outside
+// any transaction, as three statements in this order: raise the watermark,
+// delete, record the delete done. Stopped anywhere in between, the next call
+// from the done mark repeats the batch, and nothing is skipped.
 func CompactChatUpdates(ctx context.Context, db orm.Context, chatID string, after int64, cutoff time.Time, limit int) (ChatCompactionBatch, error) {
 	batch := ChatCompactionBatch{Through: after}
 	if limit <= 0 {
@@ -456,8 +474,13 @@ func CompactChatUpdates(ctx context.Context, db orm.Context, chatID string, afte
 	if err != nil {
 		return batch, fmt.Errorf("compact chat updates: delete: %w", err)
 	}
-	batch.Deleted, err = res.RowsAffected()
-	return batch, err
+	if batch.Deleted, err = res.RowsAffected(); err != nil {
+		return batch, fmt.Errorf("compact chat updates: delete: %w", err)
+	}
+	if _, err := db.Exec(ctx, recordChatCompactionDoneSQL, chatID, batch.Through); err != nil {
+		return batch, fmt.Errorf("compact chat updates: record done: %w", err)
+	}
+	return batch, nil
 }
 
 // scanChatUpdates runs a statement selecting chat_updates' columns in table

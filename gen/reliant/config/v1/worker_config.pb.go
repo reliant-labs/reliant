@@ -86,8 +86,15 @@ type WorkerConfig struct {
 	// client reconnecting from before that gets a fresh snapshot instead of a
 	// replay. The internal steps (CallLLM, ExecuteTools, SaveMessage, …) of a
 	// run that completed or was cancelled more than step_execution_retention ago
-	// are deleted; the steps the chat timeline renders are kept. 0 turns either
-	// off.
+	// are deleted; the steps the chat timeline renders are kept.
+	//
+	// Both are OFF (0) by default: retention deletes data, so an environment
+	// turns it on deliberately, and turns chat compaction on only once every
+	// api-server it runs reads the compaction watermark (a release that has it
+	// fully rolled out). Recommended: 168h and 720h. Rolling an api-server back
+	// to a release without the watermark after compaction has run lets a stale
+	// reconnect replay past compacted rows; set chat_update_retention to 0 and
+	// keep the api-servers on a watermark-aware release instead.
 	ChatUpdateRetention    *durationpb.Duration `protobuf:"bytes,32,opt,name=chat_update_retention,json=chatUpdateRetention,proto3" json:"chat_update_retention,omitempty"`
 	StepExecutionRetention *durationpb.Duration `protobuf:"bytes,33,opt,name=step_execution_retention,json=stepExecutionRetention,proto3" json:"step_execution_retention,omitempty"`
 	// How long after the worker starts its first retention pass waits. An
@@ -267,7 +274,7 @@ var File_reliant_config_v1_worker_config_proto protoreflect.FileDescriptor
 
 const file_reliant_config_v1_worker_config_proto_rawDesc = "" +
 	"\n" +
-	"%reliant/config/v1/worker_config.proto\x12\x11reliant.config.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\x1a\x1egoogle/protobuf/duration.proto\"\xa5\x1b\n" +
+	"%reliant/config/v1/worker_config.proto\x12\x11reliant.config.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\x1a\x1egoogle/protobuf/duration.proto\"\xfc\x1b\n" +
 	"\fWorkerConfig\x12\x9d\x01\n" +
 	"\x12hosted_actions_url\x18\x1e \x01(\tBo\x82\xce\x18k\n" +
 	"!RELIANT_WORKER_HOSTED_ACTIONS_URL*DPrivate HTTPS workspace-controller endpoint for fixed hosted actionsP\x01R\x10hostedActionsUrl\x12\xbd\x01\n" +
@@ -304,11 +311,11 @@ const file_reliant_config_v1_worker_config_proto_rawDesc = "" +
 	"\x1aegress_host_max_concurrent\x18\x1c \x01(\x05Bw\xbaH\x04\x1a\x02(\x01\x82\xce\x18l\n" +
 	")RELIANT_WORKER_EGRESS_HOST_MAX_CONCURRENT\x1a\x0216*;Egress calls in flight to one destination host, per replicaR\x17egressHostMaxConcurrent\x12\xc1\x01\n" +
 	"\x18egress_turn_max_parallel\x18\x1d \x01(\x05B\x87\x01\xbaH\x04\x1a\x02(\x01\x82\xce\x18|\n" +
-	"'RELIANT_WORKER_EGRESS_TURN_MAX_PARALLEL\x1a\x014*NEgress calls of one conversation turn run at once, per replica (the rest wait)R\x15egressTurnMaxParallel\x12\xdc\x01\n" +
-	"\x15chat_update_retention\x18  \x01(\v2\x19.google.protobuf.DurationB\x8c\x01\x82\xce\x18\x87\x01\n" +
-	"$RELIANT_WORKER_CHAT_UPDATE_RETENTION\x1a\x04168h*YAge past which a chat's update log is compacted to each entity's newest update (0: never)R\x13chatUpdateRetention\x12\xd7\x01\n" +
-	"\x18step_execution_retention\x18! \x01(\v2\x19.google.protobuf.DurationB\x81\x01\x82\xce\x18}\n" +
-	"'RELIANT_WORKER_STEP_EXECUTION_RETENTION\x1a\x04720h*LAge past which a finished run's internal step records are deleted (0: never)R\x16stepExecutionRetention\x12\x8a\x02\n" +
+	"'RELIANT_WORKER_EGRESS_TURN_MAX_PARALLEL\x1a\x014*NEgress calls of one conversation turn run at once, per replica (the rest wait)R\x15egressTurnMaxParallel\x12\xa2\x02\n" +
+	"\x15chat_update_retention\x18  \x01(\v2\x19.google.protobuf.DurationB\xd2\x01\x82\xce\x18\xcd\x01\n" +
+	"$RELIANT_WORKER_CHAT_UPDATE_RETENTION\x1a\x020s*\xa0\x01Age past which a chat's update log is compacted to each entity's newest update (0: never; recommended 168h once every api-server reads the compaction watermark)R\x13chatUpdateRetention\x12\xe8\x01\n" +
+	"\x18step_execution_retention\x18! \x01(\v2\x19.google.protobuf.DurationB\x92\x01\x82\xce\x18\x8d\x01\n" +
+	"'RELIANT_WORKER_STEP_EXECUTION_RETENTION\x1a\x020s*^Age past which a finished run's internal step records are deleted (0: never; recommended 720h)R\x16stepExecutionRetention\x12\x8a\x02\n" +
 	"\x1cledger_retention_start_delay\x18\" \x01(\v2\x19.google.protobuf.DurationB\xad\x01\x82\xce\x18\xa8\x01\n" +
 	"+RELIANT_WORKER_LEDGER_RETENTION_START_DELAY\x1a\x021h*uWait after worker start before the first ledger retention pass, so an api-server rollout completes first (0: at once)R\x19ledgerRetentionStartDelay:\x1d\xca\xc1\x18\x19\n" +
 	"\areliant\x12\x06server\x12\x06workerJ\x04\b\x01\x10\x02J\x04\b\n" +

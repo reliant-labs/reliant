@@ -76,12 +76,11 @@ func TestChatCompactionClassesMatchTheReaders(t *testing.T) {
 func TestStepRetentionLiteralsMatchTheEnums(t *testing.T) {
 	if int32(reliantv1.WorkflowState_WORKFLOW_STATE_STOPPED) != 3 ||
 		int32(reliantv1.WorkflowStopReason_WORKFLOW_STOP_REASON_COMPLETED) != 1 ||
-		int32(reliantv1.WorkflowStopReason_WORKFLOW_STOP_REASON_CANCELLED) != 4 ||
-		int32(reliantv1.WorkflowStopReason_WORKFLOW_STOP_REASON_PAUSED) != 3 {
-		t.Fatal("stepRetentionRootsSQL / pruneRunStepsSQL spell STOPPED as 3, COMPLETED 1, CANCELLED 4, PAUSED 3")
+		int32(reliantv1.WorkflowStopReason_WORKFLOW_STOP_REASON_CANCELLED) != 4 {
+		t.Fatal("stepRetentionRootsSQL / stepRetentionTreeSQL spell STOPPED as 3, COMPLETED 1, CANCELLED 4")
 	}
 	if !strings.Contains(stepRetentionRootsSQL, "state = 3 AND stop_reason IN (1, 4)") ||
-		!strings.Contains(pruneRunStepsSQL, "t.state = 3 AND t.stop_reason <> 3") {
+		!strings.Contains(stepRetentionTreeSQL, "w.state = 3 AND w.stop_reason IN (1, 4) AND w.completed_at < ?1") {
 		t.Fatal("the run-state predicates changed: re-check them against the enums above")
 	}
 	m := regexp.MustCompile(`(?s)se\.activity_name IN \(([^)]*)\)`).FindStringSubmatch(pruneRunStepsSQL)

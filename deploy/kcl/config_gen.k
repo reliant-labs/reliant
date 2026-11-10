@@ -1513,7 +1513,7 @@ vaultMaintenanceConfigEnvMap = lambda c: VaultMaintenanceConfig, config_secrets:
 }
 
 # forge:section schema WorkerConfig
-# forge:hash=0b7f78a98f66323358d33d5aabab52f1d8075ab55a58bf07a6aa12be8a5eb12a
+# forge:hash=19c9837fa805f7ade03a50abad415e4177942517cc7203b45570d3069910740f
 schema WorkerConfig:
     # Private HTTPS workspace-controller endpoint for fixed hosted actions
     hosted_actions_url: str = ""
@@ -1547,10 +1547,10 @@ schema WorkerConfig:
     egress_host_max_concurrent: int = 16
     # Egress calls of one conversation turn run at once, per replica (the rest wait)
     egress_turn_max_parallel: int = 4
-    # Age past which a chat's update log is compacted to each entity's newest update (0: never)
-    chat_update_retention: str = "168h"
-    # Age past which a finished run's internal step records are deleted (0: never)
-    step_execution_retention: str = "720h"
+    # Age past which a chat's update log is compacted to each entity's newest update (0: never; recommended 168h once every api-server reads the compaction watermark)
+    chat_update_retention: str = "0s"
+    # Age past which a finished run's internal step records are deleted (0: never; recommended 720h)
+    step_execution_retention: str = "0s"
     # Wait after worker start before the first ledger retention pass, so an api-server rollout completes first (0: at once)
     ledger_retention_start_delay: str = "1h"
 
@@ -1559,8 +1559,8 @@ schema WorkerConfig:
         shutdown_timeout != "", "shutdown_timeout = \"\" cannot reach the process: an empty SHUTDOWN_TIMEOUT counts as unset, so it would load the default \"30s\" — set a value"
         liveness_paths != "", "liveness_paths = \"\" cannot reach the process: an empty LIVENESS_PATHS counts as unset, so it would load the default \"/health,/healthz\" — set a value, or change its default in the proto"
         readiness_paths != "", "readiness_paths = \"\" cannot reach the process: an empty READINESS_PATHS counts as unset, so it would load the default \"/ready,/readyz\" — set a value, or change its default in the proto"
-        chat_update_retention != "", "chat_update_retention = \"\" cannot reach the process: an empty RELIANT_WORKER_CHAT_UPDATE_RETENTION counts as unset, so it would load the default \"168h\" — set a value"
-        step_execution_retention != "", "step_execution_retention = \"\" cannot reach the process: an empty RELIANT_WORKER_STEP_EXECUTION_RETENTION counts as unset, so it would load the default \"720h\" — set a value"
+        chat_update_retention != "", "chat_update_retention = \"\" cannot reach the process: an empty RELIANT_WORKER_CHAT_UPDATE_RETENTION counts as unset, so it would load the default \"0s\" — set a value"
+        step_execution_retention != "", "step_execution_retention = \"\" cannot reach the process: an empty RELIANT_WORKER_STEP_EXECUTION_RETENTION counts as unset, so it would load the default \"0s\" — set a value"
         ledger_retention_start_delay != "", "ledger_retention_start_delay = \"\" cannot reach the process: an empty RELIANT_WORKER_LEDGER_RETENTION_START_DELAY counts as unset, so it would load the default \"1h\" — set a value"
 
 # forge:section env-map workerConfigEnvMap

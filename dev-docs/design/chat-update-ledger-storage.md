@@ -2,7 +2,8 @@
 
 Status: **for the owner's decision.** Retention inside Postgres (option 1
 below) is implemented in the same PR as this document, because the owner
-approved it on 2026-11-10. Moving any of this to NATS is not implemented.
+approved it on 2026-11-10; it ships off and is enabled per environment.
+Moving any of this to NATS is not implemented.
 
 The question, from the owner: prod Cloud SQL `reliant-pg` went from 11 GB to
 33 GB of data in 14 days, `chat_updates` and `step_executions` have never had a
@@ -97,8 +98,9 @@ its internal ones after 30 days.
 
 - **Reconnect and gaps.** Each chat gets a compaction watermark
   (`update_stream_counters.compacted_through_seq`). A cursor below it gets a
-  snapshot instead of a replay, and a replay the watermark overtakes is
-  followed by a snapshot. Clients already handle a snapshot at any point, so
+  snapshot instead of a replay, and every replay batch is verified against it
+  before it is sent: a batch the watermark overtook is replaced by a snapshot.
+  Polling readers (`GetChatUpdates`) get the watermark in the response. Clients already handle a snapshot at any point, so
   no client changes. The watermark is raised before any row under it is
   deleted, so it never under-states what is gone.
 - **Isolation.** Unchanged: rows are keyed by chat, access is checked in the
@@ -203,10 +205,14 @@ reader to the exact rows it read before compaction.
 
 ## Open, for the owner
 
-1. **Retention windows.** Defaults: chat updates 7 days
-   (`RELIANT_WORKER_CHAT_UPDATE_RETENTION`), step records 30 days
-   (`RELIANT_WORKER_STEP_EXECUTION_RETENTION`). At 30 days `step_executions`
-   stops growing at about its current size; 14 days would roughly halve it.
+1. **Turning it on.** Both retention periods default to 0 (off): this release
+   ships the watermark-aware readers, and an environment enables deletion
+   explicitly once every api-server it runs is on a release that has them.
+   Recommended: chat updates 7 days (`RELIANT_WORKER_CHAT_UPDATE_RETENTION=168h`),
+   step records 30 days (`RELIANT_WORKER_STEP_EXECUTION_RETENTION=720h`). At 30
+   days `step_executions` stops growing at about its current size; 14 days would
+   roughly halve it. The PR body has the enablement, acceptance check and stop
+   procedure.
 2. **`user_updates`** is not compacted (0.8 GB). Its stream has no snapshot to
    fall back to, so pruning it needs a resync signal on the user stream first.
    Not worth doing at its size today.

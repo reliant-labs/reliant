@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"slices"
 	"testing"
 	"time"
 
@@ -18,6 +19,16 @@ import (
 // Ledger retention (internal/db/ledger_retention.go): what compaction and the
 // step prune delete, and — the point — that every reader of what is left
 // reads exactly what it read before.
+
+// The retention fixtures use fixed instants, never the wall clock: aged rows
+// are backdated to retentionAged, the cutoff is retentionCutoff, and a row
+// written by the test itself (at the real now, years later) is young. Nothing
+// asserted depends on where now falls.
+var (
+	retentionAged   = time.Date(2025, 1, 10, 12, 0, 0, 0, time.UTC)
+	retentionCutoff = time.Date(2025, 6, 1, 0, 0, 0, 0, time.UTC)
+	retentionRecent = time.Date(2025, 9, 1, 0, 0, 0, 0, time.UTC) // after the cutoff, before any real now
+)
 
 // chatReads is everything a reader takes from a chat's update log other than a
 // replay: the snapshot's heads, each workflow's node heads, scroll-back's
@@ -162,11 +173,10 @@ func TestCompactChatUpdates_ReadersReadWhatTheyReadBefore(t *testing.T) {
 	write(msg, "m-2", `{"id":"m-2"}`)
 	write(node, "wf-1:n2", `{"s":"rerun"}`)
 
-	now := time.Now()
-	ageChatUpdates(t, env, chat, aged, now.Add(-48*time.Hour))
+	ageChatUpdates(t, env, chat, aged, retentionAged)
 	before := readChat(t, env, chat, "wf-1", "wf-2")
 
-	res, err := env.Repo.CompactChatUpdates(ctx, now.Add(-24*time.Hour), 0)
+	res, err := env.Repo.CompactChatUpdates(ctx, retentionCutoff, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -192,7 +202,7 @@ func TestCompactChatUpdates_ReadersReadWhatTheyReadBefore(t *testing.T) {
 
 	// A second pass finds nothing to do: the chat's first update past its
 	// watermark is young.
-	res, err = env.Repo.CompactChatUpdates(ctx, now.Add(-24*time.Hour), 0)
+	res, err = env.Repo.CompactChatUpdates(ctx, retentionCutoff, 0)
 	if err != nil || res != (db.ChatCompactionResult{}) {
 		t.Fatalf("second pass = %+v, %v; want nothing", res, err)
 	}
@@ -211,7 +221,7 @@ func TestCompactChatUpdates_BatchesAndIdleChats(t *testing.T) {
 	// 2,500 NODE_EXECUTION updates of one node, then a message: written in
 	// one statement, with the counter row the allocator would have left.
 	const n = 2500
-	old := time.Now().Add(-72 * time.Hour)
+	old := retentionAged
 	mustExec(t, env, `INSERT INTO chat_updates (id, chat_id, sequence_number, update_type, entity_id, data, created_at)
 		SELECT $1 || '-' || s, $1, s, 9, 'wf-1:loop', '{"turn":' || s || '}', $2::timestamptz + s * interval '1 ms'
 		  FROM generate_series(1, $3::int) s`, chat, old, n)
@@ -223,7 +233,7 @@ func TestCompactChatUpdates_BatchesAndIdleChats(t *testing.T) {
 	}
 	before := readChat(t, env, chat, "wf-1")
 
-	cutoff := time.Now().Add(-24 * time.Hour)
+	cutoff := retentionCutoff
 	due, err := store.ChatsDueForCompaction(ctx, env.ORM, cutoff, "", 10)
 	if err != nil || len(due) != 1 || due[0].ChatID != chat {
 		t.Fatalf("due = %+v, %v; want only %s (chat-young has nothing aged)", due, err, chat)
@@ -249,6 +259,57 @@ func TestCompactChatUpdates_BatchesAndIdleChats(t *testing.T) {
 	}
 	if through, _ := env.Repo.GetChatCompactedThrough(ctx, "chat-young"); through != 0 {
 		t.Fatalf("chat-young's watermark %d, want 0", through)
+	}
+}
+
+// TestCompactChatUpdates_InterruptedBatchIsRedone: the watermark commits
+// before the delete, so a worker can stop (or the delete fail) with the
+// watermark raised and nothing deleted. The next pass resumes from where
+// compaction FINISHED, not from the watermark, and does that batch again.
+func TestCompactChatUpdates_InterruptedBatchIsRedone(t *testing.T) {
+	env, ctx := storetest.New(t), context.Background()
+	const chat = "chat-interrupted"
+	seedChat(t, env, chat)
+	write := func(typ reliantv1.ChatUpdateType, entity string) {
+		t.Helper()
+		if err := env.Repo.CreateChatUpdate(ctx, chat, typ, entity, `{}`); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for i := 0; i < 5; i++ {
+		write(reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_MESSAGE, fmt.Sprintf("m-%d", i))
+	}
+	write(reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_WORKFLOW_STATUS, "wf") // 6: kept whole
+	write(reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_MESSAGE, "m-young")    // 7: young
+	ageChatUpdates(t, env, chat, 6, retentionAged)
+
+	// The state a batch leaves when it stops between its first statement and
+	// its delete: watermark raised over 1..6, nothing deleted, nothing done.
+	mustExec(t, env, `UPDATE update_stream_counters SET compacted_through_seq = 6 WHERE stream_kind = 'chat' AND stream_id = $1`, chat)
+	if left := chatSeqs(t, env, chat); len(left) != 7 {
+		t.Fatalf("fixture: %d updates, want 7", len(left))
+	}
+
+	due, err := store.ChatsDueForCompaction(ctx, env.ORM, retentionCutoff, "", 10)
+	if err != nil || len(due) != 1 || due[0].Done != 0 {
+		t.Fatalf("due = %+v, %v; want the chat, done at 0 although its watermark is 6", due, err)
+	}
+	res, err := env.Repo.CompactChatUpdates(ctx, retentionCutoff, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Deleted != 5 {
+		t.Fatalf("deleted %d, want the 5 aged messages the interrupted batch left", res.Deleted)
+	}
+	if left := chatSeqs(t, env, chat); len(left) != 2 || left[6] == 0 || left[7] == 0 {
+		t.Fatalf("left %v, want the status (6) and the young message (7)", left)
+	}
+	var through, done int64
+	if err := env.SQL.QueryRow(`SELECT compacted_through_seq, compaction_done_seq FROM update_stream_counters WHERE stream_kind = 'chat' AND stream_id = $1`, chat).Scan(&through, &done); err != nil {
+		t.Fatal(err)
+	}
+	if through != 6 || done != 6 {
+		t.Fatalf("watermark %d, done %d; want both 6", through, done)
 	}
 }
 
@@ -321,70 +382,27 @@ func retainedStepIDs(t *testing.T, env *storetest.Env) map[string]bool {
 	return out
 }
 
-// TestPruneStepExecutions_KeepsTheTimelineAndLiveRuns: a root run that
-// completed or was cancelled before the cutoff loses its internal steps, and
-// so do its finished children; the chat timeline (the BASIC read) is exactly
-// what it was; and nothing of a running, paused, failed or recent run, or of a
-// child still running under a finished root, is touched.
-func TestPruneStepExecutions_KeepsTheTimelineAndLiveRuns(t *testing.T) {
-	env, ctx := storetest.New(t), context.Background()
-	seedChat(t, env, "chat-prune")
-	old, recent := time.Now().Add(-60*24*time.Hour), time.Now().Add(-time.Hour)
-	runs := []struct {
-		id          string
-		parent      *string
-		status      core.WorkflowStatus
-		completedAt *time.Time
-		pruned      bool
-	}{
-		{"wf-done", nil, core.Completed(), &old, true},
-		{"wf-done-child", ptr("wf-done"), core.Completed(), &old, true},
-		{"wf-done-live-child", ptr("wf-done"), core.Active(), nil, false},
-		{"wf-cancelled", nil, core.Cancelled(), &old, true},
-		{"wf-failed", nil, core.Failed(), &old, false},
-		{"wf-paused", nil, core.Paused(), nil, false},
-		{"wf-active", nil, core.Active(), nil, false},
-		{"wf-recent", nil, core.Completed(), &recent, false},
-	}
-	var all []stepRow
-	for _, r := range runs {
-		if err := store.InsertWorkflowIfAbsent(ctx, env.ORM, newWorkflow(r.id, "chat-prune", r.parent, r.status, l2Base)); err != nil {
-			t.Fatal(err)
-		}
-		if r.completedAt != nil {
-			mustExec(t, env, `UPDATE workflows SET completed_at = $1 WHERE id = $2`, *r.completedAt, r.id)
-		}
-		all = append(all, runSteps(r.id)...)
-	}
-	seedRetentionSteps(t, env, all)
-	timeline := func() []string {
-		steps, err := store.ListBasicChatStepExecutions(ctx, env.ORM, "chat-prune")
-		if err != nil {
-			t.Fatal(err)
-		}
-		out := make([]string, len(steps))
-		for i, s := range steps {
-			b, _ := json.Marshal(s)
-			out[i] = string(b)
-		}
-		return out
-	}
-	before := timeline()
+// stepRun is a workflow of a pruning fixture.
+type stepRun struct {
+	id          string
+	parent      *string
+	status      core.WorkflowStatus
+	completedAt *time.Time
+}
 
-	res, err := env.Repo.PruneStepExecutions(ctx, time.Now().Add(-30*24*time.Hour), 0)
-	if err != nil {
-		t.Fatal(err)
-	}
-	requireSame(t, "the chat timeline", timeline(), before)
-
+// assertPruned fails unless exactly the prunable steps of the runs in pruned
+// are gone, and every other step of runs is present. It returns how many are
+// gone.
+func assertPruned(t *testing.T, env *storetest.Env, runs []stepRun, pruned ...string) int {
+	t.Helper()
 	left := retainedStepIDs(t, env)
-	want := 0
+	n := 0
 	for _, r := range runs {
 		gone := map[string]bool{}
-		if r.pruned {
+		if slices.Contains(pruned, r.id) {
 			for _, id := range prunable(r.id) {
 				gone[id] = true
-				want++
+				n++
 			}
 		}
 		for _, s := range runSteps(r.id) {
@@ -393,19 +411,136 @@ func TestPruneStepExecutions_KeepsTheTimelineAndLiveRuns(t *testing.T) {
 			}
 		}
 	}
-	if res.Runs != 2 || res.Deleted != int64(want) {
-		t.Fatalf("result = %+v, want 2 root runs and %d steps", res, want)
+	return n
+}
+
+func deferredRoots(t *testing.T, env *storetest.Env) []string {
+	t.Helper()
+	ids, err := store.DeferredStepRetentionRoots(context.Background(), env.ORM, "", 100)
+	if err != nil {
+		t.Fatal(err)
 	}
+	return ids
+}
+
+// TestPruneStepExecutions_PrunesOnlyWhatIsFinishedAndOld: a root run that
+// completed or was cancelled before the cutoff loses the internal steps of
+// each workflow in its tree that ITSELF completed or was cancelled before the
+// cutoff. Nothing of a failed (resumable), paused, running or recently
+// finished workflow is touched — root or child — and the chat timeline (the
+// BASIC read) is exactly what it was.
+func TestPruneStepExecutions_PrunesOnlyWhatIsFinishedAndOld(t *testing.T) {
+	env, ctx := storetest.New(t), context.Background()
+	seedChat(t, env, "chat-prune")
+	old, recent := retentionAged, retentionRecent
+	runs := []stepRun{
+		{"wf-done", nil, core.Completed(), &old},
+		{"wf-done-child", ptr("wf-done"), core.Completed(), &old},
+		{"wf-done-live-child", ptr("wf-done"), core.Active(), nil},
+		{"wf-done-paused-child", ptr("wf-done"), core.Paused(), nil},
+		{"wf-done-failed-child", ptr("wf-done"), core.Failed(), &old},
+		{"wf-done-recent-child", ptr("wf-done"), core.Completed(), &recent},
+		{"wf-cancelled", nil, core.Cancelled(), &old},
+		{"wf-failed", nil, core.Failed(), &old},
+		{"wf-paused", nil, core.Paused(), nil},
+		{"wf-active", nil, core.Active(), nil},
+		{"wf-recent", nil, core.Completed(), &recent},
+	}
+	seedStepRuns(t, env, "chat-prune", runs)
+	before := basicTimeline(t, env, "chat-prune")
+
+	res, err := env.Repo.PruneStepExecutions(ctx, retentionCutoff, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	requireSame(t, "the chat timeline", basicTimeline(t, env, "chat-prune"), before)
+	want := assertPruned(t, env, runs, "wf-done", "wf-done-child", "wf-cancelled")
+	if res.Runs != 2 || res.Deferred != 1 || res.Deleted != int64(want) {
+		t.Fatalf("result = %+v, want 2 root runs (1 deferred) and %d steps", res, want)
+	}
+	requireSame(t, "deferred roots", deferredRoots(t, env), []string{"wf-done"})
 
 	// The run's diagnostics degrade to what is left; they do not fail.
 	if rows, err := store.ListRunNodeExecutions(ctx, env.ORM, "wf-done", 50); err != nil || len(rows) == 0 {
 		t.Fatalf("diagnostics of a pruned run = %d rows, %v", len(rows), err)
 	}
-	// The cursor holds: a second pass re-reads none of it.
-	if res, err := env.Repo.PruneStepExecutions(ctx, time.Now().Add(-30*24*time.Hour), 0); err != nil || res != (db.StepRetentionResult{}) {
-		t.Fatalf("second pass = %+v, %v; want nothing", res, err)
+	if at, id, err := store.ReadLedgerRetentionCursor(ctx, env.ORM, "step_executions"); err != nil || id != "wf-done" || !at.Equal(old) {
+		t.Fatalf("cursor = %v %q, %v; want wf-done at %v", at, id, err, old)
 	}
-	if at, id, err := store.ReadLedgerRetentionCursor(ctx, env.ORM, "step_executions"); err != nil || id == "" || at.Sub(old).Abs() > time.Millisecond {
-		t.Fatalf("cursor = %v %q, %v; want the last pruned root at %v", at, id, err, old)
+}
+
+// TestPruneStepExecutions_DeferredRootIsRevisited: the cursor passes a root
+// whose tree still holds unfinished work, but the root is deferred, so a child
+// that finishes afterwards is pruned by a later pass; once the whole tree is
+// pruned the root is no longer deferred, and a pass with nothing left to do
+// does nothing.
+func TestPruneStepExecutions_DeferredRootIsRevisited(t *testing.T) {
+	env, ctx := storetest.New(t), context.Background()
+	seedChat(t, env, "chat-defer")
+	old := retentionAged
+	runs := []stepRun{
+		{"wf-root", nil, core.Completed(), &old},
+		{"wf-late-child", ptr("wf-root"), core.Active(), nil},
+		{"wf-failed-child", ptr("wf-root"), core.Failed(), &old},
 	}
+	seedStepRuns(t, env, "chat-defer", runs)
+
+	if _, err := env.Repo.PruneStepExecutions(ctx, retentionCutoff, 0); err != nil {
+		t.Fatal(err)
+	}
+	assertPruned(t, env, runs, "wf-root")
+	requireSame(t, "deferred roots", deferredRoots(t, env), []string{"wf-root"})
+
+	// The late child completes, long enough ago to be prunable; the cursor is
+	// past its root, which only the deferral brings back.
+	mustExec(t, env, `UPDATE workflows SET state = 3, stop_reason = 1, completed_at = $1 WHERE id = 'wf-late-child'`, old)
+	res, err := env.Repo.PruneStepExecutions(ctx, retentionCutoff, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := len(prunable("wf-late-child"))
+	if res.Runs != 1 || res.Deferred != 1 || res.Deleted != int64(want) {
+		t.Fatalf("revisit = %+v, want the deferred root, still deferred (failed child), %d steps", res, want)
+	}
+	assertPruned(t, env, runs, "wf-root", "wf-late-child")
+
+	// The failed child is resumed and completes: the tree is done.
+	mustExec(t, env, `UPDATE workflows SET stop_reason = 1, completed_at = $1 WHERE id = 'wf-failed-child'`, old)
+	if res, err = env.Repo.PruneStepExecutions(ctx, retentionCutoff, 0); err != nil || res.Deferred != 0 {
+		t.Fatalf("final pass = %+v, %v; want nothing deferred", res, err)
+	}
+	assertPruned(t, env, runs, "wf-root", "wf-late-child", "wf-failed-child")
+	requireSame(t, "deferred roots", deferredRoots(t, env), []string(nil))
+	if res, err := env.Repo.PruneStepExecutions(ctx, retentionCutoff, 0); err != nil || res != (db.StepRetentionResult{}) {
+		t.Fatalf("idle pass = %+v, %v; want nothing", res, err)
+	}
+}
+
+func seedStepRuns(t *testing.T, env *storetest.Env, chatID string, runs []stepRun) {
+	t.Helper()
+	var all []stepRow
+	for _, r := range runs {
+		if err := store.InsertWorkflowIfAbsent(context.Background(), env.ORM, newWorkflow(r.id, chatID, r.parent, r.status, l2Base)); err != nil {
+			t.Fatal(err)
+		}
+		if r.completedAt != nil {
+			mustExec(t, env, `UPDATE workflows SET completed_at = $1 WHERE id = $2`, *r.completedAt, r.id)
+		}
+		all = append(all, runSteps(r.id)...)
+	}
+	seedRetentionSteps(t, env, all)
+}
+
+func basicTimeline(t *testing.T, env *storetest.Env, chatID string) []string {
+	t.Helper()
+	steps, err := store.ListBasicChatStepExecutions(context.Background(), env.ORM, chatID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := make([]string, len(steps))
+	for i, s := range steps {
+		b, _ := json.Marshal(s)
+		out[i] = string(b)
+	}
+	return out
 }

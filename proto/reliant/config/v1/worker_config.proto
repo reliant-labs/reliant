@@ -183,17 +183,24 @@ message WorkerConfig {
   // client reconnecting from before that gets a fresh snapshot instead of a
   // replay. The internal steps (CallLLM, ExecuteTools, SaveMessage, …) of a
   // run that completed or was cancelled more than step_execution_retention ago
-  // are deleted; the steps the chat timeline renders are kept. 0 turns either
-  // off.
+  // are deleted; the steps the chat timeline renders are kept.
+  //
+  // Both are OFF (0) by default: retention deletes data, so an environment
+  // turns it on deliberately, and turns chat compaction on only once every
+  // api-server it runs reads the compaction watermark (a release that has it
+  // fully rolled out). Recommended: 168h and 720h. Rolling an api-server back
+  // to a release without the watermark after compaction has run lets a stale
+  // reconnect replay past compacted rows; set chat_update_retention to 0 and
+  // keep the api-servers on a watermark-aware release instead.
   google.protobuf.Duration chat_update_retention = 32 [(forge.v1.config) = {
     env_var: "RELIANT_WORKER_CHAT_UPDATE_RETENTION"
-    default_value: "168h"
-    description: "Age past which a chat's update log is compacted to each entity's newest update (0: never)"
+    default_value: "0s"
+    description: "Age past which a chat's update log is compacted to each entity's newest update (0: never; recommended 168h once every api-server reads the compaction watermark)"
   }];
   google.protobuf.Duration step_execution_retention = 33 [(forge.v1.config) = {
     env_var: "RELIANT_WORKER_STEP_EXECUTION_RETENTION"
-    default_value: "720h"
-    description: "Age past which a finished run's internal step records are deleted (0: never)"
+    default_value: "0s"
+    description: "Age past which a finished run's internal step records are deleted (0: never; recommended 720h)"
   }];
   // How long after the worker starts its first retention pass waits. An
   // api-server of a release before the compaction watermark does not read it,

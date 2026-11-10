@@ -74,7 +74,7 @@ func TestLedgerRetention_FirstPassWaitsOutTheStartDelay(t *testing.T) {
 	// Run is blocked on the delay timer, which comes before any pass.
 	require.Empty(t, h.passes, "a pass ran before the start delay was over")
 
-	h.fire <- time.Now()
+	h.fire <- time.Time{} // the value is never read
 	h.waitPass(t)
 }
 

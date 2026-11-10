@@ -356,11 +356,16 @@ func ListBasicChatStepExecutions(ctx context.Context, db orm.Context, chatID str
 // outcome, failure_detail) is untouched, so its summary stays.
 //
 // The unit is a root run — what get_run and ListRunNodeExecutions read as one
-// tree — that COMPLETED or was CANCELLED. A FAILED root is resumable, a
-// PAUSED one is live, and neither is touched; if one is later resumed and
-// completes, its completed_at moves past the cursor and it is pruned then.
-// Inside a pruned root, a workflow still running or paused (a background
-// spawn that outlived its parent) keeps its steps.
+// tree — that COMPLETED or was CANCELLED before the cutoff. Inside it, every
+// workflow is judged on its own: only one that itself completed or was
+// cancelled before the cutoff loses its internal steps. A FAILED workflow is
+// resumable, a PAUSED one live, an ACTIVE or PENDING one running, and one that
+// finished after the cutoff is too recent: their steps stay. A root that still
+// holds any such workflow is DEFERRED (step_retention_deferred_roots) and
+// revisited every pass until its whole tree has been pruned, so a child that
+// finishes after its root was first visited is pruned in its turn. A FAILED
+// root is never visited; if it is resumed and completes, its completed_at moves
+// past the cursor and it is visited then.
 
 // StepRetentionRoot is a root run whose internal steps may be pruned.
 type StepRetentionRoot struct {
@@ -389,23 +394,30 @@ func StepRetentionRoots(ctx context.Context, db orm.Context, cutoff, afterAt tim
 	return out, nil
 }
 
-// pruneRunStepsSQL deletes up to ?1 internal steps of the stopped, not paused
-// workflows of root run ?0's tree (the tree ListRunNodeExecutions reads). The
-// prunable list is model.InternalActivities, and the "-save" exemption is
-// BasicChatStepExecutionsSQL's second arm verbatim: a save row whose
-// user-facing step (same workflow, step id, loop scope) renders it. Both
-// literals are pinned by TestUserFacingStepIndexPredicateMatchesInternalActivities
-// and TestStepRetentionLiteralsMatchTheEnums. Locked rows are skipped, so two
-// replicas pruning one run do not wait on each other.
-const pruneRunStepsSQL = `
+// stepRetentionTreeSQL is root run ?0's tree (the tree ListRunNodeExecutions
+// reads), each workflow marked prunable when it itself completed (stop reason
+// 1) or was cancelled (4) before ?1. Every other workflow — running, pending,
+// paused, failed, finished since the cutoff, or with no completed_at — is not.
+const stepRetentionTreeSQL = `
 WITH RECURSIVE tree AS (
-    SELECT id, chat_id, state, stop_reason FROM workflows WHERE id = ?0
+    SELECT id, chat_id FROM workflows WHERE id = ?0
     UNION ALL
-    SELECT w.id, w.chat_id, w.state, w.stop_reason FROM workflows w JOIN tree t ON w.parent_id = t.id AND w.chat_id = t.chat_id
-)
-DELETE FROM step_executions WHERE id IN (
+    SELECT w.id, w.chat_id FROM workflows w JOIN tree t ON w.parent_id = t.id AND w.chat_id = t.chat_id
+), judged AS (
+    SELECT t.id, COALESCE(w.state = 3 AND w.stop_reason IN (1, 4) AND w.completed_at < ?1, false) AS prunable
+      FROM tree t JOIN workflows w ON w.id = t.id
+)`
+
+// prunableStepsSQL selects the prunable steps of the prunable workflows of
+// stepRetentionTreeSQL. The prunable list is model.InternalActivities, and the
+// "-save" exemption is BasicChatStepExecutionsSQL's second arm verbatim: a
+// save row whose user-facing step (same workflow, step id, loop scope)
+// renders it in the chat timeline. Both literals are pinned by
+// TestUserFacingStepIndexPredicateMatchesInternalActivities and
+// TestStepRetentionLiteralsMatchTheEnums.
+const prunableStepsSQL = `
     SELECT se.id FROM step_executions se
-      JOIN tree t ON t.id = se.workflow_id AND t.state = 3 AND t.stop_reason <> 3
+      JOIN judged j ON j.id = se.workflow_id AND j.prunable
      WHERE se.activity_name IN (
              'WorkflowStatus', 'WorkflowError', 'Cleanup', 'FetchThreadResult',
              'FailStep', 'SaveMessage', 'CallLLM', 'Approval', 'ExecuteTools')
@@ -417,21 +429,83 @@ DELETE FROM step_executions WHERE id IN (
                     = ARRAY[vis.loop_node_id, vis.loop_iteration::text]
                 AND vis.activity_name NOT IN (
                     'WorkflowStatus', 'WorkflowError', 'Cleanup', 'FetchThreadResult',
-                    'FailStep', 'SaveMessage', 'CallLLM', 'Approval', 'ExecuteTools')))
-     LIMIT ?1
-     FOR UPDATE OF se SKIP LOCKED)`
+                    'FailStep', 'SaveMessage', 'CallLLM', 'Approval', 'ExecuteTools')))`
 
-// PruneRunSteps deletes up to limit prunable steps of root run rootID's tree
-// and returns how many. Call it until it returns less than limit.
-func PruneRunSteps(ctx context.Context, db orm.Context, rootID string, limit int) (int64, error) {
+// pruneRunStepsSQL deletes up to ?2 of them. No SKIP LOCKED: a row another
+// replica is deleting is waited for, so a batch never passes over a row whose
+// delete then rolls back.
+const pruneRunStepsSQL = stepRetentionTreeSQL + `
+DELETE FROM step_executions WHERE id IN (` + prunableStepsSQL + `
+     LIMIT ?2)`
+
+// runStepsLeftSQL: whether any prunable step of the tree is left. A short
+// batch does not prove there is none (rows another replica deleted under the
+// LIMIT count for nothing), so the prune ends only on this.
+const runStepsLeftSQL = stepRetentionTreeSQL + `
+SELECT EXISTS (` + prunableStepsSQL + `)`
+
+// runHasUnprunableWorkflowsSQL: whether the tree holds a workflow that is not
+// prunable yet, so the root must be revisited.
+const runHasUnprunableWorkflowsSQL = stepRetentionTreeSQL + `
+SELECT EXISTS (SELECT 1 FROM judged WHERE NOT prunable)`
+
+// PruneRunSteps deletes up to limit prunable steps of root run rootID's tree,
+// as of cutoff, and returns how many.
+func PruneRunSteps(ctx context.Context, db orm.Context, rootID string, cutoff time.Time, limit int) (int64, error) {
 	if limit <= 0 {
 		return 0, fmt.Errorf("prune run steps: limit must be positive")
 	}
-	res, err := db.Bun().NewRaw(pruneRunStepsSQL, rootID, limit).Exec(ctx)
+	res, err := db.Bun().NewRaw(pruneRunStepsSQL, rootID, cutoff.UTC(), limit).Exec(ctx)
 	if err != nil {
 		return 0, fmt.Errorf("prune run steps: %w", err)
 	}
 	return res.RowsAffected()
+}
+
+// RunStepsLeft reports whether root run rootID's tree still has a step
+// PruneRunSteps would delete.
+func RunStepsLeft(ctx context.Context, db orm.Context, rootID string, cutoff time.Time) (bool, error) {
+	var left bool
+	if err := db.Bun().NewRaw(runStepsLeftSQL, rootID, cutoff.UTC()).Scan(ctx, &left); err != nil {
+		return false, fmt.Errorf("run steps left: %w", err)
+	}
+	return left, nil
+}
+
+// RunHasUnprunableWorkflows reports whether root run rootID's tree holds a
+// workflow that is not prunable as of cutoff: the root must be revisited.
+func RunHasUnprunableWorkflows(ctx context.Context, db orm.Context, rootID string, cutoff time.Time) (bool, error) {
+	var pending bool
+	if err := db.Bun().NewRaw(runHasUnprunableWorkflowsSQL, rootID, cutoff.UTC()).Scan(ctx, &pending); err != nil {
+		return false, fmt.Errorf("run has unprunable workflows: %w", err)
+	}
+	return pending, nil
+}
+
+// DeferStepRetentionRoot records that root run rootID must be revisited.
+func DeferStepRetentionRoot(ctx context.Context, db orm.Context, rootID string) error {
+	if _, err := db.Exec(ctx, `INSERT INTO step_retention_deferred_roots (root_id) VALUES ($1) ON CONFLICT (root_id) DO NOTHING`, rootID); err != nil {
+		return fmt.Errorf("defer step retention root: %w", err)
+	}
+	return nil
+}
+
+// ClearStepRetentionRoot records that root run rootID's tree is fully pruned.
+func ClearStepRetentionRoot(ctx context.Context, db orm.Context, rootID string) error {
+	if _, err := db.Exec(ctx, `DELETE FROM step_retention_deferred_roots WHERE root_id = $1`, rootID); err != nil {
+		return fmt.Errorf("clear step retention root: %w", err)
+	}
+	return nil
+}
+
+// DeferredStepRetentionRoots returns up to limit deferred root runs after
+// afterID, in id order.
+func DeferredStepRetentionRoots(ctx context.Context, db orm.Context, afterID string, limit int) ([]string, error) {
+	var ids []string
+	if err := db.Bun().NewRaw(`SELECT root_id FROM step_retention_deferred_roots WHERE root_id > ?0 ORDER BY root_id LIMIT ?1`, afterID, limit).Scan(ctx, &ids); err != nil {
+		return nil, fmt.Errorf("deferred step retention roots: %w", err)
+	}
+	return ids, nil
 }
 
 // chatStepExecutionRow is one row of the chat-wide step reads.

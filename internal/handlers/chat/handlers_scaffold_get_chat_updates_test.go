@@ -26,6 +26,7 @@ func TestGetChatUpdates_Generated(t *testing.T) {
 	repo.GetLatestUpdateSequenceFunc = func(_ context.Context, chatID string) (int64, error) {
 		return 7, nil
 	}
+	repo.GetChatCompactedThroughFunc = func(context.Context, string) (int64, error) { return 0, nil }
 	svc := chat.NewTestChat(t, chat.WithChatDeps(chat.Deps{Repo: repo}))
 
 	tdd.RunRPCCases(t, []tdd.RPCCase[pb.GetChatUpdatesRequest, pb.GetChatUpdatesResponse]{
@@ -54,6 +55,7 @@ func TestGetChatUpdates_Generated(t *testing.T) {
 			Check: func(t *testing.T, resp *connect.Response[pb.GetChatUpdatesResponse]) {
 				require.Empty(t, resp.Msg.GetUpdates())
 				require.Equal(t, int64(7), resp.Msg.GetLatestSequence())
+				require.Equal(t, "0", resp.Header().Get(chat.ChatCompactedThroughHeader), "a chat never compacted reports 0")
 			},
 		},
 	}, svc.GetChatUpdates)

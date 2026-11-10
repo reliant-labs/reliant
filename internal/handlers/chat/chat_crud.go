@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"time"
 
 	"connectrpc.com/connect"
@@ -720,6 +721,19 @@ func (s *Service) ListArchivedChats(
 	}), nil
 }
 
+// ChatCompactedThroughHeader is the GetChatUpdates response header carrying
+// the chat's compaction watermark (store.CompactChatUpdates). At or below it
+// the log is compacted: MESSAGE, TOOL_CALL, STREAM_FINALIZED and
+// AGENT_MESSAGES_DRAINED updates are gone, NODE_EXECUTION keeps each node's
+// newest update and every other type each entity's newest, while THREAD,
+// WORKFLOW_STATUS, ERROR and QUESTION are whole. A poll from at or above it
+// gets every update; one from below it gets that compacted view, each
+// entity's current state without the transitions that led to it. A header,
+// not a response field: GetChatUpdatesResponse is public SDK API, which
+// changes in its own PR (sdk/go/README.md), and a header is invisible to every
+// client that does not look for it. 0: never compacted.
+const ChatCompactedThroughHeader = "Reliant-Chat-Compacted-Through"
+
 // GetChatUpdates fetches chat updates since a sequence number
 func (s *Service) GetChatUpdates(
 	ctx context.Context,
@@ -749,6 +763,16 @@ func (s *Service) GetChatUpdates(
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get latest sequence"))
 	}
 
+	// The compaction watermark, read AFTER the updates: compaction raises it
+	// before it deletes, and it only rises, so a value at or below since_seq
+	// proves nothing under the updates above was deleted, and anything a
+	// concurrent compaction took from this read is under the value reported.
+	// Unreadable, the poll fails rather than claim a log it cannot vouch for.
+	compactedThrough, err := s.deps.Repo.GetChatCompactedThrough(ctx, req.Msg.ChatId)
+	if err != nil {
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to read the chat's compaction watermark"))
+	}
+
 	// Convert to proto messages
 	toolBodies := messageproto.ResolveToolBodyMode(req.Msg.GetToolBodies(), s.deps.Config.GetTranscript().GetToolBodyStubs())
 	protoUpdates := make([]*reliantv1.ChatUpdate, len(updates))
@@ -773,11 +797,13 @@ func (s *Service) GetChatUpdates(
 	// What this read sent, by block kind, on the RPC's span.
 	trace.SpanFromContext(ctx).SetAttributes(sent.Attributes("transcript")...)
 
-	return connect.NewResponse(&reliantv1.GetChatUpdatesResponse{
+	resp := connect.NewResponse(&reliantv1.GetChatUpdatesResponse{
 		Updates:        protoUpdates,
 		Total:          int32(len(updates)),
 		LatestSequence: latestSeq,
-	}), nil
+	})
+	resp.Header().Set(ChatCompactedThroughHeader, strconv.FormatInt(compactedThrough, 10))
+	return resp, nil
 }
 
 // ListChatPlans lists plans associated with a chat
