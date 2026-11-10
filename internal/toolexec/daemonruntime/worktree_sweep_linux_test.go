@@ -51,6 +51,11 @@ func TestSweepReclaimedWorkspaceIsRestoredWithItsCaptureByEnsure(t *testing.T) {
 	r := worktreereclaim.NewReclaimer(root)
 	r.Acquire = func(context.Context, []string) (worktreereclaim.RecoveryLease, error) { return sweepTestLease{}, nil }
 	r.PRMerged, r.FetchBase = nil, nil
+	// Process inspection fails closed on any process of this user it cannot
+	// read, which on a shared host is another agent's; worktreereclaim tests
+	// it. Stubbed here so the restore is always asserted.
+	r.ProcessUse = func(context.Context, []string) error { return nil }
+	r.Cwds = func(context.Context) ([]string, error) { return nil, nil }
 	r.Now = func() time.Time { return time.Now().Add(10 * 24 * time.Hour) }
 	state := t.TempDir()
 	opts := worktreereclaim.SweepOptions{Mode: worktreereclaim.SweepOn, StateDir: state, Anchors: []string{f.project},
@@ -72,9 +77,6 @@ func TestSweepReclaimedWorkspaceIsRestoredWithItsCaptureByEnsure(t *testing.T) {
 	// The approval as the server delivers it (worktree.reclaim_approve).
 	opts.Authorized = []worktreereclaim.AuthorizedApproval{{Key: entry.Key, Fingerprint: entry.Fingerprint, Path: entry.Path, ApprovedBy: "inbox:u1"}}
 	pass := r.SweepMachine(ctx, opts)
-	if len(pass.Entries) == 1 && pass.Entries[0].Reason == worktreereclaim.ReasonInUse && hostUninspectable(pass.Entries[0].Detail) {
-		t.Skipf("host has an uninspectable process, so the reclaim is held: %s", pass.Entries[0].Detail)
-	}
 	if len(pass.Entries) != 1 || pass.Entries[0].Outcome != worktreereclaim.OutcomeReclaimed {
 		t.Fatalf("approved pass %+v, want the workspace reclaimed", pass.Entries)
 	}

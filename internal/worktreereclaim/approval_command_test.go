@@ -17,12 +17,19 @@ import (
 type approvalFixture struct {
 	*sweepFixture
 	ctx context.Context
+	// at is the one instant every pass and command of the test runs at.
+	at time.Time
 }
 
 func newApprovalFixture(t *testing.T, names ...string) (*approvalFixture, map[string]SweepEntry) {
 	t.Helper()
 	s := newSweepFixture(t)
-	a := &approvalFixture{sweepFixture: s, ctx: context.Background()}
+	// One fixed clock for the whole test, pinned after git wrote the
+	// fixture: ten days past its last write, the same for every pass and
+	// every command, so no assertion depends on when it runs.
+	at := s.r.now()
+	s.r.Now = func() time.Time { return at }
+	a := &approvalFixture{sweepFixture: s, ctx: context.Background(), at: at}
 	var paths []string
 	for _, n := range names {
 		p := s.plain(filepath.Join(s.tmp, n), "agent/"+n)
@@ -48,7 +55,7 @@ func commandFor(e SweepEntry) ApprovalCommand {
 // approve runs the command the way the daemon does: answer, then remove.
 func (a *approvalFixture) approve(t *testing.T, cmd ApprovalCommand) (ApprovalResult, ApprovalResult) {
 	t.Helper()
-	first, err := PrepareApprovalCommand(a.ctx, a.state, SweepOn, cmd, a.r.now())
+	first, err := PrepareApprovalCommand(a.ctx, a.state, SweepOn, cmd, a.at)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -133,7 +140,7 @@ func TestForgedApprovalsFileDeletesNothing(t *testing.T) {
 		}
 		defer unlock()
 		return storeApprovalsLocked(a.state, []Approval{{Key: w.Key, Path: w.Path, Fingerprint: w.Fingerprint,
-			Decision: DecisionApprove, DecidedAt: time.Now().UTC(), DecidedBy: "inbox:u1"}})
+			Decision: DecisionApprove, DecidedAt: a.at, DecidedBy: "inbox:u1"}})
 	}(); err != nil {
 		t.Fatal(err)
 	}
@@ -233,7 +240,7 @@ func TestPrepareApprovalCommandRefusesAtOnce(t *testing.T) {
 	heavyUnderShort(t, "~60 git processes")
 	a, es := newApprovalFixture(t, "wip")
 	e := es["wip"]
-	now := a.r.now()
+	now := a.at
 	for _, tc := range []struct {
 		mut    func(*ApprovalCommand)
 		mode   SweepMode
@@ -264,11 +271,11 @@ func TestApprovalCommandReplayIsIdempotent(t *testing.T) {
 	heavyUnderShort(t, "~90 git processes")
 	a, es := newApprovalFixture(t, "wip")
 	cmd := commandFor(es["wip"])
-	first, err := PrepareApprovalCommand(a.ctx, a.state, SweepOn, cmd, a.r.now())
+	first, err := PrepareApprovalCommand(a.ctx, a.state, SweepOn, cmd, a.at)
 	if err != nil || first.Status != ApprovalAccepted {
 		t.Fatalf("%+v, %v", first, err)
 	}
-	inflight, err := PrepareApprovalCommand(a.ctx, a.state, SweepOn, cmd, a.r.now())
+	inflight, err := PrepareApprovalCommand(a.ctx, a.state, SweepOn, cmd, a.at)
 	if err != nil || inflight.Status != ApprovalAccepted || !inflight.Replayed {
 		t.Fatalf("a replay while it runs: %+v, %v; want the accepted answer, replayed", inflight, err)
 	}
@@ -277,7 +284,7 @@ func TestApprovalCommandReplayIsIdempotent(t *testing.T) {
 		t.Fatalf("%+v, want reclaimed", done)
 	}
 	refs := captureRefs(t, a.project)
-	again, err := PrepareApprovalCommand(a.ctx, a.state, SweepOn, cmd, a.r.now())
+	again, err := PrepareApprovalCommand(a.ctx, a.state, SweepOn, cmd, a.at)
 	if err != nil || again.Status != ApprovalReclaimed || !again.Replayed || again.CaptureRef != done.CaptureRef {
 		t.Fatalf("a replay after it: %+v, %v; want the reclaimed answer, replayed", again, err)
 	}
@@ -295,7 +302,7 @@ func TestApprovalCommandAuthorizesTheStateNotTheKey(t *testing.T) {
 	a, es := newApprovalFixture(t, "wip")
 	e := es["wip"]
 	cmd := commandFor(e)
-	first, err := PrepareApprovalCommand(a.ctx, a.state, SweepOn, cmd, a.r.now())
+	first, err := PrepareApprovalCommand(a.ctx, a.state, SweepOn, cmd, a.at)
 	if err != nil || first.Status != ApprovalAccepted {
 		t.Fatalf("%+v, %v", first, err)
 	}
@@ -311,7 +318,7 @@ func TestApprovalCommandAuthorizesTheStateNotTheKey(t *testing.T) {
 		}
 		defer unlock()
 		if err := storeApprovalsLocked(a.state, []Approval{{Key: e.Key, Path: e.Path, Fingerprint: fp,
-			Decision: DecisionApprove, DecidedAt: time.Now().UTC(), DecidedBy: "inbox:u1"}}); err != nil {
+			Decision: DecisionApprove, DecidedAt: a.at, DecidedBy: "inbox:u1"}}); err != nil {
 			t.Fatal(err)
 		}
 	}()
@@ -324,5 +331,96 @@ func TestApprovalCommandAuthorizesTheStateNotTheKey(t *testing.T) {
 	}
 	if refs := captureRefs(t, a.project); refs != "" {
 		t.Fatalf("captured: %s", refs)
+	}
+}
+
+// Three proposals: one approved and removed, one whose approval is refused
+// while it is carried out, one nobody decided. The command's passes amend the
+// last report with exactly the approved worktrees: the removed one as
+// reclaimed, the refused one as the same proposal, undecided again with why;
+// the third is unchanged in the report and in what the Inbox lists.
+func TestApprovalCommandAmendsOnlyItsOwnProposals(t *testing.T) {
+	t.Parallel()
+	heavyUnderShort(t, "~150 git processes")
+	a, e := newApprovalFixture(t, "removed", "refused", "untouched")
+	before, err := ReadSweepReport(a.state)
+	if err != nil {
+		t.Fatal(err)
+	}
+	entryByKey := func(rep SweepReport, key string) SweepEntry {
+		t.Helper()
+		for _, x := range rep.Entries {
+			if x.Key == key {
+				return x
+			}
+		}
+		t.Fatalf("no entry %s in the report", key)
+		return SweepEntry{}
+	}
+	proposalByKey := func(key string) (Proposal, bool) {
+		t.Helper()
+		set, err := PendingProposals(a.state)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, p := range set.Proposals {
+			if p.Key == key {
+				return p, true
+			}
+		}
+		return Proposal{}, false
+	}
+	untouchedBefore, _ := proposalByKey(e["untouched"].Key)
+
+	if _, done := a.approve(t, commandFor(e["removed"])); done.Status != ApprovalReclaimed {
+		t.Fatalf("approved: %+v, want reclaimed", done)
+	}
+	refusedPath := e["refused"].Path
+	a.r.ProcessUse = func(_ context.Context, paths []string) error {
+		for _, p := range paths {
+			if strings.Contains(p, filepath.Base(refusedPath)) {
+				return errors.New("open by process 4242 (vim)")
+			}
+		}
+		return nil
+	}
+	if _, done := a.approve(t, commandFor(e["refused"])); done.Status != ApprovalRefused || done.Reason != string(ReasonInUse) {
+		t.Fatalf("refused: %+v, want refused (in_use)", done)
+	}
+
+	after, err := ReadSweepReport(a.state)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := entryByKey(after, e["removed"].Key); got.Outcome != OutcomeReclaimed || got.CaptureRef == "" {
+		t.Fatalf("report: removed entry %+v, want reclaimed with its capture", got)
+	}
+	got := entryByKey(after, e["refused"].Key)
+	if got.Class != ClassNeedsApproval || got.Outcome != OutcomeAwaiting || got.Fingerprint != e["refused"].Fingerprint ||
+		!strings.Contains(got.Detail, "not carried out (in_use)") || !strings.Contains(got.Detail, "process 4242") {
+		t.Fatalf("report: refused entry %+v, want the same proposal, awaiting, with why", got)
+	}
+	if b, a2 := entryByKey(before, e["untouched"].Key), entryByKey(after, e["untouched"].Key); b != a2 {
+		t.Fatalf("report: the untouched entry changed:\nbefore %+v\nafter  %+v", b, a2)
+	}
+	if len(after.Entries) != len(before.Entries) {
+		t.Fatalf("report has %d entries, had %d", len(after.Entries), len(before.Entries))
+	}
+
+	if _, ok := proposalByKey(e["removed"].Key); ok {
+		t.Fatal("the Inbox still lists the removed worktree")
+	}
+	p, ok := proposalByKey(e["refused"].Key)
+	if !ok || p.Decision != "" || p.Fingerprint != e["refused"].Fingerprint || !strings.Contains(p.Detail, "not carried out (in_use)") {
+		t.Fatalf("Inbox: refused proposal %+v (listed %t), want undecided with why", p, ok)
+	}
+	if strings.Count(p.Detail, "not carried out") != 1 {
+		t.Fatalf("the reason is given more than once: %q", p.Detail)
+	}
+	if u, ok := proposalByKey(e["untouched"].Key); !ok || u.Decision != untouchedBefore.Decision || u.Detail != untouchedBefore.Detail || u.Fingerprint != untouchedBefore.Fingerprint {
+		t.Fatalf("Inbox: untouched proposal %+v, was %+v", u, untouchedBefore)
+	}
+	if !exists(filepath.Join(refusedPath, "a.txt")) || !exists(filepath.Join(e["untouched"].Path, "a.txt")) {
+		t.Fatal("a worktree that was not removed lost its files")
 	}
 }

@@ -56,6 +56,58 @@ func (o SweepOptions) authorizes(key, fingerprint, path string) bool {
 	return ok
 }
 
+// authorizedAmendments is what a command's pass writes into the last report:
+// the entry of every authorized worktree it reached, whatever became of it,
+// and nothing else (the other proposals stay as the last full pass left
+// them). A removed one is recorded as reclaimed. One whose state changed is
+// recorded in its new state, proposed again and undecided. One refused while
+// it was carried out (in use, its capture missing, changed while parked) is
+// held by the pass, which would drop it from the proposals; it is recorded
+// instead as the proposal it was, at the state the person approved, awaiting a
+// decision again, with why its approval was not carried out.
+func authorizedAmendments(dir string, entries []SweepEntry, o SweepOptions) []SweepEntry {
+	last := map[string]SweepEntry{}
+	if rep, err := ReadSweepReport(dir); err == nil {
+		for _, e := range rep.Entries {
+			last[e.Key] = e
+		}
+	}
+	var out []SweepEntry
+	for _, e := range entries {
+		a, ok := o.authorizedFor(e.Key, e.Path)
+		if !ok {
+			continue
+		}
+		if e.Outcome != OutcomeReclaimed && e.Class != ClassNeedsApproval {
+			reason := string(e.Reason)
+			if e.Outcome == OutcomeSweepDeferred {
+				reason = RefusedDeferred
+			}
+			if prev, ok := last[e.Key]; ok && prev.Class == ClassNeedsApproval && prev.Fingerprint == a.Fingerprint {
+				prev.Outcome = OutcomeAwaiting
+				prev.Detail = refusedDetail(reason, e.Detail)
+				e = prev
+			}
+		}
+		out = append(out, e)
+	}
+	return out
+}
+
+// refusedDetail is how a proposal whose approval was not carried out says so.
+func refusedDetail(reason, detail string) string {
+	return "Your approval was not carried out (" + reason + "): " + detail
+}
+
+func (o SweepOptions) authorizedFor(key, path string) (AuthorizedApproval, bool) {
+	for _, a := range o.Authorized {
+		if a.Key == key && samePath(a.Path, path) {
+			return a, true
+		}
+	}
+	return AuthorizedApproval{}, false
+}
+
 func (o SweepOptions) authorizesKey(key string) bool {
 	for _, a := range o.Authorized {
 		if a.Key == key {

@@ -75,6 +75,12 @@ func TestInboxApprovalIsTheOnlyApprovalTheDaemonActsOn(t *testing.T) {
 	r := worktreereclaim.NewReclaimer(root)
 	r.Acquire = func(context.Context, []string) (worktreereclaim.RecoveryLease, error) { return sweepTestLease{}, nil }
 	r.PRMerged, r.FetchBase = nil, nil
+	// Process inspection reads every process of this user on the machine,
+	// and fails closed on one it cannot read (another test binary, another
+	// agent): that is worktreereclaim's to test, with its own stubs. Here it
+	// is stubbed, so this test's assertions run on any host.
+	r.ProcessUse = func(context.Context, []string) error { return nil }
+	r.Cwds = func(context.Context) ([]string, error) { return nil, nil }
 	// One fixed clock for the whole test. The checkout's activity (mtimes,
 	// reflog) is what git wrote while building the fixture, so the clock is
 	// pinned once, after that: every sweep runs at the same instant, ten
@@ -206,12 +212,6 @@ func TestInboxApprovalIsTheOnlyApprovalTheDaemonActsOn(t *testing.T) {
 		t.Fatalf("command results %+v, %v", results, err)
 	}
 	done := results[0]
-	if done.Status == worktreereclaim.ApprovalRefused && done.Reason == string(worktreereclaim.ReasonInUse) && hostUninspectable(done.Detail) {
-		// The host, not the code: a process of this user that cannot be
-		// inspected (undumpable) might be inside the checkout, so the
-		// removal is refused, as it must be.
-		t.Skipf("host has an uninspectable process, so the approval is refused: %s", done.Detail)
-	}
 	if done.Status != worktreereclaim.ApprovalReclaimed || done.ApprovedBy != "inbox:"+userID || done.CaptureRef == "" {
 		t.Fatalf("command result %+v, want reclaimed, approved by the person, with its capture", done)
 	}
@@ -236,11 +236,4 @@ func TestInboxApprovalIsTheOnlyApprovalTheDaemonActsOn(t *testing.T) {
 	if !strings.Contains(string(again), `"status":"reclaimed"`) || !strings.Contains(string(again), `"replayed":true`) || runs != 1 {
 		t.Fatalf("replayed command answered %s after %d runs, want the reclaimed answer and no new run", again, runs)
 	}
-}
-
-// hostUninspectable says a reclaim was held by a process of this user that
-// cannot be inspected (worktreereclaim's process_uninspectable_linux.go):
-// another test binary or agent on a shared machine, not the code under test.
-func hostUninspectable(detail string) bool {
-	return strings.Contains(detail, " unreadable") && strings.HasPrefix(detail, "process ")
 }

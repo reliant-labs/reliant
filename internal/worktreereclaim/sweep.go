@@ -419,14 +419,7 @@ func (r *Reclaimer) SweepMachine(ctx context.Context, opts SweepOptions) SweepRe
 		}
 		amend := rep
 		if len(opts.Authorized) > 0 {
-			// A command's pass amends the report only with what it removed:
-			// one it refused stays proposed, so the Inbox can ask again.
-			amend.Entries = nil
-			for _, e := range rep.Entries {
-				if e.Outcome == OutcomeReclaimed {
-					amend.Entries = append(amend.Entries, e)
-				}
-			}
+			amend.Entries = authorizedAmendments(dir, rep.Entries, opts)
 		}
 		if b, err := json.MarshalIndent(rep, "", "  "); err == nil && (!opts.ApprovedOnly || len(amend.Entries) != 0) {
 			if opts.ApprovedOnly {

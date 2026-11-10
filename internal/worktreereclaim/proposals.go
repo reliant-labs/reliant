@@ -129,7 +129,11 @@ func allPendingProposals(stateDir string) (ProposalSet, error) {
 		// again, with why: the person decides afresh, knowing.
 		if c, ok := commands.find(e.Key, e.Fingerprint); ok && c.Status == ApprovalRefused && p.Decision == DecisionApprove {
 			p.Decision = ""
-			p.Detail = "Your approval was not carried out (" + c.Reason + "): " + c.Detail
+			if !strings.HasPrefix(p.Detail, "Your approval was not carried out") {
+				// The report was not amended (no pass reached it): say why
+				// from the command's own record.
+				p.Detail = refusedDetail(c.Reason, c.Detail)
+			}
 		}
 		if n, ok := notes.find(e.Key, e.Fingerprint); ok {
 			p.Note, p.NoteAt = n.Text, n.At
