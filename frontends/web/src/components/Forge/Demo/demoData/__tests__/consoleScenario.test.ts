@@ -199,6 +199,10 @@ describe("every console read is answered; every write is refused", () => {
         const addressed: Record<string, object> = {
           "controlplane.v1.AppDatabaseService/DescribeDatabase": { environmentId: "env-dev", database: "shop" },
           "controlplane.v1.AppDatabaseService/BrowseTable": { environmentId: "env-dev", database: "shop", table: "public.chats", limit: 50 },
+          "controlplane.v1.StorageBrowserService/ListBrowsableBuckets": { environmentId: "env-dev" },
+          "controlplane.v1.StorageBrowserService/ListObjects": { environmentId: "env-dev", bucket: "uploads" },
+          "controlplane.v1.StorageBrowserService/GetObjectMetadata": { environmentId: "env-dev", bucket: "uploads", key: "README.txt" },
+          "controlplane.v1.StorageBrowserService/PreviewObject": { environmentId: "env-dev", bucket: "uploads", key: "README.txt" },
           "controlplane.v1.DeployService/GetWorkloadConfig": { environmentId: "env-dev", workload: "api" },
         };
         await expect(client[method.localName](addressed[`${service.typeName}/${method.name}`] ?? {}), `${service.typeName}/${method.name}`).resolves.toBeDefined();
