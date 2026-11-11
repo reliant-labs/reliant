@@ -214,13 +214,13 @@ func (a *CreateWorktreeActivity) Execute(ctx context.Context, input ActivityInpu
 		ChatID:        chatIDPtr,
 		OwnerDaemonID: ownerDaemonID,
 	}
-	wt, err := workspacecreate.Insert(ctx, a.repo, createReq)
+	machine := daemonMachine{router: a.daemonRouter, userID: chat.UserID, daemonID: ownerDaemonID}
+	wt, err := workspacecreate.Insert(ctx, a.repo, machine, createReq)
 	if err != nil {
 		// %w keeps a refusal's class (a name taken, a branch git would
 		// refuse): a user error crosses the activity boundary as Benign.
 		return CreateWorktreeOutput{}, fmt.Errorf("create worktree: %w", err)
 	}
-	machine := daemonMachine{router: a.daemonRouter, userID: chat.UserID, daemonID: ownerDaemonID}
 	finishErr := workspacecreate.Finish(ctx, a.repo, machine, createReq, wt)
 	// Settled either way (ACTIVE or FAILED): tell connected clients.
 	if err := a.repo.EmitUserRefetch(ctx, chat.UserID, db.RefetchWorktreeChanges, db.RefetchOpts{

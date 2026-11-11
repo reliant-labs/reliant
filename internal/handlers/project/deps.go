@@ -45,6 +45,10 @@ type Repository interface {
 	// is, and what to call it in a sentence.
 	GetDaemon(ctx context.Context, id string) (*db.Daemon, error)
 	DeleteProjectDaemon(ctx context.Context, projectID, daemonID string) error
+	// BeginCheckoutTeardown and SettleCheckoutTeardown record a remove or
+	// reclone of a checkout by the op id its machine acknowledges.
+	BeginCheckoutTeardown(ctx context.Context, projectID, daemonID, kind, path string, guard func(ctx context.Context) error) (*db.CheckoutTeardown, error)
+	SettleCheckoutTeardown(ctx context.Context, id, state, detail string) (*db.CheckoutTeardown, error)
 	// DetachProjectFromDaemon forgets a checkout without touching its files
 	// and records the detachment, which ListProjectDaemonDetachmentsForDaemon
 	// reads back so the connect heal leaves the pair alone.

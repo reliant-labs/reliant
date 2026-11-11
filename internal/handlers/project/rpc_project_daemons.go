@@ -20,7 +20,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/daemonplacement"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
-	"github.com/reliant-labs/reliant/internal/errreason"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/ospath"
 	"github.com/reliant-labs/reliant/internal/projectfacts"
@@ -609,7 +608,7 @@ func (s *Service) RemoveProjectFromDaemon(
 	req *connect.Request[reliantv1.RemoveProjectFromDaemonRequest],
 ) (*connect.Response[reliantv1.RemoveProjectFromDaemonResponse], error) {
 	userID := auth.MustGetUserID(ctx)
-	_, pd, err := s.resolveProjectDaemonRow(ctx, req.Msg.ProjectId, req.Msg.DaemonId, userID)
+	project, pd, err := s.resolveProjectDaemonRow(ctx, req.Msg.ProjectId, req.Msg.DaemonId, userID)
 	if err != nil {
 		// NotFound is treated as success — the row's already gone and
 		// there's nothing on disk to delete from our perspective. Anything
@@ -619,37 +618,30 @@ func (s *Service) RemoveProjectFromDaemon(
 		}
 		return nil, err
 	}
-	var removeResp struct {
-		Success bool   `json:"success"`
-		Removed bool   `json:"removed"`
-		Error   string `json:"error"`
+	machine := s.machineName(ctx, req.Msg.DaemonId)
+	// Recorded before it is sent, and holding back workspace creation on the
+	// checkout until the machine says how it ended (checkout_teardown.go).
+	op, done, err := s.beginTeardown(ctx, userID, project, pd, req.Msg.DaemonId, db.CheckoutTeardownRemove, machine)
+	if err != nil {
+		return nil, err
 	}
-	payload := map[string]string{"path": pd.Path}
-	// The row goes only once the machine has removed the checkout. It is the
-	// only record of a checkout on that machine: dropped while the clone is
-	// still on disk (the machine was offline, the remove failed), the machine
-	// is refused the project while its files sit there unrecorded, and the
-	// user is told to clone what they already have. The remove is retried
-	// from here; a machine that is gone for good releases its rows when it
-	// is removed (db.Repo.RemoveDaemon).
-	if err := s.sendToDaemon(ctx, userID, req.Msg.DaemonId, "git.remove", payload, &removeResp); err != nil {
-		if daemonerr.Unreachable(err) {
-			// Refused, with the two ways out: nothing else ever drops the
-			// row of a machine that never comes back.
-			return nil, svcerr.WithReason(svcerr.WithCause(svcerr.WithClass(
-				svcerr.Unavailable(removeFromOfflineMachine), svcerr.ClassUser), err), errreason.DaemonNotConnected)
-		}
-		return nil, daemonerr.Error("remove the project from the machine", err)
+	if done {
+		// A retry of a remove the machine has since finished.
+		return connect.NewResponse(&reliantv1.RemoveProjectFromDaemonResponse{}), nil
 	}
-	if !removeResp.Success {
-		reason := strings.TrimSpace(removeResp.Error)
-		if reason == "" {
-			reason = "the machine did not report the checkout removed"
-		}
-		return nil, svcerr.FailedPrecondition(fmt.Sprintf("could not remove the project from the machine: %s", reason))
-	}
-	if err := s.deps.Repo.DeleteProjectDaemon(ctx, req.Msg.ProjectId, req.Msg.DaemonId); err != nil {
-		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to delete project_daemons row"))
+	// The row goes only once the machine has removed the checkout, in the
+	// same step that records the op done (db.Repo.SettleCheckoutTeardown). It
+	// is the only record of a checkout on that machine: dropped while the
+	// clone is still on disk (the machine was offline, the remove failed),
+	// the machine is refused the project while its files sit there
+	// unrecorded, and the user is told to clone what they already have. The
+	// remove is retried from here; a machine that is gone for good releases
+	// its rows when it is removed (db.Repo.RemoveDaemon).
+	var reply teardownReply
+	payload := map[string]string{"path": pd.Path, "op_id": op.ID}
+	sendErr := teardownMachine{s: s, userID: userID, daemonID: req.Msg.DaemonId}.Send(ctx, "git.remove", payload, &reply, teardownTimeoutMs)
+	if err := s.settleTeardown(ctx, userID, op, project, machine, reply, sendErr); err != nil {
+		return nil, err
 	}
 	return connect.NewResponse(&reliantv1.RemoveProjectFromDaemonResponse{}), nil
 }
@@ -681,18 +673,25 @@ func (s *Service) RecloneProjectOnDaemon(
 	} else if project.DefaultBranch != nil {
 		branch = *project.DefaultBranch
 	}
-	var recloneResp struct {
-		Success bool   `json:"success"`
-		Path    string `json:"path"`
-		Error   string `json:"error"`
+	machine := s.machineName(ctx, req.Msg.DaemonId)
+	op, done, err := s.beginTeardown(ctx, userID, project, pd, req.Msg.DaemonId, db.CheckoutTeardownReclone, machine)
+	if err != nil {
+		return nil, err
 	}
+	if done {
+		// A retry of a reclone the machine has since finished.
+		return connect.NewResponse(&reliantv1.RecloneProjectOnDaemonResponse{Path: pd.Path}), nil
+	}
+	var reply teardownReply
 	payload := map[string]string{
 		"path":   pd.Path,
 		"repo":   *project.RemoteURL,
 		"branch": branch,
+		"op_id":  op.ID,
 	}
-	if err := s.sendToDaemon(ctx, userID, req.Msg.DaemonId, "git.reclone", payload, &recloneResp); err != nil {
-		return nil, daemonerr.Error("git reclone", err)
+	sendErr := teardownMachine{s: s, userID: userID, daemonID: req.Msg.DaemonId}.Send(ctx, "git.reclone", payload, &reply, teardownTimeoutMs)
+	if err := s.settleTeardown(ctx, userID, op, project, machine, reply, sendErr); err != nil {
+		return nil, err
 	}
 	// Refresh cloned_at — the row's path/branch are unchanged but the
 	// "Last cloned/pulled" column should now show "just now".
@@ -700,6 +699,6 @@ func (s *Service) RecloneProjectOnDaemon(
 		logging.WarnContext(ctx, "RecloneProjectOnDaemon: failed to refresh cloned_at", "error", err, "project_id", req.Msg.ProjectId, "daemon_id", req.Msg.DaemonId)
 	}
 	return connect.NewResponse(&reliantv1.RecloneProjectOnDaemonResponse{
-		Path: recloneResp.Path,
+		Path: pd.Path,
 	}), nil
 }

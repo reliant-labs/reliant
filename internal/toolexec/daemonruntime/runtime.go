@@ -338,6 +338,10 @@ func Start(ctx context.Context, opts StartOptions) error {
 	// Only after the claim above, so a second daemon that is about to be
 	// refused never rewrites the incumbent's records.
 	installBackgroundJournal(ctx, opts.BootstrapConfig.DataDir)
+	// Checkout removes and reclones the server acknowledged by op id
+	// (checkout_teardown.go): loaded before the first command can arrive, and
+	// after the claim for the same reason as the background journal.
+	initializeCheckoutTeardowns(ctx, opts.BootstrapConfig.DataDir)
 
 	client, err := newDaemonClient(opts.BootstrapConfig, opts.Host, opts.Guards, mcp.WithChromeBrowserURL(opts.ChromeBrowserURL))
 	if err != nil {

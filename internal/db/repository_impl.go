@@ -1803,6 +1803,15 @@ func (r *Repo) CreateWorktree(ctx context.Context, worktree *Worktree) error {
 		if err := store.LockProjectCheckout(txCtx, r.ORM(), worktree.ProjectID, *worktree.DaemonID, true); err != nil {
 			return err
 		}
+		// And not while a remove or reclone of that checkout may still be
+		// deleting it (BeginCheckoutTeardown takes the exclusive side).
+		pending, err := store.PendingCheckoutTeardown(txCtx, r.ORM(), worktree.ProjectID, *worktree.DaemonID, false)
+		if err != nil {
+			return err
+		}
+		if pending != nil {
+			return &CheckoutTeardownPendingError{Teardown: pending}
+		}
 		return store.InsertWorktree(txCtx, r.ORM(), worktree)
 	})
 }

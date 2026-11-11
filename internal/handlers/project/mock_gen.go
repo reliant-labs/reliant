@@ -56,7 +56,7 @@ func (m *MockOrgResolver) ListScope(ctx context.Context, userID string, requeste
 var _ OrgResolver = (*MockOrgResolver)(nil)
 
 // forge:section MockRepository
-// forge:hash=25e2ecb81708a344b3921bfd9d6bf15d5331955bd424a0a09e55682c6fd2767d
+// forge:hash=25063562e65c6b4033819c76edd324a23c3bf00be54a2ab5d7b0aaf9a30b8d09
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -84,6 +84,8 @@ type MockRepository struct {
 	ListProjectDaemonsForDaemonFunc           func(context.Context, string) ([]*core.ProjectDaemon, error)
 	GetDaemonFunc                             func(context.Context, string) (*db.Daemon, error)
 	DeleteProjectDaemonFunc                   func(context.Context, string, string) error
+	BeginCheckoutTeardownFunc                 func(context.Context, string, string, string, string, func(ctx context.Context) error) (*db.CheckoutTeardown, error)
+	SettleCheckoutTeardownFunc                func(context.Context, string, string, string) (*db.CheckoutTeardown, error)
 	DetachProjectFromDaemonFunc               func(context.Context, string, string, string, func(ctx context.Context) error) error
 	ListProjectDaemonDetachmentsForDaemonFunc func(context.Context, string) ([]*core.ProjectDaemonDetachment, error)
 	CreateRepoFunc                            func(context.Context, *core.Repo) error
@@ -259,6 +261,24 @@ func (m *MockRepository) DeleteProjectDaemon(ctx context.Context, projectID stri
 		return m.DeleteProjectDaemonFunc(ctx, projectID, daemonID)
 	}
 	return contractkit.MockNotSet("MockRepository", "DeleteProjectDaemon")
+}
+
+// BeginCheckoutTeardown records the call and delegates to BeginCheckoutTeardownFunc when set.
+func (m *MockRepository) BeginCheckoutTeardown(p0 context.Context, projectID string, daemonID string, kind string, path string, guard func(ctx context.Context) error) (*db.CheckoutTeardown, error) {
+	m.Recorder.Record("BeginCheckoutTeardown", p0, projectID, daemonID, kind, path, guard)
+	if m.BeginCheckoutTeardownFunc != nil {
+		return m.BeginCheckoutTeardownFunc(p0, projectID, daemonID, kind, path, guard)
+	}
+	return nil, contractkit.MockNotSet("MockRepository", "BeginCheckoutTeardown")
+}
+
+// SettleCheckoutTeardown records the call and delegates to SettleCheckoutTeardownFunc when set.
+func (m *MockRepository) SettleCheckoutTeardown(ctx context.Context, id string, state string, detail string) (*db.CheckoutTeardown, error) {
+	m.Recorder.Record("SettleCheckoutTeardown", ctx, id, state, detail)
+	if m.SettleCheckoutTeardownFunc != nil {
+		return m.SettleCheckoutTeardownFunc(ctx, id, state, detail)
+	}
+	return nil, contractkit.MockNotSet("MockRepository", "SettleCheckoutTeardown")
 }
 
 // DetachProjectFromDaemon records the call and delegates to DetachProjectFromDaemonFunc when set.
