@@ -11,7 +11,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/diskwatch"
 	"github.com/reliant-labs/reliant/internal/worktreereclaim"
 )
 
@@ -45,6 +47,7 @@ type tombDaemon struct {
 	skew      time.Duration // how far the daemon's clock runs behind
 	cmds      []string
 	archived  []worktreereclaim.Worktree // archived requests, as sent
+	reclaimAt []time.Time                // each placed mark's notice time
 }
 
 func newTombDaemon(c *clock) *tombDaemon {
@@ -77,6 +80,7 @@ func (d *tombDaemon) SendDaemonCommandToDaemon(_ context.Context, _, _, cmd stri
 		case worktreereclaim.MarkCommand:
 			if w.Mark != nil && !d.noTombs {
 				d.marks[w.ID] = w.Mark.ID
+				d.reclaimAt = append(d.reclaimAt, w.Mark.ReclaimAt)
 				d.use[w.ID] = d.clock.now().Add(-d.skew) // placing it writes files
 			}
 		case worktreereclaim.UnmarkCommand:
@@ -321,4 +325,96 @@ func TestMark_UseIsJudgedOnTheDaemonsOwnClock(t *testing.T) {
 	assert.False(t, e.meta().Marked(), "used after the mark, by the daemon's own clock")
 	e.pass(t, 30*time.Hour)
 	assert.Empty(t, e.store.archived)
+}
+
+// guard turns the machine's disk guard on (a report with a reclaiming
+// volume) or off (a report with none), as of the env's clock.
+func (e *markEnv) guard(t *testing.T, on bool) {
+	t.Helper()
+	vol := &reliantv1.DiskVolume{Label: "home", TotalBytes: 400 * diskwatch.GiB, FreeBytes: 300 * diskwatch.GiB}
+	if on {
+		vol.FreeBytes, vol.Guard = 30*diskwatch.GiB, reliantv1.DiskGuardState_DISK_GUARD_STATE_RECLAIMING
+	}
+	raw, err := diskwatch.Encode(diskwatch.Stamp(&reliantv1.DiskReport{Volumes: []*reliantv1.DiskVolume{vol}}, nil, e.clock.now()))
+	require.NoError(t, err)
+	e.store.mu.Lock()
+	e.store.disk = map[string]string{"d": raw}
+	e.store.mu.Unlock()
+}
+
+func TestMark_UnderDiskPressureAnHourOfQuietAndAnHourOfGrace(t *testing.T) {
+	t.Parallel()
+	e := newMarkEnv(t, AutoArchiveOn, 2*time.Hour)
+	e.pass(t, 0)
+	require.False(t, e.meta().Marked(), "two hours of quiet, no pressure: not marked")
+
+	// The guard's episode begins after that check: it re-asks the row now.
+	e.clock.advance(time.Minute)
+	e.guard(t, true)
+	e.pass(t, 0)
+	require.True(t, e.meta().Marked(), "under pressure an hour of quiet is enough")
+	require.Len(t, e.daemon.reclaimAt, 1)
+	assert.Equal(t, e.meta().ReclaimMarkedAt.Add(guardReclaimGrace), e.daemon.reclaimAt[0],
+		"the tombstone says it goes in an hour")
+
+	e.pass(t, 30*time.Minute)
+	assert.Empty(t, e.store.archived, "the hour is not up")
+	e.pass(t, 31*time.Minute)
+	assert.Equal(t, []string{"wt"}, e.store.archived, "an hour after the mark, under pressure: reclaimed")
+}
+
+func TestMark_PressureThatClearsMidGraceWaitsTheFullGrace(t *testing.T) {
+	t.Parallel()
+	e := newMarkEnv(t, AutoArchiveOn, 2*time.Hour)
+	e.guard(t, true)
+	e.pass(t, 0)
+	require.True(t, e.meta().Marked())
+	markedAt := *e.meta().ReclaimMarkedAt
+
+	e.guard(t, false)
+	e.pass(t, 2*time.Hour)
+	assert.Empty(t, e.store.archived, "pressure cleared: the mark waits the full grace again")
+	assert.True(t, e.meta().Marked(), "and still stands")
+
+	e.clock.mu.Lock()
+	e.clock.t = markedAt.Add(DefaultReclaimGrace + time.Minute)
+	e.clock.mu.Unlock()
+	e.pass(t, 0)
+	assert.Equal(t, []string{"wt"}, e.store.archived, "a day after the mark")
+}
+
+func TestMark_UnderDiskPressureEveryOtherCheckStands(t *testing.T) {
+	t.Parallel()
+	for name, touch := range map[string]func(e *markEnv){
+		"the tombstone is deleted": func(e *markEnv) { delete(e.daemon.marks, "wt") },
+		"it is used by path":       func(e *markEnv) { e.daemon.use["wt"] = e.clock.now() },
+		"a chat works in it": func(e *markEnv) {
+			e.store.mu.Lock()
+			e.store.activity["wt"] = core.WorktreeRunActivity{LastActive: e.clock.now()}
+			e.store.mu.Unlock()
+		},
+		"new work does not land": func(e *markEnv) { e.daemon.notLanded = true },
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			e := newMarkEnv(t, AutoArchiveOn, 2*time.Hour)
+			e.guard(t, true)
+			e.pass(t, 0)
+			require.True(t, e.meta().Marked())
+			e.clock.advance(10 * time.Minute)
+			e.daemon.mu.Lock()
+			touch(e)
+			e.daemon.mu.Unlock()
+			e.pass(t, 2*time.Hour)
+			assert.Empty(t, e.store.archived, "pressure shortens the waits, never a check")
+			assert.False(t, e.meta().Marked(), "the mark is cancelled")
+		})
+	}
+
+	e := newMarkEnv(t, AutoArchiveOn, 10*24*time.Hour)
+	e.daemon.noTombs = true
+	e.guard(t, true)
+	e.pass(t, 0)
+	e.pass(t, 3*time.Hour)
+	assert.Empty(t, e.store.archived, "a daemon without tombstones is never reclaimed, under pressure too")
 }
