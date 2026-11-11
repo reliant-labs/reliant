@@ -25,23 +25,33 @@ import (
 // each, with Keep and Reclaim now, acting only on the mark shown.
 
 // unmarkSender records the daemon commands it is sent and answers them as a
-// daemon that removed the tombstone.
+// daemon whose worktree has landed and still carries tombstone mark (until
+// it is sent an unmark).
 type unmarkSender struct {
 	mu   sync.Mutex
 	cmds []string
+	mark string
 }
 
 func (u *unmarkSender) SendDaemonCommandToDaemon(_ context.Context, _, _, cmd string, payload []byte, _ int32) ([]byte, error) {
 	u.mu.Lock()
+	defer u.mu.Unlock()
 	u.cmds = append(u.cmds, cmd)
-	u.mu.Unlock()
+	if cmd == worktreereclaim.UnmarkCommand {
+		u.mark = ""
+	}
 	var req worktreereclaim.Request
 	if err := json.Unmarshal(payload, &req); err != nil {
 		return nil, err
 	}
 	resp := worktreereclaim.Response{}
 	for _, w := range req.Worktrees {
-		resp.Results = append(resp.Results, worktreereclaim.Result{ID: w.ID, Outcome: worktreereclaim.OutcomeLocked, Tombstone: &worktreereclaim.TombstoneReport{}})
+		r := worktreereclaim.Result{ID: w.ID, Outcome: worktreereclaim.OutcomeLocked, Landed: w.ProbeLanded,
+			Tombstone: &worktreereclaim.TombstoneReport{MarkID: u.mark}}
+		if w.State == worktreereclaim.StateArchived {
+			r = worktreereclaim.Result{ID: w.ID, Outcome: worktreereclaim.OutcomeHeld, Reason: worktreereclaim.ReasonKept}
+		}
+		resp.Results = append(resp.Results, r)
 	}
 	return json.Marshal(resp)
 }
@@ -49,6 +59,13 @@ func (u *unmarkSender) SendDaemonCommandToDaemon(_ context.Context, _, _, cmd st
 // markedFixture is a user with one machine and one live worktree carrying
 // reclaim mark "m-1", marked an hour ago.
 func markedFixture(t *testing.T) (*inboxFixture, *unmarkSender, string) {
+	f, sender, id, _ := markedFixtureSweeper(t)
+	return f, sender, id
+}
+
+// markedFixtureSweeper is markedFixture with automatic archiving on, and
+// its sweeper, so a test can wait for the settles it starts.
+func markedFixtureSweeper(t *testing.T) (*inboxFixture, *unmarkSender, string, *worktreesweep.Sweeper) {
 	t.Helper()
 	f := newInboxFixture(t)
 	daemonID := "d-" + uuid.NewString()
@@ -63,9 +80,10 @@ func markedFixture(t *testing.T) (*inboxFixture, *unmarkSender, string) {
 	ok, err := f.repo.MarkWorktreeForReclaim(f.ctx, id, "m-1", now, nil, db.ArchivedBecauseLanded)
 	require.NoError(t, err)
 	require.True(t, ok)
-	sender := &unmarkSender{}
-	f.withSweeper(t, worktreesweep.New(f.repo, sender).WithReclaimMarks(f.repo, 0, 0))
-	return f, sender, id
+	sender := &unmarkSender{mark: "m-1"}
+	sweeper := worktreesweep.New(f.repo, sender).WithAutoArchive(worktreesweep.AutoArchiveOn, f.repo, nil).WithReclaimMarks(f.repo, 0, 0)
+	f.withSweeper(t, sweeper)
+	return f, sender, id, sweeper
 }
 
 func (f *inboxFixture) markedItems(t *testing.T) []*reliantv1.InboxItem {
@@ -123,7 +141,7 @@ func TestKeepMarkedWorktree(t *testing.T) {
 }
 
 func TestReclaimMarkedWorktreeNow(t *testing.T) {
-	f, _, id := markedFixture(t)
+	f, _, id, sweeper := markedFixtureSweeper(t)
 	_, err := f.inbox.ReclaimMarkedWorktreeNow(f.ctx, connect.NewRequest(&reliantv1.ReclaimMarkedWorktreeNowRequest{WorktreeId: id, MarkId: "m-old"}))
 	require.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
 	other, _, _ := f.otherUser(t)
@@ -132,9 +150,26 @@ func TestReclaimMarkedWorktreeNow(t *testing.T) {
 
 	_, err = f.inbox.ReclaimMarkedWorktreeNow(f.ctx, connect.NewRequest(&reliantv1.ReclaimMarkedWorktreeNowRequest{WorktreeId: id, MarkId: "m-1"}))
 	require.NoError(t, err)
-	items := f.markedItems(t)
-	// The settle ran in the background against a machine that is not
-	// connected: nothing was reclaimed, and the approval is recorded.
-	require.Len(t, items, 1)
-	assert.True(t, items[0].GetWorktreeMarked().Approved)
+	sweeper.WaitCleanups()
+	// Marked a moment ago, its tombstone standing and its work landed: the
+	// approval skipped the day's wait and the background settle reclaimed it.
+	wt, err := f.repo.GetWorktree(f.ctx, id)
+	require.NoError(t, err)
+	require.NotNil(t, wt.DeletedAt, "reclaimed at once")
+	assert.Equal(t, db.ArchivedBecauseLanded, wt.CleanupMetadata.ArchivedBecause)
+	assert.Empty(t, f.markedItems(t), "no longer a marked live worktree")
+}
+
+func TestReclaimMarkedWorktreeNow_StillKeepsAWorktreeWhoseTombstoneIsGone(t *testing.T) {
+	f, sender, id, sweeper := markedFixtureSweeper(t)
+	sender.mu.Lock()
+	sender.mark = "" // someone deleted the tombstone
+	sender.mu.Unlock()
+	_, err := f.inbox.ReclaimMarkedWorktreeNow(f.ctx, connect.NewRequest(&reliantv1.ReclaimMarkedWorktreeNowRequest{WorktreeId: id, MarkId: "m-1"}))
+	require.NoError(t, err)
+	sweeper.WaitCleanups()
+	wt, err := f.repo.GetWorktree(f.ctx, id)
+	require.NoError(t, err)
+	assert.Nil(t, wt.DeletedAt, "approval skips the wait, never a check")
+	assert.False(t, wt.CleanupMetadata.Marked(), "the mark is cancelled instead")
 }
