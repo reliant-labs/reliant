@@ -284,6 +284,22 @@ func TestAutoPause_AMissingScheduleIsNotAnError(t *testing.T) {
 	assert.Equal(t, creatorLeftOrgDetail, detail)
 }
 
+// The API says why the system paused a trigger, and only while it is paused:
+// a reason the previous release left on a trigger it re-enabled is not shown.
+func TestToProto_CarriesThePausedReasonWhilePaused(t *testing.T) {
+	trigger := testTrigger(t, func(tr *core.Trigger, _ *core.ScheduleConfig) {
+		tr.Enabled, tr.PausedReason = false, core.TriggerPausedCreatorLeftOrg
+	})
+	out, err := ToProto(trigger, nil, nil, nil)
+	require.NoError(t, err)
+	assert.Equal(t, "creator_left_org", out.GetPausedReason())
+
+	trigger.Enabled = true
+	out, err = ToProto(trigger, nil, nil, nil)
+	require.NoError(t, err)
+	assert.Empty(t, out.GetPausedReason())
+}
+
 type missingSchedules struct{ ScheduleClient }
 
 type missingScheduleHandle struct{ client.ScheduleHandle }

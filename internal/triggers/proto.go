@@ -72,6 +72,7 @@ func ToProto(t *core.Trigger, nextFireAt *time.Time, firings []*core.TriggerEven
 		OrgId:            t.OrgID,
 		WorktreeId:       t.WorktreeID,
 		Enabled:          t.Enabled,
+		PausedReason:     pausedReason(t),
 		Workflow:         t.Workflow,
 		Presets:          t.Presets,
 		Params:           params,

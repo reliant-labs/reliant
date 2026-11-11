@@ -29,10 +29,17 @@ func TestSetTriggerEnabled_ResumesACreatorLeftOrgPauseAfterRejoining(t *testing.
 	paused, err := env.repo.PauseTrigger(context.Background(), created.GetId(), core.TriggerPausedCreatorLeftOrg)
 	require.NoError(t, err)
 	require.True(t, paused)
+	got, err := env.svc.GetTrigger(env.ctx, connect.NewRequest(&reliantv1.GetTriggerRequest{Id: created.GetId()}))
+	require.NoError(t, err)
+	assert.False(t, got.Msg.GetTrigger().GetEnabled())
+	assert.Equal(t, core.TriggerPausedCreatorLeftOrg, got.Msg.GetTrigger().GetPausedReason(), "the API says why")
 
-	resume := func(ctx context.Context) error {
-		_, err := env.svc.SetTriggerEnabled(ctx, connect.NewRequest(&reliantv1.SetTriggerEnabledRequest{Id: created.GetId(), Enabled: true}))
-		return err
+	resume := func(ctx context.Context) (*reliantv1.Trigger, error) {
+		resp, err := env.svc.SetTriggerEnabled(ctx, connect.NewRequest(&reliantv1.SetTriggerEnabledRequest{Id: created.GetId(), Enabled: true}))
+		if err != nil {
+			return nil, err
+		}
+		return resp.Msg.GetTrigger(), nil
 	}
 	stored := func() *core.Trigger {
 		t.Helper()
@@ -43,14 +50,17 @@ func TestSetTriggerEnabled_ResumesACreatorLeftOrgPauseAfterRejoining(t *testing.
 
 	removed := orgs.New(leftAcmeSource{})
 	env.configure(t, func(d *Deps) { d.Orgs = removed })
-	err = resume(authz.WithMembership(context.WithValue(context.Background(), auth.UserIDContextKey, env.userID), removed))
+	_, err = resume(authz.WithMembership(context.WithValue(context.Background(), auth.UserIDContextKey, env.userID), removed))
 	requireDenied(t, err, connect.CodeNotFound, "")
 	assert.False(t, stored().Enabled)
 	assert.Equal(t, core.TriggerPausedCreatorLeftOrg, stored().PausedReason, "a refused resume leaves the reason")
 
 	live := orgs.New(triggerOrgSource{})
 	env.configure(t, func(d *Deps) { d.Orgs = live })
-	require.NoError(t, resume(authz.WithMembership(context.WithValue(context.Background(), auth.UserIDContextKey, env.userID), live)))
+	resumed, err := resume(authz.WithMembership(context.WithValue(context.Background(), auth.UserIDContextKey, env.userID), live))
+	require.NoError(t, err)
+	assert.True(t, resumed.GetEnabled())
+	assert.Empty(t, resumed.GetPausedReason())
 	assert.True(t, stored().Enabled)
 	assert.Empty(t, stored().PausedReason)
 }
