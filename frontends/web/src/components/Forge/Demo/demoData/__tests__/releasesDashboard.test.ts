@@ -15,6 +15,7 @@ import type { Panel, PanelResult, QueryPanelRequest } from "@/services/controlPl
 import forgeDashboardsRaw from "../shop/forge-dashboards.json?raw";
 import { shopDora, shopPromotions } from "../shop/delivery";
 import { shopReleaseHealth } from "../shop/issues";
+import { productAnalyticsPanel } from "../shop/productAnalytics";
 import { releasesWindow, shopReleasesSqlPanel } from "../shop/releases";
 import { DEMO_INCIDENT } from "../shopStory";
 
@@ -87,5 +88,20 @@ describe("the demo's Releases dashboard", () => {
         if (total) expect(total).toBeCloseTo(1, 3);
       });
     }
+  });
+
+  it("answers every weekly panel of the combined set in the bucket its minStep names", () => {
+    const all = (JSON.parse(forgeDashboardsRaw) as { dashboards: { id: string; panels: Panel[] }[] }).dashboards;
+    const weekly = all.flatMap((d) => d.panels.filter((p) => p.minStep === "7d").map((p) => ({ dashboardId: d.id, panel: p })));
+    expect(weekly.map((w) => `${w.dashboardId}/${w.panel.id}`)).toEqual(["users/lifecycle-weekly", "acquisition/signups-by-channel-weekly"]);
+    for (const { dashboardId, panel: p } of weekly) {
+      const req = { orgId: "org-acme", projectId: "shop", envIds: [], filters: [], window: { startMs: NOW - 30 * 86_400_000, endMs: NOW }, panel: { ...p, series: [], signal: "" }, services: [], stepSeconds: 0, dashboardId } as QueryPanelRequest;
+      expect(productAnalyticsPanel(req, NOW)?.bucketSeconds, p.id).toBe(7 * 86_400);
+    }
+  });
+
+  it("holds both forge sets: the built-in product dashboards and the Releases dashboard", () => {
+    const ids = (JSON.parse(forgeDashboardsRaw) as { dashboards: { id: string }[] }).dashboards.map((d) => d.id);
+    expect(ids).toEqual(["overview", "service-orders", "workloads", "releases", "users", "product", "acquisition"]);
   });
 });

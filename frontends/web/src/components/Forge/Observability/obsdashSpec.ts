@@ -448,6 +448,10 @@ function displayProblems(panel: Panel, problems: string[]) {
     if (!Number.isInteger(display.topN) || display.topN < 1 || display.topN > MAX_TOP_N) problems.push(`Top N is a whole number of series from 1 to ${MAX_TOP_N}.`);
     else if (!options.topN) problems.push(`A ${style} ${panel.kind} panel has no series to fold into "Other"${panel.kind === "bar" ? " (a bar panel keeps its top groups with its limit)" : ""}.`);
   }
+  if (display.exact !== undefined) {
+    if (typeof display.exact !== "boolean") problems.push("Exact is true or false.");
+    else if (panel.kind !== "number" && panel.kind !== "sql") problems.push("Only a number or sql panel draws figures to keep exact.");
+  }
   if ((style === "pie" || style === "donut") && (panel.series ?? []).length !== 1) problems.push(`A ${style} draws one value per group: it takes exactly one series.`);
   colourProblems(display, style, problems);
 }

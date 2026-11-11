@@ -65,7 +65,7 @@ import { cn } from "@/lib/utils";
 import { attributeLabel } from "../attributes";
 import { countryFlag, countryName, isCountryCode } from "../geo";
 import { UPlotChart, type ChartBand } from "../charts/UPlotChart";
-import { formatAgo, formatCount, formatDuration, formatPercent, formatValue } from "../format";
+import { formatAgo, formatCount, formatDuration, formatFigure, formatPercent, formatValue } from "../format";
 import { groupLabel } from "../obsFilters";
 import { sessionTitle } from "../Sessions/sessionModel";
 import { CategoryChart } from "./CategoryChart";
@@ -418,14 +418,14 @@ export function unitOf(panel: Panel, result: PanelResult): Unit {
 }
 
 /** "▲ 18ms vs previous period" — neutral: whether up is good depends on the figure, which the spec does not say. */
-export function describeChange(now: number | null, before: number | null, unit: Unit, label: string): string | null {
+export function describeChange(now: number | null, before: number | null, unit: Unit, label: string, exact = false): string | null {
   if (now === null || before === null) return null;
   const delta = now - before;
   if (delta === 0) return `no change vs ${label}`;
   const arrow = delta > 0 ? "▲" : "▼";
   if (unit === "percent") return `${arrow} ${formatCount(Math.abs(delta) * 100)}pt vs ${label}`;
   if (unit === "ms" || unit === "s" || unit === "bytes") return `${arrow} ${formatValue(Math.abs(delta), unit)} vs ${label}`;
-  if (before === 0) return `${arrow} ${formatValue(Math.abs(delta), unit)} vs ${label}`;
+  if (before === 0) return `${arrow} ${formatFigure(Math.abs(delta), unit, exact)} vs ${label}`;
   return `${arrow} ${formatPercent(Math.abs(delta) / Math.abs(before))} vs ${label}`;
 }
 
@@ -448,6 +448,7 @@ function NumberFigures({
 }) {
   const many = data.series.length > 1;
   const gauge = panel.display?.style === "gauge" && !compact;
+  const exact = !!panel.display?.exact;
   return (
     <dl
       className={cn("grid gap-3", many ? (gauge ? "grid-cols-[repeat(auto-fill,minmax(9rem,1fr))]" : "grid-cols-[repeat(auto-fill,minmax(7rem,1fr))]") : "grid-cols-1")}
@@ -456,7 +457,7 @@ function NumberFigures({
     >
       {data.series.map((s, index) => {
         const before = compare?.series.find((p) => seriesKey(p) === seriesKey(s))?.value ?? null;
-        const change = compareLabel ? describeChange(s.value, before, unit, compareLabel) : null;
+        const change = compareLabel ? describeChange(s.value, before, unit, compareLabel, exact) : null;
         const label = seriesLabel(s, panel, keys);
         const thresholds = intentOf(s, panel)?.thresholds;
         // The server sends an ungrouped number's trend with it (a sql panel's
@@ -471,7 +472,7 @@ function NumberFigures({
                 <Gauge value={s.value} unit={unit} min={panel.display?.min} max={panel.display?.max} thresholds={thresholds} label={label} token={token} />
               </dd>
             ) : (
-              <dd className={cn("font-semibold tabular-nums", gradeInk(s.value, thresholds), compact ? "text-base" : many ? "text-lg" : "text-2xl")}>{formatValue(s.value, unit)}</dd>
+              <dd className={cn("font-semibold tabular-nums", gradeInk(s.value, thresholds), compact ? "text-base" : many ? "text-lg" : "text-2xl")}>{formatFigure(s.value, unit, exact)}</dd>
             )}
             {change && (
               <dd className={cn("text-xs text-ink-muted", gauge && "text-center")} data-testid="obs-panel-change">

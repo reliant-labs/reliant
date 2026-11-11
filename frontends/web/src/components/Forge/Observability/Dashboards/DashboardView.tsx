@@ -113,7 +113,7 @@ import { PanelErrorBoundary } from "./PanelErrorBoundary";
 import { BUTTON_PRIMARY, BUTTON_SECONDARY, BUTTON_SMALL, ICON_BUTTON, INK_LINK, Menu, PointMenu, Segmented, SourceTag, StarButton, VariableSelect, type MenuEntry } from "./parts";
 import { useObsReadOnly } from "../obsReadOnly";
 import { DataPanelBody, type PanelDataContext } from "./DataPanel";
-import type { DeliveryPanelContext } from "./DeliveryPanels";
+import { isDeliveryKind, type DeliveryPanelContext } from "./DeliveryPanels";
 import { browseParams } from "./dataPanelModel";
 import type { DataSearch } from "../../Data/dataUrl-model";
 
@@ -389,8 +389,14 @@ export function DashboardView({ project, dashRef, env: consoleEnv, environments:
               ...(exploreHref(panel)
                 ? [{ label: "Explore in Metrics", detail: "this query, editable", href: exploreHref(panel)!, testId: `dashboard-panel-explore-${panel.id}` }]
                 : []),
-              { label: panel.signal === "logs" ? "Explore in Logs" : "Explore in Traces", detail: "with this panel's service", href: links.searchHref(panel) },
-              { label: CREATE_ALERT_LABEL, detail: "as KCL", onSelect: () => setAlertPanel(panel), separated: true, testId: `dashboard-panel-alert-${panel.id}` },
+              // A delivery panel (release health, promotions, DORA) reads the release ledger, not telemetry:
+              // there are no spans to explore and no query to alert on.
+              ...(isDeliveryKind(panel.kind)
+                ? []
+                : [
+                    { label: panel.signal === "logs" ? "Explore in Logs" : "Explore in Traces", detail: "with this panel's service", href: links.searchHref(panel) },
+                    { label: CREATE_ALERT_LABEL, detail: "as KCL", onSelect: () => setAlertPanel(panel), separated: true, testId: `dashboard-panel-alert-${panel.id}` },
+                  ]),
               {
                 label: "Ask Reliant",
                 detail: "in a new chat",

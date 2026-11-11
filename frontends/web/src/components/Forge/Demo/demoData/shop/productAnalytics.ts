@@ -356,10 +356,10 @@ function crud(q: Q) {
 // ── Answers ──────────────────────────────────────────────────────────────────
 
 /**
- * A weekly series' bucket (toMonday): 7 days. control-plane's sqlBucket
- * reports every Date first column as 1 day today, which captions a weekly
- * chart "1-day buckets"; this is what it reports once it reads toMonday /
- * toStartOfWeek as a week.
+ * A weekly series' bucket (toMonday): 7 days, the panel's minStep. The
+ * console captions a chart's bucket from its minStep (SeriesChart
+ * panelBucketSeconds), so it reads "7-day buckets" whatever the server infers
+ * from the Date column; the demo answers the bucket the statement grouped by.
  */
 const WEEK_BUCKET = 7 * 86400;
 
