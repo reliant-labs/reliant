@@ -349,9 +349,22 @@ func (m markStore) ListMarkedWorktreesForUser(_ context.Context, userID string) 
 	return out, nil
 }
 
-func (m markStore) ApproveWorktreeMark(_ context.Context, id, markID string) (bool, error) {
+func (m markStore) ClearWorktreeMarkForUser(ctx context.Context, userID, id, markID string) (bool, error) {
+	m.mu.Lock()
+	owner := m.rows[id].OwnerUserID
+	m.mu.Unlock()
+	if userID == "" || owner != userID {
+		return false, nil
+	}
+	return m.ClearWorktreeMark(ctx, id, markID)
+}
+
+func (m markStore) ApproveWorktreeMarkForUser(_ context.Context, userID, id, markID string) (bool, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if userID == "" || m.rows[id].OwnerUserID != userID {
+		return false, nil
+	}
 	wt := m.rows[id].Worktree
 	if wt.DeletedAt != nil || !wt.CleanupMetadata.Marked() || wt.CleanupMetadata.ReclaimMarkID != markID {
 		return false, nil

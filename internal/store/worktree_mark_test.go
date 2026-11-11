@@ -112,7 +112,7 @@ func TestApproveAndListMarkedWorktrees(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, rows)
 
-	ok, err := store.ApproveWorktreeMark(ctx, env.ORM, id, "m-1")
+	ok, err := store.ApproveWorktreeMarkForUser(ctx, env.ORM, storetest.SeedUserID, id, "m-1")
 	require.NoError(t, err)
 	require.False(t, ok, "nothing to approve without a mark")
 
@@ -128,10 +128,10 @@ func TestApproveAndListMarkedWorktrees(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, rows, "another user's worktree is never listed")
 
-	ok, err = store.ApproveWorktreeMark(ctx, env.ORM, id, "m-other")
+	ok, err = store.ApproveWorktreeMarkForUser(ctx, env.ORM, storetest.SeedUserID, id, "m-other")
 	require.NoError(t, err)
 	require.False(t, ok, "an approval of another mark")
-	ok, err = store.ApproveWorktreeMark(ctx, env.ORM, id, "m-1")
+	ok, err = store.ApproveWorktreeMarkForUser(ctx, env.ORM, storetest.SeedUserID, id, "m-1")
 	require.NoError(t, err)
 	require.True(t, ok)
 	wt, err := env.Repo.GetWorktree(ctx, id)
@@ -144,4 +144,43 @@ func TestApproveAndListMarkedWorktrees(t *testing.T) {
 	wt, err = env.Repo.GetWorktree(ctx, id)
 	require.NoError(t, err)
 	require.Nil(t, wt.CleanupMetadata.ReclaimApprovedAt, "the approval goes with the mark")
+}
+
+// The Inbox's decisions are the owner's: whether the person still owns the
+// worktree's project is decided in the decision's own transaction, not by the
+// list they saw, so a project that changed hands between the two keeps its
+// new owner's mark untouched.
+func TestMarkDecisions_FollowTheProjectsCurrentOwner(t *testing.T) {
+	env := storetest.New(t)
+	ctx := context.Background()
+	c := landedFixture(t, env, "transferred")
+	id := *c.WorktreeID
+	ok, err := store.MarkWorktreeForReclaim(ctx, env.ORM, id, "m-1", time.Now().Add(-30*time.Minute), nil, core.ArchivedBecauseLanded)
+	require.NoError(t, err)
+	require.True(t, ok)
+	rows, err := store.ListMarkedWorktreesForUser(ctx, env.ORM, storetest.SeedUserID)
+	require.NoError(t, err)
+	require.Len(t, rows, 1, "the owner lists it")
+
+	// The project changes hands after the list.
+	_, err = env.ORM.Bun().NewRaw(`UPDATE projects SET user_id = 'new-owner' WHERE id = (SELECT project_id FROM worktrees WHERE id = ?)`, id).Exec(ctx)
+	require.NoError(t, err)
+
+	ok, err = store.ApproveWorktreeMarkForUser(ctx, env.ORM, storetest.SeedUserID, id, "m-1")
+	require.NoError(t, err)
+	require.False(t, ok, "the former owner's approval does not apply")
+	cleared, err := store.ClearWorktreeMarkForUser(ctx, env.ORM, storetest.SeedUserID, id, "m-1")
+	require.NoError(t, err)
+	require.False(t, cleared, "the former owner's keep does not apply")
+	wt, err := env.Repo.GetWorktree(ctx, id)
+	require.NoError(t, err)
+	require.Equal(t, "m-1", wt.CleanupMetadata.ReclaimMarkID, "the new owner's mark stands")
+	require.Nil(t, wt.CleanupMetadata.ReclaimApprovedAt)
+
+	ok, err = store.ApproveWorktreeMarkForUser(ctx, env.ORM, "new-owner", id, "m-1")
+	require.NoError(t, err)
+	require.True(t, ok, "the current owner decides")
+	cleared, err = store.ClearWorktreeMarkForUser(ctx, env.ORM, "", id, "m-1")
+	require.NoError(t, err)
+	require.False(t, cleared, "no person, no decision")
 }

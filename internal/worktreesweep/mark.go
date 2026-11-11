@@ -88,10 +88,13 @@ type MarkStore interface {
 }
 
 // MarkDecisionStore is what the Inbox's keep and reclaim-now decisions need.
+//
+// The two decisions take the person: whether they still own the worktree is
+// decided under the same lock as the decision, never by the earlier list.
 type MarkDecisionStore interface {
 	ListMarkedWorktreesForUser(ctx context.Context, userID string) ([]*core.HeldWorktree, error)
-	ClearWorktreeMark(ctx context.Context, id, markID string) (bool, error)
-	ApproveWorktreeMark(ctx context.Context, id, markID string) (bool, error)
+	ClearWorktreeMarkForUser(ctx context.Context, userID, id, markID string) (bool, error)
+	ApproveWorktreeMarkForUser(ctx context.Context, userID, id, markID string) (bool, error)
 }
 
 // Errors of KeepMarked and ReclaimMarkedNow.
@@ -137,7 +140,7 @@ func (s *Sweeper) KeepMarked(ctx context.Context, store MarkDecisionStore, userI
 	if err != nil {
 		return err
 	}
-	cleared, err := store.ClearWorktreeMark(ctx, id, markID)
+	cleared, err := store.ClearWorktreeMarkForUser(ctx, userID, id, markID)
 	if err != nil {
 		return err
 	}
@@ -160,7 +163,7 @@ func (s *Sweeper) ReclaimMarkedNow(ctx context.Context, store MarkDecisionStore,
 	if err != nil {
 		return err
 	}
-	approved, err := store.ApproveWorktreeMark(ctx, id, markID)
+	approved, err := store.ApproveWorktreeMarkForUser(ctx, userID, id, markID)
 	if err != nil {
 		return err
 	}

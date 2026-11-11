@@ -822,9 +822,42 @@ func MarkWorktreeForReclaim(ctx context.Context, db orm.Context, id, markID stri
 // ClearWorktreeMark cancels a worktree's reclaim mark markID ("" any),
 // archived or not. It reports whether there was such a mark.
 func ClearWorktreeMark(ctx context.Context, db orm.Context, id, markID string) (bool, error) {
+	return clearWorktreeMark(ctx, db, "", id, markID)
+}
+
+// ClearWorktreeMarkForUser is ClearWorktreeMark for the Inbox's "Keep": it
+// applies only while userID owns the worktree's project, decided in the same
+// transaction as the clear (ownedWorktreeTx), so an ownership change between
+// the person's list and their decision never clears another owner's mark.
+func ClearWorktreeMarkForUser(ctx context.Context, db orm.Context, userID, id, markID string) (bool, error) {
+	if userID == "" {
+		return false, nil
+	}
+	return clearWorktreeMark(ctx, db, userID, id, markID)
+}
+
+// ownedWorktreeTx reports, inside a transaction, whether userID owns worktree
+// id's project, and holds that project row FOR SHARE until the transaction
+// ends, so its owner cannot change before the decision it guards commits.
+func ownedWorktreeTx(ctx context.Context, db orm.Context, userID, id string) (bool, error) {
+	var one int
+	err := db.Bun().NewRaw(`SELECT 1 FROM projects p JOIN worktrees w ON w.project_id = p.id
+		WHERE w.id = ? AND p.user_id = ? FOR SHARE OF p`, id, userID).Scan(ctx, &one)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	return err == nil, err
+}
+
+func clearWorktreeMark(ctx context.Context, db orm.Context, owner, id, markID string) (bool, error) {
 	cleared := false
 	err := recoveryTx(ctx, db, func(ctx context.Context) error {
 		cleared = false
+		if owner != "" {
+			if owned, err := ownedWorktreeTx(ctx, db, owner, id); err != nil || !owned {
+				return err
+			}
+		}
 		var raw *string
 		err := db.Bun().NewRaw(`SELECT cleanup_metadata FROM worktrees WHERE id = ? FOR NO KEY UPDATE`, id).Scan(ctx, &raw)
 		if errors.Is(err, sql.ErrNoRows) {
@@ -848,14 +881,22 @@ func ClearWorktreeMark(ctx context.Context, db orm.Context, id, markID string) (
 	return cleared && err == nil, err
 }
 
-// ApproveWorktreeMark records the person's "Reclaim now" for mark markID of
-// a live worktree, under its row lock: false, with no error, when the row no
-// longer carries that mark (cancelled, or replaced by a newer one), so an
-// approval of what the person saw never applies to anything else.
-func ApproveWorktreeMark(ctx context.Context, db orm.Context, id, markID string) (bool, error) {
+// ApproveWorktreeMarkForUser records the person's "Reclaim now" for mark
+// markID of a live worktree userID owns, under its row lock: false, with no
+// error, when the row no longer carries that mark (cancelled, or replaced by a
+// newer one), or its project is no longer userID's, so an approval of what
+// the person saw never applies to anything else. Ownership is decided in the
+// same transaction (ownedWorktreeTx).
+func ApproveWorktreeMarkForUser(ctx context.Context, db orm.Context, userID, id, markID string) (bool, error) {
 	approved := false
+	if userID == "" {
+		return false, nil
+	}
 	err := recoveryTx(ctx, db, func(ctx context.Context) error {
 		approved = false
+		if owned, err := ownedWorktreeTx(ctx, db, userID, id); err != nil || !owned {
+			return err
+		}
 		meta, ok, err := lockLiveWorktreeMeta(ctx, db, id)
 		if err != nil || !ok || markID == "" || meta.ReclaimMarkID != markID {
 			return err
