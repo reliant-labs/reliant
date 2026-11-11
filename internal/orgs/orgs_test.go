@@ -56,6 +56,48 @@ func newResolver(src *fakeSource) (*Resolver, *clock) {
 	return r, c
 }
 
+// A lookup that fails because the request ended (its client went away, or its
+// deadline passed) is that, not an outage: a client navigating away must not
+// read, log or count as a server error (v1.15.0 prod, 2026-11-11: ListInbox
+// and ListProjects answered Unavailable to cancelled requests).
+func TestALookupOfAnEndedRequestIsNotUnavailable(t *testing.T) {
+	cancelled, cancel := context.WithCancel(context.Background())
+	cancel()
+	expired, cancelExpired := context.WithDeadline(context.Background(), time.Unix(1, 0))
+	defer cancelExpired()
+	outage := errors.New("dial admin-server: connection refused")
+	cases := map[string]struct {
+		ctx  context.Context
+		err  error
+		want connect.Code
+	}{
+		"live request, outage":          {context.Background(), outage, connect.CodeUnavailable},
+		"cancelled request":             {cancelled, fmt.Errorf("post: %w", context.Canceled), connect.CodeCanceled},
+		"cancelled, cause not ctx's":    {cancelled, outage, connect.CodeCanceled},
+		"deadline exceeded":             {expired, fmt.Errorf("post: %w", context.DeadlineExceeded), connect.CodeDeadlineExceeded},
+		"deadline exceeded, other root": {expired, outage, connect.CodeDeadlineExceeded},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			if got := svcerr.Code(LookupFailed(tc.ctx, "could not verify the organization; try again", tc.err)); got != tc.want {
+				t.Fatalf("LookupFailed code = %v, want %v", got, tc.want)
+			}
+		})
+	}
+	// Through the resolver: the source's failure under a cancelled request.
+	r, _ := newResolver(&fakeSource{err: fmt.Errorf("post: %w", context.Canceled)})
+	if _, err := r.Named(cancelled, "alice", "acme"); svcerr.Code(err) != connect.CodeCanceled {
+		t.Fatalf("Named on a cancelled request = %v (%v), want Canceled", svcerr.Code(err), err)
+	}
+	if _, err := r.ListScope(expired, "alice", "acme", nil); svcerr.Code(err) != connect.CodeDeadlineExceeded {
+		t.Fatalf("ListScope past its deadline = %v (%v), want DeadlineExceeded", svcerr.Code(err), err)
+	}
+	r, _ = newResolver(&fakeSource{err: outage})
+	if _, err := r.Named(context.Background(), "alice", "acme"); svcerr.Code(err) != connect.CodeUnavailable {
+		t.Fatalf("Named during an outage = %v (%v), want Unavailable", svcerr.Code(err), err)
+	}
+}
+
 func TestNilResolverIsADeploymentWithNoOrgs(t *testing.T) {
 	ctx := context.Background()
 	var r *Resolver
