@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"time"
 
 	"connectrpc.com/connect"
@@ -287,9 +288,14 @@ func (s *Service) sendInitialChatSync(ctx context.Context, chat *db.ChatRow, sin
 		if err != nil {
 			return 0, svcerr.WrapOr(err, svcerr.Internal("failed to read the latest chat update sequence"))
 		}
-		if chatCursorNeedsSnapshot(sinceSeq, chatLatestSeq) {
+		compactedThrough, err := s.deps.Repo.GetChatCompactedThrough(ctx, chatID)
+		if err != nil {
+			return 0, svcerr.WrapOr(err, svcerr.Internal("failed to read the chat's compaction watermark"))
+		}
+		if chatCursorNeedsSnapshot(sinceSeq, chatLatestSeq, compactedThrough) {
 			logging.DebugContext(ctx, LOG_PREFIX_STREAM_CHAT+" Cursor not replayable, sending snapshot",
-				"chatID", shortID(chatID), "chatSinceSeq", sinceSeq, "chatLatestSeq", chatLatestSeq)
+				"chatID", shortID(chatID), "chatSinceSeq", sinceSeq, "chatLatestSeq", chatLatestSeq,
+				"chatCompactedThrough", compactedThrough)
 			useSnapshot = true
 		}
 	}
@@ -308,8 +314,20 @@ func (s *Service) sendInitialChatSync(ctx context.Context, chat *db.ChatRow, sin
 
 	span.SetAttributes(attribute.String("chat_stream.sync", "replay"), attribute.Int64("chat.latest_sequence", chatLatestSeq))
 	if chatLatestSeq > sinceSeq {
-		if err := s.sendChatUpdateBatches(ctx, chatID, sinceSeq, chatLatestSeq, toolBodies, stream); err != nil {
+		overtaken, err := s.sendChatUpdateBatches(ctx, chatID, sinceSeq, chatLatestSeq, toolBodies, stream)
+		if err != nil {
 			return 0, svcerr.WrapOr(err, svcerr.Internal("failed to send chat updates"))
+		}
+		if overtaken {
+			// Compaction passed the replay's position while it read: the
+			// batch it would have sent next may be missing rows, and was
+			// not sent. A snapshot replaces whatever the replay built.
+			span.SetAttributes(attribute.String("chat_stream.sync", "replay+snapshot"))
+			snapshotSeq, err := s.sendChatSnapshot(ctx, chat, toolBodies, stream)
+			if err != nil {
+				return 0, svcerr.WrapOr(err, svcerr.Internal("failed to send chat snapshot"))
+			}
+			return snapshotSeq, nil
 		}
 	}
 	return chatLatestSeq, nil
@@ -325,8 +343,13 @@ func (s *Service) sendInitialChatSync(ctx context.Context, chat *db.ChatRow, sin
 //     cursor belongs to another database, or to a chat whose update log was
 //     rebuilt; "replay nothing" sent no chat state at all, leaving the client
 //     on its stale cache with no signal that it was wrong.
-func chatCursorNeedsSnapshot(chatSinceSeq, chatLatestSeq int64) bool {
-	return chatSinceSeq > chatLatestSeq || chatLatestSeq-chatSinceSeq > maxChatReplayGap
+//   - The cursor is BELOW the chat's compaction watermark: the ledger there
+//     keeps only each entity's newest update (store.CompactChatUpdates), so a
+//     replay would skip rows — a message update, a tool call's progress —
+//     and the client could not tell. A small gap on an idle chat is exactly
+//     this case: the cap above does not catch it.
+func chatCursorNeedsSnapshot(chatSinceSeq, chatLatestSeq, chatCompactedThrough int64) bool {
+	return chatSinceSeq > chatLatestSeq || chatLatestSeq-chatSinceSeq > maxChatReplayGap || chatSinceSeq < chatCompactedThrough
 }
 
 // chatUpdateToProto converts a persisted chat update to its wire form.
@@ -469,13 +492,23 @@ func (s *Service) sendChatSnapshot(ctx context.Context, chat *db.ChatRow, toolBo
 }
 
 // sendChatUpdateBatches replays the chat updates in (startSeq, latestSeq].
-func (s *Service) sendChatUpdateBatches(ctx context.Context, chatID string, startSeq, latestSeq int64, toolBodies reliantv1.ToolBodyMode, stream *connect.ServerStream[reliantv1.ChatStreamEvent]) (err error) {
+//
+// Every batch is verified before it is sent. Compaction raises the chat's
+// watermark before it deletes anything under it, and the watermark only
+// rises, so a batch read from currentSeq is whole if the watermark, read
+// AFTER the batch, is still at or below currentSeq. If it is above, the batch
+// may be missing rows: it is not sent, and the replay stops with overtaken
+// true (the caller sends a snapshot). If the watermark cannot be read, the
+// replay fails without sending the batch, so the client's cursor never passes
+// a batch that was not verified and its reconnect resumes safely.
+func (s *Service) sendChatUpdateBatches(ctx context.Context, chatID string, startSeq, latestSeq int64, toolBodies reliantv1.ToolBodyMode, stream *connect.ServerStream[reliantv1.ChatStreamEvent]) (overtaken bool, err error) {
 	ctx, span := startSpan(ctx, "chat_stream.replay", attribute.Int64("chat_stream.replay_from", startSeq), attribute.Int64("chat_stream.replay_to", latestSeq))
 	// What the replay sent, by block kind, over all its batches (after the
 	// stub policy).
 	sent := messageproto.TranscriptBytes{ToolBodies: toolBodies}
 	defer func() {
 		span.SetAttributes(sent.Attributes("transcript")...)
+		span.SetAttributes(attribute.Bool("chat_stream.replay_overtaken", overtaken))
 		observe.RecordSpanError(span, err)
 		span.End()
 	}()
@@ -484,11 +517,18 @@ func (s *Service) sendChatUpdateBatches(ctx context.Context, chatID string, star
 	for currentSeq < latestSeq {
 		updates, err := s.deps.Repo.GetUpdatesSince(ctx, chatID, currentSeq, chatReplayBatchSize)
 		if err != nil {
-			return err
+			return false, err
 		}
 
 		if len(updates) == 0 {
 			break
+		}
+		compactedThrough, err := s.deps.Repo.GetChatCompactedThrough(ctx, chatID)
+		if err != nil {
+			return false, fmt.Errorf("verify replay batch against the compaction watermark: %w", err)
+		}
+		if compactedThrough > currentSeq {
+			return true, nil
 		}
 
 		protoUpdates := make([]*reliantv1.ChatUpdateData, 0, len(updates))
@@ -511,13 +551,13 @@ func (s *Service) sendChatUpdateBatches(ctx context.Context, chatID string, star
 			},
 		}
 		if err := stream.Send(event); err != nil {
-			return err
+			return false, err
 		}
 
 		currentSeq = maxSeq
 	}
 
-	return nil
+	return false, nil
 }
 
 // chatFocusFilter picks the user-level updates a chat stream forwards: those

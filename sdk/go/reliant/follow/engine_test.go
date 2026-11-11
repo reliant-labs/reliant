@@ -935,3 +935,50 @@ func TestEngineSurfacesRealWorkflowStatusRows(t *testing.T) {
 		t.Errorf("root terminal timestamp = %q, want the row's own created_at (a synthetic terminal was emitted instead)", got)
 	}
 }
+
+// compactedSource refuses a read from below its watermark, as the server does
+// once ledger retention compacted the feed.
+type compactedSource struct {
+	*fakeSource
+	through int64
+	refused int
+}
+
+func (c *compactedSource) Updates(ctx context.Context, sinceSeq int64) ([]RawUpdate, int64, error) {
+	if sinceSeq < c.through {
+		c.refused++
+		return nil, sinceSeq, &HistoryCompactedError{Through: c.through}
+	}
+	return c.fakeSource.Updates(ctx, sinceSeq)
+}
+
+// The engine never treats a compacted feed as an empty one: it says so on Log
+// and follows from the watermark, where the log is whole again.
+func TestEngineResumesFromTheCompactionWatermark(t *testing.T) {
+	src := &compactedSource{fakeSource: &fakeSource{updates: []RawUpdate{
+		workflowUpdate(1, "started", "wf-1", ""),
+		nodeUpdate(2, 1, "plan"),
+		nodeUpdate(3, 3, "plan"),
+		nodeUpdate(4, 1, "build"),
+		nodeUpdate(5, 3, "build"),
+		workflowUpdate(6, "completed", "wf-1", ""),
+	}}, through: 3}
+	var out bytes.Buffer
+	e := newTestEngine(src, &out)
+	logBuf := &bytes.Buffer{}
+	e.Log = logBuf
+	code, err := e.Run(context.Background())
+	if err != nil || code != ExitSuccess {
+		t.Fatalf("Run = %d, %v", code, err)
+	}
+	evs := parseNDJSON(t, out.String())
+	if len(evs) == 0 || evs[0].NodeID != "build" {
+		t.Fatalf("events = %+v, want the first one to be the build node after the watermark", evs)
+	}
+	if src.refused != 1 {
+		t.Fatalf("refused reads = %d, want 1", src.refused)
+	}
+	if !strings.Contains(logBuf.String(), "compacted") {
+		t.Fatalf("Log = %q", logBuf.String())
+	}
+}

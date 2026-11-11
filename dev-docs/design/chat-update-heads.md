@@ -215,15 +215,49 @@ migration at all.
 - The existing snapshot tests (`TestSnapshotHeadsQueryMatchesPartialIndex` and
   the `GetLatestNonMessageUpdatesPerEntity` suite) stay green unchanged.
 
-## Follow-up: retention of `chat_updates`
+## Retention of `chat_updates`
 
-Once every chat is complete, the snapshot no longer reads old log rows at all.
-Replay reads only the last `maxChatReplayGap` (2000) sequences before falling
-back to a snapshot (`chatCursorNeedsSnapshot`), and the other readers are
-bounded too (`LatestWorkflowNodeUpdates` reads node heads; `ErrorUpdatesInRange`
-reads error rows in a page's time range — both need checking before pruning
-their types). So rows that are neither a head nor within the replay window
-become deletable, which is most of the 11 GB (NODE_EXECUTION 54%, MESSAGE 17%,
-TOOL_CALL 17%). That needs its own design: the previous release still reads
-the log for snapshots, so pruning may start only once no supported release
-falls back to it, and the fallback in this release must then be retired.
+Retention comes in two tiers (owner, 2026-11-11). Only the second depends on
+retiring the log fallback.
+
+**Tier 1: compaction, implemented** (`store.CompactChatUpdates`,
+`dev-docs/design/chat-update-ledger-storage.md`). It deletes aged rows no reader
+needs: MESSAGE, TOOL_CALL, STREAM_FINALIZED and AGENT_MESSAGES_DRAINED;
+superseded NODE_EXECUTION per node; and, for every other type, all but the
+newest row per (type, entity). THREAD, QUESTION, ERROR and WORKFLOW_STATUS are
+kept whole. That is most of the 11 GB, and it keeps every row
+`SnapshotHeadsSQL` reads:
+
+- an entity head (the newest row per entity) is the newest row of its
+  (type, entity);
+- the re-keyed types are kept whole.
+
+So:
+
+- the log fallback reads identical heads after compaction, in this release and
+  in every older one;
+- in a complete chat, every `chat_update_heads.update_id` still points at a
+  log row. An incomplete chat's table can hold a head that a previous-release
+  write superseded, and compaction may delete its log row. That table is never
+  served, and the backfill replaces the head with the newer one the log kept;
+- the backfill, which recomputes heads from the log, builds what it built
+  before.
+
+`TestCompactChatUpdates_KeepsEveryUpdateHead` holds all three. Tier 1
+therefore waits on nothing here. It is off by default and enabled per
+environment once every api-server reads the compaction watermark.
+
+**Tier 2: not built.** It would also delete the log rows that only the snapshot
+reads: entity heads of types no other reader keys on, and THREAD/QUESTION
+history. After that, only `chat_update_heads` holds them. It may run only when
+no release that reads snapshots from the log, or that writes without
+maintaining heads, can run against the database again. Recommended gate:
+
+- a `forge:breaks-rollback` marker migration, which raises each env's rollback
+  floor past this release when the env is promoted;
+- an explicit config flag, for self-hosted servers, which have no floor;
+- a per-chat completeness check (`heads_through_seq = last_assigned_seq`) in
+  the delete itself.
+
+Tier 2 saves a minority of what tier 1 leaves (~50-150 rows per chat), so it
+waits until measurements show it is needed.

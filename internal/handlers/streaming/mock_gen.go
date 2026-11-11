@@ -19,7 +19,7 @@ import (
 )
 
 // forge:section MockRepository
-// forge:hash=310af803e8628d4b714fd7674422b684da30f43a5a47cfbfcbd9556e0e6fafc9
+// forge:hash=ce52d4b37411e8e0041726a0b560a7864c4cb9f6bc9564295e386b145f185479
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -32,6 +32,7 @@ type MockRepository struct {
 	GetChatRowFunc                                           func(context.Context, string) (*db.ChatRow, error)
 	GetTriggerEventByChatFunc                                func(context.Context, core.TriggerEventKind, string) (*core.TriggerEvent, error)
 	GetLatestUpdateSequenceFunc                              func(context.Context, string) (int64, error)
+	GetChatCompactedThroughFunc                              func(context.Context, string) (int64, error)
 	GetUpdatesSinceFunc                                      func(context.Context, string, int64, int) ([]db.ChatUpdate, error)
 	GetLatestNonMessageUpdatesPerEntityFunc                  func(context.Context, string) ([]db.ChatUpdate, error)
 	GetLatestUserUpdateSequenceFunc                          func(context.Context, string) (int64, error)
@@ -115,6 +116,15 @@ func (m *MockRepository) GetLatestUpdateSequence(ctx context.Context, chatID str
 		return m.GetLatestUpdateSequenceFunc(ctx, chatID)
 	}
 	return 0, contractkit.MockNotSet("MockRepository", "GetLatestUpdateSequence")
+}
+
+// GetChatCompactedThrough records the call and delegates to GetChatCompactedThroughFunc when set.
+func (m *MockRepository) GetChatCompactedThrough(ctx context.Context, chatID string) (int64, error) {
+	m.Recorder.Record("GetChatCompactedThrough", ctx, chatID)
+	if m.GetChatCompactedThroughFunc != nil {
+		return m.GetChatCompactedThroughFunc(ctx, chatID)
+	}
+	return 0, contractkit.MockNotSet("MockRepository", "GetChatCompactedThrough")
 }
 
 // GetUpdatesSince records the call and delegates to GetUpdatesSinceFunc when set.
