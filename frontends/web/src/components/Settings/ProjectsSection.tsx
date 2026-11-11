@@ -15,6 +15,7 @@ import { RemoveProjectModal } from "../Projects/RemoveProjectModal";
 import { ADD_PROJECT_LABEL, NO_PROJECTS_COPY, PROJECT_DEFINITION } from "../Projects/projectCopy";
 import { SettingsPageHeader } from "./SettingsPageHeader";
 import { CurrentProjectDetails } from "./projects/CurrentProjectDetails";
+import { ProjectMachines } from "./projects/ProjectMachines";
 import { ProjectsTable } from "./projects/ProjectsTable";
 import { projectMatchesQuery, sortProjectsForSettings } from "./projects/projectSource";
 
@@ -200,6 +201,7 @@ export function ProjectsSection() {
                 openingProjectId={openingProjectId}
               />
             )}
+            {visibleProjects.map((project) => <ProjectMachines key={project.id} project={project} />)}
           </section>
         )}
 

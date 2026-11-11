@@ -18,7 +18,14 @@ import {
   useCreateDirectory,
   useListDirectory,
 } from "../../hooks/file-system-service-hooks_gen";
+import { useDaemonStatus } from "../../hooks/useDaemonStatus";
+import { defaultMachineDaemon } from "../../lib/chatMachine";
+import { canUseNativeFolderDialog, fetchLocalDaemonId, useLocalDaemonId } from "../../lib/localMachine";
+import { machineDisplayName } from "../../lib/machineName";
+import { toast } from "../../lib/toast-manager";
 import { cn } from "../../lib/utils";
+import { describeMachineFolderError } from "./machineFolderErrors";
+import { MachineSelect } from "./MachineSelect";
 import {
   containsSeparator,
   dirname,
@@ -30,7 +37,24 @@ import {
 interface DirectoryPickerProps {
   isOpen: boolean;
   onClose: () => void;
-  onSelect: (path: string) => void;
+  /**
+   * The folder chosen, and the machine it is on: the machine picked in the
+   * picker, else `daemonId`; undefined only when neither named one (the
+   * server then used the user's default machine).
+   */
+  onSelect: (path: string, daemonId: string | undefined) => void;
+  /**
+   * The machine to browse when the picker opens. Unset: the user's default
+   * machine, as the server resolves it.
+   */
+  daemonId?: string;
+  /** Offer the in-picker machine selector (default). False pins the picker to `daemonId`. */
+  machineSelectable?: boolean;
+  /** Told when the user switches machine in the picker. */
+  onDaemonChange?: (daemonId: string) => void;
+  /** The confirm button's label. */
+  selectLabel?: string;
+  closeOnSelect?: boolean;
 }
 
 const NO_ENTRIES: DirectoryEntry[] = [];
@@ -39,7 +63,23 @@ export function DirectoryPicker({
   isOpen,
   onClose,
   onSelect,
+  daemonId,
+  machineSelectable = true,
+  onDaemonChange,
+  selectLabel = "Use this folder",
+  closeOnSelect = true,
 }: DirectoryPickerProps) {
+  const { daemons } = useDaemonStatus();
+  // The picker can stay mounted while closed; registration may finish later.
+  const localDaemonId = useLocalDaemonId(isOpen);
+  // The machine being browsed: what the user picked here, else what the
+  // caller opened the picker on. Reset to the caller's on every open.
+  const [chosenDaemonId, setChosenDaemonId] = useState<string | undefined>(daemonId);
+  // What the selector shows when nothing names a machine: the one default
+  // resolution lands on, which is the machine the server lists.
+  const shownDaemonId = chosenDaemonId ?? defaultMachineDaemon(daemons)?.daemonId ?? null;
+  const shownDaemon = daemons.find((d) => d.daemonId === shownDaemonId);
+  const machineName = shownDaemon ? machineDisplayName(shownDaemon) : "your machine";
   // The directory asked for; "" is the machine's home directory.
   const [requestedPath, setRequestedPath] = useState("");
   // The last directory that listed, so a failed navigation still leaves the
@@ -57,29 +97,56 @@ export function DirectoryPicker({
   // Re-read on every open and every visit (`staleTime: 0`), showing the
   // cached listing meanwhile. While a new directory loads, the one being left
   // stays on screen.
+  // Keyed by machine as well as path, so another machine's listing is never
+  // shown as this one's.
   const listing = useListDirectory(
-    { path: requestedPath },
+    chosenDaemonId ? { path: requestedPath, daemonId: chosenDaemonId } : { path: requestedPath },
     { enabled: isOpen, staleTime: 0, retry: false, placeholderData: keepPreviousData },
   );
   // A successful create invalidates every FileSystemService read, which
   // refetches this listing, so the new folder appears and is selectable.
   const createDirectory = useCreateDirectory({ meta: { silenceErrorToast: true } });
 
+  // The machine the listing on screen came from. Right after a switch the
+  // placeholder is still the OLD machine's folder; it must not be shown or
+  // chosen as the new machine's, so it counts as no listing at all.
+  // null: nothing listed since the picker opened.
+  const [listedDaemonId, setListedDaemonId] = useState<string | undefined | null>(null);
+  // A listing asked of a named machine counts only when the server says it
+  // listed that machine. A server older than the request's daemonId ignores
+  // it and lists the default machine, echoing nothing: showing that listing
+  // under the chosen machine's name, or making a folder in it, would act on
+  // the wrong disk.
+  const listingIsOfChosenMachine = !chosenDaemonId || listing.data?.daemonId === chosenDaemonId;
+  const serverIgnoresMachine =
+    !!chosenDaemonId && !!listing.data && !listing.isPlaceholderData && !listingIsOfChosenMachine;
   useEffect(() => {
-    if (listing.data) setLastListedPath(listing.data.path);
-  }, [listing.data]);
+    if (listing.data && !listing.isPlaceholderData && listingIsOfChosenMachine) {
+      setLastListedPath(listing.data.path);
+      setListedDaemonId(chosenDaemonId);
+    }
+    // chosenDaemonId is read with the data it produced.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [listing.data, listing.isPlaceholderData]);
+  const otherMachinesListing = listing.isPlaceholderData && listedDaemonId !== chosenDaemonId;
+  const data = otherMachinesListing || !listingIsOfChosenMachine ? undefined : listing.data;
 
-  const resolvedPath = listing.data?.path ?? lastListedPath;
-  const entries = listing.data?.entries ?? NO_ENTRIES;
-  const isLoading = listing.isFetching && (listing.isPlaceholderData || !listing.data);
+  const resolvedPath = data?.path ?? lastListedPath;
+  const entries = data?.entries ?? NO_ENTRIES;
+  const isLoading = listing.isFetching && (listing.isPlaceholderData || !data);
   const error = listing.error
-    ? listing.error.message || "Failed to list directory"
-    : null;
+    ? describeMachineFolderError(listing.error, machineName) || "Failed to list directory"
+    : serverIgnoresMachine
+      ? `This Reliant server cannot browse ${machineName} yet: it would show another machine's folders. Update the server, or add the project from the machine itself.`
+      : null;
   const isSubmittingFolder = createDirectory.isPending;
 
   // Start at the home directory on open
   useEffect(() => {
     if (isOpen) {
+      setChosenDaemonId(daemonId);
+      setListedDaemonId(null);
+      setLastListedPath("");
       setRequestedPath("");
       setShowHidden(false);
       setIsCreatingFolder(false);
@@ -87,7 +154,20 @@ export function DirectoryPicker({
       setCreateError(null);
       setTypedPath("");
     }
+    // Only on open: a new daemonId while open is the caller following the
+    // user's own switch (onDaemonChange), already applied.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen]);
+
+  // Another machine is another filesystem: start again at its home folder.
+  const switchMachine = (next: string) => {
+    if (!next || next === chosenDaemonId) return;
+    setChosenDaemonId(next);
+    setLastListedPath("");
+    setTypedPath("");
+    navigateTo("");
+    onDaemonChange?.(next);
+  };
 
   const navigateTo = (path: string) => {
     setIsCreatingFolder(false);
@@ -106,7 +186,9 @@ export function DirectoryPicker({
       setCreateError("Enter a single folder name (no slashes)");
       return;
     }
-    if (!resolvedPath) {
+    // Only into a folder this machine listed: a server that ignores the
+    // machine would make it on another disk.
+    if (!resolvedPath || serverIgnoresMachine) {
       setCreateError("Open a directory first");
       return;
     }
@@ -116,13 +198,17 @@ export function DirectoryPicker({
     const targetPath = joinPath(resolvedPath, name);
     setCreateError(null);
     try {
-      await createDirectory.mutateAsync({ path: targetPath });
+      const created = await createDirectory.mutateAsync(
+        chosenDaemonId ? { path: targetPath, daemonId: chosenDaemonId } : { path: targetPath },
+      );
+      if (chosenDaemonId && created?.daemonId !== chosenDaemonId) {
+        setCreateError(`This Reliant server cannot create folders on ${machineName} yet. Update the server.`);
+        return;
+      }
       setIsCreatingFolder(false);
       setNewFolderName("");
     } catch (err) {
-      setCreateError(
-        err instanceof Error ? err.message : "Failed to create folder"
-      );
+      setCreateError(describeMachineFolderError(err, machineName) || "Failed to create folder");
     }
   };
 
@@ -136,9 +222,32 @@ export function DirectoryPicker({
     navigateTo(dirname(resolvedPath));
   };
 
+  // The machine the folder is on: the one browsed, named even when the
+  // picker opened on the default (the selector already showed it).
+  const selectedDaemonId = chosenDaemonId ?? shownDaemonId ?? undefined;
+
   const handleSelect = () => {
-    onSelect(resolvedPath);
-    onClose();
+    onSelect(resolvedPath, selectedDaemonId);
+    if (closeOnSelect) onClose();
+  };
+
+  // The desktop app's own dialog, when the machine browsed is this computer
+  // (lib/localMachine): a path from it is a path on that machine's disk.
+  const nativeDialog = canUseNativeFolderDialog(selectedDaemonId, localDaemonId);
+  const chooseWithSystemDialog = async () => {
+    // A cached render is not authority after an account/server change. Check
+    // again before opening, and discard a result if identity changed meanwhile.
+    if (!canUseNativeFolderDialog(selectedDaemonId, await fetchLocalDaemonId())) return;
+    let path: string | null = null;
+    try {
+      path = await window.electronAPI!.selectDirectory();
+    } catch (err) {
+      toast.error(err);
+      return;
+    }
+    if (!path || !canUseNativeFolderDialog(selectedDaemonId, await fetchLocalDaemonId())) return;
+    onSelect(path, selectedDaemonId);
+    if (closeOnSelect) onClose();
   };
 
   // Breadcrumbs, root first. The root crumb is the volume root as the daemon
@@ -160,10 +269,23 @@ export function DirectoryPicker({
     <Modal
       open={isOpen}
       onClose={onClose}
-      title="Choose a folder"
+      title={shownDaemon ? `Choose a folder on ${machineName}` : "Choose a folder"}
       size="lg"
     >
       <div className="flex flex-col gap-4">
+        {/* Which machine's disk this is. Every machine is offered, offline
+            ones too: browsing one says it is offline, in words. */}
+        {machineSelectable && daemons.length > 0 && (
+          <MachineSelect
+            id="directory-picker-machine"
+            label="Machine"
+            machines={daemons}
+            value={shownDaemonId}
+            onChange={switchMachine}
+            localDaemonId={localDaemonId}
+          />
+        )}
+
         {/* Go to a typed path */}
         <form
           className="flex items-center gap-2"
@@ -238,7 +360,7 @@ export function DirectoryPicker({
                 setNewFolderName("");
                 setIsCreatingFolder((v) => !v);
               }}
-              disabled={!resolvedPath}
+              disabled={!resolvedPath || serverIgnoresMachine}
               className="flex h-8 items-center gap-1.5 rounded-md px-2.5 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
               title="Create a new folder here"
             >
@@ -261,7 +383,7 @@ export function DirectoryPicker({
         </div>
 
         {/* Inline "New folder" creator */}
-        {isCreatingFolder && (
+        {isCreatingFolder && !serverIgnoresMachine && (
           <div className="flex flex-col gap-2 rounded-md border border-border/60 bg-background p-3">
             <div className="flex items-center gap-2">
               <FolderPlus className="w-4 h-4 text-primary-ink flex-shrink-0" />
@@ -392,6 +514,16 @@ export function DirectoryPicker({
 
         {/* Actions */}
         <div className="flex justify-end gap-2 pt-1">
+          {nativeDialog && (
+            <button
+              type="button"
+              onClick={() => void chooseWithSystemDialog()}
+              data-testid="directory-picker-system-dialog"
+              className="mr-auto inline-flex h-9 items-center justify-center gap-2 rounded-md px-3 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              Use system dialog…
+            </button>
+          )}
           <button
             type="button"
             onClick={onClose}
@@ -402,10 +534,10 @@ export function DirectoryPicker({
           <button
             type="button"
             onClick={handleSelect}
-            disabled={!resolvedPath}
+            disabled={!resolvedPath || listing.isFetching || !!error || otherMachinesListing}
             className="inline-flex h-9 items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            Use this folder
+            {selectLabel}
           </button>
         </div>
       </div>

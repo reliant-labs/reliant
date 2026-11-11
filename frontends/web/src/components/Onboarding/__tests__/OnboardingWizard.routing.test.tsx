@@ -6,12 +6,14 @@
  * outro's onComplete hook, and the retired tour's ids.
  *
  * Runs against the shipped journeys:
- *   workflows: wf-new (signal + route, autoAdvance) → … → wf-machines (route)
- *              → wf-automations (page-bound) → wf-params
- *              → wf-outro-layout (Reliant-only outro, collapses panels)
- *   forge:     fg-console → … → fg-done (journeys/forge.tsx; its own test covers it)
+ *   workflows: wf-example → wf-edge → … → wf-inputs (the builder, on the
+ *              example the first step recorded) → wf-outro-layout (Reliant-only
+ *              outro: Make your own, collapses panels)
+ * The workflows journey has no required action, so the action-gated tests
+ * run on a small fixture journey registered in its place.
+ *   forge:     fg-intro → … → fg-done (journeys/forge.tsx; its own test covers it)
  */
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import React from "react";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -50,7 +52,7 @@ const tourStoreState = vi.hoisted(() => ({
     setJourneyContext: vi.fn(),
     markJourneyShown: vi.fn(async () => undefined),
     resumeStep: null as string | null,
-    contexts: {},
+    contexts: { workflows: { exampleSlug: "fix-my-pr", exampleProjectId: "project-1" } } as Record<string, Record<string, unknown>>,
     lastJourney: null,
     journeys: {
       workflows: { version: 2, current: null, completedOlder: false },
@@ -210,6 +212,12 @@ vi.mock("../journeys/layoutActions", () => ({
   layoutActions: { collapseAll: vi.fn(), showSidebar: vi.fn(), hideSidebar: vi.fn() },
 }));
 
+// The first step adds the example and opens it; here it already exists.
+vi.mock("../journeys/fixMyPr", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../journeys/fixMyPr")>()),
+  ensureFixMyPrExample: vi.fn(async () => "fix-my-pr"),
+}));
+
 // Imported statically, after the mocks (vitest hoists vi.mock above it): a
 // dynamic import inside the first test made that test pay for loading the
 // wizard's whole module graph, and on a loaded machine it hit the 10s test
@@ -221,6 +229,9 @@ import { layoutActions } from "../journeys/layoutActions";
 import { __resetJourneyAnalytics } from "../journeyAnalytics";
 import { tourEvents } from "../tourEvents";
 import { retainTourParam } from "../tourParam";
+import { registerJourney } from "../journeys/registry";
+import { workflowsJourney } from "../journeys/workflows";
+import type { Journey } from "../types";
 
 // ─── Test router ─────────────────────────────────────────────────────────────
 
@@ -303,8 +314,8 @@ describe("journey engine (OnboardingWizard)", () => {
 
   it("opens the retired single tour's ids at their successor journey", async () => {
     renderAt("/workflows/library?tour=chat-and-sidebars");
-    expect(await screen.findByText(/1 \/ 10/)).toBeInTheDocument();
-    expect(screen.getAllByText("Start a workflow").length).toBeGreaterThan(0);
+    expect(await screen.findByText(/Step 1 of 8/)).toBeInTheDocument();
+    expect(screen.getAllByText("Fix my PR, already built").length).toBeGreaterThan(0);
   });
 
   describe("the picker", () => {
@@ -316,7 +327,7 @@ describe("journey engine (OnboardingWizard)", () => {
       expect(screen.getByTestId("journey-card-workflows")).toHaveAttribute("aria-pressed", "false");
 
       await userEvent.click(screen.getByRole("button", { name: /start tour/i }));
-      await waitFor(() => expect(tourParam(router)).toBe("forge:fg-console"));
+      await waitFor(() => expect(tourParam(router)).toBe("forge:fg-intro"));
       expect(trackEvent).toHaveBeenCalledWith(
         "journey_selected",
         expect.objectContaining({ journey: "forge", source: "landing" }),
@@ -338,11 +349,11 @@ describe("journey engine (OnboardingWizard)", () => {
     });
 
     it("offers Resume when a tour was ended mid-way", async () => {
-      tourStoreState.state = { ...tourStoreState.state, resumeStep: "workflows:wf-automations" };
+      tourStoreState.state = { ...tourStoreState.state, resumeStep: "workflows:wf-inputs" };
       const router = renderAt("/?tour=pick:menu");
       await userEvent.click(await screen.findByTestId("journey-resume"));
-      await waitFor(() => expect(tourParam(router)).toBe("workflows:wf-automations"));
-      expect(router.state.location.pathname).toBe("/workflows/library");
+      await waitFor(() => expect(tourParam(router)).toBe("workflows:wf-inputs"));
+      expect(router.state.location.pathname).toBe("/workflow/fix-my-pr");
     });
 
     it("Not now closes it and records the dismissal", async () => {
@@ -356,68 +367,102 @@ describe("journey engine (OnboardingWizard)", () => {
 
   describe("a page-bound step", () => {
     it("off its page, renders an Open card that goes there keeping the tour", async () => {
-      const router = renderAt("/?tour=workflows:wf-automations");
-      await userEvent.click(await screen.findByRole("button", { name: /open workflows/i }));
-      await waitFor(() => expect(router.state.location.pathname).toBe("/workflows/library"));
-      expect(tourParam(router)).toBe("workflows:wf-automations");
+      const router = renderAt("/?tour=workflows:wf-inputs");
+      await userEvent.click(await screen.findByRole("button", { name: /open fix my pr/i }));
+      await waitFor(() => expect(router.state.location.pathname).toBe("/workflow/fix-my-pr"));
+      expect(tourParam(router)).toBe("workflows:wf-inputs");
     });
 
     it("on its page, renders the spotlight", async () => {
-      renderAt("/workflows/library?tour=workflows:wf-automations");
-      expect(await screen.findByText(/8 \/ 10/)).toBeInTheDocument();
-      expect(screen.queryByRole("button", { name: /open workflows/i })).toBeNull();
+      renderAt("/workflow/fix-my-pr?tour=workflows:wf-inputs");
+      expect(await screen.findByText(/Step 7 of 8/)).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /open fix my pr/i })).toBeNull();
     });
   });
 
   describe("an action-gated step (advanceOn)", () => {
-    it("hides Next until the action, then moves on by itself (autoAdvance)", async () => {
-      const router = renderAt("/workflows/library?tour=workflows:wf-new");
-      await screen.findByText(/1 \/ 10/);
-      expect(screen.queryByRole("button", { name: /^next/i })).toBeNull();
-      expect(screen.getByRole("button", { name: /create it for me/i })).toBeInTheDocument();
-      expect(screen.getByText(/click new workflow, then create workflow/i)).toBeInTheDocument();
+    // The workflows journey asks for no action: stand a small one in for it.
+    const FIXTURE: Journey = {
+      ...workflowsJourney,
+      outro: [],
+      steps: [
+        {
+          id: "wf-fx-draft",
+          title: "Start a workflow",
+          description: "Click New workflow.",
+          route: { path: "/workflows/library", label: "Open Workflows" },
+          advanceOn: {
+            kind: "when",
+            test: ({ signals, location }) => !!signals["workflow:draftCreated"] && location.pathname.startsWith("/workflow/"),
+          },
+          autoAdvance: true,
+          actionHint: "Click New workflow, then Create workflow",
+          skip: { label: "Create it for me" },
+          signal: "draft_created",
+        },
+        { id: "wf-fx-next", title: "Next one", description: "n" },
+        {
+          id: "wf-fx-machines",
+          title: "Machines",
+          description: "m",
+          route: { path: "/settings/machines", label: "Open Machines" },
+          advanceOn: { kind: "route", path: "/settings/machines" },
+        },
+        { id: "wf-fx-loop", title: "Loop", description: "l", route: { path: "/workflow/", label: "Open it" } },
+        { id: "wf-fx-last", title: "Last", description: "z" },
+      ],
+    };
+    beforeEach(() => registerJourney(FIXTURE));
+    afterEach(() => registerJourney(workflowsJourney));
 
-      // The action: the guided draft exists, and the builder opened on it.
+    it("disables Next until the action, then moves on by itself (autoAdvance)", async () => {
+      const router = renderAt("/workflows/library?tour=workflows:wf-fx-draft");
+      await screen.findByText(/Step 1 of 5/);
+      // No bottom bar: the callout carries the controls, and Next waits for the action.
+      expect(screen.queryByTestId("onboarding-nav-bar")).toBeNull();
+      expect(screen.getByRole("button", { name: /^next/i })).toBeDisabled();
+      expect(screen.getByRole("button", { name: /create it for me/i })).toBeInTheDocument();
+      expect(screen.getAllByText(/click new workflow, then create workflow/i).length).toBeGreaterThan(0);
+
+      // The action: a draft exists, and the builder opened on it.
       tourEvents.emit("workflow:draftCreated", { slug: "fix-my-pr", draftId: "d1", start: "tour-fix-my-pr" });
       await router.navigate({
         to: "/workflow/$workflowName",
         params: { workflowName: "fix-my-pr" },
-        search: { tour: "workflows:wf-new" },
+        search: { tour: "workflows:wf-fx-draft" },
       } as any);
-      await waitFor(() => expect(tourParam(router)).toBe("workflows:wf-edge"), { timeout: 3000 });
+      await waitFor(() => expect(tourParam(router)).toBe("workflows:wf-fx-next"), { timeout: 3000 });
       expect(trackEvent).toHaveBeenCalledWith(
         "journey_step_completed",
-        expect.objectContaining({ journey: "workflows", step: "wf-new", via: "action", signal: "draft_created" }),
+        expect.objectContaining({ journey: "workflows", step: "wf-fx-draft", via: "action", signal: "draft_created" }),
       );
     });
 
     it("already satisfied on entry: shows Next with a check, without moving on", async () => {
-      renderAt("/settings/machines?tour=workflows:wf-machines");
-      expect(await screen.findByRole("button", { name: /^next/i })).toBeInTheDocument();
-      expect(screen.getByText("Done")).toBeInTheDocument();
+      renderAt("/settings/machines?tour=workflows:wf-fx-machines");
+      const next = await screen.findByRole("button", { name: /next/i });
+      expect(next).toBeEnabled();
+      expect(screen.getByTestId("tour-next-done")).toBeInTheDocument();
     });
 
-    it("Skip step moves on and records it as skipped", async () => {
-      const router = renderAt("/workflow/fix-my-pr?tour=workflows:wf-loop");
-      await userEvent.click(await screen.findByRole("button", { name: /skip step/i }));
-      await waitFor(() => expect(tourParam(router)).toBe("workflows:wf-branch"));
-      expect(tourStoreState.state.skipStep).toHaveBeenCalledWith("workflows:wf-loop");
-      expect(trackEvent).toHaveBeenCalledWith(
-        "journey_step_completed",
-        expect.objectContaining({ step: "wf-loop", via: "skip" }),
-      );
+    it("has no generic Skip step; Back goes to the previous step", async () => {
+      const router = renderAt("/workflow/fix-my-pr?tour=workflows:wf-fx-loop");
+      await screen.findByTestId("tour-controls");
+      expect(screen.queryByRole("button", { name: /skip step/i })).toBeNull();
+      await userEvent.click(screen.getByTestId("tour-back"));
+      await waitFor(() => expect(tourParam(router)).not.toBe("workflows:wf-fx-loop"));
     });
   });
 
   describe("ending a journey", () => {
     const lastStepUrl = "/project/project-1?tour=workflows:wf-outro-layout";
 
-    it("the last step offers Finish and Try the other journey, and no End tour", async () => {
+    it("the last step offers Finish and Try the other journey, and no Exit tour", async () => {
       renderAt(lastStepUrl);
       expect(await screen.findByRole("button", { name: /finish/i })).toBeInTheDocument();
       expect(screen.getByRole("button", { name: /try the other journey/i })).toBeInTheDocument();
-      expect(screen.getByText(/10 \/ 10/)).toBeInTheDocument();
-      expect(screen.queryByRole("button", { name: /end tour/i })).toBeNull();
+      expect(screen.getByText(/Step 8 of 8/)).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /exit tour/i })).toBeNull();
     });
 
     it("Finish runs the step's onComplete, records completion and lands on the project chat", async () => {
@@ -430,14 +475,23 @@ describe("journey engine (OnboardingWizard)", () => {
       expect(trackEvent).toHaveBeenCalledWith("journey_completed", expect.objectContaining({ journey: "workflows" }));
       expect(trackEvent).toHaveBeenCalledWith(
         "onboarding_completed",
-        expect.objectContaining({ journey: "workflows", totalSteps: 10 }),
+        expect.objectContaining({ journey: "workflows", totalSteps: 8 }),
       );
+    });
+
+    it("Make your own finishes the journey on New workflow", async () => {
+      const router = renderAt(lastStepUrl);
+      await userEvent.click(await screen.findByTestId("wf-make-your-own"));
+      await waitFor(() => expect(router.state.location.pathname).toBe("/workflow/new"));
+      expect(tourParam(router)).toBeUndefined();
+      expect(layoutActions.collapseAll).toHaveBeenCalledTimes(1);
+      expect(tourStoreState.state.markTourCompleted).toHaveBeenCalledWith("workflows", "completed");
     });
 
     it("Try the other journey completes this one and starts the other", async () => {
       const router = renderAt(lastStepUrl);
       await userEvent.click(await screen.findByRole("button", { name: /try the other journey/i }));
-      await waitFor(() => expect(tourParam(router)).toBe("forge:fg-console"));
+      await waitFor(() => expect(tourParam(router)).toBe("forge:fg-intro"));
       expect(tourStoreState.state.markTourCompleted).toHaveBeenCalledWith("workflows", "completed");
       expect(trackEvent).toHaveBeenCalledWith(
         "journey_selected",
@@ -447,19 +501,19 @@ describe("journey engine (OnboardingWizard)", () => {
 
     it("a journey with no finish target leaves a builder page for the chat with ?tour= cleared", async () => {
       const router = renderAt("/workflow/fix-my-pr?tour=workflows:wf-loop");
-      await userEvent.click(await screen.findByRole("button", { name: /end tour/i }));
+      await userEvent.click(await screen.findByRole("button", { name: /exit tour/i }));
       await waitFor(() => expect(router.state.location.pathname).toBe("/project/project-1"));
       expect(tourParam(router)).toBeUndefined();
     });
 
-    it("End tour records the journey skipped and where it ended, for Resume", async () => {
-      const router = renderAt("/workflows/library?tour=workflows:wf-automations");
-      await userEvent.click(await screen.findByRole("button", { name: /end tour/i }));
+    it("Exit tour records the journey skipped and where it ended, for Resume", async () => {
+      const router = renderAt("/workflow/fix-my-pr?tour=workflows:wf-inputs");
+      await userEvent.click(await screen.findByRole("button", { name: /exit tour/i }));
       await waitFor(() => expect(router.state.location.pathname).toBe("/project/project-1"));
       expect(tourParam(router)).toBeUndefined();
-      expect(tourStoreState.state.setResumeStep).toHaveBeenCalledWith("workflows:wf-automations");
+      expect(tourStoreState.state.setResumeStep).toHaveBeenCalledWith("workflows:wf-inputs");
       expect(tourStoreState.state.markTourCompleted).toHaveBeenCalledWith("workflows", "skipped");
-      expect(trackEvent).toHaveBeenCalledWith("journey_skipped", expect.objectContaining({ journey: "workflows", step: "wf-automations" }));
+      expect(trackEvent).toHaveBeenCalledWith("journey_skipped", expect.objectContaining({ journey: "workflows", step: "wf-inputs" }));
     });
   });
 });

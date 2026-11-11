@@ -3,6 +3,8 @@ import { RotateCw, X } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { FileIcon } from '../FileBrowser/FileIcon';
 import { ImagePreviewModal } from './ImagePreviewModal';
+import { TextAttachmentModal, isTextAttachment } from './TextAttachmentModal';
+import { isImageMimeType, useAttachmentBlobUrls } from './useAttachmentBlobUrls';
 import { useAttachmentStore } from '../../store/attachmentStore';
 
 interface Attachment {
@@ -12,8 +14,6 @@ interface Attachment {
   mime_type: string;
   url: string;
 }
-
-const isImageMimeType = (mimeType: string): boolean => mimeType.startsWith('image/');
 
 /**
  * One chip in the composer's chip row (design doc §5.3): a body that opens the
@@ -95,39 +95,62 @@ export function ComposerChip({
 
 /**
  * The attachments on the next message, as chips. An image chip carries a
- * thumbnail and opens the full preview on tap.
+ * thumbnail and opens the full preview on tap; a text chip opens the text,
+ * editable while `onSave` is given.
  *
  * Renders chips only — no wrapper — so they share the composer's single chip
  * row with uploads, file references, the thread and the preset; with no
  * attachments it renders nothing and takes no space.
  */
-export function AttachmentPreview({ attachments, onRemove }: {
+export function AttachmentPreview({ attachments, onRemove, onSave, onInsert }: {
   attachments: Attachment[];
   onRemove: (id: string) => void;
+  /** Replace a text attachment with edited text. Absent: text opens read-only. */
+  onSave?: (id: string, filename: string, text: string) => Promise<void>;
+  /** Put a text attachment's text into the message in its place. */
+  onInsert?: (id: string, text: string) => void;
 }) {
   const [previewImage, setPreviewImage] = useState<{ url: string; filename: string } | null>(null);
-  const getBlobUrl = useAttachmentStore((state) => state.getBlobUrl);
+  const [openText, setOpenText] = useState<Attachment | null>(null);
+  const localBlobUrls = useAttachmentStore((state) => state.blobUrls);
+  const localFiles = useAttachmentStore((state) => state.localFiles);
+  // A draft restored after a reload has no local bytes: fetch its thumbnails.
+  const { blobUrls: fetchedBlobUrls } = useAttachmentBlobUrls(
+    attachments
+      .filter((attachment) => !localBlobUrls.has(attachment.id))
+      .map((attachment) => ({ id: attachment.id, mimeType: attachment.mime_type })),
+  );
 
   if (attachments.length === 0) return null;
+
+  // The open attachment can be replaced (Save) or sent while open; follow it out.
+  const openTextAttachment = openText && attachments.some((a) => a.id === openText.id) ? openText : null;
 
   return (
     <>
       {attachments.map((attachment) => {
         const isImage = isImageMimeType(attachment.mime_type);
-        const imageUrl = getBlobUrl(attachment.id) || attachment.url;
+        const isText = !isImage && isTextAttachment(attachment.filename, attachment.mime_type);
+        const imageUrl = localBlobUrls.get(attachment.id) ?? fetchedBlobUrls.get(attachment.id);
         return (
           <ComposerChip
             key={attachment.id}
             icon={
-              isImage ? (
+              isImage && imageUrl ? (
                 <img src={imageUrl} alt="" className="h-5 w-5 rounded object-cover touch:h-7 touch:w-7" />
               ) : (
                 <FileIcon mimeType={attachment.mime_type} />
               )
             }
             label={attachment.filename}
-            onOpen={isImage ? () => setPreviewImage({ url: imageUrl, filename: attachment.filename }) : undefined}
-            openLabel={isImage ? `Preview ${attachment.filename}` : undefined}
+            onOpen={
+              isImage && imageUrl
+                ? () => setPreviewImage({ url: imageUrl, filename: attachment.filename })
+                : isText
+                  ? () => setOpenText(attachment)
+                  : undefined
+            }
+            openLabel={isImage || isText ? `${isText && onSave ? 'Open' : 'Preview'} ${attachment.filename}` : undefined}
             onRemove={() => onRemove(attachment.id)}
             removeLabel={`Remove ${attachment.filename}`}
           />
@@ -140,6 +163,20 @@ export function AttachmentPreview({ attachments, onRemove }: {
           onClose={() => setPreviewImage(null)}
           imageUrl={previewImage.url}
           filename={previewImage.filename}
+        />
+      )}
+
+      {openTextAttachment && (
+        <TextAttachmentModal
+          attachmentId={openTextAttachment.id}
+          filename={openTextAttachment.filename}
+          localFile={localFiles.get(openTextAttachment.id)}
+          onClose={() => setOpenText(null)}
+          onSave={onSave && ((text) => onSave(openTextAttachment.id, openTextAttachment.filename, text))}
+          onInsert={onInsert && ((text) => {
+            setOpenText(null);
+            onInsert(openTextAttachment.id, text);
+          })}
         />
       )}
     </>

@@ -15,6 +15,7 @@ import (
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/daemonchoice"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -22,6 +23,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/messageproto"
 	"github.com/reliant-labs/reliant/internal/planproto"
+	"go.opentelemetry.io/otel/trace"
 	"go.temporal.io/api/serviceerror"
 )
 
@@ -156,6 +158,13 @@ func (s *Service) startChat(
 	if jwt, ok := auth.GetUserJWT(userID); ok {
 		spec.UserJWT = jwt
 	}
+	// A new chat's org is fixed here and never changes; an existing chat
+	// keeps its own.
+	if msg.GetChatId() == "" {
+		if spec.OrgID, spec.DefaultOrgID, err = s.newChatOrgs(ctx, userID, msg.ProjectId, msg.GetOrgId()); err != nil {
+			return nil, err
+		}
+	}
 
 	// A chat with no machine by design: there is nothing to choose, validate
 	// or wake. The launcher refuses the contradictions (with a daemon_id, or
@@ -260,7 +269,7 @@ func (s *Service) validateBuilderTest(ctx context.Context, userID string, msg *r
 	if err != nil {
 		return svcerr.WrapOr(err, svcerr.Internal("failed to look up workflow draft"))
 	}
-	if draft == nil || draft.UserID != userID {
+	if !authz.CanReadWorkflow(ctx, userID, draft) {
 		return svcerr.WithMessage(svcerr.ErrNotFound, fmt.Sprintf("builder_test requires a saved workflow draft you own: %q", msg.Workflow))
 	}
 	return nil
@@ -284,9 +293,14 @@ func (s *Service) ListChats(
 	if req.Msg.ProjectId != "" {
 		projectID = &req.Msg.ProjectId
 	}
+	scope, err := s.listScope(ctx, userID, req.Msg.GetOrgId())
+	if err != nil {
+		return nil, err
+	}
 	filters := db.ChatFilters{
 		UserID:          userID,
 		ProjectID:       projectID,
+		Org:             scope,
 		Limit:           limit,
 		ExcludeArchived: true,
 		// The chat list holds conversations: USER-origin chats and adopted
@@ -298,13 +312,16 @@ func (s *Service) ListChats(
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list chats"))
 	}
+	// The store lists what the caller owns; a chat of an org they have left
+	// is not theirs to see, named org or not (GetChat refuses it too).
+	chats = authz.Visible(ctx, userID, chats, authz.CanReadChat[*db.Chat])
 
 	// The background reconciler repairs stale DB status against Temporal.
 	protoChats := make([]*reliantv1.Chat, len(chats))
 	for i, c := range chats {
 		protoChats[i] = chatToProto(c)
 	}
-	mainWorktrees := s.attachWorktrees(ctx, userID, req.Msg.ProjectId, chats, protoChats)
+	mainWorktrees := s.attachWorktrees(ctx, userID, req.Msg.ProjectId, scope, chats, protoChats)
 
 	// Get latest user update sequence for stream sync —
 	// the frontend uses this to connect the streaming RPC without redundant event replay.
@@ -339,7 +356,7 @@ func (s *Service) GetChat(
 	}
 
 	// Verify user owns the chat
-	if chat.UserID != userID {
+	if !authz.CanReadChat(ctx, userID, chat) {
 		return nil, svcerr.NotFound("chat")
 	}
 
@@ -414,7 +431,7 @@ func (s *Service) UpdateChat(
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}
 
-	if chat.UserID != userID {
+	if !authz.CanWriteChat(ctx, userID, chat) {
 		return nil, svcerr.NotFound("chat")
 	}
 
@@ -674,6 +691,7 @@ func (s *Service) SearchChats(
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to search chats"))
 	}
+	chats = authz.Visible(ctx, userID, chats, authz.CanReadChat[*db.Chat])
 
 	protoChats := make([]*reliantv1.Chat, len(chats))
 	for i, c := range chats {
@@ -697,6 +715,9 @@ func (s *Service) ListArchivedChats(
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list archived chats"))
 	}
+	archivedChats = authz.Visible(ctx, userID, archivedChats, func(ctx context.Context, userID string, ac *db.ArchivedChatInfo) bool {
+		return authz.CanReadChat(ctx, userID, &ac.Chat)
+	})
 
 	protoChats := make([]*reliantv1.ArchivedChat, len(archivedChats))
 	for i, ac := range archivedChats {
@@ -749,21 +770,28 @@ func (s *Service) GetChatUpdates(
 	}
 
 	// Convert to proto messages
+	toolBodies := messageproto.ResolveToolBodyMode(req.Msg.GetToolBodies(), s.deps.Config.GetTranscript().GetToolBodyStubs())
 	protoUpdates := make([]*reliantv1.ChatUpdate, len(updates))
+	sent := messageproto.TranscriptBytes{ToolBodies: toolBodies}
 	for i, update := range updates {
 		data := []byte(update.Data)
 		if update.UpdateType == reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_MESSAGE {
 			// The same tool-result preview every client-facing read sends.
-			data = messageproto.PreviewMessageUpdate(data)
+			data = messageproto.PreviewMessageUpdate(data, toolBodies)
 		}
+		dataJSON := string(data)
+		sent.AddChatUpdate(update.UpdateType, dataJSON)
 		protoUpdates[i] = &reliantv1.ChatUpdate{
 			SequenceNumber: update.SequenceNumber,
 			UpdateType:     update.UpdateType.String(),
 			EntityId:       update.EntityID,
-			Data:           string(data),
+			Data:           dataJSON,
 			CreatedAt:      update.CreatedAt.Format(time.RFC3339),
 		}
 	}
+
+	// What this read sent, by block kind, on the RPC's span.
+	trace.SpanFromContext(ctx).SetAttributes(sent.Attributes("transcript")...)
 
 	return connect.NewResponse(&reliantv1.GetChatUpdatesResponse{
 		Updates:        protoUpdates,
@@ -788,7 +816,7 @@ func (s *Service) ListChatPlans(
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}
-	if chat.UserID != userID {
+	if !authz.CanReadChat(ctx, userID, chat) {
 		return nil, svcerr.NotFound("chat")
 	}
 

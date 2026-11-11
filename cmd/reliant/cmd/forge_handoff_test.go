@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/reliant-labs/forge/pkg/testkit"
+	"github.com/reliant-labs/reliant/internal/version"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -74,6 +75,12 @@ func TestReliantForgeRunsTheProjectsForge(t *testing.T) {
 	const pin = "v0.1.45-0.20261012195649-377b61532c0e"
 
 	t.Run("a project pinned to X runs X", func(t *testing.T) {
+		// forge never hands a replaced (local) forge's commands to a pin, by
+		// design (forge's pinSkewFor). Forge's consumer canary builds reliant
+		// that way, so there is no hand-off to observe.
+		if version.Forge() == "(devel)" {
+			t.Skip("the embedded forge is replaced by a local checkout, which never hands off to a pinned forge")
+		}
 		project := forgeProject(t, pin)
 		cache := t.TempDir()
 		standIn := filepath.Join(cache, pin, runtime.GOOS+"-"+runtime.GOARCH, "forge")

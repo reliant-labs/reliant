@@ -8,15 +8,16 @@
  * instrumentation. Every number on it is read from the manifest or the cast.
  */
 
-import { useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp } from "lucide-react";
 
-import { LightweightCodeViewer } from "@/components/Chat/LightweightCodeViewer";
+import { LightweightCodeViewer } from "@/components/shared/LightweightCodeViewer";
 import Button from "@/components/forge-ui/button";
 import { cn } from "@/lib/utils";
 
 import { CATEGORY_COPY, CHAIN_COPY, NAMED_PATHS } from "./copy";
 import type { CategoryId, ManifestCategory, ScaffoldCast, ScaffoldManifest } from "./fixtures";
+import { categoryOwnership, recordedOwnership, OwnershipBadge } from "./ownership";
 
 const n = (value: number) => value.toLocaleString("en-US");
 
@@ -49,57 +50,59 @@ export function summarize(manifest: ScaffoldManifest, cast: ScaffoldCast) {
 export function ScaffoldPanel({ manifest, cast }: { manifest: ScaffoldManifest; cast: ScaffoldCast }) {
   const s = useMemo(() => summarize(manifest, cast), [manifest, cast]);
   return (
-    <section className="space-y-6" data-testid="scaffold-panel" aria-labelledby="scaffold-panel-title">
-      <div className="space-y-2" data-testid="scaffold-totals">
-        <h3 id="scaffold-panel-title" className="text-base font-semibold text-ink">
-          What forge generated
-        </h3>
+    <section className="space-y-10" data-testid="scaffold-panel" aria-labelledby="scaffold-panel-title">
+      <div className="space-y-4 rounded-xl border border-border bg-surface p-4 sm:p-6" data-testid="scaffold-totals">
+        <h2 id="scaffold-panel-title" className="text-xl font-semibold text-ink sm:text-2xl">
+          What Forge generated
+        </h2>
         <p className="text-lg text-ink" data-testid="scaffold-headline">
-          You wrote <strong>{n(s.youLines)}</strong> lines of proto in {s.youFiles} files. forge generated{" "}
+          <strong>{n(s.youLines)}</strong> lines of API definitions in {s.youFiles} files. Forge generated{" "}
           <strong>{n(s.forgeLines)}</strong> lines across <strong>{n(s.files)}</strong> files.
         </p>
-        <p className="text-sm text-ink-muted">
+        <p className="text-base leading-relaxed text-ink">Your agent customizes the starting files and implements your app&apos;s rules. Regenerated files come from their inputs instead of direct edits.</p>
+        <div className="grid gap-4 rounded-lg border border-border bg-surface-sunken p-4 sm:grid-cols-2" aria-label="Code ownership in this recording">
+          <div className="space-y-2"><OwnershipBadge ownership="regen" /><p className="text-sm text-ink">Change the source inputs, then regenerate. Direct edits are overwritten.</p></div>
+          <div className="space-y-2"><OwnershipBadge ownership="yours" /><p className="text-sm text-ink">Starting code your agent edits directly as the app grows.</p></div>
+        </div>
+        <details className="border-t border-border pt-2">
+          <summary className="min-h-[44px] cursor-pointer py-3 text-sm font-medium text-ink">How these files are counted and maintained</summary>
+        <p className="text-sm leading-relaxed text-ink-muted">
           <code>forge project new</code> wrote {n(s.newFiles)} files; <code>forge scaffold</code> then added {n(s.scaffoldAdded)} and changed{" "}
-          {n(s.scaffoldChanged)}. Of forge&apos;s lines, {n(s.regenLines)} are in files it rewrites on every <code>forge generate</code>,{" "}
-          {n(s.machineLines)} of them the protobuf and Connect stubs buf compiles. It wrote the other {n(s.onceLines)} once: they are
-          starting points, and yours to change. Not counted: {s.lockfiles} lockfiles, and forge&apos;s own state in <code>.forge/</code>.
+          {n(s.scaffoldChanged)}. Of Forge&apos;s lines, {n(s.regenLines)} are in files it rewrites on every <code>forge generate</code>:
+          change their inputs rather than editing those files. These include {n(s.machineLines)} lines of generated Go and TypeScript API code.
+          It wrote the other {n(s.onceLines)} once: starting code and pages your agent can customize, not a finished product.
+          Not counted: {s.lockfiles} dependency lockfiles, and Forge&apos;s own working files in <code>.forge/</code>.
         </p>
+        </details>
       </div>
 
       <CategoryBreakdown categories={manifest.categories} />
       <EntityChain manifest={manifest} />
 
       <div className="grid gap-4 md:grid-cols-3" data-testid="scaffold-explainers">
-        <Explainer title="The contract">
-          The protos are the wire truth. Each service is a Connect RPC service, so the same handler answers Connect, gRPC and gRPC-Web
-          clients. buf compiles the protos into Go and TypeScript ({n(s.machineLines)} lines under <code>gen/</code>), and the
-          handlers, the React hooks and the mocks are typed from that code. Change a field and the compiler shows you every place that
-          needs to follow.
+        <Explainer title="One API definition">
+          The API files describe the requests your app accepts and the responses it returns. Forge uses them to generate matching Go and
+          TypeScript code ({n(s.machineLines)} lines under <code>gen/</code>) for the server, browser and tests. When a definition changes,
+          type checks help find code that no longer matches.
         </Explainer>
-        <Explainer title="The schema">
-          The SQL migrations are the schema truth. forge writes a table&apos;s first migration from its entity message and never edits
-          it again. On every generate it applies all the migrations to a throwaway Postgres and reads the result back, so the ORM (
-          {s.storeFiles} files in <code>internal/db</code>) is a projection of a schema that exists. The wire and the table change on
-          their own schedules, on purpose.
+        <Explainer title="Database changes you control">
+          Forge creates the first database setup file from your data definition. Later changes go in new SQL migration files:
+          instructions for updating the database. Forge applies those files to a temporary Postgres database and generates matching Go
+          database code ({s.storeFiles} files in <code>internal/db</code>). Editing an API definition alone does not update an existing table.
         </Explainer>
-        <Explainer title="The instrumentation">
-          The server&apos;s start-up (<code>{NAMED_PATHS.serve}</code>) sets up OpenTelemetry traces and metrics. forge&apos;s Connect
-          interceptors put a span on every rpc and carry the trace to the next service, the database driver adds one per query, and the
-          browser app (<code>{NAMED_PATHS.browserTelemetry}</code>) sends its own spans and errors. <code>deploy/observability</code>{" "}
-          holds {s.observabilityFiles} files of dashboards, default alerts and collector config.
+        <Explainer title="Monitoring built in">
+          Forge sets up request timelines, performance measurements and error reporting across the server (<code>{NAMED_PATHS.serve}</code>),
+          database and browser (<code>{NAMED_PATHS.browserTelemetry}</code>). <code>deploy/observability</code> holds {s.observabilityFiles}{" "}
+          files of dashboards, default alerts and settings for collecting this information.
           <span className="mt-2 block">
-            That matters to an LLM as much as to you. Your agent reads the same telemetry from a terminal with <code>forge obs</code>.{" "}
-            <code>{NAMED_PATHS.agents}</code>, which forge wrote into the project, points it at forge&apos;s skills before it guesses.{" "}
+            On your running app, you and your agent can inspect the same health information with <code>forge obs</code>.{" "}
+            <code>{NAMED_PATHS.agents}</code> points your agent to Forge&apos;s instructions.{" "}
             {s.gatingLinters !== null ? (
               <>
-                <code>forge lint</code> ran {s.gatingLinters} gating linters on this app before it built, and <code>forge lint --tracing</code>{" "}
-                points out where a trace would break.
+                In this recording, <code>forge lint</code> passed {s.gatingLinters} required checks before the Go build.{" "}
               </>
-            ) : (
-              <>
-                <code>forge lint --tracing</code> points out where a trace would break.
-              </>
-            )}
+            ) : null}
+            <code>forge lint --tracing</code> checks for common gaps in request tracking.
           </span>
         </Explainer>
       </div>
@@ -109,12 +112,15 @@ export function ScaffoldPanel({ manifest, cast }: { manifest: ScaffoldManifest; 
 
 function Explainer({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="rounded-lg border border-border p-3">
-      <h4 className="mb-1 text-sm font-semibold text-ink">{title}</h4>
-      <p className="text-sm text-ink-muted">{children}</p>
+    <div className="rounded-xl border border-border bg-surface p-4 sm:p-5">
+      <h3 className="mb-3 text-lg font-semibold text-ink">{title}</h3>
+      <p className="text-sm leading-relaxed text-ink">{children}</p>
     </div>
   );
 }
+
+/** The category's lines in files Forge regenerates (the rest it wrote once). */
+const regenLines = (cat: ManifestCategory) => cat.entries.reduce((sum, entry) => sum + (entry[3] === "regen" ? entry[1] : 0), 0);
 
 function CategoryBreakdown({ categories }: { categories: ManifestCategory[] }) {
   const [open, setOpen] = useState<CategoryId | null>(null);
@@ -124,8 +130,12 @@ function CategoryBreakdown({ categories }: { categories: ManifestCategory[] }) {
   });
   const widest = Math.max(...rows.map((r) => r.cat.lines));
   return (
-    <div data-testid="scaffold-categories">
-      <h4 className="mb-2 text-sm font-semibold text-ink">By category</h4>
+    <div className="space-y-4 border-t border-border pt-8" data-testid="scaffold-categories">
+      <h2 className="text-xl font-semibold text-ink sm:text-2xl">Explore the generated files</h2>
+      <p className="hidden items-center gap-4 text-xs text-ink-muted md:flex" aria-hidden="true">
+        <span className="inline-flex items-center gap-1.5"><span className="h-2 w-4 rounded-full bg-primary" />Regenerated by Forge</span>
+        <span className="inline-flex items-center gap-1.5"><span className="h-2 w-4 rounded-full bg-primary/35" />Written once, yours to edit</span>
+      </p>
       <ul className="divide-y divide-border rounded-lg border border-border">
         {rows.map(({ id, label, detail, cat }) => {
           const expanded = open === id;
@@ -139,10 +149,15 @@ function CategoryBreakdown({ categories }: { categories: ManifestCategory[] }) {
               >
                 <span className="min-w-0">
                   <span className="block text-sm font-medium text-ink">{label}</span>
-                  <span className="block truncate text-xs text-ink-muted">{detail}</span>
+                  {/* A uniform category says so; a mixed one shows its split in the bar instead of a chip on every row. */}
+                  {categoryOwnership(cat) !== "mixed" && <span className="mt-1 block"><OwnershipBadge ownership={categoryOwnership(cat)} /></span>}
+                  <span className="mt-1 block text-xs text-ink-muted">{detail}</span>
                 </span>
-                <span className="hidden h-2 rounded-full bg-surface-sunken md:block" aria-hidden="true">
-                  <span className="block h-2 rounded-full bg-primary" style={{ width: `${Math.max(2, (cat.lines / widest) * 100)}%` }} />
+                <span className="hidden h-2 rounded-full bg-surface-sunken md:block" aria-hidden="true" title={`${n(regenLines(cat))} regenerated · ${n(cat.lines - regenLines(cat))} written once`}>
+                  <span className="flex h-2 overflow-hidden rounded-full" style={{ width: `${Math.max(2, (cat.lines / widest) * 100)}%` }}>
+                    <span className="h-2 bg-primary" style={{ width: `${(regenLines(cat) / Math.max(1, cat.lines)) * 100}%` }} />
+                    <span className="h-2 flex-1 bg-primary/35" />
+                  </span>
                 </span>
                 <span className="whitespace-nowrap text-right font-mono text-xs text-ink-muted" data-testid="scaffold-category-count">
                   {n(cat.lines)} lines · {cat.files} {cat.files === 1 ? "file" : "files"}
@@ -154,12 +169,12 @@ function CategoryBreakdown({ categories }: { categories: ManifestCategory[] }) {
                   {[...cat.entries]
                     .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
                     .map(([path, lines, yours, own]) => (
-                      <li key={path} className="flex items-center gap-2 py-0.5">
+                      <li key={path} className="flex flex-wrap items-center gap-2 border-b border-border py-2 last:border-0">
                         <span className="min-w-0 flex-1 truncate text-ink" title={path}>
                           {path}
                         </span>
                         {yours > 0 && <span className="text-primary-ink">{yours} yours</span>}
-                        <span className="text-ink-muted">{own === "regen" ? "regenerated" : "written once"}</span>
+                        <OwnershipBadge ownership={own} />
                         <span className="w-12 text-right text-ink-muted">{n(lines)}</span>
                       </li>
                     ))}
@@ -179,53 +194,82 @@ const VIEWER_LANG: Record<string, string> = { protobuf: "plaintext", sql: "sql",
 function EntityChain({ manifest }: { manifest: ScaffoldManifest }) {
   const chain = manifest.chain;
   const [index, setIndex] = useState(0);
+  const id = useId();
+  const tabs = useRef<(HTMLButtonElement | null)[]>([]);
+  const rail = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const selected = tabs.current[index];
+    const host = rail.current;
+    if (!selected || !host) return;
+    // Reveal only within this horizontal rail; never move the page vertically.
+    const item = selected.getBoundingClientRect();
+    const viewport = host.getBoundingClientRect();
+    if (item.left < viewport.left) host.scrollLeft -= viewport.left - item.left + 12;
+    else if (item.right > viewport.right) host.scrollLeft += item.right - viewport.right + 12;
+  }, [index]);
   const excerpt = chain[index];
   const copy = CHAIN_COPY[excerpt.id];
+  const ownership = recordedOwnership(manifest, excerpt.path);
   return (
-    <div data-testid="scaffold-chain">
-      <h4 className="mb-1 text-sm font-semibold text-ink">One entity, end to end: Order</h4>
-      <p className="mb-2 text-sm text-ink-muted">From the proto you write to the test forge scaffolds, all from the same run.</p>
-      <div role="tablist" aria-label="The Order entity, step by step" className="mb-2 flex flex-wrap gap-1">
+    <div className="space-y-4 border-t border-border pt-8" data-testid="scaffold-chain">
+      <h2 className="text-xl font-semibold text-ink sm:text-2xl">Follow an order through the generated code</h2>
+      <p className="text-sm leading-relaxed text-ink">From the API&apos;s order data to database setup, server and browser code, and a test—all from this recording.</p>
+      <p className="text-sm font-medium text-ink" aria-live="polite">Step {index + 1} of {chain.length}: {copy.title}</p>
+      <div ref={rail} role="tablist" aria-label="The Order example, step by step" className="flex gap-2 overflow-x-auto rounded-xl border border-border bg-surface-sunken p-3 xl:grid xl:grid-cols-6" onKeyDown={(event) => {
+        let next = index;
+        if (event.key === "ArrowRight") next = (index + 1) % chain.length;
+        else if (event.key === "ArrowLeft") next = (index - 1 + chain.length) % chain.length;
+        else if (event.key === "Home") next = 0;
+        else if (event.key === "End") next = chain.length - 1;
+        else return;
+        event.preventDefault(); setIndex(next); tabs.current[next]?.focus();
+      }}>
         {chain.map((step, i) => (
           <button
             key={step.id}
             type="button"
             role="tab"
+            id={`${id}-step-${i}`}
+            aria-controls={`${id}-panel`}
             aria-selected={i === index}
+            tabIndex={i === index ? 0 : -1}
+            ref={(el) => { tabs.current[i] = el; }}
             onClick={() => setIndex(i)}
             className={cn(
-              "rounded-md px-2 py-1 text-xs font-medium",
-              // The app colours [aria-selected] with primary-ink (index.css); the selected tab is a primary tint to match.
-              i === index ? "bg-primary/10 text-primary-ink ring-1 ring-primary/30" : "bg-surface-muted text-ink-muted hover:text-ink"
+              "flex min-h-[56px] min-w-44 shrink-0 items-center gap-3 rounded-lg border px-3 py-3 text-left text-sm font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring xl:min-w-0 xl:flex-col xl:items-start xl:gap-2",
+              i === index ? "border-primary bg-surface text-ink" : "border-border bg-surface text-ink hover:bg-ink/5"
             )}
             data-testid={`scaffold-chain-tab-${step.id}`}
           >
-            {i + 1}. {CHAIN_COPY[step.id].title}
+            <span aria-hidden="true" className={cn("flex h-8 w-8 shrink-0 items-center justify-center rounded-full border text-sm", i === index ? "border-primary bg-primary text-primary-foreground" : "border-border text-ink")}>{i + 1}</span>
+            <span>{CHAIN_COPY[step.id].title}</span>
+            {i < chain.length - 1 && <ChevronRight className="ml-auto h-4 w-4 shrink-0 text-ink-muted xl:hidden" aria-hidden="true" />}
           </button>
         ))}
       </div>
-      <div role="tabpanel" className="rounded-lg border border-border" data-testid="scaffold-chain-panel" data-excerpt={excerpt.id}>
+      <div role="tabpanel" id={`${id}-panel`} aria-labelledby={`${id}-step-${index}`} tabIndex={0} className="rounded-xl border border-border bg-surface" data-testid="scaffold-chain-panel" data-excerpt={excerpt.id}>
         <div className="flex flex-wrap items-baseline gap-x-3 border-b border-border px-3 py-2">
           <span className="text-sm font-medium text-ink">{copy.title}</span>
-          <code className="text-xs text-ink-muted" data-testid="scaffold-chain-path">
+          <OwnershipBadge ownership={ownership} />
+          <code className="break-all text-xs text-ink-muted" data-testid="scaffold-chain-path">
             {excerpt.path}:{excerpt.start_line}–{excerpt.end_line}
             {excerpt.truncated ? ` (its first ${excerpt.end_line - excerpt.start_line + 1} lines)` : ""}
           </code>
         </div>
-        <p className="px-3 pt-2 text-sm text-ink-muted">{copy.body}</p>
+        <p className="border-b border-border px-4 py-4 text-base leading-relaxed text-ink">{copy.body}</p>
         <div className="p-2">
           <LightweightCodeViewer content={excerpt.code} language={VIEWER_LANG[excerpt.lang] ?? "plaintext"} maxHeight={360} noBorder />
         </div>
         <div className="flex items-center justify-between border-t border-border px-3 py-2">
-          <Button size="sm" variant="ghost" leftIcon={<ChevronLeft />} disabled={index === 0} onClick={() => setIndex(index - 1)} data-testid="scaffold-chain-prev">
+          <Button className="min-h-[44px]" variant="outline" leftIcon={<ChevronLeft />} disabled={index === 0} onClick={() => setIndex(index - 1)} data-testid="scaffold-chain-prev">
             Back
           </Button>
           <span className="text-xs text-ink-muted">
             {index + 1} of {chain.length}
           </span>
           <Button
-            size="sm"
-            variant="ghost"
+            className="min-h-[44px]"
+            variant="primary"
             rightIcon={<ChevronRight />}
             disabled={index === chain.length - 1}
             onClick={() => setIndex(index + 1)}

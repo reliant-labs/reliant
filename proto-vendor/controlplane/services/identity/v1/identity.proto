@@ -74,6 +74,21 @@ service IdentityService {
     };
   }
 
+  // GetUser reads one human user of the instance by its identity-provider
+  // subject id (IdentityUser.user_id, the token's sub), with the same state,
+  // roles and sign-in fields ListUsers returns: what a console deep-links to.
+  // Admission is ListUsers': any member, or a machine credential with
+  // identity:read. NotFound for an id the environment's instance does not
+  // hold, a service account, or a deleted user; an id from another org's
+  // instance is simply not in this one.
+  rpc GetUser(GetIdentityUserRequest) returns (GetIdentityUserResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+    };
+  }
+
   // InviteUser creates the account if needed and grants the console-managed
   // roles. An account with no credential yet (a new one, or one never set up)
   // gets a password-set code: emailed as a link when the environment has mail
@@ -282,6 +297,15 @@ message GetIdentityStatusResponse {
   // in the same order. Set by admin-server, never by the reconciler.
   IdentityEnvironment owner_environment = 23;
   repeated IdentityEnvironment sharer_environments = 24;
+  // The redirect URI to register with each social provider's OAuth client
+  // (<issuer>/idps/callback); set when the owning environment declares
+  // social sign-in (forge.ManagedIdentity social).
+  string social_callback_url = 25;
+  // Each declared social provider as the reconciler last applied it.
+  repeated IdentitySocialStatus social = 26;
+  // Declared owners with no credential yet who were not invited on the last
+  // pass (no mail, invited recently, or invited the most times allowed).
+  repeated string owners_pending = 27;
 }
 
 message ListIdentityUsersRequest {
@@ -306,6 +330,20 @@ message ListIdentityUsersResponse {
   // How many users match the request's filters across every page, as the
   // instance counts them.
   int32 total_size = 4;
+}
+
+message GetIdentityUserRequest {
+  string org_id = 1 [(buf.validate.field).required = true];
+  string environment_id = 2 [(buf.validate.field).required = true];
+  // The identity provider's subject id (IdentityUser.user_id).
+  string user_id = 3 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 128
+  }];
+}
+
+message GetIdentityUserResponse {
+  IdentityUser user = 1;
 }
 
 message InviteIdentityUserRequest {

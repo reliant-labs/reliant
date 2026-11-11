@@ -66,7 +66,10 @@ type API struct {
 	PayloadGC *PayloadGC
 	// LLMUsageRetention prunes per-call LLM usage past its retention period.
 	LLMUsageRetention *LLMUsageRetention
-	Router            *APIDaemonRouter
+	// ChatUpdateHeadsBackfill brings chats' materialized snapshot heads up to
+	// their logs.
+	ChatUpdateHeadsBackfill *ChatUpdateHeadsBackfill
+	Router                  *APIDaemonRouter
 	// Feed publishes the repository's user and chat updates; it has no
 	// lifecycle, and orders the hubs after the router.
 	Feed      *RepoUpdateFeed

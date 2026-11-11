@@ -1,4 +1,6 @@
 import { useEffect } from 'react'
+// The workflows journey's content and Reliant's end-of-tour landing (the demo bundle leaves them out).
+import './components/Onboarding/journeys/catalog'
 import { ActiveOrgBinding } from './components/Orgs/ActiveOrgBinding'
 import { createRootRoute, createRoute, createRouter, Outlet, Navigate, useRouterState, useNavigate, type RouteComponent } from '@tanstack/react-router'
 import { SurfaceProvider } from './lib/surfaceContext'
@@ -28,6 +30,7 @@ import {
 } from './routeSchemas'
 import { reportCaughtError, RouteErrorFallback } from './components/ErrorBoundary'
 import { lazyRoute } from './lib/lazyRoute'
+import { watchRoutedChatOpens } from './lib/routedChatOpen'
 import { AuthGuard } from './components/AuthGuard'
 import { ModalLayer } from './components/Modals/ModalLayer'
 import { AddProjectDialogHost } from './components/Projects/AddProjectDialog'
@@ -35,6 +38,7 @@ import { AutomationDialogHost } from './components/Automations/dialog/Automation
 import { AnonSignInNudge } from './components/AnonSignInNudge'
 import { Toaster } from './lib/toast'
 import { NewBuildPrompt } from './components/NewBuildPrompt'
+import { GlobalUpdateHandler } from './components/Settings/GlobalUpdateHandler'
 import { ContextualTipsLayer, OnboardingWizard } from './components/Onboarding'
 import { GitHubSyncStatus } from './components/Layout/GitHubSyncBanner'
 import { QueuedDeployWatch } from './components/Forge/QueuedDeployWatch'
@@ -80,6 +84,8 @@ const UpgradeAccount = lazyRoute(
   () => import('./components/UpgradeAccount'), 'UpgradeAccount')
 const ClaimPage = lazyRoute(
   () => import('./components/Claim/ClaimPage'), 'ClaimPage')
+const AcceptInvitePage = lazyRoute(
+  () => import('./components/Orgs/AcceptInvitePage'), 'AcceptInvitePage')
 const DesignSandboxPage = lazyRoute(
   () => import('./components/DesignSandbox/DesignSandboxPage'), 'DesignSandboxPage')
 // Proving harness for the forge → reliant token bridge (see index.css).
@@ -111,8 +117,12 @@ const MetricsExplorerPreview = lazyRoute(
   () => import('./components/Forge/Observability/Metrics/__preview__/MetricsExplorerPreview'), 'default')
 const ReleasesPreview = lazyRoute(
   () => import('./components/Forge/Releases/__preview__/ReleasesPreview'), 'default')
+const DataPreview = lazyRoute(
+  () => import('./components/Forge/Data/__preview__/DataPreview'), 'default')
 const WorkloadsPreview = lazyRoute(
   () => import('./components/Forge/Workloads/__preview__/WorkloadsPreview'), 'default')
+const StoragePreview = lazyRoute(
+  () => import('./components/Forge/Storage/__preview__/StoragePreview'), 'default')
 const SettingsPage = lazyRoute(
   () => import('./components/Settings/SettingsPage'), 'SettingsPage')
 const ConnectorConsentPage = lazyRoute(
@@ -193,6 +203,10 @@ const ForgeConsoleDashboardsPage = lazyRoute(
   () => import('./components/Forge/Observability/Dashboards/DashboardsPages'), 'DashboardsPage')
 const ForgeConsoleDashboardPage = lazyRoute(
   () => import('./components/Forge/Observability/Dashboards/DashboardsPages'), 'DashboardPage')
+const ForgeConsoleStoragePage = lazyRoute(
+  () => import('./components/Forge/Storage/StoragePage'), 'StoragePage')
+const ForgeConsoleDataPage = lazyRoute(
+  () => import('./components/Forge/Data/DataPage'), 'DataPage')
 const ForgeConsoleSecretsPage = lazyRoute(
   () => import('./components/Forge/Console/ConsolePages'), 'SecretsPage')
 const ForgeConsoleActivityPage = lazyRoute(
@@ -298,6 +312,9 @@ function RootShell() {
       <AnonSignInNudge />
       <Toaster />
       <NewBuildPrompt />
+      {/* The desktop app's update dialog: the sidebar button, Settings and
+          the app menu's "Check for Updates…" open it from any route. */}
+      <GlobalUpdateHandler />
       <ContextualTipsLayer />
       <GitHubSyncStatus />
       <OnboardingWizard />
@@ -479,6 +496,16 @@ const claimRoute = createRoute({
   component: ClaimPage,
 })
 
+// Accept an org invitation (`/accept-invite#rinv_<token>`, from an invitation
+// email or a link an admin copied). Root-level and unguarded like /claim: a
+// signed-out invitee is sent through sign-in from the page, which returns
+// here. lib/inviteLinkBoot moves the token out of the fragment first.
+const acceptInviteRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/accept-invite',
+  component: AcceptInvitePage,
+})
+
 // Pathless layout route that owns the App shell + its shared search schema.
 // Children `/` and `/project/$projectId` both render <App />; placing the
 // validateSearch + AuthGuard on the parent means components inside App can
@@ -621,6 +648,24 @@ const forgeWorkloadsPreviewRoute = createRoute({
   component: () => <DevOnlyRoute><WorkloadsPreview /></DevOnlyRoute>,
 })
 
+// The storage browser (buckets, a level, an object's preview and download),
+// inside the real console chrome, against the fixture buckets — every state
+// in every scheme, no backend.
+const forgeStoragePreviewRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/forge-storage-preview',
+  component: () => <DevOnlyRoute><StoragePreview /></DevOnlyRoute>,
+})
+
+// The data browser (databases, tables, a grid, a row and its Related), inside
+// the real console chrome, against the fixture shop — every state in every
+// scheme, no backend.
+const forgeDataPreviewRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/forge-data-preview',
+  component: () => <DevOnlyRoute><DataPreview /></DevOnlyRoute>,
+})
+
 const forgeDashboardsPreviewRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/forge-dashboards-preview',
@@ -755,6 +800,8 @@ const forgeConsoleRoutes = createForgeConsoleRoutes(() => authenticatedLayoutRou
   observabilityView: gated(ForgeConsoleObservabilityViewPage),
   dashboards: gated(ForgeConsoleDashboardsPage),
   dashboard: gated(ForgeConsoleDashboardPage),
+  storage: gated(ForgeConsoleStoragePage),
+  data: gated(ForgeConsoleDataPage),
   environments: gated(ForgeEnvironmentsPage),
   environment: gated(ForgeEnvPage),
   secrets: gated(ForgeConsoleSecretsPage),
@@ -974,6 +1021,7 @@ const routeTree = rootRoute.addChildren([
   verifyEmailRoute,
   upgradeRoute,
   claimRoute,
+  acceptInviteRoute,
   designSandboxRoute,
   forgeTokenSandboxRoute,
   setupSurfacesPreviewRoute,
@@ -984,6 +1032,8 @@ const routeTree = rootRoute.addChildren([
   consolePrimitivesPreviewRoute,
   forgeReleasesPreviewRoute,
   forgeWorkloadsPreviewRoute,
+  forgeStoragePreviewRoute,
+  forgeDataPreviewRoute,
   forgeDashboardsPreviewRoute,
   forgeMetricsPreviewRoute,
   projectRootRedirectRoute,
@@ -1030,6 +1080,15 @@ export const router = createRouter({
   // rather than just itself.
   defaultErrorComponent: RouteErrorFallback,
   defaultOnCatch: (error, errorInfo) => reportCaughtError(error, errorInfo.componentStack),
+})
+
+// The mobile chat screen opens its chat from the URL, not through
+// chatStore.selectChat: time each of those opens from the navigation that
+// starts it (lib/routedChatOpen). Subscribed here, with the router, so the
+// app's first navigation (a reload, a deep link) is seen too.
+watchRoutedChatOpens(router, (pathname) => {
+  const { foundRoute, routeParams } = router.getMatchedRoutes(pathname)
+  return foundRoute?.id === mobileChatRoute.id ? routeParams.chatId : undefined
 })
 
 // Register the router on globalThis so non-React modules (e.g. projectStore)

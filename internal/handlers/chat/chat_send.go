@@ -407,6 +407,13 @@ func (s *Service) SendMessage(
 				return nil, svcerr.WithReason(svcerr.FailedPrecondition("chat has not started; call StartChat"), errreason.ChatNotStarted)
 
 			case db.Paused():
+				// Which of the run's threads the message is for, decided
+				// before anything is written (run_recipient.go).
+				recipient, err := s.resolveRunRecipient(ctx, chat, workflowID, existingWorkflow.Thread, req.Msg.GetTargetThread())
+				if err != nil {
+					return nil, err
+				}
+
 				// Refuse bad params before anything is written; see
 				// liveRunStateUpdate.
 				newPresets := changedPresets(chat.SelectedPresets, req.Msg.SelectedPresets)
@@ -419,12 +426,7 @@ func (s *Service) SendMessage(
 					s.persistChatPresets(ctx, chat)
 				}
 
-				// Determine target thread - use workflow's thread from DB (not root workflow ID)
-				// to handle forked/child threads correctly.
-				targetThread := existingWorkflow.Thread
-				if req.Msg.TargetThread != nil && *req.Msg.TargetThread != "" {
-					targetThread = *req.Msg.TargetThread
-				}
+				targetThread := recipient.thread
 
 				// Save the messages in one transaction. The mailbox is not
 				// touched: a paused run delivers anything queued for the thread
@@ -525,6 +527,13 @@ func (s *Service) SendMessage(
 					return replayResponse(chat, prior), nil
 				}
 
+				// Which of the run's threads the message is for, decided
+				// before anything is written or queued (run_recipient.go).
+				recipient, err := s.resolveRunRecipient(ctx, chat, workflowID, existingWorkflow.Thread, req.Msg.GetTargetThread())
+				if err != nil {
+					return nil, err
+				}
+
 				// Refuse bad params before anything is written or queued; see
 				// liveRunStateUpdate.
 				newPresets := changedPresets(chat.SelectedPresets, req.Msg.SelectedPresets)
@@ -537,12 +546,7 @@ func (s *Service) SendMessage(
 					s.persistChatPresets(ctx, chat)
 				}
 
-				// Use workflow's thread from DB (not root workflow ID) to handle
-				// forked/child threads correctly.
-				targetThread := existingWorkflow.Thread
-				if req.Msg.TargetThread != nil && *req.Msg.TargetThread != "" {
-					targetThread = *req.Msg.TargetThread
-				}
+				targetThread := recipient.thread
 
 				// Save system messages first
 				for _, sysMsg := range systemMessages {
@@ -647,6 +651,20 @@ func (s *Service) SendMessage(
 				// wake that reaches no run starts one for the message — so it
 				// is never left for the user's next send to discover.
 				if queuedMsg != nil && s.wakeLiveRun(ctx, chat, targetThread, threadwake.ReasonMailbox) {
+					// A pending message never restarts a workflow. Starting a
+					// run for it is a new turn of an agent chat; for a graph
+					// run (no agent on its root) it re-ran the whole workflow
+					// at graph entry (reliant #2394). Withdraw the row and say
+					// it was not delivered, so the composer keeps the text.
+					if recipient.routed && !recipient.rootReads {
+						if _, err := s.deps.Repo.CancelQueuedAgentMessage(ctx, queuedMsg.ID, chat.ID); err != nil {
+							logging.WarnContext(ctx, "Could not withdraw a message whose run ended before it was read",
+								"error", err, "chatID", req.Msg.ChatId, "messageID", queuedMsg.ID)
+						}
+						return nil, svcerr.WithReason(svcerr.WithCause(svcerr.FailedPrecondition(
+							"not delivered: the run ended before its agent read the message"),
+							core.ErrRunNoListeningAgent), errreason.RunNoListeningAgent)
+					}
 					logging.InfoContext(ctx, "Run finished before a message to it could wake it; starting a run for the message",
 						"chatID", req.Msg.ChatId, "workflowID", workflowID, "threadID", targetThread)
 					resumeMessagesSaved = true

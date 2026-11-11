@@ -24,21 +24,37 @@
  */
 
 import type { DescMethod } from "@bufbuild/protobuf";
+import { MethodOptions_IdempotencyLevel } from "@bufbuild/protobuf/wkt";
 import type { Transport } from "@connectrpc/connect";
 import { createConnectTransport } from "@connectrpc/connect-web";
+import { createMockTransport } from "@reliantlabs/forge-web-runtime/mock-transport";
 
 import { loadConfig } from "@/lib/config_gen";
 
 import { createDemoScenario } from "./demoScenario";
 import { setDemoDataStatus } from "./demoDataStatus";
-import { createMockTransport } from "./forgeMockCompat";
 
 /** How long the gateway gets before the sample data answers instead. */
 export const REMOTE_TIMEOUT_MS = 4_000;
 
-/** The reads the demo may make: every console read is a List/Get/Search/Query (readOnlyApi.ts READ_METHODS). */
-export function isDemoRead(method: Pick<DescMethod, "name">): boolean {
-  return /^(List|Get|Search|Query)/.test(method.name);
+/**
+ * Read-only verbs, for the methods whose proto declares no idempotency (most
+ * of control-plane's today): reads that list, fetch, search, query, compare,
+ * watch or stream, or that describe, preview or plan a change without making
+ * it. Every other name is a write.
+ */
+const READ_VERB = /^(List|Get|Search|Query|Compare|Watch|Stream|Describe|Browse|Preview|Plan|Check|Resolve)/;
+
+/**
+ * The reads the demo may make. The proto's own word wins: a method declared
+ * `idempotency_level = NO_SIDE_EFFECTS` is a read, and one declared
+ * IDEMPOTENT (a set, a delete) is a write whatever its name. Otherwise the
+ * verb decides (READ_VERB).
+ */
+export function isDemoRead(method: Pick<DescMethod, "name"> & Partial<Pick<DescMethod, "idempotency">>): boolean {
+  if (method.idempotency === MethodOptions_IdempotencyLevel.NO_SIDE_EFFECTS) return true;
+  if (method.idempotency === MethodOptions_IdempotencyLevel.IDEMPOTENT) return false;
+  return READ_VERB.test(method.name);
 }
 
 export interface DemoDataConfig {

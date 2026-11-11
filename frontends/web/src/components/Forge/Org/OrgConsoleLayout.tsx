@@ -28,7 +28,8 @@ import { useApps } from "@/hooks/apps-queries";
 import { useAlerts, useObservabilityOrg } from "@/hooks/observability-queries";
 import { useTitleBarChrome } from "@/hooks/useTitleBarChrome";
 import { getParentRouteNavigateOptions } from "@/lib/routeParent";
-import { useAuthStore } from "@/store/authStore";
+import { useConsoleUser } from "@/components/Forge/Console/consoleHost";
+import { useObsNavOpen } from "@/components/Forge/Console/obsNavOpen";
 
 import { ObsQuotaBanner } from "../Observability/ObsStates";
 import { ForgeCloseButton } from "../ForgeHeader";
@@ -70,17 +71,9 @@ function OrgChrome({ search }: { search: Record<string, unknown> }) {
     });
   }, []);
 
-  const authUser = useAuthStore((state) => state.user);
-  const user = authUser
-    ? {
-        name:
-          (authUser.user_metadata?.full_name as string | undefined) ??
-          (authUser.user_metadata?.name as string | undefined) ??
-          authUser.email?.split("@")[0] ??
-          "You",
-        email: authUser.email ?? undefined,
-      }
-    : undefined;
+  const [obsOpen, setObsOpen] = useObsNavOpen();
+
+  const user = useConsoleUser();
 
   const { trafficLightPadding, dragRegionStyle } = useTitleBarChrome({ collapsedPadding: "0px" });
   const onClose = useCallback(() => void navigate(getParentRouteNavigateOptions(pathname)), [navigate, pathname]);
@@ -92,6 +85,8 @@ function OrgChrome({ search }: { search: Record<string, unknown> }) {
       apps={apps}
       alertsFiring={alertsFiring}
       search={search}
+      obsOpen={obsOpen}
+      onObsOpenChange={setObsOpen}
       user={user}
       collapsed={collapsed}
       onToggleCollapsed={toggleCollapsed}

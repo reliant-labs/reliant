@@ -27,7 +27,9 @@ func TestFailStepActivity(t *testing.T) {
 		_, err := activity.Execute(ctx, input)
 
 		require.Error(t, err)
-		assert.Equal(t, "workflow validation failed: Agent step has empty prompt", err.Error())
+		assert.Equal(t, "step cannot run as configured: Agent step has empty prompt", err.Error())
+		assert.NotContains(t, err.Error(), "validation",
+			"a run-time failure in a definition that validated is not a validation failure")
 	})
 
 	t.Run("is not retried: the same definition and inputs fail the same way", func(t *testing.T) {

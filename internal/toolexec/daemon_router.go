@@ -219,7 +219,9 @@ const (
 	// ErrorCodeDaemonRestarted is the daemon's own answer, after it restarted,
 	// for a call that was running when its previous process died. A running
 	// call cannot be resumed, so the outcome is unknown. It comes from the
-	// daemon (it persisted the fact), not from a transport.
+	// daemon (it persisted the fact), not from a transport. A daemon also
+	// gives it for a request id it already ran and whose result it no longer
+	// holds (it never runs one twice): the same "it ran; outcome unknown".
 	ErrorCodeDaemonRestarted = "DAEMON_RESTARTED"
 	// ErrorCodeDaemonReconnecting is the gateway's answer for a request it
 	// held because the daemon's fresh stream had not yet carried a round
@@ -248,7 +250,11 @@ func IsTransportErrorCode(code string) bool {
 // gateway wraps it; the bridge carries it to the requester as
 // ErrorCodeDaemonInterrupted, and the router decides from the request whether
 // asking again after the reconnect is safe (see daemon_reconnect.go).
-var ErrDaemonConnectionInterrupted = errors.New("daemon connection interrupted")
+//
+// It is an interruption, so it and every interruption rebuilt from a reply
+// say ConnectionInterrupted(): a package toolexec imports (workspacecreate)
+// recognizes it by that method, since it cannot name this variable.
+var ErrDaemonConnectionInterrupted error = interruption("daemon connection interrupted")
 
 // ErrNotDispatched marks a tool request failure that proves the request never
 // reached a daemon: no machine resolved, or NATS had no responder for every

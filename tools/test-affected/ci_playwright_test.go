@@ -393,7 +393,10 @@ func TestPlaywrightFailsClosedInAggregation(t *testing.T) {
 		t.Errorf("ci-result `if` = %q, want always() so a failed/cancelled needs fails it rather than skipping it", got)
 	}
 
+	// Every case below is its own bash run over a synthetic document: they
+	// run in parallel, which is what keeps this test under its -short budget.
 	t.Run("release record", func(t *testing.T) {
+		t.Parallel()
 		rr := wf.job(t, "release-record")
 		guardIdx, guard := rr.step(t, "release-record", "The path lanes passed")
 		assembleIdx, _ := rr.step(t, "release-record", "Assemble the record")
@@ -424,57 +427,157 @@ func TestPlaywrightFailsClosedInAggregation(t *testing.T) {
 	})
 
 	t.Run("ci result", func(t *testing.T) {
+		t.Parallel()
 		_, gate := wf.job(t, "ci-result").step(t, "ci-result", "Every job that ran passed")
 		needs := wf.job(t, "ci-result").needs()
 
-		// push: every lane runs; only the merge-tier gate and the contract
+		// push: every lane runs; only the merge-tier jobs and the contract
 		// check may be skipped.
-		push := func(playwright string) bool {
+		push := func(t *testing.T, playwright string) bool {
+			t.Helper()
 			r := map[string]string{}
 			for _, n := range needs {
 				r[n] = "success"
 			}
-			r["merge-gate"], r["cp-contract"] = "skipped", "skipped"
+			r["merge-gate"], r["golangci"], r["cp-contract"] = "skipped", "skipped", "skipped"
 			r["playwright"] = playwright
 			ok, _ := ciShell(t, gate.Run, map[string]string{"RESULTS": needsJSON(r), "EVENT_NAME": "push", "CI_RUN": "false"})
 			return ok
 		}
 		// pull_request: the merge gate runs, and a lane the change does not
 		// reach is skipped.
-		pr := func(ciRun, playwright string) bool {
+		pr := func(t *testing.T, ciRun, playwright string) bool {
+			t.Helper()
 			r := map[string]string{}
 			for _, n := range needs {
 				r[n] = "skipped"
 			}
-			r["lanes"], r["merge-gate"] = "success", "success"
+			r["lanes"], r["merge-gate"], r["golangci"] = "success", "success", "success"
 			r["playwright"] = playwright
 			ok, _ := ciShell(t, gate.Run, map[string]string{"RESULTS": needsJSON(r), "EVENT_NAME": "pull_request", "CI_RUN": ciRun})
 			return ok
 		}
 
-		if !push("success") {
+		if !push(t, "success") {
 			t.Fatal("harness: ci-result fails on a push with every lane green, so the cases below prove nothing")
 		}
-		if !pr("true", "success") {
+		if !pr(t, "true", "success") {
 			t.Fatal("harness: ci-result fails on a ci:run PR with Playwright green, so the cases below prove nothing")
 		}
 		for _, bad := range []string{"failure", "cancelled", "skipped"} {
-			if push(bad) {
-				t.Errorf("CI result passes a push whose playwright result is %q", bad)
-			}
+			t.Run("push/"+bad, func(t *testing.T) {
+				t.Parallel()
+				if push(t, bad) {
+					t.Errorf("CI result passes a push whose playwright result is %q", bad)
+				}
+			})
 		}
 		for _, bad := range []string{"failure", "cancelled"} {
 			for _, ciRun := range []string{"true", "false"} {
-				if pr(ciRun, bad) {
-					t.Errorf("CI result passes a pull request (ci:run=%s) whose playwright result is %q", ciRun, bad)
-				}
+				t.Run("pull_request/ci:run="+ciRun+"/"+bad, func(t *testing.T) {
+					t.Parallel()
+					if pr(t, ciRun, bad) {
+						t.Errorf("CI result passes a pull request (ci:run=%s) whose playwright result is %q", ciRun, bad)
+					}
+				})
 			}
 		}
 		// The intended semantics for a path-selected lane: skipped is fine on
 		// a pull request, where the lanes job decides which lanes a change
 		// reaches.
-		if !pr("true", "skipped") {
-			t.Error("CI result must accept a skipped (not path-selected) playwright lane on a pull request")
-		}
+		t.Run("pull_request/skipped", func(t *testing.T) {
+			t.Parallel()
+			if !pr(t, "true", "skipped") {
+				t.Error("CI result must accept a skipped (not path-selected) playwright lane on a pull request")
+			}
+		})
 	})
+}
+
+// The browsers' system packages come from a cache of .deb files, never from
+// the Ubuntu mirror on every run: on 2026-11-09 the mirror served ~100 KB/s
+// and the responsive leg was cancelled at its timeout inside
+// `playwright install --with-deps` (control-plane main-red #2372).
+func TestPlaywrightSystemPackagesComeFromTheCache(t *testing.T) {
+	wf := loadCIWorkflow(t)
+	tf := parseTaskfile(t, filepath.Join(repoRoot, "Taskfile.yml"))
+	pw := wf.job(t, "playwright")
+
+	// The suite step's env (ciStep is shared with workflows whose steps
+	// declare env their own way, so it is read here).
+	var envOnly struct {
+		Jobs map[string]struct {
+			Steps []struct {
+				Run string            `yaml:"run"`
+				Env map[string]string `yaml:"env"`
+			} `yaml:"steps"`
+		} `yaml:"jobs"`
+	}
+	if err := yaml.Unmarshal(readRepo(t, ".github/workflows/ci.yml"), &envOnly); err != nil {
+		t.Fatal(err)
+	}
+	var suiteEnv map[string]string
+	for _, s := range envOnly.Jobs["playwright"].Steps {
+		if strings.Contains(s.Run, "task test:web:e2e") {
+			suiteEnv = s.Env
+		}
+	}
+
+	var restore, save *ciStep
+	recordedIf := ""
+	for i := range pw.Steps {
+		s := &pw.Steps[i]
+		if strings.Contains(s.Run, "task test:web:e2e") {
+			// --with-deps (the mirror) only as the rollback, behind the variable.
+			if strings.Contains(s.Run, "--with-deps") &&
+				(!strings.Contains(s.Run, `if [ "$OS_DEPS_CACHE" = off ]`) || suiteEnv["OS_DEPS_CACHE"] != "${{ vars.PLAYWRIGHT_OS_DEPS_CACHE }}") {
+				t.Errorf("the suite step installs system packages from the mirror outside the PLAYWRIGHT_OS_DEPS_CACHE=off rollback (%q)", s.Run)
+			}
+			if !strings.Contains(s.Run, "PLAYWRIGHT_DEPS_CACHE=") {
+				t.Errorf("the suite step does not pass PLAYWRIGHT_DEPS_CACHE (%q)", s.Run)
+			}
+		}
+		if s.ID == "os-deps-recorded" {
+			recordedIf = s.If
+		}
+		if fmt.Sprint(s.With["path"]) != "~/.cache/playwright-os-deps" {
+			continue
+		}
+		switch {
+		case strings.HasPrefix(s.Uses, "actions/cache/restore@"):
+			restore = s
+		case strings.HasPrefix(s.Uses, "actions/cache/save@"):
+			save = s
+		}
+	}
+	if restore == nil || save == nil {
+		t.Fatalf("playwright job must restore and save ~/.cache/playwright-os-deps (restore=%v save=%v)", restore != nil, save != nil)
+	}
+	// The cached set is what ONE runner image lacks; another image's set
+	// could downgrade its libraries, so no prefix fallback.
+	if key := fmt.Sprint(restore.With["key"]); !strings.Contains(key, "steps.runner-image.outputs.image") {
+		t.Errorf("system-package cache key %q does not carry the runner image", key)
+	}
+	// The rollback: a version variable moves runs off a bad entry, and
+	// PLAYWRIGHT_OS_DEPS_CACHE=off skips the cache entirely.
+	if key := fmt.Sprint(restore.With["key"]); !strings.Contains(key, "vars.PLAYWRIGHT_OS_DEPS_CACHE_VERSION") {
+		t.Errorf("system-package cache key %q has no PLAYWRIGHT_OS_DEPS_CACHE_VERSION to move off a bad entry", key)
+	}
+	if !strings.Contains(restore.If, "vars.PLAYWRIGHT_OS_DEPS_CACHE != 'off'") || !strings.Contains(recordedIf, "vars.PLAYWRIGHT_OS_DEPS_CACHE != 'off'") {
+		t.Errorf("PLAYWRIGHT_OS_DEPS_CACHE=off does not skip the restore (if %q) and the save (check if %q)", restore.If, recordedIf)
+	}
+	if _, ok := restore.With["restore-keys"]; ok {
+		t.Error("system-package cache has restore-keys: another runner image's packages could be installed")
+	}
+	if !strings.Contains(recordedIf, "refs/heads/main") || !strings.Contains(save.If, "os-deps-recorded") {
+		t.Errorf("system packages must be saved on main only, after the script recorded them (save if %q, check if %q)", save.If, recordedIf)
+	}
+
+	var runCmds strings.Builder
+	for _, c := range tf.commands("web:e2e:run") {
+		runCmds.WriteString(c)
+	}
+	if !strings.Contains(runCmds.String(), "scripts/playwright-os-deps.sh '{{.PLAYWRIGHT_DEPS_CACHE}}' {{.BROWSERS}}") {
+		t.Error("web:e2e:run does not install the suite's system packages through scripts/playwright-os-deps.sh")
+	}
 }

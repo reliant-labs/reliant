@@ -37,7 +37,7 @@ import { Place } from "../Place";
 import type { ReplayerCtor } from "./ReplayPlayer";
 import { SessionDetail } from "./SessionDetail";
 import { isReplayKnownUnplayable, rumScopeOf, sessionTitle } from "./sessionModel";
-import { SessionsNotConfigured } from "./SessionStates";
+import { SessionsNotConfigured, SessionsReplayOff } from "./SessionStates";
 import { ClientName, DeviceSummary } from "../Client";
 import { ClientFilters, hasClientFilters, NO_CLIENT_FILTERS, type ClientFilterValues } from "../ClientFilters";
 import { CONTROL_FIELD, SEGMENTED, segmentTone } from "../../controlStyles";
@@ -131,6 +131,8 @@ function SessionList({ scope, rumScope, subject, range, service, text, hasError,
         ) : (
           <ObsError error={sessions.error} subject={subject} onRetry={() => void sessions.refetch()} retrying={sessions.isFetching} />
         )
+      ) : rows.length === 0 && page === 1 && !filtered ? (
+        <SessionsReplayOff range={range} onWiden={() => navigate({ range: "7d", ...FIRST_PAGE })} />
       ) : rows.length === 0 && page === 1 ? (
         <ObsNoData
           what="browser sessions"
@@ -223,7 +225,7 @@ function SessionToolbar({
           <label htmlFor="obs-sessions-path" className="sr-only">
             Entry path contains
           </label>
-          <Search className="pointer-events-none absolute left-2.5 top-2 h-4 w-4 text-ink-muted" aria-hidden="true" />
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink-muted" aria-hidden="true" />
           <input
             id="obs-sessions-path"
             type="search"
@@ -324,7 +326,8 @@ function SessionTable({ sessions, onOpen }: { sessions: SessionSummary[]; onOpen
     {
       key: "entry",
       header: "Entry",
-      className: "max-w-[16rem] truncate",
+      // 12rem: the table fits a 1440px laptop beside the nav without a sideways scrollbar.
+      className: "max-w-[12rem] truncate",
       render: (_, { session: s }) => (
         <span className="font-mono text-xs" title={s.entryPath}>
           {s.entryPath || "/"}

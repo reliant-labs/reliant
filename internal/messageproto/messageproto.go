@@ -55,6 +55,12 @@ type Options struct {
 	// SequenceNumber, if non-zero, is set on the resulting proto message.
 	// Used by streaming snapshots to tag messages with the latest sequence.
 	SequenceNumber int64
+
+	// ToolBodies is how finished tool calls' bodies are sent. Unset (and
+	// TOOL_BODY_MODE_FULL) is the original form: inputs whole, results
+	// previewed. TOOL_BODY_MODE_STUB leaves bodies out (see applyStub); a
+	// caller resolves the client's request through ResolveToolBodyMode.
+	ToolBodies reliantv1.ToolBodyMode
 }
 
 // ToolCallReader is what AssembleForDisplay reads the durable tool-call rows
@@ -212,6 +218,9 @@ func contentBlockToProto(b *db.MessageContentBlock, opts *Options) *reliantv1.Co
 	if b.IsError != nil {
 		proto.IsError = b.IsError
 	}
+	if opts.ToolBodies == reliantv1.ToolBodyMode_TOOL_BODY_MODE_STUB {
+		applyStub(b, proto, opts)
+	}
 	return proto
 }
 
@@ -328,7 +337,8 @@ func FromDB(m *db.Message, blocks []*db.MessageContentBlock, attachments []*db.A
 // Assemble, which is exactly what it does.
 //
 // blocksByMessageID and attachments must already be fetched; this does the
-// per-message grouping and the tool-call and sender lookups.
+// per-message grouping and the tool-call and sender lookups. toolBodies is
+// Options.ToolBodies.
 func AssembleForDisplay(
 	ctx context.Context,
 	reader Reader,
@@ -337,9 +347,10 @@ func AssembleForDisplay(
 	attachmentMap map[string]*db.Attachment,
 	viewingThreadID string,
 	sequenceNumber int64,
+	toolBodies reliantv1.ToolBodyMode,
 ) []*reliantv1.Message {
 	lookups := LoadDisplayLookups(ctx, reader, messages, blocksByMessageID)
-	return Assemble(messages, blocksByMessageID, attachmentMap, lookups, viewingThreadID, sequenceNumber)
+	return Assemble(messages, blocksByMessageID, attachmentMap, lookups, viewingThreadID, sequenceNumber, toolBodies)
 }
 
 // DisplayLookups are the rows a page of messages is displayed with besides
@@ -419,6 +430,7 @@ func Assemble(
 	lookups DisplayLookups,
 	viewingThreadID string,
 	sequenceNumber int64,
+	toolBodies reliantv1.ToolBodyMode,
 ) []*reliantv1.Message {
 	// Tool names by call id, from the page's tool_call blocks: a tool_result
 	// block's own tool_name can be empty, and the name decides whether its
@@ -457,6 +469,7 @@ func Assemble(
 			ViewingThreadID:        viewingThreadID,
 			SenderTitlesByThreadID: lookups.SenderTitles,
 			SequenceNumber:         sequenceNumber,
+			ToolBodies:             toolBodies,
 		}))
 	}
 	return protoMessages

@@ -33,6 +33,11 @@ const (
 	StatusWarning Status = "warning"
 	// StatusRejected means a limit is exhausted and requests are refused until it resets.
 	StatusRejected Status = "rejected"
+	// StatusOverage means a window of the plan is exhausted but requests are
+	// still served, paid for from credits (a ChatGPT workspace's or purchased
+	// Codex credits). The account is not limited: a window at 100% under this
+	// status must not bench it.
+	StatusOverage Status = "overage"
 )
 
 // Window is one limit window as of a response.

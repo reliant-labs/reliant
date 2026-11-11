@@ -46,8 +46,9 @@
  * one machine against one origin used to overwrite each other's PAT. The
  * daemon's stable id is NOT in this file — it moved to a `daemon-id` file in
  * the instance's data directory, because identity is per INSTANCE (origin,
- * account, workspace) while a PAT is per ACCOUNT. That file is the daemon's;
- * Electron neither writes nor reads it.
+ * account, workspace) while a PAT is per ACCOUNT. That file is the daemon's
+ * to write; BackendManager reads only its current instance's id for the
+ * renderer's local-folder chooser.
  *
  * No Electron imports
  * -------------------

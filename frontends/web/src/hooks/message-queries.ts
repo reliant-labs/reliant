@@ -5,6 +5,7 @@ import {
   type QueryClient,
 } from "@tanstack/react-query";
 import type { Message } from "../api/client";
+import { keepHeldBodies } from "@reliantlabs/sdk/client";
 import { queryClient } from "../lib/query-client";
 import { isLocalOnlyMessageId } from "../lib/pendingSends";
 import { recordToolResults } from "../lib/toolResultSink";
@@ -371,8 +372,20 @@ async function fetchThreadMessages(
     // A spawn thread's messages reach the client only through this read, so
     // its tool results join the index here.
     recordToolResults(chatId, result.messages);
+    // The read sends finished calls' bodies elided; a turn this cache holds
+    // whole (watched live) keeps its bodies, as the chat's own snapshot does.
+    const held = new Map(
+      (queryClient.getQueryData<Message[]>(messageKeys.thread(chatId, threadId, recent)) ?? EMPTY_MESSAGES)
+        .map((m) => [m.id, m])
+    );
+    const messages = held.size === 0
+      ? result.messages
+      : result.messages.map((m) => {
+          const prior = held.get(m.id);
+          return prior ? keepHeldBodies(prior, m) : m;
+        });
     return upsertMessagesById(
-      result.messages,
+      messages,
       pendingThreadMessages.get(pendingKey) ?? EMPTY_MESSAGES
     );
   } finally {

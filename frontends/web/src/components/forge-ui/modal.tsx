@@ -1,4 +1,12 @@
-import React, { useEffect, useId, useRef } from "react";
+import React, {
+  createContext,
+  useContext,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+} from "react";
 import { createPortal } from "react-dom";
 
 /**
@@ -14,7 +22,10 @@ import { createPortal } from "react-dom";
  *   - Escape closes it, unless something inside already handled the key (an
  *     open menu calls preventDefault). Only the TOP dialog responds when
  *     dialogs stack; the one underneath keeps its focus trap off until the
- *     top one closes.
+ *     top one closes. Existing external `role="dialog"` / `alertdialog`
+ *     surfaces with `aria-modal="true"` painted above it retain their own
+ *     focus/Tab/Escape policy; a lower, hidden or app-inert dialog does not.
+ *     New custom surfaces can use `useModalDialog` for the shared lifecycle.
  *   - Closing returns focus to whatever had it before the dialog opened. If
  *     that element is gone (the menu item that opened the dialog unmounted),
  *     `fallbackFocus` decides where focus goes instead.
@@ -25,11 +36,22 @@ import { createPortal } from "react-dom";
  *     `portal={false}` renders it in place (a preview harness pinning it in a
  *     box).
  *
- * Layout: the panel is at most 90% of the dynamic viewport tall and the body
+ * Layout: the panel is at most 90% of the visible viewport tall and the body
  * scrolls, so a long form's footer — its primary action — never scrolls out
  * of reach. `sheetOnMobile` (default on for lg and wider, whose forms are too
  * tall for a floating card on a phone) makes it a full-screen sheet below
  * the `sm` breakpoint.
+ *
+ * "Visible" means the VISUAL viewport, not `dvh`. A phone's software
+ * keyboard shrinks (and on iOS pans) the visual viewport only; `100dvh` and
+ * a fixed `inset-0` box keep the layout viewport's size, so a sheet sized
+ * with them leaves its footer and focused field under the keyboard. While
+ * open, the overlay follows `window.visualViewport` (its height and offset,
+ * as the `--modal-vv-height` / `--modal-vv-top` custom properties), and falls
+ * back to `100dvh` where the API is missing. Edges respect the device's
+ * safe-area insets (notch, home indicator) once the page opts into them with
+ * `viewport-fit=cover`. `overlayClassName` is the seam for anything else
+ * about the overlay's geometry.
  */
 
 const FOCUSABLE_SELECTOR =
@@ -52,6 +74,11 @@ export interface ModalProps {
   sheetOnMobile?: boolean;
   /** Extra classes on the dialog panel. */
   className?: string;
+  /**
+   * Extra classes on the overlay (the scrim that positions the panel):
+   * its padding, alignment or backdrop.
+   */
+  overlayClassName?: string;
   /** Where focus goes on close when the element that had it is gone. */
   fallbackFocus?: () => void;
   /** Render in place instead of in a portal on <body>. Defaults to true. */
@@ -69,20 +96,455 @@ const sizeStyles: Record<NonNullable<ModalProps["size"]>, string> = {
 // Open dialogs, bottom to top. Escape and the focus trap belong to the top
 // one only; a module-level stack because stacked dialogs are usually
 // rendered by unrelated components.
-const openStack: symbol[] = [];
-const isTop = (id: symbol) => openStack[openStack.length - 1] === id;
+interface DialogEntry {
+  id: symbol;
+  panel: HTMLElement;
+  ref: React.RefObject<HTMLElement | null>;
+  ancestors: React.RefObject<HTMLElement | null>[];
+  containFocus: () => void;
+  external: HTMLElement | null;
+}
+const DialogAncestors = createContext<React.RefObject<HTMLElement | null>[]>([]);
+const openStack: DialogEntry[] = [];
+// React removes portal DOM after layout cleanup; a closing registered panel
+// must not be rediscovered as a legacy external overlay in that interval.
+const registeredPanels = new WeakSet<HTMLElement>();
+// React layout effects run children first. A nested Modal is above its parent
+// even when the parent's effect registers later in that same commit.
+function registerDialog(entry: DialogEntry) {
+  registeredPanels.add(entry.panel);
+  const child = openStack.findIndex((other) => other.ancestors.includes(entry.ref));
+  if (child < 0) openStack.push(entry);
+  else openStack.splice(child, 0, entry);
+}
+const isTop = (id: symbol) => openStack[openStack.length - 1]?.id === id;
 
-// The body scroll lock, counted across stacked dialogs.
+// External dialogs predate this hook. Cooperate with a visible modal layer
+// painted above ours, not every aria-modal node anywhere on the page. Compare
+// the first divergent stacking contexts; equal z-index uses DOM paint order.
+function stackingPath(el: HTMLElement): HTMLElement[] {
+  const path: HTMLElement[] = [];
+  for (
+    let node: HTMLElement | null = el;
+    node && node !== document.body;
+    node = node.parentElement
+  ) {
+    const style = getComputedStyle(node);
+    if (
+      style.position === "fixed" ||
+      style.position === "sticky" ||
+      (style.zIndex !== "" && style.zIndex !== "auto") ||
+      (style.transform !== "" && style.transform !== "none") ||
+      style.isolation === "isolate"
+    )
+      path.unshift(node);
+  }
+  if (path[path.length - 1] !== el) path.push(el);
+  return path;
+}
+function paintedAbove(candidate: HTMLElement, panel: HTMLElement): boolean {
+  if (panel.contains(candidate)) return true;
+  if (candidate.contains(panel)) return false;
+  const a = stackingPath(candidate);
+  const b = stackingPath(panel);
+  let i = 0;
+  while (a[i] && a[i] === b[i]) i++;
+  const left = a[i] ?? candidate;
+  const right = b[i] ?? panel;
+  const z = (el: HTMLElement) => parseInt(getComputedStyle(el).zIndex, 10) || 0;
+  if (z(left) !== z(right)) return z(left) > z(right);
+  return !!(right.compareDocumentPosition(left) & Node.DOCUMENT_POSITION_FOLLOWING);
+}
+function externalAbove(panel: HTMLElement): HTMLElement | null {
+  let top: HTMLElement = panel;
+  for (const candidate of document.querySelectorAll<HTMLElement>(
+    '[role="dialog"][aria-modal="true"], [role="alertdialog"][aria-modal="true"]',
+  )) {
+    if (registeredPanels.has(candidate)) continue;
+    // Ignore our own temporary isolation, but respect application-owned hidden
+    // or inert state and hidden ancestors.
+    let visible = true;
+    for (
+      let node: HTMLElement | null = candidate;
+      node && node !== document.body;
+      node = node.parentElement
+    ) {
+      const saved = isolated.get(node);
+      const style = getComputedStyle(node);
+      if (
+        node.hidden ||
+        (saved ? saved.inert !== null : node.hasAttribute("inert")) ||
+        (saved ? saved.hidden === "true" : node.getAttribute("aria-hidden") === "true") ||
+        style.display === "none" ||
+        style.visibility === "hidden"
+      )
+        visible = false;
+    }
+    if (visible && paintedAbove(candidate, top)) top = candidate;
+  }
+  return top === panel ? null : top;
+}
+
+// A menu/picker can portal outside the dialog DOM. aria-controls ties it to
+// its trigger without importing that component or mistaking unrelated portals
+// for part of this modal. Follow chains (a picker inside a portaled menu).
+function modalSurfaces(panel: HTMLElement): HTMLElement[] {
+  const surfaces = [panel];
+  for (const surface of surfaces) {
+    for (const control of surface.querySelectorAll("[aria-controls]")) {
+      for (const id of (control.getAttribute("aria-controls") ?? "").split(/\s+/)) {
+        const owned = document.getElementById(id);
+        if (owned && !surfaces.some((surface) => surface.contains(owned))) surfaces.push(owned);
+      }
+    }
+  }
+  return surfaces;
+}
+
+// Restore before re-isolating: a new portal must never inherit an older
+// dialog's inert background. Keep exact attributes, including existing inert.
+const isolated = new Map<Element, { inert: string | null; hidden: string | null }>();
+function restoreBackground() {
+  for (const [el, saved] of isolated) {
+    if (saved.inert === null) el.removeAttribute("inert");
+    else el.setAttribute("inert", saved.inert);
+    if (saved.hidden === null) el.removeAttribute("aria-hidden");
+    else el.setAttribute("aria-hidden", saved.hidden);
+  }
+  isolated.clear();
+}
+function isolateBackground() {
+  restoreBackground();
+  const panel = openStack[openStack.length - 1]?.panel;
+  if (!panel) return;
+  const external = externalAbove(panel);
+  const owner = openStack[openStack.length - 1];
+  if (owner && external) owner.external = external;
+  const surfaces = modalSurfaces(external ?? panel).map(
+    (el) => el.closest("[data-modal-layer]") ?? el,
+  );
+  const visit = (parent: Element) => {
+    for (const child of Array.from(parent.children)) {
+      if (child.matches("script, style, link") || surfaces.includes(child)) continue;
+      if (surfaces.some((surface) => child.contains(surface))) {
+        visit(child);
+        continue;
+      }
+      isolated.set(child, {
+        inert: child.getAttribute("inert"),
+        hidden: child.getAttribute("aria-hidden"),
+      });
+      child.setAttribute("inert", "");
+      child.setAttribute("aria-hidden", "true");
+    }
+  };
+  visit(document.body);
+  // Removing a focused node need not emit focusin (browsers can leave body
+  // active). Reconcile focus after DOM mutations too, not only on Tab.
+  if (external) {
+    // The external surface retains its own Tab/Escape policy. Only keep page
+    // focus from falling behind it during lower teardown or portal removal.
+    if (!modalSurfaces(external).some((surface) => surface.contains(document.activeElement))) {
+      (external.querySelector<HTMLElement>(FOCUSABLE_SELECTOR) ?? external).focus({
+        preventScroll: true,
+      });
+    }
+  } else openStack[openStack.length - 1]?.containFocus();
+}
+
+// Shared by Modal and SidebarLayout, so closing either cannot unlock the other.
 let lockCount = 0;
-let savedOverflow = "";
+let pendingExternal: HTMLElement | null = null;
+let pendingUnlock: MutationObserver | null = null;
+let savedStyles: { name: string; value: string; priority: string }[] = [];
 function lockScroll() {
-  if (lockCount++ === 0) {
-    savedOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
+  if (lockCount++ === 0 && !pendingUnlock) {
+    savedStyles = ["overscroll-behavior", "padding-right", "overflow"].map((name) => ({
+      name,
+      value: document.body.style.getPropertyValue(name),
+      priority: document.body.style.getPropertyPriority(name),
+    }));
+    const width = document.documentElement.clientWidth;
+    const scrollbar = width > 0 ? window.innerWidth - width : 0;
+    if (scrollbar > 0) {
+      document.body.style.paddingRight = `${(parseFloat(getComputedStyle(document.body).paddingRight) || 0) + scrollbar}px`;
+    }
+    document.body.style.setProperty("overscroll-behavior", "none");
+    document.body.style.setProperty("overflow", "hidden");
   }
 }
-function unlockScroll() {
-  if (--lockCount === 0) document.body.style.overflow = savedOverflow;
+function restoreScroll() {
+  for (const { name, value, priority } of savedStyles) {
+    if (value) document.body.style.setProperty(name, value, priority);
+    else document.body.style.removeProperty(name);
+  }
+}
+function externalLockActive(panel: HTMLElement | null): boolean {
+  if (
+    !panel?.isConnected ||
+    !panel.matches('[role="dialog"][aria-modal="true"], [role="alertdialog"][aria-modal="true"]')
+  )
+    return false;
+  for (
+    let node: HTMLElement | null = panel;
+    node && node !== document.body;
+    node = node.parentElement
+  ) {
+    const saved = isolated.get(node);
+    const style = getComputedStyle(node);
+    if (
+      node.hidden ||
+      (saved ? saved.inert !== null : node.hasAttribute("inert")) ||
+      (saved ? saved.hidden === "true" : node.getAttribute("aria-hidden") === "true") ||
+      style.display === "none" ||
+      style.visibility === "hidden"
+    )
+      return false;
+  }
+  return true;
+}
+function retainExternalLock(external: HTMLElement) {
+  if (pendingExternal === external && pendingUnlock) return;
+  pendingUnlock?.disconnect();
+  pendingExternal = external;
+  // This is a cooperative lease on a *visible modal*, not on a DOM node's
+  // connectivity. Legacy overlays may close in place (hidden, inert, CSS or
+  // aria-modal=false); a no-op callback while still visible does not close it.
+  pendingUnlock = new MutationObserver(() => {
+    if (externalLockActive(pendingExternal)) return;
+    pendingUnlock?.disconnect();
+    pendingUnlock = null;
+    pendingExternal = null;
+    // MutationObserver receives removal itself, after synchronous React
+    // cleanup. No extra mutation or arbitrary timer is needed to settle it.
+    if (lockCount === 0) restoreScroll();
+    else {
+      // A reopened Forge dialog still owns the lock. A legacy cleanup may
+      // just have restored a stale value, so reassert only our two properties.
+      document.body.style.setProperty("overscroll-behavior", "none");
+      document.body.style.setProperty("overflow", "hidden");
+    }
+  });
+  pendingUnlock.observe(document.body, {
+    childList: true,
+    subtree: true,
+    attributes: true,
+    attributeFilter: ["hidden", "inert", "aria-hidden", "aria-modal", "role", "class", "style"],
+  });
+}
+function unlockScroll(external: HTMLElement | null) {
+  // Carry the final page snapshot until both the counted Forge owners and
+  // the cooperative external owner end. Reopening never takes a new snapshot
+  // of "hidden" or creates a second observer for the same external layer.
+  if (external && externalLockActive(external)) retainExternalLock(external);
+  if (--lockCount !== 0) return;
+  if (pendingUnlock && externalLockActive(pendingExternal)) return;
+  pendingUnlock?.disconnect();
+  pendingUnlock = null;
+  pendingExternal = null;
+  restoreScroll();
+}
+
+/** Shared modal lifecycle; use the same stack for custom dialog surfaces. */
+export function useModalDialog({
+  open,
+  panelRef,
+  onClose,
+  initialFocus,
+  returnFocus,
+  fallbackFocus,
+}: {
+  open: boolean;
+  panelRef: React.RefObject<HTMLElement | null>;
+  onClose: () => void;
+  initialFocus?: () => HTMLElement | null | undefined;
+  returnFocus?: () => HTMLElement | null;
+  fallbackFocus?: () => void;
+}) {
+  const ancestors = useContext(DialogAncestors);
+  const callbacks = useRef({ onClose, initialFocus, returnFocus, fallbackFocus });
+  const passiveScrollSettlement = useRef<(() => void) | null>(null);
+  // Parent passive cleanup can precede a legacy child's passive cleanup.
+  // A microtask from this phase runs after both, unlike layout cleanup (which
+  // may run after the external portal DOM has already disappeared).
+  useEffect(() => {
+    if (!open) passiveScrollSettlement.current?.();
+    return () => passiveScrollSettlement.current?.();
+  }, [open]);
+  useLayoutEffect(() => {
+    callbacks.current = { onClose, initialFocus, returnFocus, fallbackFocus };
+  });
+  useLayoutEffect(() => {
+    const panel = panelRef.current;
+    if (!open || !panel) return;
+    const id = Symbol("modal");
+    const active = document.activeElement;
+    const previouslyFocused =
+      callbacks.current.returnFocus?.() ??
+      (active instanceof HTMLElement && active !== document.body ? active : null);
+    let lastFocused: HTMLElement | null = null;
+    const containsFocus = () =>
+      modalSurfaces(panel).some((surface) => surface.contains(document.activeElement));
+    const containFocus = () => {
+      if (!isTop(id) || !panel.isConnected) return;
+      if (externalAbove(panel)) {
+        isolateBackground();
+        return;
+      }
+      if (containsFocus()) return;
+      const target =
+        lastFocused?.isConnected &&
+        modalSurfaces(panel).some((surface) => surface.contains(lastFocused)) &&
+        !lastFocused.closest('[inert], [hidden], [aria-hidden="true"]') &&
+        !lastFocused.matches(":disabled") &&
+        getComputedStyle(lastFocused).display !== "none" &&
+        getComputedStyle(lastFocused).visibility !== "hidden"
+          ? lastFocused
+          : (callbacks.current.initialFocus?.() ?? focusable()[0] ?? panel);
+      target.focus({ preventScroll: true });
+    };
+    const entry: DialogEntry = {
+      id,
+      panel,
+      ref: panelRef,
+      ancestors,
+      containFocus,
+      external: null,
+    };
+    registerDialog(entry);
+    lockScroll();
+    // Release the lower dialog's isolation before focusing a new portal.
+    // Its new background is isolated only AFTER focus has moved out of it.
+    restoreBackground();
+
+    const focusable = () =>
+      modalSurfaces(panel)
+        .flatMap((surface) => [
+          ...(surface !== panel && surface.matches(FOCUSABLE_SELECTOR) ? [surface] : []),
+          ...Array.from(surface.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)),
+        ])
+        .filter(
+          (el) =>
+            el.tabIndex >= 0 &&
+            !el.closest('[inert], [hidden], [aria-hidden="true"]') &&
+            getComputedStyle(el).display !== "none" &&
+            getComputedStyle(el).visibility !== "hidden",
+        );
+    if (isTop(id) && !externalAbove(panel) && !panel.contains(document.activeElement)) {
+      (callbacks.current.initialFocus?.() ?? focusable()[0] ?? panel).focus();
+    }
+    if (document.activeElement instanceof HTMLElement && containsFocus()) {
+      lastFocused = document.activeElement;
+    }
+    const onFocusIn = () => {
+      if (!isTop(id)) return;
+      if (externalAbove(panel)) {
+        isolateBackground();
+        return;
+      }
+      if (containsFocus() && document.activeElement instanceof HTMLElement) {
+        lastFocused = document.activeElement;
+      } else containFocus();
+    };
+    document.addEventListener("focusin", onFocusIn);
+    isolateBackground();
+    // Portals created while open also belong to the background unless they
+    // register a new modal above us. Observe child changes, not our attributes.
+    const observer = new MutationObserver(isolateBackground);
+    observer.observe(document.body, { childList: true, subtree: true });
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (!isTop(id) || externalAbove(panel)) return;
+      if (e.key === "Escape") {
+        if (e.defaultPrevented) return;
+        e.preventDefault();
+        callbacks.current.onClose();
+        return;
+      }
+      if (e.key !== "Tab") return;
+      const items = focusable();
+      const first = items[0];
+      const last = items[items.length - 1];
+      const active = document.activeElement;
+      const owner = active instanceof Element ? active.closest('[aria-modal="true"]') : null;
+      if (owner && owner !== panel && externalAbove(panel) === owner) return;
+      const inside = modalSurfaces(panel).some((surface) => surface.contains(active));
+      if (!first) {
+        e.preventDefault();
+        panel.focus();
+      } else if (e.shiftKey && (!inside || active === first || active === panel)) {
+        e.preventDefault();
+        (last ?? first).focus();
+      } else if (!e.shiftKey && (!inside || active === last)) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      observer.disconnect();
+      document.removeEventListener("keydown", onKeyDown);
+      document.removeEventListener("focusin", onFocusIn);
+      const wasTop = isTop(id);
+      const external = wasTop ? (externalAbove(panel) ?? entry.external) : null;
+      if (external) {
+        const snapshot = savedStyles;
+        passiveScrollSettlement.current = () => {
+          passiveScrollSettlement.current = null;
+          queueMicrotask(() => {
+            // Never restore over a reopened Forge or still-visible legacy
+            // owner, nor over a later generation's page-style snapshot.
+            if (
+              savedStyles === snapshot &&
+              lockCount === 0 &&
+              !externalLockActive(external) &&
+              !externalLockActive(pendingExternal)
+            ) {
+              pendingUnlock?.disconnect();
+              pendingUnlock = null;
+              pendingExternal = null;
+              restoreScroll();
+            }
+          });
+        };
+      }
+      openStack.splice(
+        openStack.findIndex((entry) => entry.id === id),
+        1,
+      );
+      isolateBackground();
+      unlockScroll(external);
+      if (!wasTop || external) return;
+      if (
+        previouslyFocused?.isConnected &&
+        !previouslyFocused.closest("[inert], [hidden]") &&
+        !previouslyFocused.matches(":disabled") &&
+        getComputedStyle(previouslyFocused).display !== "none" &&
+        getComputedStyle(previouslyFocused).visibility !== "hidden"
+      ) {
+        previouslyFocused.focus();
+      } else callbacks.current.fallbackFocus?.();
+    };
+  }, [open, panelRef]);
+}
+
+// Pins `el` to the visual viewport: the custom properties the overlay's
+// classes read, kept current as the keyboard opens, closes or pans the page.
+// Set on the element directly rather than through state, so a keyboard
+// animation's stream of resize events never re-renders the dialog's content.
+function trackVisualViewport(el: HTMLElement): () => void {
+  const vv = typeof window === "undefined" ? undefined : window.visualViewport;
+  if (!vv) return () => {};
+  const sync = () => {
+    el.style.setProperty("--modal-vv-height", `${vv.height}px`);
+    el.style.setProperty("--modal-vv-top", `${vv.offsetTop}px`);
+  };
+  sync();
+  vv.addEventListener("resize", sync);
+  vv.addEventListener("scroll", sync);
+  return () => {
+    vv.removeEventListener("resize", sync);
+    vv.removeEventListener("scroll", sync);
+  };
 }
 
 export default function Modal({
@@ -98,12 +560,15 @@ export default function Modal({
   hideCloseButton = false,
   sheetOnMobile,
   className,
+  overlayClassName,
   fallbackFocus,
   portal = true,
 }: ModalProps) {
   const sheet = sheetOnMobile ?? (size === "lg" || size === "xl" || size === "full");
   const overlayRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
+  const ancestors = useContext(DialogAncestors);
+  const childAncestors = useMemo(() => [...ancestors, panelRef], [ancestors]);
   const bodyRef = useRef<HTMLDivElement>(null);
   const footerRef = useRef<HTMLDivElement>(null);
   // useId-based labelling: multiple modals on one page never collide the
@@ -112,76 +577,31 @@ export default function Modal({
   const descriptionId = useId();
   // Read through refs so a new onClose identity on every parent render does
   // not tear the effect down — which would unlock and relock the page (a
-  // visible flash) and re-run initial focus.
+  // visible flash) and re-run initial focus. The refs follow the props in a
+  // layout effect, not during render (a render may be thrown away, and React
+  // forbids touching refs there); layout effects run before the effect
+  // below and before any event the committed dialog can receive.
   const onCloseRef = useRef(onClose);
-  onCloseRef.current = onClose;
-  const fallbackFocusRef = useRef(fallbackFocus);
-  fallbackFocusRef.current = fallbackFocus;
+  useLayoutEffect(() => {
+    onCloseRef.current = onClose;
+  });
 
-  useEffect(() => {
-    if (!open) return;
-    const id = Symbol("modal");
-    openStack.push(id);
-    lockScroll();
-
-    // <body> is not an opener: focus falls back to it when the focused
-    // element unmounts in the same render that opens the dialog (a menu
-    // item that closes its menu), so treat it as "the opener is gone".
-    const active = document.activeElement;
-    const previouslyFocused =
-      active instanceof HTMLElement && active !== document.body ? active : null;
-    const panel = panelRef.current;
-    if (panel && !panel.contains(document.activeElement)) {
-      const initial =
-        bodyRef.current?.querySelector<HTMLElement>(FOCUSABLE_SELECTOR) ??
-        footerRef.current?.querySelector<HTMLElement>(FOCUSABLE_SELECTOR) ??
-        panel;
-      initial.focus();
-    }
-
-    function onKeyDown(e: KeyboardEvent) {
-      if (!isTop(id) || !panelRef.current) return;
-      if (e.key === "Escape") {
-        if (e.defaultPrevented) return;
-        e.preventDefault();
-        onCloseRef.current();
-        return;
-      }
-      if (e.key !== "Tab") return;
-      const focusable = Array.from(
-        panelRef.current.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR),
-      );
-      if (focusable.length === 0) {
-        e.preventDefault();
-        panelRef.current.focus();
-        return;
-      }
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-      const active = document.activeElement;
-      // A dialog stacked above this one that is not a forge Modal (an image
-      // viewer, a command palette) owns its own Tab order.
-      const owner = active instanceof Element ? active.closest('[aria-modal="true"]') : null;
-      if (owner && owner !== panelRef.current) return;
-      const inside = panelRef.current.contains(active);
-      if (e.shiftKey && (!inside || active === first || active === panelRef.current)) {
-        e.preventDefault();
-        last?.focus();
-      } else if (!e.shiftKey && (!inside || active === last)) {
-        e.preventDefault();
-        first?.focus();
-      }
-    }
-    document.addEventListener("keydown", onKeyDown);
-
-    return () => {
-      document.removeEventListener("keydown", onKeyDown);
-      openStack.splice(openStack.indexOf(id), 1);
-      unlockScroll();
-      if (previouslyFocused?.isConnected) previouslyFocused.focus();
-      else fallbackFocusRef.current?.();
-    };
+  // A layout effect, so the overlay has its visible size before first paint.
+  useLayoutEffect(() => {
+    if (!open || !overlayRef.current) return;
+    return trackVisualViewport(overlayRef.current);
   }, [open]);
+
+  useModalDialog({
+    open,
+    panelRef,
+    onClose,
+    initialFocus: () =>
+      bodyRef.current?.querySelector<HTMLElement>(FOCUSABLE_SELECTOR) ??
+      footerRef.current?.querySelector<HTMLElement>(FOCUSABLE_SELECTOR) ??
+      panelRef.current,
+    fallbackFocus,
+  });
 
   if (!open) return null;
 
@@ -193,15 +613,21 @@ export default function Modal({
     // dismissal, which is the Escape handler above; without that handler a
     // backdrop-click-to-close modal would be a keyboard trap.
     //
-    // h-[100dvh] alongside inset-0: a fixed inset-0 box resolves against the
-    // LARGEST mobile viewport, so centring in it alone puts the panel below
-    // the visible centre while browser chrome is showing.
+    // Top and height follow the visual viewport (trackVisualViewport), not
+    // inset-0: a fixed inset-0 box resolves against the LARGEST mobile
+    // viewport, so centring in it puts the panel below the visible centre
+    // while browser chrome is showing, and under the keyboard while one is
+    // open. 100dvh is the fallback before the first measurement, and where
+    // there is no visualViewport.
     <div
       ref={overlayRef}
       role="presentation"
-      className={`fixed inset-0 z-50 flex h-[100dvh] items-center justify-center bg-black/50 p-4 backdrop-blur-sm sm:p-6 ${
+      // React portals keep context but not DOM order: a child portal can be
+      // inserted before its parent on first mount. Give nested layers depth.
+      style={ancestors.length ? { zIndex: 50 + ancestors.length } : undefined}
+      className={`fixed inset-x-0 top-[var(--modal-vv-top,0px)] z-50 flex h-[var(--modal-vv-height,100dvh)] items-center justify-center bg-black/50 px-[max(1rem,env(safe-area-inset-left),env(safe-area-inset-right))] pt-[max(1rem,env(safe-area-inset-top))] pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur-sm sm:p-6 ${
         sheet ? "max-sm:p-0" : ""
-      }`}
+      } ${overlayClassName ?? ""}`}
       onClick={(e) => {
         if (closeOnOverlay && e.target === overlayRef.current) onCloseRef.current();
       }}
@@ -209,9 +635,9 @@ export default function Modal({
       <div
         ref={panelRef}
         tabIndex={-1}
-        className={`flex max-h-[90dvh] w-full ${sizeStyles[size]} flex-col overflow-hidden rounded-xl bg-surface shadow-2xl focus:outline-none ${
+        className={`flex max-h-[min(calc(var(--modal-vv-height,100dvh)*0.9),100%)] w-full ${sizeStyles[size]} flex-col overflow-hidden rounded-xl bg-surface shadow-2xl focus:outline-none ${
           sheet
-            ? "max-sm:h-[100dvh] max-sm:max-h-[100dvh] max-sm:max-w-none max-sm:rounded-none"
+            ? "max-sm:h-full max-sm:max-h-full max-sm:max-w-none max-sm:rounded-none max-sm:pt-[env(safe-area-inset-top)] max-sm:pb-[env(safe-area-inset-bottom)]"
             : ""
         } ${className ?? ""}`}
         role="dialog"
@@ -281,5 +707,8 @@ export default function Modal({
     </div>
   );
 
-  return portal && typeof document !== "undefined" ? createPortal(dialog, document.body) : dialog;
+  const content = (
+    <DialogAncestors.Provider value={childAncestors}>{dialog}</DialogAncestors.Provider>
+  );
+  return portal && typeof document !== "undefined" ? createPortal(content, document.body) : content;
 }

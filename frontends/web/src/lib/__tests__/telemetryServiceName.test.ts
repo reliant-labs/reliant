@@ -47,8 +47,11 @@ describe("telemetry service.name", () => {
   });
 
   it("is the service the generated frontend alert defaults filter on", () => {
+    // The project has more than one frontend (reliant-web and the forge
+    // demo), so the generated filter lists every frontend's service: the web
+    // app's must be one of them.
     const doc = readJSON<AlertDefaults>("alert-defaults_gen.json");
-    expect(doc.input.frontend_services).toEqual([reported]);
+    expect(doc.input.frontend_services).toContain(reported);
   });
 
   it("scopes every browser panel of the generated frontend dashboard", () => {
@@ -56,7 +59,10 @@ describe("telemetry service.name", () => {
     const browser = dash.tiles.filter((t) => t.config.where?.includes("rum.sessionId"));
     expect(browser.length).toBeGreaterThan(0);
     for (const tile of browser) {
-      expect(tile.config.where, tile.id).toContain(`ServiceName IN ('${reported}')`);
+      const list = tile.config.where?.match(/ServiceName IN \(([^)]*)\)/)?.[1];
+      expect(list, tile.id).toBeDefined();
+      const services = (list ?? "").split(",").map((s) => s.trim().replace(/^'|'$/g, ""));
+      expect(services, tile.id).toContain(reported);
     }
   });
 });

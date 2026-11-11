@@ -4,6 +4,7 @@ package runtime
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"testing"
 	"time"
 
@@ -196,10 +197,14 @@ func TestAskUser_MessageToTheThreadEndsTheWait(t *testing.T) {
 }
 
 // The same, through the chat's workflow: the doorbell SendAgentMessage rings
-// ends the wait, and the run does not end with the message unread — the
-// wake no turn has read yet earns one (late_wake.go), which here is a
-// continue-as-new because this graph has no call_llm after its tools.
-func TestAskUser_MessageToTheThreadReachesATurnInTheChatsRun(t *testing.T) {
+// ends the wait. This graph runs its tools on the root thread with no agent
+// loop there, so no turn in it could ever read the message: the run ends
+// rather than continuing at graph entry (late_wake.go; a pending message
+// never restarts a workflow, reliant #2394), and the thread's completion
+// marks the message undelivered. An agent chat, whose root runs an agent
+// loop, still continues so the message gets a turn
+// (TestLateWakeCheck_SeesAWakeTheHandlerHasNotCountedYet).
+func TestAskUser_MessageToTheThreadEndsTheWaitInTheChatsRun(t *testing.T) {
 	t.Parallel()
 	r := newAskUserYieldRun(t)
 	r.at(t, time.Minute, func() { r.wake(askUserYieldThread) })
@@ -208,8 +213,8 @@ func TestAskUser_MessageToTheThreadReachesATurnInTheChatsRun(t *testing.T) {
 
 	require.True(t, r.env.IsWorkflowCompleted(), "the ask_user wait must end")
 	var canErr *workflow.ContinueAsNewError
-	require.ErrorAs(t, r.env.GetWorkflowError(), &canErr,
-		"the message must get a turn, not be left unread when the run ends")
+	require.False(t, errors.As(r.env.GetWorkflowError(), &canErr),
+		"a graph with no agent on its root must not be re-run at graph entry for the message")
 	r.requireResolvedUnanswered(t)
 	assert.Contains(t, r.scheduled, "QuestionResolve")
 }

@@ -14,7 +14,9 @@ import { CATEGORY_COPY, CHAIN_COPY, NAMED_PATHS } from "../copy";
 import { scaffoldFixtures } from "../fixtures";
 import { BuiltTourStep } from "../BuiltTourStep";
 import { HowThisAppWasBuilt } from "../HowThisAppWasBuilt";
+import { shortForgeVersion } from "../forgeVersion";
 import { summarize } from "../ScaffoldPanel";
+import { recordedOwnership, categoryOwnership } from "../ownership";
 
 const { cast, manifest } = scaffoldFixtures();
 const n = (value: number) => value.toLocaleString("en-US");
@@ -29,7 +31,7 @@ describe("<HowThisAppWasBuilt>", () => {
     render(<HowThisAppWasBuilt />);
     const t = manifest.totals;
     expect(screen.getByTestId("scaffold-headline")).toHaveTextContent(
-      `You wrote ${n(t.you_wrote_lines)} lines of proto in ${t.you_wrote_files} files. forge generated ${n(t.forge_lines)} lines across ${n(t.files)} files.`
+      `${n(t.you_wrote_lines)} lines of API definitions in ${t.you_wrote_files} files. Forge generated ${n(t.forge_lines)} lines across ${n(t.files)} files.`
     );
     const totals = screen.getByTestId("scaffold-totals");
     const s = summarize(manifest, cast);
@@ -38,7 +40,15 @@ describe("<HowThisAppWasBuilt>", () => {
     }
     expect(s.onceLines + s.regenLines).toBe(t.forge_lines);
     expect(s.newFiles + s.scaffoldAdded).toBe(t.files);
-    expect(screen.getByTestId("how-built")).toHaveTextContent(manifest.forge_version);
+    // A reader sees the release; the pseudo-version is the title.
+    expect(screen.getByTestId("how-built")).toHaveTextContent(shortForgeVersion(manifest.forge_version));
+    expect(screen.getByTestId("how-built").querySelector(`[title="forge ${manifest.forge_version}"]`)).not.toBeNull();
+  });
+
+  it("shortens a Go pseudo-version, and leaves a release alone", () => {
+    expect(shortForgeVersion("v1.0.17-0.20261105225243-7ad8943ce387")).toBe("v1.0.17");
+    expect(shortForgeVersion("v1.0.17")).toBe("v1.0.17");
+    expect(shortForgeVersion("v1.1.0-rc.1.0.20261105225243-7ad8943ce387")).toBe("v1.1.0");
   });
 
   it("lists every category, its lines and files as counted, and its files when opened", () => {
@@ -77,6 +87,71 @@ describe("<HowThisAppWasBuilt>", () => {
     expect(panel()).toHaveAttribute("data-excerpt", "migration");
   });
 
+  it("gives the stepper keyboard navigation and labelled current content", () => {
+    render(<HowThisAppWasBuilt />);
+    const first = screen.getByTestId("scaffold-chain-tab-proto");
+    expect(first).toHaveAttribute("tabindex", "0");
+    first.focus();
+    fireEvent.keyDown(first, {key:"ArrowRight"});
+    const second = screen.getByTestId("scaffold-chain-tab-migration");
+    expect(second).toHaveFocus();
+    expect(second).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByTestId("scaffold-chain-panel")).toHaveAttribute("aria-labelledby", second.id);
+    fireEvent.keyDown(second, {key:"End"});
+    expect(screen.getByTestId("scaffold-chain-panel")).toHaveAttribute("data-excerpt", "test");
+    fireEvent.keyDown(screen.getByTestId("scaffold-chain-tab-test"), {key:"Home"});
+    expect(first).toHaveFocus();
+    expect(first).toHaveAttribute("aria-selected", "true");
+  });
+
+  it("on the public entry, makes no second pitch and keeps the recording's caveats in its disclosure", () => {
+    render(<HowThisAppWasBuilt leadWithRecording />);
+    // DemoWelcome is the entry's one hero.
+    expect(screen.queryByTestId("build-summary")).toBeNull();
+    const about = screen.getByTestId("how-built-about");
+    expect(about.tagName).toBe("DETAILS");
+    expect(about).not.toHaveAttribute("open");
+    expect(about).toHaveTextContent("not a deployment or a test-suite run");
+    expect(screen.getByTestId("scaffold-headline")).not.toHaveTextContent(/person|agent/i);
+    expect(CHAIN_COPY.proto.title).toBe("The agent defines the API");
+    expect(CHAIN_COPY.proto.body).toMatch(/^Your agent defines/);
+    expect(CHAIN_COPY.handler.body).toContain("your agent implements your app's rules");
+    expect(screen.getByRole("heading", {name:"What Forge generated",level:2})).toBeVisible();
+  });
+
+  it("elsewhere, leads with a shared plain-language API summary", () => {
+    render(<HowThisAppWasBuilt />);
+    const summary = screen.getByTestId("build-summary");
+    expect(summary).toHaveTextContent("Your agent defines the data and API");
+    expect(summary).not.toHaveTextContent(/rpc|proto|A person|You write the message/i);
+  });
+
+  it("labels recorded ownership for each excerpt without inferring it from language", () => {
+    render(<HowThisAppWasBuilt />);
+    const expected = {proto:"yours",migration:"yours",orm:"regen",handler:"yours",hook:"regen",test:"yours"};
+    for (const excerpt of manifest.chain) {
+      expect(recordedOwnership(manifest, excerpt.path)).toBe(expected[excerpt.id]);
+      fireEvent.click(screen.getByTestId(`scaffold-chain-tab-${excerpt.id}`));
+      const panel = screen.getByTestId("scaffold-chain-panel");
+      expect(panel.querySelector(`[data-ownership="${expected[excerpt.id]}"]`)).not.toBeNull();
+    }
+    const apiStub = manifest.categories.flatMap(c=>c.entries).find(e=>e[0].startsWith("gen/") && e[3] === "regen")!;
+    expect(apiStub).toBeDefined();
+    expect(recordedOwnership(manifest, apiStub[0])).toBe("regen");
+    expect(recordedOwnership(manifest,"unknown.go")).toBeNull();
+    const mixed = manifest.categories.find(c=>c.id === "contract")!;
+    expect(categoryOwnership(mixed)).toBe("mixed");
+    // A mixed category wears no chip (it would be on nearly every row); its bar shows the split.
+    const row = screen.getByTestId("scaffold-category-contract");
+    expect(row).not.toHaveTextContent("Mixed ownership");
+    expect(row.querySelector("[data-ownership]")).toBeNull();
+    expect(row.querySelector("[title*='regenerated']")).not.toBeNull();
+    // A uniform one says what it is.
+    expect(screen.getByTestId("scaffold-category-ci").querySelector("[data-ownership='yours']")).not.toBeNull();
+    // The chain's tabs carry no "Current step / Next step / Upcoming" sub-labels.
+    expect(screen.getByTestId("scaffold-chain")).not.toHaveTextContent(/Current step|Next step|Upcoming/);
+  });
+
   it("offers Back only when it is given somewhere to go", () => {
     const onBack = vi.fn();
     const { unmount } = render(<HowThisAppWasBuilt />);
@@ -94,9 +169,9 @@ describe("<BuiltTourStep> (the tour's card)", () => {
     expect(screen.getByTestId("scaffold-replay")).toBeInTheDocument();
     const t = manifest.totals;
     expect(screen.getByTestId("built-tour-totals")).toHaveTextContent(
-      `You write ${n(t.you_wrote_lines)} lines of proto. forge writes ${n(t.forge_lines)} lines across ${n(t.files)} files`
+      `${n(t.you_wrote_lines)} lines of API definitions. Forge generated ${n(t.forge_lines)} lines across ${n(t.files)} files`
     );
-    expect(screen.getByTestId("built-tour-totals")).toHaveTextContent("How this app was built");
+    expect(screen.getByTestId("built-tour-totals")).toHaveTextContent("How it was built");
     expect(allPaths).toContain("AGENTS.md");
   });
 });

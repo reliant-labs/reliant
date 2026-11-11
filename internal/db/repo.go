@@ -19,6 +19,8 @@ import (
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/observability"
 	"github.com/reliant-labs/reliant/internal/store"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 	"go.temporal.io/sdk/activity"
 )
 
@@ -678,11 +680,21 @@ func (r *Repo) GetLatestUpdateSequence(ctx context.Context, chatID string) (int6
 // CreateChatUpdate creates a new chat update (for dual-write pattern)
 // This operation is atomic - the sequence number generation and insert happen in a transaction
 // to prevent race conditions when multiple parallel operations try to create updates.
+//
+// It runs at READ COMMITTED for the reason CreateUserUpdate does: every update
+// for a chat is allocated from ONE counter row, and every thread, tool call and
+// sub-agent of the chat writes through it. Under SERIALIZABLE each commit on
+// that row aborts every writer waiting behind it with SQLSTATE 40001 ("could
+// not serialize access due to concurrent update"); prod's reliant-pg logged
+// thousands a day from this statement. At READ COMMITTED a waiter takes the
+// next number in its one transaction, the row lock still keeps sequence order
+// equal to commit order, and the insert reads nothing but the value the upsert
+// returned. A call that joins an outer transaction inherits its isolation.
 func (r *Repo) CreateChatUpdate(ctx context.Context, chatID string, updateType reliantv1.ChatUpdateType, entityID string, data string) error {
 	// The allocation and the insert share one transaction: the counter's row
 	// lock is what keeps sequence order equal to commit order, and a rollback
 	// must take both back (store.AllocateUpdateSequence).
-	return r.RunTx(ctx, orm.Serializable, func(ctx context.Context) error {
+	return r.RunTx(ctx, orm.ReadCommitted.WithMaxAttempts(orm.DefaultTxMaxAttempts), func(ctx context.Context) error {
 		chatUpdate, err := store.AppendChatUpdate(ctx, r.ORM(), chatID, updateType, entityID, data)
 		if err != nil {
 			return err
@@ -784,11 +796,11 @@ func (r *Repo) GetLatestNonMessageUpdatesPerEntity(ctx context.Context, chatID s
 	// calls.
 	//
 	// "Few" only holds if they can be FOUND without reading the rest:
-	// idx_chat_updates_snapshot_rekeyed is a partial index over exactly the
-	// re-keyed types. Without it the re-keyed read rechecked every row
-	// idx_chat_updates_snapshot_heads holds for the chat (165,843 on chat
-	// 8bb0a875, almost all NODE_EXECUTION) to keep 758: ~350ms of a ~475ms
-	// query. With it, ~3ms.
+	// idx_chat_updates_snapshot_rekey_heads is a partial index over exactly
+	// the re-keyed types, keyed by their dedup key. Without such an index the
+	// re-keyed read rechecked every row the old idx_chat_updates_snapshot_heads
+	// held for the chat (165,843 on chat 8bb0a875, almost all NODE_EXECUTION)
+	// to keep 758: ~350ms of a ~475ms query. With one, ~3ms.
 	//
 	// WORKFLOW_STATUS and NODE_EXECUTION are excluded: they are workflow state,
 	// keyed per workflow and per workflow node, so every run a chat ever made
@@ -821,7 +833,20 @@ func (r *Repo) GetLatestNonMessageUpdatesPerEntity(ctx context.Context, chatID s
 	// The statement and the literal-vs-parameter reasoning are
 	// store.SnapshotHeadsSQL's; TestSnapshotHeadsQueryMatchesPartialIndex
 	// pins its literals to the enum values and to both index predicates.
-	return store.LatestNonMessageUpdatesPerEntity(ctx, r.ORM(), chatID)
+	//
+	// That statement is now the fallback. The heads are materialized in
+	// chat_update_heads, in the transaction of every log write, and read from
+	// there when the chat's stream counter vouches for them; a chat the
+	// previous release wrote to, or one not yet backfilled, reads the log as
+	// above (store.SnapshotUpdateHeads, dev-docs/design/chat-update-heads.md).
+	// Which one served is recorded on the caller's span (the snapshot's
+	// chat_snapshot.update_heads) as chat_snapshot.update_heads.source.
+	updates, source, err := store.SnapshotUpdateHeads(ctx, r.ORM(), chatID)
+	if err != nil {
+		return nil, err
+	}
+	trace.SpanFromContext(ctx).SetAttributes(attribute.String("chat_snapshot.update_heads.source", source))
+	return updates, nil
 }
 
 // GetLatestWorkflowNodeUpdates returns the newest NODE_EXECUTION update of
@@ -1263,6 +1288,26 @@ func (r *Repo) UpdateChatActiveDaemon(ctx context.Context, chatID string, daemon
 	return store.UpdateChatActiveDaemon(ctx, r.ORM(), chatID, daemonID)
 }
 
+// ChatMove is a chat's move to another project (MoveChatToProject).
+type ChatMove = store.ChatMove
+
+// MoveChatToProject moves an idle (or errored) chat, with its plans, to
+// another project. moved is false, and nothing is written, when the chat is
+// gone, has left m.FromProjectID, or is not idle.
+//
+// It takes the owner's org lock (store.LockUserOrgs) first, before the
+// chat's row lock: call it first in its transaction.
+func (r *Repo) MoveChatToProject(ctx context.Context, m ChatMove) (moved bool, err error) {
+	err = r.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
+		if err := store.LockUserOrgs(ctx, r.ORM(), m.UserID); err != nil {
+			return err
+		}
+		moved, err = store.MoveChatToProject(ctx, r.ORM(), m)
+		return err
+	})
+	return moved, err
+}
+
 // PinChatDaemonIfUnset pins an unpinned chat that is on a machine to daemonID
 // and returns the pin the row holds afterwards, whichever send wrote it ("" for
 // none). A chat that already has a pin, or has no machine by design, is left
@@ -1395,44 +1440,59 @@ func (r *Repo) ListChatsWaitingForMachine(ctx context.Context, userID string) ([
 	return store.ListChatsWaitingForMachine(ctx, r.ORM(), userID)
 }
 
-// UpdateChatUnread sets the unread flag on a chat and emits a user update.
+// UpdateChatUnread sets the unread flag on a chat and emits the user update
+// that tells connected clients, in one transaction: a client never sees the
+// flag change without its announcement, or the announcement without the flag.
+//
+// Run on its own, the transaction is retried on the repo's ladder like every
+// RunTx. Inside a caller's transaction it joins it, and a failure is returned
+// rather than logged and swallowed: a serialization failure (SQLSTATE 40001,
+// the counter row of a user whose updates race) aborts the WHOLE transaction,
+// so only the caller's RunTx can retry it, and only if the error reaches it.
+// Swallowing it left the caller committing a transaction Postgres had already
+// aborted, an ERROR log per conflict, and the retry happening only because
+// that COMMIT then failed too (reliant #2393).
+//
+// A chat deleted under the update is not a failure on its own transaction:
+// there is nothing left to mark. Inside a caller's transaction the refused
+// write has aborted it, so the error is the caller's.
 func (r *Repo) UpdateChatUnread(ctx context.Context, chatID string, unread bool, reason string) error {
-	chat, err := r.GetChat(ctx, chatID)
+	err := r.RunTx(ctx, orm.ReadCommitted.WithMaxAttempts(orm.DefaultTxMaxAttempts), func(txCtx context.Context) error {
+		chat, err := r.GetChat(txCtx, chatID)
+		if err != nil {
+			return fmt.Errorf("failed to get chat: %w", err)
+		}
+
+		if err := store.UpdateChatUnread(txCtx, r.ORM(), chatID, unread); err != nil {
+			return err
+		}
+
+		dataJSON, err := json.Marshal(map[string]interface{}{
+			"unread":  unread,
+			"reason":  reason,
+			"chat_id": chatID,
+		})
+		if err != nil {
+			return fmt.Errorf("failed to marshal unread update: %w", err)
+		}
+
+		return r.CreateUserUpdate(txCtx, &UserUpdate{
+			UserID:     chat.UserID,
+			ProjectID:  &chat.ProjectID,
+			WorktreeID: chat.WorktreeID,
+			ChatID:     &chatID,
+			UpdateType: UserUpdateChatStateChange,
+			EntityType: EntityTypeChat,
+			EntityID:   chatID,
+			Data:       dataJSON,
+		})
+	})
+	if chatDeletedUnder(err) && !orm.InTx(ctx) {
+		logging.DebugContext(ctx, "Chat deleted before its unread change was announced", "chatID", chatID, "unread", unread)
+		return nil
+	}
 	if err != nil {
-		return fmt.Errorf("failed to get chat: %w", err)
-	}
-
-	if err := store.UpdateChatUnread(ctx, r.ORM(), chatID, unread); err != nil {
-		return err
-	}
-
-	updateData := map[string]interface{}{
-		"unread":  unread,
-		"reason":  reason,
-		"chat_id": chatID,
-	}
-
-	dataJSON, err := json.Marshal(updateData)
-	if err != nil {
-		return fmt.Errorf("failed to marshal unread update: %w", err)
-	}
-
-	userUpdate := &UserUpdate{
-		UserID:     chat.UserID,
-		ProjectID:  &chat.ProjectID,
-		WorktreeID: chat.WorktreeID,
-		ChatID:     &chatID,
-		UpdateType: UserUpdateChatStateChange,
-		EntityType: EntityTypeChat,
-		EntityID:   chatID,
-		Data:       dataJSON,
-	}
-
-	if err := r.CreateUserUpdate(ctx, userUpdate); err != nil {
-		logging.ErrorContext(ctx, "Failed to create user update for chat unread change",
-			"error", err,
-			"chatID", chatID,
-			"unread", unread)
+		return fmt.Errorf("update chat unread: %w", err)
 	}
 
 	logging.DebugContext(ctx, "Chat unread updated",

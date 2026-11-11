@@ -1356,11 +1356,25 @@ func (e daemonReportedFailure) Is(target error) bool { return target == errDaemo
 // forge.topology and fs.get_tree for a path only their laptop had produced 70
 // ERROR issue events in two days (2026-10-23..25). Any other daemon failure
 // keeps no opinion (svcerr.ClassNone), so its code decides.
+//
+// The daemon refusing a credential store (daemonpolicy.ErrCredentialFile,
+// ErrViewerCredential) is a user error too: the daemon's own policy said no to
+// what a tool or the file viewer asked for, as designed. Logged as a server
+// fault it was an ERROR "machinewake.AfterFailure" issue (prod issue
+// 1e396220, 2026-11-09) for a refusal that worked.
 func (e daemonReportedFailure) ErrorClass() svcerr.Class {
-	if IsMissingPathText(string(e)) {
+	if IsMissingPathText(string(e)) || isCredentialRefusalText(string(e)) {
 		return svcerr.ClassUser
 	}
 	return svcerr.ClassNone
+}
+
+// isCredentialRefusalText reports whether a daemon's failure text is its
+// refusal to read or write a credential store. The refusal crosses the wire
+// as text, so its sentinel's message is what there is to match.
+func isCredentialRefusalText(text string) bool {
+	return strings.Contains(text, daemonpolicy.ErrCredentialFile.Error()) ||
+		strings.Contains(text, daemonpolicy.ErrViewerCredential.Error())
 }
 
 // missingPathMarkers are how a daemon's error text says "that path does not
@@ -1592,6 +1606,16 @@ func (r *NATSDaemonRouter) SendToolRequestSyncWithSelector(ctx context.Context, 
 }
 
 func (r *NATSDaemonRouter) SendLoadProjectConfigs(ctx context.Context, userID string, projectPath string, requestID string) error {
+	resolvedDaemonID, err := r.resolveFollowUpDaemonID(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("resolving daemon for config load: %w", err)
+	}
+	return r.SendLoadProjectConfigsToDaemon(ctx, userID, resolvedDaemonID, projectPath, requestID)
+}
+
+// SendLoadProjectConfigsToDaemon is SendLoadProjectConfigs on one named
+// machine: for a checkout path that is true only on that machine's disk.
+func (r *NATSDaemonRouter) SendLoadProjectConfigsToDaemon(ctx context.Context, userID, daemonID string, projectPath string, requestID string) error {
 	payload, err := json.Marshal(map[string]string{
 		"project_path": projectPath,
 		"request_id":   requestID,
@@ -1599,11 +1623,7 @@ func (r *NATSDaemonRouter) SendLoadProjectConfigs(ctx context.Context, userID st
 	if err != nil {
 		return err
 	}
-	resolvedDaemonID, err := r.resolveFollowUpDaemonID(ctx, userID)
-	if err != nil {
-		return fmt.Errorf("resolving daemon for config load: %w", err)
-	}
-	subject := daemonSubject(configLoadSubject, userID, resolvedDaemonID)
+	subject := daemonSubject(configLoadSubject, userID, daemonID)
 	msg := natsotel.NewMsg(ctx, subject, payload)
 	if err := r.nc.PublishMsg(msg); err != nil {
 		observability.NATSErrorsTotal.WithLabelValues("daemon.config.load", "publish").Inc()
@@ -1614,6 +1634,16 @@ func (r *NATSDaemonRouter) SendLoadProjectConfigs(ctx context.Context, userID st
 }
 
 func (r *NATSDaemonRouter) SendWatchProjectConfigs(ctx context.Context, userID string, projectPath string, includeInitial bool) error {
+	resolvedDaemonID, err := r.resolveFollowUpDaemonID(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("resolving daemon for config watch: %w", err)
+	}
+	return r.SendWatchProjectConfigsToDaemon(ctx, userID, resolvedDaemonID, projectPath, includeInitial)
+}
+
+// SendWatchProjectConfigsToDaemon is SendWatchProjectConfigs on one named
+// machine.
+func (r *NATSDaemonRouter) SendWatchProjectConfigsToDaemon(ctx context.Context, userID, daemonID string, projectPath string, includeInitial bool) error {
 	payload, err := json.Marshal(map[string]interface{}{
 		"project_path":    projectPath,
 		"include_initial": includeInitial,
@@ -1621,11 +1651,7 @@ func (r *NATSDaemonRouter) SendWatchProjectConfigs(ctx context.Context, userID s
 	if err != nil {
 		return err
 	}
-	resolvedDaemonID, err := r.resolveFollowUpDaemonID(ctx, userID)
-	if err != nil {
-		return fmt.Errorf("resolving daemon for config watch: %w", err)
-	}
-	subject := daemonSubject(configWatchSubject, userID, resolvedDaemonID)
+	subject := daemonSubject(configWatchSubject, userID, daemonID)
 	msg := natsotel.NewMsg(ctx, subject, payload)
 	if err := r.nc.PublishMsg(msg); err != nil {
 		observability.NATSErrorsTotal.WithLabelValues("daemon.config.watch", "publish").Inc()

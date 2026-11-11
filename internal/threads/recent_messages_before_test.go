@@ -2,8 +2,11 @@ package threads
 
 import (
 	"context"
+	"fmt"
+	"sync/atomic"
 	"testing"
 
+	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/reliant-labs/reliant/internal/db"
 )
 
@@ -11,7 +14,8 @@ import (
 // forked or compacted thread before it was bounded: resolve the whole
 // transcript (all, LoadDisplayMessages' answer), drop everything at or past the
 // cursor, keep the newest `limit`. The bounded walk has to be indistinguishable
-// from it. The caller resolves the transcript once: it does not change while
+// from it, over the transcript's rows: callers pass the resolution through
+// transcriptOf, since the walk leaves HIDDEN rows out. The caller resolves the transcript once: it does not change while
 // the test reads it, and resolving it again for every (cursor, limit) pair was
 // three quarters of the test's run time (13s -> 3.5s).
 func legacyRecentMessagesBefore(all []*db.Message, beforeSeq int64, limit int) (page []*db.Message, hasMore bool) {
@@ -40,6 +44,7 @@ func legacyRecentMessagesBefore(all []*db.Message, beforeSeq int64, limit int) (
 // past the end) at every page size, comparing ids, order, hasMore and
 // visual-thread normalization.
 func TestLoadRecentMessagesBefore_CompactedAndBranched_MatchesFullLoad(t *testing.T) {
+	testkit.Slow(t, "DB-backed: ~600 (cursor, limit) reads against pgtest's Postgres")
 	t.Parallel()
 
 	h := newTestHelper(t)
@@ -51,6 +56,7 @@ func TestLoadRecentMessagesBefore_CompactedAndBranched_MatchesFullLoad(t *testin
 	if err != nil {
 		t.Fatalf("LoadDisplayMessages: %v", err)
 	}
+	full = transcriptOf(full)
 	if len(full) < 20 {
 		t.Fatalf("fixture resolved only %d messages; it is not exercising a deep chain", len(full))
 	}
@@ -61,32 +67,55 @@ func TestLoadRecentMessagesBefore_CompactedAndBranched_MatchesFullLoad(t *testin
 	}
 	cursors = append(cursors, full[len(full)-1].Seq+100)
 
-	checked := 0
-	for _, cursor := range cursors {
-		for limit := 1; limit <= len(full)+2; limit++ {
-			want, wantMore := legacyRecentMessagesBefore(full, cursor, limit)
-			got, gotMore, err := h.svc.LoadRecentMessagesBefore(ctx, leaf, cursor, limit)
-			if err != nil {
-				t.Fatalf("LoadRecentMessagesBefore(cursor=%d, limit=%d): %v", cursor, limit, err)
-			}
-			if gotMore != wantMore {
-				t.Fatalf("cursor=%d limit=%d: hasMore=%v, want %v", cursor, limit, gotMore, wantMore)
-			}
-			if len(got) != len(want) {
-				t.Fatalf("cursor=%d limit=%d: got %d messages %v, want %d %v",
-					cursor, limit, len(got), messageIDs(got), len(want), messageIDs(want))
-			}
-			for i := range want {
-				g, w := got[i], want[i]
-				if g.ID != w.ID || g.Seq != w.Seq || g.ThreadID != w.ThreadID || g.ChatID != w.ChatID || !samePtr(g.WorkflowID, w.WorkflowID) {
-					t.Fatalf("cursor=%d limit=%d: position %d is %s seq=%d thread=%s chat=%s, want %s seq=%d thread=%s chat=%s",
-						cursor, limit, i, g.ID, g.Seq, g.ThreadID, g.ChatID, w.ID, w.Seq, w.ThreadID, w.ChatID)
-				}
-			}
-			checked++
+	// One subtest per cursor: each sweeps every limit against the same
+	// read-only chain, and in series the ~600 reads cost seconds. At most
+	// recentPagesWorkers sweep at once, so the shared embedded Postgres sees a
+	// few concurrent readers rather than a burst of one per cursor.
+	const recentPagesWorkers = 4
+	slots := make(chan struct{}, recentPagesWorkers)
+	var checked atomic.Int64
+	t.Run("pages", func(t *testing.T) {
+		for _, cursor := range cursors {
+			t.Run(fmt.Sprintf("cursor=%d", cursor), func(t *testing.T) {
+				t.Parallel()
+				slots <- struct{}{}
+				defer func() { <-slots }()
+				checked.Add(checkRecentPagesAt(t, h, leaf, full, cursor))
+			})
 		}
+	})
+	t.Logf("%d (cursor, limit) pages over a %d-message, 6-window transcript match the full load", checked.Load(), len(full))
+}
+
+// checkRecentPagesAt holds every limit's page before cursor to the full-load
+// answer, and returns how many it checked.
+func checkRecentPagesAt(t *testing.T, h *testHelper, leaf string, full []*db.Message, cursor int64) int64 {
+	t.Helper()
+	ctx := context.Background()
+	var checked int64
+	for limit := 1; limit <= len(full)+2; limit++ {
+		want, wantMore := legacyRecentMessagesBefore(full, cursor, limit)
+		got, gotMore, err := h.svc.LoadRecentMessagesBefore(ctx, leaf, cursor, limit)
+		if err != nil {
+			t.Fatalf("LoadRecentMessagesBefore(cursor=%d, limit=%d): %v", cursor, limit, err)
+		}
+		if gotMore != wantMore {
+			t.Fatalf("cursor=%d limit=%d: hasMore=%v, want %v", cursor, limit, gotMore, wantMore)
+		}
+		if len(got) != len(want) {
+			t.Fatalf("cursor=%d limit=%d: got %d messages %v, want %d %v",
+				cursor, limit, len(got), messageIDs(got), len(want), messageIDs(want))
+		}
+		for i := range want {
+			g, w := got[i], want[i]
+			if g.ID != w.ID || g.Seq != w.Seq || g.ThreadID != w.ThreadID || g.ChatID != w.ChatID || !samePtr(g.WorkflowID, w.WorkflowID) {
+				t.Fatalf("cursor=%d limit=%d: position %d is %s seq=%d thread=%s chat=%s, want %s seq=%d thread=%s chat=%s",
+					cursor, limit, i, g.ID, g.Seq, g.ThreadID, g.ChatID, w.ID, w.Seq, w.ThreadID, w.ChatID)
+			}
+		}
+		checked++
 	}
-	t.Logf("%d (cursor, limit) pages over a %d-message, 6-window transcript match the full load", checked, len(full))
+	return checked
 }
 
 // Walking a chat back page by page, the way the client scrolls, tiles the
@@ -104,6 +133,7 @@ func TestLoadRecentMessagesBefore_CompactedAndBranched_PagesTileTheTranscript(t 
 	if err != nil {
 		t.Fatalf("LoadDisplayMessages: %v", err)
 	}
+	full = transcriptOf(full)
 
 	const pageSize = 4
 	var walked []string

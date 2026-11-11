@@ -28,6 +28,20 @@ vi.mock("@tanstack/react-router", async (importOriginal) => ({
 const ready = async () => waitFor(() => expect(screen.getByTestId("workload-detail")).toHaveAttribute("data-state", "ready"));
 
 describe("a workload", () => {
+  it.each([Code.PermissionDenied, Code.Unimplemented])("preserves names-only Config when values are refused (%s), with no automatic read", async (code) => {
+    const readConfig = vi.fn().mockRejectedValue(new ConnectError("refused", code));
+    renderWorkload("admin-server", { search: { tab: "config" }, readConfig });
+    await ready();
+    const names = screen.getByTestId("workload-config-env").textContent;
+    expect(readConfig).not.toHaveBeenCalled();
+    expect(screen.getByTestId("workload-config")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "View config values" }));
+    await screen.findByRole("alert");
+    expect(screen.getByTestId("workload-config-env").textContent).toBe(names);
+    expect(screen.getByTestId("workload-config")).toBeInTheDocument();
+    expect(readConfig).toHaveBeenCalledTimes(1);
+  });
+
   it("heads the page with its verdict, environment, kind, replicas and release", async () => {
     renderWorkload("reliant-temporal-worker");
     await ready();
@@ -145,19 +159,29 @@ describe("a workload", () => {
     await waitFor(() => expect(screen.getByTestId("workload-updated")).toHaveTextContent(/updated .* by /));
   });
 
-  it("links to canonical promotion histories without duplicating their event feed", async () => {
-    renderWorkload("admin-server", { env: "e2e" });
+  it("lists the releases that moved it here — who, when, checks, rollbacks — and what each changed in it", async () => {
+    renderWorkload("admin-server");
     await ready();
     expect(screen.queryByTestId("workload-deploy-history")).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole("tab", { name: "History" }));
-    const history = await screen.findByTestId("workload-history-deploys");
-    const links = await within(history).findAllByRole("link", { name: /Promotion history for/ });
-    expect(links.length).toBeGreaterThan(1);
-    expect(new Set(links.map((link) => link.getAttribute("href"))).size).toBe(links.length);
-    expect(history.querySelector("[data-rollback]")).toBeNull();
+    const panel = await screen.findByTestId("workload-history-releases");
+    const rows = await within(panel).findAllByTestId("workload-release-row");
+    expect(rows.length).toBeGreaterThan(1);
+    // Each row links to its release, where the full promotion record lives.
+    for (const row of rows) expect(within(row).getAllByRole("link")[0]).toHaveAttribute("href", expect.stringContaining(row.getAttribute("data-version")!));
+    // The move back to an older release is marked as the rollback it was.
+    const rollback = rows.find((row) => row.hasAttribute("data-rollback"));
+    expect(rollback).toBeDefined();
+    expect(within(rollback!).getByText("rollback")).toBeInTheDocument();
+    // What changed comes from the release comparison, cut to this workload's objects.
+    await waitFor(() => expect(within(panel).getAllByRole("list", { name: "What changed in admin-server" }).length).toBeGreaterThan(0));
+    const changed = within(panel).getAllByRole("list", { name: "What changed in admin-server" })[0]!;
+    expect(changed).toHaveTextContent(/modified Deployment admin-server: image control-plane/);
+    expect(changed).not.toHaveTextContent("identity-gateway-egress");
     expect(screen.getByTestId("workload-history-versions")).toBeInTheDocument();
     expect(screen.getByTestId("workload-history-images")).toBeInTheDocument();
   });
+
 
   it("never scales from the console: it opens a pull request against the repository's default branch", async () => {
     renderWorkload("reliant-temporal-worker");
@@ -213,10 +237,12 @@ describe("a workload", () => {
     expect(screen.getByTestId("workload-config-env")).toHaveTextContent("DATABASE_URL");
   });
 
-  it("says when a bundle recorded no spec, rather than calling the fields undeclared", async () => {
+  it("says why a bundle recorded no spec, rather than calling the fields undeclared or promising the next deploy", async () => {
     renderWorkload("litellm", { search: { tab: "config" } });
     await ready();
-    expect(screen.getByTestId("workload-config-partial")).toBeInTheDocument();
+    const note = screen.getByTestId("workload-config-partial");
+    expect(note).toHaveTextContent("in a registry Reliant cannot read");
+    expect(note).not.toHaveTextContent("The next deploy records the rest");
     expect(screen.getByTestId("workload-config")).toHaveTextContent("not recorded");
   });
 

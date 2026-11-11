@@ -199,6 +199,7 @@ export const useTourStore = create<TourState>((set, get) => ({
       lastJourneySetting,
       resumeSetting,
       contextSetting,
+      legacyCurrentStepSetting,
       ...versionSettings
     ] = await Promise.all([
       getTourStorage().get(TOUR_SETTINGS_KEYS.COMPLETED),
@@ -207,6 +208,7 @@ export const useTourStore = create<TourState>((set, get) => ({
       getTourStorage().get(TOUR_SETTINGS_KEYS.LAST_JOURNEY),
       getTourStorage().get(TOUR_SETTINGS_KEYS.RESUME),
       getTourStorage().get(TOUR_SETTINGS_KEYS.JOURNEY_CONTEXT),
+      getTourStorage().get(TOUR_SETTINGS_KEYS.CURRENT_STEP),
       ...versionKeys.map(({ key }) => getTourStorage().get(key)),
     ]);
 
@@ -257,11 +259,16 @@ export const useTourStore = create<TourState>((set, get) => ({
 
     // Backwards-compat: a previous version of this store persisted the
     // current step under TOUR_SETTINGS_KEYS.CURRENT_STEP. That value is no
-    // longer the source of truth (the URL is). Delete it on first load so
-    // the row doesn't linger forever — best-effort, swallow failures.
-    void getTourStorage().delete(TOUR_SETTINGS_KEYS.CURRENT_STEP).catch(() => {
-      /* ignore */
-    });
+    // longer the source of truth (the URL is). Delete it when it is still
+    // there so the row doesn't linger forever — best-effort, swallow
+    // failures. Only when it is there: the read above is served from the
+    // settings cache, while an unconditional delete was an RPC on every
+    // startup that answered NotFound for every user who no longer had it.
+    if (legacyCurrentStepSetting !== undefined) {
+      void getTourStorage().delete(TOUR_SETTINGS_KEYS.CURRENT_STEP).catch(() => {
+        /* ignore */
+      });
+    }
   },
 
   // Per-step progress persists optimistically: the in-memory set is the

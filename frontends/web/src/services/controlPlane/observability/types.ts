@@ -433,7 +433,7 @@ export type PanelKind = string;
  * kind's default, so a spec from a newer forge still renders.
  */
 export interface PanelDisplay {
-  /** line/sql: line | area | bars; bar: bar | pie | donut; number: stat | gauge; sql also: funnel. */
+  /** line/sql: line | area | bars; bar: bar | pie | donut; number: stat | gauge; sql also: funnel, heatmap. */
   style?: string;
   /** Stack the series (area or bars; a bar panel's bars). */
   stack?: boolean;
@@ -444,6 +444,10 @@ export interface PanelDisplay {
   max?: number;
   /** Series (or slices) drawn before the rest fold into "Other". */
   topN?: number;
+  /** A palette key (blue, violet, cyan, amber, fuchsia, slate, danger): a heatmap's scale, a figure's sparkline, a one-series chart. */
+  color?: string;
+  /** Palette keys by series name: a series label, a sql value column, or a group value. Unnamed series take the rest of the palette. */
+  colors?: Record<string, string>;
 }
 
 /**
@@ -479,7 +483,28 @@ export interface PanelPostgres {
   group?: string[];
 }
 
+export interface PanelLink {
+  database: string;
+  table: string;
+  column?: string;
+  fromField?: string;
+  row?: boolean;
+  fromFields?: string[];
+}
+
+/** forge.dashspec BrowseView: structured data, never SQL or executable expressions. */
+export interface BrowseView {
+  database: string;
+  table: string;
+  columns?: string[];
+  filters?: { column: string; op: import("./appDatabaseApi").BrowseOp; values?: string[] }[];
+  sort?: { column: string; desc?: boolean }[];
+  size?: number;
+}
+
 export interface Panel {
+  link?: PanelLink;
+  browse?: BrowseView;
   id: string;
   /** Optional dashboard section; viewer visibility never edits this association. */
   section?: string;
@@ -504,6 +529,8 @@ export interface Panel {
   sql?: string;
   /** sql panels only: the narrowest bucket the statement produces ("1d"); a window shorter than it is widened. */
   minStep?: string;
+  /** sql panels only: a second SELECT returning a time series, drawn as the sparkline under the figure `sql` returns. */
+  trendSql?: string;
   /** text panels only: Markdown, drawn with no query. */
   markdown?: string;
   /** postgres panels only: the statement and how its result is drawn. */
@@ -517,6 +544,8 @@ export interface Panel {
 }
 
 export interface DashboardFilter {
+  kind?: "toggle";
+  default?: boolean;
   /** Empty or absent targets all panels. Never infer targeting from panel titles. */
   panelIds?: string[];
   id: string;
@@ -536,6 +565,13 @@ export interface DashboardAnnotation {
   label?: string;
 }
 
+export interface DashboardSection {
+  id: string;
+  title: string;
+  /** A line under the heading: what the section answers. */
+  description?: string;
+}
+
 export interface Dashboard {
   /**
    * Which telemetry the panels read. `project` (absent): the selected
@@ -543,7 +579,8 @@ export interface Dashboard {
    * `platform`: the signals belong to no environment, so none is filtered on.
    */
   scope?: "project" | "org" | "platform";
-  sections?: { id: string; title: string }[];
+  /** Drawn as headings over their panels, in this order, after the panels that name none. */
+  sections?: DashboardSection[];
   id: string;
   title: string;
   description?: string;
@@ -552,6 +589,8 @@ export interface Dashboard {
   annotations?: DashboardAnnotation[];
   /** The range the dashboard opens on when the URL names none ("7d"), rounded up to a preset. */
   defaultRange?: string;
+  /** The comparison the dashboard opens with when the URL names none: "period" or "release". */
+  defaultCompare?: string;
   panels: Panel[];
 }
 
@@ -791,14 +830,25 @@ export interface DeclaredPort {
 }
 
 /**
+ * Why a declared spec is not recorded:
+ *   pending           the control plane has not read the bundle's manifests yet (it does, in the background)
+ *   unreadable        the manifests are in a registry it cannot read, are gone, or were never in the bundle
+ *   not-in-manifests  the manifests were read and hold no object for this workload
+ *   unknown           a control plane that predates the reason
+ */
+export type DeclaredSpecGap = "pending" | "unreadable" | "not-in-manifests" | "unknown";
+
+/**
  * What the environment's recorded bundle declares for the workload — names and
  * numbers only (environment variables by NAME, never values). GetWorkload only.
  */
 export interface DeclaredWorkload {
   name: string;
   kind: WorkloadKind;
-  /** False for a bundle recorded before snapshots: only name, kind and replicas are known. */
+  /** True when the spec is recorded (from the bundle's snapshot or its manifests); otherwise only name, kind, replicas (and the shape's image) are known. */
   specRecorded: boolean;
+  /** Why it is not recorded; null when it is. */
+  specGap: DeclaredSpecGap | null;
   replicas: number | null;
   /** 0 = not declared. */
   cpuRequestMillicores: number;

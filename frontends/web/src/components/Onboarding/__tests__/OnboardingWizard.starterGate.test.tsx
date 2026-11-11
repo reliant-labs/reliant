@@ -242,7 +242,7 @@ describe("OnboardingWizard — no starter-picker gate", () => {
     render(React.createElement(RouterProvider as any, { router }));
 
     await waitFor(() =>
-      expect(screen.getByText(/1 \/ 10/)).toBeInTheDocument(),
+      expect(screen.getByText(/Step 1 of 8/)).toBeInTheDocument(),
     );
   });
 
@@ -252,7 +252,7 @@ describe("OnboardingWizard — no starter-picker gate", () => {
     render(React.createElement(RouterProvider as any, { router }));
 
     await waitFor(() =>
-      expect(screen.getByText(/1 \/ 10/)).toBeInTheDocument(),
+      expect(screen.getByText(/Step 1 of 8/)).toBeInTheDocument(),
     );
   });
 });

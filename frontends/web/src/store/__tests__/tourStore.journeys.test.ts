@@ -141,4 +141,24 @@ describe("tourStore — journey versions", () => {
     expect(held[journeyCompletionKey("forge", JOURNEYS.forge.version)]).toBe("completed");
     expect(held["onboarding.completed"]).toBe("true");
   });
+
+  describe("the retired current-step key", () => {
+    // It was deleted on every load, so a user who no longer had it paid a
+    // DeleteSetting RPC that answered NotFound on every startup.
+    it("is not deleted when it is not stored", async () => {
+      const { deleteSettingIfExists } = await import("../../lib/settingsPersistence");
+      vi.mocked(deleteSettingIfExists).mockClear();
+      await useTourStore.getState().loadState();
+      expect(deleteSettingIfExists).not.toHaveBeenCalled();
+    });
+
+    it("is still cleaned up when an older version left it behind", async () => {
+      const { deleteSettingIfExists } = await import("../../lib/settingsPersistence");
+      vi.mocked(deleteSettingIfExists).mockClear();
+      settings.rows.set("onboarding.current_step", "workflows:intro");
+      await useTourStore.getState().loadState();
+      expect(deleteSettingIfExists).toHaveBeenCalledWith("onboarding.current_step");
+      expect(settings.rows.has("onboarding.current_step")).toBe(false);
+    });
+  });
 });

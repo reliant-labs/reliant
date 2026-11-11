@@ -22,11 +22,15 @@ import { FakeCookieBrowser, memoryStorage } from './fakeCookieJar'
 const KEY = 'supabase-auth'
 const DOMAIN = 'reliantlabs.io'
 
+// Read once: a session() built a second later must still equal the one
+// stored, or an assertion straddling a second boundary fails at random.
+const EXPIRES_AT = Math.floor(Date.now() / 1000) + 3600
+
 const session = (overrides: Record<string, unknown> = {}) =>
   JSON.stringify({
     access_token: 'access-1',
     refresh_token: 'refresh-1',
-    expires_at: Math.floor(Date.now() / 1000) + 3600,
+    expires_at: EXPIRES_AT,
     token_type: 'bearer',
     user: { id: 'user-1', email: 'a@example.com' },
     ...overrides,

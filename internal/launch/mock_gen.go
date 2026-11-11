@@ -21,7 +21,7 @@ import (
 )
 
 // forge:section MockChatWriter
-// forge:hash=86b3291292c1bee52cb93461c6c13b85555c25f0d53d95d1c2c6c50b4b75ab4f
+// forge:hash=3cc972b7dfc8843493cd9fe0f29c71bddfc9c827677ca3791d807164a52a7498
 
 // MockChatWriter is a test mock for the ChatWriter interface.
 //
@@ -31,6 +31,7 @@ import (
 // "MockChatWriter.<Method>Func not set" error.
 type MockChatWriter struct {
 	contractkit.Recorder
+	LockUserOrgsFunc            func(context.Context, string, ...db.OrgRead) error
 	CreateChatFunc              func(context.Context, *db.Chat) error
 	GetChatFunc                 func(context.Context, string) (*db.Chat, error)
 	UpdateChatFunc              func(context.Context, *db.Chat) error
@@ -39,6 +40,15 @@ type MockChatWriter struct {
 	SaveMessageToThreadFunc     func(context.Context, string, string, int32, string, *string, []string, *int32) (*db.Message, error)
 	SaveMessageToThreadOnceFunc func(context.Context, string, string, int32, string, *string, []string, *int32, string) (*db.Message, bool, error)
 	CreateUserUpdateFunc        func(context.Context, *db.UserUpdate) error
+}
+
+// LockUserOrgs records the call and delegates to LockUserOrgsFunc when set.
+func (m *MockChatWriter) LockUserOrgs(ctx context.Context, userID string, reads ...db.OrgRead) error {
+	m.Recorder.Record("LockUserOrgs", ctx, userID, reads)
+	if m.LockUserOrgsFunc != nil {
+		return m.LockUserOrgsFunc(ctx, userID, reads...)
+	}
+	return contractkit.MockNotSet("MockChatWriter", "LockUserOrgs")
 }
 
 // CreateChat records the call and delegates to CreateChatFunc when set.
@@ -681,7 +691,7 @@ func (m *MockChatSelections) CopyChatSelection(ctx context.Context, fromChatID s
 var _ ChatSelections = (*MockChatSelections)(nil)
 
 // forge:section MockStore
-// forge:hash=5008864cb7c6a608ec0179da216f73f351107ecba49ba16b608d5d25f7b49871
+// forge:hash=1a1b3cfadc2f411de498118b6a0a91d4b71caeecc7d84945024052b3c444abb1
 
 // MockStore is a test mock for the Store interface.
 //
@@ -691,6 +701,7 @@ var _ ChatSelections = (*MockChatSelections)(nil)
 // "MockStore.<Method>Func not set" error.
 type MockStore struct {
 	contractkit.Recorder
+	LockUserOrgsFunc                   func(context.Context, string, ...db.OrgRead) error
 	CreateChatFunc                     func(context.Context, *db.Chat) error
 	GetChatFunc                        func(context.Context, string) (*db.Chat, error)
 	UpdateChatFunc                     func(context.Context, *db.Chat) error
@@ -729,6 +740,15 @@ type MockStore struct {
 	ListWorktreesFunc                  func(context.Context, db.WorktreeFilters) ([]*db.Worktree, error)
 	GetSettingFunc                     func(context.Context, string, *string, string) (*db.Setting, error)
 	RunTxFunc                          func(context.Context, orm.TxPolicy, func(ctx context.Context) error) error
+}
+
+// LockUserOrgs records the call and delegates to LockUserOrgsFunc when set.
+func (m *MockStore) LockUserOrgs(ctx context.Context, userID string, reads ...db.OrgRead) error {
+	m.Recorder.Record("LockUserOrgs", ctx, userID, reads)
+	if m.LockUserOrgsFunc != nil {
+		return m.LockUserOrgsFunc(ctx, userID, reads...)
+	}
+	return contractkit.MockNotSet("MockStore", "LockUserOrgs")
 }
 
 // CreateChat records the call and delegates to CreateChatFunc when set.

@@ -20,8 +20,8 @@ import { hasControlPlane } from "@/services/controlPlane/config";
 import { controlPlaneObservabilityApi, type ObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
 import { isDemoShell } from "@/lib/shell";
 
-import { createFixtureApi } from "../../Observability/__fixtures__/fixtureApi";
-import { FIXTURE_SIGNALS } from "../../Observability/__fixtures__/fixtureSignals";
+import { createDemoFixtures } from "./busyApp";
+import { withDemoWorkloadLedger } from "./workloadScenario";
 import { withReadOnly } from "../../Observability/readOnlyApi";
 import { DEMO_SCENARIO_RPCS, type DemoScenarioMethod } from "./demoScenario";
 
@@ -31,7 +31,7 @@ export interface DemoApiOptions {
 }
 
 export function createDemoApi({ wire = isDemoShell() && hasControlPlane }: DemoApiOptions = {}): ObservabilityApi {
-  const fixtures = createFixtureApi({ signals: FIXTURE_SIGNALS, dashboardsReadOnly: true, graph: "shop", crossService: true });
+  const fixtures = withDemoWorkloadLedger(createDemoFixtures());
   if (!wire) return withReadOnly(fixtures);
   const overWire = Object.fromEntries(
     (Object.keys(DEMO_SCENARIO_RPCS) as DemoScenarioMethod[]).map((method) => [method, controlPlaneObservabilityApi[method]]),

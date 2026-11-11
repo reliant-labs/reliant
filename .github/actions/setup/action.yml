@@ -7,7 +7,7 @@
 # that also pushed main's caches out of the repository's 10 GB budget. ci.yml's
 # `go-cache` and `release-gate` jobs save on main; everything else restores.
 name: Set up the CI toolchain
-description: Task, plus Go (go.mod's version), Node and ripgrep on request, with main's caches restored
+description: Task, plus Go (go.mod's version), Node, ripgrep and buf on request, with main's caches restored
 
 inputs:
   go:
@@ -34,6 +34,9 @@ inputs:
   buf:
     description: Put go.mod's buf on PATH (forge lint's buf-lint lane refuses to run without it)
     default: "false"
+  golangci:
+    description: Put the pinned forge's golangci-lint on PATH, the release the release gate's forge lint runs (needs go)
+    default: "false"
 
 outputs:
   go-version:
@@ -51,32 +54,102 @@ runs:
     # the ~14 GB a hosted runner has free: the first merge-gate run on CI
     # failed every phase with "disk quota exceeded". The runner image ships
     # .NET, Android, GHC, Boost and CodeQL, none of which this repo uses;
-    # removing them frees ~30 GB in seconds. First, so nothing installed
-    # below can be in the way.
+    # removing them frees ~30 GB. First, so nothing installed below can be in
+    # the way.
+    #
+    # ONLY WHEN THE DISK NEEDS IT. The ubuntu-26.04 runners have a 145 GB root
+    # with 88 GB free before anything is deleted (every merge-queue and
+    # release-gate run of 2026-11-09/10), twice what the gates ran in after the
+    # deletion on the old ~14 GB-free image (~44 GB). There the rm took ~110s
+    # of each release-gate part's setup for space nobody used, so it now runs
+    # only when less than FREE_DISK_MIN_GB is free.
     - name: Free runner disk
       if: inputs.free-disk == 'true'
       shell: bash
+      env:
+        FREE_DISK_MIN_GB: "45"
       run: |
         df -h / | tail -1
+        avail=$(df -BG --output=avail / | tail -1 | tr -dc '0-9')
+        if [ "${avail:-0}" -ge "${FREE_DISK_MIN_GB}" ]; then echo "${avail} GB free (>= ${FREE_DISK_MIN_GB}): nothing to delete"; exit 0; fi
         sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup \
           /usr/local/share/boost /opt/hostedtoolcache/CodeQL || true
         df -h / | tail -1
     # The same deletion without waiting for it: ~100s of rm, most of it the
     # Android SDK's small files, while the caches below restore. Output goes
     # to /dev/null so the step does not wait on the pipe; the runner reaps the
-    # process when the job ends.
+    # process when the job ends. Skipped on a roomy disk, as above: it would
+    # only compete with the cache extraction for the disk.
     - name: Free runner disk (background)
       if: inputs.free-disk == 'background'
       shell: bash
+      env:
+        FREE_DISK_MIN_GB: "45"
       run: |
         df -h / | tail -1
+        avail=$(df -BG --output=avail / | tail -1 | tr -dc '0-9')
+        if [ "${avail:-0}" -ge "${FREE_DISK_MIN_GB}" ]; then echo "${avail} GB free (>= ${FREE_DISK_MIN_GB}): nothing to delete"; exit 0; fi
         sudo sh -c 'rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup /usr/local/share/boost /opt/hostedtoolcache/CodeQL' >/dev/null 2>&1 </dev/null &
 
-    # Taskfile.yml needs Task 3.38+ (`if:` on a task call).
+    # TOOL BINARIES (Task, ripgrep, buf) ARE CACHED PER TOOL AND VERSION, AND A
+    # CACHE HIT NEVER TOUCHES github.com. On 2026-11-08 from ~08:46Z, github.com's
+    # release downloads answered 504 for hours and every job failed here. On a
+    # miss, fetch-release-asset.sh downloads with retries, falls back to the
+    # REST API's asset endpoint (which kept serving), and checks the sha256.
+    # Only the binary is cached, never the archive, and it is saved on a push to
+    # main only (the header). A PR restores main's copy.
+    #
+    # Checking it after the merge: the first push to main runs "Save <tool>
+    # (main only)" in each job that installs it, and the next PR's "Restore
+    # <tool>" reports a cache hit and its install step downloads nothing.
+    # Rolling it back: revert the commit that added these steps (Task goes back
+    # to arduino/setup-task, buf to bufbuild/buf-action, ripgrep to plain curl);
+    # the ci-tool-* caches then go unread and GitHub evicts them after 7 days.
+    # A bad cached binary alone is dropped with `gh cache delete <key>` (keys
+    # are ci-tool-<tool>-<version>-<os>-<arch>), so the next run re-downloads
+    # and re-verifies it.
+    #
+    # Taskfile.yml needs Task 3.38+ (`if:` on a task call). Pinned, not `3.x`:
+    # a cached binary needs a fixed version and checksum. To bump it, change all
+    # three lines together; the sha256 is the asset's (`gh api
+    # repos/go-task/task/releases/tags/<tag> --jq '.assets[].digest'`).
+    - name: Restore Task
+      id: task-cache
+      if: runner.os == 'Linux' && runner.arch == 'X64'
+      uses: actions/cache/restore@v4
+      with:
+        path: ~/.cache/ci-tools/task-3.54.0
+        key: ci-tool-task-3.54.0-${{ runner.os }}-${{ runner.arch }}
+
     - name: Install Task
+      if: runner.os == 'Linux' && runner.arch == 'X64'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        set -euo pipefail
+        d="$HOME/.cache/ci-tools/task-3.54.0"
+        if [ ! -x "$d/task" ]; then
+          mkdir -p "$d"
+          "${{ github.action_path }}/fetch-release-asset.sh" go-task/task v3.54.0 task_linux_amd64.tar.gz \
+            "$RUNNER_TEMP/task.tgz" 680859dbb4d881a9c72d4d9a8f510825450849af8567deacd7302c01124416fb
+          tar -xzf "$RUNNER_TEMP/task.tgz" -C "$d" task
+        fi
+        echo "$d" >> "$GITHUB_PATH"
+
+    - name: Save Task (main only)
+      if: runner.os == 'Linux' && runner.arch == 'X64' && steps.task-cache.outputs.cache-hit != 'true' && github.event_name == 'push' && github.ref == 'refs/heads/main'
+      uses: actions/cache/save@v4
+      with:
+        path: ~/.cache/ci-tools/task-3.54.0
+        key: ci-tool-task-3.54.0-${{ runner.os }}-${{ runner.arch }}
+
+    # Every job runs on ubuntu x64 today; any other runner keeps the action.
+    - name: Install Task (other runners)
+      if: runner.os != 'Linux' || runner.arch != 'X64'
       uses: arduino/setup-task@v2
       with:
-        version: 3.x
+        version: 3.54.0
         repo-token: ${{ github.token }}
 
     # setup-go's own cache always saves in its post step, which cannot be
@@ -139,23 +212,100 @@ runs:
       shell: bash
       run: echo "version=$(awk '$1 == "github.com/bufbuild/buf" { sub(/^v/, "", $2); print $2; exit }' go.mod)" >> "$GITHUB_OUTPUT"
 
+    # Cached like Task (above). Its checksum is the digest GitHub records for
+    # the asset, since the version follows go.mod.
+    - name: Restore buf
+      id: buf-cache
+      if: inputs.buf == 'true'
+      uses: actions/cache/restore@v4
+      with:
+        path: ~/.cache/ci-tools/buf-${{ steps.buf.outputs.version }}
+        key: ci-tool-buf-${{ steps.buf.outputs.version }}-${{ runner.os }}-${{ runner.arch }}
+
     - name: Install buf
       if: inputs.buf == 'true'
-      uses: bufbuild/buf-action@v1
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        BUF_VERSION: ${{ steps.buf.outputs.version }}
+      run: |
+        set -euo pipefail
+        d="$HOME/.cache/ci-tools/buf-${BUF_VERSION}"
+        if [ ! -x "$d/buf" ]; then
+          mkdir -p "$d"
+          "${{ github.action_path }}/fetch-release-asset.sh" bufbuild/buf "v${BUF_VERSION}" buf-Linux-x86_64 "$d/buf.download"
+          install -m 0755 "$d/buf.download" "$d/buf" && rm -f "$d/buf.download"
+        fi
+        echo "$d" >> "$GITHUB_PATH"
+
+    - name: Save buf (main only)
+      if: inputs.buf == 'true' && steps.buf-cache.outputs.cache-hit != 'true' && github.event_name == 'push' && github.ref == 'refs/heads/main'
+      uses: actions/cache/save@v4
       with:
-        setup_only: true
-        version: ${{ steps.buf.outputs.version }}
-        github_token: ${{ github.token }}
+        path: ~/.cache/ci-tools/buf-${{ steps.buf.outputs.version }}
+        key: ci-tool-buf-${{ steps.buf.outputs.version }}-${{ runner.os }}-${{ runner.arch }}
+
+    # The merge queue's `golangci (changed)` job (merge-queue.yml). The version
+    # is the pinned forge's templates.GolangciLintVersion, the release forge
+    # lint requires in the release gate, read from that module's source so the
+    # two can never disagree; a forge that moved the constant fails this step
+    # rather than installing a guess. Cached like buf, checked against the
+    # digest GitHub records for the asset (it is the release binary, built
+    # with a Go new enough for go.mod).
+    - name: Read the golangci-lint pin
+      id: golangci
+      if: inputs.golangci == 'true'
+      shell: bash
+      run: |
+        set -euo pipefail
+        dir="$(go mod download -json github.com/reliant-labs/forge | jq -r .Dir)"
+        v="$(sed -n 's/^const GolangciLintVersion = "v\([0-9][0-9.]*\)"$/\1/p' "${dir}/internal/templates/toolversions.go")"
+        [ -n "$v" ] || { echo "::error::no GolangciLintVersion in ${dir}/internal/templates/toolversions.go (the pinned forge moved it?)"; exit 1; }
+        echo "version=${v}" | tee -a "$GITHUB_OUTPUT"
+
+    - name: Restore golangci-lint
+      id: golangci-cache
+      if: inputs.golangci == 'true'
+      uses: actions/cache/restore@v4
+      with:
+        path: ~/.cache/ci-tools/golangci-lint-${{ steps.golangci.outputs.version }}
+        key: ci-tool-golangci-lint-${{ steps.golangci.outputs.version }}-${{ runner.os }}-${{ runner.arch }}
+
+    - name: Install golangci-lint
+      if: inputs.golangci == 'true'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        V: ${{ steps.golangci.outputs.version }}
+      run: |
+        set -euo pipefail
+        d="$HOME/.cache/ci-tools/golangci-lint-${V}" f="golangci-lint-${V}-linux-amd64"
+        if [ ! -x "$d/golangci-lint" ]; then
+          mkdir -p "$d"
+          "${{ github.action_path }}/fetch-release-asset.sh" golangci/golangci-lint "v${V}" "${f}.tar.gz" "${RUNNER_TEMP}/golangci.tgz"
+          tar -xzf "${RUNNER_TEMP}/golangci.tgz" -C "${RUNNER_TEMP}" "${f}/golangci-lint"
+          install -m 0755 "${RUNNER_TEMP}/${f}/golangci-lint" "$d/golangci-lint"
+        fi
+        echo "$d" >> "$GITHUB_PATH"
+
+    - name: Save golangci-lint (main only)
+      if: inputs.golangci == 'true' && steps.golangci-cache.outputs.cache-hit != 'true' && github.event_name == 'push' && github.ref == 'refs/heads/main'
+      uses: actions/cache/save@v4
+      with:
+        path: ~/.cache/ci-tools/golangci-lint-${{ steps.golangci.outputs.version }}
+        key: ci-tool-golangci-lint-${{ steps.golangci.outputs.version }}-${{ runner.os }}-${{ runner.arch }}
 
     # frontends/web installs with pnpm, at the version that wrote its
-    # pnpm-lock.yaml (frontends/web/package.json engines.pnpm). The npm cache
-    # below covers the npm projects; pnpm fetches the web tree from the registry.
+    # pnpm-lock.yaml. The action reads it from the root package.json's
+    # packageManager field (the same pin frontends/web/package.json carries),
+    # so there is no version here: naming one beside that field fails the
+    # action ("Multiple versions of pnpm specified"). The npm cache below
+    # covers the npm projects; pnpm fetches the web tree from the registry.
     - name: Set up pnpm
       if: inputs.node == 'true'
       uses: pnpm/action-setup@v4
-      with:
-        version: 12.15.0
 
+    # The major .nvmrc names; package.json engines.node admits 22.12+ and 24.
     - name: Set up Node
       if: inputs.node == 'true'
       uses: actions/setup-node@v6
@@ -167,14 +317,36 @@ runs:
           electron/package-lock.json
           tools/protoc-gen-es/package-lock.json
 
-    # A pinned, checksum-verified static build: apt-get cost ~15s a job.
+    # A pinned, checksum-verified static build (apt-get cost ~15s a job),
+    # cached like Task (above).
+    - name: Restore ripgrep
+      id: rg-cache
+      if: inputs.ripgrep == 'true'
+      uses: actions/cache/restore@v4
+      with:
+        path: ~/.cache/ci-tools/rg-14.1.1
+        key: ci-tool-rg-14.1.1-${{ runner.os }}-${{ runner.arch }}
+
     - name: Install ripgrep
       if: inputs.ripgrep == 'true'
       shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
       run: |
         set -euo pipefail
-        v=14.1.1; f="ripgrep-${v}-x86_64-unknown-linux-musl"
-        curl -fsSL -o "${RUNNER_TEMP}/rg.tgz" "https://github.com/BurntSushi/ripgrep/releases/download/${v}/${f}.tar.gz"
-        echo "4cf9f2741e6c465ffdb7c26f38056a59e2a2544b51f7cc128ef28337eeae4d8e  ${RUNNER_TEMP}/rg.tgz" | sha256sum -c -
-        tar -xzf "${RUNNER_TEMP}/rg.tgz" -C "${RUNNER_TEMP}" "${f}/rg"
-        sudo install -m 0755 "${RUNNER_TEMP}/${f}/rg" /usr/local/bin/rg
+        v=14.1.1; f="ripgrep-${v}-x86_64-unknown-linux-musl"; d="$HOME/.cache/ci-tools/rg-${v}"
+        if [ ! -x "$d/rg" ]; then
+          mkdir -p "$d"
+          "${{ github.action_path }}/fetch-release-asset.sh" BurntSushi/ripgrep "$v" "${f}.tar.gz" "${RUNNER_TEMP}/rg.tgz" \
+            4cf9f2741e6c465ffdb7c26f38056a59e2a2544b51f7cc128ef28337eeae4d8e
+          tar -xzf "${RUNNER_TEMP}/rg.tgz" -C "${RUNNER_TEMP}" "${f}/rg"
+          install -m 0755 "${RUNNER_TEMP}/${f}/rg" "$d/rg"
+        fi
+        sudo install -m 0755 "$d/rg" /usr/local/bin/rg
+
+    - name: Save ripgrep (main only)
+      if: inputs.ripgrep == 'true' && steps.rg-cache.outputs.cache-hit != 'true' && github.event_name == 'push' && github.ref == 'refs/heads/main'
+      uses: actions/cache/save@v4
+      with:
+        path: ~/.cache/ci-tools/rg-14.1.1
+        key: ci-tool-rg-14.1.1-${{ runner.os }}-${{ runner.arch }}

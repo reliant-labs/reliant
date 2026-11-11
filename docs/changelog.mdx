@@ -13,6 +13,159 @@ Regenerate with: task generate:docs:changelog
 
 Track what's new in each Reliant release.
 
+<Update label="v1.14.0" description="November 10, 2026">
+### 2 new features, 8 fixes and 7 other changes
+
+Every pull request merged since v1.13.0, grouped by its conventional-commit type.
+
+#### Added
+
+- **web: environment Promotions timeline on the env Overview** [#2514](https://github.com/reliant-labs/reliant/pull/2514)
+- **models: add Claude 5.2 Fable on the claude subscription driver** [#2531](https://github.com/reliant-labs/reliant/pull/2531)
+
+#### Changed
+
+- **mcp: EnsureProjectServersLoaded tests start no built-in server (#2424)** [#2516](https://github.com/reliant-labs/reliant/pull/2516)
+- **forge-version tests skip when forge is replaced by a local checkout (forge's consumer canary)** [#2518](https://github.com/reliant-labs/reliant/pull/2518)
+- **daemonruntime: preview forwarder port tests hold their ports so no other process can take them (#2479)** [#2526](https://github.com/reliant-labs/reliant/pull/2526)
+- **toolexec: restore TestTerminalOutputQueue_OverflowEndsWithError (#2228)** [#2528](https://github.com/reliant-labs/reliant/pull/2528)
+- **shell: restore the archived-workspace kill notice assertion, waited for (#2128)** [#2530](https://github.com/reliant-labs/reliant/pull/2530)
+- **authz: one authorization seam for chats, projects, machines, workflows and triggers** [#2533](https://github.com/reliant-labs/reliant/pull/2533)
+- **demo: demo.reliantlabs.io ships with prod's release; the demo env is deprecated** [#2515](https://github.com/reliant-labs/reliant/pull/2515)
+
+#### Fixed
+
+- **proctree: a command prepared alongside another no longer fails to start with ENOENT** [#2517](https://github.com/reliant-labs/reliant/pull/2517)
+- **prove_test: admit files in another git worktree of a workspace repository** [#2520](https://github.com/reliant-labs/reliant/pull/2520)
+- **worktree: a base branch whose local copy is behind origin's starts at origin's** [#2521](https://github.com/reliant-labs/reliant/pull/2521)
+- **store: a NUL in a step's output no longer fails its step_executions insert** [#2522](https://github.com/reliant-labs/reliant/pull/2522)
+- **toolexec: the daemon refusing a credential file is a user error, not an ERROR** [#2523](https://github.com/reliant-labs/reliant/pull/2523)
+- **workflow: a step that cannot run as configured no longer reports "workflow validation failed"** [#2527](https://github.com/reliant-labs/reliant/pull/2527)
+- **web: scrolling back no longer loads a chat's whole history with the view stuck at the top** [#2513](https://github.com/reliant-labs/reliant/pull/2513)
+- **db: allocate chat updates at READ COMMITTED, as user updates already are** [#2524](https://github.com/reliant-labs/reliant/pull/2524)
+
+</Update>
+
+<Update label="v1.13.0" description="November 9, 2026">
+### 1 new feature, 4 fixes and 3 other changes
+
+Every pull request merged since v1.12.0, grouped by its conventional-commit type.
+
+#### Added
+
+- **web: read-only storage browser in the Apps console** [#2364](https://github.com/reliant-labs/reliant/pull/2364)
+
+#### Changed
+
+- **pin: forge@0a3a89d5 (accessible drawer and modal adoption)** [#2468](https://github.com/reliant-labs/reliant/pull/2468)
+- **web: drop the unused better-sqlite3 dev dependency and admit Node 26** [#2506](https://github.com/reliant-labs/reliant/pull/2506)
+- **forge: hosting is generally available; deploy any language and third-party images** [#2507](https://github.com/reliant-labs/reliant/pull/2507)
+
+#### Fixed
+
+- **workflow: run node honors work_dir and templates writable_checkouts** [#2503](https://github.com/reliant-labs/reliant/pull/2503)
+- **machines: let a cleared default machine forget its remembered choice (1/2)** [#2502](https://github.com/reliant-labs/reliant/pull/2502)
+- **cli: reliant github tries the next account when one has no GitHub connection** [#2508](https://github.com/reliant-labs/reliant/pull/2508)
+- **web: sheets opened by a tap Safari never focused restore focus to it again** [#2509](https://github.com/reliant-labs/reliant/pull/2509)
+
+</Update>
+
+<Update label="v1.12.0" description="November 9, 2026">
+### 3 new features, 4 fixes and 3 other changes
+
+Every pull request merged since v1.11.0, grouped by its conventional-commit type.
+
+#### Added
+
+- **workflow: a run step's retry reattaches to the command its first attempt started** [#2473](https://github.com/reliant-labs/reliant/pull/2473)
+- **web: show a spinner while a hosted app is deploying** [#2476](https://github.com/reliant-labs/reliant/pull/2476)
+- **web,sdk: open chats with tool bodies fetched on expand; SDK toolBodies option and fetchContentBlockBodies (TS + Go)** [#2470](https://github.com/reliant-labs/reliant/pull/2470)
+
+#### Changed
+
+- **cmd: the transcript kill-switch test evaluates KCL with the pinned forge, not PATH's** [#2485](https://github.com/reliant-labs/reliant/pull/2485)
+- **web: use generated definitions for transient filesystem reads** [#2487](https://github.com/reliant-labs/reliant/pull/2487)
+- **pin: forge@56e8024f38c5 + @reliantlabs/forge-web-runtime@0.13.9, as promoted in v1.11.0-rc.2** [#2492](https://github.com/reliant-labs/reliant/pull/2492)
+
+#### Fixed
+
+- **dev: pin pnpm and Node so a dev install never edits tracked files** [#2463](https://github.com/reliant-labs/reliant/pull/2463)
+- **accountlimits: a Codex account served from credits past its weekly window is not limited** [#2484](https://github.com/reliant-labs/reliant/pull/2484)
+- **runs: input to a run reaches the agent running in it, and never restarts a workflow** [#2464](https://github.com/reliant-labs/reliant/pull/2464)
+- **web: keep filesystem move deletion on the captured machine** [#2488](https://github.com/reliant-labs/reliant/pull/2488)
+
+</Update>
+
+<Update label="v1.11.0" description="November 8, 2026">
+### 10 new features, 27 fixes and 17 other changes
+
+Every pull request merged since v1.10.0, grouped by its conventional-commit type.
+
+#### Added
+
+- **chat: long pastes are ordinary attachment chips; draft attachments survive a reload** [#2400](https://github.com/reliant-labs/reliant/pull/2400)
+- **web: the forge demo as its own bundle and env — forge console on the mock transport, Reliant-free, deploy/kcl/demo** [#2335](https://github.com/reliant-labs/reliant/pull/2335)
+- **config: deprecate DEMO_APP_HOST now that demo.reliantlabs.io is its own env (behavior kept within v1); demo deploy and rollback docs** [#2336](https://github.com/reliant-labs/reliant/pull/2336)
+- **projects: browse, create and attach projects on any machine; detach without deleting** [#2338](https://github.com/reliant-labs/reliant/pull/2338)
+- **workflow: add durable opt-in ambient memory exclusion** [#2379](https://github.com/reliant-labs/reliant/pull/2379)
+- **web: manage projects per machine; pick the machine when adding a project or folder** [#2342](https://github.com/reliant-labs/reliant/pull/2342)
+- **web: workflows tour shows a finished Fix my PR on the canvas (drag demo, no required build steps, phone deck)** [#2359](https://github.com/reliant-labs/reliant/pull/2359)
+- **web: time chat open as one chat.open interaction span, click to usable timeline** [#2433](https://github.com/reliant-labs/reliant/pull/2433)
+- **web: simplified thread never folds the agent's prose, only runs of tool work** [#2438](https://github.com/reliant-labs/reliant/pull/2438)
+- **workloads: view redacted config values on demand** [#2381](https://github.com/reliant-labs/reliant/pull/2381)
+
+#### Changed
+
+- **e2e: the one-step demo page tour shows no step count** [#2403](https://github.com/reliant-labs/reliant/pull/2403)
+- **app: remove flaky TestPersistenceRolesAreTheDatabase (#2401)** [#2402](https://github.com/reliant-labs/reliant/pull/2402)
+- **dev: build each Air host binary once per save, with -trimpath** [#2410](https://github.com/reliant-labs/reliant/pull/2410)
+- **pin: forge@v1.2.0 (the tag on the commit already pinned, 7a1f5720c)** [#2417](https://github.com/reliant-labs/reliant/pull/2417)
+- **ci: claim the service catalog and demo scripts in test-affected** [#2418](https://github.com/reliant-labs/reliant/pull/2418)
+- **pin: forge@88cb28c2f (pgtest owner leases #1918, dev telemetry, obs instance scope); web-runtime 0.13.6** [#2421](https://github.com/reliant-labs/reliant/pull/2421)
+- **forge: bump to 88cb28c2f; dev stack ships telemetry to the hosted store (dev_telemetry = auto)** [#2411](https://github.com/reliant-labs/reliant/pull/2411)
+- **pin: forge@6d8c0ab60 (ShellBuild inputs skip: forge #1935)** [#2422](https://github.com/reliant-labs/reliant/pull/2422)
+- **setup: cache Task, ripgrep and buf; fetch them with retries and an API fallback** [#2426](https://github.com/reliant-labs/reliant/pull/2426)
+- **electron: cache the Electron zip and electron-builder's tools by version** [#2427](https://github.com/reliant-labs/reliant/pull/2427)
+- **release-gate: restore the Electron zip in every part, not only web** [#2428](https://github.com/reliant-labs/reliant/pull/2428)
+- **ci: merge-gate --skip-lint drops vet and lint without queue-entry semantics** [#2431](https://github.com/reliant-labs/reliant/pull/2431)
+- **chat: record transcript byte share on every read** [#2439](https://github.com/reliant-labs/reliant/pull/2439)
+- **golangci-lint on changed packages before merge (parallel job)** [#2436](https://github.com/reliant-labs/reliant/pull/2436)
+- **web: adopt published forge devlog and record frontend migration gaps** [#2448](https://github.com/reliant-labs/reliant/pull/2448)
+- **pin: forge@56e8024f (two-phase trace page query, fast ListTraces: forge #1960)** [#2453](https://github.com/reliant-labs/reliant/pull/2453)
+- **web: use published forge demo mock helpers** [#2454](https://github.com/reliant-labs/reliant/pull/2454)
+
+#### Fixed
+
+- **web: quiet idempotent setting cleanup and make settings-sync startup logs accurate** [#2405](https://github.com/reliant-labs/reliant/pull/2405)
+- **web: share one ListDaemons query instead of a burst of aborted duplicates** [#2404](https://github.com/reliant-labs/reliant/pull/2404)
+- **web: the telemetry service.name test accepts a project with more than one frontend** [#2408](https://github.com/reliant-labs/reliant/pull/2408)
+- **web: the chat transcript can never scroll sideways** [#2409](https://github.com/reliant-labs/reliant/pull/2409)
+- **credsandbox: a credentials:none command run inside another one is no longer refused** [#2415](https://github.com/reliant-labs/reliant/pull/2415)
+- **dev: air-build marks a build reusable only when its input graph held still** [#2414](https://github.com/reliant-labs/reliant/pull/2414)
+- **worktreereclaim: tracked secrets/ and data/ directories and forge generate output no longer hold every worktree from retirement** [#2406](https://github.com/reliant-labs/reliant/pull/2406)
+- **dev: air-build delegates staleness to go's build cache** [#2419](https://github.com/reliant-labs/reliant/pull/2419)
+- **ci: the merge gate checks pgtest's shared Postgres before generate and test** [#2420](https://github.com/reliant-labs/reliant/pull/2420)
+- **worktree: a create on a slow machine takes back a failed checkout, fsyncs a made one, and warns instead of paging** [#2293](https://github.com/reliant-labs/reliant/pull/2293)
+- **worktreereclaim: apply De Morgan in repairRegistration's lock check (main red on Release gate lint)** [#2425](https://github.com/reliant-labs/reliant/pull/2425)
+- **credsandbox: credentials: none can no longer write what a later credentialed step trusts (sandbox v2)** [#2368](https://github.com/reliant-labs/reliant/pull/2368)
+- **test-affected: apply De Morgan in the Electron cache test's step-order check (main red on Release gate lint)** [#2430](https://github.com/reliant-labs/reliant/pull/2430)
+- **credsandbox: mark credScratchRecordName as not a credential (main red on Release gate lint, gosec G101)** [#2432](https://github.com/reliant-labs/reliant/pull/2432)
+- **web: keep demo page callouts below the screen-action row** [#2437](https://github.com/reliant-labs/reliant/pull/2437)
+- **chat: scroll-back keeps paging past hidden rows; "Start of conversation" only at the real start** [#2440](https://github.com/reliant-labs/reliant/pull/2440)
+- **web: simplified thread keeps cards, media and mail at their place in the timeline** [#2441](https://github.com/reliant-labs/reliant/pull/2441)
+- **observability: always show Sessions, with a replay-off empty state** [#2442](https://github.com/reliant-labs/reliant/pull/2442)
+- **daemonruntime: an archived worktree is held only by its own processes and terminals, not by any on the machine** [#2434](https://github.com/reliant-labs/reliant/pull/2434)
+- **db: UpdateChatUnread hands a serialization failure to its transaction's retry** [#2445](https://github.com/reliant-labs/reliant/pull/2445)
+- **runtime: a user's cancel and the identical-failure guard are outcomes, not ERRORs** [#2446](https://github.com/reliant-labs/reliant/pull/2446)
+- **server: flush telemetry on root startup failures** [#2447](https://github.com/reliant-labs/reliant/pull/2447)
+- **ci: green reliant main — the apps e2e finds the deploy card in place, with no fold (#2441)** [#2449](https://github.com/reliant-labs/reliant/pull/2449)
+- **workflow: a stopped spawn is no longer repaired as stranded while its run reports the stop** [#2452](https://github.com/reliant-labs/reliant/pull/2452)
+- **spawn: accept providers sent as a JSON-encoded string** [#2444](https://github.com/reliant-labs/reliant/pull/2444)
+- **workflow: a worker stop retries the LLM turn instead of saving its partial as the answer** [#2451](https://github.com/reliant-labs/reliant/pull/2451)
+- **demo: keep mobile workload controls reachable and notices in flow** [#2456](https://github.com/reliant-labs/reliant/pull/2456)
+
+</Update>
+
 <Update label="v1.10.0" description="November 7, 2026">
 ### 10 new features, 13 fixes and 11 other changes
 

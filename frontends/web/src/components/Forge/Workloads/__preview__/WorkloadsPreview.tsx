@@ -34,6 +34,7 @@ import { createReleasesFixtureApi } from "../../Releases/__fixtures__/releaseFix
 import { OverviewHome, type HostedByEnv, type OverviewSearch } from "../OverviewHome";
 import { WorkloadDetail, type WorkloadActions, type WorkloadDetailSearch } from "../WorkloadDetail";
 import { actionsUnavailableReason } from "../WorkloadPages";
+import { createConfigFixtureReader } from "../__fixtures__/workloadConfigFixtures";
 import {
   FIXTURE_DOMAINS,
   FIXTURE_HOSTED,
@@ -66,6 +67,9 @@ const CASES: { id: string; label: string; state: WorkloadsFixtureState }[] = [
   { id: "local", label: "local env (no restart)", state: "data" },
   { id: "no-default-branch", label: "repo default branch unknown", state: "data" },
   { id: "action-fails", label: "restart / stop refused", state: "data" },
+  { id: "config-values", label: "redacted config values (Config tab)", state: "data" },
+  { id: "config-denied", label: "config grant refused (Config tab)", state: "data" },
+  { id: "config-unsupported", label: "config unsupported (Config tab)", state: "data" },
   { id: "no-envs", label: "nothing deployed", state: "data" },
   { id: "no-frontends", label: "no frontend deployed", state: "data" },
   { id: "frontends-loading", label: "frontends loading", state: "data" },
@@ -171,6 +175,7 @@ export default function WorkloadsPreview() {
                   dashboards: withSearch("/forge-dashboards-preview", { dark: search.dark, scheme: search.scheme }),
                 }}
                 actions={actions}
+                readConfig={createConfigFixtureReader(active.id === "config-denied" ? "denied" : active.id === "config-unsupported" ? "unsupported" : "values")}
                 hosted={kind === "persistent" ? fixtureHostedObservation(workloadEnv.name, search.workload) : null}
                 declaredInRender={!workloadEnv.placed && workloadEnv.declared.includes(search.workload)}
               />

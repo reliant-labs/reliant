@@ -97,9 +97,13 @@ describe("the forge demo console", () => {
     renderDemo("/forge/demo?view=overview");
     expect(await screen.findByTestId("forge-demo-banner", {}, { timeout: 15_000 })).toHaveTextContent("Demo data");
     expect(screen.getByTestId("forge-demo-banner")).toHaveTextContent("Sample data from a made-up app called shop. Nothing here touches your projects.");
+    // The notice belongs to the document flow, not a translucent sticky layer
+    // that paints over filters and chart actions as the page scrolls.
+    expect(screen.getByTestId("forge-demo-banner")).toHaveClass("bg-surface");
+    expect(screen.getByTestId("forge-demo-banner").className).not.toMatch(/sticky|fixed|bg-warning-surface/);
     expect(await screen.findByTestId("obs-overview")).toBeInTheDocument();
     // The console's nav (the journey's first spotlight), every row kept on the demo.
-    const nav = document.querySelector<HTMLElement>("[data-tour='forge-console'] #sidebar-layout-nav");
+    const nav = document.querySelector<HTMLElement>("[data-tour='forge-console'] aside");
     expect(nav).not.toBeNull();
     expect(within(nav!).getByRole("link", { name: /Overview/ })).toHaveAttribute("href", "/forge/demo");
     expect(within(nav!).getByRole("link", { name: /Releases/ })).toHaveAttribute("href", "/forge/demo");
@@ -111,7 +115,7 @@ describe("the forge demo console", () => {
     fireEvent.click(await screen.findByTestId("forge-demo-how-built", {}, { timeout: 15_000 }));
     await waitFor(() => expect(search(router).section).toBe("built"));
     expect(await screen.findByTestId("scaffold-replay", {}, { timeout: 15_000 })).toBeInTheDocument();
-    expect(screen.getByTestId("scaffold-headline")).toHaveTextContent(/You wrote \d+ lines of proto/);
+    expect(screen.getByTestId("scaffold-headline")).toHaveTextContent(/\d+ lines of API definitions/);
     expect(screen.queryByTestId("obs-overview")).toBeNull();
     // Already open: the banner no longer offers it.
     expect(screen.queryByTestId("forge-demo-how-built")).toBeNull();
@@ -239,19 +243,30 @@ describe("the forge demo console", () => {
     beforeEach(() => resetShellForTests("demo"));
     afterEach(() => resetShellForTests());
 
-    it("offers Install forge and Sign up instead of Leave the demo, and says what it records", async () => {
-      const user = userEvent.setup();
+    it("draws no banner (the action row says it once), and lists How it was built as a nav row", async () => {
       renderDemo("/forge/demo?view=overview");
-      const banner = await screen.findByTestId("forge-demo-banner", {}, { timeout: 15_000 });
-      expect(banner).toHaveTextContent("Nothing you click here changes anything.");
-      expect(within(banner).queryByTestId("forge-demo-exit")).toBeNull();
-      expect(within(banner).getByTestId("demo-cta-signup")).toHaveAttribute("href", expect.stringContaining("/auth?utm_source=demo&utm_medium=banner"));
-      expect(within(banner).getByTestId("forge-demo-telemetry-notice")).toHaveTextContent("This demo records usage and session replays to improve the product.");
-      await user.click(within(banner).getByTestId("demo-cta-install"));
-      const sheet = await screen.findByTestId("demo-install-sheet");
-      expect(sheet).toHaveTextContent("brew install reliant-labs/reliant/forge");
-      expect(sheet).toHaveTextContent("forge start");
+      expect(await screen.findByTestId("obs-overview", {}, { timeout: 15_000 })).toBeInTheDocument();
+      expect(screen.queryByTestId("forge-demo-banner")).toBeNull();
+      // Not repeated as a button under every view.
+      expect(screen.queryByTestId("how-built-link")).toBeNull();
+      const row = screen.getByRole("link", { name: "How it was built" });
+      expect(row).toHaveAttribute("href", "/forge/demo?section=built");
       expectNothingTouched();
+    }, 30_000);
+
+    it("names the build page in the breadcrumb and nav, not Overview", async () => {
+      renderDemo("/forge/demo?section=built");
+      expect(await screen.findByTestId("how-built", {}, { timeout: 15_000 })).toBeInTheDocument();
+      const crumbs = screen.getByRole("navigation", { name: "Breadcrumb" });
+      expect(within(crumbs).getByText("How it was built")).toHaveAttribute("aria-current", "page");
+      expect(within(crumbs).queryByText("Overview")).toBeNull();
+      expect(screen.getByRole("link", { name: "How it was built" })).toHaveAttribute("aria-current", "page");
+    }, 30_000);
+
+    it("orders the environments dev, staging, prod, then All", async () => {
+      renderDemo("/forge/demo?view=overview");
+      const scope = await screen.findByTestId("env-scope", {}, { timeout: 15_000 });
+      expect(within(scope).getAllByRole("button").map((b) => b.textContent)).toEqual(["dev", "staging", "prod", "All"]);
     }, 30_000);
   });
 });

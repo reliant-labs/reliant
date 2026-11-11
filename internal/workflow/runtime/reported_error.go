@@ -31,12 +31,29 @@ func alreadyReported(err error) bool {
 	return errors.As(err, &r)
 }
 
-// logFailure logs a failure a layer is returning: at ERROR, or at DEBUG when
-// an inner layer already reported err.
+// logFailure logs a failure a layer is returning: at ERROR; at DEBUG when an
+// inner layer already reported err; at INFO when it is the user's cancel. A
+// cancel ends the thread the way the user asked, and ERROR is for faults:
+// each layer it passed through used to log it there, and every ERROR opens an
+// obs issue (prod 4d68df91, reliant #2395). A real failure keeps ERROR.
 func logFailure(logger log.Logger, err error, msg string, keyvals ...interface{}) {
-	if alreadyReported(err) {
+	switch {
+	case alreadyReported(err):
 		logger.Debug(msg, keyvals...)
-		return
+	case errors.Is(err, ErrThreadCancelled):
+		logger.Info(msg, keyvals...)
+	default:
+		logger.Error(msg, keyvals...)
 	}
-	logger.Error(msg, keyvals...)
+}
+
+// reportExpectedStop logs, at WARN, a failure the runtime raises on purpose
+// to end an agent — a guard working as designed on what the agent was told —
+// and returns err marked reported, so the layers that pass it up log it at
+// DEBUG. The run still fails with it, and its user reads why in the run; it
+// is not a fault of the platform, so it is not an ERROR (prod bc65dd1b, an
+// agent that kept asking GitHub for a repository the app is not installed on).
+func reportExpectedStop(logger log.Logger, err error, msg string, keyvals ...interface{}) error {
+	logger.Warn(msg, keyvals...)
+	return markReported(err)
 }

@@ -36,6 +36,15 @@ export interface ToolCallData {
    * thread the call owns — no search required.
    */
   childWorkflowId?: string;
+  /**
+   * The server left this call's input out (a stub transcript read,
+   * ContentBlock.body_elided): `input` is a skeleton — every key kept, long
+   * strings cut — enough to label the call, never to render it as its input.
+   * The body is read by `content_block_id` (hooks/content-block-bodies.ts).
+   */
+  inputElided?: boolean;
+  /** Byte length of the stored input, when it was elided. */
+  inputSize?: number;
 }
 
 export interface ToolResultData {
@@ -53,6 +62,14 @@ export interface ToolResultData {
    */
   truncated?: boolean;
   original_size?: number;
+  /**
+   * The server left this result's body out (ContentBlock.body_elided):
+   * `content` is a short stub and `truncated` is set too. The body is read by
+   * `block_id` (hooks/content-block-bodies.ts).
+   */
+  elided?: boolean;
+  /** The TOOL_RESULT block this came from. */
+  block_id?: string;
 }
 
 export interface ToolExecution {
@@ -168,6 +185,10 @@ export function processMessage(
         durableCompletedAt: block.completedAt,
         childWorkflowId: block.childWorkflowId,
       };
+      if (block.bodyElided) {
+        call.inputElided = true;
+        if (block.bodySize !== undefined) call.inputSize = Number(block.bodySize);
+      }
 
       // Check for streaming state
       if (!call.name || block.input === undefined) {
@@ -192,6 +213,8 @@ export function processMessage(
           attachments: indexed.attachments,
           truncated: indexed.truncated,
           original_size: indexed.original_size,
+          elided: indexed.elided,
+          block_id: indexed.block_id,
         });
       }
     } else if (block.type === ContentBlockType.TOOL_RESULT) {
@@ -203,6 +226,8 @@ export function processMessage(
         is_error: Boolean(block.isError),
         truncated: resolved.truncated,
         original_size: resolved.original_size,
+        elided: resolved.elided,
+        block_id: resolved.block_id,
       };
 
       if (result.tool_call_id && !toolResultsById.has(result.tool_call_id)) {

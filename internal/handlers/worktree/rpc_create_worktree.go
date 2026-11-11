@@ -176,7 +176,7 @@ func (s *Service) CreateWorktree(
 		OwnerDaemonID:  ownerDaemonID,
 		IdempotencyKey: idempotencyKey,
 	}
-	worktree, err := workspacecreate.Insert(ctx, s.deps.Repo, createReq)
+	worktree, err := workspacecreate.Insert(ctx, s.deps.Repo, worktreeMachine{s: s, userID: userID, target: target.machine}, createReq)
 	if err != nil {
 		return nil, insertWorktreeError(err, req.Msg.Name)
 	}
@@ -203,7 +203,10 @@ func (s *Service) CreateWorktree(
 // insertWorktreeError maps a workspacecreate.Insert failure to its wire error.
 func insertWorktreeError(err error, name string) error {
 	var branchHeld *workspacecreate.BranchHeldError
+	var teardown *workspacecreate.TeardownPendingError
 	switch {
+	case errors.As(err, &teardown):
+		return svcerr.WithCause(svcerr.WithClass(svcerr.FailedPrecondition(teardown.Error()), svcerr.ClassUser), err)
 	case errors.Is(err, core.ErrWorktreeNameTaken):
 		return svcerr.AlreadyExists(fmt.Sprintf("worktree with name '%s' already exists in this project; archive or rename it, or choose another name", name))
 	case errors.As(err, &branchHeld):

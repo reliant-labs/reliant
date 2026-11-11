@@ -11,10 +11,12 @@ import (
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/messageproto"
 	"github.com/reliant-labs/reliant/internal/threads"
+	"go.opentelemetry.io/otel/trace"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -35,7 +37,7 @@ func (s *Service) ListMessages(
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}
-	if chat.UserID != userID {
+	if !authz.CanReadChat(ctx, userID, chat) {
 		return nil, svcerr.NotFound("chat")
 	}
 
@@ -170,8 +172,15 @@ func (s *Service) ListMessages(
 		}
 	}
 
+	toolBodies := messageproto.ResolveToolBodyMode(req.Msg.GetToolBodies(), s.deps.Config.GetTranscript().GetToolBodyStubs())
 	protoMessages := messageproto.AssembleForDisplay(
-		ctx, s.deps.Repo, messages, blocksByMessageID, attachmentMap, viewingThreadID, 0)
+		ctx, s.deps.Repo, messages, blocksByMessageID, attachmentMap, viewingThreadID, 0, toolBodies)
+	// What this read sent, by block kind, on the RPC's span: counted after
+	// the stub policy, so a STUB read reports the bytes it really sent and
+	// what it left out (transcript.blocks_elided, transcript.bytes_elided).
+	sent := messageproto.TranscriptBytes{ToolBodies: toolBodies}
+	sent.AddMessages(protoMessages...)
+	trace.SpanFromContext(ctx).SetAttributes(sent.Attributes("transcript")...)
 
 	var pageErrors []*reliantv1.ChatErrorUpdate
 	if beforeSeq > 0 && (req.Msg.ThreadId == nil || *req.Msg.ThreadId == "") && len(messages) > 0 {

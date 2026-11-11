@@ -143,6 +143,28 @@ describe("globalUpdatesStore: usage-limit wait", () => {
   });
 });
 
+describe("globalUpdatesStore: a chat moved to another project", () => {
+  it("patches its project and workspace, and refetches the lists it leaves and joins", async () => {
+    const invalidate = vi.spyOn(queryClient, "invalidateQueries");
+    useGlobalUpdatesStore.getState().handleUpdate([
+      buildUpdate({
+        project_id: "p2",
+        update_type: UserUpdateType.CHAT_CONFIG_CHANGED,
+        data: { chat_id: "c1", project_id: "p2", previous_project_id: "p1", worktree_id: "wt-p2-main", active_daemon_id: "d1" },
+      }),
+    ]);
+
+    const detail = queryClient.getQueryData<Chat>(chatKeys.detail("c1"))!;
+    expect(detail.projectId).toBe("p2");
+    expect(detail.worktreeId).toBe("wt-p2-main");
+    expect(detail.activeDaemonId).toBe("d1");
+    await vi.waitFor(() =>
+      expect(invalidate.mock.calls.some(([f]) => JSON.stringify(f?.queryKey) === JSON.stringify(chatKeys.lists()))).toBe(true),
+    );
+    invalidate.mockRestore();
+  });
+});
+
 describe("globalUpdatesStore cache patching", () => {
   it("CHAT_STATE_CHANGE patches the list + detail caches without a refetch", () => {
     // parseChatState only recognizes "idle"/"archived" strings (or numeric

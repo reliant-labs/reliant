@@ -17,6 +17,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/daemon"
 	"github.com/reliant-labs/reliant/internal/daemonpolicy"
 	"github.com/reliant-labs/reliant/internal/diskwatch"
+	"github.com/reliant-labs/reliant/internal/ghshim"
 	"github.com/reliant-labs/reliant/internal/heavyjob"
 	"github.com/reliant-labs/reliant/internal/llm/tools/shell"
 	"github.com/reliant-labs/reliant/internal/osutil"
@@ -67,11 +68,6 @@ func buildExecCommand(ctx context.Context, req daemon.RunCommandRequest) *exec.C
 }
 
 func handleExecRun(ctx context.Context, payload []byte) ([]byte, error) {
-	releaseRecovery, err := beginRecoveryWork()
-	if err != nil {
-		return nil, err
-	}
-	defer releaseRecovery()
 	var req daemon.RunCommandRequest
 	if err := json.Unmarshal(payload, &req); err != nil {
 		return nil, fmt.Errorf("invalid payload: %w", err)
@@ -86,6 +82,13 @@ func handleExecRun(ctx context.Context, payload []byte) ([]byte, error) {
 		return nil, err
 	}
 	req.WorkingDir = resolvedDir
+	// Admitted where it runs, before it starts: it holds only a worktree it
+	// runs inside, and a worktree being retired refuses it.
+	releaseRecovery, err := beginRecoveryWorkIn(req.WorkingDir)
+	if err != nil {
+		return nil, err
+	}
+	defer releaseRecovery()
 
 	// Name a bad working directory before spawning, or the kernel's ENOENT
 	// comes back attributed to the shell binary instead of the directory.
@@ -125,6 +128,9 @@ func handleExecRun(ctx context.Context, payload []byte) ([]byte, error) {
 		return nil, err
 	}
 	cmd.Env = daemonpolicy.ChildEnv(ctx, req.Env, credentials)
+	// A chat's command finds the gh shim first on PATH, so a pull request it
+	// opens with `gh pr create` names the chat (internal/ghshim).
+	cmd.Env = ghshim.Default().Env(cmd.Env)
 
 	// A heavy command runs under the slot wrapper, waiting for one of the
 	// machine's heavy slots first; its timeout counts the wait. On a nearly
@@ -138,9 +144,11 @@ func handleExecRun(ctx context.Context, payload []byte) ([]byte, error) {
 	// credentials: none is a sandbox, not just a scrubbed environment: the
 	// command runs where the daemon's credential files are absent. It wraps
 	// OUTSIDE the heavy-slot rewrite above, so the slot wrapper runs inside it.
-	if refusal := credsandbox.Wrap(cmd, credentials); refusal != "" {
+	if refusal := credsandbox.Wrap(cmd, credentials, req.SandboxWritable()); refusal != "" {
 		return json.Marshal(daemon.CommandResult{ExitCode: credsandbox.RefusedExitCode, Stderr: refusal, Combined: refusal})
 	}
+	// A return before Start must not keep the sandbox's descriptors open.
+	defer credsandbox.Release(cmd)
 
 	var stdoutBuf, stderrBuf bytes.Buffer
 	// Output stamps activity, so if the command is detached into the
@@ -181,6 +189,8 @@ func handleExecRun(ctx context.Context, payload []byte) ([]byte, error) {
 
 	start := time.Now()
 	err = cmd.Start()
+	// The child holds its own copies of the sandbox's descriptors now.
+	credsandbox.Release(cmd)
 	if err != nil {
 		tree.Started(0)
 	}
@@ -253,11 +263,6 @@ func handleExecRun(ctx context.Context, payload []byte) ([]byte, error) {
 // =============================================================================
 
 func handleExecBGStart(ctx context.Context, payload []byte) ([]byte, error) {
-	releaseRecovery, err := beginRecoveryWork()
-	if err != nil {
-		return nil, err
-	}
-	defer releaseRecovery()
 	var req daemon.RunCommandRequest
 	if err := json.Unmarshal(payload, &req); err != nil {
 		return nil, fmt.Errorf("invalid payload: %w", err)
@@ -270,6 +275,13 @@ func handleExecBGStart(ctx context.Context, payload []byte) ([]byte, error) {
 		return nil, err
 	}
 	req.WorkingDir = resolvedDir
+	// Held until the process is in the background registry, which then
+	// holds the worktree it runs in for its whole lifetime (managedRecoveryUse).
+	releaseRecovery, err := beginRecoveryWorkIn(req.WorkingDir)
+	if err != nil {
+		return nil, err
+	}
+	defer releaseRecovery()
 	credentials, err := daemonpolicy.ParseCredentials(req.Credentials)
 	if err != nil {
 		return nil, err
@@ -282,6 +294,7 @@ func handleExecBGStart(ctx context.Context, payload []byte) ([]byte, error) {
 		WorkingDir:  req.WorkingDir,
 		Env:         req.Env,
 		Credentials: credentials,
+		Writable:    req.SandboxWritable(),
 		// Tag the process with the grant that started it, so a later
 		// bg_output/bg_kill from a different connector cannot reach it.
 		// Empty for first-party callers.

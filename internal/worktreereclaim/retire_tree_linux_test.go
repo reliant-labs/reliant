@@ -262,6 +262,56 @@ func TestRetirementTreePartialFailureKeepsGitPointer(t *testing.T) {
 	}
 }
 
+// A lease's Check is point-in-time. Each entry's deletion boundary re-checks
+// it against the inventory, so a change that lands after the check but before
+// that boundary stops deletion: only the inventoried entry, unchanged, is
+// unlinked, and a directory with anything new in it cannot be removed. Here
+// the "outside process" writes inside the tree after the check has passed and
+// before the first boundary; whatever it wrote, and the recovery pointer,
+// survive. The boundary check and its unlink are separate syscalls, so this is
+// not a fence for a write between the two: that window is bounded by the
+// full process check before every unlink, on a tree only its fresh quarantine
+// name reaches (see daemonruntime's managedRecoveryUse).
+func TestRetirementTreeChangeBeforeTheDeletionBoundaryStopsDeletion(t *testing.T) {
+	for name, enter := range map[string]func(root string){
+		"new file":      func(root string) { write(t, filepath.Join(root, "src", "late.go"), "written after the check") },
+		"modified file": func(root string) { write(t, filepath.Join(root, "src", "main.go"), "rewritten after the check") },
+	} {
+		t.Run(name, func(t *testing.T) {
+			root := retirementFixture(t)
+			tree, err := inspectRetirementTree(context.Background(), root)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer tree.close()
+			entered := false
+			err = tree.remove(context.Background(), func() error {
+				if !entered {
+					entered = true
+					enter(root) // after this check authorized the next unlink
+				}
+				return nil
+			})
+			if !entered {
+				t.Fatal("check never ran")
+			}
+			if err == nil {
+				t.Fatal("tree used after the final check was removed")
+			}
+			if !exists(filepath.Join(root, ".git")) {
+				t.Fatal("recovery pointer removed")
+			}
+			if name == "modified file" {
+				if b, err := os.ReadFile(filepath.Join(root, "src", "main.go")); err != nil || string(b) != "rewritten after the check" {
+					t.Fatalf("rewritten file lost: %q %v", b, err)
+				}
+			} else if !exists(filepath.Join(root, "src", "late.go")) {
+				t.Fatal("file written after the check was removed")
+			}
+		})
+	}
+}
+
 // Every node_modules holds symlinks (.bin, pnpm's whole layout) and pnpm
 // hard-links its store into it. Refusing either held every worktree that had
 // run an install, which were the worktrees that filled the disk. Removing a

@@ -36,6 +36,7 @@ import (
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/checkoutteardown"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/gitref"
@@ -130,6 +131,9 @@ type Request struct {
 	// worktrees root (see worktreepath.WorkspaceDirName). Adopt needs it up
 	// front because it moves a checkout into the directory before Finish.
 	WorkspaceID string
+	// Now is the clock a pending checkout teardown's grace is judged by
+	// (checkoutteardown.Query); nil is time.Now.
+	Now func() time.Time
 	// Existing lists repos whose checkout already exists (an adopted
 	// worktree). Finish makes no checkout for them and records their branch
 	// and base. Setting it also puts Finish in adopt mode for the OTHER repos:
@@ -159,7 +163,12 @@ type ExistingCheckout struct {
 // Insert persists the CREATING row, before any daemon work. The returned row
 // carries the ID the daemon writes into each checkout's reclaim lock reason.
 // Its Path stays empty until Finish learns where the checkouts landed.
-func Insert(ctx context.Context, store Store, req Request) (*db.Worktree, error) {
+//
+// m is the owner machine. Insert sends it nothing unless a remove or reclone
+// of the checkout has not been confirmed finished: it then asks the machine
+// how that ended (checkoutteardown.Query) and inserts once it has, or refuses
+// with a *TeardownPendingError.
+func Insert(ctx context.Context, store Store, m Machine, req Request) (*db.Worktree, error) {
 	branch := req.Branch
 	if branch == "" {
 		branch = fmt.Sprintf("worktree/%s-%d", req.Name, time.Now().Unix())
@@ -188,7 +197,18 @@ func Insert(ctx context.Context, store Store, req Request) (*db.Worktree, error)
 		UpdatedAt:      now,
 		LastActive:     now,
 	}
-	if err := store.CreateWorktree(ctx, wt); err != nil {
+	err := store.CreateWorktree(ctx, wt)
+	var pending *db.CheckoutTeardownPendingError
+	if errors.As(err, &pending) {
+		if err = settleTeardown(ctx, store, m, req, pending.Teardown); err == nil {
+			err = store.CreateWorktree(ctx, wt)
+		}
+		if errors.As(err, &pending) {
+			// Another teardown began in between: refuse as for the first.
+			err = &TeardownPendingError{Project: req.Project.Name, Teardown: pending.Teardown}
+		}
+	}
+	if err != nil {
 		// A concurrent create took the name between claimName and here.
 		if errors.Is(err, core.ErrWorktreeNameTaken) {
 			return nil, &NameTakenError{Name: req.Name}
@@ -196,6 +216,59 @@ func Insert(ctx context.Context, store Store, req Request) (*db.Worktree, error)
 		return nil, err
 	}
 	return wt, nil
+}
+
+// TeardownPendingError is Insert refusing a workspace of a checkout that a
+// remove or reclone may still be deleting on the machine. Its sentence says
+// why the machine could not settle it (Cause).
+type TeardownPendingError struct {
+	Project  string
+	Teardown *db.CheckoutTeardown
+	// Cause is why it is still pending: the op is running, the machine did
+	// not answer, or (*checkoutteardown.LegacyPendingError) it is too old to
+	// say. Nil when it is simply still running.
+	Cause error
+}
+
+func (e *TeardownPendingError) Error() string {
+	what := fmt.Sprintf("a %s of %q's checkout on this machine", e.Teardown.Kind, e.Project)
+	var legacy *checkoutteardown.LegacyPendingError
+	switch {
+	case errors.As(e.Cause, &legacy):
+		return fmt.Sprintf("%s was sent to a machine whose Reliant is too old to confirm it finished; "+
+			"workspaces can be created there again after %s, or as soon as the machine is updated",
+			what, legacy.Until.UTC().Format("15:04 MST"))
+	case e.Cause != nil:
+		return fmt.Sprintf("%s has not been confirmed finished, and the machine could not say how it ended; try again once it is online", what)
+	default:
+		return fmt.Sprintf("%s is still running; create the workspace once it finishes", what)
+	}
+}
+
+func (e *TeardownPendingError) Unwrap() error { return e.Cause }
+
+// ErrorClass makes the refusal a user error: its sentence is the answer.
+func (e *TeardownPendingError) ErrorClass() svcerr.Class { return svcerr.ClassUser }
+
+// settleTeardown asks the owner machine how op ended. It returns nil once op
+// is settled, and a *TeardownPendingError while it is not.
+func settleTeardown(ctx context.Context, store Store, m Machine, req Request, op *db.CheckoutTeardown) error {
+	if m == nil {
+		return &TeardownPendingError{Project: req.Project.Name, Teardown: op, Cause: errors.New("no machine to ask")}
+	}
+	now := time.Now
+	if req.Now != nil {
+		now = req.Now
+	}
+	settled, err := checkoutteardown.Query(ctx, store, m, op, now())
+	if err != nil {
+		logging.WarnContext(ctx, "workspace create: a checkout teardown is unsettled", "teardown", op.ID, "kind", op.Kind, "error", err)
+		return &TeardownPendingError{Project: req.Project.Name, Teardown: op, Cause: err}
+	}
+	if settled.State == db.CheckoutTeardownPending {
+		return &TeardownPendingError{Project: req.Project.Name, Teardown: op}
+	}
+	return nil
 }
 
 // claimName is the one name-availability rule. A live row holding the name
@@ -324,15 +397,20 @@ func Finish(ctx context.Context, store Store, m Machine, req Request, wt *db.Wor
 			}, nil, commandTimeoutMs)
 		}
 
-		logging.ErrorContext(ctx, "Worktree creation failed", "error", reason, "worktreeID", wt.ID)
+		away := isMachineFailure(reason)
+		logging.LogContext(ctx, sendFailureLevel(away), "Worktree creation failed", "error", reason, "worktreeID", wt.ID)
 		wt.Status = int32(reliantv1.WorktreeStatus_WORKTREE_STATUS_FAILED)
 		// A create from the UI settles in the background, so the row is how
 		// the reason reaches the user. Only a reason that is theirs to fix
-		// is written: ours stays in the logs (and its issue), and the UI says
-		// the create did not finish.
+		// is written, or the state of their machine in the router's words:
+		// ours stays in the logs (and its issue), and the UI says the create
+		// did not finish.
 		wt.FailureReason = ""
-		if svcerr.IsUserError(reason) {
+		switch {
+		case svcerr.IsUserError(reason):
 			wt.FailureReason = reason.Error()
+		case away:
+			wt.FailureReason = svcerr.ToConnect(reason).Message()
 		}
 		// A FAILED row must carry NO path: filepreview.ResolveBasePath returns an
 		// existing row's path as-is, so a path to directories just deleted
@@ -398,9 +476,21 @@ func Finish(ctx context.Context, store Store, m Machine, req Request, wt *db.Wor
 			payload.FetchBranch, payload.ExpectedHead = req.FetchBranch, req.ExpectedHead
 		}
 		err := m.Send(ctx, "worktree.create", payload, &createResp, commandTimeoutMs)
+		// The branch may be held by the checkout of an earlier create of it
+		// whose answer was lost (failed_create.go): the retry this is. That
+		// checkout is removed when it is provably the untouched leftover,
+		// and the create is tried once more; anything else keeps the
+		// refusal below.
+		if err == nil && !createResp.Success && !adopting &&
+			createResp.ErrorCode == worktreeerr.BranchCheckedOut &&
+			freeBranchFromFailedCreates(ctx, store, m, wt, repoPath) {
+			createResp = checkoutResponse{}
+			err = m.Send(ctx, "worktree.create", payload, &createResp, commandTimeoutMs)
+		}
 		if err != nil {
-			logging.ErrorContext(ctx, "Failed to create git worktree via daemon", "error", err, "repo", repo.ID)
-			return repoCreateResult{}, fmt.Errorf("failed to create worktree for repo %s: %w", repo.Name, err)
+			cause, away := machineFailure("checking out "+repo.Name, err)
+			logging.LogContext(ctx, sendFailureLevel(away), "Failed to create git worktree via daemon", "error", cause, "repo", repo.ID)
+			return repoCreateResult{}, fmt.Errorf("failed to create worktree for repo %s: %w", repo.Name, cause)
 		}
 		if !createResp.Success {
 			err := checkoutError(createResp, repo.Name, wt.Branch, adopting)
@@ -505,7 +595,8 @@ func Finish(ctx context.Context, store Store, m Machine, req Request, wt *db.Wor
 		}, &copyResp, commandTimeoutMs)
 		switch {
 		case err != nil:
-			logging.ErrorContext(ctx, "Failed to copy paths into worktree", "error", err, "worktreeID", wt.ID)
+			cause, away := machineFailure("copying files into the workspace", err)
+			logging.LogContext(ctx, sendFailureLevel(away), "Failed to copy paths into worktree", "error", cause, "worktreeID", wt.ID)
 		case copyResp.Error != "" || len(copyResp.Failed) > 0:
 			logging.ErrorContext(ctx, "Some paths were not copied into worktree", "error", copyResp.Error,
 				"failed", copyResp.Failed, "worktreeID", wt.ID)

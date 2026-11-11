@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/ptr"
 
 	"connectrpc.com/connect"
@@ -359,7 +360,7 @@ func (s *Service) RunScenario(
 			}
 			// Scenarios are user-owned rows; a foreign one is NotFound (no
 			// cross-tenant existence oracle), matching DeleteScenario's check.
-			if dbScenario == nil || dbScenario.UserID != userID {
+			if dbScenario == nil || !authz.CanAccessPersonal(userID, dbScenario.UserID) {
 				return nil, svcerr.WithMessage(svcerr.ErrNotFound, fmt.Sprintf("scenario not found: %s", req.Msg.ScenarioId))
 			}
 
@@ -437,7 +438,7 @@ func (s *Service) DeleteScenario(
 	if scenario == nil {
 		return nil, svcerr.NotFound("scenario")
 	}
-	if scenario.UserID != userID {
+	if !authz.CanAccessPersonal(userID, scenario.UserID) {
 		return nil, svcerr.PermissionDenied("not authorized to delete this scenario")
 	}
 
@@ -619,7 +620,7 @@ func (s *Service) ExportScenario(
 	}
 	// Scenarios are user-owned rows; a foreign one is NotFound (no
 	// cross-tenant existence oracle), matching DeleteScenario's check.
-	if dbScenario == nil || dbScenario.UserID != userID {
+	if dbScenario == nil || !authz.CanAccessPersonal(userID, dbScenario.UserID) {
 		return nil, svcerr.WithMessage(svcerr.ErrNotFound, fmt.Sprintf("scenario not found: %s", req.Msg.ScenarioId))
 	}
 

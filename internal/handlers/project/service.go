@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"sync"
 
 	"connectrpc.com/connect"
 
@@ -36,6 +37,12 @@ type Deps struct {
 	// there.
 	// forge:optional-dep
 	ControlPlane CloneDispatcher
+	// Orgs says which organization a create acts in and verifies the org a
+	// list names (internal/orgs). Nil, or a nil *orgs.Resolver, is a
+	// deployment with no orgs: projects are created with none and lists
+	// ignore org_id.
+	// forge:optional-dep
+	Orgs OrgResolver
 }
 
 // validateDeps returns an error if any required Deps field is nil. The
@@ -57,6 +64,10 @@ func (d Deps) validateDeps() error {
 type Service struct {
 	reliantv1connect.UnimplementedProjectServiceHandler
 	deps Deps
+	// failedCreateCleanups holds the daemon ids whose connect-time
+	// failed-create cleanup is running (failed_create_cleanup.go), so a
+	// machine that reconnects in a loop runs one at a time.
+	failedCreateCleanups sync.Map
 }
 
 // New creates a new project service instance with the supplied Deps.

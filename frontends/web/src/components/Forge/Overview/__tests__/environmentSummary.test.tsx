@@ -149,6 +149,21 @@ describe("an environment's summary", () => {
     expect(s.health).toMatchObject({ tone: "neutral", label: "Unobserved" });
   });
 
+  it("spins the health of an environment whose deploy is running, but never over a known-bad one", () => {
+    const deploying = read([run({ state: "running", finishedAt: undefined })]);
+    const placed = (verdict: CloudEnvStatus["verdict"]) =>
+      input({ env: liveEnv({ kind: "persistent" }), status: read<CloudEnvStatus>({ verdict, currentPromotion: null, workloads: [] }), runs: deploying });
+
+    expect(summarizeEnvironment(placed("converged")).health).toMatchObject({ label: "Healthy", busy: true, detail: "A deploy is in progress." });
+    expect(summarizeEnvironment(placed("converging")).health).toMatchObject({ label: "Settling", tone: "neutral", busy: true, detail: "" });
+    expect(summarizeEnvironment(placed("diverged")).health).toMatchObject({ label: "Drifted", tone: "danger", busy: false });
+    // Settling spins on its own, deploy run or not.
+    expect(summarizeEnvironment({ ...placed("converging"), runs: read([run()]) }).health).toMatchObject({ busy: true });
+    expect(summarizeEnvironment({ ...placed("converged"), runs: read([run()]) }).health).toMatchObject({ busy: false });
+    // Telemetry health: a failing workload stays red while the deploy runs.
+    expect(summarizeEnvironment(input({ runs: deploying })).health).toMatchObject({ tone: "danger", busy: false });
+  });
+
   it("counts a placed environment's backends as the platform observed them when telemetry has none", () => {
     const status: CloudEnvStatus = {
       verdict: "converging",

@@ -83,6 +83,29 @@ func TestProtoAccountMapsLimitsToWindowsAndStatus(t *testing.T) {
 	assert.InDelta(t, 1.0, got.Windows[0].GetUsedFraction(), 1e-9)
 }
 
+func TestProtoAccountUsingCredits(t *testing.T) {
+	now := t0
+	acct := core.ProviderAccount{ID: "a1", Provider: "codex", AuthKind: core.AuthKindOAuth, CreatedAt: now.Add(-time.Hour)}
+	limits := func(status string, weeklyResets time.Time, extra ...core.LimitWindow) *core.LimitState {
+		used := 1.0
+		return &core.LimitState{AccountID: "a1", Status: status, Source: SourceUsageAPI, ObservedAt: now.Add(-time.Minute),
+			Windows: append([]core.LimitWindow{{Name: "secondary", UsedFraction: &used, ResetsAt: weeklyResets, LengthS: 604800}}, extra...)}
+	}
+	later := now.Add(48 * time.Hour)
+
+	got := ProtoAccount(acct, limits("overage", later), now)
+	assert.True(t, got.GetUsingCredits(), "a spent weekly window paid from credits")
+	assert.Equal(t, pb.ProviderAccountStatus_PROVIDER_ACCOUNT_STATUS_AVAILABLE, got.GetStatus())
+
+	assert.False(t, ProtoAccount(acct, limits("rejected", later), now).GetUsingCredits(), "no credits: limited, not using credits")
+	assert.False(t, ProtoAccount(acct, limits("overage", now.Add(-time.Second)), now).GetUsingCredits(),
+		"the spent window has reset since: a new window")
+	used := 1.0
+	scopedOnly := limits("overage", now.Add(-time.Second),
+		core.LimitWindow{Name: "codex_bengalfox.primary", UsedFraction: &used, ResetsAt: later})
+	assert.False(t, ProtoAccount(acct, scopedOnly, now).GetUsingCredits(), "another limit family's window is not the plan's")
+}
+
 func TestProtoAccountStatusPrecedenceAndNoLimits(t *testing.T) {
 	now := t0
 	until := now.Add(time.Hour)

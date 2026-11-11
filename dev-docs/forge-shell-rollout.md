@@ -116,46 +116,70 @@ sign-out on one host applies to the other (lib/auth/sharedSession.ts).
   migration emptied, so users sign in once more; the shared cookies expire
   unused (or clear them by signing out before the rollback ships).
 
-## Demo host (demo.reliantlabs.io)
+## The demo (demo.reliantlabs.io) is not this bundle
 
-The same bundle mounts a third shell, `demo`, on DEMO_APP_HOST (default
-`demo.reliantlabs.io`): one route, `/forge/demo`, on sample data, with every
-other path redirecting there and the forge tour started on every page load
-(`src/demoShellRoutes.tsx`, `lib/shell.ts`). It has no sign-in route, so it
-needs **no** control-plane CORS entry, **no** GoTrue redirect entry and no new
-static site: it is a third custom domain on `prod/reliant-web`.
+`demo.reliantlabs.io` is its own build and its own env: the `forge-demo`
+frontend of reliant's `demo` env (`deploy/kcl/demo/main.k`), built from
+`frontends/web/demo.html` (`npm run build:demo`, or `WEB_BUILD_TARGET=demo`,
+which is how forge builds it). That bundle is always the demo shell
+(`__WEB_TARGET__`, `lib/shell.ts`), mounts the forge console on sample data and
+contains no Reliant chat, onboarding, sign-in, Supabase, daemon or settings
+code (`vite-plugin-demo-bundle.ts` fails a build that would). Once the domain is
+bound to the demo env, no request reaches `prod/reliant-web` on that host;
+`?shell=demo` still mounts the demo shell there, for a look in local dev.
 
-Runtime config (all defaults are the owner's, 2026-11-05):
+Its runtime config is the env's (`DEMO_DATA_SOURCE`, `DEMO_DATA_URL`,
+`DEMO_TELEMETRY`, `OTEL_ENDPOINT=/_otel`, `OTEL_REPLAY`); it names no API, no
+auth mode and no key. It needs no control-plane CORS entry and no GoTrue
+redirect entry: it calls no backend.
 
-| Key | Default | What it does |
-|---|---|---|
-| `DEMO_APP_HOST` | `demo.reliantlabs.io` | the host that mounts the demo shell |
-| `DEMO_TELEMETRY` | `replay` | `replay` / `analytics` / `off`, service `forge-demo`, `surface=demo`; never for a browser sending DNT or GPC |
-| `DEMO_TOUR` | `short` | `short` (≤ 10 steps) or `full` |
-| `DEMO_DATA_SOURCE` | `fixtures` | `fixtures`, or `remote` = the demo-data gateway at `DEMO_DATA_URL`, falling back to fixtures |
-| `DEMO_DATA_URL` | unset | the gateway's base URL (phase 2) |
+`DEMO_APP_HOST` (proto field 24) is deprecated but still works:
+`prod/reliant-web` mounts the demo shell on that host, as before, so a
+deployment that still points the host at reliant-web keeps its demo (and the
+cutover keeps a rollback target). It is removed only in a future major.
 
-Owner actions, from `control-plane/` with the tenant-zero credential, after
-the release that carries the demo shell is live:
+**Order.** The cutover below moves the domain to the demo env and checks it.
+`prod/reliant-web` stays its rollback target throughout, because it still
+serves the demo shell on that host (`DEMO_APP_HOST`, deprecated). The full
+runbook, with every check, is `dev-docs/forge-demo-cutover.md`.
+
+Ship and bind it from a reliant checkout of `main` (owner, tenant-zero
+credential):
 
 ```bash
-FORGE_ALLOW_VERSION_SKEW=1 reliant forge domain add  demo.reliantlabs.io --env prod
-FORGE_ALLOW_VERSION_SKEW=1 reliant forge domain bind demo.reliantlabs.io --env prod --target reliant-web
-FORGE_ALLOW_VERSION_SKEW=1 reliant forge domain show demo.reliantlabs.io --env prod   # the exact records
+reliant forge env build demo --target forge-demo --release <v>
+reliant forge env deploy demo <v>
+reliant forge obs check demo --wait --json   # 0 good · 1 regressed · 2 not proven good · 8 not enough data yet
+reliant forge domain bind demo.reliantlabs.io --env demo --target forge-demo
+reliant forge domain show demo.reliantlabs.io --env demo
+node frontends/web/scripts/demo/smoke-demo-site.mjs https://demo.reliantlabs.io
 ```
 
-Then, in Cloudflare (zone `reliantlabs.io`), exactly what `show` prints: the
-`_reliant-challenge.demo` TXT (never delete it), the
-`_acme-challenge_<id>.demo` CNAME, and `demo` as a DNS-only (grey cloud)
-CNAME. Check with `reliant forge domain verify demo.reliantlabs.io --env prod`
-until LIVE.
+**Checks** (all must pass before the cutover is called done):
 
-Checks, signed out: `/` lands on `/forge/demo?tour=forge:fg-console` with
-`data-shell="demo"` on the root; the tour makes no request to any other origin
-(with `DEMO_DATA_SOURCE=fixtures`); Resolve, assign and comment are disabled
-with "Read-only demo"; a `POST /_otel/…` answers 2xx and ClickStack shows
-`ServiceName='forge-demo'` page views.
+```bash
+curl -sI https://demo.reliantlabs.io/ | grep -i 'via: 1.1 google'   # served through the edge
+curl -s  https://demo.reliantlabs.io/ | grep -o '<title>[^<]*'      # forge demo · Reliant
+curl -s  https://demo.reliantlabs.io/config.js                      # only the DEMO_* / OTEL_* keys
+node frontends/web/scripts/demo/smoke-demo-site.mjs https://demo.reliantlabs.io
+```
 
-Rollback: `reliant forge domain unbind demo.reliantlabs.io --env prod` (or
-delete the `demo` CNAME). Reverting the shell code instead makes the host fall
-back to the Reliant shell.
+**Rollback of the cutover** (if a check fails). The domain's verification and
+certificate belong to the domain, not to the binding, so moving it back is
+instant and needs no DNS change. It restores exactly what served before: the
+build `prod/reliant-web` runs, which still mounts the demo shell on this host
+(`DEMO_APP_HOST`).
+
+```bash
+cd ../control-plane
+FORGE_ALLOW_VERSION_SKEW=1 reliant forge domain bind demo.reliantlabs.io --env prod --target reliant-web
+FORGE_ALLOW_VERSION_SKEW=1 reliant forge domain show demo.reliantlabs.io --env prod   # serving: reliant-web
+```
+
+Then, from this checkout, `node frontends/web/scripts/demo/smoke-demo-site.mjs
+https://demo.reliantlabs.io` (it fails a page without `data-shell="demo"`).
+
+To roll back only the demo env's own release, deploy its previous release:
+`reliant forge env status demo` lists them, then
+`reliant forge env deploy demo <previous version>` (a static site has no
+migrations, so that is a complete rollback).

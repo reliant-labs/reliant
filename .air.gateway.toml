@@ -1,7 +1,7 @@
 # Air config for the daemon gateway (`reliant server gateway`) under
 # `forge env up dev` in THIS repo (deploy/kcl/dev/main.k binds
 # daemon-gateway to it). Same shape as .air.api.toml: its own tmp dir, and an
-# atomic build (go build -o .tmp && mv) with stop_on_error=false, so a broken
+# atomic build (scripts/air-build.sh: .tmp && mv) with stop_on_error=false, so a broken
 # mid-edit tree never takes the running gateway down. Env comes from forge's
 # host phase, not from here.
 root = "."
@@ -11,7 +11,11 @@ tmp_dir = "tmp/air-gateway"
 [build]
   bin = "./tmp/air-gateway/reliant"
   args_bin = ["server", "gateway"]
-  cmd = "CGO_ENABLED=0 go build -buildvcs=false -o ./tmp/air-gateway/reliant.tmp ./cmd/reliant && mv ./tmp/air-gateway/reliant.tmp ./tmp/air-gateway/reliant"
+  # scripts/air-build.sh builds ./cmd/reliant ONCE per save for every Air
+  # watcher (api, worker and gateway run the same binary), with -trimpath, and
+  # links the result here atomically. A failed build exits non-zero for every
+  # watcher and never replaces this binary.
+  cmd = "scripts/air-build.sh ./cmd/reliant ./tmp/air-gateway/reliant"
   delay = 1000
   exclude_dir = ["assets", "tmp", "vendor", "testdata", "frontends", "mobile", "dist", ".claude_plan", "test", "electron", "node_modules", "e2e", ".reliant", "examples", "data", ".git", "scripts", "docs"]
   exclude_file = []

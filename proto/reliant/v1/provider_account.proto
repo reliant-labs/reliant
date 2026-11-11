@@ -164,6 +164,10 @@ message ProviderAccount {
   optional string usage_error = 19;
   // RFC 3339 UTC.
   string created_at = 20;
+  // True while one of the plan's usage windows is used up but the provider
+  // keeps serving the account, paid from credits (a ChatGPT workspace's or
+  // purchased Codex credits). The account is not limited.
+  bool using_credits = 21;
 }
 
 message ListProviderAccountsRequest {}

@@ -25,9 +25,9 @@ import { resetShellForTests } from "@/lib/shell";
 import { controlPlaneObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
 import { setRuntimeConfig } from "@/test/runtimeConfig";
 
-import { createFixtureApi } from "../../../Observability/__fixtures__/fixtureApi";
 import { FIXTURE_SIGNALS } from "../../../Observability/__fixtures__/fixtureSignals";
 import { createDemoApi } from "../demoApi";
+import { createDemoFixtures } from "../busyApp";
 import { getDemoDataStatus, resetDemoDataStatusForTests } from "../demoDataStatus";
 import { DEMO_SCENARIO_RPCS, splitLogQuery } from "../demoScenario";
 import { createDemoTransport, demoDataConfig, isDemoRead } from "../demoTransport";
@@ -64,7 +64,7 @@ afterEach(() => {
 });
 
 describe("the demo scenario, through the console's real client", () => {
-  const fixtures = createFixtureApi({ signals: FIXTURE_SIGNALS, graph: "shop", crossService: true });
+  const fixtures = createDemoFixtures();
   const wire = controlPlaneObservabilityApi;
 
   it("answers ListTraces, GetTrace and SearchLogs exactly as the fixtures do", async () => {
@@ -101,14 +101,14 @@ describe("the demo scenario, through the console's real client", () => {
 });
 
 describe("the demo transport", () => {
-  it("refuses every write before the scenario sees it, and reads Lists/Gets/Searches/Queries", async () => {
+  it("refuses every write before the scenario sees it, and reads Lists/Gets/Searches/Queries and the like", async () => {
     const client = createClient(IssuesService, createDemoTransport({ source: "fixtures", url: "" }));
     await expect(client.updateIssueStatus({ issueId: "x" } as never)).rejects.toSatisfy(
       (err: unknown) => err instanceof ConnectError && err.code === Code.PermissionDenied,
     );
-    // A read the scenario does not serve yet is Unimplemented, not a silent empty answer.
-    await expect(client.listIssues({} as never)).rejects.toSatisfy((err: unknown) => err instanceof ConnectError && err.code === Code.Unimplemented);
-    expect(["ListTraces", "GetTrace", "SearchLogs", "QueryPanel"].every((name) => isDemoRead({ name }))).toBe(true);
+    // A read the story says nothing about gets forge's generated default (demoServiceDefaults.ts).
+    await expect(client.listIssues({} as never)).resolves.toBeDefined();
+    expect(["ListTraces", "GetTrace", "SearchLogs", "QueryPanel", "CompareReleases", "WatchDeploy", "StreamLogs", "PlanDeploy"].every((name) => isDemoRead({ name }))).toBe(true);
     expect(["UpdateIssueStatus", "CreateSilence", "SaveDashboard", "MarkNotificationsRead"].some((name) => isDemoRead({ name }))).toBe(false);
   });
 
@@ -148,6 +148,68 @@ describe("the demo transport", () => {
       (err: unknown) => err instanceof ConnectError && err.code === Code.PermissionDenied,
     );
     expect(gateway.unary).toHaveBeenCalledTimes(1);
+  });
+
+  it("never masks caller cancellation as fixture success or a fallback banner", async () => {
+    const controller = new AbortController();
+    const canceled = new ConnectError("caller canceled", Code.Canceled);
+    const gateway = {
+      unary: vi.fn(async () => { controller.abort(); throw canceled; }),
+      stream: vi.fn(),
+    } as unknown as Transport;
+    const client = createClient(ObservabilityService, createDemoTransport({ source: "remote", url: "https://gw.test" }, gateway));
+
+    await expect(client.listTraces({}, { signal: controller.signal })).rejects.toBe(canceled);
+    expect(getDemoDataStatus()).toBe("live");
+    expect(gateway.unary).toHaveBeenCalledTimes(1);
+  });
+
+  it("falls back on the gateway deadline and keeps fixture mode network-free", async () => {
+    const gateway = {
+      unary: vi.fn(async (_method, _signal, timeoutMs) => {
+        expect(timeoutMs).toBe(4_000);
+        throw new ConnectError("gateway timed out", Code.DeadlineExceeded);
+      }),
+      stream: vi.fn(),
+    } as unknown as Transport;
+    const remote = createClient(ObservabilityService, createDemoTransport({ source: "remote", url: "https://gw.test" }, gateway));
+    expect((await remote.getTrace({ traceId: TRACE })).spans.length).toBeGreaterThan(0);
+    expect(getDemoDataStatus()).toBe("fallback");
+
+    const fixtures = createClient(ObservabilityService, createDemoTransport({ source: "fixtures", url: "" }, gateway));
+    await fixtures.getTrace({ traceId: TRACE });
+    expect(gateway.unary).toHaveBeenCalledTimes(1);
+    expect(getDemoDataStatus()).toBe("fixtures");
+  });
+
+  it("bounds a gateway that ignores deadlines, falls back and updates the failure banner", async () => {
+    vi.useFakeTimers();
+    try {
+      const gateway = {
+        unary: vi.fn(() => new Promise(() => {})),
+        stream: vi.fn(),
+      } as unknown as Transport;
+      const client = createClient(ObservabilityService, createDemoTransport({ source: "remote", url: "https://gw.test" }, gateway));
+      const response = client.getTrace({ traceId: TRACE });
+      await vi.advanceTimersByTimeAsync(4_001);
+      expect((await response).spans.length).toBeGreaterThan(0);
+      expect(getDemoDataStatus()).toBe("fallback");
+      expect(gateway.unary).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps unknown fixture reads unavailable rather than reaching a remote backend", async () => {
+    // A descriptor not in the console defaults must not silently become live.
+    const gateway = { unary: vi.fn(), stream: vi.fn() } as unknown as Transport;
+    const transport = createDemoTransport({ source: "fixtures", url: "" }, gateway);
+    const method = { ...IssuesService.method.listIssues, parent: { ...IssuesService, typeName: "unknown.Service" } };
+    const client = createClient({ ...IssuesService, methods: [method], method: { listIssues: method } }, transport);
+    await expect(client.listIssues({})).rejects.toSatisfy(
+      (err: unknown) => err instanceof ConnectError && err.code === Code.Unimplemented,
+    );
+    expect(gateway.unary).not.toHaveBeenCalled();
   });
 
   it("reads DEMO_DATA_SOURCE and DEMO_DATA_URL; remote without a URL is the sample data", () => {

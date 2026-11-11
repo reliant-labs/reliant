@@ -27,7 +27,7 @@ import type {
 import type { ObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
 import type { Dashboard, Panel } from "@/services/controlPlane/observability/types";
 
-import { FIXTURE_ENVS, FIXTURE_PROJECT, fixtureDashboards, fixtureDayGrainedDashboard, fixtureReleaseDashboards } from "./fixtureApi";
+import { FIXTURE_ENVS, FIXTURE_PROJECT, fixtureDashboards, fixtureDayGrainedDashboard, fixtureHeadlineDashboard, fixtureReleaseDashboards } from "./fixtureApi";
 
 export interface DashboardFixtureOptions {
   /** The caller is not an org admin: reads work, every write is PermissionDenied. */
@@ -38,11 +38,27 @@ export interface DashboardFixtureOptions {
   dashboardsFailWith?: Code;
   /** Ships control-plane's day-grained product-usage dashboard (a 7d defaultRange, sql panels bucketed by day). */
   dashboardsDayGrained?: boolean;
+  /** Ships forge's Product usage shape: sections, figures with sparklines and a default comparison, a retention heatmap. */
+  dashboardsHeadline?: boolean;
   /** A control plane that predates DashboardSummary.group/tags: the page infers each group. */
   dashboardsUngrouped?: boolean;
   /** A young app: its overview and one service dashboard, nothing saved. */
   dashboardsFew?: boolean;
+  /**
+   * A control plane that lists the standard dashboards as every project's
+   * built-ins (source builtin, category "standard"): a release dashboard of
+   * the same id replaces one, and the gallery no longer carries them.
+   */
+  dashboardsStandardBuiltins?: boolean;
 }
+
+/** The standard built-ins the fixture's control plane defines, in list order. */
+const STANDARD_BUILTINS: { id: string; group: string }[] = [
+  { id: "overview", group: "overview" },
+  { id: "service-red", group: "services" },
+  { id: "usage", group: "product" },
+  { id: "releases", group: "releases" },
+];
 
 type Call = <T>(rpc: string, request: unknown, answer: () => T) => Promise<T>;
 
@@ -282,12 +298,43 @@ export function createDashboardFixture(options: DashboardFixtureOptions, call: C
       changes: [{ releaseVersion: "v1.8.2", author: ROBOT, atMs: Date.now() - 16 * HOUR }],
     });
   }
+  if (options.dashboardsHeadline) {
+    const prod = FIXTURE_ENVS.find((e) => e.name === "prod")!.id;
+    state.releases.push({
+      spec: fixtureHeadlineDashboard(),
+      source: "generated",
+      releaseVersion: "v1.8.2",
+      shippedAtMs: Date.now() - 16 * HOUR,
+      filePath: "observability/dashboards/shop-usage_gen.json",
+      envIds: [prod],
+      changes: [{ releaseVersion: "v1.8.2", author: ROBOT, atMs: Date.now() - 16 * HOUR }],
+    });
+  }
   if (options.dashboardsFew) {
     state.releases = state.releases.filter((row) => row.spec.id === "overview" || row.spec.id === "service-orders");
     state.workspace = [];
     state.stars = new Set(["release/overview"]);
     state.viewed = new Map();
   }
+  const builtinSpec = (id: string): Dashboard | null => {
+    if (id === "usage") return { ...fixtureDayGrainedDashboard(), id: "usage", title: "Product usage" };
+    const t = state.templates.find((candidate) => candidate.id === id);
+    if (t) return { ...t.spec, id, title: t.title };
+    const r = state.releases.find((row) => row.spec.id === id);
+    return r ? r.spec : null;
+  };
+  const builtins = options.dashboardsStandardBuiltins
+    ? STANDARD_BUILTINS.flatMap((b) => {
+        const spec = builtinSpec(b.id);
+        return spec ? [{ ...b, spec }] : [];
+      })
+    : [];
+  if (options.dashboardsStandardBuiltins) state.templates = state.templates.filter((t) => !STANDARD_BUILTINS.some((b) => b.id === t.id));
+  const findBuiltin = (key: string) => {
+    const b = builtins.find((candidate) => candidate.id === key);
+    if (!b) throw new ConnectError(`no built-in dashboard "${key}"`, Code.NotFound);
+    return b;
+  };
   const grouping = (ref: DashboardRef) => (options.dashboardsUngrouped ? {} : (GROUPING[keyOf(ref)] ?? {}));
   const canWrite = !options.dashboardsReadOnly;
 
@@ -358,6 +405,27 @@ export function createDashboardFixture(options: DashboardFixtureOptions, call: C
       ...grouping(ref),
     };
   };
+  const builtinSummary = (b: (typeof builtins)[number]): DashboardSummary => {
+    const ref: DashboardRef = { kind: "builtin", projectId: FIXTURE_PROJECT, key: b.id };
+    return {
+      ref,
+      source: "builtin",
+      title: b.spec.title,
+      description: b.spec.description ?? "",
+      readOnly: true,
+      starred: state.stars.has(keyOf(ref)),
+      lastViewedAtMs: state.viewed.get(keyOf(ref)) ?? null,
+      panelCount: b.spec.panels.length,
+      previewPanels: previewsOf(b.spec),
+      release: null,
+      workspace: null,
+      category: "standard",
+      group: b.group,
+    };
+  };
+  // A release dashboard of a built-in's id, in the environment listed, replaces it.
+  const listedBuiltins = (envId?: string) =>
+    builtins.filter((b) => !state.releases.some((row) => row.spec.id === b.id && (!envId || row.envIds.includes(envId)))).map(builtinSummary);
   const templateSummary = (t: (typeof state.templates)[number]): DashboardSummary => ({
     ref: { kind: "template", projectId: "", key: t.id },
     source: "template",
@@ -392,6 +460,7 @@ export function createDashboardFixture(options: DashboardFixtureOptions, call: C
   };
   const specOf = (ref: DashboardRef): Dashboard => {
     if (ref.kind === "release") return findRelease(ref.key).spec;
+    if (ref.kind === "builtin") return findBuiltin(ref.key).spec;
     if (ref.kind === "template") {
       const t = state.templates.find((candidate) => candidate.id === ref.key);
       if (!t) throw new ConnectError(`no template "${ref.key}"`, Code.NotFound);
@@ -404,6 +473,7 @@ export function createDashboardFixture(options: DashboardFixtureOptions, call: C
     listDashboards: (req) =>
       guarded("ListDashboards", req, () => ({
         dashboards: [
+          ...(req.projectId ? listedBuiltins(req.envId) : []),
           ...state.releases.flatMap((row) => releaseSummary(row, req.envId) ?? []),
           ...live()
             .filter((row) => !req.envId || row.envIds.length === 0 || row.envIds.includes(req.envId))
@@ -422,6 +492,11 @@ export function createDashboardFixture(options: DashboardFixtureOptions, call: C
           const t = state.templates.find((candidate) => candidate.id === req.ref.key);
           if (!t) throw new ConnectError(`no template "${req.ref.key}"`, Code.NotFound);
           return { summary: templateSummary(t), spec: t.spec, version: 0, canWrite };
+        }
+        if (req.ref.kind === "builtin") {
+          const b = findBuiltin(req.ref.key);
+          if (req.ref.projectId !== FIXTURE_PROJECT) throw new ConnectError(`no built-in dashboard "${req.ref.key}"`, Code.NotFound);
+          return { summary: builtinSummary(b), spec: b.spec, version: 0, canWrite };
         }
         const row = findWorkspace(req.ref.key);
         const v = req.version ? row.versions.find((candidate) => candidate.version === req.version) : current(row);
@@ -471,6 +546,7 @@ export function createDashboardFixture(options: DashboardFixtureOptions, call: C
       }),
     listDashboardVersions: (orgId, ref) =>
       guarded("ListDashboardVersions", { orgId, ref }, () => {
+        if (ref.kind === "builtin") return [];
         if (ref.kind === "release") {
           const row = findRelease(ref.key);
           return row.changes.map((change, index) => ({

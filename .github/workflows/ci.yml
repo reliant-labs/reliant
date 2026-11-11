@@ -14,15 +14,17 @@ name: CI
 #                                     The review itself is the separate
 #                                     "Reliant review" check (reliant-review.yml),
 #                                     which the ruleset also requires
-#   merge_group                       NOT HERE: merge-queue.yml, one job,
+#   merge_group                       NOT HERE: merge-queue.yml, one gate job,
 #                                     `task ci:merge -- --queue`, five-minute
-#                                     budget (owner, 2026-11-01)
+#                                     budget (owner, 2026-11-01), and beside
+#                                     it `task ci:golangci` (owner, 2026-11-08)
 #   push to main, schedule, dispatch  task release:gate  the whole suite plus
 #                                     every lane, recorded per sha; never
 #                                     blocks a merge, gates every release
 #
-# A pull request labelled `ci:run` gets the merge tier and the lanes its paths
-# reach, read on the next push (see `pull_request:` for why not on `labeled`).
+# A pull request labelled `ci:run` gets the merge tier (the merge gate and
+# golangci on the changed packages) and the lanes its paths reach, read on the
+# next push (see `pull_request:` for why not on `labeled`).
 #
 # A red main does not block merges: pipeline-health files a fix
 # (`pipeline:slo`), and `task release:tag` refuses a sha without a green
@@ -216,6 +218,28 @@ jobs:
           retention-days: 7
           if-no-files-found: ignore
 
+  # The merge queue's golangci job (merge-queue.yml) on a ci:run pull request,
+  # beside the merge gate: golangci-lint on the changed packages, findings on
+  # changed files only. Main runs the whole module in the release gate's lint.
+  golangci:
+    name: golangci (changed)
+    needs: lanes
+    if: github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'ci:run')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      BASE: ${{ needs.lanes.outputs.base }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/setup
+        with:
+          golangci: "true"
+          postgres-cache: "false"
+      - name: task ci:golangci
+        run: task ci:golangci -- --base "${BASE}"
+
   # ── The release tier (main, nightly, dispatch) ────────────────────────────
   # The whole suite on this commit, in a private checkout, recorded as a git
   # note pushed to origin, so `task release:tag` can cut a release from it. A
@@ -288,11 +312,31 @@ jobs:
           fi
           "$dir/temporal" --version
           echo "$dir" >> "$GITHUB_PATH"
+      # Every part's npm phase installs electron, whose postinstall downloads
+      # Electron's zip from github.com releases (static and go 2/3 failed on
+      # it as well as web, 1f81a402e). Restored in every part from the entry
+      # the Electron package smoke job keeps (see that job); saved here by the
+      # web part on main if missing.
+      - name: Read the Electron version
+        id: electron-version
+        run: echo "zip=electron-zip-${RUNNER_OS}-${RUNNER_ARCH}-$(jq -r '.packages["node_modules/electron"].version' electron/package-lock.json)" >> "$GITHUB_OUTPUT"
+      - name: Restore the Electron zip
+        id: electron-zip
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.cache/electron
+          key: ${{ steps.electron-version.outputs.zip }}
       - name: task release:gate (part ${{ matrix.label }})
         env:
           PART: ${{ matrix.part }}
           SHARD: ${{ matrix.shard }}
         run: RELEASE_GATE_DIR="${RUNNER_TEMP}/release-gate" task release:gate -- --part "${PART}" ${SHARD:+--shard "${SHARD}"} "${GITHUB_SHA}"
+      - name: Save the Electron zip (main only)
+        if: ${{ matrix.part == 'web' && steps.electron-zip.outputs.cache-hit != 'true' && github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.cache/electron
+          key: ${{ steps.electron-version.outputs.zip }}
       - name: task ci:repo-checks
         if: ${{ !cancelled() && matrix.part == 'static' }}
         run: task ci:repo-checks BASE="${{ needs.lanes.outputs.base }}"
@@ -376,6 +420,17 @@ jobs:
   # Plain -trimpath package compiles only: what a PR can reuse is the compile of
   # everything its change does not reach. Test binaries, -race variants and
   # linked tools would be dead weight that evicts this from the 10 GB budget.
+  #
+  # TRIMMED TO ONE COMMIT'S COMPILES before it is saved (reliant#2061). The job
+  # restores the previous entry, recompiles what changed, and used to save the
+  # union, so every superseded compile of every package stayed in it: 3.26 GB
+  # compressed on 2026-11-09, 3.83 GB a day later, against ~3.5 GB UNcompressed
+  # for a cold compile of one commit. Every Go job restores this entry first
+  # (the merge queue's setup spent 52-147s extracting it, most of its
+  # five-minute budget), and at that size the repository's 10 GB budget evicted
+  # it outright. Go refreshes the mtime of an entry it uses that is over an
+  # hour old, so after the builds everything older than the restore (minus an
+  # hour and five minutes of slack) is a compile this commit did not use.
   go-cache:
     name: Go package cache (main only)
     needs: lanes
@@ -384,14 +439,48 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v6
+      - name: Note when the Go build cache was restored
+        run: echo "GOCACHE_RESTORED_AT=$(date +%s)" >> "$GITHUB_ENV"
+      # golangci: its cached binary is saved here, on main, for the merge
+      # queue's golangci job to restore.
       - uses: ./.github/actions/setup
         id: setup
+        with:
+          golangci: "true"
       - name: task build:packages
         run: task build:packages
       # The protoc plugins buf runs as `go tool`, so a pull request's generate
       # finds their executables in this cache instead of compiling them.
       - name: task deps:go-protoc-plugins
         run: task deps:go-protoc-plugins
+      # After every build above, right before the save (the header says why).
+      #
+      # CHECKING IT AFTER THE MERGE. (1) The first push to main: this step's
+      # "Go build cache: <before> -> <after>" line; expect <after> near 3.5 GB
+      # (one commit's compiles, uncompressed). (2) Its `Save Go build cache`
+      # "Cache Size": ~0.7-0.8 GB, against 3.3-3.8 GB before. (3) The next
+      # merge-queue runs (merge-queue.yml, `CI result`): the go-build-trimpath
+      # restore's "Cache Size" matches (2), the setup step falls from ~170s to
+      # ~70s, and the gate's `build` phase in the merge-gate summary takes no
+      # longer than it did on comparable groups before (a longer one means the
+      # gate is compiling what the old cache held).
+      #
+      # ROLLING IT BACK, when (1) shows <after> under ~2 GB (the trim dropped
+      # compiles this commit used), or (3) shows the `build` phase or
+      # `task ci:merge` slower on comparable groups: revert the commit that
+      # added this step and the "Note when ..." step above. The next push to
+      # main then saves the untrimmed union again. If a bad trimmed entry is
+      # what the jobs keep restoring, also delete it so that push starts cold
+      # and saves a whole one: `gh cache list -R reliant-labs/reliant --key
+      # go-build-trimpath-` and `gh cache delete <key>` for each listed key.
+      - name: Trim the Go build cache to this commit's compiles
+        run: |
+          set -euo pipefail
+          dir="$(go env GOCACHE)"
+          before="$(du -sh "${dir}" | cut -f1)"
+          stale_minutes=$(( ($(date +%s) - GOCACHE_RESTORED_AT) / 60 + 65 ))
+          find "${dir}" -type f -mmin +"${stale_minutes}" -delete
+          echo "Go build cache: ${before} -> $(du -sh "${dir}" | cut -f1) (dropped entries unused for ${stale_minutes}+ minutes)"
       - name: Save Go build cache
         uses: actions/cache/save@v4
         with:
@@ -512,19 +601,61 @@ jobs:
           path: ~/.cache/ms-playwright
           # Per suite: the desktop job installs Chromium only.
           key: playwright-${{ matrix.suite }}-${{ runner.os }}-${{ hashFiles('frontends/web/pnpm-lock.yaml') }}
+      # The browsers' system packages (WebKit's GStreamer/GTK set is ~114 MB),
+      # as the .deb files a main run downloaded. On 2026-11-09 the runner's
+      # Ubuntu mirror served ~100 KB/s and the responsive job was cancelled at
+      # its timeout still inside `playwright install --with-deps` (reliant
+      # main 74127457b, control-plane main-red #2372). Keyed on the exact
+      # runner image: the cached set is the packages THAT image lacks, and
+      # scripts/playwright-os-deps.sh installs it with dpkg, no mirror. No
+      # restore-keys: another image's set could downgrade its libraries.
+      # Rollback and rollout checks: dev-docs/responsive-ui-standards.md,
+      # "System-package cache". Repository variable PLAYWRIGHT_OS_DEPS_CACHE=off
+      # turns the cache off (back to --with-deps); PLAYWRIGHT_OS_DEPS_CACHE_VERSION
+      # moves every run off a bad entry.
+      - name: Read the runner image
+        id: runner-image
+        if: ${{ vars.PLAYWRIGHT_OS_DEPS_CACHE != 'off' }}
+        run: echo "image=${ImageOS:-unknown}-${ImageVersion:-unknown}" >> "$GITHUB_OUTPUT"
+      - name: Restore Playwright system packages
+        id: os-deps
+        if: ${{ vars.PLAYWRIGHT_OS_DEPS_CACHE != 'off' }}
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.cache/playwright-os-deps
+          key: playwright-os-deps-${{ vars.PLAYWRIGHT_OS_DEPS_CACHE_VERSION || 'v1' }}-${{ matrix.suite }}-${{ steps.runner-image.outputs.image }}-${{ hashFiles('frontends/web/pnpm-lock.yaml') }}
       - name: task deps:web
         run: task deps:web
       # desktop: the Chromium suite (which also runs the responsive journeys
       # with mouse input). responsive: the required production-route
       # assertions in Chromium touch and WebKit phone/tablet.
       - name: Browser guardrails (${{ matrix.suite }})
-        run: task test:web:e2e:${{ matrix.suite }} PLAYWRIGHT_DEPS=--with-deps
+        env:
+          OS_DEPS_CACHE: ${{ vars.PLAYWRIGHT_OS_DEPS_CACHE }}
+        run: |
+          if [ "$OS_DEPS_CACHE" = off ]; then
+            task test:web:e2e:${{ matrix.suite }} PLAYWRIGHT_DEPS=--with-deps
+          else
+            task test:web:e2e:${{ matrix.suite }} PLAYWRIGHT_DEPS_CACHE="$HOME/.cache/playwright-os-deps"
+          fi
       - name: Save Playwright browsers (main only)
         if: ${{ !cancelled() && github.ref == 'refs/heads/main' && steps.browsers.outputs.cache-hit != 'true' }}
         uses: actions/cache/save@v4
         with:
           path: ~/.cache/ms-playwright
           key: ${{ steps.browsers.outputs.cache-primary-key }}
+      # The script writes the cache only after the packages installed, so a
+      # failed install leaves nothing to save. (hashFiles cannot see ~.)
+      - name: Were the system packages recorded
+        id: os-deps-recorded
+        if: ${{ !cancelled() && vars.PLAYWRIGHT_OS_DEPS_CACHE != 'off' && github.ref == 'refs/heads/main' && steps.os-deps.outputs.cache-hit != 'true' }}
+        run: if [ -f "$HOME/.cache/playwright-os-deps/browsers" ]; then echo "yes=true" >> "$GITHUB_OUTPUT"; fi
+      - name: Save Playwright system packages (main only)
+        if: ${{ !cancelled() && steps.os-deps-recorded.outputs.yes == 'true' }}
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.cache/playwright-os-deps
+          key: ${{ steps.os-deps.outputs.cache-primary-key }}
       - if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
@@ -547,26 +678,63 @@ jobs:
         with:
           go: "false"
           node: "true"
+      # Electron's postinstall fetches Electron's zip, and electron-builder its
+      # packaging tools (AppImage runtime, fpm, ...), from github.com releases.
+      # On 2026-11-08 those downloads answered 504 for hours and this job, and
+      # the release gate's web part (its electron npm install), failed. Each is
+      # cached by the version that decides its contents, restored before deps,
+      # and saved on a push to main only, after a green step (the setup
+      # action's header rule). The zip's entry is shared with the release gate.
+      - name: Read the Electron versions
+        id: electron-versions
+        run: |
+          lock=electron/package-lock.json
+          echo "zip=electron-zip-${RUNNER_OS}-${RUNNER_ARCH}-$(jq -r '.packages["node_modules/electron"].version' "$lock")" >> "$GITHUB_OUTPUT"
+          echo "builder=electron-builder-${RUNNER_OS}-${RUNNER_ARCH}-$(jq -r '.packages["node_modules/electron-builder"].version' "$lock")" >> "$GITHUB_OUTPUT"
+      - name: Restore the Electron zip
+        id: electron-zip
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.cache/electron
+          key: ${{ steps.electron-versions.outputs.zip }}
+      - name: Restore electron-builder's tools
+        id: electron-builder
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.cache/electron-builder
+          key: ${{ steps.electron-versions.outputs.builder }}
       - name: task deps:web deps:electron
         run: task deps:web deps:electron
+      - name: Save the Electron zip (main only)
+        if: steps.electron-zip.outputs.cache-hit != 'true' && github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.cache/electron
+          key: ${{ steps.electron-versions.outputs.zip }}
       - name: task build:electron:smoke
         run: task build:electron:smoke
+      - name: Save electron-builder's tools (main only)
+        if: steps.electron-builder.outputs.cache-hit != 'true' && github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.cache/electron-builder
+          key: ${{ steps.electron-versions.outputs.builder }}
 
   # ── One verdict ───────────────────────────────────────────────────────────
   # Green only when every job that ran passed. On an unlabelled PR nothing
   # heavy runs (REVIEW FIRST), so this is green within a minute and GitHub can
   # enqueue the PR once pr-review passes it (the separate, required "Reliant
   # review" check). On a ci:run PR a lane the change does not reach is
-  # skipped, which is fine, but the merge gate must have run. (The merge
-  # queue's CI result is merge-queue.yml's.) Off a PR every lane runs
-  # (scripts/ci-lanes.sh --full), so a skip there is a broken `if:`, never a
-  # pass: everything but the merge gate (merge tier only), go-cache (only a
-  # push runs it)
+  # skipped, which is fine, but the merge gate and golangci must have run and
+  # passed. (The merge queue's CI result is merge-queue.yml's.) Off a PR every
+  # lane runs (scripts/ci-lanes.sh --full), so a skip there is a broken `if:`,
+  # never a pass: everything but the merge gate and golangci (merge tier only;
+  # the release gate lints the whole module), go-cache (only a push runs it)
   # and cp-contract (only a change to the vendored contract does) must have
   # succeeded.
   ci-result:
     name: CI result
-    needs: [lanes, migration-order, merge-gate, release-gate, release-record, go-cache, cp-contract, web-bundle, playwright, electron-package]
+    needs: [lanes, migration-order, merge-gate, golangci, release-gate, release-record, go-cache, cp-contract, web-bundle, playwright, electron-package]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -589,8 +757,11 @@ jobs:
           gate=$([ "${merge_tier}" = true ] && echo merge-gate || echo release-record)
           [ "$(jq -r .lanes.result <<< "${RESULTS}")" = success ] || bad="${bad}"$'\n'"lanes: no lane was selected"
           [ "$(jq -r --arg g "${gate}" '.[$g].result' <<< "${RESULTS}")" = success ] || bad="${bad}"$'\n'"${gate}: must run and pass on ${EVENT_NAME}"
+          if [ "${merge_tier}" = true ]; then
+            [ "$(jq -r '.golangci.result' <<< "${RESULTS}")" = success ] || bad="${bad}"$'\n'"golangci: must run and pass on ${EVENT_NAME}"
+          fi
           if [ "${merge_tier}" != true ]; then
-            skipped=$(jq -r --arg e "${EVENT_NAME}" 'to_entries[] | select(.value.result == "skipped") | select(.key != "merge-gate" and .key != "cp-contract" and (.key != "go-cache" or $e == "push")) | "\(.key): skipped on \($e), where every lane runs"' <<< "${RESULTS}")
+            skipped=$(jq -r --arg e "${EVENT_NAME}" 'to_entries[] | select(.value.result == "skipped") | select(.key != "merge-gate" and .key != "golangci" and .key != "cp-contract" and (.key != "go-cache" or $e == "push")) | "\(.key): skipped on \($e), where every lane runs"' <<< "${RESULTS}")
             bad="${bad}"$'\n'"${skipped}"
           fi
           bad=$(grep . <<< "${bad}" | sort -u || true)

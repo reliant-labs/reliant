@@ -45,8 +45,13 @@ import {
 import type { ObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
 import type { AttributeOp, LogRecord, ObsScope, Severity, Span, TimeWindow, TraceRed, TraceSummary } from "@/services/controlPlane/observability/types";
 
-import { createFixtureApi } from "../../Observability/__fixtures__/fixtureApi";
-import { FIXTURE_SIGNALS } from "../../Observability/__fixtures__/fixtureSignals";
+import { createDemoFixtures } from "./busyApp";
+import { consoleScenarioHandlers } from "./consoleScenario";
+import { configScenarioHandlers } from "./configScenario";
+import { inventoryScenarioHandlers } from "./inventoryScenario";
+import { storageScenarioHandlers } from "./storageScenario";
+import { DEMO_DEFAULT_SERVICES, defaultHandlers, withMessageRequests } from "./demoServiceDefaults";
+import { scopedToDemo } from "./demoScope";
 
 const SERVICE = ObservabilityService.typeName;
 const rpc = (method: string) => `${SERVICE}/${method}`;
@@ -196,7 +201,7 @@ const points = (timestamps: number[], values: (number | null)[]) =>
  * sample app by default). Each handler returns a proto message (create()),
  * as a server would.
  */
-export function createDemoScenario(fixtures: ObservabilityApi = createFixtureApi({ signals: FIXTURE_SIGNALS, graph: "shop", crossService: true })): MockScenario {
+export function createDemoScenario(fixtures: ObservabilityApi = createDemoFixtures()): MockScenario {
   const handlers = {
     [DEMO_SCENARIO_RPCS.listTraces]: async (req: ListTracesRequest) => {
       const scope = modelScope(req.scope);
@@ -290,5 +295,9 @@ export function createDemoScenario(fixtures: ObservabilityApi = createFixtureApi
       });
     },
   };
-  return { name: "demo", handlers: handlers as unknown as MockScenario["handlers"] };
+  // Dispatch, most specific first: the tour's encoded reads (above), the console's story
+  // (consoleScenario.ts: Releases, Environments, Secrets, Domains, Activity), then forge's
+  // generated defaults for every other read of the console's services (demoServiceDefaults.ts).
+  // A read naming another project or environment is answered empty first (demoScope.ts).
+  return { name: "demo", handlers: withMessageRequests(scopedToDemo({ ...defaultHandlers(), ...consoleScenarioHandlers(), ...configScenarioHandlers(), ...inventoryScenarioHandlers(), ...storageScenarioHandlers(), ...handlers }, DEMO_DEFAULT_SERVICES)) as unknown as MockScenario["handlers"] };
 }

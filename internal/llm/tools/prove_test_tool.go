@@ -4,6 +4,7 @@ package tools
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -186,6 +187,7 @@ func (t *proveTestTool) Execute(tc *rctx.ToolContext, params ProveTestParams) (T
 
 	report, err := provetest.Prove(ctx, provetest.Options{
 		Workspace:  workspace,
+		Repos:      proveTestRepoDirs(tc, workspace),
 		Dir:        dir,
 		Files:      params.Files,
 		Baseline:   params.Baseline,
@@ -222,6 +224,21 @@ var proveTestVerdictText = map[provetest.Verdict]string{
 	provetest.VerdictRestoreFailed: "A named file could NOT be restored. Your version is preserved at the path below, and the next prove_test call " +
 		"in this repository retries the restore. Check the file before doing anything else.",
 	provetest.VerdictInconclusive: "A run did not complete, so nothing was established.",
+}
+
+// proveTestRepoDirs is the workspace's repository checkouts: the workspace
+// root and each nested repo. Their other git worktrees — the checkouts the
+// worktree tool makes under ~/.reliant/worktrees — are where a chat bound to
+// the main checkout does its branch work, so prove_test admits files there.
+func proveTestRepoDirs(tc *rctx.ToolContext, workspace string) []string {
+	dirs := []string{workspace}
+	for _, r := range tc.Repos {
+		if r == nil || r.RelativePath == "" || r.RelativePath == "." {
+			continue
+		}
+		dirs = append(dirs, filepath.Join(workspace, r.RelativePath))
+	}
+	return dirs
 }
 
 func renderProveTest(r *provetest.Report, tailLines int) string {

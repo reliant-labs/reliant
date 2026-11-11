@@ -1,19 +1,26 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * OVERVIEW — the project home: workloads, health and telemetry in one place
- * (there is no separate Observability home; its strip is this page's).
+ * OVERVIEW — the project home: is the app OK, what changed, what needs me.
  *
- *   top, left    a deploy that is in flight or failed, when there is one; one
- *                status cell per environment (its worst workload, the release
- *                live there, who put it there), the health KPIs, and what
- *                needs attention — each item with the release it followed and
- *                the way back.
- *   top, right   recent releases.
- *   below        the Services table (long-running workloads: health, ready,
- *                release, restarts and last exit, CPU and memory against their
- *                limits) and the Jobs table (migrations, provisioning,
- *                scheduled jobs: result, the release that ran it, duration).
+ *   header       the title, the counts in scope, the window.
+ *   env strip    one compact cell per environment: its health, the release
+ *                live there, who put it there and when.
+ *   left         the health KPIs (one card of four figures) and what needs
+ *                attention, each item with the release it followed and the
+ *                way back.
+ *   rail         what changed: recent releases. The rail is where further
+ *                "who and what changed" cards stack (a Users card for apps on
+ *                managed auth: new, returning and active users), so it is
+ *                kept as a column of its own rather than folded into the left.
+ *   below        Services (long-running workloads, one tight row each:
+ *                health, ready, release, requests, CPU and memory against
+ *                their limits, restarts) with its filters, the Frontends (one
+ *                row per site and the address it is live at), the traces and
+ *                sessions tiles, Processes, and the Jobs timeline.
+ *
+ * Density is sized to content: no card is taller than the rows it holds, and
+ * a list of two is a list of two lines.
  *
  * Every row opens the workload's page. The top-bar scope narrows the tables,
  * the KPIs and "Needs attention"; the environment strip always shows every
@@ -68,13 +75,9 @@ import { ObsError, ObsNotSetUp, ObsAsOf } from "../Observability/ObsStates";
 import { Ago, INK_BUTTON, INK_LINK, Panel } from "../Releases/releaseParts";
 import { shortVersion } from "../Releases/releaseModel";
 import {
-  KIND_LABEL,
   attentionItems,
-  filterServices,
   formatAge,
   jobRows,
-  kindsOf,
-  needsAttention,
   previewsCell,
   serviceRows,
   stripCell,
@@ -89,8 +92,8 @@ import {
 import { SkeletonRows } from "./workloadParts";
 import { FrontendList, FrontendsEmpty, FrontendsLoading } from "../Frontends/FrontendList";
 import { JobTimeline } from "./JobTimeline";
-import { ProcessHealth } from "./ProcessHealth";
-import { ServiceCards, type RedLookup } from "./ServiceCards";
+import { ServiceCards } from "./ServiceCards";
+import { filterRows, overviewRows, rowKindsOf, ROW_KIND_LABEL } from "./overviewRows";
 import { PartialNote, StaleNote, keepsStaleResult } from "./tileState";
 
 export interface OverviewSearch {
@@ -193,22 +196,36 @@ export function OverviewHome({
   const allJobs = useMemo(() => jobRows(listed.data?.jobs ?? [], ENV_ALL), [listed.data]);
   const services = useMemo(() => serviceRows(workloads, env, envs), [workloads, env, envs]);
   const jobs = useMemo(() => (all ? allJobs : allJobs.filter((row) => row.envName === env)), [allJobs, all, env]);
-  const visible = useMemo(() => filterServices(services, search), [services, search]);
   // Every run in scope, for the jobs' timeline; the window it is drawn over.
   const jobRuns = useMemo(() => (listed.data?.jobs ?? []).filter((run) => all || run.envName === env), [listed.data, all, env]);
   const jobWindow = useMemo(() => resolveWindow(range), [range, listed.dataUpdatedAt]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // The service cards' requests: the same GetServiceOverview read (scope, window, group-by) Processes makes, so one cached answer.
+  // The list's request side: GetServiceOverview for the scope (the read the Dashboards hub's Processes makes, so one cached answer).
   const redGroupBy = useMemo(() => (kpiScope?.envIds.length === 0 ? [ENV_KEY] : []), [kpiScope]);
   const red = useServiceOverview(kpiScope, range, [], redGroupBy);
-  const redLookup = useMemo<RedLookup>(() => {
-    const byKey = new Map(red.data?.services.map((health) => [`${health.group[ENV_KEY] ?? ""}/${health.name}`, health] as const) ?? []);
-    return { loading: red.isLoading, of: (name, envName) => byKey.get(`${redGroupBy.length ? envName : ""}/${name}`) };
-  }, [red.data, red.isLoading, redGroupBy]);
-  const obsHref = (view: "traces" | "sessions", extra: Record<string, unknown> = {}) =>
+  // Its own state: a failed telemetry read blanks only the figures, never the rows the workload read drew.
+  const redFailed = !!red.error && !keepsStaleResult(red.error, red.data);
+  const obsHref = (view: "traces" | "sessions" | "logs", extra: Record<string, unknown> = {}) =>
     withSearch(consolePath(project, { kind: "obs-view", view }), { env, range, ...extra });
 
   const projectEnvIds = useMemo(() => new Set(envs.map((candidate) => candidate.id)), [envs]);
+  const envNameOf = useMemo(() => (id: string) => envs.find((candidate) => candidate.id === id)?.name, [envs]);
+  // ONE list: services, jobs and the processes that send telemetry with no workload (overviewRows.ts).
+  const rows = useMemo(
+    () =>
+      overviewRows({
+        services,
+        jobs,
+        workloads,
+        telemetry: redFailed ? [] : (red.data?.services ?? []),
+        alerts: (alerts.data ?? []).filter((alert) => projectEnvIds.has(alert.envId)),
+        env,
+        envNameOf,
+        workloadsUnread: !!listed.error && !listed.data,
+      }),
+    [services, jobs, workloads, red.data, redFailed, alerts.data, projectEnvIds, env, envNameOf, listed.error, listed.data]
+  );
+  const visible = useMemo(() => filterRows(rows, search), [rows, search]);
   const firing = useMemo(
     () => (alerts.data ?? []).filter((a) => a.state === "firing" && projectEnvIds.has(a.envId) && (all || a.envId === scopedEnv?.id)),
     [alerts.data, projectEnvIds, all, scopedEnv]
@@ -236,7 +253,7 @@ export function OverviewHome({
   const servicesMissing = missing.filter((section) => section !== "jobs");
   const retryWorkloads = () => void listed.refetch({ cancelRefetch: false });
   const where = all ? "all environments" : env;
-  const unhealthy = services.filter(needsAttention).length;
+  const unhealthy = rows.filter((row) => row.attention).length;
 
   // NOTHING DEPLOYED: the header states no counts. They would be drawn from
   // telemetry about environments the page is about to say do not exist.
@@ -313,26 +330,15 @@ export function OverviewHome({
   const windowWords = RANGE_LABELS[range].toLowerCase();
 
   return (
-    <div className="space-y-6" data-testid="overview" data-state={loading ? "loading" : workloadsFailed ? "error" : "ready"}>
+    <div className="space-y-5" data-testid="overview" data-state={loading ? "loading" : workloadsFailed ? "error" : "ready"}>
       {header}
+      {deploys}
+      <EnvStrip envs={envs} env={env} workloads={workloads} jobs={allJobs} loading={loading} failed={workloadsFailed} scopedHref={hrefs.scoped} />
 
-      {!unrecorded && (
-        <FrontendsPanel
-          scope={env}
-          envs={envs}
-          hosted={hosted}
-          loading={envsLoading || hostedLoading}
-          domains={domains}
-          domainsHref={domainsHref}
-        />
-      )}
-
-      <div className="grid grid-cols-[minmax(0,1fr)] items-start gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
+      <div className="grid grid-cols-[minmax(0,1fr)] items-start gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
         <div className="min-w-0 space-y-4">
-          {deploys}
-          <EnvStrip envs={envs} env={env} workloads={workloads} jobs={allJobs} loading={loading} failed={workloadsFailed} scopedHref={hrefs.scoped} />
           {unrecorded ? (
-            <p className="rounded-lg border border-dashed border-border bg-surface px-4 py-5 text-sm text-ink-muted" data-testid="overview-unrecorded-env">
+            <p className="rounded-lg border border-dashed border-border bg-surface px-4 py-3 text-sm text-ink-muted" data-testid="overview-unrecorded-env">
               Reliant has no record of <span className="font-medium text-ink">{env}</span>, so nothing it runs is reported here. Once it is deployed through Reliant, its
               services and their health appear on this page.
             </p>
@@ -354,10 +360,115 @@ export function OverviewHome({
             </>
           )}
         </div>
-        <aside className="space-y-4" aria-label="Recent changes">
+        {/* What changed. Cards about who uses the app (a Users card, for apps on managed auth) stack here too. */}
+        <aside className="min-w-0 space-y-4" aria-label="Recent changes" data-testid="overview-rail">
           <RecentReleases project={project} envs={envs} hrefs={hrefs} />
         </aside>
       </div>
+
+      {notSetUp ? (
+        <ObsNotSetUp subject={project} topic="overview" env={all ? undefined : env} />
+      ) : (
+        <section className="space-y-2" aria-labelledby="overview-services-heading" data-testid="overview-services">
+          <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+            <h2 id="overview-services-heading" className="text-sm font-medium text-ink" title="Everything the app runs: services, jobs and processes, with their health and requests. CPU, memory and pods are on each workload's page.">
+              Services
+              {!loading && <span className="ml-1.5 text-xs font-normal tabular-nums text-ink-muted">{rows.length}</span>}
+            </h2>
+            {/* The request figures are their own read: during a quota pause they are the last result, and say so. */}
+            {red.data && <ObsAsOf updatedAt={red.dataUpdatedAt} />}
+            <FilterBar
+              label="Filter services"
+              active={[search.q, search.status, search.kind].filter(Boolean).length}
+              onClear={() => onSearch({ q: undefined, status: undefined, kind: undefined })}
+              testId="overview-toolbar"
+              className="w-full sm:w-auto"
+            >
+              <FilterSearch value={search.q ?? ""} onChange={(q) => onSearch({ q: q || undefined })} placeholder="Filter services" testId="overview-filter" />
+              <FilterChip
+                on={search.status === "attention"}
+                count={filterRows(rows, { ...search, status: "attention" }).length}
+                onClick={() => onSearch({ status: search.status ? undefined : "attention" })}
+                testId="overview-chip-status"
+                title={search.status ? "Show every service" : "Show only the services that need attention"}
+              >
+                Needs attention
+              </FilterChip>
+              <FilterMenu
+                label="Kind"
+                value={search.kind}
+                options={rowKindsOf(rows).map((kind) => ({ value: kind, label: ROW_KIND_LABEL[kind], count: filterRows(rows, { ...search, kind }).length }))}
+                onChange={(kind) => onSearch({ kind: kind as KindFilter | undefined })}
+                testId="overview-chip-kind"
+              />
+            </FilterBar>
+          </div>
+          {workloadsFailed && (
+            <div className="rounded-lg border border-border bg-surface p-4" data-testid="overview-services-error">
+              <ObsError error={listed.error} subject={project} onRetry={retryWorkloads} retrying={listed.isFetching} />
+            </div>
+          )}
+          {/* The telemetry is its own read: a failed workload read still lists what sends requests, with its figures. */}
+          {(!workloadsFailed || rows.length > 0) && (
+            <div data-testid="overview-services-table">
+              <ServiceCards
+                rows={visible}
+                loading={loading && !workloadsFailed}
+                showEnv={all}
+                hosted={hosted}
+                hrefs={hrefs}
+                rowHrefs={{
+                  logs: (name) => obsHref("logs", { service: name, severity: "error,fatal" }),
+                  traces: (name) => obsHref("traces", { service: name }),
+                }}
+                redLoading={red.isLoading}
+                empty={
+                  filtered ? (
+                    <>
+                      Nothing matches these filters.{" "}
+                      <button type="button" className={INK_BUTTON} onClick={() => onSearch({ q: undefined, status: undefined, kind: undefined })}>
+                        Clear them
+                      </button>
+                    </>
+                  ) : unrecorded ? (
+                    <>Nothing is reported for {env}.</>
+                  ) : (
+                    <>
+                      No service or job has reported from {where} in the {windowWords}. Workloads appear once Reliant sees their pods.
+                    </>
+                  )
+                }
+              />
+            </div>
+          )}
+          {redFailed && (
+            <div className="flex flex-wrap items-center gap-x-2 text-xs text-ink-muted" data-testid="overview-services-red-error">
+              Requests, error logs and alerts per service could not be read, so those columns are empty.
+              <button type="button" className={INK_BUTTON} onClick={() => void red.refetch({ cancelRefetch: false })} disabled={red.isFetching} data-testid="overview-services-red-retry">
+                {red.isFetching ? "Retrying…" : "Try again"}
+              </button>
+            </div>
+          )}
+          {listed.data?.truncated && (
+            <p className="text-xs text-ink-muted" data-testid="overview-services-truncated">
+              Showing the first 500 workloads.
+            </p>
+          )}
+          {!workloadsFailed && <PartialNote sections={servicesMissing} onRetry={retryWorkloads} retrying={listed.isFetching} testId="overview-services-partial" />}
+          {workloadsStale && <StaleNote onRetry={retryWorkloads} retrying={listed.isFetching} testId="overview-services-stale" />}
+        </section>
+      )}
+
+      {!unrecorded && (
+        <FrontendsPanel
+          scope={env}
+          envs={envs}
+          hosted={hosted}
+          loading={envsLoading || hostedLoading}
+          domains={domains}
+          domainsHref={domainsHref}
+        />
+      )}
 
       {!unrecorded && !notSetUp && (
         // Each tile reads, loads, fails and retries on its own (SignalTiles).
@@ -372,94 +483,9 @@ export function OverviewHome({
         </div>
       )}
 
-      {notSetUp ? (
-        <ObsNotSetUp subject={project} topic="overview" env={all ? undefined : env} />
-      ) : (
+      {!notSetUp && (
         <div className="space-y-4">
-          <FilterBar
-            label="Filter services"
-            active={[search.q, search.status, search.kind].filter(Boolean).length}
-            onClear={() => onSearch({ q: undefined, status: undefined, kind: undefined })}
-            testId="overview-toolbar"
-          >
-            <FilterSearch value={search.q ?? ""} onChange={(q) => onSearch({ q: q || undefined })} placeholder="Filter services" testId="overview-filter" />
-            <FilterChip
-              on={search.status === "attention"}
-              count={filterServices(services, { ...search, status: "attention" }).length}
-              onClick={() => onSearch({ status: search.status ? undefined : "attention" })}
-              testId="overview-chip-status"
-              title={search.status ? "Show every service" : "Show only the services that need attention"}
-            >
-              Needs attention
-            </FilterChip>
-            <FilterMenu
-              label="Kind"
-              value={search.kind}
-              options={kindsOf(services).map((kind) => ({ value: kind, label: KIND_LABEL[kind], count: filterServices(services, { ...search, kind }).length }))}
-              onChange={(kind) => onSearch({ kind: kind as KindFilter | undefined })}
-              testId="overview-chip-kind"
-            />
-          </FilterBar>
-
-          <section className="space-y-2" aria-labelledby="overview-services-heading" data-testid="overview-services">
-            <h2 id="overview-services-heading" className="text-sm font-medium text-ink">
-              Services
-              <span className="ml-2 text-xs font-normal text-ink-muted">Long-running workloads: health, requests, and CPU and memory against their limits</span>
-            </h2>
-            {workloadsFailed ? (
-              <div className="rounded-lg border border-border bg-surface p-4" data-testid="overview-services-error">
-                <ObsError error={listed.error} subject={project} onRetry={retryWorkloads} retrying={listed.isFetching} />
-              </div>
-            ) : (
-            <div data-testid="overview-services-table">
-            <ServiceCards
-              rows={visible}
-              loading={loading}
-              showEnv={all}
-              windowShort={range}
-              hosted={hosted}
-              hrefs={hrefs}
-              red={redLookup}
-              empty={
-                filtered ? (
-                  <>
-                    No service matches these filters.{" "}
-                    <button type="button" className={INK_BUTTON} onClick={() => onSearch({ q: undefined, status: undefined, kind: undefined })}>
-                      Clear them
-                    </button>
-                  </>
-                ) : unrecorded ? (
-                  <>Nothing is reported for {env}.</>
-                ) : (
-                  <>
-                    No service has reported from {where} in the {windowWords}. Workloads appear once Reliant sees their pods; an environment
-                    that runs only jobs looks like this.
-                  </>
-                )
-              }
-            />
-            </div>
-            )}
-            {listed.data?.truncated && (
-              <p className="text-xs text-ink-muted" data-testid="overview-services-truncated">
-                Showing the first 500 workloads.
-              </p>
-            )}
-            {!workloadsFailed && <PartialNote sections={servicesMissing} onRetry={retryWorkloads} retrying={listed.isFetching} testId="overview-services-partial" />}
-            {workloadsStale && <StaleNote onRetry={retryWorkloads} retrying={listed.isFetching} testId="overview-services-stale" />}
-          </section>
-
-          {!unrecorded && <ProcessHealth
-            scope={kpiScope}
-            range={range}
-            workloads={workloads}
-            alerts={(alerts.data ?? []).filter(alert => projectEnvIds.has(alert.envId))}
-            envNameOf={(id) => envs.find(candidate => candidate.id === id)?.name}
-            workloadHref={(name, processEnv) => hrefs.workload(name, processEnv ?? env)}
-            logsHref={(name) => withSearch(consolePath(project, { kind: "obs-view", view: "logs" }), { env, range, service: name, severity: "error,fatal" })}
-          />}
-
-          <Panel title="Jobs" meta="Migrations, provisioning and scheduled jobs: every run in the window" flush testId="overview-jobs">
+          <Panel title="Job runs" meta="Every run of each job in the window; the latest is on its row above" flush testId="overview-jobs">
             {workloadsFailed ? (
               <div className="p-4" data-testid="overview-jobs-error">
                 <ObsError error={listed.error} subject={project} onRetry={retryWorkloads} retrying={listed.isFetching} />
@@ -520,18 +546,25 @@ function FrontendsPanel({
   const covered = envs.filter((candidate) => (scope === ENV_ALL ? !candidate.preview : candidate.name === scope));
   const frontends = frontendsInScope(scope, envs, hosted, domains?.availability === "available" ? domains.domains : null);
   if (frontends.length === 0 && !covered.some((candidate) => candidate.placed)) return null;
+  // Shaped like Services above it: a heading with its count, then one tight row per site.
   return (
-    <Panel title="Frontends" meta="Websites Reliant hosts, and the address each is live at." flush testId="overview-frontends">
+    <section className="space-y-2" aria-labelledby="overview-frontends-heading" data-testid="overview-frontends">
+      <h2 id="overview-frontends-heading" className="text-sm font-medium text-ink" title="Websites Reliant hosts, and the address each is live at">
+        Frontends
+        {frontends.length > 0 && <span className="ml-1.5 text-xs font-normal tabular-nums text-ink-muted">{frontends.length}</span>}
+      </h2>
       {loading && frontends.length === 0 ? (
-        <FrontendsLoading />
-      ) : frontends.length === 0 ? (
-        <div className="px-4 pb-4">
-          <FrontendsEmpty env={scope === ENV_ALL ? undefined : scope} />
+        <div className="rounded-lg border border-border bg-surface">
+          <FrontendsLoading />
         </div>
+      ) : frontends.length === 0 ? (
+        <FrontendsEmpty env={scope === ENV_ALL ? undefined : scope} />
       ) : (
-        <FrontendList frontends={frontends} showEnv={scope === ENV_ALL} domainsHref={domainsHref} />
+        <div className="overflow-hidden rounded-lg border border-border bg-surface">
+          <FrontendList frontends={frontends} showEnv={scope === ENV_ALL} domainsHref={domainsHref} />
+        </div>
       )}
-    </Panel>
+    </section>
   );
 }
 
@@ -563,23 +596,30 @@ function EnvStrip({
   const previewSelected = previews.some((candidate) => candidate.name === env);
   return (
     <div
-      // One row of cells on a desktop; two to a row on a phone, where five
-      // environments in one row left each ~70px and clipped its status.
-      className="grid grid-cols-2 overflow-hidden rounded-lg border border-border bg-surface md:grid-cols-[repeat(var(--env-cells),minmax(0,1fr))] max-md:[&>*]:border-b max-md:[&>*]:border-border"
+      // One row of cells on a desktop; one cell per line on a phone, where
+      // five environments in one row left each ~70px and clipped its status.
+      // The hairlines between cells are the gap showing the border colour.
+      className="grid grid-cols-1 gap-px overflow-hidden rounded-lg border border-border bg-border md:grid-cols-[repeat(var(--env-cells),minmax(0,1fr))]"
       style={{ "--env-cells": count } as CSSProperties}
       data-testid="overview-env-strip"
     >
-      {cells.map((cell, index) => (
-        <EnvCell key={cell.env.name} cell={cell} first={index === 0} selected={cell.env.name === env} loading={loading} failed={failed} href={scopedHref(cell.env.name)} />
+      {cells.map((cell) => (
+        <EnvCell key={cell.env.name} cell={cell} selected={cell.env.name === env} loading={loading} failed={failed} href={scopedHref(cell.env.name)} />
       ))}
       {previewCell && (
-        <div className={cn("relative min-w-0 px-4 py-3", cells.length > 0 && "border-l border-border")} data-testid="overview-env-previews" data-selected={previewSelected ? "true" : undefined}>
+        <div className="relative min-w-0 bg-surface px-4 py-2.5" data-testid="overview-env-previews" data-selected={previewSelected ? "true" : undefined}>
           <div className="flex items-center justify-between gap-2 text-xs">
             <span className="text-ink-muted">previews</span>
             {!loading && !failed && <Status tone={previewCell.tone} label={previewCell.label} size="sm" />}
           </div>
-          <div className="mt-1 text-sm font-medium text-ink">{previews.length} running</div>
-          <div className="text-xs text-ink-muted">{loading || failed ? " " : `${previewCell.services} ${previewCell.services === 1 ? "service" : "services"}`}</div>
+          <div className="mt-0.5 flex min-w-0 items-baseline gap-1.5">
+            <span className="text-sm font-medium text-ink">{previews.length} running</span>
+            {!loading && !failed && (
+              <span className="truncate text-xs text-ink-muted">
+                {previewCell.services} {previewCell.services === 1 ? "service" : "services"}
+              </span>
+            )}
+          </div>
           <div className="flex flex-wrap gap-x-1.5 text-xs text-ink-muted">
             {previews.map((preview, index) => (
               <span key={preview.name}>
@@ -603,14 +643,12 @@ function EnvStrip({
 
 function EnvCell({
   cell,
-  first,
   selected,
   loading,
   failed,
   href,
 }: {
   cell: StripCell;
-  first: boolean;
   selected: boolean;
   loading: boolean;
   failed: boolean;
@@ -624,10 +662,7 @@ function EnvCell({
       title={selected ? `Showing ${env.name}` : `Show ${env.name}`}
       data-testid={`overview-env-${env.name}`}
       data-tone={loading || failed ? undefined : cell.tone}
-      className={cn(
-        "no-color relative block min-w-0 px-4 py-3 text-left transition-colors hover:bg-ink/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
-        !first && "border-l border-border"
-      )}
+      className="no-color relative block min-w-0 bg-surface px-4 py-2.5 text-left transition-colors hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
     >
       <div className="flex items-center justify-between gap-2 text-xs">
         <span className={selected ? "font-medium text-ink" : "text-ink-muted"}>{env.name}</span>
@@ -639,22 +674,25 @@ function EnvCell({
           <Status tone={cell.tone} label={cell.label} size="sm" />
         )}
       </div>
-      <div className="mt-1 truncate text-sm font-medium text-ink" title={env.release || undefined}>
-        {env.release ? shortVersion(env.release) : <span className="font-normal text-ink-muted">No release</span>}
-      </div>
-      <div className="truncate text-xs text-ink-muted">
-        {loading || failed ? " " : `${cell.services} ${cell.services === 1 ? "service" : "services"}`}
-        {cell.failedJobs > 0 && !loading && <span className="text-danger-ink"> · {cell.failedJobs} job{cell.failedJobs === 1 ? "" : "s"} failed</span>}
-      </div>
-      <div className="truncate text-xs text-ink-muted">
+      {/* The release live there, then who put it there and when: one line. */}
+      <div className="mt-0.5 flex min-w-0 items-baseline gap-1.5">
+        <span className="shrink-0 text-sm font-medium text-ink" title={env.release || undefined}>
+          {env.release ? shortVersion(env.release) : <span className="font-normal text-ink-muted">No release</span>}
+        </span>
         {env.release && (
-          <>
-            {env.promotedBy ? `promoted by ${env.promotedBy}` : "promoted"}
+          <span className="truncate text-xs text-ink-muted">
+            {env.promotedBy ?? "promoted"}
             {env.promotedAt && " · "}
             <Ago at={env.promotedAt} />
-          </>
+          </span>
         )}
       </div>
+      {/* A failed job is not a workload's health: it says so on its own line, only when there is one. */}
+      {!loading && cell.failedJobs > 0 && (
+        <div className="truncate text-xs text-danger-ink">
+          {cell.failedJobs} job{cell.failedJobs === 1 ? "" : "s"} failed
+        </div>
+      )}
       {selected && <span aria-hidden="true" className="absolute inset-x-0 bottom-0 h-0.5 bg-ink" />}
     </Link>
   );
@@ -709,6 +747,8 @@ function NeedsAttention({
             Workload health could not be read, so only the firing alerts are listed.
           </p>
         )}
+        {/* On a phone a row is two lines (the subject, then the detail under it) rather than one wider than the screen. */}
+        <div data-testid="overview-attention-scroll">
         <table className="w-full text-sm" aria-label="Needs attention">
           <tbody>
             {items.map((item) => {
@@ -718,7 +758,7 @@ function NeedsAttention({
               return (
                 <tr
                   key={item.key}
-                  className="relative cursor-pointer border-t border-border/70 first:border-t-0 hover:bg-ink/5"
+                  className="relative cursor-pointer border-t border-border/70 first:border-t-0 hover:bg-ink/5 max-sm:grid max-sm:grid-cols-[1.5rem_minmax(0,1fr)_auto_auto] max-sm:items-center max-sm:py-1.5"
                   onClick={(event) => {
                     if ((event.target as HTMLElement).closest("a, button")) return;
                     navigateTo(href);
@@ -726,20 +766,24 @@ function NeedsAttention({
                   data-testid={`attention-${item.key}`}
                   data-tone={item.tone}
                 >
-                  <td className="h-10 w-6 pl-4 pr-0">
+                  <td className="h-10 w-6 pl-4 pr-0 max-sm:h-7">
                     <Status tone={item.tone} />
                   </td>
-                  <td className="h-10 max-w-0 px-3">
+                  {/* min-w: when the row outgrows a phone, the subject keeps room to read rather than the detail. */}
+                  <td className="h-10 min-w-40 max-w-0 px-3 max-sm:h-7 max-sm:min-w-0 max-sm:max-w-none max-sm:pr-1">
                     <Link href={href} className="no-color block truncate text-ink">
                       <span className="font-medium">{item.subject}</span> {item.what}
                     </Link>
                   </td>
                   {showEnv && (
-                    <td className="h-10 w-px whitespace-nowrap px-2">
+                    <td className="h-10 w-px whitespace-nowrap px-2 max-sm:w-auto max-sm:col-start-2 max-sm:row-start-2 max-sm:h-auto max-sm:px-3">
                       <Tag>{item.envName}</Tag>
                     </td>
                   )}
-                  <td className="h-10 w-px max-w-64 truncate whitespace-nowrap px-4 text-right text-xs text-ink-muted" title={item.detail}>
+                  <td
+                    className="h-10 w-px max-w-64 truncate whitespace-nowrap px-4 text-right text-xs text-ink-muted max-sm:col-span-3 max-sm:col-start-2 max-sm:h-auto max-sm:w-auto max-sm:max-w-none max-sm:px-3 max-sm:pb-1 max-sm:text-left"
+                    title={item.detail}
+                  >
                     {item.detail}
                     {suspect && (
                       <span className="block" data-testid={`attention-suspect-${item.key}`}>
@@ -750,22 +794,26 @@ function NeedsAttention({
                       </span>
                     )}
                   </td>
-                  <td className="h-10 w-px whitespace-nowrap pr-2 text-right" data-testid={`attention-ask-${item.key}`}>
+                  <td className="h-10 w-px whitespace-nowrap pr-2 text-right max-sm:w-auto max-sm:col-start-3 max-sm:row-start-1 max-sm:h-7" data-testid={`attention-ask-${item.key}`}>
                     <AskReliantMenu subject={attentionSubject(item)} label={`Ask Reliant about ${item.subject}`} />
                   </td>
                   {rollback && (
-                    <td className="h-10 w-px whitespace-nowrap pr-4 text-right">
+                    <td className="h-10 w-px whitespace-nowrap pr-4 text-right max-sm:w-auto max-sm:col-start-4 max-sm:row-start-1 max-sm:h-7">
                       {target && (
                         <button
                           type="button"
                           onClick={() => rollback.onRollback(target)}
                           disabled={!!rollback.blockedReason}
                           title={rollback.blockedReason ?? `Plan a rollback of ${target.env} to ${target.previous}`}
+                          aria-label={`Roll back ${target.env} to ${shortVersion(target.previous)}`}
                           className="inline-flex h-7 items-center gap-1 rounded-md border border-border bg-surface px-2 text-xs font-medium text-ink hover:bg-ink/5 disabled:cursor-not-allowed disabled:opacity-60"
                           data-testid={`attention-rollback-${item.key}`}
                         >
                           <RotateCcw className="h-3 w-3" aria-hidden="true" />
-                          Roll back {target.env} to {shortVersion(target.previous)}
+                          {/* A phone keeps the icon; the button's name says the whole of it. */}
+                          <span className="max-sm:sr-only">
+                            Roll back {target.env} to {shortVersion(target.previous)}
+                          </span>
                         </button>
                       )}
                     </td>
@@ -775,6 +823,7 @@ function NeedsAttention({
             })}
           </tbody>
         </table>
+        </div>
         </>
       )}
     </Panel>
@@ -826,38 +875,38 @@ function RecentReleases({ project, envs, hrefs }: { project: string; envs: Strip
   const releases = useProjectReleases(project);
   const recent = (releases.data ?? []).slice(0, 3);
   return (
-    <Panel title="Recent releases" meta="Latest builds and where they run now" actions={<RailLink href={hrefs.releases}>All</RailLink>} testId="overview-recent-releases">
+    <Panel title="Recent releases" actions={<RailLink href={hrefs.releases}>All</RailLink>} flush testId="overview-recent-releases">
       {releases.isLoading ? (
-        <div className="h-24 animate-pulse rounded bg-ink/5 motion-reduce:animate-none" aria-label="Loading releases" />
+        <div className="mx-4 mb-3 h-20 animate-pulse rounded bg-ink/5 motion-reduce:animate-none" aria-label="Loading releases" />
       ) : releases.error && !releases.data ? (
-        <p className="text-xs text-ink-muted">Releases could not be read right now.</p>
+        <p className="px-4 pb-3 text-xs text-ink-muted">Releases could not be read right now.</p>
       ) : recent.length === 0 ? (
-        <p className="text-xs text-ink-muted">No release has been cut yet. The first reliant forge env deploy cuts one.</p>
+        <p className="px-4 pb-3 text-xs text-ink-muted">No release has been cut yet. The first reliant forge env deploy cuts one.</p>
       ) : (
-        <ol className="space-y-3.5">
-          {recent.map((release, index) => {
+        // One release, two lines: the version, where it is live and when; then what it changed and who cut it.
+        <ol className="divide-y divide-border/70">
+          {recent.map((release) => {
             const live = envs.filter((candidate) => candidate.release === release.version).map((candidate) => candidate.name);
             return (
-              <li key={release.version} className="relative pl-6 text-xs" data-testid={`overview-release-${release.version}`}>
-                <span
-                  aria-hidden="true"
-                  className={cn("absolute left-1 top-1.5 h-2 w-2 rounded-full border", index === 0 && live.length ? "border-success bg-success" : "border-ink-muted bg-surface")}
-                />
-                {index < recent.length - 1 && <span aria-hidden="true" className="absolute -bottom-3.5 left-2 top-4 w-px bg-border" />}
-                <Link href={hrefs.release(release.version)} className={`${INK_LINK} text-sm`} title={release.version}>
-                  {shortVersion(release.version)}
-                </Link>
-                {release.subject && (
-                  <span className="block truncate text-ink-muted" title={release.subject}>
+              <li key={release.version} className="min-w-0 px-4 py-2 text-xs" data-testid={`overview-release-${release.version}`}>
+                <div className="flex min-w-0 items-baseline gap-2">
+                  <Link href={hrefs.release(release.version)} className={`${INK_LINK} shrink-0 text-sm`} title={release.version}>
+                    {shortVersion(release.version)}
+                  </Link>
+                  <span className={cn("min-w-0 truncate", live.length ? "text-ink" : "text-ink-muted")}>
+                    {live.length ? `live in ${live.join(", ")}` : "not live"}
+                  </span>
+                  <span className="ml-auto shrink-0 text-ink-muted">
+                    <Ago at={release.createdAt} />
+                  </span>
+                </div>
+                {(release.subject || release.author) && (
+                  <span className="block truncate text-ink-muted" title={release.subject || undefined}>
+                    {release.author && <span className="text-ink">{release.author}</span>}
+                    {release.author && release.subject ? " · " : ""}
                     {release.subject}
                   </span>
                 )}
-                <span className="block text-ink-muted">
-                  {live.length ? `live in ${live.join(", ")}` : "not live in these environments"}
-                  {release.author ? ` · ${release.author}` : ""}
-                  {release.createdAt ? " · " : ""}
-                  <Ago at={release.createdAt} />
-                </span>
               </li>
             );
           })}

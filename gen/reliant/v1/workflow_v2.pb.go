@@ -1038,9 +1038,14 @@ type ThreadConfig struct {
 	// true: Create thread once, reuse across iterations.
 	Memo *CelBool `protobuf:"bytes,2,opt,name=memo,proto3" json:"memo,omitempty"`
 	// Inject adds a message to the thread before execution.
-	Inject        *InjectConfig `protobuf:"bytes,3,opt,name=inject,proto3" json:"inject,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Inject *InjectConfig `protobuf:"bytes,3,opt,name=inject,proto3" json:"inject,omitempty"`
+	// Excludes automatic global/project/repository memory injection in this
+	// execution and its descendants. False/unset never overrides an excluded
+	// ancestor; exclusion latches durably on the thread, including recovery.
+	// Does not remove history, skills, bootstrap context or tool access.
+	ExcludeAmbientMemory bool `protobuf:"varint,4,opt,name=exclude_ambient_memory,json=excludeAmbientMemory,proto3" json:"exclude_ambient_memory,omitempty"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
 }
 
 func (x *ThreadConfig) Reset() {
@@ -1092,6 +1097,13 @@ func (x *ThreadConfig) GetInject() *InjectConfig {
 		return x.Inject
 	}
 	return nil
+}
+
+func (x *ThreadConfig) GetExcludeAmbientMemory() bool {
+	if x != nil {
+		return x.ExcludeAmbientMemory
+	}
+	return false
 }
 
 // InjectConfig configures message injection into a thread.
@@ -2006,9 +2018,19 @@ type CallLLMArgs struct {
 	// a wedged thread recoverable. That guard stays the default; a loop that saw
 	// "incomplete" opts out of it for exactly the next turn by setting this from
 	// its own previous-iteration outputs.
-	ContinueTurn  *CelBool `protobuf:"bytes,15,opt,name=continue_turn,json=continueTurn,proto3" json:"continue_turn,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	ContinueTurn *CelBool `protobuf:"bytes,15,opt,name=continue_turn,json=continueTurn,proto3" json:"continue_turn,omitempty"`
+	// Opt out of automatic global/project/repository memory injection for this
+	// call and descendants it spawns. Inherited exclusion cannot be re-enabled;
+	// exclusion latches durably on the thread for subsequent turns and recovery.
+	// Bootstrap prompts, history, explicit skills/messages and tools are unchanged.
+	ExcludeAmbientMemory bool `protobuf:"varint,16,opt,name=exclude_ambient_memory,json=excludeAmbientMemory,proto3" json:"exclude_ambient_memory,omitempty"`
+	// Opt out of the configured skill catalog for THIS call only. Omits the
+	// announcement and automatic skill preloads. Nonempty skills is rejected.
+	// Does not redact history or restrict tools (including explicit skill loads);
+	// strict no-skill workflows must set this on every call and offer no tools.
+	ExcludeSkillCatalog bool `protobuf:"varint,17,opt,name=exclude_skill_catalog,json=excludeSkillCatalog,proto3" json:"exclude_skill_catalog,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *CallLLMArgs) Reset() {
@@ -2116,6 +2138,20 @@ func (x *CallLLMArgs) GetContinueTurn() *CelBool {
 		return x.ContinueTurn
 	}
 	return nil
+}
+
+func (x *CallLLMArgs) GetExcludeAmbientMemory() bool {
+	if x != nil {
+		return x.ExcludeAmbientMemory
+	}
+	return false
+}
+
+func (x *CallLLMArgs) GetExcludeSkillCatalog() bool {
+	if x != nil {
+		return x.ExcludeSkillCatalog
+	}
+	return false
 }
 
 // ResponseTool defines a custom tool for structured LLM output.
@@ -3611,9 +3647,21 @@ type RunArgs struct {
 	// A guard rail against a command that pushes or merges when it should not,
 	// not containment: the command still runs as the daemon's Unix user and can
 	// read that user's files.
-	Credentials   string `protobuf:"bytes,5,opt,name=credentials,proto3" json:"credentials,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Credentials string `protobuf:"bytes,5,opt,name=credentials,proto3" json:"credentials,omitempty"`
+	// WritableCheckouts are the shared project checkouts, or directories inside
+	// one, that a credentials: none command writes. On Linux such a command sees
+	// every project checkout other than its own (the one holding its working
+	// directory, and its Reliant worktree's) read-only, .git included, so it
+	// cannot plant hooks, config or scripts that a later credentialed step runs.
+	// It also writes the user's cache directories (XDG_CACHE_HOME, ~/.cache)
+	// privately, so it cannot change what one step hands another there; a
+	// directory inside one named here (a hand-off this step writes for a later
+	// one) is written for real. Relative paths are relative to the working
+	// directory. Ignored when the command has credentials; a daemon older than
+	// the field ignores it too.
+	WritableCheckouts []string `protobuf:"bytes,6,rep,name=writable_checkouts,json=writableCheckouts,proto3" json:"writable_checkouts,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *RunArgs) Reset() {
@@ -3679,6 +3727,13 @@ func (x *RunArgs) GetCredentials() string {
 		return x.Credentials
 	}
 	return ""
+}
+
+func (x *RunArgs) GetWritableCheckouts() []string {
+	if x != nil {
+		return x.WritableCheckouts
+	}
+	return nil
 }
 
 // SubWorkflowArgs configures a workflow node — invokes a sub-workflow.
@@ -8165,6 +8220,17 @@ type Workflow struct {
 	// had produced. The run still ends FAILED: the handler cannot mask the
 	// failure, and an error in it is logged, never recursive.
 	OnFailure *Workflow `protobuf:"bytes,19,opt,name=on_failure,json=onFailure,proto3" json:"on_failure,omitempty"`
+	// Finally is a handler that runs ONCE when a run of this workflow ENDS,
+	// whatever ended it: it completed, it failed, or it was cancelled
+	// (control_run cancel, CancelRun, archiving its chat). Not when it pauses,
+	// and not when it hands off to a successor run (continue-as-new). It is an
+	// inline graph like on_failure, and runs after it. Its nodes read
+	// `run.status` ('completed' | 'failed' | 'cancelled'), `failure.*` (every
+	// key present; empty unless the run failed), `inputs`, and the `nodes`
+	// outputs the run had produced. It cannot change how the run ended, and an
+	// error in it is logged, never recursive. It is where a workflow releases
+	// what it holds — a lease, a claim, a label — however the run ends.
+	Finally *Workflow `protobuf:"bytes,24,opt,name=finally,proto3" json:"finally,omitempty"`
 	// Requires declares what a run needs from outside the definition: the
 	// executables its commands call, the integrations its actions and agents
 	// authenticate to, the checkouts it reads. A run checks them after its
@@ -8353,6 +8419,13 @@ func (x *Workflow) GetConcurrency() *WorkflowConcurrency {
 func (x *Workflow) GetOnFailure() *Workflow {
 	if x != nil {
 		return x.OnFailure
+	}
+	return nil
+}
+
+func (x *Workflow) GetFinally() *Workflow {
+	if x != nil {
+		return x.Finally
 	}
 	return nil
 }
@@ -8703,14 +8776,16 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"\ftool_results\x18\x05 \x01(\v2\x15.reliant.v1.CelStringR\vtoolResults\x12\x92\x01\n" +
 	"\vattachments\x18\x06 \x01(\v2\x15.reliant.v1.CelStringBY\x82\xb5\x18U\n" +
 	"SAttachment IDs to attach to the saved message. CEL expression must return []string.R\vattachments\x12B\n" +
-	"\rdisplay_style\x18\a \x01(\v2\x15.reliant.v1.CelStringB\x06\x82\xb5\x18\x02 \x01R\fdisplayStyle\"\xa4\x02\n" +
+	"\rdisplay_style\x18\a \x01(\v2\x15.reliant.v1.CelStringB\x06\x82\xb5\x18\x02 \x01R\fdisplayStyle\"\xca\x03\n" +
 	"\fThreadConfig\x12X\n" +
 	"\x04mode\x18\x01 \x01(\tBD\x82\xb5\x18@\n" +
 	",Thread mode: inherit (default), new, or fork\x12\x10inherit|new|forkR\x04mode\x12_\n" +
 	"\x04memo\x18\x02 \x01(\v2\x13.reliant.v1.CelBoolB6\x82\xb5\x182\n" +
 	"0Whether to memoize thread across loop iterationsR\x04memo\x12Y\n" +
 	"\x06inject\x18\x03 \x01(\v2\x18.reliant.v1.InjectConfigB'\x82\xb5\x18#\n" +
-	"!Message injection into the threadR\x06inject\"\x94\x04\n" +
+	"!Message injection into the threadR\x06inject\x12\xa3\x01\n" +
+	"\x16exclude_ambient_memory\x18\x04 \x01(\bBm\x82\xb5\x18i\n" +
+	"gExclude automatic saved memories; inherited exclusion cannot be re-enabled. Not full context isolation.R\x14excludeAmbientMemory\"\x94\x04\n" +
 	"\fInjectConfig\x12i\n" +
 	"\x04role\x18\x01 \x01(\v2\x15.reliant.v1.CelStringB>\x82\xb5\x18:\n" +
 	"!Message role for injected message\x12\x15user|system|assistantR\x04role\x12P\n" +
@@ -8784,7 +8859,7 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"\n" +
 	"ToolsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12-\n" +
-	"\x05value\x18\x02 \x01(\v2\x17.google.protobuf.StructR\x05value:\x028\x01\"\xf3\x0e\n" +
+	"\x05value\x18\x02 \x01(\v2\x17.google.protobuf.StructR\x05value:\x028\x01\"\x91\x12\n" +
 	"\vCallLLMArgs\x12\x97\x01\n" +
 	"\x05model\x18\x01 \x01(\v2\x1c.reliant.v1.CelModelSelectorBc\x82\xb5\x18_\n" +
 	";A model tag (flagship, fast, cheap) or an explicit model ID*\x05ModelJ\x05ModelZ\x05basicp\x01\x82\x01\bflagshipR\x05model\x12\xd4\x01\n" +
@@ -8808,7 +8883,11 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"\x06skills\x18\x0e \x01(\v2\x19.reliant.v1.CelStringListB\xa7\x01\x82\xb5\x18\xa2\x01\n" +
 	"VSkills to preload into this call, by path, so the model starts with their instructions*\x06PromptJ\x06SkillsZ\badvanced\x82\x01\x17[forge/db, code-review]\x8a\x01\x13list of skill pathsR\x06skills\x12\xb9\x01\n" +
 	"\rcontinue_turn\x18\x0f \x01(\v2\x13.reliant.v1.CelBoolB\x7f\x82\xb5\x18{\n" +
-	"VCall the provider even though history ends with the assistant (continue a paused turn) \x01*\x06PromptJ\rContinue turnZ\badvancedR\fcontinueTurn:\\\x8a\xb5\x18X\n" +
+	"VCall the provider even though history ends with the assistant (continue a paused turn) \x01*\x06PromptJ\rContinue turnZ\badvancedR\fcontinueTurn\x12\xb2\x01\n" +
+	"\x16exclude_ambient_memory\x18\x10 \x01(\bB|\x82\xb5\x18x\n" +
+	"LExclude automatic saved memories (default false); not full context isolation*\x06PromptJ\x16Exclude ambient memoryZ\badvancedR\x14excludeAmbientMemory\x12\xe6\x01\n" +
+	"\x15exclude_skill_catalog\x18\x11 \x01(\bB\xb1\x01\x82\xb5\x18\xac\x01\n" +
+	"\x80\x01Exclude configured skills for this call (default false); rejects skill preloads, does not redact history or restrict other tools*\x06PromptJ\x15Exclude skill catalogZ\badvancedR\x13excludeSkillCatalog:\\\x8a\xb5\x18X\n" +
 	"\bcall_llm\x12\bCall LLM\x1a4Send a prompt to a language model and get a response*\aagentic2\x03Bot\"\xa3\x01\n" +
 	"\fResponseTool\x12)\n" +
 	"\x04name\x18\x01 \x01(\v2\x15.reliant.v1.CelStringR\x04name\x127\n" +
@@ -8992,7 +9071,7 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"\x11BaseBranchesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01:f\x8a\xb5\x18b\n" +
-	"\x0fcreate_worktree\x12\x0fCreate Worktree\x1a.Create a git worktree for isolated development*\x03git2\tGitBranch\"\xe5\x05\n" +
+	"\x0fcreate_worktree\x12\x0fCreate Worktree\x1a.Create a git worktree for isolated development*\x03git2\tGitBranch\"\x81\b\n" +
 	"\aRunArgs\x12~\n" +
 	"\acommand\x18\x01 \x01(\v2\x15.reliant.v1.CelStringBM\x82\xb5\x18I\n" +
 	"1The shell command to run in the project directoryp\x01\x82\x01\x11npm test -- --runR\acommand\x12M\n" +
@@ -9003,7 +9082,9 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"\blog_file\x18\x04 \x01(\v2\x15.reliant.v1.CelStringB+\x82\xb5\x18'\n" +
 	"#Redirect stdout+stderr to this file \x01R\alogFile\x12\xca\x01\n" +
 	"\vcredentials\x18\x05 \x01(\tB\xa7\x01\x82\xb5\x18\xa2\x01\n" +
-	"\x8b\x01Set to none to run the command with no GitHub, git, ssh or cloud credentials. Not a sandbox: files the daemon's user can read stay readableJ\vCredentials\x82\x01\x04noneR\vcredentials\x1a6\n" +
+	"\x8b\x01Set to none to run the command with no GitHub, git, ssh or cloud credentials. Not a sandbox: files the daemon's user can read stay readableJ\vCredentials\x82\x01\x04noneR\vcredentials\x12\x99\x02\n" +
+	"\x12writable_checkouts\x18\x06 \x03(\tB\xe9\x01\x82\xb5\x18\xe4\x01\n" +
+	"\xd5\x01With credentials: none, the shared project checkouts, or hand-off directories under the cache directory, the command may write. Every other checkout but its own is read-only to it, and its cache writes are its own \x01\x82\x01\areliantR\x11writableCheckouts\x1a6\n" +
 	"\bEnvEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01:D\x8a\xb5\x18@\n" +
@@ -9480,7 +9561,7 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"\x05value\x18\x02 \x01(\v2\x14.reliant.v1.PositionR\x05value:\x028\x01\x1aW\n" +
 	"\rSwitchesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x120\n" +
-	"\x05value\x18\x02 \x01(\v2\x1a.reliant.v1.SwitchMetadataR\x05value:\x028\x01\"\xa2\t\n" +
+	"\x05value\x18\x02 \x01(\v2\x1a.reliant.v1.SwitchMetadataR\x05value:\x028\x01\"\xd2\t\n" +
 	"\bWorkflow\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12&\n" +
 	"\x05nodes\x18\x02 \x03(\v2\x10.reliant.v1.NodeR\x05nodes\x12&\n" +
@@ -9504,7 +9585,8 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"\x0fautomation_only\x18\x12 \x01(\bR\x0eautomationOnly\x12A\n" +
 	"\vconcurrency\x18\x14 \x01(\v2\x1f.reliant.v1.WorkflowConcurrencyR\vconcurrency\x123\n" +
 	"\n" +
-	"on_failure\x18\x13 \x01(\v2\x14.reliant.v1.WorkflowR\tonFailure\x12<\n" +
+	"on_failure\x18\x13 \x01(\v2\x14.reliant.v1.WorkflowR\tonFailure\x12.\n" +
+	"\afinally\x18\x18 \x01(\v2\x14.reliant.v1.WorkflowR\afinally\x12<\n" +
 	"\brequires\x18\x15 \x01(\v2 .reliant.v1.WorkflowRequirementsR\brequires\x12;\n" +
 	"\asecrets\x18\x16 \x03(\v2!.reliant.v1.Workflow.SecretsEntryR\asecrets\x12 \n" +
 	"\vpermissions\x18\x17 \x03(\tR\vpermissions\x1aL\n" +
@@ -9899,33 +9981,34 @@ var file_reliant_v1_workflow_v2_proto_depIdxs = []int32{
 	125, // 215: reliant.v1.Workflow.triggers:type_name -> reliant.v1.WorkflowTrigger
 	95,  // 216: reliant.v1.Workflow.concurrency:type_name -> reliant.v1.WorkflowConcurrency
 	91,  // 217: reliant.v1.Workflow.on_failure:type_name -> reliant.v1.Workflow
-	94,  // 218: reliant.v1.Workflow.requires:type_name -> reliant.v1.WorkflowRequirements
-	122, // 219: reliant.v1.Workflow.secrets:type_name -> reliant.v1.Workflow.SecretsEntry
-	1,   // 220: reliant.v1.SecretDeclaration.environment:type_name -> reliant.v1.CelString
-	1,   // 221: reliant.v1.NodeSecretRef.environment:type_name -> reliant.v1.CelString
-	0,   // 222: reliant.v1.WorkflowConcurrency.waiting:type_name -> reliant.v1.WorkflowConcurrencyWaiting
-	123, // 223: reliant.v1.ToolsConfig.ToolsEntry.value:type_name -> google.protobuf.Struct
-	123, // 224: reliant.v1.ExecuteToolsArgs.ResponseToolSchemasEntry.value:type_name -> google.protobuf.Struct
-	124, // 225: reliant.v1.InvokeToolArgs.ParamsEntry.value:type_name -> google.protobuf.Value
-	124, // 226: reliant.v1.ActionArgs.WithEntry.value:type_name -> google.protobuf.Value
-	124, // 227: reliant.v1.ComputeArgs.OutputsEntry.value:type_name -> google.protobuf.Value
-	124, // 228: reliant.v1.SubWorkflowArgs.ArgsEntry.value:type_name -> google.protobuf.Value
-	124, // 229: reliant.v1.LoopArgs.ArgsEntry.value:type_name -> google.protobuf.Value
-	60,  // 230: reliant.v1.ObjectInputConfig.PropertiesEntry.value:type_name -> reliant.v1.PropertySchema
-	60,  // 231: reliant.v1.PropertySchema.PropertiesEntry.value:type_name -> reliant.v1.PropertySchema
-	47,  // 232: reliant.v1.GroupInputConfig.InputsEntry.value:type_name -> reliant.v1.Input
-	69,  // 233: reliant.v1.ToolCapabilities.BoundParamsEntry.value:type_name -> reliant.v1.ToolBoundParams
-	70,  // 234: reliant.v1.ToolBoundParams.ParamsEntry.value:type_name -> reliant.v1.BoundParam
-	123, // 235: reliant.v1.LoopOutput.ResultsEntry.value:type_name -> google.protobuf.Struct
-	87,  // 236: reliant.v1.WorkflowUI.PositionsEntry.value:type_name -> reliant.v1.Position
-	89,  // 237: reliant.v1.WorkflowUI.SwitchesEntry.value:type_name -> reliant.v1.SwitchMetadata
-	47,  // 238: reliant.v1.Workflow.InputsEntry.value:type_name -> reliant.v1.Input
-	92,  // 239: reliant.v1.Workflow.SecretsEntry.value:type_name -> reliant.v1.SecretDeclaration
-	240, // [240:240] is the sub-list for method output_type
-	240, // [240:240] is the sub-list for method input_type
-	240, // [240:240] is the sub-list for extension type_name
-	240, // [240:240] is the sub-list for extension extendee
-	0,   // [0:240] is the sub-list for field type_name
+	91,  // 218: reliant.v1.Workflow.finally:type_name -> reliant.v1.Workflow
+	94,  // 219: reliant.v1.Workflow.requires:type_name -> reliant.v1.WorkflowRequirements
+	122, // 220: reliant.v1.Workflow.secrets:type_name -> reliant.v1.Workflow.SecretsEntry
+	1,   // 221: reliant.v1.SecretDeclaration.environment:type_name -> reliant.v1.CelString
+	1,   // 222: reliant.v1.NodeSecretRef.environment:type_name -> reliant.v1.CelString
+	0,   // 223: reliant.v1.WorkflowConcurrency.waiting:type_name -> reliant.v1.WorkflowConcurrencyWaiting
+	123, // 224: reliant.v1.ToolsConfig.ToolsEntry.value:type_name -> google.protobuf.Struct
+	123, // 225: reliant.v1.ExecuteToolsArgs.ResponseToolSchemasEntry.value:type_name -> google.protobuf.Struct
+	124, // 226: reliant.v1.InvokeToolArgs.ParamsEntry.value:type_name -> google.protobuf.Value
+	124, // 227: reliant.v1.ActionArgs.WithEntry.value:type_name -> google.protobuf.Value
+	124, // 228: reliant.v1.ComputeArgs.OutputsEntry.value:type_name -> google.protobuf.Value
+	124, // 229: reliant.v1.SubWorkflowArgs.ArgsEntry.value:type_name -> google.protobuf.Value
+	124, // 230: reliant.v1.LoopArgs.ArgsEntry.value:type_name -> google.protobuf.Value
+	60,  // 231: reliant.v1.ObjectInputConfig.PropertiesEntry.value:type_name -> reliant.v1.PropertySchema
+	60,  // 232: reliant.v1.PropertySchema.PropertiesEntry.value:type_name -> reliant.v1.PropertySchema
+	47,  // 233: reliant.v1.GroupInputConfig.InputsEntry.value:type_name -> reliant.v1.Input
+	69,  // 234: reliant.v1.ToolCapabilities.BoundParamsEntry.value:type_name -> reliant.v1.ToolBoundParams
+	70,  // 235: reliant.v1.ToolBoundParams.ParamsEntry.value:type_name -> reliant.v1.BoundParam
+	123, // 236: reliant.v1.LoopOutput.ResultsEntry.value:type_name -> google.protobuf.Struct
+	87,  // 237: reliant.v1.WorkflowUI.PositionsEntry.value:type_name -> reliant.v1.Position
+	89,  // 238: reliant.v1.WorkflowUI.SwitchesEntry.value:type_name -> reliant.v1.SwitchMetadata
+	47,  // 239: reliant.v1.Workflow.InputsEntry.value:type_name -> reliant.v1.Input
+	92,  // 240: reliant.v1.Workflow.SecretsEntry.value:type_name -> reliant.v1.SecretDeclaration
+	241, // [241:241] is the sub-list for method output_type
+	241, // [241:241] is the sub-list for method input_type
+	241, // [241:241] is the sub-list for extension type_name
+	241, // [241:241] is the sub-list for extension extendee
+	0,   // [0:241] is the sub-list for field type_name
 }
 
 func init() { file_reliant_v1_workflow_v2_proto_init() }

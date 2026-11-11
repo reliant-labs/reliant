@@ -19,17 +19,35 @@ const ENVS = [
 ];
 
 describe("buildConsoleNav", () => {
-  it("is Overview, Releases, Observability ›, then Configure, with Activity pinned last", () => {
+  it("is Overview, Releases, Observability ›, Data, Storage, then Configure, with Activity pinned last", () => {
     const { items, footer } = buildConsoleNav({ project: "shop", page: { kind: "overview" }, env: "prod", envs: ENVS });
     expect(items.map((item) => [item.label, item.section ?? ""])).toEqual([
       ["Overview", ""],
       ["Releases", ""],
       ["Observability", ""],
+      ["Data", ""],
+      ["Storage", ""],
       ["Environments", "Configure"],
       ["Secrets", "Configure"],
       ["Domains", "Configure"],
     ]);
     expect(footer.map((item) => item.label)).toEqual(["Activity"]);
+  });
+
+  it("links Storage with the scope, lights it on its page, and crumbs it", () => {
+    const { items } = buildConsoleNav({ project: "shop", page: { kind: "storage" }, env: "staging", envs: ENVS });
+    const storage = items.find((item) => item.label === "Storage")!;
+    expect(storage.href).toBe("/forge/p/shop/storage?env=staging");
+    expect(storage.active).toBe(true);
+    expect(consoleCrumbs("shop", { kind: "storage" }, "staging")).toEqual([{ label: "Storage" }]);
+  });
+
+  it("links Data with the scope, lights it on its page, and crumbs it", () => {
+    const { items } = buildConsoleNav({ project: "shop", page: { kind: "data" }, env: "staging", envs: ENVS });
+    const data = items.find((item) => item.label === "Data")!;
+    expect(data.href).toBe("/forge/p/shop/data?env=staging");
+    expect(data.active).toBe(true);
+    expect(consoleCrumbs("shop", { kind: "data" }, "staging")).toEqual([{ label: "Data" }]);
   });
 
   it("opens Observability on Dashboards from its row: it has no home of its own", () => {
@@ -45,12 +63,15 @@ describe("buildConsoleNav", () => {
   });
 
   it("hides only known-empty optional views, retaining an active direct link", () => {
-    const base = { project: "shop", env: "prod", envs: ENVS, optionalViews: { sessions: false, profiles: false } };
+    const base = { project: "shop", env: "prod", envs: ENVS, optionalViews: { profiles: false } };
     const labels = (page: Parameters<typeof buildConsoleNav>[0]["page"]) => buildConsoleNav({ ...base, page }).items.find((item) => item.label === "Observability")!.children!.map((child) => child.label);
-    expect(labels({ kind: "overview" })).not.toContain("Sessions");
     expect(labels({ kind: "overview" })).not.toContain("Profiles");
-    expect(labels({ kind: "obs-view", view: "sessions" })).toContain("Sessions");
     expect(labels({ kind: "obs-view", view: "profiles" })).toContain("Profiles");
+  });
+
+  it("always lists Sessions: its empty state is where replay is discovered", () => {
+    const { items } = buildConsoleNav({ project: "shop", page: { kind: "overview" }, env: "prod", envs: ENVS, optionalViews: { profiles: false } });
+    expect(items.find((item) => item.label === "Observability")!.children!.map((child) => child.label)).toContain("Sessions");
   });
 
   it("files environments under Configure, previews collapsed into one entry", () => {
@@ -80,6 +101,24 @@ describe("buildConsoleNav", () => {
 
     const release = buildConsoleNav({ project: "shop", page: { kind: "release", version: "v1.8.2" }, env: "prod", envs: ENVS });
     expect(release.items.find((item) => item.label === "Releases")?.active).toBe(true);
+  });
+
+  it("expands Observability on every page, not only its own", () => {
+    for (const page of [{ kind: "overview" }, { kind: "secrets" }, { kind: "obs-view", view: "logs" }] as const) {
+      const obs = buildConsoleNav({ project: "shop", page, env: "prod", envs: ENVS }).items.find((item) => item.label === "Observability")!;
+      expect(obs.defaultExpanded).toBe(true);
+      expect(obs.open).toBeUndefined();
+    }
+    // Every other group stays an accordion.
+    const environments = buildConsoleNav({ project: "shop", page: { kind: "overview" }, env: "prod", envs: ENVS }).items.find((item) => item.label === "Environments")!;
+    expect(environments.defaultExpanded).toBeUndefined();
+  });
+
+  it("hands Observability the reader's remembered choice", () => {
+    const onObsOpenChange = () => {};
+    const obs = buildConsoleNav({ project: "shop", page: { kind: "overview" }, env: "prod", envs: ENVS, obsOpen: false, onObsOpenChange }).items.find((item) => item.label === "Observability")!;
+    expect(obs.open).toBe(false);
+    expect(obs.onOpenChange).toBe(onObsOpenChange);
   });
 
   it("files a workload under the Overview, not under its environment", () => {

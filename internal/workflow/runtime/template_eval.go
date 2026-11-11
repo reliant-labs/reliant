@@ -152,6 +152,14 @@ func EvaluateNodeConfig(
 	// we parse it into ExecuteToolsArgs.ResolvedToolCalls ([]*ToolCallMsg).
 	populateResolvedFields(resolvedNode)
 
+	// A run node's writable_checkouts are plain strings, which ResolveCELFields
+	// leaves alone: render the templates in them here (a per-run directory a
+	// step before printed), so the sandbox keeps the directory the workflow
+	// meant rather than a literal "{{ ... }}" path that keeps nothing.
+	if err := resolveRunWritableCheckouts(resolvedNode, builder); err != nil {
+		return nil, err
+	}
+
 	// Resolve ResponseTool schema CEL expressions. The schema field is a
 	// google.protobuf.Struct which ResolveCELFields skips. The YAML parser stores
 	// CEL expressions as a sentinel Struct with key "__cel_expr__"; evaluate it now.
@@ -439,4 +447,47 @@ func populateExecuteToolsResolved(args *reliantv1.ExecuteToolsArgs) {
 		}
 		args.ResolvedToolCalls = append(args.ResolvedToolCalls, msg)
 	}
+}
+
+// resolveRunWritableCheckouts renders each `{{ }}` template in a run node's
+// writable_checkouts. An entry that renders a list contributes each element;
+// one that renders empty fails the node: a credentials-none command that was
+// meant to keep a directory would otherwise run keeping nothing, and lose what
+// it hands the next step.
+func resolveRunWritableCheckouts(node *reliantv1.Node, builder *CELContextBuilder) error {
+	run := node.GetRun()
+	if run == nil || len(run.GetWritableCheckouts()) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(run.GetWritableCheckouts()))
+	for i, entry := range run.GetWritableCheckouts() {
+		if !strings.Contains(entry, "{{") {
+			out = append(out, entry)
+			continue
+		}
+		value, err := builder.EvalString(entry)
+		if err != nil {
+			return fmt.Errorf("run node %q: writable_checkouts[%d] %q: %w", node.GetId(), i, entry, err)
+		}
+		var rendered []string
+		switch v := convertCELToNative(value).(type) {
+		case []interface{}:
+			for _, e := range v {
+				rendered = append(rendered, valueToInterpolatedString(e))
+			}
+		case []string:
+			rendered = v
+		default:
+			rendered = []string{valueToInterpolatedString(v)}
+		}
+		for _, r := range rendered {
+			if strings.TrimSpace(r) == "" {
+				return fmt.Errorf("run node %q: writable_checkouts[%d] %q rendered empty, so its command was not run: "+
+					"a credentials-none command would keep nothing it writes there", node.GetId(), i, entry)
+			}
+			out = append(out, r)
+		}
+	}
+	run.WritableCheckouts = out
+	return nil
 }

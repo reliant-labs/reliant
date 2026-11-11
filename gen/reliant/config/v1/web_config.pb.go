@@ -71,7 +71,14 @@ type ReliantWebConfig struct {
 	GatewayUrl         string `protobuf:"bytes,3,opt,name=gateway_url,json=gatewayUrl,proto3" json:"gateway_url,omitempty"`
 	AppUrl             string `protobuf:"bytes,4,opt,name=app_url,json=appUrl,proto3" json:"app_url,omitempty"`
 	ForgeAppHost       string `protobuf:"bytes,23,opt,name=forge_app_host,json=forgeAppHost,proto3" json:"forge_app_host,omitempty"`
-	// ── The public forge demo (demo shell, lib/shell.ts) ──────────────────
+	// ── The public forge demo (the forge-demo bundle, demo.html) ───────────
+	// Deprecated: the host on which THIS bundle mounts the demo shell. The
+	// demo is its own build and env now (deploy/kcl/demo), the supported path;
+	// this bundle still honours the key (lib/shell.ts) so a deployment that
+	// points the host at reliant-web keeps its demo. Removed only in a future
+	// major.
+	//
+	// Deprecated: Marked as deprecated in reliant/config/v1/web_config.proto.
 	DemoAppHost    string `protobuf:"bytes,24,opt,name=demo_app_host,json=demoAppHost,proto3" json:"demo_app_host,omitempty"`
 	DemoTelemetry  string `protobuf:"bytes,25,opt,name=demo_telemetry,json=demoTelemetry,proto3" json:"demo_telemetry,omitempty"`
 	DemoTour       string `protobuf:"bytes,26,opt,name=demo_tour,json=demoTour,proto3" json:"demo_tour,omitempty"`
@@ -162,6 +169,7 @@ func (x *ReliantWebConfig) GetForgeAppHost() string {
 	return ""
 }
 
+// Deprecated: Marked as deprecated in reliant/config/v1/web_config.proto.
 func (x *ReliantWebConfig) GetDemoAppHost() string {
 	if x != nil {
 		return x.DemoAppHost
@@ -292,7 +300,7 @@ var File_reliant_config_v1_web_config_proto protoreflect.FileDescriptor
 
 const file_reliant_config_v1_web_config_proto_rawDesc = "" +
 	"\n" +
-	"\"reliant/config/v1/web_config.proto\x12\x11reliant.config.v1\x1a\x14forge/v1/forge.proto\"\xe74\n" +
+	"\"reliant/config/v1/web_config.proto\x12\x11reliant.config.v1\x1a\x14forge/v1/forge.proto\"\xad5\n" +
 	"\x10ReliantWebConfig\x12\xa0\x03\n" +
 	"\aapi_url\x18\x01 \x01(\tB\x86\x03\x82\xce\x18\x81\x03\n" +
 	"\aAPI_URL*\xe1\x02Origin of the reliant api-server (Connect RPCs, the terminal WebSocket). Also what the onboarding's `reliant daemon start` command tells a daemon to dial. Unset: the generated dev floor (src/lib/apiurl_gen.ts). Under the Vite dev server the browser calls its own origin and the dev proxy forwards to the API, so this is only the CLI-command value there.r\x12\n" +
@@ -306,11 +314,11 @@ const file_reliant_config_v1_web_config_proto_rawDesc = "" +
 	"\aapp_url\x18\x04 \x01(\tB\xfe\x01\x82\xce\x18\xf9\x01\n" +
 	"\aAPP_URL*\xed\x01This app's own public origin: the base of every URL that leaves the process and comes back (the OAuth redirectTo). Unset: the document origin in a browser; in the desktop app, whose origin no system browser can reach, the hosted default.R\x06appUrl\x12\xf2\x02\n" +
 	"\x0eforge_app_host\x18\x17 \x01(\tB\xcb\x02\x82\xce\x18\xc6\x02\n" +
-	"\x0eFORGE_APP_HOST\x1a\x14forge.reliantlabs.io*\x9d\x02Hostname that serves the forge-branded shell (ForgeShell) from this same bundle. A document loaded on this host mounts the forge console, claim, sites, usage and settings pages with forge branding; every other host mounts Reliant. Also where Reliant's \"Open Forge console\" link points.R\fforgeAppHost\x12\x92\x02\n" +
-	"\rdemo_app_host\x18\x18 \x01(\tB\xed\x01\x82\xce\x18\xe8\x01\n" +
-	"\rDEMO_APP_HOST\x1a\x13demo.reliantlabs.io*\xc1\x01Hostname that serves the public forge demo (the demo shell) from this same bundle: one route, /forge/demo, read-only, with the forge tour started on every visit. No sign-in exists on this host.R\vdemoAppHost\x12\xf9\x02\n" +
-	"\x0edemo_telemetry\x18\x19 \x01(\tB\xd1\x02\x82\xce\x18\xcc\x02\n" +
-	"\x0eDEMO_TELEMETRY\x1a\x06replay*\x99\x02What the demo host records about its anonymous visitors, under service forge-demo. \"replay\": page and tour analytics and masked session replay. \"analytics\": page and tour analytics only. \"off\": nothing. A browser that sends Do Not Track or Global Privacy Control is never recorded.J\x06replayJ\tanalyticsJ\x03offR\rdemoTelemetry\x12\xea\x01\n" +
+	"\x0eFORGE_APP_HOST\x1a\x14forge.reliantlabs.io*\x9d\x02Hostname that serves the forge-branded shell (ForgeShell) from this same bundle. A document loaded on this host mounts the forge console, claim, sites, usage and settings pages with forge branding; every other host mounts Reliant. Also where Reliant's \"Open Forge console\" link points.R\fforgeAppHost\x12\xd0\x02\n" +
+	"\rdemo_app_host\x18\x18 \x01(\tB\xab\x02\x82\xce\x18\xa4\x02\n" +
+	"\rDEMO_APP_HOST\x1a\x13demo.reliantlabs.io*\xfd\x01Deprecated: hostname on which this bundle still mounts the public forge demo (the demo shell), read-only on sample data. The supported demo is its own build and env (deploy/kcl/demo, the forge-demo frontend); this key keeps working until a future major.\x18\x01R\vdemoAppHost\x12\x81\x03\n" +
+	"\x0edemo_telemetry\x18\x19 \x01(\tB\xd9\x02\x82\xce\x18\xd4\x02\n" +
+	"\x0eDEMO_TELEMETRY\x1a\x06replay*\xa1\x02What the demo host records about its anonymous visitors, under service reliant-forge-demo. \"replay\": page and tour analytics and masked session replay. \"analytics\": page and tour analytics only. \"off\": nothing. A browser that sends Do Not Track or Global Privacy Control is never recorded.J\x06replayJ\tanalyticsJ\x03offR\rdemoTelemetry\x12\xea\x01\n" +
 	"\tdemo_tour\x18\x1a \x01(\tB\xcc\x01\x82\xce\x18\xc7\x01\n" +
 	"\tDEMO_TOUR\x1a\x05short*\xa5\x01The forge tour on the demo host. \"short\": at most ten steps (no profile or on-call step; the cross-service, graph and agent steps instead). \"full\": every forge step.J\x05shortJ\x04fullR\bdemoTour\x12\xb0\x02\n" +
 	"\x10demo_data_source\x18\x1b \x01(\tB\x85\x02\x82\xce\x18\x80\x02\n" +

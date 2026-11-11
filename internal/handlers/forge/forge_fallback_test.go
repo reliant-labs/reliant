@@ -54,7 +54,7 @@ func installed(daemonID, path string) *core.ProjectDaemon {
 // belongs to another user.
 func fallbackRepo(projects ...fallbackProject) *MockRepository {
 	row := func(p fallbackProject) *db.Project {
-		out := &db.Project{ID: p.id, Name: "control-plane", Path: macPath}
+		out := &db.Project{ID: p.id, UserID: "test-user", Name: "control-plane", Path: macPath}
 		if !p.noRemote {
 			remote := p.remote
 			if remote == "" {

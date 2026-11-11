@@ -95,6 +95,19 @@ func FindMessage(ctx context.Context, db orm.Context, id string) (*core.Message,
 	return messageFromRow(row), nil
 }
 
+// ListMessagesByIDs reads messages by primary key, in one query. An id no
+// row holds is simply absent from the result; order is unspecified.
+func ListMessagesByIDs(ctx context.Context, db orm.Context, ids []string) ([]*core.Message, error) {
+	if len(ids) == 0 {
+		return []*core.Message{}, nil
+	}
+	rows, err := ListMessage(ctx, db, orm.WhereIn(MessageFieldID, ids))
+	if err != nil {
+		return nil, fmt.Errorf("failed to list messages by id: %w", err)
+	}
+	return messagesFromRows(rows), nil
+}
+
 // FindMessageByActivity reads the message a Temporal activity wrote into a
 // chat — the idempotency key of an activity retry — or nil. workflowID
 // narrows it to one workflow's activity ("" means any): child workflows of
@@ -155,15 +168,32 @@ func ListMessages(ctx context.Context, db orm.Context, chatID string, opts core.
 // the main thread by an order of magnitude (636KB of a 2.3MB snapshot on a
 // real 55k-message chat). What remains are the threads the transcript renders
 // inline (workflow-node and fork threads).
+//
+// HIDDEN rows are left out too (notTranscriptHidden), so a sibling-only page
+// is sized on rows the transcript renders.
 func transcriptSiblingMessages(db orm.Context, chatID, mainThreadID string, fromSeq int64, rows *[]*Message) *bun.SelectQuery {
 	spawnThreads := db.Bun().NewSelect().Model((*Thread)(nil)).Column("id").
 		Where("chat_id = ?", chatID).
 		Where("origin = ?", "spawn")
-	return db.Bun().NewSelect().Model(rows).
+	q := db.Bun().NewSelect().Model(rows).
 		Where("chat_id = ?", chatID).
 		Where("thread_id <> ?", mainThreadID).
 		Where("seq >= ?", fromSeq).
 		Where("thread_id NOT IN (?)", spawnThreads)
+	notTranscriptHidden(q)
+	return q
+}
+
+// notTranscriptHidden leaves out the DISPLAY_STYLE_HIDDEN rows: LLM-only
+// messages (mailbox envelopes, sub-agent result bodies, run-to-run
+// deliveries, system notes, compaction summaries) that reach the model
+// through the history load but are never part of the transcript --
+// messageproto.Assemble drops them from every display response. A display
+// read that sized its page on them returned short pages, and a page of
+// nothing but hidden rows came back empty while has_more said there was more.
+// display_style is nullable, hence IS DISTINCT FROM.
+func notTranscriptHidden(q *bun.SelectQuery) {
+	q.Where("? IS DISTINCT FROM ?", bun.Ident(MessageFieldDisplayStyle), int32(reliantv1.DisplayStyle_DISPLAY_STYLE_HIDDEN))
 }
 
 // ListRecentTranscriptSiblingMessages is the chat snapshot's sibling-thread
@@ -261,15 +291,19 @@ func LatestMessageWithTokens(ctx context.Context, db orm.Context, threadID strin
 	return messageFromRow(row), nil
 }
 
-// ListRecentMessagesInContextWindowBeforeSeq is the newest limit messages of
-// one context window strictly before beforeSeq (0 means unbounded: the newest
-// page), ascending. Bounded in SQL for the common (unforked) case instead of
-// fetching the whole context window.
-func ListRecentMessagesInContextWindowBeforeSeq(ctx context.Context, db orm.Context, contextWindowID string, beforeSeq int64, limit int) ([]*core.Message, error) {
+// ListRecentTranscriptMessagesInContextWindowBeforeSeq is the newest limit
+// transcript messages of one context window strictly before beforeSeq (0
+// means unbounded: the newest page), ascending. Bounded in SQL for the common
+// (unforked) case instead of fetching the whole context window.
+//
+// Transcript means every row but the HIDDEN ones (notTranscriptHidden): the
+// limit counts rows the transcript renders, so a page is as full as asked
+// for and is never empty while older transcript remains.
+func ListRecentTranscriptMessagesInContextWindowBeforeSeq(ctx context.Context, db orm.Context, contextWindowID string, beforeSeq int64, limit int) ([]*core.Message, error) {
 	if limit <= 0 {
 		return []*core.Message{}, nil
 	}
-	opts := []orm.QueryOption{orm.WhereEq(MessageFieldContextWindowID, contextWindowID)}
+	opts := []orm.QueryOption{orm.WhereEq(MessageFieldContextWindowID, contextWindowID), notTranscriptHidden}
 	if beforeSeq != 0 {
 		opts = append(opts, orm.WhereLt(MessageFieldSeq, beforeSeq))
 	}

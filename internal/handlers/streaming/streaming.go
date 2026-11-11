@@ -34,6 +34,14 @@ const (
 	defaultHeartbeatInterval = 30 * time.Second
 	batchSize                = 100
 
+	// defaultReauthorizeInterval is Service.reauthorizeInterval in
+	// production: an open chat stream of a removed org member ends within
+	// orgs.CacheTTL (30s) plus this.
+	defaultReauthorizeInterval = 10 * time.Second
+	// defaultUnassignedOrgRecheck is how long the user stream's org gate
+	// trusts that a resource has no org yet before reading it again.
+	defaultUnassignedOrgRecheck = 3 * time.Second
+
 	// chatReplayBatchSize is how many chat updates one replay read returns
 	// and one replay frame carries. Every batch is a serial database round
 	// trip before the client is caught up, so a reopen maxChatReplayGap
@@ -88,7 +96,7 @@ func (s *Service) StreamUserUpdates(
 	}
 
 	sinceSeq := req.Msg.SinceSeq
-	filter := userUpdateFilter{projectID: req.Msg.GetProjectId()}
+	filter := userUpdateFilter{projectID: req.Msg.GetProjectId(), orgs: newOrgGate(s.deps.Repo, userID, s.unassignedOrgRecheck)}
 
 	// --- User-level initialization ---
 	latestSeq, err := s.deps.Repo.GetLatestUserUpdateSequence(ctx, userID)
@@ -280,7 +288,7 @@ func (s *Service) sendSingleUserUpdate(update db.UserUpdate, latestSeq int64, st
 //
 // Each round, and each read inside it, has its own span (chat_snapshot.*), so
 // a slow open shows which read it waited on.
-func (s *Service) buildChatSnapshot(ctx context.Context, chat *db.ChatRow) (snapshot *reliantv1.ChatSyncSnapshot, latestSeq int64, err error) {
+func (s *Service) buildChatSnapshot(ctx context.Context, chat *db.ChatRow, toolBodies reliantv1.ToolBodyMode) (snapshot *reliantv1.ChatSyncSnapshot, latestSeq int64, err error) {
 	chatID := chat.ID
 	ctx, span := startSpan(ctx, "chat_snapshot.build", attribute.String("chat.id", chatID))
 	defer func() {
@@ -559,8 +567,12 @@ func (s *Service) buildChatSnapshot(ctx context.Context, chat *db.ChatRow) (snap
 	// pass SequenceNumber alone, which left live spawns with no thread to
 	// preview: they showed "Starting…" until something else refetched them.
 	_, assembleSpan := startSpan(ctx, "chat_snapshot.assemble")
-	assembledMessages := messageproto.Assemble(displayable, messageBlocks, attachmentMap, lookups, mainThread, latestSeq)
+	assembledMessages := messageproto.Assemble(displayable, messageBlocks, attachmentMap, lookups, mainThread, latestSeq, toolBodies)
 	otherUpdates = append(otherUpdates, snapshotToolCalls(allBlocks, lookups.ToolCalls, liveToolCalls, mainThread, latestSeq)...)
+	// Counted after the stub policy: what the snapshot really sends.
+	sent := messageproto.TranscriptBytes{ToolBodies: toolBodies}
+	sent.AddMessages(assembledMessages...)
+	assembleSpan.SetAttributes(sent.Attributes("transcript")...)
 	assembleSpan.End()
 
 	// Calculate pagination metadata.
@@ -1027,13 +1039,13 @@ func toolCallStatusString(status core.ToolCallStatus) string {
 // number in the payload into a float64 on the way through). Only the top
 // level is decoded, to see whether the payload is already wrapped and to
 // reject one that is not a JSON object.
-func formatChatUpdateDataJSON(updateType reliantv1.ChatUpdateType, rawData json.RawMessage) string {
+func formatChatUpdateDataJSON(updateType reliantv1.ChatUpdateType, rawData json.RawMessage, toolBodies reliantv1.ToolBodyMode) string {
 	if updateType != reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_MESSAGE {
 		return string(rawData)
 	}
 	// Large tool output goes to the client as a preview, the same one the
 	// snapshot and ListMessages send (GetToolResult has the rest).
-	rawData = messageproto.PreviewMessageUpdate(rawData)
+	rawData = messageproto.PreviewMessageUpdate(rawData, toolBodies)
 
 	var top map[string]json.RawMessage
 	if err := json.Unmarshal(rawData, &top); err != nil || top == nil {
@@ -1110,17 +1122,19 @@ func (s *Service) sendUserUpdateBatches(ctx context.Context, userID string, star
 }
 
 // userUpdateFilter decides which user updates one user stream delivers: those
-// in the client's current project (see userUpdateMatchesProject). The chat the
-// client has open may be in another project; StreamChatUpdates forwards that
-// chat's updates the filter drops (chatFocusFilter), so this stream needs no
+// in the client's current project (see userUpdateMatchesProject) about
+// nothing of an org the caller has left (orgGate). The chat the client has
+// open may be in another project; StreamChatUpdates forwards that chat's
+// updates the filter drops (chatFocusFilter), so this stream needs no
 // knowledge of which chat is open.
 type userUpdateFilter struct {
 	projectID string
+	orgs      *orgGate
 }
 
 // matches reports whether the stream should receive the update.
-func (f userUpdateFilter) matches(_ context.Context, update *db.UserUpdate) bool {
-	return userUpdateMatchesProject(update, f.projectID)
+func (f userUpdateFilter) matches(ctx context.Context, update *db.UserUpdate) bool {
+	return userUpdateMatchesProject(update, f.projectID) && f.orgs.allows(ctx, update)
 }
 
 // userUpdateMatchesProject reports whether a project-scoped subscriber should

@@ -371,7 +371,8 @@ func (s *Service) LoadDisplayMessages(ctx context.Context, threadID string) ([]*
 
 // LoadRecentDisplayMessages is the bounded form of LoadDisplayMessages: the
 // newest `limit` messages of the thread's visible history, equal to the tail
-// of LoadDisplayMessages' result.
+// of LoadDisplayMessages' result with its DISPLAY_STYLE_HIDDEN rows left out
+// (see recentDisplayMessagesBeforeFromCW).
 //
 // It does not compute that tail by resolving everything and slicing. On a
 // long chat the transcript chain is thousands of messages across several
@@ -458,6 +459,14 @@ func (s *Service) recentDisplayMessagesFromCW(ctx context.Context, latest *db.Co
 // cursor simply joins every window's exclusive upper bound, tightened by the
 // fork cut where one applies. A window entirely above the cursor contributes
 // nothing and the walk moves on to its parent.
+//
+// The walk reads transcript rows only: DISPLAY_STYLE_HIDDEN rows (LLM-only
+// framing that messageproto.Assemble drops from every display response) are
+// left out in SQL, so `limit` counts rows the transcript renders. Counting
+// them made a scroll-back page come back short by its hidden rows, and a
+// window of nothing but hidden rows come back empty with more history below.
+// The edges of the walk read no rows (the fork cut is the fork message's
+// seq, fetched by id), so leaving hidden rows out cannot move a cut.
 func (s *Service) recentDisplayMessagesBeforeFromCW(ctx context.Context, latest *db.ContextWindow, cursorSeq int64, limit int) ([]*db.Message, error) {
 	// Each window's contribution, collected newest window first.
 	var contributions [][]*db.Message
@@ -474,7 +483,7 @@ func (s *Service) recentDisplayMessagesBeforeFromCW(ctx context.Context, latest 
 		visited[cw.ID] = true
 
 		if contributes {
-			msgs, err := s.repo.ListRecentMessagesInContextWindowBeforeSeq(ctx, cw.ID, beforeSeq, need)
+			msgs, err := s.repo.ListRecentTranscriptMessagesInContextWindowBeforeSeq(ctx, cw.ID, beforeSeq, need)
 			if err != nil {
 				return nil, fmt.Errorf("failed to get messages for CW %s: %w", cw.ID, err)
 			}

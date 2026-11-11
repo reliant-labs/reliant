@@ -2,8 +2,10 @@ package daemonruntime
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -13,59 +15,166 @@ import (
 )
 
 func newTestRecoveryGate() *recoveryAdmission {
-	return &recoveryAdmission{work: map[uint64][]string{}, leases: map[uint64]*WorktreeRecoveryLease{}}
+	return &recoveryAdmission{work: map[uint64]admissionScope{}, leases: map[uint64]*WorktreeRecoveryLease{}}
 }
-func TestRecoveryAdmissionUnknownManagedLifetimeSurvivesStartReturn(t *testing.T) {
-	for _, kind := range []string{"background", "terminal"} {
+
+// managedRegistry stands in for the background-process and terminal
+// registries: what managedWorkSnapshot would report right now.
+type managedRegistry struct {
+	mu   sync.Mutex
+	work []managedWork
+}
+
+func (m *managedRegistry) set(work ...managedWork) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.work = work
+}
+
+func (m *managedRegistry) use(leased []string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return managedUseIn(leased, m.work)
+}
+
+// gateWithRegistry is a gate whose managed-use check is the production one
+// over an injected registry, and whose process inspection finds nothing.
+func gateWithRegistry() (*recoveryAdmission, *managedRegistry) {
+	g, reg := newTestRecoveryGate(), &managedRegistry{}
+	g.managedUse = reg.use
+	g.processUse = func(context.Context, []string) error { return nil }
+	return g, reg
+}
+
+// The owner decision of 2026-11-08 (bug c4a30cf1): on an agent machine some
+// background process, terminal and tool call is always open, and holding
+// every archived worktree for them meant none ever freed its disk. Work that
+// runs anywhere other than inside the worktree does not hold it, including
+// work started in an ancestor of it ($HOME).
+func TestRecoveryAdmissionBusyMachineUnrelatedWorkDoesNotHold(t *testing.T) {
+	g, reg := gateWithRegistry()
+	home := t.TempDir()
+	workspace := filepath.Join(home, ".reliant", "worktrees", "archived")
+	sibling := filepath.Join(home, ".reliant", "worktrees", "live")
+	elsewhere := t.TempDir()
+	for _, dir := range []string{workspace, sibling} {
+		if err := os.MkdirAll(dir, 0700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	reg.set(
+		managedWork{kind: "background process", dir: sibling},
+		managedWork{kind: "background process", dir: elsewhere},
+		managedWork{kind: "terminal session", dir: home},
+		managedWork{kind: "terminal session", dir: filepath.Join(sibling, "sub")},
+	)
+	for _, dir := range []string{sibling, home, elsewhere} {
+		done, err := g.beginIn(dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer done()
+	}
+	lease, err := g.acquire([]string{workspace})
+	if err != nil {
+		t.Fatalf("unrelated work on the machine held the worktree: %v", err)
+	}
+	defer lease.Release()
+	if err := lease.Check(context.Background()); err != nil {
+		t.Fatalf("unrelated work on the machine held the worktree: %v", err)
+	}
+	// And the reverse: a worktree being retired refuses only work inside it.
+	for _, dir := range []string{sibling, home, elsewhere} {
+		done, err := g.beginIn(dir)
+		if err != nil {
+			t.Fatalf("work in %s refused while an unrelated worktree retires: %v", dir, err)
+		}
+		done()
+	}
+	for _, dir := range []string{workspace, filepath.Join(workspace, "sub", "dir")} {
+		if done, err := g.beginIn(dir); err == nil {
+			done()
+			t.Fatalf("work in %s admitted into a worktree being retired", dir)
+		}
+	}
+}
+
+func TestRecoveryAdmissionManagedWorkStartedInWorktreeHolds(t *testing.T) {
+	for _, kind := range []string{"background process", "terminal session"} {
 		t.Run(kind, func(t *testing.T) {
-			g := newTestRecoveryGate()
-			workspace, outside := t.TempDir(), t.TempDir()
-			var running atomic.Bool
-			// This injected registry models an arbitrary shell started outside the
-			// workspace: no cwd/fd/exe mapping can disclose its future delayed write.
-			// Explicit completion is the only release, not returning its start result.
-			g.managedUse = func() error {
-				if running.Load() {
-					return errRecoveryAdmission
-				}
-				return nil
-			}
-			finishStart, err := g.begin(nil)
-			if err != nil {
-				t.Fatal(err)
-			}
-			initialCwd := outside
-			if admissionOverlap(initialCwd, workspace) {
-				t.Fatal("fixture cwd must be outside")
-			}
-			running.Store(true) // manager publishes process/session before returning
-			finishStart()
-			delayedWrite := func() {
-				if err := os.WriteFile(filepath.Join(workspace, "delayed"), []byte("written"), 0600); err != nil {
-					t.Fatal(err)
-				}
-			}
-			for _, root := range []string{workspace, t.TempDir()} {
-				if lease, err := g.acquire([]string{root}); err == nil {
+			g, reg := gateWithRegistry()
+			workspace := t.TempDir()
+			for _, dir := range []string{workspace, filepath.Join(workspace, "frontends", "web")} {
+				reg.set(managedWork{kind: "background process", dir: t.TempDir()}, managedWork{kind: kind, dir: dir})
+				if lease, err := g.acquire([]string{workspace}); err == nil {
 					lease.Release()
-					t.Fatal("unknown managed lifetime must veto ANY finalizer")
+					t.Fatalf("a %s started in %s did not hold the worktree", kind, dir)
 				}
 			}
-			delayedWrite() // no sleeps: advance the injected managed lifetime
-			running.Store(false)
+			// The registry, not the start command, carries the veto: once the
+			// process exits or the session closes, the worktree is free.
+			reg.set(managedWork{kind: "background process", dir: t.TempDir()})
 			lease, err := g.acquire([]string{workspace})
 			if err != nil {
-				t.Fatal("completion must release veto", err)
+				t.Fatal("completion must release the hold:", err)
 			}
-			lease.Release()
+			defer lease.Release()
+			// One that appears after admission is seen by the next Check.
+			reg.set(managedWork{kind: kind, dir: workspace})
+			if err := lease.Check(context.Background()); err == nil {
+				t.Fatalf("a %s started after admission was not seen before removal", kind)
+			}
 		})
 	}
 }
 
-func TestRecoveryAdmissionFreshCheckRetainsUnknownManagedVeto(t *testing.T) {
+// A managed process whose working directory cannot be placed may be running in
+// the worktree, so it holds it.
+func TestRecoveryAdmissionManagedWorkWithUnknownDirHolds(t *testing.T) {
+	workspace := t.TempDir()
+	// A name longer than NAME_MAX: resolving it fails with ENAMETOOLONG.
+	unresolvable := filepath.Join(t.TempDir(), strings.Repeat("a", 300), "shell")
+	if err := managedUseIn([]string{workspace}, []managedWork{{kind: "terminal session", dir: unresolvable}}); err == nil {
+		t.Fatal("a session whose directory cannot be resolved did not hold the worktree")
+	}
+}
+
+// A live process with its cwd, an open file or a mapping under the worktree
+// holds it, and so does inspection that cannot run: an unreadable /proc is
+// never read as "unused".
+func TestRecoveryAdmissionProcessInspectionHoldsAndFailsClosed(t *testing.T) {
+	for name, inspectErr := range map[string]error{
+		"process with cwd in the worktree": errors.New("process 123 has its working directory in the workspace"),
+		"unreadable /proc":                 errors.New("process enumeration unavailable: permission denied"),
+	} {
+		t.Run(name, func(t *testing.T) {
+			g, _ := gateWithRegistry()
+			// The gate canonicalizes what it is given (macOS: /var is /private/var).
+			workspace, err := filepath.EvalSymlinks(t.TempDir())
+			if err != nil {
+				t.Fatal(err)
+			}
+			var seen []string
+			g.processUse = func(_ context.Context, paths []string) error { seen = paths; return inspectErr }
+			lease, err := g.acquire([]string{workspace})
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer lease.Release()
+			if err := lease.Check(context.Background()); err == nil {
+				t.Fatal("removal authorized despite", inspectErr)
+			}
+			if len(seen) != 1 || !admissionWithin(seen[0], workspace) {
+				t.Fatalf("inspection was not scoped to the worktree: %v", seen)
+			}
+		})
+	}
+}
+
+func TestRecoveryAdmissionFreshCheckRetainsManagedVeto(t *testing.T) {
 	g := newTestRecoveryGate()
 	var running atomic.Bool
-	g.managedUse = func() error {
+	g.managedUse = func([]string) error {
 		if running.Load() {
 			return errRecoveryAdmission
 		}
@@ -77,10 +186,23 @@ func TestRecoveryAdmissionFreshCheckRetainsUnknownManagedVeto(t *testing.T) {
 	}
 	defer lease.Release()
 	// A registry recovered after initial admission is checked again before
-	// removal. Unknown scope must veto even without matching cwd/open files.
+	// removal.
 	running.Store(true)
 	if err := lease.Check(context.Background()); err != errRecoveryAdmission {
 		t.Fatalf("fresh lifetime veto missing: %v", err)
+	}
+}
+
+func TestRecoveryCommandExecAndTerminalAreScopedByTheirHandlers(t *testing.T) {
+	for _, name := range []string{"exec.run", "exec.bg_start", "terminal.create"} {
+		if !selfAdmittedCommand(name) {
+			t.Fatalf("%s would be admitted with unknown scope by the dispatcher", name)
+		}
+	}
+	for _, name := range []string{"exec.bg_list", "terminal.close", "fs.read_file", "worktree.recovery_finalize", "exec.run.evil"} {
+		if selfAdmittedCommand(name) {
+			t.Fatal("unexpected self-admission", name)
+		}
 	}
 }
 

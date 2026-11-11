@@ -31,6 +31,7 @@ import { BUTTON_SECONDARY } from "../Dashboards/parts";
 import { useAskAgentMode } from "./askAgentMode";
 import { askAgentCommands, askAgentPlaybook, buildAskReliantPrompt, type AskIntent, type AskSubject } from "./askReliantPrompt";
 import { SEGMENTED, segmentTone } from "../../controlStyles";
+import { ReliantWorkflowNote } from "./ReliantWorkflowNote";
 
 /** Reliant's web app, where the console's chat actions run. */
 export const RELIANT_APP_URL = "https://app.reliantlabs.io";
@@ -209,6 +210,8 @@ export function AskAgentSheet({ subject, intent: initialIntent, forgeProject, en
               forge&apos;s MCP server covers introspection, skills, lint and generate; <code className="font-mono">{cli} obs</code> runs in your agent&apos;s shell.
             </p>
           </Section>
+
+          {(demo || standalone) && <ReliantWorkflowNote />}
 
           {standalone && (
             <p className="text-xs text-ink-muted" data-testid="ask-agent-login">

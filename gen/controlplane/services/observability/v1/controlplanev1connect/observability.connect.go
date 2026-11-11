@@ -90,6 +90,9 @@ const (
 	// ObservabilityServiceGetReleaseHealthProcedure is the fully-qualified name of the
 	// ObservabilityService's GetReleaseHealth RPC.
 	ObservabilityServiceGetReleaseHealthProcedure = "/controlplane.v1.ObservabilityService/GetReleaseHealth"
+	// ObservabilityServiceListFrontendReplayProcedure is the fully-qualified name of the
+	// ObservabilityService's ListFrontendReplay RPC.
+	ObservabilityServiceListFrontendReplayProcedure = "/controlplane.v1.ObservabilityService/ListFrontendReplay"
 )
 
 // ObservabilityServiceClient is a client for the controlplane.v1.ObservabilityService service.
@@ -99,8 +102,8 @@ type ObservabilityServiceClient interface {
 	// default, with cursor pagination. Max range 7 days.
 	SearchLogs(context.Context, *connect.Request[v1.SearchLogsRequest]) (*connect.Response[v1.SearchLogsResponse], error)
 	// ListTraces returns one summary row per trace in the range (root span, total
-	// duration, span and error counts, services touched) plus a RED summary of
-	// the matched traces. Max range 7 days.
+	// duration, span and error counts, services touched) plus, on the first
+	// page, a RED summary of the matched traces. Max range 7 days.
 	ListTraces(context.Context, *connect.Request[v1.ListTracesRequest]) (*connect.Response[v1.ListTracesResponse], error)
 	// GetTrace returns every span of one trace, for the waterfall. Max range 7
 	// days (the traces TTL).
@@ -219,6 +222,27 @@ type ObservabilityServiceClient interface {
 	// issues and alerts as well as telemetry, all under obs:read for a machine
 	// credential.
 	GetReleaseHealth(context.Context, *connect.Request[v1.GetReleaseHealthRequest]) (*connect.Response[v1.GetReleaseHealthResponse], error)
+	// ListFrontendReplay answers "is session replay on for this frontend, in
+	// this environment": one row per (environment, frontend). Replay is a
+	// setting of a frontend INSTANCE (forge.BrowserTelemetry.replay, rendered
+	// into its runtime config as OTEL_REPLAY), gated by the environment's
+	// observability policy, which must opt in to replay for the ingest to keep
+	// the recordings.
+	//
+	// A hosted frontend (a StaticSite) is read LIVE, from the runtime config the
+	// platform serves it now. Any other frontend is read from the runtime config
+	// its environment's current release recorded (RELEASE); a self-hosted
+	// frontend serves its own config.js, which the control plane cannot read. A
+	// frontend the release names with neither reads UNKNOWN (source NONE).
+	//
+	// Admission is every other read's: a member of org_id, or a machine
+	// credential holding obs:read in it, whose environment binding covers the
+	// environments read. Postgres and Kubernetes reads only; nothing here
+	// queries ClickHouse. At most 100 environments in scope.
+	//
+	// forge:custom — a read over runtime configs and the release ledger; a
+	// FrontendReplay row is not a stored entity.
+	ListFrontendReplay(context.Context, *connect.Request[v1.ListFrontendReplayRequest]) (*connect.Response[v1.ListFrontendReplayResponse], error)
 }
 
 // NewObservabilityServiceClient constructs a client for the controlplane.v1.ObservabilityService
@@ -346,6 +370,12 @@ func NewObservabilityServiceClient(httpClient connect.HTTPClient, baseURL string
 			connect.WithSchema(observabilityServiceMethods.ByName("GetReleaseHealth")),
 			connect.WithClientOptions(opts...),
 		),
+		listFrontendReplay: connect.NewClient[v1.ListFrontendReplayRequest, v1.ListFrontendReplayResponse](
+			httpClient,
+			baseURL+ObservabilityServiceListFrontendReplayProcedure,
+			connect.WithSchema(observabilityServiceMethods.ByName("ListFrontendReplay")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -370,6 +400,7 @@ type observabilityServiceClient struct {
 	getDashboards          *connect.Client[v1.GetDashboardsRequest, v1.GetDashboardsResponse]
 	getObservabilityUsage  *connect.Client[v1.GetObservabilityUsageRequest, v1.GetObservabilityUsageResponse]
 	getReleaseHealth       *connect.Client[v1.GetReleaseHealthRequest, v1.GetReleaseHealthResponse]
+	listFrontendReplay     *connect.Client[v1.ListFrontendReplayRequest, v1.ListFrontendReplayResponse]
 }
 
 // SearchLogs calls controlplane.v1.ObservabilityService.SearchLogs.
@@ -471,6 +502,11 @@ func (c *observabilityServiceClient) GetReleaseHealth(ctx context.Context, req *
 	return c.getReleaseHealth.CallUnary(ctx, req)
 }
 
+// ListFrontendReplay calls controlplane.v1.ObservabilityService.ListFrontendReplay.
+func (c *observabilityServiceClient) ListFrontendReplay(ctx context.Context, req *connect.Request[v1.ListFrontendReplayRequest]) (*connect.Response[v1.ListFrontendReplayResponse], error) {
+	return c.listFrontendReplay.CallUnary(ctx, req)
+}
+
 // ObservabilityServiceHandler is an implementation of the controlplane.v1.ObservabilityService
 // service.
 type ObservabilityServiceHandler interface {
@@ -479,8 +515,8 @@ type ObservabilityServiceHandler interface {
 	// default, with cursor pagination. Max range 7 days.
 	SearchLogs(context.Context, *connect.Request[v1.SearchLogsRequest]) (*connect.Response[v1.SearchLogsResponse], error)
 	// ListTraces returns one summary row per trace in the range (root span, total
-	// duration, span and error counts, services touched) plus a RED summary of
-	// the matched traces. Max range 7 days.
+	// duration, span and error counts, services touched) plus, on the first
+	// page, a RED summary of the matched traces. Max range 7 days.
 	ListTraces(context.Context, *connect.Request[v1.ListTracesRequest]) (*connect.Response[v1.ListTracesResponse], error)
 	// GetTrace returns every span of one trace, for the waterfall. Max range 7
 	// days (the traces TTL).
@@ -599,6 +635,27 @@ type ObservabilityServiceHandler interface {
 	// issues and alerts as well as telemetry, all under obs:read for a machine
 	// credential.
 	GetReleaseHealth(context.Context, *connect.Request[v1.GetReleaseHealthRequest]) (*connect.Response[v1.GetReleaseHealthResponse], error)
+	// ListFrontendReplay answers "is session replay on for this frontend, in
+	// this environment": one row per (environment, frontend). Replay is a
+	// setting of a frontend INSTANCE (forge.BrowserTelemetry.replay, rendered
+	// into its runtime config as OTEL_REPLAY), gated by the environment's
+	// observability policy, which must opt in to replay for the ingest to keep
+	// the recordings.
+	//
+	// A hosted frontend (a StaticSite) is read LIVE, from the runtime config the
+	// platform serves it now. Any other frontend is read from the runtime config
+	// its environment's current release recorded (RELEASE); a self-hosted
+	// frontend serves its own config.js, which the control plane cannot read. A
+	// frontend the release names with neither reads UNKNOWN (source NONE).
+	//
+	// Admission is every other read's: a member of org_id, or a machine
+	// credential holding obs:read in it, whose environment binding covers the
+	// environments read. Postgres and Kubernetes reads only; nothing here
+	// queries ClickHouse. At most 100 environments in scope.
+	//
+	// forge:custom — a read over runtime configs and the release ledger; a
+	// FrontendReplay row is not a stored entity.
+	ListFrontendReplay(context.Context, *connect.Request[v1.ListFrontendReplayRequest]) (*connect.Response[v1.ListFrontendReplayResponse], error)
 }
 
 // NewObservabilityServiceHandler builds an HTTP handler from the service implementation. It returns
@@ -722,6 +779,12 @@ func NewObservabilityServiceHandler(svc ObservabilityServiceHandler, opts ...con
 		connect.WithSchema(observabilityServiceMethods.ByName("GetReleaseHealth")),
 		connect.WithHandlerOptions(opts...),
 	)
+	observabilityServiceListFrontendReplayHandler := connect.NewUnaryHandler(
+		ObservabilityServiceListFrontendReplayProcedure,
+		svc.ListFrontendReplay,
+		connect.WithSchema(observabilityServiceMethods.ByName("ListFrontendReplay")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/controlplane.v1.ObservabilityService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case ObservabilityServiceSearchLogsProcedure:
@@ -762,6 +825,8 @@ func NewObservabilityServiceHandler(svc ObservabilityServiceHandler, opts ...con
 			observabilityServiceGetObservabilityUsageHandler.ServeHTTP(w, r)
 		case ObservabilityServiceGetReleaseHealthProcedure:
 			observabilityServiceGetReleaseHealthHandler.ServeHTTP(w, r)
+		case ObservabilityServiceListFrontendReplayProcedure:
+			observabilityServiceListFrontendReplayHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -845,4 +910,8 @@ func (UnimplementedObservabilityServiceHandler) GetObservabilityUsage(context.Co
 
 func (UnimplementedObservabilityServiceHandler) GetReleaseHealth(context.Context, *connect.Request[v1.GetReleaseHealthRequest]) (*connect.Response[v1.GetReleaseHealthResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.ObservabilityService.GetReleaseHealth is not implemented"))
+}
+
+func (UnimplementedObservabilityServiceHandler) ListFrontendReplay(context.Context, *connect.Request[v1.ListFrontendReplayRequest]) (*connect.Response[v1.ListFrontendReplayResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.ObservabilityService.ListFrontendReplay is not implemented"))
 }

@@ -31,7 +31,8 @@ import { RANGE_LABELS, type RangePreset } from "@/services/controlPlane/observab
 import { DeployWithAgentButton } from "./AskReliant/AskReliant";
 import type { ObsView } from "./obsSearch";
 
-function StateFrame({
+/** The frame for Observability, Data and Storage states: an icon, title, words and actions. */
+export function StateFrame({
   icon,
   title,
   children,

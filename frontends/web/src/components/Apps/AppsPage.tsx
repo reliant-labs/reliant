@@ -267,7 +267,7 @@ function EnvChip({ env, firing }: { env: AppEnv; firing: number }) {
   const facts = [health.label, release].join(" · ");
   return (
     <span title={`${env.name}: ${facts}`} data-testid={`app-env-${env.name}`} data-verdict={env.verdict} data-firing={firing || undefined}>
-      <Status tone={health.tone} label={env.name} size="sm" />
+      <Status tone={health.tone} label={env.name} size="sm" busy={health.busy} />
       {health.alerting ? (
         <span className="ml-1 text-xs text-ink-muted" data-testid={`app-env-${env.name}-alerts`}>
           <span className="sr-only">: </span>

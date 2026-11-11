@@ -22,7 +22,12 @@
  *     ConnectError subclass with the numeric `.code`, metadata and details
  *     intact, so the `instanceof ConnectError` call sites keep working; it adds
  *     `.reason` / `.codeName` / `.status` / `.retryable` / `.traceId`, and its
- *     `.message` drops connect's "[code] " prefix (`rawMessage` is unchanged);
+ *     `.message` drops connect's "[code] " prefix (`rawMessage` is unchanged).
+ *     Being a runtime interceptor, it also records the open interaction (or
+ *     the caller's span) at call entry, before auth's await, so a call held
+ *     there while the user opens something else stays in the interaction it
+ *     started under (lib/chatOpenInteraction). An app interceptor that awaits
+ *     must never go above it without `interactionContextInterceptor()` first;
  *   - org snapshots synchronously before any auth await or timeout replacement:
  *     an operation started in A cannot become a write in B after a switch.
  *     Explicit caller orgs win; no selection stays unset across retries.
@@ -53,8 +58,8 @@
  * error reporting, and the upgrade modal — drift gone.
  */
 
-import { ConnectError, Code } from "@connectrpc/connect";
-import type { Interceptor } from "@connectrpc/connect";
+import { ConnectError, Code, createContextKey, createContextValues } from "@connectrpc/connect";
+import type { ContextValues, Interceptor } from "@connectrpc/connect";
 import {
   authInterceptor as runtimeAuthInterceptor,
   errorNormalizeInterceptor,
@@ -394,6 +399,7 @@ const errorInterceptor: Interceptor = (next) => async (req) => {
     const duration = Date.now() - startTime;
     const kind = classifyRpcFailure(error, {
       serviceTypeName: req.service.typeName,
+      methodName: req.method.name,
       signalAborted: req.signal.aborted,
     });
     const context = {
@@ -413,6 +419,12 @@ const errorInterceptor: Interceptor = (next) => async (req) => {
     }
     if (kind === "account-required") {
       logger.info("[gRPC Client] Account required", context);
+      throw error;
+    }
+    if (kind === "already-absent") {
+      // An idempotent delete found nothing to delete: the caller's goal
+      // holds. Still thrown, so a caller that cares can tell.
+      logger.debug("[gRPC Client] Delete target already absent", context);
       throw error;
     }
     if (kind === "machine-wait") {
@@ -768,6 +780,39 @@ export function buildInterceptors(
     upgradeInterceptor,
     machineWakeInterceptor,
     ...(withAuth ? [unauthInterceptor, writeOwnerInterceptor] : []),
+    // Innermost: everything above (the token above all) is settled.
+    requestSentInterceptor,
   ];
   return chain;
 }
+
+// ─── Request sent ────────────────────────────────────────────────────
+
+/**
+ * A callback a caller attaches to one RPC (`contextValues`) to learn when its
+ * request is handed to the network: after every interceptor above has run,
+ * the bearer token's lookup included, and right before the transport calls
+ * fetch. The chat stream marks its open's `stream_requested` phase with it
+ * (api/chat-streaming-grpc.ts), which separates time spent before the
+ * request left the browser from time waiting on the server.
+ */
+export const requestSentKey = createContextKey<(() => void) | undefined>(undefined, {
+  description: "called when the request is handed to fetch",
+});
+
+/** Attach `onSent` to an RPC's context values (see requestSentKey). */
+export function withRequestSent(values: ContextValues | undefined, onSent: () => void): ContextValues {
+  const next = values ?? createContextValues();
+  next.set(requestSentKey, onSent);
+  return next;
+}
+
+// Not async, so it adds no promise hop before fetch.
+const requestSentInterceptor: Interceptor = (next) => (req) => {
+  try {
+    req.contextValues.get(requestSentKey)?.();
+  } catch {
+    // An observer never fails the request it observes.
+  }
+  return next(req);
+};

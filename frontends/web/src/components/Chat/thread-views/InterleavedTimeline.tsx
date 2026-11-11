@@ -41,6 +41,7 @@ import { sortMessagesForDisplay } from "../../../lib/messageOrder";
 import { cleanTemporalErrorMessage } from "../../../lib/temporalErrors";
 import { getThreadColor, formatNodeId, resolveThreadNameFromActiveThreads, resolveRouterDecisionFromActiveThreads, isSpawnOrigin } from "./threadUtils";
 import { useActiveThreads } from "../../../store/threadActivityStore";
+import { useToolResultsByCallId } from "../../../store/chatStoreHooks";
 import { logger } from "../../../lib/logger";
 import { settingsSync, SETTINGS_KEYS } from "../../../services/settingsSync";
 import { getSpawnDisplayMode } from "../../Settings/SpawnDisplaySettings";
@@ -49,11 +50,12 @@ import { pinnedPromptFirstLine, usePinnedPromptForm } from "./pinnedPromptForm";
 import { useChatThreadMode } from "./useChatThreadMode";
 import {
   buildSimplifiedTimeline,
+  createFoldKeys,
   createSegmentReader,
-  isRoutineActivityMessage,
   type MessageSlice,
   type WorkItem,
 } from "./simplifiedTurns";
+import { createSurfacedPredicate } from "./surfacedExecutions";
 import { TurnWorkFold } from "../TurnWorkFold";
 import { LiveTurnFoldContext } from "./liveTurnContext";
 import {
@@ -117,11 +119,13 @@ interface WorkflowDisplay {
 
 type TimelineItem =
   /**
-   * `slice` is set only in the simplified thread mode, on a turn's answer
-   * rows: the message renders just those segments (see simplifiedTurns.ts).
+   * `slice` is set only in the simplified thread mode, on the prose rows of a
+   * message that also did tool work: the message renders just those segments
+   * (see simplifiedTurns.ts). `key` names every such row but the message's
+   * first, since one message can then yield several rows.
    */
-  | { type: "message"; message: Message; workflow: WorkflowDisplay; slice?: MessageSlice }
-  /** Simplified thread mode only: one agent turn's folded work. */
+  | { type: "message"; message: Message; workflow: WorkflowDisplay; slice?: MessageSlice; key?: string }
+  /** Simplified thread mode only: one folded run of work. */
   | WorkItem<WorkflowDisplay>
   | { type: "thread-start"; workflow: WorkflowDisplay; parentName: string }
   | { type: "handoff"; toName: string; color: string; key: string }
@@ -151,7 +155,7 @@ type TimelineItem =
 function timelineItemKey(item: TimelineItem): string {
   switch (item.type) {
     case "message":
-      return item.message.id;
+      return item.key ?? item.message.id;
     case "work":
       return item.work.key;
     case "thread-start":
@@ -167,6 +171,34 @@ function timelineItemKey(item: TimelineItem): string {
     case "run_output":
       return `run-${item.runOutput.id}`;
   }
+}
+
+/** When a timeline item happened, for placing timestamped events among them. */
+function timelineItemTime(item: TimelineItem): number | null {
+  const at =
+    item.type === "message" ? item.message.createdAt
+      : item.type === "error" ? item.error.timestamp
+        : item.type === "info" ? item.info.timestamp
+          : item.type === "run_output" ? item.runOutput.timestamp
+            : undefined;
+  if (!at) return null;
+  const ms = new Date(at).getTime();
+  return Number.isNaN(ms) ? null : ms;
+}
+
+/**
+ * Where an event that happened at `time` goes: after the last item at or
+ * before it — a message, or an event already placed. Anchoring on messages
+ * alone put every event after the same message at that message's index, so
+ * the later-inserted one landed first: two errors after one message rendered
+ * newest first, and an info always ahead of an error it followed.
+ */
+function insertionIndex(items: readonly TimelineItem[], time: number): number {
+  for (let i = items.length - 1; i >= 0; i--) {
+    const at = timelineItemTime(items[i]);
+    if (at !== null && at <= time) return i + 1;
+  }
+  return 0;
 }
 
 /**
@@ -609,9 +641,12 @@ const TransitionDivider = memo(function TransitionDivider({
   );
 });
 
+/** A stable default: the simplified pass is memoized on the approvals list. */
+const NO_APPROVALS: Approval[] = [];
+
 export const InterleavedTimeline = memo(function InterleavedTimeline({
   messages,
-  approvals = [],
+  approvals = NO_APPROVALS,
   errorEvents = [],
   infoEvents = [],
   runOutputs = [],
@@ -876,19 +911,7 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
       const error = group.error;
       const errorTime = new Date(error.timestamp).getTime();
 
-      // Find insertion point: after last item with timestamp <= error time
-      let insertIdx = items.length;
-      for (let i = items.length - 1; i >= 0; i--) {
-        const item = items[i];
-        if (item.type === "message") {
-          const msgTime = new Date(item.message.createdAt || "").getTime();
-          if (msgTime <= errorTime) {
-            insertIdx = i + 1;
-            break;
-          }
-        }
-        if (i === 0) insertIdx = 0;
-      }
+      const insertIdx = insertionIndex(items, errorTime);
 
       // An error older than every loaded message happened somewhere in the
       // history not loaded yet. Its place is among those messages, not stacked
@@ -908,21 +931,7 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
     for (const info of infoEvents) {
       const infoTime = new Date(info.timestamp).getTime();
 
-      // Find insertion point: after last item with timestamp <= info time
-      let insertIdx = items.length;
-      for (let i = items.length - 1; i >= 0; i--) {
-        const item = items[i];
-        if (item.type === "message") {
-          const msgTime = new Date(item.message.createdAt || "").getTime();
-          if (msgTime <= infoTime) {
-            insertIdx = i + 1;
-            break;
-          }
-        }
-        if (i === 0) insertIdx = 0;
-      }
-
-      items.splice(insertIdx, 0, {
+      items.splice(insertionIndex(items, infoTime), 0, {
         type: "info",
         info,
       });
@@ -932,21 +941,7 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
     for (const runOutput of runOutputs) {
       const runOutputTime = new Date(runOutput.timestamp).getTime();
 
-      // Find insertion point: after last item with timestamp <= runOutput time
-      let insertIdx = items.length;
-      for (let i = items.length - 1; i >= 0; i--) {
-        const item = items[i];
-        if (item.type === "message") {
-          const msgTime = new Date(item.message.createdAt || "").getTime();
-          if (msgTime <= runOutputTime) {
-            insertIdx = i + 1;
-            break;
-          }
-        }
-        if (i === 0) insertIdx = 0;
-      }
-
-      items.splice(insertIdx, 0, {
+      items.splice(insertionIndex(items, runOutputTime), 0, {
         type: "run_output",
         runOutput,
       });
@@ -955,37 +950,38 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
     return items;
   }, [messages, chatId, workflowExecution, selectedThreads, errorEvents, infoEvents, runOutputs, activeThreads, hasOlderMessages, simplified]);
 
-  // Simplified mode folds each agent turn's work into one row (see
+  // Simplified mode folds each run of non-text work into one row (see
   // simplifiedTurns.ts). The reader memoizes per message object, so the pass
   // stays a cheap linear walk on every streamed delta.
   const segmentReader = useMemo(() => createSegmentReader(), []);
+  // Some calls leave their fold when a result or an approval arrives (a
+  // deploy's card, a call waiting on the user), so the pass follows both.
+  const toolResultsByCallId = useToolResultsByCallId(chatId);
+  const isSurfaced = useMemo(
+    () => createSurfacedPredicate(toolResultsByCallId, approvals),
+    [toolResultsByCallId, approvals],
+  );
+  // Fold keys outlive each rebuild, so a scroll-back page that brings the
+  // older half of the run at the top does not rename its fold (FoldKeys).
+  const foldKeys = useMemo(() => createFoldKeys(), []);
   const timelineItems = useMemo((): TimelineItem[] => {
     if (!simplified) return detailedTimelineItems;
-    let lastMessageId: string | undefined;
-    for (let i = detailedTimelineItems.length - 1; i >= 0; i--) {
-      const item = detailedTimelineItems[i];
-      if (item.type === "message" && !isRoutineActivityMessage(item.message)) {
-        lastMessageId = item.message.id;
-        break;
-      }
-    }
     return buildSimplifiedTimeline(detailedTimelineItems, {
       segmentsOf: segmentReader,
-      isLiveTurn: (last) => isStreaming && last.id === lastMessageId,
       workflowOf: (item) => item.workflow,
+      isSurfaced,
+      foldKeys,
     }) as TimelineItem[];
-  }, [simplified, detailedTimelineItems, segmentReader, isStreaming]);
+  }, [simplified, detailedTimelineItems, segmentReader, isSurfaced, foldKeys]);
 
-  // The fold still being worked on: the last work row, when only its own
-  // answer rows follow it. Its header shows live status and an elapsed timer.
+  // The fold still being worked on: the last row, while streaming. Its own
+  // surfaced content renders inside it, so anything after it — the agent's
+  // prose included — means the run is over. Its header shows live status and
+  // an elapsed timer.
   const liveWorkIndex = useMemo(() => {
     if (!simplified || !isStreaming) return -1;
-    for (let i = timelineItems.length - 1; i >= 0; i--) {
-      const item = timelineItems[i];
-      if (item.type === "work") return i;
-      if (item.type !== "message" || item.slice?.role !== "answer") return -1;
-    }
-    return -1;
+    const last = timelineItems.length - 1;
+    return timelineItems[last]?.type === "work" ? last : -1;
   }, [simplified, isStreaming, timelineItems]);
 
   // `timelineItems` IS the list the virtualizer renders. There is deliberately
@@ -1235,27 +1231,34 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
 
   // Jump to a specific message, e.g. from a chat-search hit. The target is
   // usually not rendered, so the jump is by index through the virtualizer.
-  const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
+  // Keyed by row, not message: in the simplified thread one message can yield
+  // several rows, and only the one the jump landed on should ring.
+  const [highlightedRowKey, setHighlightedRowKey] = useState<string | null>(null);
 
   useEffect(() => {
     const handleScrollToMessage = (event: Event) => {
       const messageId = (event as CustomEvent<{ messageId?: string }>).detail?.messageId;
       if (!messageId) return;
-      // In the simplified thread a message's work lives inside its turn's
-      // fold, so a hit on that message lands on the fold.
-      const index = timelineItems.findIndex(
-        (item) =>
-          (item.type === "message" && item.message.id === messageId) ||
-          (item.type === "work" && (
-            item.work.parts.some((part) => part.message.id === messageId) ||
-            item.work.events?.some((event) => event.message.id === messageId)
-          )),
+      // In the simplified thread a message may be cut into prose rows and
+      // folded work. A hit lands on its first prose row (search matches
+      // text), or else on the fold that holds it.
+      let index = timelineItems.findIndex(
+        (item) => item.type === "message" && item.message.id === messageId,
       );
+      if (index === -1) {
+        index = timelineItems.findIndex(
+          (item) =>
+            item.type === "work" && (
+              item.work.parts.some((part) => part.message.id === messageId) ||
+              Boolean(item.work.events?.some((event) => event.message.id === messageId))
+            ),
+        );
+      }
       // Not in the loaded window — the message lives in a page we have not
       // fetched yet, so there is nothing to scroll to.
       if (index === -1) return;
       virtualizer.scrollToIndex(index, { align: "center", behavior: "auto" });
-      setHighlightedMessageId(messageId);
+      setHighlightedRowKey(timelineItemKey(timelineItems[index]));
       // Tell the requester to stop retrying; it cannot observe this otherwise.
       acknowledgeScrollToMessage(messageId);
     };
@@ -1266,10 +1269,10 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
 
   // Clear the highlight once it has had time to register visually.
   useEffect(() => {
-    if (!highlightedMessageId) return;
-    const timer = setTimeout(() => setHighlightedMessageId(null), 2000);
+    if (!highlightedRowKey) return;
+    const timer = setTimeout(() => setHighlightedRowKey(null), 2000);
     return () => clearTimeout(timer);
-  }, [highlightedMessageId]);
+  }, [highlightedRowKey]);
 
   // "Focus the conversation" — hands the transcript keyboard focus so it can
   // be scrolled and read without the mouse.
@@ -1504,12 +1507,8 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
   const renderRow = useCallback((index: number, item: TimelineItem) => {
     // After a search jump, briefly ring the target so the eye can find it —
     // landing mid-conversation with no cue makes the jump feel like it failed.
-    const isHighlighted =
-      highlightedMessageId !== null &&
-      item.type === "message" &&
-      item.message.id === highlightedMessageId;
-
     const rowKey = timelineItemKey(item);
+    const isHighlighted = highlightedRowKey !== null && rowKey === highlightedRowKey;
     const toolRowSpacing = getToolRowSpacing(timelineItems, index);
 
     return (
@@ -1542,7 +1541,8 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
               "rounded-lg ring-2 ring-primary/60 transition-shadow duration-500",
           )}
         >
-          {item.type === "message" && dateLabels.has(item.message.id) && (
+          {/* A message's later prose rows (keyed) never repeat its date. */}
+          {item.type === "message" && !item.key && dateLabels.has(item.message.id) && (
             <div className="flex items-center gap-3 py-3 text-xs text-muted-foreground">
               <span aria-hidden="true" className="h-px flex-1 bg-border" />
               <time dateTime={item.message.createdAt}>{dateLabels.get(item.message.id)}</time>
@@ -1553,7 +1553,7 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
         </div>
       </div>
     );
-  }, [contentMaxWidthClass, dateLabels, highlightedMessageId, measureRow, renderItem, timelineGapClass, timelineHorizontalPaddingClass, timelineItems]);
+  }, [contentMaxWidthClass, dateLabels, highlightedRowKey, measureRow, renderItem, timelineGapClass, timelineHorizontalPaddingClass, timelineItems]);
 
   if (timelineItems.length === 0) {
     return (
@@ -1693,7 +1693,17 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
       )}
       <div
         ref={setScrollerEl}
-        className="h-full overflow-y-auto"
+        className="h-full overflow-y-auto overflow-x-hidden"
+        // overflow-x-hidden alone does not stop sideways scrolling: a hidden
+        // axis is still scrollable by everything but the wheel — scrollIntoView,
+        // focus, a drag-select, find-in-page, a touch pan on iOS. So a row too
+        // wide for the transcript left the whole conversation parked to the
+        // right, with no scrollbar to get back. The guard that holds is the
+        // overflow-x-clip on the virtual container below: clipped overflow is
+        // not scrollable overflow, so this element's horizontal scroll range is
+        // always zero. A wide row must still wrap or scroll inside itself;
+        // e2e/chat-width.spec.ts checks every row's geometry for that.
+        //
         // "contain": the end-of-list bounce stays (it is macOS's native
         // rubber-band; its length is set by the OS, not here), but a scroll
         // past either end never chains to the page behind the transcript.
@@ -1714,8 +1724,12 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
       >
         {/* The virtual space: as tall as every row measured or estimated,
             with only the rows near the viewport actually rendered. */}
-        {/* Height is written by the virtualizer (directDomUpdates), not JSX. */}
-        <div ref={virtualizer.containerRef} className="relative w-full">
+        {/* Height is written by the virtualizer (directDomUpdates), not JSX.
+            overflow-x-clip, not hidden: clip makes no scroll container, so the
+            y axis stays visible and the rows' sticky toolbars still stick to
+            the scroller, while nothing a row pushes past the column edge can
+            give the scroller a horizontal range (see the scroller above). */}
+        <div ref={virtualizer.containerRef} className="relative w-full overflow-x-clip">
           {/* The space paddingStart reserves above row 0: the manual
               "load more" affordance, or the start-of-history marker. Fixed
               height in every state, so it never moves the rows below it.

@@ -71,7 +71,7 @@ export type ScenarioRpcHandlers =
   }
 
   // forge:section reliant.v1.ChatService
-  // forge:hash=63b0b132cc3373d987eabe865a7e41fdc5301cda4df7f0815fd1d7406074768f
+  // forge:hash=09d33b6f662839715991f26af9e36981bb159739175d9ad324390c9f9749941a
   & {
     "reliant.v1.ChatService/StartChat"?: (req: import("@/gen/reliant/v1/chat_pb").StartChatRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/chat_pb").StartChatResponseSchema>>;
     "reliant.v1.ChatService/RunNow"?: (req: import("@/gen/reliant/v1/chat_pb").RunNowRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/chat_pb").RunNowResponseSchema>>;
@@ -90,6 +90,7 @@ export type ScenarioRpcHandlers =
     "reliant.v1.ChatService/InterruptThread"?: (req: import("@/gen/reliant/v1/chat_pb").InterruptThreadRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/chat_pb").InterruptThreadResponseSchema>>;
     "reliant.v1.ChatService/ListMessages"?: (req: import("@/gen/reliant/v1/chat_pb").ListMessagesRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/chat_pb").ListMessagesResponseSchema>>;
     "reliant.v1.ChatService/GetToolResult"?: (req: import("@/gen/reliant/v1/chat_pb").GetToolResultRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/chat_pb").GetToolResultResponseSchema>>;
+    "reliant.v1.ChatService/GetContentBlockBodies"?: (req: import("@/gen/reliant/v1/chat_pb").GetContentBlockBodiesRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/chat_pb").GetContentBlockBodiesResponseSchema>>;
     "reliant.v1.ChatService/UpdateChatState"?: (req: import("@/gen/reliant/v1/chat_pb").UpdateChatStateRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/chat_pb").UpdateChatStateResponseSchema>>;
     "reliant.v1.ChatService/TerminateChat"?: (req: import("@/gen/reliant/v1/chat_pb").TerminateChatRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/chat_pb").TerminateChatResponseSchema>>;
     "reliant.v1.ChatService/PauseChat"?: (req: import("@/gen/reliant/v1/chat_pb").PauseChatRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/chat_pb").PauseChatResponseSchema>>;
@@ -109,6 +110,7 @@ export type ScenarioRpcHandlers =
     "reliant.v1.ChatService/GetWorkflowNodeExecutions"?: (req: import("@/gen/reliant/v1/chat_pb").GetWorkflowNodeExecutionsRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/chat_pb").GetWorkflowNodeExecutionsResponseSchema>>;
     "reliant.v1.ChatService/GetThreadWorkflowInputs"?: (req: import("@/gen/reliant/v1/chat_pb").GetThreadWorkflowInputsRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/chat_pb").GetThreadWorkflowInputsResponseSchema>>;
     "reliant.v1.ChatService/SetChatDaemon"?: (req: import("@/gen/reliant/v1/chat_pb").SetChatDaemonRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/chat_pb").SetChatDaemonResponseSchema>>;
+    "reliant.v1.ChatService/MoveChatToProject"?: (req: import("@/gen/reliant/v1/chat_pb").MoveChatToProjectRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/chat_pb").MoveChatToProjectResponseSchema>>;
   }
 
   // forge:section reliant.v1.ConnectionService
@@ -281,7 +283,7 @@ export type ScenarioRpcHandlers =
   }
 
   // forge:section reliant.v1.ProjectService
-  // forge:hash=e3062948eade5fc5df224c6b97b3f5d624b305b48e216012f0dd3e13a2a48f8f
+  // forge:hash=4cdf43c57810610941de72e957d87ee2328b2d27e2747b16cc418547faa4e85c
   & {
     "reliant.v1.ProjectService/CreateProject"?: (req: import("@/gen/reliant/v1/project_pb").CreateProjectRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/project_pb").CreateProjectResponseSchema>>;
     "reliant.v1.ProjectService/ListProjects"?: (req: import("@/gen/reliant/v1/project_pb").ListProjectsRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/project_pb").ListProjectsResponseSchema>>;
@@ -306,6 +308,8 @@ export type ScenarioRpcHandlers =
     "reliant.v1.ProjectService/ListRepositoriesForDaemon"?: (req: import("@/gen/reliant/v1/project_pb").ListRepositoriesForDaemonRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/project_pb").ListRepositoriesForDaemonResponseSchema>>;
     "reliant.v1.ProjectService/PullProjectOnDaemon"?: (req: import("@/gen/reliant/v1/project_pb").PullProjectOnDaemonRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/project_pb").PullProjectOnDaemonResponseSchema>>;
     "reliant.v1.ProjectService/RemoveProjectFromDaemon"?: (req: import("@/gen/reliant/v1/project_pb").RemoveProjectFromDaemonRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/project_pb").RemoveProjectFromDaemonResponseSchema>>;
+    "reliant.v1.ProjectService/AttachProjectToDaemon"?: (req: import("@/gen/reliant/v1/project_pb").AttachProjectToDaemonRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/project_pb").AttachProjectToDaemonResponseSchema>>;
+    "reliant.v1.ProjectService/DetachProjectFromDaemon"?: (req: import("@/gen/reliant/v1/project_pb").DetachProjectFromDaemonRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/project_pb").DetachProjectFromDaemonResponseSchema>>;
     "reliant.v1.ProjectService/RecloneProjectOnDaemon"?: (req: import("@/gen/reliant/v1/project_pb").RecloneProjectOnDaemonRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/project_pb").RecloneProjectOnDaemonResponseSchema>>;
   }
 
@@ -533,6 +537,12 @@ export type ScenarioRpcHandlers =
     "reliant.v1.WorktreeService/PullWorktree"?: (req: import("@/gen/reliant/v1/worktree_pb").PullWorktreeRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/worktree_pb").PullWorktreeResponseSchema>>;
     "reliant.v1.WorktreeService/GetWorktreePR"?: (req: import("@/gen/reliant/v1/worktree_pb").GetWorktreePRRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/worktree_pb").GetWorktreePRResponseSchema>>;
     "reliant.v1.WorktreeService/CreateWorktreePR"?: (req: import("@/gen/reliant/v1/worktree_pb").CreateWorktreePRRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/worktree_pb").CreateWorktreePRResponseSchema>>;
+  }
+
+  // forge:section reliant.v1.WorktreeReclaimService
+  // forge:hash=afd85eebf842fae92b2d923f6df6004172822be23f99e1b21e0e1c3b7917188a
+  & {
+    "reliant.v1.WorktreeReclaimService/DecideWorktreeReclaim"?: (req: import("@/gen/reliant/v1/worktree_reclaim_pb").DecideWorktreeReclaimRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/worktree_reclaim_pb").DecideWorktreeReclaimResponseSchema>>;
   }
 
   // forge:section (escape hatch)

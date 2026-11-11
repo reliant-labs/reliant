@@ -12,6 +12,7 @@ import (
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/logging"
 )
@@ -49,7 +50,7 @@ func (s *Service) ResolveQuestion(
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get question"))
 	}
-	if chat == nil || chat.UserID != userID {
+	if !authz.CanWriteChat(ctx, userID, chat) {
 		return nil, svcerr.NotFound("question")
 	}
 
@@ -137,6 +138,19 @@ func (s *Service) ListPendingQuestions(
 	)
 	if req.Msg.ChatId == nil {
 		questions, err = s.deps.Repo.ListAnswerablePendingQuestionsByUser(ctx, userID)
+		// The store lists the caller's questions; one in a chat they may no
+		// longer read (an org they left, a credential's other org) is not
+		// listed, as GetChat would not show its chat.
+		readable := map[string]bool{}
+		questions = authz.Visible(ctx, userID, questions, func(ctx context.Context, userID string, q *db.Question) bool {
+			ok, seen := readable[q.ChatID]
+			if !seen {
+				chat, getErr := s.deps.Repo.GetChatRow(ctx, q.ChatID)
+				ok = getErr == nil && authz.CanReadChat(ctx, userID, chat)
+				readable[q.ChatID] = ok
+			}
+			return ok
+		})
 	} else {
 		chatID := req.Msg.GetChatId()
 		if chatID == "" {
@@ -146,7 +160,7 @@ func (s *Service) ListPendingQuestions(
 		if getErr != nil {
 			return nil, svcerr.WrapOr(getErr, svcerr.Internal("failed to get chat"))
 		}
-		if chat == nil || chat.UserID != userID {
+		if !authz.CanReadChat(ctx, userID, chat) {
 			return nil, svcerr.NotFound("chat")
 		}
 		questions, err = s.deps.Repo.ListAnswerablePendingQuestionsByChat(ctx, chatID)

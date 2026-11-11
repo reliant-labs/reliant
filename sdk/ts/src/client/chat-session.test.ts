@@ -4,6 +4,12 @@ import { Code, ConnectError } from "@connectrpc/connect";
 import { createChatState } from "./chat-reducer.js";
 import type { ChatState } from "./chat-state.js";
 import { createReliantClient } from "./client.js";
+import {
+  fetchContentBlockBodies,
+  MAX_CONTENT_BLOCK_BODY_IDS,
+  type ContentBlockBodiesClient,
+} from "./content-block-bodies.js";
+import { ToolBodyMode } from "../gen/reliant/v1/chat_pb.js";
 import type { WakeHandlers, WakeSource } from "./reconnecting-stream.js";
 import {
   approvalData,
@@ -355,5 +361,180 @@ describe("sending", () => {
     await session.send("one");
     // "one" succeeded the first time, so its id was retired: the third is a new message.
     expect(new Set(calls.map((c) => c.clientMessageId)).size).toBe(3);
+  });
+});
+
+describe("chat stream sync hooks", () => {
+  // The next connection, however long its reconnect backoff (jittered) takes.
+  async function connection(n: number) {
+    for (let i = 0; i < 200 && server.chatStreams().length < n; i++) {
+      await vi.advanceTimersByTimeAsync(100);
+    }
+    return server.chatStreams()[n - 1]!;
+  }
+
+  it("reports each connection's snapshot or replay, and its caught_up, once", async () => {
+    server = scriptedServer();
+    const hooks = {
+      onSnapshotReceived: vi.fn(),
+      onReplayStarted: vi.fn(),
+      onCaughtUp: vi.fn(),
+      onSnapshotApplied: vi.fn(),
+    };
+    const client = createReliantClient({ transport: server.transport, wake: noWake });
+    const session = client.chat({ chatId: CHAT, sleep: async () => {}, hooks }).start();
+    await flush();
+
+    // A first open: snapshot, then caught_up. Live updates after it are not a replay.
+    const first = server.chatStreams()[0]!;
+    first.push(snapshotFrame(10, [textMessage("m-1", 1, 1, "ship it")]));
+    first.push(caughtUpFrame(10));
+    first.push(updatesFrame([messageData(11, "m-2", "done")], 11));
+    await flush();
+    expect(hooks.onSnapshotReceived).toHaveBeenCalledWith({ chatId: CHAT, messages: 1, otherUpdates: 0 });
+    // Deprecated, still reported for existing consumers.
+    expect(hooks.onSnapshotApplied).toHaveBeenCalledOnce();
+    expect(hooks.onReplayStarted).not.toHaveBeenCalled();
+    expect(hooks.onCaughtUp).toHaveBeenCalledExactlyOnceWith({
+      chatId: CHAT,
+      sync: "snapshot",
+      initialSync: true,
+      replayedUpdates: 0,
+      latestSequence: 10,
+    });
+
+    // A reconnect replays from the cursor: a resync, not the initial sync.
+    first.fail(new ConnectError("connection reset", Code.Unavailable));
+    const second = await connection(2);
+    second.push(updatesFrame([messageData(12, "m-3", "a"), deltaData("message_start")], 12));
+    second.push(updatesFrame([messageData(13, "m-5", "b")], 13));
+    second.push(caughtUpFrame(13));
+    await flush();
+    expect(hooks.onReplayStarted).toHaveBeenCalledExactlyOnceWith({ chatId: CHAT, sinceSequence: 11, updates: 1 });
+    expect(hooks.onCaughtUp).toHaveBeenLastCalledWith({
+      chatId: CHAT,
+      sync: "replay",
+      initialSync: false,
+      replayedUpdates: 2,
+      latestSequence: 13,
+    });
+
+    // A replay of nothing sends only caught_up.
+    second.fail(new ConnectError("connection reset", Code.Unavailable));
+    (await connection(3)).push(caughtUpFrame(13));
+    await flush();
+    expect(hooks.onReplayStarted).toHaveBeenCalledOnce();
+    expect(hooks.onCaughtUp).toHaveBeenCalledTimes(3);
+    expect(hooks.onCaughtUp).toHaveBeenLastCalledWith(expect.objectContaining({ sync: "replay", replayedUpdates: 0 }));
+    session.close();
+  });
+});
+
+describe("toolBodies", () => {
+  // A snapshot that says older history remains, so loadOlder has a page to ask for.
+  const pagedSnapshot = () => {
+    const snapshot = snapshotFrame(10, [textMessage("m-1", 1, 6, "recent")]);
+    (snapshot.event.value as { hasMore: boolean; oldestSeq: bigint }).hasMore = true;
+    (snapshot.event.value as { hasMore: boolean; oldestSeq: bigint }).oldestSeq = 6n;
+    return snapshot;
+  };
+  const openWith = async (toolBodies?: "full" | "stub") => {
+    server = scriptedServer({ ListMessages: () => ({ messages: [textMessage("m-0", 1, 5, "earlier")], hasMore: false }) });
+    const client = createReliantClient({ transport: server.transport, wake: noWake });
+    const session = client.chat({ chatId: CHAT, sleep: async () => {}, toolBodies }).start();
+    await flush();
+    server.chatStreams()[0]!.push(pagedSnapshot());
+    await flush();
+    await session.loadOlder(50);
+    session.close();
+    return {
+      stream: server.chatStreams()[0]!.request,
+      page: server.unaryRequests.find((r) => r.method === "ListMessages")!.request,
+    };
+  };
+
+  it('"stub" reaches the stream request and every ListMessages page', async () => {
+    const { stream, page } = await openWith("stub");
+    expect(stream).toMatchObject({ chatId: CHAT, toolBodies: ToolBodyMode.STUB });
+    expect(page).toMatchObject({ chatId: CHAT, recent: 50, beforeSeq: 6n, toolBodies: ToolBodyMode.STUB });
+  });
+
+  it("is full by default: the field is left unset, which every server reads as FULL", async () => {
+    for (const toolBodies of [undefined, "full"] as const) {
+      const { stream, page } = await openWith(toolBodies);
+      expect(stream.toolBodies).toBeUndefined();
+      expect(page.toolBodies).toBeUndefined();
+    }
+  });
+});
+
+describe("fetchContentBlockBodies", () => {
+  const body = (id: string) => ({ blockId: id, input: `input of ${id}` });
+
+  it("sends at most 100 ids a request, asks again for the deferred, and accounts for every id once", async () => {
+    const asked: string[][] = [];
+    const client: ContentBlockBodiesClient = {
+      async getContentBlockBodies(request) {
+        asked.push(request.blockIds);
+        // The server's byte budget: answer the first two, defer the rest of the batch.
+        const [first, second, ...rest] = request.blockIds;
+        const answered = [first!, second].filter((id): id is string => !!id);
+        return {
+          bodies: answered.filter((id) => id !== "gone").map(body),
+          notFound: answered.filter((id) => id === "gone"),
+          deferred: rest,
+        };
+      },
+    };
+    const ids = ["gone", ...Array.from({ length: 149 }, (_, i) => `b-${i}`), "b-0", ""];
+    const got = await fetchContentBlockBodies(client, CHAT, ids, { full: true });
+
+    expect(asked.every((batch) => batch.length <= MAX_CONTENT_BLOCK_BODY_IDS)).toBe(true);
+    expect(asked[0]).toHaveLength(100);
+    expect(asked[0]![0]).toBe("gone");
+    expect(Object.keys(got.bodies)).toHaveLength(149);
+    expect(got.bodies["b-148"]).toEqual(body("b-148"));
+    expect(got.notFound).toEqual(["gone"]);
+  });
+
+  it("treats an id the server names nowhere as not found, and refuses to loop on a response that answers nothing", async () => {
+    const quiet: ContentBlockBodiesClient = {
+      getContentBlockBodies: async () => ({ bodies: [body("a")], notFound: [], deferred: [] }),
+    };
+    await expect(fetchContentBlockBodies(quiet, CHAT, ["a", "b"])).resolves.toEqual({ bodies: { a: body("a") }, notFound: ["b"] });
+
+    const stuck: ContentBlockBodiesClient = {
+      getContentBlockBodies: async (request) => ({ bodies: [], notFound: [], deferred: request.blockIds }),
+    };
+    await expect(fetchContentBlockBodies(stuck, CHAT, ["a"])).rejects.toThrow(/answered none/);
+  });
+
+  it("ends when the server answers other ids but defers one on every response", async () => {
+    let calls = 0;
+    const stubborn: ContentBlockBodiesClient = {
+      async getContentBlockBodies(request) {
+        calls++;
+        // Answer every id but "x" (and an id nobody asked for); always defer "x".
+        const others = request.blockIds.filter((id) => id !== "x");
+        return { bodies: [...others, "unasked"].map(body), notFound: [], deferred: ["x"] };
+      },
+    };
+    await expect(fetchContentBlockBodies(stubborn, CHAT, ["a", "x", "b"])).rejects.toThrow(/answered none/);
+    expect(calls).toBe(2);
+  });
+
+  it("is a ChatSession method over the session's own ChatService client", async () => {
+    server = scriptedServer({
+      GetContentBlockBodies: (r) => ({
+        bodies: (r.blockIds as string[]).map((id) => ({ blockId: id, content: "whole", originalSize: 5n })),
+      }),
+    });
+    const client = createReliantClient({ transport: server.transport, wake: noWake });
+    const session = client.chat({ chatId: CHAT });
+    const got = await session.fetchContentBlockBodies(["r-1"], { full: true });
+    expect(got.bodies["r-1"]).toMatchObject({ blockId: "r-1", content: "whole", originalSize: 5n });
+    expect(server.unaryRequests).toEqual([
+      { method: "GetContentBlockBodies", request: expect.objectContaining({ chatId: CHAT, blockIds: ["r-1"], full: true }) },
+    ]);
   });
 });

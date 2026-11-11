@@ -34,6 +34,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/diskguard"
 	"github.com/reliant-labs/reliant/internal/diskwatch"
 	"github.com/reliant-labs/reliant/internal/egresslimit"
+	"github.com/reliant-labs/reliant/internal/ghshim"
 	"github.com/reliant-labs/reliant/internal/heavyjob"
 	"github.com/reliant-labs/reliant/internal/instanceid"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
@@ -51,6 +52,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/toolexec/daemonstate"
 	"github.com/reliant-labs/reliant/internal/toolexec/transport"
 	"github.com/reliant-labs/reliant/internal/workflow/workflowref"
+	"github.com/reliant-labs/reliant/internal/worktreereclaim"
 )
 
 const (
@@ -87,6 +89,11 @@ type daemonClient struct {
 	// instead of paying a fresh handshake.
 	gatewayClient reliantv1connect.ToolsDaemonServiceClient
 	gatewayURL    string
+
+	// reconnectMinDelay is the first wait of run()'s reconnect backoff; zero
+	// means transport.ReconnectMinDelay. Only tests set it, so proving the
+	// reconnect behaviour does not cost the production backoff's seconds.
+	reconnectMinDelay time.Duration
 
 	mcpManager    *mcp.Manager
 	localExecutor *toolexec.LocalToolExecutor
@@ -139,6 +146,9 @@ type daemonClient struct {
 	// DiskReport, and explains ENOSPC failures in tool results. The
 	// process-wide diskwatch.Default(), shared with the exec paths.
 	diskWatcher *diskwatch.Watcher
+	// reclaimMode is the machine sweep's mode; the heartbeat carries its
+	// proposals while it is dry-run or on (worktree_reclaim_proposals.go).
+	reclaimMode worktreereclaim.SweepMode
 
 	// diskGuard acts on the volumes diskWatcher reports: it reclaims past
 	// one threshold and refuses new heavy commands past another
@@ -234,6 +244,9 @@ type StartOptions struct {
 	// StorageReaper schedules forge's storage reaper on this machine; the zero
 	// value leaves it off (diskwatch.ReaperConfig).
 	StorageReaper diskwatch.ReaperConfig
+	// WorktreeReclaim is the machine-wide worktree reclaim, which rides the
+	// storage reaper's schedule; the zero value is off.
+	WorktreeReclaim worktreereclaim.SweepConfig
 	// Host is what the platform declares about where this daemon runs; zero
 	// off a workspace pod.
 	Host Host
@@ -325,6 +338,10 @@ func Start(ctx context.Context, opts StartOptions) error {
 	// Only after the claim above, so a second daemon that is about to be
 	// refused never rewrites the incumbent's records.
 	installBackgroundJournal(ctx, opts.BootstrapConfig.DataDir)
+	// Checkout removes and reclones the server acknowledged by op id
+	// (checkout_teardown.go): loaded before the first command can arrive, and
+	// after the claim for the same reason as the background journal.
+	initializeCheckoutTeardowns(ctx, opts.BootstrapConfig.DataDir)
 
 	client, err := newDaemonClient(opts.BootstrapConfig, opts.Host, opts.Guards, mcp.WithChromeBrowserURL(opts.ChromeBrowserURL))
 	if err != nil {
@@ -377,6 +394,13 @@ func Start(ctx context.Context, opts StartOptions) error {
 	// And the reaper that keeps the build caches inside their budget: forge's
 	// storage pass, on a schedule and under pressure, when opts enables it.
 	client.diskWatcher.ConfigureReaper(opts.StorageReaper)
+	// Every linked worktree on the machine, on the same schedule: captured,
+	// then reclaimed, or only reported in dry-run (worktree_sweep.go).
+	client.diskWatcher.ConfigureWorktreeSweep(worktreeSweep(opts.WorktreeReclaim))
+	client.reclaimMode = opts.WorktreeReclaim.Mode
+	// An Inbox approval (worktree.reclaim_approve) runs with the same roots,
+	// thresholds and mode.
+	setReclaimSweepConfig(opts.WorktreeReclaim)
 	go client.diskWatcher.RunReaper(ctx)
 	// The disk guard reclaims with the same pass, at once, when a volume
 	// crosses its reclaim threshold — where the routine runs at all: a
@@ -573,6 +597,15 @@ func newDaemonClient(bootCfg bootstrap.DaemonBootstrapConfig, host Host, guards 
 		logging.Info(logPrefix + " " + heavyGate.String())
 	}
 	SetHeavyGate(heavyGate)
+
+	// `gh pr create` in a chat's shell names the chat in the pull request
+	// body, so automations reacting to the pull request later reach that
+	// chat first (internal/ghshim). Without it gh runs as is.
+	if shim, err := ghshim.InstallDefault(); err != nil {
+		logging.Info(logPrefix+" gh pr create runs unmarked", "reason", err)
+	} else {
+		logging.Info(logPrefix + " " + shim.String())
+	}
 
 	// Every command an agent runs gets a thread limit of its own where the
 	// machine allows (a delegated cgroup: pids.max per command, sized to the
@@ -960,7 +993,11 @@ func isFatalError(err error) bool {
 }
 
 func (d *daemonClient) run(ctx context.Context) error {
-	delay := transport.ReconnectMinDelay
+	minDelay := transport.ReconnectMinDelay
+	if d.reconnectMinDelay > 0 {
+		minDelay = d.reconnectMinDelay
+	}
+	delay := minDelay
 	for {
 		if ctx.Err() != nil {
 			d.stopAllStreams()
@@ -975,7 +1012,7 @@ func (d *daemonClient) run(ctx context.Context) error {
 		if errors.Is(err, errGatewayMoving) {
 			// Make before break: the draining replica's stream is still
 			// open and serving, so dial its successor now, with no backoff.
-			delay = transport.ReconnectMinDelay
+			delay = minDelay
 			continue
 		}
 		if err != nil && !errors.Is(err, context.Canceled) {
@@ -1091,7 +1128,7 @@ func (d *daemonClient) run(ctx context.Context) error {
 		// Reset backoff after a session that lasted long enough to be considered
 		// successful (e.g. it stayed connected for at least 30 seconds).
 		if time.Since(sessionStart) >= 30*time.Second {
-			delay = transport.ReconnectMinDelay
+			delay = minDelay
 		}
 
 		timer := time.NewTimer(delay)
@@ -1312,8 +1349,13 @@ func (d *daemonClient) handleServerMessage(ctx context.Context, s *gatewaySessio
 			return nil
 		}
 		// Recorded before the goroutine starts, so a status question that
-		// arrives right behind the request already finds it running.
-		d.results.start(m.ToolRequest.RequestId)
+		// arrives right behind the request already finds it running. A
+		// request id this daemon already ran is never run again
+		// (result_once.go).
+		if known, fresh := d.results.begin(m.ToolRequest.RequestId); !fresh {
+			d.answerRepeatedRequest(s, m.ToolRequest.RequestId, known)
+			return nil
+		}
 		if s != nil && m.ToolRequest.RequestId != "" {
 			s.inFlight.Add(1) // until a gateway acknowledges the result
 		}
@@ -1859,6 +1901,7 @@ func (d *daemonClient) runHeartbeats(ctx context.Context, s *gatewaySession, liv
 		if rep, ok := d.diskWatcher.Report(); ok {
 			d.diskGuard.Annotate(rep)
 			rep.Processes = d.procGuard.Report()
+			rep.WorktreeReclaim = worktreeReclaimProposals(d.reclaimMode)
 			hb.Disk = rep
 		}
 		hb.ToolCallsInFlight = uint32(d.results.runningCount())
@@ -1947,16 +1990,6 @@ func (d *daemonClient) executeTool(s *gatewaySession, req *reliantv1.ToolRequest
 	// Before the tool can do anything a restart would cut short.
 	d.results.persistRunning(req.RequestId)
 
-	releaseRecovery, admissionErr := beginRecoveryWork()
-	if admissionErr != nil {
-		d.sendToolResult(s, req.RequestId, &toolexec.ExecutionResult{
-			Success: false, IsError: true, Content: admissionErr.Error(),
-			ErrorMessage: admissionErr.Error(), ErrorCode: "RECOVERY_FINALIZING",
-		})
-		return
-	}
-	defer releaseRecovery()
-
 	execCtx, cancel := context.WithCancel(dispatchContext(req))
 	// Registered under both ids. request_id is the transport's correlation key
 	// (a fresh timestamp per dispatch, known only to the server that sent it);
@@ -1991,12 +2024,39 @@ func (d *daemonClient) executeTool(s *gatewaySession, req *reliantv1.ToolRequest
 	if contextMap["user_id"] == nil {
 		contextMap["user_id"] = d.currentUserID()
 	}
+	// A run step's result outlives its acknowledgement for a while, so a
+	// retry whose worker went away can still reattach to it
+	// (result_retain.go), and its id is tombstoned so it never runs twice
+	// (result_once.go). Before the command runs; a tombstone that cannot be
+	// made durable means the command does not run at all (fail closed).
+	if runStep, _ := contextMap[toolexec.RunStepContextKey].(bool); runStep {
+		if err := d.results.markRunStep(req.RequestId, time.Duration(req.TimeoutMs)*time.Millisecond); err != nil {
+			logging.Warn(logPrefix+" Not running a run step: its tombstone could not be persisted",
+				"request_id", req.RequestId, "error", err)
+			d.sendToolResult(s, req.RequestId, failClosedRunStep(req.RequestId, err))
+			return
+		}
+	}
 
 	// The worktree or project this call works in: recorded the first time it
 	// is seen, and refused while it (or $HOME) is no longer the directory the
 	// daemon was serving. Empty for a call with no project context, which
 	// only a $HOME fault refuses.
 	workspaceRoot := resolveProjectPathFromContext(contextMap, "", "")
+	// Use of the workspace it works in and of every one its input names
+	// (worktree_use.go), recorded even if it is refused below: it was asked.
+	noteWorktreeUse(workspaceRoot, req.GetToolInput())
+	// Admitted where the call works, before it does anything: it holds only
+	// that worktree, and a worktree being retired refuses it.
+	releaseRecovery, admissionErr := beginRecoveryWorkIn(workspaceRoot)
+	if admissionErr != nil {
+		d.sendToolResult(s, req.RequestId, &toolexec.ExecutionResult{
+			Success: false, IsError: true, Content: admissionErr.Error(),
+			ErrorMessage: admissionErr.Error(), ErrorCode: "RECOVERY_FINALIZING",
+		})
+		return
+	}
+	defer releaseRecovery()
 	if refused := d.guard.preflight(workspaceRoot); refused != nil {
 		d.sendToolResult(s, req.RequestId, refused)
 		return

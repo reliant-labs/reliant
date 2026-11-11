@@ -509,11 +509,12 @@ func (e *StepExecutor) HandleCompletion(running *RunningStep) *StepEvent {
 	if IsUnattended(e.workflowInputs) && stepEvent != nil && stepEvent.Error == nil {
 		if err := e.pauseCtrl.ObserveRepeatedToolErrors(e.GetThread(), running.ActivityName, stepEvent); err != nil &&
 			workflow.GetVersion(e.ctx, repeatedToolErrorChangeID, workflow.DefaultVersion, 1) != workflow.DefaultVersion {
-			// Reported here, once: the loop, the inline workflow and the run
-			// pass it up and log it at DEBUG (markReported).
-			e.logger.Error("[StepExecutor] Ending the agent: its tool calls keep failing identically",
+			// Reported here, once, at WARN: the guard working as designed is
+			// an outcome, not a fault. The loop, the inline workflow and the
+			// run pass it up and log it at DEBUG (markReported).
+			stepEvent.Error = reportExpectedStop(e.logger, err,
+				"[StepExecutor] Ending the agent: its tool calls keep failing identically",
 				"stepID", running.StepID, "thread", e.GetThread(), "error", err)
-			stepEvent.Error = markReported(err)
 		}
 	}
 
@@ -1270,6 +1271,16 @@ func (e *StepExecutor) buildRuntimeContext(node *reliantv1.Node) types.RuntimeCo
 	// Thread from execution context
 	if e.execContext != nil {
 		rtx.Thread = e.execContext.Thread
+		rtx.ExcludeAmbientMemory = e.execContext.ExcludeAmbientMemory
+	}
+	// A call's opt-out also caps any descendants it subsequently spawns on
+	// this thread. Never clear a previously recorded exclusion.
+	rtx.ExcludeAmbientMemory = rtx.ExcludeAmbientMemory || excludesAmbientMemory(e.workflowInputs) || e.childTracker.excludesAmbientMemory(rtx.Thread)
+	if node.GetCallLlm().GetExcludeAmbientMemory() {
+		rtx.ExcludeAmbientMemory = true
+	}
+	if rtx.ExcludeAmbientMemory {
+		e.childTracker.excludeAmbientMemory(rtx.Thread)
 	}
 
 	// Who this run's integration writes speak as (see InputKeyActingIdentity).
@@ -1315,6 +1326,9 @@ func (e *StepExecutor) buildRuntimeContext(node *reliantv1.Node) types.RuntimeCo
 		// Whether the loop took this turn on a hint (see
 		// RuntimeContext.SpeculativeTurn).
 		rtx.SpeculativeTurn = e.childTracker.isSpeculativeTurn(rtx.Thread)
+		// Whether this is the first turn of a loop resumed mid-work (see
+		// RuntimeContext.ResumeTurn). Consumed here, so it marks one turn.
+		rtx.ResumeTurn = e.childTracker.takeResumeTurn(rtx.Thread)
 		// The catalog the run started with: the spawn tool describes its
 		// presets from it (catalog_pin.go).
 		rtx.CatalogPin = catalogPinFrom(e.ctx)

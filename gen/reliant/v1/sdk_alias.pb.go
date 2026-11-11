@@ -55,6 +55,7 @@ type (
 	ConfigScope                              = sdk.ConfigScope
 	ConnectorPolicy                          = sdk.ConnectorPolicy
 	ContentBlock                             = sdk.ContentBlock
+	ContentBlockBody                         = sdk.ContentBlockBody
 	ContentBlockType                         = sdk.ContentBlockType
 	CreateTriggerRequest                     = sdk.CreateTriggerRequest
 	CreateTriggerResponse                    = sdk.CreateTriggerResponse
@@ -129,6 +130,8 @@ type (
 	GetChatResponse                          = sdk.GetChatResponse
 	GetChatUpdatesRequest                    = sdk.GetChatUpdatesRequest
 	GetChatUpdatesResponse                   = sdk.GetChatUpdatesResponse
+	GetContentBlockBodiesRequest             = sdk.GetContentBlockBodiesRequest
+	GetContentBlockBodiesResponse            = sdk.GetContentBlockBodiesResponse
 	GetLaunchEventRequest                    = sdk.GetLaunchEventRequest
 	GetLaunchEventResponse                   = sdk.GetLaunchEventResponse
 	GetRunRequest                            = sdk.GetRunRequest
@@ -175,10 +178,12 @@ type (
 	InboxItem_Recovery                       = sdk.InboxItem_Recovery
 	InboxItem_Storage                        = sdk.InboxItem_Storage
 	InboxItem_WaitingForMachine              = sdk.InboxItem_WaitingForMachine
+	InboxItem_WorktreeReclaim                = sdk.InboxItem_WorktreeReclaim
 	InboxQuestion                            = sdk.InboxQuestion
 	InboxRefusedAutomation                   = sdk.InboxRefusedAutomation
 	InboxStorage                             = sdk.InboxStorage
 	InboxWaitingForMachine                   = sdk.InboxWaitingForMachine
+	InboxWorktreeReclaim                     = sdk.InboxWorktreeReclaim
 	IndexedPreset                            = sdk.IndexedPreset
 	IndexedScenario                          = sdk.IndexedScenario
 	IndexedSkill                             = sdk.IndexedSkill
@@ -243,6 +248,8 @@ type (
 	Message                                  = sdk.Message
 	MessageRole                              = sdk.MessageRole
 	MessageSender                            = sdk.MessageSender
+	MoveChatToProjectRequest                 = sdk.MoveChatToProjectRequest
+	MoveChatToProjectResponse                = sdk.MoveChatToProjectResponse
 	OutputStreamType                         = sdk.OutputStreamType
 	PauseChatRequest                         = sdk.PauseChatRequest
 	PauseChatResponse                        = sdk.PauseChatResponse
@@ -357,12 +364,14 @@ type (
 	TerminalSessionEvent_EventType           = sdk.TerminalSessionEvent_EventType
 	TerminateChatRequest                     = sdk.TerminateChatRequest
 	TerminateChatResponse                    = sdk.TerminateChatResponse
+	ToolBodyMode                             = sdk.ToolBodyMode
 	ToolCallStatus                           = sdk.ToolCallStatus
 	ToolExecutionBackground                  = sdk.ToolExecutionBackground
 	ToolExecutionCancel                      = sdk.ToolExecutionCancel
 	ToolExecutionStatus                      = sdk.ToolExecutionStatus
 	ToolRequest                              = sdk.ToolRequest
 	ToolResponse                             = sdk.ToolResponse
+	ToolResponseMedia                        = sdk.ToolResponseMedia
 	ToolResultAck                            = sdk.ToolResultAck
 	Trigger                                  = sdk.Trigger
 	TriggerChange                            = sdk.TriggerChange
@@ -432,6 +441,8 @@ type (
 	WorkspaceBranchContext                   = sdk.WorkspaceBranchContext
 	Worktree                                 = sdk.Worktree
 	WorktreeFileChange                       = sdk.WorktreeFileChange
+	WorktreeReclaimProposal                  = sdk.WorktreeReclaimProposal
+	WorktreeReclaimProposals                 = sdk.WorktreeReclaimProposals
 	WorktreeRecovery                         = sdk.WorktreeRecovery
 	WorktreeRecoveryCheckout                 = sdk.WorktreeRecoveryCheckout
 	WorktreeRepoStatus                       = sdk.WorktreeRepoStatus
@@ -528,6 +539,7 @@ const (
 	InboxItemKind_INBOX_ITEM_KIND_STORAGE                                      = sdk.InboxItemKind_INBOX_ITEM_KIND_STORAGE
 	InboxItemKind_INBOX_ITEM_KIND_UNSPECIFIED                                  = sdk.InboxItemKind_INBOX_ITEM_KIND_UNSPECIFIED
 	InboxItemKind_INBOX_ITEM_KIND_WAITING_FOR_MACHINE                          = sdk.InboxItemKind_INBOX_ITEM_KIND_WAITING_FOR_MACHINE
+	InboxItemKind_INBOX_ITEM_KIND_WORKTREE_RECLAIM                             = sdk.InboxItemKind_INBOX_ITEM_KIND_WORKTREE_RECLAIM
 	MessageRole_MESSAGE_ROLE_ASSISTANT                                         = sdk.MessageRole_MESSAGE_ROLE_ASSISTANT
 	MessageRole_MESSAGE_ROLE_SYSTEM                                            = sdk.MessageRole_MESSAGE_ROLE_SYSTEM
 	MessageRole_MESSAGE_ROLE_TOOL                                              = sdk.MessageRole_MESSAGE_ROLE_TOOL
@@ -567,6 +579,9 @@ const (
 	TerminalSessionEvent_EVENT_TYPE_CREATED                                    = sdk.TerminalSessionEvent_EVENT_TYPE_CREATED
 	TerminalSessionEvent_EVENT_TYPE_ERROR                                      = sdk.TerminalSessionEvent_EVENT_TYPE_ERROR
 	TerminalSessionEvent_EVENT_TYPE_UNSPECIFIED                                = sdk.TerminalSessionEvent_EVENT_TYPE_UNSPECIFIED
+	ToolBodyMode_TOOL_BODY_MODE_FULL                                           = sdk.ToolBodyMode_TOOL_BODY_MODE_FULL
+	ToolBodyMode_TOOL_BODY_MODE_STUB                                           = sdk.ToolBodyMode_TOOL_BODY_MODE_STUB
+	ToolBodyMode_TOOL_BODY_MODE_UNSPECIFIED                                    = sdk.ToolBodyMode_TOOL_BODY_MODE_UNSPECIFIED
 	ToolCallStatus_TOOL_CALL_STATUS_BACKGROUNDED                               = sdk.ToolCallStatus_TOOL_CALL_STATUS_BACKGROUNDED
 	ToolCallStatus_TOOL_CALL_STATUS_CANCELLED                                  = sdk.ToolCallStatus_TOOL_CALL_STATUS_CANCELLED
 	ToolCallStatus_TOOL_CALL_STATUS_COMPLETED                                  = sdk.ToolCallStatus_TOOL_CALL_STATUS_COMPLETED
@@ -702,6 +717,8 @@ var (
 	StreamingState_value                 = sdk.StreamingState_value
 	TerminalSessionEvent_EventType_name  = sdk.TerminalSessionEvent_EventType_name
 	TerminalSessionEvent_EventType_value = sdk.TerminalSessionEvent_EventType_value
+	ToolBodyMode_name                    = sdk.ToolBodyMode_name
+	ToolBodyMode_value                   = sdk.ToolBodyMode_value
 	ToolCallStatus_name                  = sdk.ToolCallStatus_name
 	ToolCallStatus_value                 = sdk.ToolCallStatus_value
 	ToolExecutionStatus_name             = sdk.ToolExecutionStatus_name

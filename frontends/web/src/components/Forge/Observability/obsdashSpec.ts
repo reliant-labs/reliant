@@ -17,6 +17,7 @@ import { canonicalJson } from "@/services/controlPlane/observability/canonicalJs
 import type { AttributeFilter, Dashboard, Panel, Predicate, SeriesIntent } from "@/services/controlPlane/observability/types";
 
 import { attributeClass, ENV_KEY, SERVICE_KEY } from "./attributes";
+import { PALETTE_KEY_TOKENS } from "./charts/chartPalette";
 import { parseFormula } from "./Dashboards/formula";
 
 export const SPEC_VERSION = "forge.dashboards/v1";
@@ -46,13 +47,35 @@ const GROWTH_TYPES = ["sum", "histogram", "exp_histogram", "summary"] as const;
 /** The annotation sources forge knows; `releases` is the only one today. */
 export const ANNOTATION_SOURCES = ["releases"] as const;
 
-/** The display styles each kind takes, its default first (dashspec displayStyles). A kind not listed is drawn one way. */
+/**
+ * The display styles the panel builder offers each kind, its default first. A
+ * kind not listed is drawn one way. Every style here is in the builder's
+ * fixture (editor-panels.json), which internal/dashspeccontract holds to the
+ * forge this repo pins, so a style forge added joins it with the pin bump.
+ */
 export const DISPLAY_STYLES: Readonly<Partial<Record<string, readonly string[]>>> = {
   line: ["line", "area", "bars"],
   bar: ["bar", "pie", "donut"],
   number: ["stat", "gauge"],
   sql: ["line", "area", "bars", "funnel"],
 };
+
+/** The styles forge accepts (dashspec displayStyles): the builder's, and a sql heatmap the console draws. */
+const ACCEPTED_STYLES: Readonly<Partial<Record<string, readonly string[]>>> = {
+  ...DISPLAY_STYLES,
+  sql: [...(DISPLAY_STYLES.sql ?? []), "heatmap"],
+};
+
+/** The styles that draw no figure: no sparkline, no series to colour apart (dashspec). */
+const ONE_COLOUR_STYLES = ["funnel", "heatmap"];
+
+/** forge's palette keys (dashspec ChartColors); a colour is named, never given as a value. */
+const PALETTE_KEYS = Object.keys(PALETTE_KEY_TOKENS);
+/** dashspec MaxColors and its key bound. */
+const MAX_COLORS = 50;
+const MAX_COLOR_NAME_BYTES = 200;
+/** dashspec MaxSectionDescriptionBytes. */
+const MAX_SECTION_DESCRIPTION_BYTES = 500;
 
 /** dashspec MaxTopN. */
 export const MAX_TOP_N = 50;
@@ -64,7 +87,7 @@ export function displayOptions(kind: string, style: string): { stack: boolean; h
     stack: (timeSeries && (style === "area" || style === "bars")) || (kind === "bar" && style === "bar"),
     horizontal: kind === "bar" && style === "bar",
     gauge: kind === "number" && style === "gauge",
-    topN: kind === "line" || (kind === "sql" && style !== "funnel") || (kind === "bar" && (style === "pie" || style === "donut")),
+    topN: kind === "line" || (kind === "sql" && !ONE_COLOUR_STYLES.includes(style)) || (kind === "bar" && (style === "pie" || style === "donut")),
   };
 }
 
@@ -294,6 +317,7 @@ const OWN_FIELDS: readonly [keyof Panel, string, string][] = [
   ["markdown", "text", "Markdown"],
   ["sql", "sql", "a ClickHouse statement"],
   ["minStep", "sql", "a minimum step"],
+  ["trendSql", "sql", "a sparkline statement"],
   ["postgres", "postgres", "a Postgres query"],
 ];
 
@@ -349,6 +373,11 @@ function selfContainedProblems(panel: Panel, problems: string[]) {
       if (present(panel.signal) && !has(SIGNALS, panel.signal)) problems.push(`"${panel.signal}" is not a signal.`);
       statementProblems(panel.sql, problems);
       if (present(panel.minStep) && !SPAN.test(panel.minStep ?? "")) problems.push('The minimum step is a number and s, m, h or d ("1d").');
+      if (present(panel.trendSql)) {
+        if (!panel.trendSql?.trim()) problems.push("Write the sparkline's statement, or remove it.");
+        else if (bytes(panel.trendSql) > MAX_SQL_BYTES) problems.push(`The sparkline's statement is ${bytes(panel.trendSql)} bytes, over the ${MAX_SQL_BYTES} a panel may run.`);
+        if (ONE_COLOUR_STYLES.includes(panel.display?.style ?? "")) problems.push(`A sql panel drawn as a ${panel.display?.style} draws no figure, so it takes no sparkline.`);
+      }
       return;
     }
     case "postgres": {
@@ -384,7 +413,7 @@ function statementProblems(sql: string | undefined, problems: string[]) {
 function displayProblems(panel: Panel, problems: string[]) {
   const display = panel.display;
   if (!display || !present(display)) return;
-  const styles = DISPLAY_STYLES[panel.kind];
+  const styles = ACCEPTED_STYLES[panel.kind];
   if (!styles) {
     problems.push(`A ${panel.kind} panel is drawn one way: only line, bar, number and sql panels take a display style.`);
     return;
@@ -409,6 +438,26 @@ function displayProblems(panel: Panel, problems: string[]) {
     else if (!options.topN) problems.push(`A ${style} ${panel.kind} panel has no series to fold into "Other"${panel.kind === "bar" ? " (a bar panel keeps its top groups with its limit)" : ""}.`);
   }
   if ((style === "pie" || style === "donut") && (panel.series ?? []).length !== 1) problems.push(`A ${style} draws one value per group: it takes exactly one series.`);
+  colourProblems(display, style, problems);
+}
+
+/** The colour rules (dashspec validator.colors): palette keys, never values, and a colour per series only where series are drawn apart. */
+function colourProblems(display: NonNullable<Panel["display"]>, style: string, problems: string[]) {
+  const palette = PALETTE_KEYS.join(", ");
+  if (present(display.color) && !has(PALETTE_KEYS, display.color)) problems.push(`"${display.color}" is not a palette colour (${palette}).`);
+  const colors = display.colors;
+  if (!colors || !present(colors)) return;
+  if (ONE_COLOUR_STYLES.includes(style)) {
+    problems.push(`A ${style} is drawn in one colour: set its colour, not one per series.`);
+    return;
+  }
+  const names = Object.keys(colors);
+  if (names.length > MAX_COLORS) problems.push(`Colour at most ${MAX_COLORS} series by name.`);
+  for (const name of names) {
+    if (!name.trim()) problems.push("A coloured series needs its name.");
+    else if (bytes(name) > MAX_COLOR_NAME_BYTES) problems.push(`A series name is at most ${MAX_COLOR_NAME_BYTES} bytes.`);
+    if (!has(PALETTE_KEYS, colors[name])) problems.push(`"${colors[name]}" is not a palette colour (${palette}).`);
+  }
 }
 
 export function dashboardProblems(dashboard: Dashboard): string[] {
@@ -416,6 +465,12 @@ export function dashboardProblems(dashboard: Dashboard): string[] {
   if (!dashboard.id?.trim()) problems.push("The dashboard needs an id.");
   else if (!ID_PATTERN.test(dashboard.id)) problems.push(`"${dashboard.id}" is not a valid dashboard id.`);
   if (!dashboard.title?.trim()) problems.push("The dashboard needs a title.");
+  if (present(dashboard.defaultCompare) && dashboard.defaultCompare !== "period" && dashboard.defaultCompare !== "release") {
+    problems.push(`"${dashboard.defaultCompare}" is not a comparison: "period" or "release".`);
+  }
+  for (const section of dashboard.sections ?? []) {
+    if (bytes(section.description ?? "") > MAX_SECTION_DESCRIPTION_BYTES) problems.push(`The description of section "${section.title}" is over ${MAX_SECTION_DESCRIPTION_BYTES} bytes.`);
+  }
   const panels = dashboard.panels ?? [];
   if (panels.length === 0) problems.push("A dashboard needs at least one panel.");
   if (panels.length > MAX_PANELS) problems.push(`A dashboard holds at most ${MAX_PANELS} panels.`);

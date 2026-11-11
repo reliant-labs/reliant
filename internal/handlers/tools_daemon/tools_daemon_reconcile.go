@@ -164,6 +164,19 @@ func reconcileProjectDaemons(
 			recorded[row.ProjectID] = row
 		}
 	}
+	// What the user detached from this machine stays off it, folder or no
+	// folder. Unreadable, nothing is recorded: a row written here would undo
+	// the user's detach.
+	detachments, err := database.ListProjectDaemonDetachmentsForDaemon(ctx, daemonID)
+	if err != nil {
+		logging.WarnContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" reconcile: failed to read the machine's detached projects",
+			"error", err, "userID", userID, "daemonID", daemonID)
+		return nil, nil, nil
+	}
+	detached := make(map[string]bool, len(detachments))
+	for _, d := range detachments {
+		detached[d.ProjectID] = true
+	}
 
 	var reconciled, backfilled, skipped int
 	for i, project := range projects {
@@ -171,6 +184,12 @@ func reconcileProjectDaemons(
 			break
 		}
 		if project == nil || strings.TrimSpace(project.ID) == "" || strings.TrimSpace(project.Path) == "" {
+			continue
+		}
+		if detached[project.ID] {
+			// Neither recorded nor missing: a missing project is restored
+			// onto a pool member (restoreCheckoutsOnConnect).
+			skipped++
 			continue
 		}
 
@@ -221,9 +240,17 @@ func reconcileProjectDaemons(
 			continue
 		}
 
-		if err := database.UpsertProjectDaemon(ctx, project.ID, daemonID, project.Path, project.DefaultBranch); err != nil {
+		// Recorded only if no detach committed since the detachments were
+		// read above: the probe can take seconds, and the write must not undo
+		// a detach that landed meanwhile.
+		recorded, err := database.RecordObservedProjectDaemon(ctx, project.ID, daemonID, project.Path, project.DefaultBranch)
+		if err != nil {
 			logging.WarnContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" reconcile: failed to upsert project_daemon",
 				"error", err, "userID", userID, "daemonID", daemonID, "projectID", project.ID)
+			skipped++
+			continue
+		}
+		if !recorded {
 			skipped++
 			continue
 		}

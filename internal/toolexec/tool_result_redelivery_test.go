@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -49,7 +50,9 @@ func TestToolResultPublisherReplacesAnOversizeResult(t *testing.T) {
 	require.NoError(t, err)
 	defer inbox.close()
 
-	huge := string(make([]byte, maxChunkedReplyBytes+1))
+	// Printable bytes: JSON escapes each NUL as \u0000, which made the marshal
+	// alone write 384MB to exceed a 64MB cap.
+	huge := strings.Repeat("x", maxChunkedReplyBytes+1)
 	require.NoError(t, NewToolResultPublisher(nc).PublishToolResult(context.Background(), "user-1", "daemon-1",
 		&ToolExecutionResponse{RequestID: requestID, Content: huge}))
 

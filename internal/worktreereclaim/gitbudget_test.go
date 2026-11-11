@@ -80,6 +80,7 @@ func subcommand(args []string) string {
 // from their files and remembered what it had asked of a commit pair, these
 // were 47, 143 and 71.
 func TestGitProcessesPerPass(t *testing.T) {
+	skipWithoutSafeInspection(t)
 	t.Parallel()
 	for _, tc := range []struct {
 		name   string

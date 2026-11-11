@@ -32,6 +32,7 @@ import (
 	"log/slog"
 	"os/signal"
 	"path/filepath"
+	"sync"
 	"syscall"
 
 	"github.com/reliant-labs/forge/pkg/lifecyclekit"
@@ -116,6 +117,15 @@ func runRoot(ctx context.Context, deps Deps, root rootSpec) error {
 	if err != nil {
 		return fmt.Errorf("initialize observability: %w", err)
 	}
+	// The supervisor flushes after draining a running root, but a migration
+	// or graph-build failure can return before it owns shutdown. Share one
+	// cleanup so every exit flushes, without closing providers twice.
+	flush := flushTelemetry(obs)
+	defer func() {
+		if err := flush(context.Background()); err != nil {
+			logger.ErrorContext(ctx, "flush telemetry", "error", err)
+		}
+	}()
 
 	// MIGRATIONS, before anything reads the schema: only a root that
 	// declares migrate=apply (the api-server, the schema's one owner) runs
@@ -149,7 +159,7 @@ func runRoot(ctx context.Context, deps Deps, root rootSpec) error {
 		Drainer:       drainer,
 		Logger:        logger,
 		FailurePolicy: skCfg.FailurePolicy,
-		Flush:         flushTelemetry(obs),
+		Flush:         flush,
 	}); err != nil {
 		return fmt.Errorf("%s: %w", policy.serviceName, err)
 	}
@@ -157,12 +167,13 @@ func runRoot(ctx context.Context, deps Deps, root rootSpec) error {
 	return nil
 }
 
-// flushTelemetry is the root's last step, after every node has stopped: the
-// OTel providers. Product events need no flush: each is written to the log as
-// it happens.
-func flushTelemetry(obs *observability.Provider) func(context.Context) error {
+// flushTelemetry is shared by the supervisor's last step and the process's
+// deferred boot-failure cleanup. Shutdown uses its own bounded context, not
+// the canceled root context. Product events are written to the log as they happen.
+func flushTelemetry(obs interface{ Shutdown() error }) func(context.Context) error {
+	shutdown := sync.OnceValue(obs.Shutdown)
 	return func(context.Context) error {
-		return obs.Shutdown()
+		return shutdown()
 	}
 }
 

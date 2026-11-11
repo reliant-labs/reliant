@@ -135,6 +135,10 @@ message StreamChatUpdatesRequest {
   // The project the client's user stream (StreamUserUpdates) is scoped to,
   // or unset when it streams every project. See ChatUserUpdates.
   optional string project_id = 3;
+  // How finished tool calls' bodies are sent in the snapshot and in replayed
+  // updates. Live updates are always sent in full. Unset is
+  // TOOL_BODY_MODE_FULL.
+  optional ToolBodyMode tool_bodies = 4;
 }
 
 // ChatStreamEvent is one frame of a chat's detail stream.

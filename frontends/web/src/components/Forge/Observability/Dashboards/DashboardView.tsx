@@ -6,7 +6,8 @@
  *
  *   header       title, star, source tag; one meta line (where it came from,
  *                version and editor, panels, the environments it is about);
- *                actions — release: History, Save as copy; workspace:
+ *                actions — release: History, Save as copy; built-in: Save
+ *                as copy (the platform defines it, so it has no history); workspace:
  *                History, Promote to code, Edit layout, Add panel, More
  *                (save a copy, archive).
  *   variables    env (the console's own scope: changing it here changes it
@@ -37,7 +38,7 @@
 import { useCallback, useEffect, useMemo, useState, type ComponentProps, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { ConnectError, Code } from "@connectrpc/connect";
-import { ArrowLeft, ArrowRight, GripVertical, History, LayoutDashboard, LayoutGrid, Maximize2, MoreHorizontal, Plus, RefreshCw, Share2, Trash2, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, ChevronDown, ChevronRight, GripVertical, History, LayoutDashboard, LayoutGrid, Maximize2, MoreHorizontal, Plus, RefreshCw, Share2, Trash2, X } from "lucide-react";
 
 import Card from "@/components/forge-ui/card";
 import ConfirmationDialog from "@/components/forge-ui/confirmation_dialog";
@@ -56,7 +57,7 @@ import { useAlertHistory, useObservabilityOrg, usePanelQuery, useReleases, useSe
 import { useEscapeLayer } from "@/hooks/useEscapeLayer";
 import { useObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
 import type { DashboardRef, DashboardSummary } from "@/services/controlPlane/observability/dashboardTypes";
-import type { Dashboard, ObsScope, Panel } from "@/services/controlPlane/observability/types";
+import type { Dashboard, DashboardSection, ObsScope, Panel } from "@/services/controlPlane/observability/types";
 import { bucketLabel, dashboardDefaultRange, RANGE_LABELS, RANGE_PRESETS, rangeForBucket, type RangePreset } from "@/services/controlPlane/observability/window";
 import { cn } from "@/lib/utils";
 
@@ -74,7 +75,7 @@ import { OrganizationUsageView } from "./OrganizationUsageView";
 import { OrganizationBillingView } from "./OrganizationBillingView";
 import { LLMUsageView } from "./LLMUsageView";
 import { useNearViewport } from "./useNearViewport";
-import { visiblePanel, viewerQuery } from "./viewerModel";
+import { drawsSqlFigures, panelGroups, sqlTrendPanel, toggledHidden, visiblePanel, viewerQuery } from "./viewerModel";
 import {
   alertBands,
   COMPARE_LABELS,
@@ -84,10 +85,12 @@ import {
   resizePanel,
   COMPARE_MODES,
   compareTarget,
+  dashboardDefaultCompare,
   marksReleases,
   rangeMs,
   refreshMs,
   REFRESH_INTERVALS,
+  isStandardBuiltinRef,
   spanOf,
   type CompareMode,
   type CompareTarget,
@@ -109,8 +112,12 @@ import { PanelDrawer, type DrawerMode } from "./PanelDrawer";
 import { PanelErrorBoundary } from "./PanelErrorBoundary";
 import { BUTTON_PRIMARY, BUTTON_SECONDARY, BUTTON_SMALL, ICON_BUTTON, INK_LINK, Menu, PointMenu, Segmented, SourceTag, StarButton, VariableSelect, type MenuEntry } from "./parts";
 import { useObsReadOnly } from "../obsReadOnly";
+import { DataPanelBody, type PanelDataContext } from "./DataPanel";
+import { browseParams } from "./dataPanelModel";
+import type { DataSearch } from "../../Data/dataUrl-model";
 
 export interface DashboardHrefs extends ExploreHrefs {
+  data?: (search: DataSearch) => string;
   list: string;
   release: (version: string) => string;
   trace: (traceId: string) => string;
@@ -153,19 +160,34 @@ export function DashboardView({ project, dashRef, env: consoleEnv, environments:
   const orgId = org.orgId;
   const api = useObservabilityApi();
   const queryClient = useQueryClient();
-  const compare: CompareMode = search.compare ?? "off";
   const refresh: RefreshInterval = search.refresh ?? "off";
   const consoleExplore = useExploreHref();
 
   const doc = useDashboard(orgId, dashRef, dashRef.kind === "builtin" ? undefined : search.version, dashRef.kind === "builtin" ? undefined : search.release);
+  // An organization view is a typed view with no panels to run; a project's
+  // standard built-in is a spec over its data, read like a release dashboard.
+  const orgView = dashRef.kind === "builtin" && !isStandardBuiltinRef(dashRef);
   // The demo's reason first (obsReadOnly.tsx): there, nobody can, admin or not.
-  const readOnlyReason = useObsReadOnly().reason;
+  const obsLock = useObsReadOnly();
+  const readOnlyReason = obsLock.reason;
+  // Whether this reader may change the dashboard: the server's answer, and never on the demo console.
+  const docCanWrite = !!doc.data?.canWrite && !obsLock.readOnly;
   const spec = doc.data?.spec;
   const summary = doc.data?.summary;
   // The dashboard's own default when the URL names no range: a day-grained one
   // declares "7d" and so never opens on a window that holds a single bucket.
   const defaultRange = dashboardDefaultRange(spec?.defaultRange);
   const range: RangePreset = search.range ?? defaultRange;
+  // Its own comparison when the URL names none: a dashboard of headline
+  // figures declares "period", so each opens beside its change.
+  const defaultCompare = dashboardDefaultCompare(spec?.defaultCompare);
+  const compare: CompareMode = search.compare ?? defaultCompare;
+  // Data reads never poll implicitly. Keep bound time stable through telemetry
+  // polling/re-renders; changing the range creates a new structured question.
+  const browseWindow = useMemo(() => {
+    const endMs = Date.now();
+    return { startMs: endMs - rangeMs(range), endMs };
+  }, [range]);
 
   // A platform dashboard's signals belong to no environment: it reads them
   // platform-wide whatever environment the top bar names.
@@ -186,10 +208,10 @@ export function DashboardView({ project, dashRef, env: consoleEnv, environments:
   const hrefs = useMemo(() => (orgScoped ? orgDashboardHrefs(consoleHrefs, orgPick) : consoleHrefs), [orgScoped, consoleHrefs, orgPick]);
   const exploreLink = useMemo(() => (orgScoped ? orgExploreHref(orgPick) : consoleExplore), [orgScoped, orgPick, consoleExplore]);
   const scope = useMemo<ObsScope | null>(() => {
-    if (!orgId || unrecorded || orgRosterBlocked || dashRef.kind === "builtin") return null;
+    if (!orgId || unrecorded || orgRosterBlocked || orgView) return null;
     if (platform) return { orgId, envIds: [], filters: [], platformScope: true };
     return orgScoped ? orgQueryScope(orgId, orgPick) : { orgId, projectId: project, envIds: envId ? [envId] : [], filters: [] };
-  }, [orgId, project, envId, unrecorded, orgRosterBlocked, platform, orgScoped, orgPick, dashRef.kind]);
+  }, [orgId, project, envId, unrecorded, orgRosterBlocked, platform, orgScoped, orgPick, orgView]);
 
   // Recently viewed: once per dashboard opened, and quietly — a view that
   // could not be recorded changes nothing the reader can see.
@@ -215,9 +237,9 @@ export function DashboardView({ project, dashRef, env: consoleEnv, environments:
   // A platform dashboard belongs to no environment: the environment the top
   // bar names (hidden for it) must not lend it that environment's alert bands
   // or its last release to compare with. Previous-period comparison stays.
-  const promotions = useReleases(delivery, "days:30", () => ({ startMs: Date.now() - 30 * 86_400_000, endMs: Date.now() }), { enabled: !!spec && !!envId && !platform && !orgRosterBlocked && dashRef.kind !== "builtin" });
+  const promotions = useReleases(delivery, "days:30", () => ({ startMs: Date.now() - 30 * 86_400_000, endMs: Date.now() }), { enabled: !!spec && !!envId && !platform && !orgRosterBlocked && !orgView });
   // Both wait for the document: until it loads, a platform dashboard is not yet known to be one.
-  const history = useAlertHistory(dashRef.kind === "builtin" || !spec || platform || orgRosterBlocked ? null : orgId, range, envId ?? undefined);
+  const history = useAlertHistory(orgView || !spec || platform || orgRosterBlocked ? null : orgId, range, envId ?? undefined);
   const scopeEnvIds = useMemo(
     () => (envId ? [envId] : orgScoped && orgPick.ids.length ? orgPick.ids : environments.map((candidate) => candidate.id)),
     [envId, environments, orgScoped, orgPick.ids]
@@ -228,7 +250,10 @@ export function DashboardView({ project, dashRef, env: consoleEnv, environments:
   );
   const now = Date.now();
   const releaseCompare = platform ? PLATFORM_NO_RELEASE : compareTarget("release", range, promotions.data?.promotions ?? [], envId, now);
-  const target = platform && compare === "release" ? PLATFORM_NO_RELEASE : compareTarget(compare, range, promotions.data?.promotions ?? [], envId, now);
+  const asked = platform && compare === "release" ? PLATFORM_NO_RELEASE : compareTarget(compare, range, promotions.data?.promotions ?? [], envId, now);
+  // A default the scope cannot honour (a release comparison over every
+  // environment) opens without one, quietly: the viewer asked for nothing.
+  const target: CompareTarget = asked.mode === "unavailable" && search.compare === undefined ? { mode: "off" } : asked;
 
   // ── Drill-down ──
   const [drill, setDrill] = useState<{ target: DrillTarget; panel: Panel; at: { x: number; y: number } } | null>(null);
@@ -297,7 +322,7 @@ export function DashboardView({ project, dashRef, env: consoleEnv, environments:
 
   const currentVersion = summary.workspace?.version ?? 0;
   const viewingOld = !!search.version && search.version !== currentVersion;
-  const editable = !summary.readOnly && !!doc.data?.canWrite && !search.version && !search.release;
+  const editable = !summary.readOnly && docCanWrite && !search.version && !search.release;
   const writeVersion = (next: Dashboard, message: string, done?: () => void) =>
     save.mutate({ spec: next, base: currentVersion, message }, { onSuccess: () => done?.() });
   const shown = layout ?? spec;
@@ -321,10 +346,7 @@ export function DashboardView({ project, dashRef, env: consoleEnv, environments:
     },
   };
 
-  const grid = (
-    <ObsChartMarkersProvider markers={marks ? releases.markers : NO_MARKERS}>
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4" data-testid="dashboard-grid" data-editing={layout ? "true" : undefined}>
-        {shown.panels.filter((panel) => !!layout || visiblePanel(panel, search)).map((panel, index) => (
+  const card = (panel: Panel, index: number) => (
           // One panel's bad definition stops at its own cell (PanelErrorBoundary).
           <PanelErrorBoundary
             key={panel.id}
@@ -377,6 +399,10 @@ export function DashboardView({ project, dashRef, env: consoleEnv, environments:
                 : []),
             ]}
             scope={scope}
+            dataContext={!platform && !orgScoped && envId && hrefs.data && scope ? {
+              env: { id: envId, name: env }, href: hrefs.data,
+              params: browseParams(spec, search, browseWindow),
+            } : undefined}
             range={range}
             services={viewerQuery(spec, panel, search).services}
             refreshEvery={refreshEvery}
@@ -386,7 +412,30 @@ export function DashboardView({ project, dashRef, env: consoleEnv, environments:
           />
           )}
           </PanelErrorBoundary>
-        ))}
+  );
+
+  // Viewing a dashboard with sections draws each under its heading (forge
+  // dashspec Section); editing the layout moves panels in their saved order,
+  // so it lays them out flat.
+  const sectioned = !layout && !!shown.sections?.length;
+  const grid = (
+    <ObsChartMarkersProvider markers={marks ? releases.markers : NO_MARKERS}>
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4" data-testid="dashboard-grid" data-editing={layout ? "true" : undefined}>
+        {sectioned
+          ? panelGroups(shown, search).flatMap((group) => [
+              ...(group.section
+                ? [
+                    <SectionHeading
+                      key={`section:${group.section.id}`}
+                      section={group.section}
+                      hidden={group.hidden}
+                      onToggle={() => onSearch({ hiddenSections: toggledHidden(search.hiddenSections, group.section!.id) })}
+                    />,
+                  ]
+                : []),
+              ...group.panels.map((panel, index) => card(panel, index)),
+            ])
+          : shown.panels.filter((panel) => !!layout || visiblePanel(panel, search)).map((panel, index) => card(panel, index))}
       </div>
       {!layout && shown.panels.every((panel) => !visiblePanel(panel, search)) && (
         <p className="rounded-lg border border-dashed border-border bg-surface-sunken p-4 text-sm text-ink-muted" role="status">
@@ -405,7 +454,8 @@ export function DashboardView({ project, dashRef, env: consoleEnv, environments:
       defaultRange={defaultRange}
       service={search.service}
       hasProcessFilter={spec.filters.some((filter) => filter.field === "service.name")}
-      compare={compare}
+      compare={target.mode === "off" ? "off" : compare}
+      defaultCompare={defaultCompare}
       target={target}
       releaseCompare={releaseCompare}
       refresh={refresh}
@@ -459,21 +509,21 @@ export function DashboardView({ project, dashRef, env: consoleEnv, environments:
               }}
               testId="dashboard-star"
             />
-            <SourceTag source={summary.source} />
+            <SourceTag source={summary.source} standard={isStandardBuiltinRef(dashRef)} />
             {viewingOld && <Tag tone="warning">v{search.version}</Tag>}
           </>
         }
         meta={<DashboardMeta summary={summary} panels={spec.panels.length} environments={environments} hrefs={hrefs} marks={marks} hasBands={bands.length > 0} />}
         actions={
           <>
-            <HistoryMenu orgId={orgId} dashRef={dashRef} summary={summary} hrefs={hrefs} search={search} />
+            {dashRef.kind !== "builtin" && <HistoryMenu orgId={orgId} dashRef={dashRef} summary={summary} hrefs={hrefs} search={search} />}
             {summary.readOnly ? (
               <button
                 type="button"
                 className={BUTTON_PRIMARY}
                 onClick={() => setDialog("copy")}
-                disabled={!doc.data?.canWrite}
-                title={doc.data?.canWrite ? undefined : readOnlyReason ?? "Only organization admins can create dashboards."}
+                disabled={!docCanWrite}
+                title={docCanWrite ? undefined : readOnlyReason ?? "Only organization admins can create dashboards."}
                 data-testid="dashboard-save-copy"
               >
                 Save as copy
@@ -487,8 +537,8 @@ export function DashboardView({ project, dashRef, env: consoleEnv, environments:
                     setDialog("promote");
                     promote.mutate(search.version);
                   }}
-                  disabled={!doc.data?.canWrite}
-                  title={doc.data?.canWrite ? undefined : readOnlyReason ?? "Only organization admins can promote dashboards."}
+                  disabled={!docCanWrite}
+                  title={docCanWrite ? undefined : readOnlyReason ?? "Only organization admins can promote dashboards."}
                   data-testid="dashboard-promote-open"
                 >
                   Promote to code
@@ -517,12 +567,12 @@ export function DashboardView({ project, dashRef, env: consoleEnv, environments:
                   triggerClassName={cn(ICON_BUTTON, "h-8 w-8 border border-border bg-surface")}
                   testId="dashboard-more"
                   entries={[
-                    { label: "Save as copy", onSelect: () => setDialog("copy"), disabled: !doc.data?.canWrite, testId: "dashboard-more-copy" },
+                    { label: "Save as copy", onSelect: () => setDialog("copy"), disabled: !docCanWrite, testId: "dashboard-more-copy" },
                     {
                       label: "Archive dashboard",
                       detail: "versions are kept",
                       onSelect: () => setDialog("archive"),
-                      disabled: !doc.data?.canWrite,
+                      disabled: !docCanWrite,
                       separated: true,
                       testId: "dashboard-more-archive",
                     },
@@ -547,6 +597,8 @@ export function DashboardView({ project, dashRef, env: consoleEnv, environments:
               )}
               : edit it there, or save a copy to change it here.
             </>
+          ) : summary.source === "builtin" ? (
+            <>Built in for every project, over this project&apos;s data: save a copy to change it.</>
           ) : (
             <>Generated by forge from your services on every release: save a copy to change it.</>
           )}
@@ -558,7 +610,7 @@ export function DashboardView({ project, dashRef, env: consoleEnv, environments:
           <span className="text-ink-muted">
             You are looking at <span className="font-medium text-ink">v{search.version}</span>. The current version is v{currentVersion}.
           </span>
-          {doc.data?.canWrite && (
+          {docCanWrite && (
             <button
               type="button"
               className={BUTTON_SMALL}
@@ -689,7 +741,7 @@ export function DashboardView({ project, dashRef, env: consoleEnv, environments:
       {dialog === "copy" && (
         <SaveCopyDialog
           sourceTitle={summary.title}
-          what={summary.readOnly ? (summary.source === "repo" ? "repo dashboard" : "generated dashboard") : "dashboard"}
+          what={!summary.readOnly ? "dashboard" : summary.source === "repo" ? "repo dashboard" : summary.source === "builtin" ? "built-in dashboard" : "generated dashboard"}
           env={env}
           pending={copy.isPending}
           error={copy.error}
@@ -865,6 +917,7 @@ function VariablesBar({
   service,
   hasProcessFilter,
   compare,
+  defaultCompare,
   target,
   releaseCompare,
   refresh,
@@ -881,6 +934,8 @@ function VariablesBar({
   service: string | undefined;
   hasProcessFilter: boolean;
   compare: CompareMode;
+  /** The dashboard's own comparison: choosing it clears the URL's. */
+  defaultCompare: CompareMode;
   target: CompareTarget;
   releaseCompare: CompareTarget;
   refresh: RefreshInterval;
@@ -942,7 +997,7 @@ function VariablesBar({
         label="Compare"
         value={compare}
         options={COMPARE_MODES.map((mode) => ({ value: mode, label: COMPARE_LABELS[mode] }))}
-        onChange={(mode) => onSearch({ compare: mode === "off" ? undefined : mode })}
+        onChange={(mode) => onSearch({ compare: mode === defaultCompare ? undefined : mode })}
         disabledReason={releaseCompare.mode === "unavailable" ? { release: releaseCompare.reason } : undefined}
         testId="dashboard-compare"
       />
@@ -1005,6 +1060,30 @@ function formatSpan(ms: number): string {
 
 // ── Panels ──────────────────────────────────────────────────────────────────
 
+/** A section's heading across the grid: its title, its description, and the toggle that hides or shows its panels. */
+function SectionHeading({ section, hidden, onToggle }: { section: DashboardSection; hidden: boolean; onToggle: () => void }) {
+  const Chevron = hidden ? ChevronRight : ChevronDown;
+  return (
+    <div className="col-span-full flex items-end justify-between gap-3 border-b border-border pb-1.5 pt-2 first:pt-0" data-testid={`dashboard-section-${section.id}`} data-hidden={hidden ? "true" : undefined}>
+      <div className="min-w-0">
+        <h2 className="text-base font-semibold tracking-tight text-ink">{section.title}</h2>
+        {section.description && <p className="text-xs text-ink-muted">{section.description}</p>}
+      </div>
+      <button
+        type="button"
+        className={cn(BUTTON_SMALL, "shrink-0")}
+        onClick={onToggle}
+        aria-expanded={!hidden}
+        aria-label={`${hidden ? "Show" : "Hide"} ${section.title}`}
+        data-testid={`dashboard-section-toggle-${section.id}`}
+      >
+        <Chevron className="h-3 w-3" aria-hidden="true" />
+        {hidden ? "Show" : "Hide"}
+      </button>
+    </div>
+  );
+}
+
 interface PanelLayoutControls {
   index: number;
   count: number;
@@ -1021,6 +1100,7 @@ function DashboardPanelCard({
   panel,
   queryPanel,
   scope,
+  dataContext,
   range: rangeOfCard,
   services,
   refreshEvery,
@@ -1033,6 +1113,7 @@ function DashboardPanelCard({
   panel: Panel;
   queryPanel: Panel;
   scope: ObsScope | null;
+  dataContext?: PanelDataContext;
   range: RangePreset;
   services: string[];
   refreshEvery: number | false;
@@ -1054,7 +1135,12 @@ function DashboardPanelCard({
   const rawQuery = usePanelQuery(scope, range, queryPanel, services, [], { refetchInterval: refreshEvery, enabled: near });
   // Not yet near is "not loaded yet", not "no data".
   const query = near || !panelRunsQuery(queryPanel.kind) ? rawQuery : { ...rawQuery, isLoading: true };
-  const comparable = (panel.kind === "line" || panel.kind === "number") && (target.mode === "period" || target.mode === "release");
+  // A sql panel compares only the figures it draws: its statement's windows
+  // (cohorts, rolling days) need not shift with the range the way a series'
+  // buckets do, so its charts are not overlaid. It asks once the figures came.
+  const comparable =
+    (panel.kind === "line" || panel.kind === "number" || (panel.kind === "sql" && drawsSqlFigures(queryPanel, rawQuery.data))) &&
+    (target.mode === "period" || target.mode === "release");
   const offsetKey = target.mode === "release" ? `release:${target.promotion.promotionId}` : target.mode === "period" ? `period:${range}` : "";
   const compareQuery = usePanelQuery(scope, range, queryPanel, services, [], {
     offsetKey,
@@ -1062,6 +1148,12 @@ function DashboardPanelCard({
       target.mode === "release" ? () => Math.max(0, Date.now() - target.promotion.promotedAtMs) : target.mode === "period" ? () => rangeMs(range) : undefined,
     refetchInterval: refreshEvery,
     enabled: comparable && near,
+  });
+  // A sql figure's sparkline: its trendSql, over the same window.
+  const trendPanel = useMemo(() => sqlTrendPanel(queryPanel), [queryPanel]);
+  const trendQuery = usePanelQuery(scope, range, trendPanel ?? queryPanel, services, [], {
+    refetchInterval: refreshEvery,
+    enabled: !!trendPanel && near && drawsSqlFigures(queryPanel, rawQuery.data),
   });
   const span = spanOf(panel);
   const offsetSec = target.mode === "release" || target.mode === "period" ? Math.round(target.offsetMs / 1000) : 0;
@@ -1140,10 +1232,12 @@ function DashboardPanelCard({
         )}
       </div>
       <div ref={bodyRef} className="px-4 pb-4 pt-2">
-        <PanelBody
+        <DataPanelBody
+          context={near ? dataContext : undefined}
           panel={queryPanel}
           query={query}
           compare={comparable && offsetSec ? { query: compareQuery, label: target.mode === "release" ? target.label : "previous period", offsetSec } : undefined}
+          trend={trendPanel ? trendQuery : undefined}
           bands={panel.kind === "line" ? bands : undefined}
           links={links}
         />
