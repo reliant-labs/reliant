@@ -130,8 +130,8 @@ func (r *Repo) DeleteChat(ctx context.Context, id string) error {
 	return store.RemoveChat(ctx, r.ORM(), id)
 }
 
-func (r *Repo) ListArchivedChats(ctx context.Context, userID string) ([]*ArchivedChatInfo, error) {
-	return store.ListArchivedChats(ctx, r.ORM(), userID)
+func (r *Repo) ListArchivedChats(ctx context.Context, userID string, org *core.OrgScope) ([]*ArchivedChatInfo, error) {
+	return store.ListArchivedChats(ctx, r.ORM(), userID, org)
 }
 
 // ListRuns is the cross-cutting run list, scoped to filters.UserID.
