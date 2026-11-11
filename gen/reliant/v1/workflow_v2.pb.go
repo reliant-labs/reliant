@@ -2024,8 +2024,13 @@ type CallLLMArgs struct {
 	// exclusion latches durably on the thread for subsequent turns and recovery.
 	// Bootstrap prompts, history, explicit skills/messages and tools are unchanged.
 	ExcludeAmbientMemory bool `protobuf:"varint,16,opt,name=exclude_ambient_memory,json=excludeAmbientMemory,proto3" json:"exclude_ambient_memory,omitempty"`
-	unknownFields        protoimpl.UnknownFields
-	sizeCache            protoimpl.SizeCache
+	// Opt out of the configured skill catalog for THIS call only. Omits the
+	// announcement and automatic skill preloads. Nonempty skills is rejected.
+	// Does not redact history or restrict tools (including explicit skill loads);
+	// strict no-skill workflows must set this on every call and offer no tools.
+	ExcludeSkillCatalog bool `protobuf:"varint,17,opt,name=exclude_skill_catalog,json=excludeSkillCatalog,proto3" json:"exclude_skill_catalog,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *CallLLMArgs) Reset() {
@@ -2138,6 +2143,13 @@ func (x *CallLLMArgs) GetContinueTurn() *CelBool {
 func (x *CallLLMArgs) GetExcludeAmbientMemory() bool {
 	if x != nil {
 		return x.ExcludeAmbientMemory
+	}
+	return false
+}
+
+func (x *CallLLMArgs) GetExcludeSkillCatalog() bool {
+	if x != nil {
+		return x.ExcludeSkillCatalog
 	}
 	return false
 }
@@ -8847,7 +8859,7 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"\n" +
 	"ToolsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12-\n" +
-	"\x05value\x18\x02 \x01(\v2\x17.google.protobuf.StructR\x05value:\x028\x01\"\xa8\x10\n" +
+	"\x05value\x18\x02 \x01(\v2\x17.google.protobuf.StructR\x05value:\x028\x01\"\x91\x12\n" +
 	"\vCallLLMArgs\x12\x97\x01\n" +
 	"\x05model\x18\x01 \x01(\v2\x1c.reliant.v1.CelModelSelectorBc\x82\xb5\x18_\n" +
 	";A model tag (flagship, fast, cheap) or an explicit model ID*\x05ModelJ\x05ModelZ\x05basicp\x01\x82\x01\bflagshipR\x05model\x12\xd4\x01\n" +
@@ -8873,7 +8885,9 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"\rcontinue_turn\x18\x0f \x01(\v2\x13.reliant.v1.CelBoolB\x7f\x82\xb5\x18{\n" +
 	"VCall the provider even though history ends with the assistant (continue a paused turn) \x01*\x06PromptJ\rContinue turnZ\badvancedR\fcontinueTurn\x12\xb2\x01\n" +
 	"\x16exclude_ambient_memory\x18\x10 \x01(\bB|\x82\xb5\x18x\n" +
-	"LExclude automatic saved memories (default false); not full context isolation*\x06PromptJ\x16Exclude ambient memoryZ\badvancedR\x14excludeAmbientMemory:\\\x8a\xb5\x18X\n" +
+	"LExclude automatic saved memories (default false); not full context isolation*\x06PromptJ\x16Exclude ambient memoryZ\badvancedR\x14excludeAmbientMemory\x12\xe6\x01\n" +
+	"\x15exclude_skill_catalog\x18\x11 \x01(\bB\xb1\x01\x82\xb5\x18\xac\x01\n" +
+	"\x80\x01Exclude configured skills for this call (default false); rejects skill preloads, does not redact history or restrict other tools*\x06PromptJ\x15Exclude skill catalogZ\badvancedR\x13excludeSkillCatalog:\\\x8a\xb5\x18X\n" +
 	"\bcall_llm\x12\bCall LLM\x1a4Send a prompt to a language model and get a response*\aagentic2\x03Bot\"\xa3\x01\n" +
 	"\fResponseTool\x12)\n" +
 	"\x04name\x18\x01 \x01(\v2\x15.reliant.v1.CelStringR\x04name\x127\n" +
