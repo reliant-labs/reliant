@@ -4,6 +4,7 @@ package dashspeccontract
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -79,14 +80,61 @@ const (
 	servicePredicate = "(empty({services:Array(String)}) OR has({services:Array(String)}, ServiceName))"
 )
 
+// statement is one SELECT a panel runs: its SQL, or its TrendSQL (the
+// sparkline, which the console runs as a sql panel of its own, through the
+// same hosted executor, scope and parameters).
+type statement struct {
+	name, sql string
+}
+
+// statements returns every statement the panel runs: SQL as "<id>", and
+// TrendSQL, when set, as "<id>/trend".
+func statements(p dashspec.Panel) []statement {
+	out := []statement{{p.ID, p.SQL}}
+	if strings.TrimSpace(p.TrendSQL) != "" {
+		out = append(out, statement{p.ID + "/trend", p.TrendSQL})
+	}
+	return out
+}
+
+// scopeProblems returns why a statement breaks the product-usage contract:
+// it reads a table other than the unqualified product_events, reads none, or
+// reads product_events without both the environment and the service
+// predicate. Empty means it holds.
+func scopeProblems(sql string) []string {
+	var problems []string
+	reads := 0
+	for _, m := range tableRef.FindAllStringSubmatch(sql, -1) {
+		if m[1] != "" {
+			continue // ARRAY JOIN: an array expression, not a table
+		}
+		if m[2] != "product_events" {
+			problems = append(problems, fmt.Sprintf("reads table %q; a product-usage statement reads only the unqualified product_events of the org's own database", m[2]))
+			continue
+		}
+		reads++
+	}
+	if reads == 0 {
+		return append(problems, "reads no product_events")
+	}
+	if n := strings.Count(sql, envPredicate); n != reads {
+		problems = append(problems, fmt.Sprintf("%d reads of product_events, %d narrowed by the environment scope %s", reads, n, envPredicate))
+	}
+	if n := strings.Count(sql, servicePredicate); n != reads {
+		problems = append(problems, fmt.Sprintf("%d reads of product_events, %d narrowed by the service filter %s", reads, n, servicePredicate))
+	}
+	return problems
+}
+
 // TestUsageDashboardReadsOnlyScopedProductEvents: every panel of the shipped
-// product-usage dashboard is a sql panel whose statement reads only the
-// unqualified product_events table, and narrows each read of it by the
-// environment and service filters. An unqualified table resolves in the
-// database the hosted executor runs the statement in (the org's own,
-// obsquery.Scope.Database), so the statement itself names no other tenant's
-// data: that, not the predicates, is the isolation boundary. A read without
-// the predicates would ignore a restricted viewer's environments.
+// product-usage dashboard is a sql panel, and every statement it runs (its
+// SQL and its TrendSQL sparkline) reads only the unqualified product_events
+// table, and narrows each read of it by the environment and service filters.
+// An unqualified table resolves in the database the hosted executor runs the
+// statement in (the org's own, obsquery.Scope.Database), so the statement
+// itself names no other tenant's data: that, not the predicates, is the
+// isolation boundary. A read without the predicates would ignore a restricted
+// viewer's environments.
 func TestUsageDashboardReadsOnlyScopedProductEvents(t *testing.T) {
 	d := usageDashboard(t)
 	if len(d.Panels) == 0 {
@@ -99,37 +147,59 @@ func TestUsageDashboardReadsOnlyScopedProductEvents(t *testing.T) {
 	if filters["env"] != "deployment.environment.name" || filters["service"] != "service.name" {
 		t.Errorf("the %q dashboard's filters are %v; want env and service, which the console binds to {env_ids} and {services}", usageDashboardID, filters)
 	}
+	trends := 0
 	for _, p := range d.Panels {
-		t.Run(p.ID, func(t *testing.T) {
-			if p.Kind != dashspec.KindSQL {
-				t.Fatalf("kind = %s; the product-usage panels are sql panels", p.Kind)
+		if p.Kind != dashspec.KindSQL {
+			t.Errorf("%s: kind = %s; the product-usage panels are sql panels", p.ID, p.Kind)
+			continue
+		}
+		for _, s := range statements(p) {
+			if s.name != p.ID {
+				trends++
 			}
-			reads := 0
-			for _, m := range tableRef.FindAllStringSubmatch(p.SQL, -1) {
-				if m[1] != "" {
-					continue // ARRAY JOIN: an array expression, not a table
+			t.Run(s.name, func(t *testing.T) {
+				for _, problem := range scopeProblems(s.sql) {
+					t.Errorf("%s:\n%s", problem, s.sql)
 				}
-				if m[2] != "product_events" {
-					t.Errorf("reads table %q; a product-usage panel reads only the unqualified product_events of the org's own database", m[2])
-					continue
-				}
-				reads++
-			}
-			if reads == 0 {
-				t.Fatalf("reads no product_events:\n%s", p.SQL)
-			}
-			if n := strings.Count(p.SQL, envPredicate); n != reads {
-				t.Errorf("%d reads of product_events, %d narrowed by the environment scope %s:\n%s", reads, n, envPredicate, p.SQL)
-			}
-			if n := strings.Count(p.SQL, servicePredicate); n != reads {
-				t.Errorf("%d reads of product_events, %d narrowed by the service filter %s:\n%s", reads, n, servicePredicate, p.SQL)
+			})
+		}
+	}
+	// forge #2010 gave the headline figures sparklines. A generator change
+	// that drops them all would leave this test checking SQL alone; say so.
+	if trends == 0 {
+		t.Errorf("no panel of the %q dashboard has a trendSql; the trend checks above ran over nothing", usageDashboardID)
+	}
+}
+
+// TestScopeProblemsRefusesAnUnscopedTrend proves the check above fails when it
+// should, on a statement shaped like the shipped rolling-window trends (a
+// subquery read under an ARRAY JOIN): with either predicate removed, with a
+// second, unscoped read, or with a read of another database's product_events.
+func TestScopeProblemsRefusesAnUnscopedTrend(t *testing.T) {
+	scoped := "SELECT addDays(seen, offset) AS day, uniqExact(UserId) AS wau FROM (SELECT DISTINCT UserId, toDate(Timestamp) AS seen FROM product_events WHERE Timestamp < {to:DateTime64(9)} AND " +
+		envPredicate + " AND " + servicePredicate + ") ARRAY JOIN range(7) AS offset GROUP BY day ORDER BY day"
+	if p := scopeProblems(scoped); len(p) != 0 {
+		t.Fatalf("the scoped trend is refused: %v", p)
+	}
+	for name, sql := range map[string]string{
+		"no environment predicate": strings.Replace(scoped, " AND "+envPredicate, "", 1),
+		"no service predicate":     strings.Replace(scoped, " AND "+servicePredicate, "", 1),
+		"a second, unscoped read":  scoped + " UNION ALL SELECT toDate(Timestamp), count() FROM product_events GROUP BY 1",
+		"another org's database":   strings.Replace(scoped, "FROM product_events", "FROM t_org_b.product_events", 1),
+		"another table":            strings.Replace(scoped, "FROM product_events", "FROM otel_logs", 1),
+		"no table at all":          "SELECT today() AS day, 1 AS n",
+	} {
+		t.Run(name, func(t *testing.T) {
+			if p := scopeProblems(sql); len(p) == 0 {
+				t.Errorf("accepted:\n%s", sql)
 			}
 		})
 	}
 }
 
-// TestUsageDashboardBindsTheViewersScope compiles every shipped panel with
-// forge's sql-panel compiler, the one the hosted console runs, and checks what
+// TestUsageDashboardBindsTheViewersScope compiles every statement a shipped
+// panel runs (its SQL and its TrendSQL sparkline) with forge's sql-panel
+// compiler, the one the hosted console runs, and checks what
 // it binds: a viewer restricted to no environment gets a list no row matches
 // (so the env predicate above is false for every row), a viewer restricted to
 // one environment gets that environment alone, the service filter is bound,
@@ -170,29 +240,31 @@ func TestUsageDashboardBindsTheViewersScope(t *testing.T) {
 		},
 	}
 	for _, p := range d.Panels {
-		for name, c := range cases {
-			t.Run(p.ID+"/"+name, func(t *testing.T) {
-				stmt, err := obsquery.SQLPanel{Scope: c.scope, SQL: p.SQL, StepSeconds: 3600}.Compile()
-				if err != nil {
-					t.Fatalf("compile: %v", err)
-				}
-				if stmt.SQL != p.SQL {
-					t.Errorf("the compiled statement differs from the shipped one: nothing may be spliced into it")
-				}
-				if got := stmt.Params[dashspec.SQLParamEnvIDs]; got != c.envIDs {
-					t.Errorf("env_ids = %s; want %s", got, c.envIDs)
-				}
-				if got := stmt.Params[dashspec.SQLParamServices]; got != c.services {
-					t.Errorf("services = %s; want %s", got, c.services)
+		for _, st := range statements(p) {
+			for name, c := range cases {
+				t.Run(st.name+"/"+name, func(t *testing.T) {
+					stmt, err := obsquery.SQLPanel{Scope: c.scope, SQL: st.sql, StepSeconds: 3600}.Compile()
+					if err != nil {
+						t.Fatalf("compile: %v", err)
+					}
+					if stmt.SQL != st.sql {
+						t.Errorf("the compiled statement differs from the shipped one: nothing may be spliced into it")
+					}
+					if got := stmt.Params[dashspec.SQLParamEnvIDs]; got != c.envIDs {
+						t.Errorf("env_ids = %s; want %s", got, c.envIDs)
+					}
+					if got := stmt.Params[dashspec.SQLParamServices]; got != c.services {
+						t.Errorf("services = %s; want %s", got, c.services)
+					}
+				})
+			}
+			t.Run(st.name+"/server database", func(t *testing.T) {
+				s := org(nil)
+				s.Database = obsquery.LocalDatabase
+				if _, err := (obsquery.SQLPanel{Scope: s, SQL: st.sql, StepSeconds: 3600}).Compile(); err == nil {
+					t.Errorf("a hosted scope naming the server's %q database compiles; it must be refused", obsquery.LocalDatabase)
 				}
 			})
 		}
-		t.Run(p.ID+"/server database", func(t *testing.T) {
-			s := org(nil)
-			s.Database = obsquery.LocalDatabase
-			if _, err := (obsquery.SQLPanel{Scope: s, SQL: p.SQL, StepSeconds: 3600}).Compile(); err == nil {
-				t.Errorf("a hosted scope naming the server's %q database compiles; it must be refused", obsquery.LocalDatabase)
-			}
-		})
 	}
 }

@@ -26,6 +26,11 @@
       "source": "config"
     },
     {
+      "name": "AUTH_COOKIE_DOMAIN",
+      "type": "string",
+      "source": "config"
+    },
+    {
       "name": "AUTH_MODE",
       "type": "string",
       "source": "config"
