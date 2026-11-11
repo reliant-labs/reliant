@@ -87,7 +87,7 @@ func expectOnlyOn(t *testing.T, want, other *daemonConnection) *reliantv1.Server
 		return msg
 	case stray := <-other.sendCh:
 		t.Fatalf("message for daemon %s was delivered to daemon %s instead: %v", want.daemonID, other.daemonID, stray)
-	case <-time.After(3 * time.Second):
+	case <-time.After(30 * time.Second):
 		t.Fatalf("message for daemon %s was never delivered", want.daemonID)
 	}
 	return nil

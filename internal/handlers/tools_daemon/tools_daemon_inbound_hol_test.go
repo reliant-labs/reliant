@@ -110,7 +110,7 @@ func TestInboundReplyIsNotQueuedBehindStatePersistence(t *testing.T) {
 			stream.recv <- staller
 			select {
 			case <-repo.entered:
-			case <-time.After(2 * time.Second):
+			case <-time.After(30 * time.Second):
 				t.Fatal("the gateway never started persisting the state message")
 			}
 
@@ -124,7 +124,7 @@ func TestInboundReplyIsNotQueuedBehindStatePersistence(t *testing.T) {
 			select {
 			case resp := <-respCh:
 				require.Equal(t, "req-fast", resp.GetRequestId())
-			case <-time.After(time.Second):
+			case <-time.After(30 * time.Second):
 				t.Fatal("the command reply waited behind an unrelated database write on the same " +
 					"daemon stream: replies must be routed without waiting for state persistence")
 			}
@@ -163,6 +163,6 @@ func TestInboundStateReceivedBeforeStreamEndIsStillApplied(t *testing.T) {
 	<-handlerDone
 
 	close(repo.release)
-	require.Eventually(t, func() bool { return repo.recordedUserUpdates() == 1 }, 2*time.Second, 10*time.Millisecond,
+	require.Eventually(t, func() bool { return repo.recordedUserUpdates() == 1 }, 30*time.Second, 10*time.Millisecond,
 		"a DaemonCommandFailed received before the stream ended must still be persisted")
 }

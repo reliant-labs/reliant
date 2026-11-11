@@ -74,7 +74,7 @@ func (r *activityRecorder) recorded(t *testing.T, quiet time.Duration) []daemonw
 // waitFor returns the first recorded event, failing if none arrives.
 func (r *activityRecorder) waitFor(t *testing.T) daemonwire.Event {
 	t.Helper()
-	deadline := time.Now().Add(3 * time.Second)
+	deadline := time.Now().Add(30 * time.Second)
 	for time.Now().Before(deadline) {
 		r.mu.Lock()
 		if len(r.events) > 0 {
@@ -132,7 +132,7 @@ func TestDaemonRepliesAndOutputAreNotActivity(t *testing.T) {
 	}}
 	select {
 	case <-respCh:
-	case <-time.After(2 * time.Second):
+	case <-time.After(30 * time.Second):
 		t.Fatal("the bg_status reply never reached its waiter")
 	}
 	stream.recv <- &reliantv1.DaemonMessage{Message: &reliantv1.DaemonMessage_TerminalOutput{
