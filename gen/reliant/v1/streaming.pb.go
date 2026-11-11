@@ -1426,8 +1426,14 @@ type UserUpdateData struct {
 	EntityId       string                 `protobuf:"bytes,9,opt,name=entity_id,json=entityId,proto3" json:"entity_id,omitempty"`
 	DataJson       string                 `protobuf:"bytes,10,opt,name=data_json,json=dataJson,proto3" json:"data_json,omitempty"` // JSON-encoded update data
 	CreatedAt      string                 `protobuf:"bytes,11,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// The org the update is about: the one it was stored with, else the org of
+	// the chat, project or saved workflow it names, as the stream decided when
+	// it chose to deliver it. Unset for an update about nothing of an org (a
+	// daemon signal), or about a resource not yet stamped with one. A client
+	// showing one org at a time ignores updates about another.
+	OrgId         *string `protobuf:"bytes,12,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *UserUpdateData) Reset() {
@@ -1533,6 +1539,13 @@ func (x *UserUpdateData) GetDataJson() string {
 func (x *UserUpdateData) GetCreatedAt() string {
 	if x != nil {
 		return x.CreatedAt
+	}
+	return ""
+}
+
+func (x *UserUpdateData) GetOrgId() string {
+	if x != nil && x.OrgId != nil {
+		return *x.OrgId
 	}
 	return ""
 }
@@ -1937,7 +1950,7 @@ const file_reliant_v1_streaming_proto_rawDesc = "" +
 	"\rlast_sequence\x18\x01 \x01(\x03R\flastSequence\"p\n" +
 	"\x0fUserUpdateBatch\x124\n" +
 	"\aupdates\x18\x01 \x03(\v2\x1a.reliant.v1.UserUpdateDataR\aupdates\x12'\n" +
-	"\x0flatest_sequence\x18\x02 \x01(\x03R\x0elatestSequence\"\xc4\x03\n" +
+	"\x0flatest_sequence\x18\x02 \x01(\x03R\x0elatestSequence\"\xeb\x03\n" +
 	"\x0eUserUpdateData\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x17\n" +
 	"\auser_id\x18\x02 \x01(\tR\x06userId\x12'\n" +
@@ -1955,11 +1968,13 @@ const file_reliant_v1_streaming_proto_rawDesc = "" +
 	"\tdata_json\x18\n" +
 	" \x01(\tR\bdataJson\x12\x1d\n" +
 	"\n" +
-	"created_at\x18\v \x01(\tR\tcreatedAtB\r\n" +
+	"created_at\x18\v \x01(\tR\tcreatedAt\x12\x1a\n" +
+	"\x06org_id\x18\f \x01(\tH\x03R\x05orgId\x88\x01\x01B\r\n" +
 	"\v_project_idB\x0e\n" +
 	"\f_worktree_idB\n" +
 	"\n" +
-	"\b_chat_id\")\n" +
+	"\b_chat_idB\t\n" +
+	"\a_org_id\")\n" +
 	"\tHeartbeat\x12\x1c\n" +
 	"\ttimestamp\x18\x01 \x01(\x03R\ttimestamp\"\x9d\x06\n" +
 	"\x12NodeExecutionState\x12\x17\n" +

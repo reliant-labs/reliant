@@ -37,10 +37,11 @@
  * inventing a status.
  */
 
-import { useState, type ReactNode } from "react";
-import { AlertTriangle, Download, Fingerprint, KeyRound, Laptop, Lock, ShieldOff } from "lucide-react";
+import { useContext, useState, type ReactNode } from "react";
+import { AlertTriangle, ArrowRight, Download, Fingerprint, KeyRound, Laptop, Lock, ShieldOff, Users as UsersIcon } from "lucide-react";
 
 import Badge from "@/components/forge-ui/badge";
+import Link from "@/components/forge-ui/link";
 import { CardInset } from "@/components/forge-ui/card";
 import SkeletonLoader from "@/components/forge-ui/skeleton_loader";
 import Card from "@/components/forge-ui/card";
@@ -59,7 +60,9 @@ import type { LiveEnv } from "@/services/forge/live";
 import type { EnvLifecycle } from "@/services/forge/roster";
 import { cn } from "@/lib/utils";
 
+import { ForgeConsoleContext } from "../Console/consoleContext";
 import { formatAgo, formatIn } from "../Observability/format";
+import { useObsReadOnly } from "../Observability/obsReadOnly";
 import { Panel } from "./EnvTabPanels";
 import { IdentityUsers } from "./IdentityUsers";
 import DataTable, { type DataTableColumn } from "@/components/forge-ui/data_table";
@@ -71,9 +74,17 @@ export interface IdentityTabProps {
   liveLoading: boolean;
   /** Names an environment of this project by its control-plane id (owners and sharers arrive as ids). */
   envNameById: (id: string) => string | undefined;
+  /**
+   * "tab" (default): the environment page's Identity tab, one column, with a
+   * link to the project's Users page. "page": the Users page itself
+   * (Users/UsersPage.tsx) — the people first, the sign-in service beside them.
+   */
+  layout?: IdentityLayout;
 }
 
-export function IdentityTab({ envName, lifecycle, live, liveLoading, envNameById }: IdentityTabProps) {
+export type IdentityLayout = "tab" | "page";
+
+export function IdentityTab({ envName, lifecycle, live, liveLoading, envNameById, layout = "tab" }: IdentityTabProps) {
   if (lifecycle === "local") return <LocalIdentity envName={envName} />;
   if (liveLoading && !live) return <IdentitySkeleton />;
   if (!live) {
@@ -84,17 +95,19 @@ export function IdentityTab({ envName, lifecycle, live, liveLoading, envNameById
       </p>
     );
   }
-  return <DeployedIdentity envId={live.id} envName={envName} envNameById={envNameById} />;
+  return <DeployedIdentity envId={live.id} envName={envName} envNameById={envNameById} layout={layout} />;
 }
 
 function DeployedIdentity({
   envId,
   envName,
   envNameById,
+  layout,
 }: {
   envId: string;
   envName: string;
   envNameById: (id: string) => string | undefined;
+  layout: IdentityLayout;
 }) {
   const org = useIdentityOrg();
   const status = useIdentityStatus(org.orgId, envId);
@@ -172,33 +185,134 @@ function DeployedIdentity({
         </Frame>
       );
     }
+    return <ManagedIdentityIntro envName={envName} />;
+  }
+
+  const readOnlyNote = !s.callerCanManage && (
+    <p className="inline-flex items-center gap-1.5 text-xs text-ink-muted" role="status" data-testid="identity-read-only">
+      <Lock className="h-3 w-3" aria-hidden="true" />
+      You can view this environment&apos;s users. Inviting and changing them needs an organization admin.
+    </p>
+  );
+
+  if (layout === "page") {
+    // The people are the page; the sign-in service that holds them sits beside
+    // them on a wide screen and after them on a narrow one.
     return (
-      <Frame
-        icon={<Fingerprint className="h-4 w-4" />}
-        title={`${envName} doesn't declare a managed identity`}
-        testId="identity-none"
-      >
-        <p>
-          Declare one with <code className="font-mono text-ink">forge.ManagedIdentity</code> in{" "}
-          <code className="font-mono text-ink">deploy/kcl/identity.k</code> and deploy. Reliant then runs its sign-in
-          service — issuer, users, roles — and they show here.
-        </p>
-      </Frame>
+      <div className="space-y-4" data-testid="identity-tab">
+        {readOnlyNote}
+        <div className="grid grid-cols-1 items-start gap-4 xl:grid-cols-[minmax(0,1fr)_24rem]">
+          <div className="min-w-0 space-y-4">
+            <IdentityUsers orgId={org.orgId} envId={envId} envName={envName} status={s} />
+          </div>
+          <div className="min-w-0 space-y-4">
+            <StatusPanel envId={envId} status={s} envNameById={envNameById} narrow />
+            <ExportPanel orgId={org.orgId} envId={envId} status={s} />
+          </div>
+        </div>
+      </div>
     );
   }
 
   return (
     <div className="space-y-4" data-testid="identity-tab">
-      {!s.callerCanManage && (
-        <p className="inline-flex items-center gap-1.5 text-xs text-ink-muted" role="status" data-testid="identity-read-only">
-          <Lock className="h-3 w-3" aria-hidden="true" />
-          You can view this environment&apos;s users. Inviting and changing them needs an organization admin.
-        </p>
-      )}
+      <UsersPageLink envName={envName} />
+      {readOnlyNote}
       <StatusPanel envId={envId} status={s} envNameById={envNameById} />
       <IdentityUsers orgId={org.orgId} envId={envId} envName={envName} status={s} />
       <ExportPanel orgId={org.orgId} envId={envId} status={s} />
     </div>
+  );
+}
+
+/** On the environment page: the project's Users page, scoped to this environment, is where people are managed day to day. */
+function UsersPageLink({ envName }: { envName: string }) {
+  const console = useContext(ForgeConsoleContext);
+  if (!console) return null;
+  return (
+    <p className="flex flex-wrap items-center gap-1.5 text-xs text-ink-muted" data-testid="identity-users-page-link">
+      <UsersIcon className="h-3.5 w-3.5" aria-hidden="true" />
+      <span>The people who sign in to {envName} also have their own page: Users, in the sidebar.</span>
+      <Link href={console.href({ kind: "users" }, { env: envName })} className="inline-flex items-center gap-0.5 font-medium text-primary-ink hover:underline">
+        Open Users
+        <ArrowRight className="h-3 w-3" aria-hidden="true" />
+      </Link>
+    </p>
+  );
+}
+
+// ── No instance ──────────────────────────────────────────────────────────────
+
+/** Where managed identity is explained. */
+export const MANAGED_IDENTITY_DOCS = "https://docs.reliantlabs.io/forge/deploy/what-gets-deployed#on-reliant-hosting";
+
+const INTRO_POINTS: { icon: ReactNode; title: string; body: string }[] = [
+  {
+    icon: <Fingerprint className="h-4 w-4" />,
+    title: "Sign-in you don't host",
+    body: "Sign-in and password-reset pages on an issuer Reliant runs, wired into your workloads when you deploy.",
+  },
+  {
+    icon: <UsersIcon className="h-4 w-4" />,
+    title: "Your users, here",
+    body: "Everyone who can sign in, their state and roles. Invite, lock, reset or remove people without writing a script.",
+  },
+  {
+    icon: <KeyRound className="h-4 w-4" />,
+    title: "Roles in code",
+    body: "Declare roles beside the rest of the environment. Members you declare are converged on every deploy.",
+  },
+  {
+    icon: <Download className="h-4 w-4" />,
+    title: "Yours to take",
+    body: "Export every user, password hashes included, in a form another sign-in service can import.",
+  },
+];
+
+/**
+ * An environment that declares no managed identity: what declaring one gives
+ * you and the one line that does it — not a blank page.
+ */
+function ManagedIdentityIntro({ envName }: { envName: string }) {
+  return (
+    <Card padding="lg" data-testid="identity-none" role="status" className="space-y-5">
+      <div className="space-y-1.5">
+        <h2 className="text-base font-semibold text-ink">{envName} doesn&apos;t declare a managed identity</h2>
+        <p className="max-w-2xl text-sm text-ink-muted">
+          Declare one and Reliant runs the sign-in service for this environment&apos;s users: no auth server to host and no
+          client secrets to copy between places.
+        </p>
+      </div>
+      <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2" data-testid="identity-none-points">
+        {INTRO_POINTS.map((point) => (
+          <li key={point.title} className="flex items-start gap-3">
+            <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-border/60 bg-surface-sunken text-ink-muted" aria-hidden="true">
+              {point.icon}
+            </span>
+            <span className="min-w-0 space-y-0.5">
+              <span className="block text-sm font-medium text-ink">{point.title}</span>
+              <span className="block text-xs text-ink-muted">{point.body}</span>
+            </span>
+          </li>
+        ))}
+      </ul>
+      <div className="space-y-2">
+        <p className="text-xs font-medium text-ink">
+          Add it to <code className="font-mono">deploy/kcl/{envName}/main.k</code> and deploy:
+        </p>
+        <CardInset padding="sm" className="overflow-x-auto">
+          <pre className="font-mono text-xs text-ink" data-testid="identity-none-declaration">
+            identity = forge.ManagedIdentity {"{}"}
+          </pre>
+        </CardInset>
+        <p className="text-xs text-ink-muted">
+          Reliant creates the instance on its next pass, usually within a minute, and the people who sign up show here.{" "}
+          <a href={MANAGED_IDENTITY_DOCS} target="_blank" rel="noreferrer" className="font-medium text-primary-ink underline-offset-2 hover:underline">
+            How hosted environments sign users in
+          </a>
+        </p>
+      </div>
+    </Card>
   );
 }
 
@@ -244,31 +358,29 @@ const DELIVERY_VARIANT: Record<IdentityDeliveryState, "success" | "warning" | "e
 
 type AppRow = { name: string; app: IdentityApp };
 
+function BrokerToken({ app }: { app: IdentityApp }) {
+  if (app.brokerExpiresAtMs === null) return <>none</>;
+  const expired = app.brokerExpiresAtMs <= Date.now();
+  return <span className={cn(expired && "text-danger-ink")}>{expired ? "expired" : `renews ${formatIn(app.brokerExpiresAtMs)}`}</span>;
+}
+
 const APP_COLUMNS: DataTableColumn<AppRow>[] = [
   { key: "name", header: "Name", render: (_, { app }) => app.name },
   { key: "clientId", header: "Client id", className: "font-mono text-xs", render: (_, { app }) => app.clientId || "—" },
-  {
-    key: "broker",
-    header: "Broker token",
-    className: "text-xs text-ink-muted",
-    render: (_, { app }) => {
-      if (app.brokerExpiresAtMs === null) return "none";
-      const expired = app.brokerExpiresAtMs <= Date.now();
-      return (
-        <span className={cn(expired && "text-danger-ink")}>{expired ? "expired" : `renews ${formatIn(app.brokerExpiresAtMs)}`}</span>
-      );
-    },
-  },
+  { key: "broker", header: "Broker token", className: "text-xs text-ink-muted", render: (_, { app }) => <BrokerToken app={app} /> },
 ];
 
 function StatusPanel({
   envId,
   status: s,
   envNameById,
+  narrow = false,
 }: {
   envId: string;
   status: IdentityStatus;
   envNameById: (id: string) => string | undefined;
+  /** A side column: facts stacked, and the applications as a list rather than a table. */
+  narrow?: boolean;
 }) {
   // The control plane names the owner and sharers (they can be in another
   // project); an older server sends ids only, which this project may know.
@@ -289,7 +401,7 @@ function StatusPanel({
       testId="identity-status"
     >
       <div className="space-y-4">
-        <dl className="grid grid-cols-1 gap-x-6 gap-y-3 text-sm sm:grid-cols-[max-content_1fr]">
+        <dl className={cn("grid grid-cols-1 gap-x-6 gap-y-3 text-sm", !narrow && "sm:grid-cols-[max-content_1fr]")}>
           <dt className="text-xs text-ink-muted">Issuer</dt>
           <dd className="min-w-0 break-all font-mono text-ink" data-testid="identity-issuer">
             {s.issuer || "—"}
@@ -382,6 +494,18 @@ function StatusPanel({
         <Section title="Applications">
           {s.apps.length === 0 ? (
             <p className="text-xs text-ink-muted">No applications are registered yet.</p>
+          ) : narrow ? (
+            <ul className="space-y-2" data-testid="identity-apps">
+              {s.apps.map((app) => (
+                <li key={app.name} className="min-w-0 space-y-0.5 text-xs">
+                  <p className="text-sm text-ink">{app.name}</p>
+                  <p className="break-all font-mono text-ink-muted">{app.clientId || "—"}</p>
+                  <p className="text-ink-muted">
+                    Broker token <BrokerToken app={app} />
+                  </p>
+                </li>
+              ))}
+            </ul>
           ) : (
             <div data-testid="identity-apps">
               <DataTable<AppRow>
@@ -448,6 +572,7 @@ function ExportPanel({ orgId, envId, status: s }: { orgId: string; envId: string
   const fetchLink = useIdentityMutation(orgId, envId, (api, o, e, _: void) => api.getExportURL(o, e), { secret: true });
   const exportNow = useIdentityMutation(orgId, envId, (api, o, e, _: void) => api.requestExport(o, e), { secret: true });
   const serving = s.state === "ready" || s.state === "degraded";
+  const { readOnly, reason } = useObsReadOnly();
 
   let body: ReactNode;
   if (!s.exportEnabled) {
@@ -463,7 +588,7 @@ function ExportPanel({ orgId, envId, status: s }: { orgId: string; envId: string
     ) : (
       <div className="space-y-2" data-testid="identity-export-on-demand">
         <p>
-          Exports every user of this sign-in service — password hashes included, in a form Zitadel can import — and gives you
+          Exports every user of this sign-in service — password hashes included, in a standard identity export format — and gives you
           a download link that works for a few minutes for whoever holds it. Exporting again within 15 minutes returns the
           same export.
         </p>
@@ -475,6 +600,8 @@ function ExportPanel({ orgId, envId, status: s }: { orgId: string; envId: string
             size="sm"
             leftIcon={<Download className="h-3.5 w-3.5" />}
             loading={exportNow.isPending}
+            disabled={readOnly}
+            title={readOnly ? reason : undefined}
             onClick={() => exportNow.mutate(undefined, { onSuccess: setLink })}
           >
             Export users
@@ -508,6 +635,8 @@ function ExportPanel({ orgId, envId, status: s }: { orgId: string; envId: string
             size="sm"
             leftIcon={<Download className="h-3.5 w-3.5" />}
             loading={fetchLink.isPending}
+            disabled={readOnly}
+            title={readOnly ? reason : undefined}
             onClick={() => fetchLink.mutate(undefined, { onSuccess: setLink })}
           >
             Get download link

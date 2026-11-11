@@ -24,6 +24,7 @@ export const DEMO_TIP_KEYS = [
   "secrets",
   "domains",
   "activity",
+  "users",
   "dashboards",
   "errors",
   "traces",
@@ -87,6 +88,8 @@ export function demoTipKey(pathname: string, search: Record<string, unknown>): D
       return "domains";
     case "activity":
       return "activity";
+    case "users":
+      return "users";
     case "dashboard":
       return "dashboards";
     case "obs-view":
@@ -97,7 +100,7 @@ export function demoTipKey(pathname: string, search: Record<string, unknown>): D
 }
 
 /** Search keys that open one item inside a list page: a trace, a span, an issue, a session, an alert rule… */
-const DETAIL_KEYS = ["trace", "span", "issue", "session", "rsession", "rule", "rpcId", "compare"] as const;
+const DETAIL_KEYS = ["trace", "span", "issue", "session", "rsession", "rule", "rpcId", "compare", "user"] as const;
 
 /** The item a URL has open inside its page, if any ("" for none). */
 export function demoDetailOf(search: Record<string, unknown>): string {

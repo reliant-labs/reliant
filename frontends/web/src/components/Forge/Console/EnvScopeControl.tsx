@@ -125,7 +125,7 @@ export function EnvScopeControl({ value, long, previews, onChange, pinnedEnv, pl
         data-testid="env-scope"
         data-pinned={pinnedEnv ? "true" : undefined}
         className={cn(
-          "relative inline-flex items-center gap-0.5 rounded-md border border-border bg-surface p-0.5 max-md:hidden",
+          "relative inline-flex items-center gap-0.5 rounded-md border border-border-strong bg-surface p-0.5 max-md:hidden",
           pinnedEnv && "opacity-60"
         )}
       >

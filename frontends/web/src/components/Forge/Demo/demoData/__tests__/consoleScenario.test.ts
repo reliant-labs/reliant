@@ -9,7 +9,7 @@
  *    Releases (list, one release, a rollout), Secrets, Domains and Activity
  *    each come back with believable rows for shop's dev/staging/prod.
  *  - Secrets are names only: nothing that looks like a value is on the wire.
- *  - The story matches the observability fixtures: prod runs v1.8.3, the
+ *  - The story matches the observability views': prod runs v1.8.3, the
  *    release the CreateOrder issue first appeared in.
  *  - Nothing outside shop: a read naming another project or environment gets an
  *    empty answer, from the story's handlers and from the generated defaults.
@@ -40,7 +40,8 @@ import { DEMO_DEFAULT_SERVICES } from "../demoServiceDefaults";
 import { outsideDemo } from "../demoScope";
 import { createDemoTransport, isDemoRead } from "../demoTransport";
 import { FIXTURE_ENVS, FIXTURE_PROJECT } from "../../../Observability/__fixtures__/fixtureApi";
-import { fixtureLedger } from "../../../Observability/__fixtures__/fixtureDelivery";
+import { shopPromotions } from "../shop/delivery";
+import { demoNow, resetDemoNowForTests } from "../shopStory";
 import { describePromotion } from "../../../Observability/releaseMarkers";
 
 const { OPTIONAL: LABEL_OPTIONAL, REPEATED: LABEL_REPEATED } = FieldDescriptorProto_Label;
@@ -56,22 +57,24 @@ afterEach(() => {
 });
 
 describe("the console's sample data, on the demo's transport", () => {
-  it("is the observability fixtures' app: same project, same environments", () => {
+  it("is the app the demo console's chrome names: same project, same environments", () => {
     expect(DEMO_PROJECT).toBe(FIXTURE_PROJECT);
     expect(DEMO_ENVS.map((e) => [e.id, e.name])).toEqual(FIXTURE_ENVS.map((e) => [e.id, e.name]));
   });
 
   it("puts the same commit and promoter on the charts' release markers as on the console's releases", async () => {
-    const markers = fixtureLedger(Date.parse("2026-11-10T12:00:00Z"));
+    const markers = shopPromotions(demoNow());
     // Every release the console cut carries its own commit on every marker.
     for (const release of DEMO_RELEASES) {
       for (const marker of markers.filter((m) => m.version === release.version)) expect(marker.gitCommit, `${release.version} in ${marker.envName}`).toBe(release.commit);
     }
-    // v1.8.3's promotions are attributed as the console's ledger attributes them.
+    // Every whole-environment promotion is one marker: same id, promoter and time.
     for (const env of DEMO_ENVS) {
-      const marker = markers.filter((m) => m.envId === env.id && m.version === "v1.8.3").at(-1);
-      const promotion = (await listReleasePromotions(env.id)).find((p) => p.releaseVersion === "v1.8.3" && p.targets.length === 0);
-      expect(marker?.promotedBy, `v1.8.3 in ${env.name}`).toBe(promotion?.promotedByActor);
+      for (const promotion of (await listReleasePromotions(env.id)).filter((p) => p.targets.length === 0)) {
+        const marker = markers.find((m) => m.promotionId === promotion.id);
+        expect(marker?.promotedBy, `${promotion.id}`).toBe(promotion.promotedByActor);
+        expect(marker?.promotedAtMs, `${promotion.id}`).toBe(Date.parse(promotion.createdAt!));
+      }
     }
     const prod = markers.filter((m) => m.envName === "prod" && m.version === "v1.8.3").at(-1)!;
     expect(describePromotion(prod)).toBe("v1.8.3 (commit e7d93a2) promoted to prod by jon");
@@ -106,6 +109,7 @@ describe("the console's sample data, on the demo's transport", () => {
     // clock is frozen: the cut times and the promotion times below are the
     // same instant minus their ages, compared exactly, however long the run.
     vi.useFakeTimers({ toFake: ["Date"], now: Date.parse("2026-11-10T12:00:00Z") });
+    resetDemoNowForTests(Date.now());
     try {
       const cutAt = new Map<string, number>(DEMO_RELEASES.map((r) => [r.version, Date.now() - r.age]));
       const ids = new Set<string>();
@@ -124,6 +128,7 @@ describe("the console's sample data, on the demo's transport", () => {
       }
     } finally {
       vi.useRealTimers();
+      resetDemoNowForTests();
     }
 
     const rank = new Map(DEMO_RELEASES.map((r, index) => [r.version, index]));
@@ -138,8 +143,12 @@ describe("the console's sample data, on the demo's transport", () => {
       { target: "shop-web", from: "v1.8.2", change: "redeploy" },
     ]);
     expect(staging.some((row) => row.health.verdict === "unknown")).toBe(true);
-    expect(staging.some((row) => row.health.verdict === "regressed")).toBe(true);
     expect(staging.some((row) => row.health.verdict === "healthy")).toBe(true);
+    expect(staging.some((row) => row.health.verdict === "regressed")).toBe(false);
+    // The one regression is prod's v1.8.3: the incident.
+    const prod = envPromotionRows(await listReleasePromotions("env-prod"), rank, new Map());
+    expect(prod[0]).toMatchObject({ version: "v1.8.3" });
+    expect(prod[0].health.verdict).toBe("regressed");
   });
 
   it("Deploys: one per promotion, newest first, and a staging build that failed before it cut a release", async () => {
@@ -200,7 +209,7 @@ describe("the console's sample data, on the demo's transport", () => {
 
   it("Activity: promotions, a release cut, a triage and a rotation, newest first", async () => {
     const { events } = await listActivity({ orgId: "org-demo", projectId: DEMO_PROJECT, envIds: [] });
-    expect(events.map((e) => e.verb)).toEqual(["promote", "cut", "assign", "promote", "promote", "rotate"]);
+    expect(events.map((e) => e.verb)).toEqual(["query_database", "promote", "cut", "assign", "issue_opened", "promote", "promote", "cut", "rotate", "rotate", "resolve"]);
     expect(events.every((e, i) => i === 0 || events[i - 1].atMs >= e.atMs)).toBe(true);
   });
 
@@ -261,7 +270,7 @@ describe("every console read is answered; every write is refused", () => {
         // ownership and confirmation checks with generated placeholder data.
         const addressed: Record<string, object> = {
           "controlplane.v1.AppDatabaseService/DescribeDatabase": { environmentId: "env-dev", database: "shop" },
-          "controlplane.v1.AppDatabaseService/BrowseTable": { environmentId: "env-dev", database: "shop", table: "public.chats", limit: 50 },
+          "controlplane.v1.AppDatabaseService/BrowseTable": { environmentId: "env-dev", database: "shop", table: "public.orders", limit: 50 },
           "controlplane.v1.StorageBrowserService/ListBrowsableBuckets": { environmentId: "env-staging" },
           "controlplane.v1.StorageBrowserService/ListObjects": { environmentId: "env-staging", bucket: "uploads" },
           "controlplane.v1.StorageBrowserService/GetObjectMetadata": { environmentId: "env-staging", bucket: "uploads", key: "README.txt" },

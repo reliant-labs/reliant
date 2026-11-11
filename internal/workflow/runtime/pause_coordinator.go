@@ -155,6 +155,10 @@ type pauseCoordinator struct {
 	// self-pauses reads it (GaveUp) before pausing and after resuming.
 	gaveUp error
 
+	// slot is the run's workflow-capacity slot, given back while the run is
+	// self-paused on a provider-capacity failure. nil when the run holds none.
+	slot *capacitySlot
+
 	activityCtx workflow.Context
 	cancelAll   workflow.CancelFunc
 
@@ -455,6 +459,12 @@ func (pc *pauseCoordinator) CheckPause(callerCtx workflow.Context) {
 	// spawned via workflow.Go() block on their own coroutine, avoiding
 	// Temporal's "trying to block on coroutine which is already blocked" panic.
 	myEpoch := pc.epoch
+	// A self-pause on a provider-capacity failure is a provider wait: give
+	// the workflow-capacity slot back (capacity_slot.go). Any other pause
+	// keeps it.
+	if pc.selfPaused && pc.capacityPause {
+		pc.slot.providerWait(callerCtx, "provider capacity")
+	}
 	_ = workflow.Await(callerCtx, func() bool { return pc.epoch > myEpoch })
 	if !workflow.IsReplaying(pc.root) {
 		workflow.GetLogger(pc.root).Info("[Workflow Runtime] Resume signal received, continuing with fresh activity context",

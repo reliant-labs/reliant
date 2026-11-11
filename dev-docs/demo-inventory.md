@@ -4,15 +4,37 @@ The public demo (`demo.reliantlabs.io`) is the standalone `WEB_BUILD_TARGET=demo
 bundle. It has no signed-in user, daemon, Supabase client or application backend.
 Its default Connect transport answers from browser-local mock scenarios.
 
-## One synthetic shop
+## One synthetic shop, one story
 
-`components/Forge/Demo/demoData/inventoryScenario.ts` answers the generated
-`AppDatabaseService` browse RPCs and `IdentityService` reads. Every normal
-environment declares one database, `shop`: the selector must not invent extra
-connections. The tables are `public.users`, `public.chats`, `public.machines`
-and `public.inventory`. Primary and foreign keys are explicit in both directions.
-A user's `customer-*` primary key is deliberately different from their
-`subject-*` identity-provider subject. Emails are reserved example.com addresses.
+Every answer the demo gives comes from one module,
+`components/Forge/Demo/demoData/shopStory.ts`: the cast (jon, maya, priya, and
+CI as `github-actions`), shop's customers, its services (`api`, `worker`,
+`inventory` and the static storefront `shop-web`; Postgres, NATS and the
+payment provider are dependencies, never services), the release ledger (each
+release one commit, each promotion one promoter and one time), the one
+incident (prod's v1.8.3 payment timeouts on api), the traffic model every
+aggregate is computed from (`demoStats`), and the database's tables. `demoNow()`
+anchors every relative time to the page load.
+
+`demoData/shop/shopApi.ts` assembles the demo's `ObservabilityApi` from one
+module per area (telemetry via `busyApp.ts`, graph, workloads, panels,
+delivery, issues and release health, alerting, sessions, dashboards, metrics);
+both the demo console (`demoApi.ts`) and the wire scenario (`demoScenario.ts`)
+read it. `consoleScenario.ts` answers Releases, Environments, Secrets, Domains
+and Activity from the same ledger. Nothing under `demoData/` imports the
+console's unit-test fixtures (`Observability/__fixtures__`);
+`__tests__/coherence.test.ts` fails if one does, or if any page's answer
+contradicts the story.
+
+`inventoryScenario.ts` answers the generated `AppDatabaseService` browse RPCs
+and `IdentityService` reads. Every normal environment declares one database,
+`shop`: the selector must not invent extra connections. The tables are
+`public.customers`, `public.products`, `public.stock`, `public.orders` and
+`public.order_items` (`shop/database.ts`, relative to the page load; only prod
+has `payment_failed` orders, all since the incident). Primary and foreign keys
+are explicit in both directions. A customer's `cus_*` primary key is
+deliberately different from their `sub_*` identity-provider subject. Emails are
+reserved example.com addresses.
 
 Browse requests use the real generated contract: column projection, ANDed typed
 filters, SQL null semantics, LIKE/ILIKE wildcards, prioritized sorts, offset
@@ -24,9 +46,9 @@ workflow; `demo-local-read` identifies a synthetic read, not an audit server row
 identities/digests. YAML and objects are projections of the same redacted tree.
 The fixed `[withheld]` markers reveal neither values nor secret-derived hashes.
 Bundle selectors are scoped to their environment, and historical release reads
-produce a meaningful timeout change. `workloadScenario.ts` aligns the demo's
-observability workload rows and declared bundle with `consoleScenario.RUNNING`,
-the same current-promotion ledger used by config and release history.
+produce a meaningful timeout change. `shop/workloads.ts` answers the
+observability workload rows from the same current-promotion ledger used by
+config and release history.
 
 ## Verify the real target
 
@@ -34,7 +56,7 @@ From `frontends/web`:
 
 ```sh
 pnpm install --frozen-lockfile
-pnpm exec vitest run src/components/Forge/Demo/demoData/__tests__ src/lib/__tests__/chatMachine.demo.test.ts src/__tests__/demoShellRoutes.test.tsx
+pnpm exec vitest run src/components/Forge/Demo src/lib/__tests__/chatMachine.demo.test.ts src/__tests__/demoShellRoutes.test.tsx
 WEB_BUILD_TARGET=demo DEMO_BUNDLE_REPORT=/tmp/demo-bundle.json pnpm build
 WEB_BUILD_TARGET=demo pnpm exec vite preview --port 4173
 # Another terminal; screenshots stay outside the repository:

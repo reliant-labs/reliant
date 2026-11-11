@@ -130,8 +130,8 @@ func (r *Repo) DeleteChat(ctx context.Context, id string) error {
 	return store.RemoveChat(ctx, r.ORM(), id)
 }
 
-func (r *Repo) ListArchivedChats(ctx context.Context, userID string) ([]*ArchivedChatInfo, error) {
-	return store.ListArchivedChats(ctx, r.ORM(), userID)
+func (r *Repo) ListArchivedChats(ctx context.Context, userID string, org *core.OrgScope) ([]*ArchivedChatInfo, error) {
+	return store.ListArchivedChats(ctx, r.ORM(), userID, org)
 }
 
 // ListRuns is the cross-cutting run list, scoped to filters.UserID.
@@ -1064,10 +1064,18 @@ func (r *Repo) GetProjectWithUserCheck(ctx context.Context, id string, userID st
 	if err != nil {
 		return nil, err
 	}
-	if !authz.CanWriteProject(ctx, userID, project) {
+	switch denial := authz.WriteProjectDenial(ctx, userID, project); {
+	case denial == nil:
+		return project, nil
+	case errors.Is(denial, authz.ErrDenied):
 		return nil, core.ErrProjectNotFound
+	default:
+		// Still NotFound to every caller, with why as the withheld cause:
+		// the launcher tells a creator who left the project's org
+		// (authz.ErrNotOrgMember) from a membership outage, which must not
+		// be mistaken for an answer.
+		return nil, svcerr.WithCause(core.ErrProjectNotFound, denial)
 	}
-	return project, nil
 }
 
 // AssignUnassignedOrg gives userID's projects and chats that have no org yet
@@ -3254,6 +3262,42 @@ func (r *Repo) SetTriggerEnabled(ctx context.Context, id string, enabled bool) e
 		}
 		return store.RecordTriggerChange(ctx, r.ORM(), op, before, after)
 	})
+}
+
+// PauseTrigger is the system pausing a trigger that can no longer launch as
+// written, recording reason (core.TriggerPaused*) on the row and the pause in
+// its change history. paused is false when the trigger was already paused (a
+// person did, or a concurrent fire got here first): nothing is written, so a
+// burst of refused fires records one pause.
+func (r *Repo) PauseTrigger(ctx context.Context, id, reason string) (paused bool, err error) {
+	if id == "" {
+		return false, fmt.Errorf("trigger ID cannot be empty")
+	}
+	err = r.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
+		if err := store.LockTrigger(ctx, r.ORM(), id); err != nil {
+			return err
+		}
+		before, err := store.GetTrigger(ctx, r.ORM(), id)
+		if err != nil {
+			return err
+		}
+		if !before.Enabled {
+			return nil
+		}
+		if err := store.PauseTrigger(ctx, r.ORM(), id, reason); err != nil {
+			return err
+		}
+		after, err := store.GetTrigger(ctx, r.ORM(), id)
+		if err != nil {
+			return err
+		}
+		paused = true
+		return store.RecordTriggerChange(ctx, r.ORM(), "pause", before, after)
+	})
+	if err != nil {
+		return false, err
+	}
+	return paused, nil
 }
 
 func (r *Repo) LockActivationDependencies(ctx context.Context, userID, projectID string) error {

@@ -1,11 +1,12 @@
 import { expect, test } from '@playwright/test';
 
-import { ENVIRONMENTS, mockAppsBackend } from './appsMocks';
+import { ENVIRONMENTS, PROJECT, mockAppsBackend } from './appsMocks';
 import { PHONE } from './mobileMocks';
 
 // The org switcher, against a mocked backend (appsMocks.ts): a person in two
 // orgs lists them, marks the default, switches, and every control-plane call
-// the Apps page makes then names the new org; a person in one org sees it
+// the Apps page makes then names the new org, as do the project and chat
+// lists (projects and chats belong to one org, so the old org's leave); a person in one org sees it
 // named, with "Create organization"; the phone has the same choice on its Account screen; and the
 // CLI-login approve page makes the org a credential will act in an explicit
 // choice. Screenshots land in e2e/screenshots/org-switcher/.
@@ -33,6 +34,8 @@ function twoOrgs(onOrgRequest?: (rpc: string, orgId: string | undefined) => void
   return {
     orgs: [ACME, SIDE],
     environmentsByOrg: { org_acme: ENVIRONMENTS, org_side: SIDE_ENVS },
+    // The storefront checkout is Acme's; Side Project has none yet.
+    projectsByOrg: { org_acme: [{ ...PROJECT, orgId: 'org_acme' }], org_side: [] },
     onOrgRequest,
   };
 }
@@ -62,12 +65,14 @@ test.describe('org switcher (desktop)', () => {
 
     // The other org's apps replace this org's, and the request names the new org.
     await expect(page.getByTestId('app-row-weekend-blog')).toBeVisible(LOADED);
-    // The user's checkout remains as an undeployed draft; only the old org's
-    // deployed environments disappear (projects themselves are user-scoped).
-    await expect(page.getByTestId('app-row-storefront')).toContainText('Not deployed yet');
+    // Acme's checkout leaves with Acme: projects belong to one org, and the
+    // project list is re-read for the new one at once, not on its next fetch.
+    await expect(page.getByTestId('app-row-storefront')).toHaveCount(0);
     await expect(page.getByTestId('app-row-status-page')).toHaveCount(0);
     await expect(page.getByTestId('org-switcher-name')).toHaveText('Side Project');
     expect(seen.filter(([rpc]) => rpc === 'ListEnvironments').every(([, org]) => org === 'org_side')).toBe(true);
+    await expect.poll(() => seen.filter(([rpc]) => rpc === 'ListProjects').map(([, org]) => org)).toContain('org_side');
+    expect(seen.filter(([rpc]) => rpc === 'ListProjects' || rpc === 'ListChats').every(([, org]) => org === 'org_side')).toBe(true);
     await page.screenshot({ path: `${SHOTS}/desktop-after-switch.png` });
   });
 

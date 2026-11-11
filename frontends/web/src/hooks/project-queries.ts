@@ -90,6 +90,9 @@ export interface Project {
   // control-plane environments are filed under. Absent until a daemon has
   // read it; see services/forge/environments.ts resolveForgeProjectName.
   forge_project_name?: string;
+  // The org the project belongs to (Project.org_id). Absent only for a row
+  // written before orgs and not yet stamped (an org-scoped list stamps it).
+  org_id?: string;
 }
 
 // ProjectDaemonInfo mirrors the proto ProjectDaemon row — one record per
@@ -152,6 +155,7 @@ export function projectFromProto(proto: ProtoProject): Project {
     remote_url: proto.remoteUrl || undefined,
     is_forge: proto.isForge,
     forge_project_name: proto.forgeProjectName || undefined,
+    org_id: proto.orgId || undefined,
   };
 }
 
@@ -208,7 +212,8 @@ export function sameProject(a: Project, b: Project): boolean {
     a.updated_at === b.updated_at &&
     a.remote_url === b.remote_url &&
     a.is_forge === b.is_forge &&
-    a.forge_project_name === b.forge_project_name
+    a.forge_project_name === b.forge_project_name &&
+    a.org_id === b.org_id
   );
 }
 

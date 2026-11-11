@@ -15,6 +15,7 @@ import (
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/launch"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -79,6 +80,14 @@ type EventFirer struct {
 	capacity  capacityDescriptions
 	wake      *capacityWake
 	pools     Placer
+	pause     *AutoPause
+}
+
+// WithAutoPause lets the firer pause a trigger whose creator left its org
+// (AutoPause). Without it, each such event is recorded as failed.
+func (f *EventFirer) WithAutoPause(p *AutoPause) *EventFirer {
+	f.pause = p
+	return f
 }
 
 // WithCapacityWake lets a capped launch fire the next waiting event of its
@@ -145,7 +154,18 @@ func (f *EventFirer) Fire(ctx context.Context, in EventFireInput) (*FireOutput, 
 		return nil, fmt.Errorf("load trigger %s: %w", in.TriggerID, err)
 	}
 	if !resuming && !manual && !trigger.Enabled {
-		return f.settle(ctx, ev, nil, core.TriggerEventSkipped, "trigger is disabled", nil)
+		return f.settle(ctx, ev, nil, core.TriggerEventSkipped, pausedDetail(trigger), nil)
+	}
+	// A creator who left the trigger's org: the first event to find out
+	// records the failure and pauses the trigger (Firer.Fire).
+	if !resuming {
+		left, err := CreatorLeftOrg(ctx, trigger)
+		if err != nil {
+			return nil, err
+		}
+		if left {
+			return f.refuseCreatorLeftOrg(ctx, ev, nil, trigger, authz.ErrNotOrgMember)
+		}
 	}
 	// A no-machine trigger names no daemon, by design; a pool-bound one is
 	// placed on a member at launch (launchOnPool).
@@ -268,11 +288,28 @@ func (f *EventFirer) Fire(ctx context.Context, in EventFireInput) (*FireOutput, 
 		}
 		return f.settle(ctx, ev, def, core.TriggerEventSkipped, reason, nil)
 	}
+	if launch.OwnerLeftOrg(launchErr) {
+		return f.refuseCreatorLeftOrg(ctx, ev, def, trigger, launchErr)
+	}
 	var validation *launch.ValidationError
 	if errors.As(launchErr, &validation) || errors.Is(launchErr, launch.ErrNotFound) {
 		return f.settle(ctx, ev, def, core.TriggerEventFailed, launchErr.Error(), launchErr)
 	}
 	return nil, fmt.Errorf("launch trigger %s event %s: %w", trigger.ID, ev.ID, launchErr)
+}
+
+// refuseCreatorLeftOrg settles an event whose trigger's creator has left its
+// org, pausing the trigger (AutoPause.Refuse). A pause that could not be
+// written is retried, settling nothing.
+func (f *EventFirer) refuseCreatorLeftOrg(ctx context.Context, ev *core.TriggerEvent, def *core.TriggerEventDefinition, trigger *core.Trigger, cause error) (*FireOutput, error) {
+	outcome, detail, err := f.pause.Refuse(ctx, trigger)
+	if err != nil {
+		return nil, err
+	}
+	if outcome == core.TriggerEventSkipped {
+		cause = nil
+	}
+	return f.settle(ctx, ev, def, outcome, detail, cause)
 }
 
 // settle records a verdict on an event that did not launch. With cause set,

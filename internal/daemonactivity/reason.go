@@ -266,8 +266,9 @@ var backgroundCommands = map[string]bool{
 	// sweep's proposals; it only records the decision. reclaim_approve
 	// carries an Inbox approval, and removes the approved worktree after it
 	// answers, as the sweep itself would.
-	// worktree.reconcile, snapshot_remove and delete_branch are sent by the
-	// worktree sweeper on its own schedule. discover_repos backs the
+	// worktree.reconcile, snapshot_remove, delete_branch and the reclaim
+	// tombstone's mark_reclaim and unmark_reclaim are sent by the worktree
+	// sweeper on its own schedule. discover_repos backs the
 	// sidebar's background discovery of worktrees made outside Reliant,
 	// which must never wake a machine.
 	"worktree.delete_branch":      true,
@@ -281,6 +282,7 @@ var backgroundCommands = map[string]bool{
 	"worktree.git_commits":        true,
 	"worktree.git_status":         true,
 	"worktree.import_validate":    true,
+	"worktree.mark_reclaim":       true,
 	"worktree.reclaim_decide":     true,
 	"worktree.reclaim_approve":    true,
 	"worktree.reconcile":          true,
@@ -289,6 +291,7 @@ var backgroundCommands = map[string]bool{
 	// before a create retries a branch such a checkout holds.
 	"worktree.remove_failed_create": true,
 	"worktree.snapshot_remove":      true,
+	"worktree.unmark_reclaim":       true,
 	"worktree.validate_path":        true,
 }
 

@@ -76,6 +76,7 @@ package authz
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"sync/atomic"
 
@@ -223,34 +224,55 @@ func orgOf(org *string) string {
 	return *org
 }
 
-// decide is the rule: the owner, and, for a resource in an org, only while
-// they are a live member of it. A caller with no id never owns anything, so
-// an empty caller and an unowned row are not a match.
+// ErrDenied is a denial with nothing more to say: no such resource, another
+// owner's, or a credential bound to another org.
+var ErrDenied = errors.New("authz: denied")
+
+// ErrNotOrgMember is the denial of a resource's own owner who is no longer a
+// live member of the resource's org: control-plane answered, and the answer
+// is no. Only the owner can be told it, so it discloses nothing.
+var ErrNotOrgMember = errors.New("authz: the owner is not a live member of the resource's organization")
+
+// ErrMembershipUnavailable is a denial because membership could not be
+// checked (an outage, or a path never wired with WithMembership). It fails
+// closed like any denial, but it is not an answer: nothing permanent may be
+// decided from it.
+var ErrMembershipUnavailable = errors.New("authz: could not check organization membership")
+
+// decide is the rule as a yes or no (deny is the rule).
 func decide(ctx context.Context, userID string, r resource) bool {
+	return deny(ctx, userID, r) == nil
+}
+
+// deny is the rule: the owner, and, for a resource in an org, only while
+// they are a live member of it. A caller with no id never owns anything, so
+// an empty caller and an unowned row are not a match. nil allows; otherwise
+// the denial is ErrDenied, ErrNotOrgMember or ErrMembershipUnavailable.
+func deny(ctx context.Context, userID string, r resource) error {
 	if !r.present || userID == "" || r.ownerUserID != userID {
-		return false
+		return ErrDenied
 	}
 	if bound, ok := boundOrg(ctx); ok && !r.orgless && !credentialReaches(ctx, userID, bound, r.orgID) {
-		return false
+		return ErrDenied
 	}
 	if r.orgID == "" {
-		return true
+		return nil
 	}
 	m := membershipOf(ctx)
 	if m == nil {
 		logging.ErrorContext(ctx, "[authz] no membership on the context; denying an org resource (a path was never wired with authz.WithMembership)",
 			"user_id", userID, "org_id", r.orgID)
-		return false
+		return ErrMembershipUnavailable
 	}
 	member, ok, err := m.IsMember(ctx, userID, r.orgID)
 	if err != nil {
 		logging.WarnContext(ctx, "[authz] could not check org membership; denying", "user_id", userID, "org_id", r.orgID, "error", err)
-		return false
+		return ErrMembershipUnavailable
 	}
-	if !ok {
-		return true
+	if !ok || member {
+		return nil
 	}
-	return member
+	return ErrNotOrgMember
 }
 
 // credentialReaches reports whether a credential bound to org bound may act
@@ -326,6 +348,14 @@ func CanWriteProject(ctx context.Context, userID string, project *core.Project) 
 	return decide(ctx, userID, projectResource(project))
 }
 
+// WriteProjectDenial is why CanWriteProject is false: nil when it is true,
+// else ErrDenied, ErrNotOrgMember or ErrMembershipUnavailable. A call site
+// that must act on the difference (an unattended launch, which pauses a
+// trigger whose creator left its org but must not on an outage) asks this.
+func WriteProjectDenial(ctx context.Context, userID string, project *core.Project) error {
+	return deny(ctx, userID, projectResource(project))
+}
+
 func machineResource(d *core.Daemon) resource {
 	if d == nil {
 		return resource{}
@@ -380,6 +410,13 @@ func CanReadTrigger(ctx context.Context, userID string, trigger *core.Trigger) b
 // delete trigger: anything that makes it launch runs. nil is false.
 func CanWriteTrigger(ctx context.Context, userID string, trigger *core.Trigger) bool {
 	return decide(ctx, userID, triggerResource(trigger))
+}
+
+// WriteTriggerDenial is why CanWriteTrigger is false: nil when it is true,
+// else ErrDenied, ErrNotOrgMember or ErrMembershipUnavailable. A firing asks
+// it for the trigger's own creator, whose identity its runs execute as.
+func WriteTriggerDenial(ctx context.Context, userID string, trigger *core.Trigger) error {
+	return deny(ctx, userID, triggerResource(trigger))
 }
 
 // CanReadTriggerEvent reports whether userID may see one firing of a trigger

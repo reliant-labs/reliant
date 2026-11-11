@@ -2,21 +2,23 @@
 import { describe, expect, it, vi } from "vitest";
 import { Code } from "@connectrpc/connect";
 import { createDemoBrowserApis } from "../browserApis";
+import { DEMO_SUBJECTS } from "../inventoryScenario";
 
-const request = { environmentId: "env-staging", database: "shop", table: "public.users", columns: [], filters: [], sort: [], limit: 25, offset: 0, count: "estimated" as const };
+const request = { environmentId: "env-staging", database: "shop", table: "public.customers", columns: [], filters: [], sort: [], limit: 25, offset: 0, count: "estimated" as const };
 describe("isolated demo browser clients", () => {
   it("uses typed synthetic reads without any network, auth or live control-plane client", async () => {
     const fetch = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("network forbidden"));
     try {
       const { data, storage, identity } = createDemoBrowserApis();
       expect(await identity.currentOrgId()).toBe("demo-org");
-      expect((await identity.listUsers("demo-org", "env-staging", {}, "")).users[0]?.email).toBe("maya@example.com");
-      expect((await identity.getUser("demo-org", "env-staging", "subject-maya"))?.userId).toBe("subject-maya");
+      expect((await identity.listUsers("demo-org", "env-staging", {}, "")).users[0]?.email).toBe("jon@example.com");
+      expect((await identity.listUsers("demo-org", "env-staging", { query: "lena.fischer" }, "")).users[0]?.userId).toBe(DEMO_SUBJECTS[0]);
+      expect((await identity.getUser("demo-org", "env-staging", DEMO_SUBJECTS[0]))?.userId).toBe(DEMO_SUBJECTS[0]);
       await expect(identity.listUsers("foreign-org", "env-staging", {}, "")).rejects.toMatchObject({ code: Code.NotFound });
       await expect(identity.getStatus("demo-org", "foreign-env")).rejects.toMatchObject({ code: Code.NotFound });
-      await expect(identity.deleteUser("demo-org", "env-staging", "subject-maya")).rejects.toMatchObject({ code: Code.PermissionDenied });
-      expect((await data.describeDatabase(request)).tables.map((table) => table.name)).toContain("users");
-      expect((await data.browseTable(request)).rows.flat()).toContain("maya@example.com");
+      await expect(identity.deleteUser("demo-org", "env-staging", DEMO_SUBJECTS[0])).rejects.toMatchObject({ code: Code.PermissionDenied });
+      expect((await data.describeDatabase(request)).tables.map((table) => table.name)).toContain("customers");
+      expect((await data.browseTable(request)).rows.flat()).toContain("lena.fischer@example.com");
       expect((await storage.listBrowsableBuckets("env-staging")).buckets[0]?.name).toBe("uploads");
       const target = { environmentId: "env-staging", bucket: "uploads", key: "README.txt" };
       expect((await storage.getObjectMetadata(target)).metadata.source).toBe("public-demo-fixtures");

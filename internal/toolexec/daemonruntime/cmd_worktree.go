@@ -55,6 +55,8 @@ func init() {
 	RegisterCommand("worktree.revert", handleWorktreeRevert)
 	RegisterCommand("worktree.get_default_branch", handleWorktreeGetDefaultBranch)
 	RegisterCommand("worktree.reconcile", handleWorktreeReconcile)
+	RegisterCommand(worktreereclaim.MarkCommand, handleWorktreeMarkReclaim)
+	RegisterCommand(worktreereclaim.UnmarkCommand, handleWorktreeUnmarkReclaim)
 	RegisterCommand("worktree.snapshot_remove", handleWorktreeSnapshotRemove)
 	RegisterCommand("worktree.recovery_observe", handleWorktreeRecoveryObserve)
 	RegisterCommand("worktree.recovery_capture", handleWorktreeRecoveryCapture)
@@ -2948,6 +2950,16 @@ func logRepairReport(rep worktreereclaim.RepairReport) {
 
 func handleWorktreeReconcile(ctx context.Context, payload []byte) ([]byte, error) {
 	return handleWorktreeReclaim(ctx, payload, (*worktreereclaim.Reclaimer).Reconcile)
+}
+
+// handleWorktreeMarkReclaim places reclaim tombstones (worktreereclaim
+// tombstone.go); handleWorktreeUnmarkReclaim removes them.
+func handleWorktreeMarkReclaim(ctx context.Context, payload []byte) ([]byte, error) {
+	return handleWorktreeReclaim(ctx, payload, (*worktreereclaim.Reclaimer).Mark)
+}
+
+func handleWorktreeUnmarkReclaim(ctx context.Context, payload []byte) ([]byte, error) {
+	return handleWorktreeReclaim(ctx, payload, (*worktreereclaim.Reclaimer).Unmark)
 }
 
 func handleWorktreeSnapshotRemove(ctx context.Context, payload []byte) ([]byte, error) {

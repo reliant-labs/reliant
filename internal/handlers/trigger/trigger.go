@@ -393,6 +393,9 @@ func (s *Service) SetTriggerEnabled(
 		return nil, svcerr.Unavailable("the schedule backend is unavailable")
 	}
 	if req.Msg.Enabled {
+		if err := s.requireProjectWritable(ctx, trigger); err != nil {
+			return nil, err
+		}
 		// Turning an activation back on is not a way around setup: its params
 		// are checked against the workflow as it is now, because the workflow
 		// may have gained a required input while it was paused.
@@ -410,6 +413,9 @@ func (s *Service) SetTriggerEnabled(
 		return nil, triggerDBError("set trigger enabled", err)
 	}
 	trigger.Enabled = req.Msg.Enabled
+	// A person pausing or resuming it is the reason now (the write cleared
+	// paused_reason too).
+	trigger.PausedReason = ""
 
 	// A pushed trigger needs nothing converged — the receivers read
 	// `enabled` off the row for every event — but a polled one pauses its
@@ -633,6 +639,26 @@ func (s *Service) ownedTrigger(ctx context.Context, id string) (*core.Trigger, e
 		return nil, svcerr.NotFound("trigger")
 	}
 	return trigger, nil
+}
+
+// requireProjectWritable refuses to turn trigger on while the caller may not
+// run work in its project: the check every launch of it meets. ownedTrigger
+// decides on the trigger's own org, and a trigger written before orgs has
+// none, so without this its creator could resume it after leaving the
+// project's org, and each resume would buy one more refused, re-paused
+// firing (triggers.AutoPause). An outage is Unavailable, never an answer.
+func (s *Service) requireProjectWritable(ctx context.Context, trigger *core.Trigger) error {
+	_, err := s.deps.Repo.GetProjectWithUserCheck(ctx, trigger.ProjectID, auth.MustGetUserID(ctx))
+	switch {
+	case err == nil:
+		return nil
+	case errors.Is(err, authz.ErrMembershipUnavailable):
+		return svcerr.WithCause(svcerr.Unavailable("could not verify the trigger's organization; try again"), err)
+	case errors.Is(err, core.ErrProjectNotFound):
+		return svcerr.NotFound("trigger")
+	default:
+		return triggerDBError("get the trigger's project", err)
+	}
 }
 
 // triggerFromDefinition validates a wire definition into a storable row.

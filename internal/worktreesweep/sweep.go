@@ -178,6 +178,7 @@ type Sweeper struct {
 	sender   Sender
 	keep     KeepFilesSetting
 	auto     *autoArchive
+	marks    *reclaimMarks
 	shed     *liveShed
 	recovery *recoveryEngine
 	// candidates and archived count this pass's finished active worktrees.
@@ -902,6 +903,10 @@ func (s *Sweeper) describe(ctx context.Context, cands []*core.ReclaimCandidate, 
 			// An unarchive that could not reach the machine left a fence to retire.
 			w.Retire = wt.CleanupMetadata.RetireFence
 		}
+		if state == worktreereclaim.StateArchived && wt.CleanupMetadata.Marked() {
+			// Reclaimed under a mark: removed only while its tombstone stands.
+			w.ReclaimMark = wt.CleanupMetadata.ReclaimMarkID
+		}
 		// A user who chose "Keep everything" keeps their workspaces visible too.
 		// eligible is a live row the sweep may ask more of than a lock.
 		eligible := state == worktreereclaim.StateActive && s.auto != nil && w.Retire == "" && !keep && wt.DeletedAt == nil
@@ -1162,6 +1167,9 @@ func (s *Sweeper) apply(ctx context.Context, userID, daemonID string, seen *core
 		case !useRecorded:
 			// Use the row does not show yet: never archive on a quiet that
 			// the daemon just contradicted.
+		case s.marks != nil && (r.Landed || r.RecoverableIdle || wt.CleanupMetadata.Marked()):
+			// Every automatic reclaim goes through a mark (mark.go).
+			s.advanceMark(ctx, userID, daemonID, wt, projectPath, r)
 		case r.Landed:
 			s.reclaimLanded(ctx, userID, wt)
 		case r.RecoverableIdle:
@@ -1213,6 +1221,10 @@ type UseStore interface {
 // to record it fails closed: the row is not archived this pass.
 func (s *Sweeper) noteUse(ctx context.Context, wt *core.Worktree, at *time.Time) bool {
 	if at == nil || !at.After(wt.LastActive) {
+		return true
+	}
+	if m := wt.CleanupMetadata; m.Marked() && m.ReclaimMarkUse != nil && !at.After(*m.ReclaimMarkUse) {
+		// The stamp of the tombstone's own writes (mark.go): not use.
 		return true
 	}
 	store, ok := s.store.(UseStore)

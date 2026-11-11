@@ -14,6 +14,13 @@ import { DeployService } from "@/gen/controlplane/services/deploy/v1/deploy_pb";
 import { OrganizationService } from "@/gen/controlplane/services/organization/v1/organization_pb";
 import { ForgeService } from "@/gen/reliant/v1/forge_pb";
 import { SettingsService } from "@/gen/reliant/v1/settings_pb";
+import { ChatService } from "@/gen/reliant/v1/chat_pb";
+import { ProjectService } from "@/gen/reliant/v1/project_pb";
+import { RunService } from "@/gen/reliant/v1/run_pb";
+import { TriggerService } from "@/gen/reliant/v1/trigger_pb";
+import { WorkflowService } from "@/gen/reliant/v1/workflow_pb";
+import { DaemonService } from "@/gen/controlplane/services/daemon/v1/daemon_pb";
+import { InboxService } from "@/gen/reliant/v1/inbox_pb";
 
 const state = vi.hoisted(() => ({ controlPlaneUrl: "https://admin.example.test" }));
 
@@ -181,6 +188,35 @@ describe("orgInterceptor", () => {
     const { connectClient } = await load("org-b");
     await connectClient(ForgeService).planDeploy({ projectId: "p", env: "prod" });
     expect(bodies[0]?.body.orgId).toBe("org-b");
+  });
+
+  it("names the org on the product's lists and creates, which belong to one org", async () => {
+    const { connectClient } = await load("org-b");
+    await connectClient(ChatService).listChats({});
+    await connectClient(ChatService).startChat({ projectId: "p" });
+    await connectClient(ProjectService).listProjects({});
+    await connectClient(ProjectService).createProject({ name: "x", path: "/x" });
+    await connectClient(ProjectService).createProjectFromRepo({});
+    await connectClient(WorkflowService).listWorkflows({});
+    await connectClient(WorkflowService).saveWorkflow({});
+    await connectClient(WorkflowService).createWorkflowDraft({});
+    await connectClient(TriggerService).listTriggers({});
+    await connectClient(TriggerService).createTrigger({});
+    await connectClient(RunService).listRuns({});
+    await connectClient(ChatService).listArchivedChats({});
+    await connectClient(ChatService).searchChats({ query: "needle" });
+    await connectClient(InboxService).listInbox({});
+    expect(bodies).toHaveLength(14);
+    for (const b of bodies) expect(b.body.orgId, b.url).toBe("org-b");
+  });
+
+  it("names no org on a call that spans every org on purpose", async () => {
+    const { connectClient } = await load("org-b");
+    const { acrossAllOrgs } = await import("@/api/orgInterceptor");
+    await connectClient(DaemonService).listDaemons({}, { contextValues: acrossAllOrgs() });
+    await connectClient(DaemonService).listDaemons({});
+    expect(bodies[0]?.body).not.toHaveProperty("orgId");
+    expect(bodies[1]?.body.orgId).toBe("org-b");
   });
 
   it("names nothing when no org is selected, so the server uses the default", async () => {

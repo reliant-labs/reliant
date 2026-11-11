@@ -16,10 +16,15 @@
  *     (WCAG 1.4.11; pinned by Settings/__tests__/consoleControlEdge.test.ts),
  *     so forge-ui's own inputs and outline buttons pick it up too.
  *     Structure (cards, panels, rows) keeps `border-border`.
- *   - Selected is the primary tint, primary ink and a primary ring: the same
- *     "this narrows the view" signal as a set filter chip (ObsScopeBar, forge-ui
- *     filter_bar), never a grey step. `primary`, not `accent`: a dialog portals
- *     out of the `.forge-ui` scope that remaps `accent`.
+ *   - Selected is the primary tint and a primary ring around a full-ink label:
+ *     the same "this narrows the view" signal as a set filter chip (ObsScopeBar,
+ *     forge-ui filter_bar), never a grey step. The label is `ink`, not
+ *     `primary-ink`: the console's muted ink (index.css, THE CONSOLE'S TEXT
+ *     RAMP) measures 9:1 in dark, brighter than primary ink's 7.9:1, so a blue
+ *     label read as quieter than the options around it. Blue marks it; ink
+ *     makes it the strongest text in the track (web-styling: "selected" is not
+ *     a link). `primary`, not `accent`: a dialog portals out of the `.forge-ui`
+ *     scope that remaps `accent`.
  *
  *   - ONE FIELD. Every text input, search box, select and textarea is the
  *     same object: a 32px row (`h-8`), `rounded-md`, the control edge, the
@@ -65,12 +70,12 @@ export const FIELD_BARE = "min-w-0 flex-1 bg-transparent text-sm text-ink placeh
 
 export const SEGMENTED = "inline-flex items-center rounded-lg border border-border-strong bg-surface-sunken p-0.5";
 
-const SELECTED = "bg-primary/12 font-medium text-primary-ink ring-1 ring-inset ring-primary";
+const SELECTED = "bg-primary/12 font-medium text-ink ring-1 ring-inset ring-primary";
 
 export function segmentTone(on: boolean): string {
   return on ? SELECTED : "text-ink-muted hover:bg-ink/5 hover:text-ink";
 }
 
 export function toggleTone(on: boolean): string {
-  return on ? "border border-primary bg-primary/12 font-medium text-primary-ink" : "border border-border-strong bg-surface text-ink hover:bg-ink/5";
+  return on ? "border border-primary bg-primary/12 font-medium text-ink" : "border border-border-strong bg-surface text-ink hover:bg-ink/5";
 }

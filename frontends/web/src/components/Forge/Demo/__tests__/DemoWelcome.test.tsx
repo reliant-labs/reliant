@@ -77,7 +77,7 @@ it("on a phone the tip is a closed one-line disclosure in the page's flow, hidde
   } finally { drawer.remove(); trigger.remove(); }
 });
 it("every page has an explanation, and none repeats the build-page action", async () => {
-  const paths = ["/forge/p/shop", "/forge/p/shop/releases", "/forge/p/shop/releases/v1", "/forge/p/shop/environments", "/forge/p/shop/environments/prod", "/forge/p/shop/secrets", "/forge/p/shop/domains", "/forge/p/shop/activity", "/forge/p/shop/workloads/prod/api", ...["dashboards","errors","traces","logs","profiles","alerts","sessions","metrics","rpc","graph"].map(view=>`/forge/demo?view=${view}`), "/forge/demo?view=traces&trace=demo"];
+  const paths = ["/forge/p/shop", "/forge/p/shop/releases", "/forge/p/shop/releases/v1", "/forge/p/shop/environments", "/forge/p/shop/environments/prod", "/forge/p/shop/secrets", "/forge/p/shop/domains", "/forge/p/shop/activity", "/forge/p/shop/users", "/forge/p/shop/workloads/prod/api", ...["dashboards","errors","traces","logs","profiles","alerts","sessions","metrics","rpc","graph"].map(view=>`/forge/demo?view=${view}`), "/forge/demo?view=traces&trace=demo"];
   const visited = new Set<string>();
   for (const path of paths) {
     cleanup(); resetDemoSessionForTests(); mount(path);

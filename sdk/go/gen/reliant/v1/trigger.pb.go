@@ -1511,7 +1511,14 @@ type Trigger struct {
 	// The organization the trigger belongs to, fixed at creation: its
 	// project's when the project has one. Every chat it launches belongs to
 	// it, so its runs bill this org. Unset for a trigger created before orgs.
-	OrgId         *string `protobuf:"bytes,35,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
+	OrgId *string `protobuf:"bytes,35,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
+	// Read-only: why Reliant paused the trigger itself, while `enabled` is
+	// false. "creator_left_org": a firing was refused because the trigger's
+	// creator, whose identity its runs execute as, is no longer a member of
+	// its organization; it fires again once they rejoin and resume it. Empty
+	// when the trigger is enabled or a person paused it. Clients show an
+	// unknown value as a plain pause.
+	PausedReason  string `protobuf:"bytes,36,opt,name=paused_reason,json=pausedReason,proto3" json:"paused_reason,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1802,6 +1809,13 @@ func (x *Trigger) GetDefinitionSource() *TriggerDefinitionSource {
 func (x *Trigger) GetOrgId() string {
 	if x != nil && x.OrgId != nil {
 		return *x.OrgId
+	}
+	return ""
+}
+
+func (x *Trigger) GetPausedReason() string {
+	if x != nil {
+		return x.PausedReason
 	}
 	return ""
 }
@@ -5220,7 +5234,7 @@ const file_reliant_v1_trigger_proto_rawDesc = "" +
 	"\vInputsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01B\b\n" +
-	"\x06source\"\xe6\r\n" +
+	"\x06source\"\x8b\x0e\n" +
 	"\aTrigger\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x1d\n" +
@@ -5266,7 +5280,8 @@ const file_reliant_v1_trigger_proto_rawDesc = "" +
 	"\x0facting_identity\x18\x1c \x01(\x0e2\x1a.reliant.v1.ActingIdentityR\x0eactingIdentity\x12'\n" +
 	"\x0fwebhook_managed\x18\x1d \x01(\bR\x0ewebhookManaged\x12P\n" +
 	"\x11definition_source\x18  \x01(\v2#.reliant.v1.TriggerDefinitionSourceR\x10definitionSource\x12\x1a\n" +
-	"\x06org_id\x18# \x01(\tH\aR\x05orgId\x88\x01\x01\x1a:\n" +
+	"\x06org_id\x18# \x01(\tH\aR\x05orgId\x88\x01\x01\x12#\n" +
+	"\rpaused_reason\x18$ \x01(\tR\fpausedReason\x1a:\n" +
 	"\fPresetsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\x1aQ\n" +

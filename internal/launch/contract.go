@@ -38,11 +38,13 @@ import (
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/chatselection"
 	"github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/daemonplacement"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/orgs"
 	"github.com/reliant-labs/reliant/internal/threads"
 )
 
@@ -337,6 +339,22 @@ func (e *NotFoundError) Unwrap() error {
 
 // Is makes errors.Is(err, ErrNotFound) match.
 func (e *NotFoundError) Is(target error) bool { return target == ErrNotFound }
+
+// OwnerLeftOrg reports whether a launch was refused because its owner is no
+// longer a live member of the org the launch acts in: the project lookup's
+// authz.ErrNotOrgMember, or a refusal carrying the not_org_member reason. It
+// is an answer, so an unattended launch may act on it for good (a trigger
+// pauses). A membership check that failed is never this: the launch returns
+// ErrInternal, retryably.
+func OwnerLeftOrg(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, authz.ErrNotOrgMember) {
+		return true
+	}
+	return svcerr.IsPermissionDenied(err) && svcerr.ToConnect(err).Meta().Get(svcerr.ReasonHeader) == orgs.ReasonNotOrgMember
+}
 
 // ErrInternal reports that the launch failed for a reason the caller cannot
 // act on — a failed transaction, a Temporal start that was refused, a chat that

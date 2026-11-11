@@ -27,6 +27,7 @@ import {
   BrowseFilterOp,
   DataAccessPolicy,
   DatabaseTableKind,
+  IdentitySubjectKind,
   type DatabaseForeignKey,
 } from "@/gen/controlplane/services/app_database/v1/app_database_pb";
 import type { PanelResultPoint } from "@/gen/controlplane/controlplane/v1/shared_pb";
@@ -149,6 +150,8 @@ export interface DbColumn {
   nullable: boolean;
   comment: string;
   isPrimaryKey: boolean;
+  /** Explicit server-projected marker only; absent on older servers. */
+  identitySubject?: "id" | "email";
 }
 
 /** A foreign key, always from the referencing side: columns[i] of schema.table references refColumns[i] of refSchema.refTable. */
@@ -324,7 +327,7 @@ async function describeDatabase(
       kind: TABLE_KINDS[t.kind] ?? "unknown",
       estimatedRows: Number(t.estimatedRows),
       comment: t.comment,
-      columns: t.columns.map((c) => ({ name: c.name, pgType: c.pgType, nullable: c.nullable, comment: c.comment, isPrimaryKey: c.isPrimaryKey })),
+      columns: t.columns.map((c) => ({ name: c.name, pgType: c.pgType, nullable: c.nullable, comment: c.comment, isPrimaryKey: c.isPrimaryKey, identitySubject: c.identitySubject === IdentitySubjectKind.ID ? "id" as const : c.identitySubject === IdentitySubjectKind.EMAIL ? "email" as const : undefined })),
       primaryKey: [...t.primaryKey],
       foreignKeys: t.foreignKeys.map(foreignKey),
       referencedBy: t.referencedBy.map(foreignKey),

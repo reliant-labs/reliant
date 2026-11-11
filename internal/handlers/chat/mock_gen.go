@@ -70,7 +70,7 @@ func (m *MockOrgResolver) ListScope(ctx context.Context, userID string, requeste
 var _ OrgResolver = (*MockOrgResolver)(nil)
 
 // forge:section MockRepository
-// forge:hash=e5d6feda809aa26331764d5e5c32b708037baeb30ab2e11fc276274c8bc38f10
+// forge:hash=2614fce18f3dd11dafd9fccc31cc355f6795c1a2a46b808b1fb14da9962a3175
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -86,7 +86,7 @@ type MockRepository struct {
 	GetChatRowWithUserCheckFunc                              func(context.Context, string, string) (*db.ChatRow, error)
 	GetChatWithUserCheckFunc                                 func(context.Context, string, string) (*db.Chat, error)
 	SearchChatsFunc                                          func(context.Context, db.ChatSearchFilters) ([]*db.Chat, error)
-	ListArchivedChatsFunc                                    func(context.Context, string) ([]*db.ArchivedChatInfo, error)
+	ListArchivedChatsFunc                                    func(context.Context, string, *core.OrgScope) ([]*db.ArchivedChatInfo, error)
 	DeleteChatFunc                                           func(context.Context, string) error
 	UpdateChatStateFunc                                      func(context.Context, string, db.ChatState, string) error
 	UpdateChatUnreadFunc                                     func(context.Context, string, bool, string) error
@@ -292,10 +292,10 @@ func (m *MockRepository) SearchChats(ctx context.Context, filters db.ChatSearchF
 }
 
 // ListArchivedChats records the call and delegates to ListArchivedChatsFunc when set.
-func (m *MockRepository) ListArchivedChats(ctx context.Context, userID string) ([]*db.ArchivedChatInfo, error) {
-	m.Recorder.Record("ListArchivedChats", ctx, userID)
+func (m *MockRepository) ListArchivedChats(ctx context.Context, userID string, org *core.OrgScope) ([]*db.ArchivedChatInfo, error) {
+	m.Recorder.Record("ListArchivedChats", ctx, userID, org)
 	if m.ListArchivedChatsFunc != nil {
-		return m.ListArchivedChatsFunc(ctx, userID)
+		return m.ListArchivedChatsFunc(ctx, userID, org)
 	}
 	return nil, contractkit.MockNotSet("MockRepository", "ListArchivedChats")
 }

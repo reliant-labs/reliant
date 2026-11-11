@@ -762,6 +762,13 @@ message Trigger {
   // project's when the project has one. Every chat it launches belongs to
   // it, so its runs bill this org. Unset for a trigger created before orgs.
   optional string org_id = 35;
+  // Read-only: why Reliant paused the trigger itself, while `enabled` is
+  // false. "creator_left_org": a firing was refused because the trigger's
+  // creator, whose identity its runs execute as, is no longer a member of
+  // its organization; it fires again once they rejoin and resume it. Empty
+  // when the trigger is enabled or a person paused it. Clients show an
+  // unknown value as a plain pause.
+  string paused_reason = 36;
 }
 
 // TriggerDefinitionSource is where an activation's workflow definition is

@@ -356,6 +356,7 @@ export function DashboardView({ project, dashRef, env: consoleEnv, environments:
           {() => (
           <DashboardPanelCard
             panel={panel}
+            dashboardId={spec.id}
             queryPanel={viewerQuery(spec, panel, search).panel}
             layout={
               layout
@@ -1098,6 +1099,7 @@ interface PanelLayoutControls {
 
 function DashboardPanelCard({
   panel,
+  dashboardId,
   queryPanel,
   scope,
   dataContext,
@@ -1111,6 +1113,8 @@ function DashboardPanelCard({
   layout,
 }: {
   panel: Panel;
+  /** Names the panel's reads in control-plane's query_log (Forge-Panel). */
+  dashboardId: string;
   queryPanel: Panel;
   scope: ObsScope | null;
   dataContext?: PanelDataContext;
@@ -1132,7 +1136,7 @@ function DashboardPanelCard({
   const range = widening?.range ?? rangeOfCard;
   // A panel reads only once it is near the viewport: twenty panels do not all queue at mount.
   const [bodyRef, near] = useNearViewport();
-  const rawQuery = usePanelQuery(scope, range, queryPanel, services, [], { refetchInterval: refreshEvery, enabled: near });
+  const rawQuery = usePanelQuery(scope, range, queryPanel, services, [], { refetchInterval: refreshEvery, enabled: near, dashboardId });
   // Not yet near is "not loaded yet", not "no data".
   const query = near || !panelRunsQuery(queryPanel.kind) ? rawQuery : { ...rawQuery, isLoading: true };
   // A sql panel compares only the figures it draws: its statement's windows
@@ -1148,6 +1152,7 @@ function DashboardPanelCard({
       target.mode === "release" ? () => Math.max(0, Date.now() - target.promotion.promotedAtMs) : target.mode === "period" ? () => rangeMs(range) : undefined,
     refetchInterval: refreshEvery,
     enabled: comparable && near,
+    dashboardId,
   });
   // A sql figure's sparkline: its trendSql, over the same window.
   const trendPanel = useMemo(() => sqlTrendPanel(queryPanel), [queryPanel]);

@@ -111,7 +111,27 @@ export function groupIndex(dashboards: readonly DashboardSummary[]): GroupedDash
 const SOURCE_RANK: Record<DashboardSummary["source"], number> = { builtin: 0, generated: 1, repo: 2, workspace: 3, template: 4 };
 const sourceRank = (d: DashboardSummary) => SOURCE_RANK[d.source] ?? 5;
 
-/** The counts per group, for the hub's link cards and the section headers. */
+/** A section of the Dashboards list: the built-ins, or one group of the project's own. */
+export type ListSection = DashboardGroup | "builtin";
+
+export const SECTION_LABELS: Record<ListSection, string> = { builtin: "Built-in", ...GROUP_LABELS };
+export const SECTION_ABOUT: Record<ListSection, string> = { builtin: "Hosted by Reliant for every app", ...GROUP_ABOUT };
+
+/**
+ * The list's sections, in page order: Built-in first when there is one (the
+ * dashboards Reliant hosts for every app, whatever group they name), then the
+ * project's own by group. An empty group is no section at all: a heading
+ * over nothing is chrome.
+ */
+export function listSections(dashboards: readonly DashboardSummary[]): Array<{ id: ListSection; dashboards: DashboardSummary[] }> {
+  const builtins = dashboards.filter((d) => d.source === "builtin");
+  const own = groupIndex(dashboards.filter((d) => d.source !== "builtin"))
+    .filter((g) => g.dashboards.length > 0)
+    .map((g) => ({ id: g.group as ListSection, dashboards: g.dashboards }));
+  return builtins.length > 0 ? [{ id: "builtin", dashboards: builtins }, ...own] : own;
+}
+
+/** The counts per group, for the section headers. */
 export function groupCounts(dashboards: readonly DashboardSummary[]): Record<DashboardGroup, number> {
   const counts = Object.fromEntries(DASHBOARD_GROUPS.map((g) => [g, 0])) as Record<DashboardGroup, number>;
   for (const d of dashboards) counts[groupOf(d)] += 1;

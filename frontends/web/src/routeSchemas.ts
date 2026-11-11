@@ -591,6 +591,7 @@ const textListParam = z.array(z.union([z.string(), z.number().transform(String)]
 
 export const forgeConsoleDataSearchSchema = z.object({
   env: envScopeParam,
+  subject: z.string().max(1600).optional().catch(undefined),
   db: textParam,
   table: textParam,
   f: textListParam,
@@ -725,7 +726,8 @@ export const forgeConsoleWorkloadSearchSchema = z.object({
  */
 export const forgeConsoleDashboardsSearchSchema = z.object({
   env: envScopeParam,
-  // Absent is the Overview hub; "all" is the grouped list.
+  // Retired: the page's Overview tab is gone (health is the project
+  // Overview's). Still parsed so an old `?view=all` link stays valid; ignored.
   view: z.enum(["all"]).optional().catch(undefined),
   q: z.string().optional().catch(undefined),
   group: z.enum(DASHBOARD_GROUPS).optional().catch(undefined),
@@ -824,10 +826,25 @@ const envPageTab = z
  * `secret` selects one secret's detail in the Secrets tab (see
  * forgeConsoleSecretsSearchSchema).
  */
+const identitySubjectParam = z.string().min(1).max(200).refine((v) => v.trim() === v && ![...v].some((c) => c.charCodeAt(0) < 32 || c.charCodeAt(0) === 127)).optional().catch(undefined);
 export const forgeConsoleEnvSearchSchema = z.object({
   env: envScopeParam,
   secret: z.string().optional(),
   tab: envPageTab,
+  user: identitySubjectParam.refine((v) => v === undefined || v.length <= 128).catch(undefined),
+  q: identitySubjectParam,
+});
+
+/**
+ * /forge/p/$project/users — who can sign in to the scoped environment. `user`
+ * (an identity subject) opens one person and `q` searches by email, exactly
+ * as the environment page's Identity tab reads them, so a link written for
+ * either opens the same person.
+ */
+export const forgeConsoleUsersSearchSchema = z.object({
+  env: envScopeParam,
+  user: identitySubjectParam.refine((v) => v === undefined || v.length <= 128).catch(undefined),
+  q: identitySubjectParam,
 });
 
 /** The retired /forge/env/$env: read only to redirect (Console/paths.ts legacyEnvTarget). */
