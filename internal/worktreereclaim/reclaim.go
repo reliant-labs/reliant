@@ -481,7 +481,7 @@ func (r *Reclaimer) settle(ctx context.Context, w Worktree, confirmed bool) Resu
 		// The memory line is the daemon's own; left at the workspace root it
 		// would be a loose file that whole retirement preserves by holding.
 		if !rootIsCheckout(w.Path, checkouts) {
-			if err := removeMemoryLine(filepath.Join(w.Path, memoryFile), w.ReclaimMark); err != nil {
+			if err := removeOwnMemoryLine(w.Path, w.ReclaimMark); err != nil {
 				return held(w, ReasonUnverified, "could not remove the reclaim notice from reliant.md: "+err.Error())
 			}
 		}

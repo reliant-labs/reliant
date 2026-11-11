@@ -120,6 +120,11 @@ func tombstoneMark(checkouts []string) string {
 // placeTombstone writes m's tombstone into every checkout and its line into
 // the workspace root's reliant.md. A checkout whose tombstone already
 // carries m is left alone, so re-sending a mark changes nothing on disk.
+//
+// The daemon's own writes are not use: every directory they touch gets its
+// modification time back, and every file they create is dated to it
+// (ownWrite), so no signal that reads times (idleSince, a checkout's newest
+// file, Result.LastUse) sees the mark.
 func placeTombstone(ctx context.Context, w Worktree, checkouts []string, m ReclaimMark) error {
 	if m.ID == "" || strings.ContainsAny(m.ID, "\n\r") {
 		return errors.New("a reclaim mark needs a one-line id")
@@ -134,39 +139,75 @@ func placeTombstone(ctx context.Context, w Worktree, checkouts []string, m Recla
 		if readTombstone(c) == m.ID {
 			continue
 		}
-		if err := os.MkdirAll(filepath.Dir(tombstonePath(c)), 0o755); err != nil {
-			return err
-		}
-		if err := writeFileAtomic(tombstonePath(c), []byte(tombstoneText(m))); err != nil {
+		err := ownWrite(c, func() error {
+			if err := os.MkdirAll(filepath.Dir(tombstonePath(c)), 0o755); err != nil {
+				return err
+			}
+			return writeFileAtomic(tombstonePath(c), []byte(tombstoneText(m)))
+		}, filepath.Dir(tombstonePath(c)), tombstonePath(c))
+		if err != nil {
 			return err
 		}
 	}
 	if !rootIsCheckout(w.Path, checkouts) {
-		return writeMemoryLine(filepath.Join(w.Path, memoryFile), m)
+		path := filepath.Join(w.Path, memoryFile)
+		return ownWrite(w.Path, func() error { return writeMemoryLine(path, m) }, path)
 	}
 	return nil
 }
 
 // removeTombstone removes the tombstones that carry id ("" removes any) and
 // the reliant.md line, leaving the info/exclude pattern (it matches nothing
-// once the file is gone).
+// once the file is gone). Its writes are not use either (ownWrite).
 func removeTombstone(w Worktree, checkouts []string, id string) error {
 	var errs []error
 	for _, c := range checkouts {
 		if got := readTombstone(c); got != "" && (id == "" || got == id) {
-			if err := os.Remove(tombstonePath(c)); err != nil && !os.IsNotExist(err) {
-				errs = append(errs, err)
-			}
-			// The .reliant directory goes too if the tombstone was all of it.
-			_ = os.Remove(filepath.Dir(tombstonePath(c)))
+			errs = append(errs, ownWrite(c, func() error {
+				if err := os.Remove(tombstonePath(c)); err != nil && !os.IsNotExist(err) {
+					return err
+				}
+				// The .reliant directory goes too if the tombstone was all of it.
+				_ = os.Remove(filepath.Dir(tombstonePath(c)))
+				return nil
+			}, filepath.Dir(tombstonePath(c))))
 		}
 	}
 	if !rootIsCheckout(w.Path, checkouts) {
-		if err := removeMemoryLine(filepath.Join(w.Path, memoryFile), id); err != nil {
-			errs = append(errs, err)
-		}
+		errs = append(errs, removeOwnMemoryLine(w.Path, id))
 	}
 	return errors.Join(errs...)
+}
+
+// removeOwnMemoryLine is removeMemoryLine at the workspace root, as an
+// ownWrite: retiring a marked worktree removes it first, and a root that
+// looked just touched would hold it as recently active, or as used after
+// its archive.
+func removeOwnMemoryLine(root, id string) error {
+	path := filepath.Join(root, memoryFile)
+	return ownWrite(root, func() error { return removeMemoryLine(path, id) }, path)
+}
+
+// ownWrite runs a write of the daemon's own inside dir and then puts dir's
+// modification time back, dating each of paths that exists afterwards
+// (what the write created or replaced) to that same time. A change someone
+// else makes to dir in the same instant loses only dir's own stamp: their
+// file keeps its time, which every check also reads.
+func ownWrite(dir string, write func() error, paths ...string) error {
+	before, err := os.Stat(dir)
+	if err != nil {
+		return err
+	}
+	at := before.ModTime()
+	err = write()
+	// Deepest first: dating a file touches nothing, but restoring a
+	// directory must come after everything written into it.
+	for i := len(paths) - 1; i >= 0; i-- {
+		if _, statErr := os.Lstat(paths[i]); statErr == nil {
+			err = errors.Join(err, os.Chtimes(paths[i], at, at))
+		}
+	}
+	return errors.Join(err, os.Chtimes(dir, at, at))
 }
 
 // rootIsCheckout reports whether the workspace root is itself one of its
