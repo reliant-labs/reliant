@@ -4,13 +4,13 @@ package daemonruntime
 import (
 	"bufio"
 	"bytes"
+	"errors"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
-	"sync"
 
 	"gopkg.in/yaml.v3"
 
@@ -26,8 +26,7 @@ import (
 //
 // The key is computed on every config poll of every project, so every input
 // is cheap: a handful of small files read whole, a few directory listings, and
-// the proto service declarations, which are re-read only when a file's size or
-// mtime moves.
+// the proto service declarations (proto/services is a few small files).
 
 // memoryContentInputs are read whole: forge.yaml (name, `envs:`,
 // `monitoring:`, `database.migrations`), and the files the project's own
@@ -172,61 +171,57 @@ func declaredMigrationsDir(root string) string {
 	return ""
 }
 
-// protoDeclMemo is one proto file's service declarations, kept while the
-// file's size and mtime hold: they are re-read only when it moves.
-type protoDeclMemo struct {
-	stamp string
-	decls []byte
-}
-
-var protoDecls sync.Map // abs path -> protoDeclMemo
-
 // protoServiceDecls is every service declaration under dir, each with the
 // comment block above it (where a `// forge:*` service marker lives), in path
 // order. Editing a message or an rpc leaves it as it was, so it does not
 // re-render the guide on every proto save.
+//
+// Each file is read whole on every call: a stamp (size, mtime) can survive a
+// rewrite, and a memo keyed on it would keep serving the old declarations. A
+// walk or read failure is written into the result as a marker, so a key built
+// while part of the tree was unreadable differs from the one built once it is
+// readable again, rather than caching a guide over an incomplete input set.
 func protoServiceDecls(dir string) []byte {
 	var out bytes.Buffer
-	_ = filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
-		if err != nil || d.IsDir() || !strings.HasSuffix(path, ".proto") {
-			return nil //nolint:nilerr // an unreadable entry is not an input
-		}
-		info, err := d.Info()
+	unreadable := func(path string) {
+		out.WriteString(path)
+		out.WriteString("\x00!unreadable\x00")
+	}
+	err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
-			return nil //nolint:nilerr // vanished mid-walk
+			if path != dir || !errors.Is(err, fs.ErrNotExist) {
+				unreadable(path)
+			}
+			return nil //nolint:nilerr // recorded in the key; the walk goes on
 		}
-		stamp := stampOf(info)
-		decls, ok := cachedProtoDecls(path, stamp)
+		if d.IsDir() || !strings.HasSuffix(path, ".proto") {
+			return nil
+		}
+		decls, ok := readProtoDecls(path)
 		if !ok {
-			decls = readProtoDecls(path)
-			protoDecls.Store(path, protoDeclMemo{stamp: stamp, decls: decls})
+			unreadable(path)
+			return nil
 		}
 		out.WriteString(path)
 		out.WriteByte(0)
 		out.Write(decls)
 		return nil
 	})
+	if err != nil {
+		unreadable(dir)
+	}
 	return out.Bytes()
 }
 
-func cachedProtoDecls(path, stamp string) ([]byte, bool) {
-	v, ok := protoDecls.Load(path)
-	if !ok || v.(protoDeclMemo).stamp != stamp {
+// readProtoDecls is each `service` line of a proto file with the run of
+// comment lines directly above it; false when the file cannot be read whole.
+func readProtoDecls(path string) ([]byte, bool) {
+	b, err := os.ReadFile(path) //nolint:gosec // a proto file under the project's proto/services
+	if err != nil {
 		return nil, false
 	}
-	return v.(protoDeclMemo).decls, true
-}
-
-// readProtoDecls is each `service` line of a proto file with the run of
-// comment lines directly above it.
-func readProtoDecls(path string) []byte {
-	f, err := os.Open(path) //nolint:gosec // a proto file under the project's proto/services
-	if err != nil {
-		return nil
-	}
-	defer func() { _ = f.Close() }()
 	var out, block bytes.Buffer
-	sc := bufio.NewScanner(f)
+	sc := bufio.NewScanner(bytes.NewReader(b))
 	sc.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 	for sc.Scan() {
 		line := strings.TrimSpace(sc.Text())
@@ -243,5 +238,8 @@ func readProtoDecls(path string) []byte {
 			block.Reset()
 		}
 	}
-	return out.Bytes()
+	if sc.Err() != nil {
+		return nil, false
+	}
+	return out.Bytes(), true
 }

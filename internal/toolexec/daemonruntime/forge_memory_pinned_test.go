@@ -160,7 +160,6 @@ func TestForgeMemory_APinnedGuideIsRenderedAgainWhenWhatItDescribesChanges(t *te
 	// A new process with the same disk cache renders nothing new.
 	before := len(f.runs)
 	f.restart(f.deps.Resolve, f.deps.Run, f.deps.CacheDir())
-	protoDecls.Clear()
 	render()
 	assert.Len(t, f.runs, before, "a restart rendered an unchanged project's guide again")
 }
@@ -215,4 +214,55 @@ func TestCollectRepoMemories_EachForgeCarriesItsOwnGuide(t *testing.T) {
 	assert.Contains(t, string(mem["c"]), "`a`", "c shares a's forge, so it points at a's guide")
 	assert.Less(t, len(mem["c"]), 1000)
 	assert.Contains(t, string(mem["d"]), "Use forge skills", "d has no pin: the embedded guide")
+}
+
+// A proto rewrite that keeps the file's size and mtime (an atomic replace with
+// copied timestamps, a coarse-mtime filesystem) still moves the key: the
+// declarations are read from the content, not trusted to a stamp.
+func TestProtoServiceDecls_ARewriteKeepingSizeAndMtimeIsSeen(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "billing.proto")
+	before := "// Billing charges.\nservice BillingService {}\n"
+	after := "// forge:unmanaged.\nservice BillingService {}\n" // same length as before
+	require.Len(t, after, len(before))
+	writeRepoFile(t, dir, "billing.proto", before)
+	info, err := os.Stat(path)
+	require.NoError(t, err)
+	first := protoServiceDecls(dir)
+
+	writeRepoFile(t, dir, "billing.proto", after)
+	require.NoError(t, os.Chtimes(path, info.ModTime(), info.ModTime()))
+	again, err := os.Stat(path)
+	require.NoError(t, err)
+	require.Equal(t, info.Size(), again.Size())
+	require.True(t, info.ModTime().Equal(again.ModTime()))
+
+	assert.NotEqual(t, string(first), string(protoServiceDecls(dir)), "a same-size, same-mtime rewrite kept the old declarations")
+	assert.Contains(t, string(protoServiceDecls(dir)), "// forge:unmanaged")
+}
+
+// A proto subtree that cannot be read is part of the key, so the key built
+// while it is unreadable is not the one built once it can be read again.
+func TestProtoServiceDecls_AnUnreadableSubtreeMovesTheKey(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("host resource missing: running as root, so a 0o000 directory is still readable")
+	}
+	dir := t.TempDir()
+	sub := filepath.Join(dir, "billing", "v1")
+	writeRepoFile(t, sub, "billing.proto", "service BillingService {}\n")
+	readable := protoServiceDecls(dir)
+	require.Contains(t, string(readable), "service BillingService")
+
+	require.NoError(t, os.Chmod(sub, 0o000))
+	t.Cleanup(func() { _ = os.Chmod(sub, 0o755) })
+	unreadable := protoServiceDecls(dir)
+	assert.NotContains(t, string(unreadable), "service BillingService")
+	assert.Contains(t, string(unreadable), "!unreadable", "an unreadable subtree left no mark in the key")
+	assert.NotEqual(t, string(readable), string(unreadable))
+
+	require.NoError(t, os.Chmod(sub, 0o755))
+	assert.Equal(t, string(readable), string(protoServiceDecls(dir)), "the key did not return once the subtree was readable")
+
+	// A missing proto directory is simply empty: no services, not an error.
+	assert.Empty(t, protoServiceDecls(filepath.Join(dir, "absent")))
 }
