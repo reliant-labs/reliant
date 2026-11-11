@@ -47934,6 +47934,19 @@
     },
     {
       "consumer": "Inbox",
+      "field": "Orgs",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/inbox.OrgResolver",
+      "methods": [],
+      "candidates": [
+        "OrgResolver"
+      ],
+      "providers": [
+        "OrgResolver"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Inbox",
       "field": "Repo",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/inbox.Repository",
       "methods": [],

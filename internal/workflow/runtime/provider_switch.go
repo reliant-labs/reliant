@@ -325,6 +325,9 @@ func (w *usageLimitWaiter) waitForProviderSwitch(ctx workflow.Context, req usage
 		"thread": req.Thread, "error_message": req.Err.Error(), "error_summary": req.Err.Error(),
 		"error_id": "provider-switch-hold/" + w.chatID + "/" + req.Thread,
 	}).Get(ctx, nil)
+	// No provider can serve the thread: give the workflow-capacity slot back
+	// while it is held (capacity_slot.go).
+	pc.capacityProviderWait(ctx, "no servable provider")
 	err := workflow.Await(ctx, func() bool {
 		return w.retryEpoch > epoch || w.tracker.threadWakeCount(req.Thread) > wakes ||
 			w.pauser.pauseSignals > pauses || (req.Cancelled != nil && req.Cancelled())

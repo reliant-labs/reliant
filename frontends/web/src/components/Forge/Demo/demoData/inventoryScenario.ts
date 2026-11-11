@@ -10,7 +10,7 @@ import { create, type MessageInitShape } from "@bufbuild/protobuf";
 import { timestampFromMs, ValueSchema } from "@bufbuild/protobuf/wkt";
 import { Code, ConnectError } from "@connectrpc/connect";
 
-import { IdentityState, IdentityUserState } from "@/gen/controlplane/controlplane/v1/identity_pb";
+import { IdentityMailDelivery, IdentityState, IdentityUserState } from "@/gen/controlplane/controlplane/v1/identity_pb";
 import {
   AppDatabaseService, BrowsableDatabaseKind, BrowseCount, BrowseFilterOp, DataAccessPolicy, DatabaseTableKind,
   DatabaseTableSchema, type BrowseFilter, type BrowseTableRequest,
@@ -19,6 +19,7 @@ import { IdentityService } from "@/gen/controlplane/services/identity/v1/identit
 
 import { completed } from "./demoServiceDefaults";
 import { demoEnvId } from "./demoScope";
+import { DEMO_IDENTITY_ROLES, demoAudience, type DemoAccount, type DemoAccountState } from "./shop/audience";
 import { shopDatabase, type Cell, type Row } from "./shop/database";
 import { DEMO_DB_TABLES, demoNow } from "./shopStory";
 import { mockService } from "@reliantlabs/forge-web-runtime/mock-transport";
@@ -177,26 +178,75 @@ export function inventoryScenarioHandlers() {
       browseTable: browse,
     })),
     ...completed(IdentityService, mockService(IdentityService, {
-      getIdentityStatus: (req) => demoEnvId(req.environmentId) ? { hasInstance: true, state: IdentityState.READY, ownerEnvironmentId: req.environmentId, issuer: "https://identity.shop.example.com", domain: "identity.shop.example.com", public: false } : {},
+      getIdentityStatus: (req) => (demoEnvId(req.environmentId) ? identityStatus(req.environmentId) : {}),
       getUser: (req) => ({ user: demoEnvId(req.environmentId) ? identityUsers(req.environmentId).find((user) => user.userId === req.userId) : undefined }),
       listUsers: (req) => {
         if (!demoEnvId(req.environmentId)) return { users: [] };
-        const users = identityUsers(req.environmentId).filter((u) => (!req.query || u.email.toLowerCase().includes(req.query.toLowerCase())) && (req.state === undefined || req.state === u.state));
+        const query = req.query?.toLowerCase();
+        const users = identityUsers(req.environmentId).filter((u) => (!query || u.email.toLowerCase().includes(query)) && (req.state === undefined || req.state === u.state));
         const offset = req.pageToken ? Number(req.pageToken) : 0;
         if (!Number.isSafeInteger(offset) || offset < 0 || (req.pageToken && String(offset) !== req.pageToken)) invalid("Invalid sample page token.");
         const size = Math.min(Math.max(req.pageSize || 50, 1), 100);
-        return { users: users.slice(offset, offset + size), totalSize: users.length, nextPageToken: offset + size < users.length ? String(offset + size) : "", roles: [{ key: "customer" }] };
+        return {
+          users: users.slice(offset, offset + size),
+          totalSize: users.length,
+          nextPageToken: offset + size < users.length ? String(offset + size) : "",
+          roles: DEMO_IDENTITY_ROLES.map((role) => ({ ...role })),
+        };
       },
     })),
   };
 }
 
+const USER_STATE: Record<DemoAccountState, IdentityUserState> = {
+  active: IdentityUserState.ACTIVE,
+  invited: IdentityUserState.INVITED,
+  locked: IdentityUserState.LOCKED,
+  disabled: IdentityUserState.DISABLED,
+};
+
+function toUser(account: DemoAccount) {
+  return {
+    userId: account.id, email: account.email, displayName: account.name,
+    state: USER_STATE[account.state], roles: account.roles,
+    createdAt: timestampFromMs(account.createdAtMs),
+    lastSignInAt: account.lastSignInAtMs === null ? undefined : timestampFromMs(account.lastSignInAtMs),
+  };
+}
+
+/** The identity provider's users: shop's audience (shop/audience.ts), the one population every page counts. */
+const userCache = new Map<string, ReturnType<typeof toUser>[]>();
 function identityUsers(env: string) {
-  // The customers who signed up, newest first; one in eleven has not signed in since.
-  return demoIdentityUsers(env).map((row, i) => ({
-    userId: String(row.identity_subject), email: String(row.email), displayName: String(row.name),
-    state: IdentityUserState.ACTIVE, roles: ["customer"],
-    createdAt: timestampFromMs(timeOf(String(row.created_at))),
-    lastSignInAt: i % 11 === 10 ? undefined : timestampFromMs(demoNow() - ((i * 37) % 300) * 3_600_000 - 60_000 * i),
-  }));
+  const key = `${env}@${demoNow()}`;
+  let users = userCache.get(key);
+  if (!users) {
+    users = demoAudience(env).map(toUser);
+    userCache.set(key, users);
+  }
+  return users;
+}
+
+/**
+ * Each environment's sign-in service: ready everywhere (the incident is the
+ * payment provider's, not sign-in's). prod signs customers in on shop's own
+ * domain and mails them, as staging does through its own relay;
+ * dev sends no email, so its invitations hand back a link.
+ */
+function identityStatus(env: string) {
+  const now = demoNow();
+  const slug = env === "env-prod" ? "" : env === "env-staging" ? "shop-staging-7f3k" : "shop-dev-2m9q";
+  const issuer = slug ? `https://${slug}.reliantidentity.com` : "https://accounts.shop.example.com";
+  return {
+    hasInstance: true,
+    state: IdentityState.READY,
+    ownerEnvironmentId: env,
+    issuer,
+    domain: slug ? "" : "accounts.shop.example.com",
+    public: true,
+    apps: [{ name: "shop-web", clientId: env === "env-prod" ? "291846035172864391" : env === "env-staging" ? "291846035172864517" : "291846035172864602", brokerExpiresAt: timestampFromMs(now + 5 * 3_600_000 + 11 * 60_000) }],
+    lastReconciledAt: timestampFromMs(now - 2 * 60_000 - 17_000),
+    callerCanManage: true,
+    exportEnabled: true,
+    mailDelivery: env === "env-dev" ? IdentityMailDelivery.NONE : IdentityMailDelivery.SMTP,
+  };
 }

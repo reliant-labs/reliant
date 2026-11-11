@@ -660,7 +660,8 @@ func (s *Service) cancelArchivedChatWorkflow(ctx context.Context, chat *db.Chat)
 }
 
 // SearchChats searches the caller's chats by title and message content: in
-// one project, or in all of their projects when project_id is empty.
+// one project, or in all of their projects when project_id is empty; in the
+// named org's chats (orgs.ListScope), or in every org's when it names none.
 func (s *Service) SearchChats(
 	ctx context.Context,
 	req *connect.Request[reliantv1.SearchChatsRequest],
@@ -680,10 +681,15 @@ func (s *Service) SearchChats(
 		limit = int(*req.Msg.Limit)
 	}
 
+	scope, err := s.listScope(ctx, userID, req.Msg.GetOrgId())
+	if err != nil {
+		return nil, err
+	}
 	filters := db.ChatSearchFilters{
 		UserID:      userID,
 		ProjectID:   req.Msg.ProjectId,
 		SearchQuery: req.Msg.Query,
+		Org:         scope,
 		Limit:       limit,
 	}
 
@@ -704,14 +710,19 @@ func (s *Service) SearchChats(
 	}), nil
 }
 
-// ListArchivedChats lists all archived chats with worktree info
+// ListArchivedChats lists the caller's archived chats with worktree info: the
+// named org's (orgs.ListScope), or every org's when it names none.
 func (s *Service) ListArchivedChats(
 	ctx context.Context,
 	req *connect.Request[reliantv1.ListArchivedChatsRequest],
 ) (*connect.Response[reliantv1.ListArchivedChatsResponse], error) {
 	userID := auth.MustGetUserID(ctx)
 
-	archivedChats, err := s.deps.Repo.ListArchivedChats(ctx, userID)
+	scope, err := s.listScope(ctx, userID, req.Msg.GetOrgId())
+	if err != nil {
+		return nil, err
+	}
+	archivedChats, err := s.deps.Repo.ListArchivedChats(ctx, userID, scope)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list archived chats"))
 	}

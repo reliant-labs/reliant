@@ -105,10 +105,19 @@ interface Ctx {
   touredAtMs: number;
 }
 
+/**
+ * How long before "now" the toured trace started. The tour tells the visitor to
+ * open it "at the top" of the traces view, which lists the newest first and
+ * renders only the rows on screen; every request generated after it sits above
+ * it. Ten seconds keeps it in the first ten rows at shop's busiest hour (a
+ * minute put it 13th to 46th by the time of day, off screen for most of the day).
+ */
+export const TOURED_AGO_MS = 10_000;
+
 function ctxOf(now: number): Ctx {
   const versions = Object.fromEntries(DEMO_ENV_IDS.map((e) => [e, [] as [number, string][]])) as Ctx["versions"];
   for (const p of demoLedger(now)) if (!p.targets.length) versions[p.envId].push([p.atMs, p.version]);
-  return { now, versions, touredAtMs: now - 60_000 };
+  return { now, versions, touredAtMs: now - TOURED_AGO_MS };
 }
 
 function versionAt(ctx: Ctx, env: DemoEnvKey, atMs: number): string {
@@ -377,7 +386,7 @@ function logsOf(r: Req): LogRecord[] {
 // ── The toured trace ─────────────────────────────────────────────────────────
 
 /**
- * The trace the tour opens: prod's newest failing CreateOrder (a minute ago),
+ * The trace the tour opens: prod's newest failing CreateOrder (TOURED_AGO_MS ago),
  * span for span what journeys/forge.tsx points at — the api's method span
  * (a2), a SELECT (b1), the charge (b3) and its two timed-out attempts, the
  * order event (b4) the worker consumed (d1), its Connect call (d3) into

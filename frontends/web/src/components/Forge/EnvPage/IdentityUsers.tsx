@@ -5,6 +5,17 @@
  * environment, in what state, with which roles — and, for an org admin, the
  * verbs that change that.
  *
+ * ONE ROW PER PERSON. The list is a table: who (email, name), state, roles,
+ * when they were added and when they last signed in. Every verb lives in the
+ * row's "⋯" menu, Delete last and apart; a click on the row opens the person
+ * (UserDetail: everything about them, the same verbs as buttons, and the role
+ * editor). On a phone each row is a card with the same menu.
+ *
+ * SORTING IS OF WHAT IS LOADED. The server lists people oldest first and
+ * takes no sort, so "Last sign-in" and "Added" reorder the pages already
+ * fetched; while more remain, the footer says so rather than implying the
+ * whole population was ranked.
+ *
  * ROLES COME IN TWO KINDS. A role the environment declares with
  * `members_from = declared` is converged from KCL on every reconcile; editing
  * it here would be undone, so the server refuses and this screen shows it
@@ -27,13 +38,17 @@
 import { useContext, useMemo, useState } from "react";
 import { ForgeConsoleContext } from "../Console/consoleContext";
 import { useSearch, useNavigate } from "@tanstack/react-router";
-import { IdentitySelection, IdentityAppDataLink, IdentityUserLink } from "./IdentitySelection";
-import { Link2, Lock, MailPlus, Search, ShieldCheck, Users } from "lucide-react";
+import { IdentitySelection, useIdentityAppDataHref } from "./IdentitySelection";
+import { Database, Link2, Lock, MailPlus, MoreHorizontal, Search, ShieldCheck, Users } from "lucide-react";
 
 import Badge from "@/components/forge-ui/badge";
 import ConfirmationDialog from "@/components/forge-ui/confirmation_dialog";
 import Button from "@/components/forge-ui/button";
-import { useIdentityMutation, useIdentityUsers } from "@/hooks/identity-queries";
+import DataTable, { type DataTableColumn } from "@/components/forge-ui/data_table";
+import DropdownMenu, { type MenuGroup } from "@/components/forge-ui/dropdown_menu";
+import Link from "@/components/forge-ui/link";
+import Modal from "@/components/forge-ui/modal";
+import { useIdentityMutation, useIdentityUser, useIdentityUsers } from "@/hooks/identity-queries";
 import type {
   IdentityRole,
   IdentityStatus,
@@ -45,7 +60,9 @@ import { identityErrorKind, identityErrorMessage } from "@/services/controlPlane
 import { toast } from "@/lib/toast-manager";
 import { cn } from "@/lib/utils";
 
+import { identityDataLinksEnabled, validIdentityId } from "../Data/identityLinks-model";
 import { formatAgo } from "../Observability/format";
+import { useObsReadOnly } from "../Observability/obsReadOnly";
 import { Panel } from "./EnvTabPanels";
 import { IdentityPasswordCodeDialog, type IssuedCode } from "./IdentityPasswordCodeDialog";
 
@@ -76,34 +93,73 @@ const STATE_FILTERS: { value: IdentityUserFilter["state"]; label: string }[] = [
 ];
 
 type Confirm = { kind: "delete" | "lock" | "revoke"; user: IdentityUser };
+type SortKey = "added" | "lastSignIn";
+type UserRowData = { id: string; user: IdentityUser };
+
+/** Which person is open, and whether their role editor is. */
+type Opened = { userId: string | null; editing: boolean };
 
 type IdentityUsersProps = { orgId: string; envId: string; envName: string; status: IdentityStatus };
 export function IdentityUsers(props: IdentityUsersProps) {
   const console = useContext(ForgeConsoleContext);
   const [query, setQuery] = useState("");
-  return console ? <RoutedIdentityUsers {...props} /> : <IdentityUsersBody {...props} query={query} setQuery={setQuery} />;
+  const [opened, setOpened] = useState<Opened>({ userId: null, editing: false });
+  return console ? (
+    <RoutedIdentityUsers {...props} />
+  ) : (
+    <IdentityUsersBody {...props} query={query} setQuery={setQuery} opened={opened} setOpened={setOpened} />
+  );
 }
+
+/**
+ * In the console the search and the open person are in the URL (`q`, `user`),
+ * so "look at this person" is a link. A build with identity data links
+ * contained keeps the open person in component state instead: it does no
+ * lookup from a URL.
+ */
 function RoutedIdentityUsers(props: IdentityUsersProps) {
   const search = useSearch({ strict: false }) as Record<string, unknown>;
   const navigate = useNavigate();
+  const routed = identityDataLinksEnabled();
+  const [editing, setEditing] = useState(false);
+  const [localUser, setLocalUser] = useState<string | null>(null);
   const query = typeof search.q === "string" && search.q.length <= 200 ? search.q : "";
+  const urlUser = routed && validIdentityId(search.user) ? search.user : null;
   const setQuery = (q: string) => void navigate({ to: ".", search: (prev: Record<string, unknown>) => ({ ...prev, q: q || undefined, user: undefined }), replace: true });
-  return <><IdentitySelection orgId={props.orgId} envId={props.envId} serving={props.status.state === "ready" || props.status.state === "degraded"} /><IdentityUsersBody {...props} query={query} setQuery={setQuery} /></>;
+  const setOpened = (next: Opened) => {
+    setEditing(next.editing);
+    if (!routed) return setLocalUser(next.userId);
+    void navigate({ to: ".", search: (prev: Record<string, unknown>) => ({ ...prev, user: next.userId ?? undefined }) });
+  };
+  const serving = props.status.state === "ready" || props.status.state === "degraded";
+  return (
+    <>
+      {!urlUser && <IdentitySelection orgId={props.orgId} envId={props.envId} serving={serving} />}
+      <IdentityUsersBody
+        {...props}
+        query={query}
+        setQuery={setQuery}
+        opened={{ userId: routed ? urlUser : localUser, editing }}
+        setOpened={setOpened}
+      />
+    </>
+  );
 }
+
 function IdentityUsersBody({
   query,
   setQuery,
+  opened,
+  setOpened,
   orgId,
   envId,
   envName,
   status,
-}: {
-  orgId: string;
-  envId: string;
-  envName: string;
-  status: IdentityStatus;
+}: IdentityUsersProps & {
   query: string;
   setQuery: (query: string) => void;
+  opened: Opened;
+  setOpened: (opened: Opened) => void;
 }) {
   const canManage = status.callerCanManage;
   // User verbs open the instance with its owner key, which only a ready (or
@@ -112,18 +168,35 @@ function IdentityUsersBody({
   // "unknown" (a server that predates the field) keeps offering email: it is
   // what that server does.
   const canEmail = status.mailDelivery !== "none";
+  // The demo console (and any read-only host) shows the verbs, disabled, with why.
+  const { readOnly, reason } = useObsReadOnly();
+  const lockedReason = readOnly ? (reason ?? "Read-only") : undefined;
 
   const [state, setState] = useState<IdentityUserFilter["state"]>(undefined);
   const filter = useMemo(() => ({ query, state }), [query, state]);
   const users = useIdentityUsers(orgId, envId, filter, serving);
+  const [sort, setSort] = useState<{ key: SortKey; dir: "asc" | "desc" } | null>(null);
 
-  const [editing, setEditing] = useState<string | null>(null);
   const [confirm, setConfirm] = useState<Confirm | null>(null);
 
   const roles: IdentityRole[] = users.data?.pages[0]?.roles ?? [];
-  const rows = users.data?.pages.flatMap((page) => page.users) ?? [];
+  const loaded = useMemo(() => users.data?.pages.flatMap((page) => page.users) ?? [], [users.data]);
+  const rows = useMemo<UserRowData[]>(() => {
+    const list = loaded.map((user) => ({ id: user.userId, user }));
+    if (!sort) return list;
+    const value = (row: UserRowData) => (sort.key === "added" ? row.user.createdAtMs : row.user.lastSignInAtMs) ?? -Infinity;
+    return [...list].sort((a, b) => (sort.dir === "asc" ? value(a) - value(b) : value(b) - value(a)));
+  }, [loaded, sort]);
   const total = users.data?.pages[0]?.totalSize ?? null;
   const reportsSignIns = users.data?.pages[0]?.reportsSignIns ?? false;
+  const declared = useMemo(() => new Set(roles.filter((r) => r.declared).map((r) => r.key)), [roles]);
+
+  // The open person: from the loaded pages when they are on one, else read on its own (a link to someone further down).
+  const openRow = opened.userId ? loaded.find((user) => user.userId === opened.userId) ?? null : null;
+  const fetched = useIdentityUser(orgId, envId, opened.userId, serving && !!opened.userId && !openRow);
+  const openUser = openRow ?? (fetched.data?.userId === opened.userId ? fetched.data : null);
+  const open = (user: IdentityUser, editing = false) => setOpened({ userId: user.userId, editing });
+  const close = () => setOpened({ userId: null, editing: false });
 
   const done = (message: string) => () => toast.success(message);
   const failed = (what: string) => (error: unknown) =>
@@ -162,19 +235,94 @@ function IdentityUsersBody({
   const runConfirmed = () => {
     if (!confirm) return;
     const { kind, user } = confirm;
-    const close = () => setConfirm(null);
+    const settle = () => setConfirm(null);
     if (kind === "delete") {
-      remove.mutate(user, { onSuccess: done(`${user.email} was deleted`), onError: failed("Couldn't delete"), onSettled: close });
+      remove.mutate(user, {
+        onSuccess: () => {
+          toast.success(`${user.email} was deleted`);
+          if (opened.userId === user.userId) close();
+        },
+        onError: failed("Couldn't delete"),
+        onSettled: settle,
+      });
     } else if (kind === "lock") {
-      lock.mutate(user, { onSuccess: done(`${user.email} is locked`), onError: failed("Couldn't lock"), onSettled: close });
+      lock.mutate(user, { onSuccess: done(`${user.email} is locked`), onError: failed("Couldn't lock"), onSettled: settle });
     } else {
       revoke.mutate(user, {
         onSuccess: (n) => toast.success(`Ended ${n} session${n === 1 ? "" : "s"} for ${user.email}`),
         onError: failed("Couldn't end sessions"),
-        onSettled: close,
+        onSettled: settle,
       });
     }
   };
+
+  const verbs: UserVerbs = {
+    canManage,
+    canEmail,
+    lockedReason,
+    busy: reset.isPending || resetLink.isPending || unlock.isPending,
+    declared,
+    open,
+    reset: (user) => reset.mutate(user, { onSuccess: done(`Emailed ${user.email} a password reset link`), onError: failed("Couldn't send the reset") }),
+    resetLink: getResetLink,
+    unlock: (user) => unlock.mutate(user, { onSuccess: done(`${user.email} is unlocked`), onError: failed("Couldn't unlock") }),
+    confirm: (kind, user) => setConfirm({ kind, user }),
+  };
+
+  const columns: DataTableColumn<UserRowData>[] = [
+    {
+      key: "user",
+      header: "User",
+      stackTitle: true,
+      // Two lines (20px + 16px) in 4px of padding: a 44px row. On a phone it leaves room for the card's menu.
+      className: "py-1 max-md:pr-10!",
+      render: (_, { user }) => (
+        <span className="flex min-w-0 flex-col">
+          <span className="truncate text-sm leading-5 text-ink">{user.email}</span>
+          {user.displayName && user.displayName !== user.email && <span className="truncate text-xs leading-4 text-ink-muted">{user.displayName}</span>}
+        </span>
+      ),
+    },
+    {
+      key: "state",
+      header: "State",
+      width: "6.5rem",
+      render: (_, { user }) => <Badge label={USER_STATE_LABEL[user.state]} variant={USER_STATE_VARIANT[user.state]} size="sm" />,
+    },
+    {
+      key: "roles",
+      header: "Roles",
+      width: "9.5rem",
+      render: (_, { user }) => <RoleTags roles={user.roles} declared={declared} max={2} />,
+    },
+    {
+      key: "added",
+      header: "Added",
+      width: "7rem",
+      sortable: true,
+      className: "text-xs text-ink-muted",
+      render: (_, { user }) =>
+        user.createdAtMs ? <time dateTime={new Date(user.createdAtMs).toISOString()} title={new Date(user.createdAtMs).toLocaleString()}>{shortDate(user.createdAtMs)}</time> : "—",
+    },
+    {
+      key: "lastSignIn",
+      header: "Last sign-in",
+      width: "7.5rem",
+      sortable: true,
+      className: "text-xs text-ink-muted",
+      render: (_, { user }) => <LastSignIn user={user} reportsSignIns={reportsSignIns} />,
+    },
+    {
+      key: "actions",
+      header: "Actions",
+      srHeader: true,
+      interactive: true,
+      width: "3rem",
+      // On a phone, the card's top-right corner rather than a labelled "Actions" line.
+      className: "text-right max-md:absolute max-md:right-3 max-md:top-2 max-md:w-auto! max-md:before:hidden",
+      render: (_, { user }) => <UserMenu user={user} envId={envId} verbs={verbs} />,
+    },
+  ];
 
   let body;
   if (!serving) {
@@ -219,32 +367,25 @@ function IdentityUsersBody({
     );
   } else {
     body = (
-      <ul className="divide-y divide-border" data-testid="identity-users">
-        {rows.map((user) => (
-          <UserRow
-            key={user.userId}
-            user={user}
-            roles={roles}
-            canManage={canManage}
-            editing={editing === user.userId}
-            onEdit={() => setEditing(editing === user.userId ? null : user.userId)}
-            orgId={orgId}
-            envId={envId}
-            reportsSignIns={reportsSignIns}
-            busy={reset.isPending || resetLink.isPending || unlock.isPending}
-            canEmail={canEmail}
-            onReset={() =>
-              reset.mutate(user, { onSuccess: done(`Emailed ${user.email} a password reset link`), onError: failed("Couldn't send the reset") })
-            }
-            onResetLink={() => getResetLink(user)}
-            onUnlock={() => unlock.mutate(user, { onSuccess: done(`${user.email} is unlocked`), onError: failed("Couldn't unlock") })}
-            onConfirm={(kind) => setConfirm({ kind, user })}
-          />
-        ))}
-      </ul>
+      <div data-testid="identity-users">
+        <DataTable<UserRowData>
+          flush
+          stacked
+          layout="fixed"
+          ariaLabel={`People who can sign in to ${envName}`}
+          columns={columns}
+          data={rows}
+          getRowKey={(row) => row.id}
+          getRowProps={(row) => ({ "data-testid": `identity-user-${row.id}` })}
+          getRowAction={(row) => () => open(row.user)}
+          getRowLabel={(row) => `Open ${row.user.email}`}
+          onSort={(key, dir) => setSort({ key: key as SortKey, dir })}
+        />
+      </div>
     );
   }
 
+  const shown = loaded.length;
   return (
     <>
       <Panel
@@ -254,7 +395,7 @@ function IdentityUsersBody({
           serving &&
           total !== null && (
             <span className="text-xs text-ink-muted" data-testid="identity-users-total">
-              {rows.length < total ? `${rows.length} of ${total}` : total} {total === 1 ? "user" : "users"}
+              {total.toLocaleString()} {total === 1 ? "user" : "users"}
             </span>
           )
         }
@@ -295,18 +436,39 @@ function IdentityUsersBody({
           </div>
         )}
         {body}
-        {users.hasNextPage && (
-          <div className="border-t border-border px-4 py-2">
-            <Button variant="ghost" size="sm" onClick={() => void users.fetchNextPage()} loading={users.isFetchingNextPage}>
-              Show more
-            </Button>
+        {serving && rows.length > 0 && (
+          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border px-4 py-2 text-xs text-ink-muted" data-testid="identity-users-pager">
+            <span>
+              {total !== null && shown < total ? `Showing ${shown.toLocaleString()} of ${total.toLocaleString()}` : `Showing all ${shown.toLocaleString()}`}
+              {sort && users.hasNextPage && <span data-testid="identity-users-sort-note"> · sorted within the loaded {shown.toLocaleString()}</span>}
+            </span>
+            {users.hasNextPage && (
+              <Button variant="outline" size="sm" onClick={() => void users.fetchNextPage()} loading={users.isFetchingNextPage} data-testid="identity-users-more">
+                Load more
+              </Button>
+            )}
           </div>
         )}
       </Panel>
 
       {canManage && serving && (
-        <InvitePanel orgId={orgId} envId={envId} envName={envName} roles={roles} canEmail={canEmail} onIssued={setIssued} />
+        <InvitePanel orgId={orgId} envId={envId} envName={envName} roles={roles} canEmail={canEmail} onIssued={setIssued} lockedReason={lockedReason} />
       )}
+
+      <UserDetail
+        open={!!opened.userId}
+        user={openUser}
+        loading={!openUser && fetched.isLoading}
+        failed={!openUser && !!fetched.error}
+        editing={opened.editing}
+        onEditingChange={(editing) => setOpened({ userId: opened.userId, editing })}
+        onClose={close}
+        orgId={orgId}
+        envId={envId}
+        roles={roles}
+        reportsSignIns={reportsSignIns}
+        verbs={verbs}
+      />
 
       <IdentityPasswordCodeDialog issued={issued} onClose={closeIssued} />
 
@@ -345,123 +507,258 @@ const CONFIRM_COPY: Record<Confirm["kind"], { title: (email: string) => string; 
   },
 };
 
-function UserRow({
+const shortDate = (ms: number) => new Date(ms).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+
+function LastSignIn({ user, reportsSignIns }: { user: IdentityUser; reportsSignIns: boolean }) {
+  if (user.lastSignInAtMs) {
+    return (
+      <time data-testid="identity-user-last-sign-in" dateTime={new Date(user.lastSignInAtMs).toISOString()} title={new Date(user.lastSignInAtMs).toLocaleString()}>
+        {formatAgo(user.lastSignInAtMs)}
+      </time>
+    );
+  }
+  return reportsSignIns ? <span data-testid="identity-user-last-sign-in">Never</span> : <span aria-label="not reported">—</span>;
+}
+
+/** Roles as quiet tags; a declared one carries a lock and says where it is managed. `max` folds the rest into "+n". */
+function RoleTags({ roles, declared, max }: { roles: string[]; declared: Set<string>; max?: number }) {
+  if (roles.length === 0) return <span className="text-xs text-ink-muted">none</span>;
+  const shown = max ? roles.slice(0, max) : roles;
+  const rest = roles.length - shown.length;
+  return (
+    <span className="flex min-w-0 flex-wrap items-center gap-1">
+      {shown.map((role) => (
+        <span
+          key={role}
+          title={declared.has(role) ? DECLARED_ROLE_NOTE : undefined}
+          className="inline-flex max-w-full items-center gap-1 truncate rounded border border-border/60 px-1.5 py-px font-mono text-2xs text-ink-muted"
+        >
+          {declared.has(role) && <Lock className="h-2.5 w-2.5 shrink-0" aria-label="declared" />}
+          {role}
+        </span>
+      ))}
+      {rest > 0 && (
+        <span className="text-2xs text-ink-muted" title={roles.slice(shown.length).join(", ")}>
+          +{rest}
+        </span>
+      )}
+    </span>
+  );
+}
+
+interface UserVerbs {
+  canManage: boolean;
+  canEmail: boolean;
+  /** Why every verb is off (a read-only console), when it is. */
+  lockedReason?: string;
+  busy: boolean;
+  declared: Set<string>;
+  open: (user: IdentityUser, editing?: boolean) => void;
+  reset: (user: IdentityUser) => void;
+  resetLink: (user: IdentityUser) => void;
+  unlock: (user: IdentityUser) => void;
+  confirm: (kind: Confirm["kind"], user: IdentityUser) => void;
+}
+
+/** The admin verbs for one person, as menu items: the same list the row menu and the detail show. */
+function adminGroups(user: IdentityUser, verbs: UserVerbs): MenuGroup[] {
+  if (!verbs.canManage) return [];
+  const off = !!verbs.lockedReason;
+  const holdsDeclared = user.roles.some((role) => verbs.declared.has(role));
+  return [
+    {
+      label: verbs.lockedReason,
+      items: [
+        { label: "Edit roles", onClick: () => verbs.open(user, true), disabled: off, testId: "identity-user-edit-roles" },
+        ...(verbs.canEmail ? [{ label: "Email reset", onClick: () => verbs.reset(user), disabled: off || verbs.busy }] : []),
+        { label: "Get reset link", icon: <Link2 className="h-3.5 w-3.5" />, onClick: () => verbs.resetLink(user), disabled: off || verbs.busy },
+        user.state === "locked"
+          ? { label: "Unlock", onClick: () => verbs.unlock(user), disabled: off || verbs.busy }
+          : { label: "Lock", onClick: () => verbs.confirm("lock", user), disabled: off },
+        { label: "End sessions", onClick: () => verbs.confirm("revoke", user), disabled: off },
+      ],
+    },
+    {
+      items: [
+        {
+          label: "Delete",
+          variant: "danger",
+          onClick: () => verbs.confirm("delete", user),
+          disabled: off || holdsDeclared,
+          hint: holdsDeclared ? "declared role" : undefined,
+        },
+      ],
+    },
+  ];
+}
+
+function UserMenu({ user, envId, verbs }: { user: IdentityUser; envId: string; verbs: UserVerbs }) {
+  const appData = useIdentityAppDataHref(envId, user);
+  const admin = adminGroups(user, verbs);
+  // A menu holding only "Open details" repeats the row's own click: a member with no data link gets none.
+  if (admin.length === 0 && !appData) return null;
+  const groups: MenuGroup[] = [
+    {
+      items: [
+        { label: "Open details", onClick: () => verbs.open(user) },
+        ...(appData ? [{ label: "App data", href: appData, icon: <Database className="h-3.5 w-3.5" /> }] : []),
+      ],
+    },
+    ...admin,
+  ];
+  return (
+    <span data-testid="identity-user-actions" className="inline-flex">
+      <DropdownMenu
+        trigger={<MoreHorizontal className="h-4 w-4" aria-hidden="true" />}
+        triggerLabel={`Actions for ${user.email}`}
+        triggerClassName="inline-flex h-7 w-7 items-center justify-center rounded-md text-ink-muted hover:bg-ink/5 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        groups={groups}
+        menuClassName="min-w-[12rem]"
+      />
+    </span>
+  );
+}
+
+/**
+ * One person, opened from their row: who they are, when they joined and last
+ * signed in, where their data is, and the verbs — with the role editor inline.
+ */
+function UserDetail({
+  open,
   user,
-  roles,
-  canManage,
+  loading,
+  failed,
   editing,
-  onEdit,
+  onEditingChange,
+  onClose,
   orgId,
   envId,
+  roles,
   reportsSignIns,
-  busy,
-  canEmail,
-  onReset,
-  onResetLink,
-  onUnlock,
-  onConfirm,
+  verbs,
 }: {
-  user: IdentityUser;
-  roles: IdentityRole[];
-  canManage: boolean;
+  open: boolean;
+  user: IdentityUser | null;
+  loading: boolean;
+  failed: boolean;
   editing: boolean;
-  onEdit: () => void;
+  onEditingChange: (editing: boolean) => void;
+  onClose: () => void;
   orgId: string;
   envId: string;
-  /** Whether a missing last sign-in means "never" (the server reports them). */
+  roles: IdentityRole[];
   reportsSignIns: boolean;
-  busy: boolean;
-  canEmail: boolean;
-  onReset: () => void;
-  onResetLink: () => void;
-  onUnlock: () => void;
-  onConfirm: (kind: Confirm["kind"]) => void;
+  verbs: UserVerbs;
 }) {
-  const declared = new Set(roles.filter((r) => r.declared).map((r) => r.key));
-  const holdsDeclared = user.roles.some((r) => declared.has(r));
   return (
-    <li className="space-y-2 px-4 py-3" data-testid={`identity-user-${user.userId}`}>
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <div className="min-w-0 space-y-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="truncate text-sm text-ink">{user.email}</span>
-            <Badge label={USER_STATE_LABEL[user.state]} variant={USER_STATE_VARIANT[user.state]} size="sm" />
-            <IdentityUserLink envId={envId} user={user} />
-            <IdentityAppDataLink envId={envId} user={user} />
-          </div>
-          <div className="flex flex-wrap items-center gap-1.5 text-xs text-ink-muted">
-            {user.displayName && user.displayName !== user.email && <span>{user.displayName}</span>}
-            {user.createdAtMs && <span>added {new Date(user.createdAtMs).toLocaleDateString()}</span>}
-            {user.lastSignInAtMs ? (
-              <span data-testid="identity-user-last-sign-in" title={new Date(user.lastSignInAtMs).toLocaleString()}>
-                signed in {formatAgo(user.lastSignInAtMs)}
-              </span>
-            ) : (
-              reportsSignIns && <span data-testid="identity-user-last-sign-in">never signed in</span>
-            )}
-            {user.roles.length === 0 ? (
-              <span>no roles</span>
-            ) : (
-              user.roles.map((role) => (
-                <span
-                  key={role}
-                  title={declared.has(role) ? DECLARED_ROLE_NOTE : undefined}
-                  className="inline-flex items-center gap-1 rounded border border-border/60 bg-surface-sunken px-1.5 py-0.5 font-mono text-2xs text-ink"
-                >
-                  {declared.has(role) && <Lock className="h-2.5 w-2.5" aria-label="declared" />}
-                  {role}
-                </span>
-              ))
-            )}
-          </div>
-        </div>
-        {canManage && (
-          <div className="flex flex-wrap items-center gap-1" data-testid="identity-user-actions">
-            <Button variant="ghost" size="xs" onClick={onEdit} aria-expanded={editing}>
-              Roles
-            </Button>
-            {canEmail && (
-              <Button variant="ghost" size="xs" onClick={onReset} disabled={busy} title="Emails them a link to set a new password">
-                Email reset
-              </Button>
-            )}
-            <Button
-              variant="ghost"
-              size="xs"
-              onClick={onResetLink}
-              disabled={busy}
-              leftIcon={<Link2 className="h-3 w-3" />}
-              title="A one-time link to set their password, for you to hand over"
-            >
-              Get reset link
-            </Button>
-            {user.state === "locked" ? (
-              <Button variant="ghost" size="xs" onClick={onUnlock} disabled={busy}>
-                Unlock
-              </Button>
-            ) : (
-              <Button variant="ghost" size="xs" onClick={() => onConfirm("lock")}>
-                Lock
-              </Button>
-            )}
-            <Button variant="ghost" size="xs" onClick={() => onConfirm("revoke")}>
-              End sessions
-            </Button>
-            <Button
-              variant="ghost"
-              size="xs"
-              className="text-danger-ink!"
-              onClick={() => onConfirm("delete")}
-              disabled={holdsDeclared}
-              title={holdsDeclared ? `Holds a declared role (${DECLARED_ROLE_NOTE}); the next reconcile would recreate them` : undefined}
-            >
-              Delete
-            </Button>
-          </div>
+    <Modal
+      open={open}
+      onClose={onClose}
+      title={user?.email ?? "User"}
+      description={user && user.displayName && user.displayName !== user.email ? user.displayName : undefined}
+      size="md"
+      sheetOnMobile
+      // A drawer on the right on a wide screen (the list stays in view behind it); a sheet on a phone.
+      overlayClassName="sm:justify-end sm:p-0!"
+      className="sm:h-full sm:max-h-none! sm:rounded-none! sm:border-l sm:border-border"
+    >
+      <div data-testid="identity-user-detail">
+        {user ? (
+          <UserDetailBody user={user} onClose={onClose} editing={editing} onEditingChange={onEditingChange} orgId={orgId} envId={envId} roles={roles} reportsSignIns={reportsSignIns} verbs={verbs} />
+        ) : failed ? (
+          <p role="alert" className="text-sm text-danger-ink">
+            Could not open this person in this environment. The server refused the lookup or they are no longer here.
+          </p>
+        ) : (
+          <p className="text-sm text-ink-muted">{loading ? "Loading…" : "Not found."}</p>
         )}
       </div>
-      {canManage && editing && <RoleEditor user={user} roles={roles} orgId={orgId} envId={envId} onDone={onEdit} />}
-    </li>
+    </Modal>
+  );
+}
+
+/** The verbs that ask first: their confirmation replaces the detail rather than stacking on it. */
+const CONFIRMS = new Set(["Lock", "End sessions", "Delete"]);
+
+function UserDetailBody({
+  user,
+  onClose,
+  editing,
+  onEditingChange,
+  orgId,
+  envId,
+  roles,
+  reportsSignIns,
+  verbs,
+}: {
+  user: IdentityUser;
+  onClose: () => void;
+  editing: boolean;
+  onEditingChange: (editing: boolean) => void;
+  orgId: string;
+  envId: string;
+  roles: IdentityRole[];
+  reportsSignIns: boolean;
+  verbs: UserVerbs;
+}) {
+  const appData = useIdentityAppDataHref(envId, user);
+  const groups = adminGroups(user, verbs);
+  const at = (ms: number | null) => (ms ? `${new Date(ms).toLocaleString()} (${formatAgo(ms)})` : null);
+  return (
+    <div className="space-y-5">
+      <dl className="grid grid-cols-[max-content_1fr] gap-x-6 gap-y-2.5 text-sm">
+        <dt className="text-xs text-ink-muted">State</dt>
+        <dd>
+          <Badge label={USER_STATE_LABEL[user.state]} variant={USER_STATE_VARIANT[user.state]} size="sm" />
+        </dd>
+        <dt className="text-xs text-ink-muted">Roles</dt>
+        <dd>
+          <RoleTags roles={user.roles} declared={verbs.declared} />
+        </dd>
+        <dt className="text-xs text-ink-muted">Added</dt>
+        <dd className="text-ink">{at(user.createdAtMs) ?? "—"}</dd>
+        <dt className="text-xs text-ink-muted">Last sign-in</dt>
+        <dd className="text-ink">{at(user.lastSignInAtMs) ?? (reportsSignIns ? "Never" : "Not reported")}</dd>
+        <dt className="text-xs text-ink-muted">User id</dt>
+        <dd className="break-all font-mono text-xs text-ink">{user.userId}</dd>
+      </dl>
+      {appData && (
+        <Link href={appData} className="inline-flex items-center gap-1.5 text-sm font-medium text-primary-ink hover:underline" data-testid="identity-user-app-data">
+          <Database className="h-3.5 w-3.5" aria-hidden="true" />
+          Their rows in the app&apos;s data
+        </Link>
+      )}
+      {groups.length > 0 && (
+        <section className="space-y-2" aria-label="Manage">
+          {verbs.lockedReason && <p className="text-xs text-ink-muted">{verbs.lockedReason}: these are turned off.</p>}
+          <div className="flex flex-wrap gap-2" data-testid="identity-user-detail-actions">
+            {groups.flatMap((group) => group.items).map((item) =>
+              item.label === "Edit roles" ? (
+                <Button key={item.label} variant="outline" size="sm" disabled={item.disabled} title={verbs.lockedReason} aria-expanded={editing} onClick={() => onEditingChange(!editing)}>
+                  Edit roles
+                </Button>
+              ) : (
+                <Button
+                  key={item.label}
+                  variant="outline"
+                  size="sm"
+                  className={cn(item.variant === "danger" && "text-danger-ink!")}
+                  disabled={item.disabled}
+                  title={verbs.lockedReason ?? (item.hint ? `Holds a declared role (${DECLARED_ROLE_NOTE}); the next reconcile would recreate them` : undefined)}
+                  onClick={() => {
+                    if (CONFIRMS.has(item.label)) onClose();
+                    item.onClick?.();
+                  }}
+                >
+                  {item.label}
+                </Button>
+              )
+            )}
+          </div>
+          {editing && !verbs.lockedReason && <RoleEditor user={user} roles={roles} orgId={orgId} envId={envId} onDone={() => onEditingChange(false)} />}
+        </section>
+      )}
+    </div>
   );
 }
 
@@ -581,6 +878,7 @@ function InvitePanel({
   roles,
   canEmail,
   onIssued,
+  lockedReason,
 }: {
   orgId: string;
   envId: string;
@@ -588,6 +886,7 @@ function InvitePanel({
   roles: IdentityRole[];
   canEmail: boolean;
   onIssued: (issued: IssuedCode) => void;
+  lockedReason?: string;
 }) {
   const [email, setEmail] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -688,7 +987,8 @@ function InvitePanel({
             type="submit"
             size="sm"
             loading={invite.isPending}
-            disabled={!valid}
+            disabled={!valid || !!lockedReason}
+            title={lockedReason}
             leftIcon={returnCode ? <Link2 className="h-3.5 w-3.5" /> : <MailPlus className="h-3.5 w-3.5" />}
           >
             {returnCode ? "Invite and get link" : "Send invitation"}

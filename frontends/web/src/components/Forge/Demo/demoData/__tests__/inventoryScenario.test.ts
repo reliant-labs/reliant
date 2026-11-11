@@ -5,11 +5,13 @@ import { describe, expect, it, vi } from "vitest";
 
 import { AppDatabaseService, BrowseCount, BrowseFilterOp } from "@/gen/controlplane/services/app_database/v1/app_database_pb";
 import { DeployService } from "@/gen/controlplane/services/deploy/v1/deploy_pb";
+import { IdentityUserState } from "@/gen/controlplane/controlplane/v1/identity_pb";
 import { IdentityService } from "@/gen/controlplane/services/identity/v1/identity_pb";
 
 import { demoBundleId, DEMO_WITHHELD } from "../configScenario";
 import { createDemoTransport } from "../demoTransport";
-import { DEMO_SUBJECTS } from "../inventoryScenario";
+import { DEMO_SUBJECTS, demoIdentityUsers } from "../inventoryScenario";
+import { DEMO_AUDIENCE_SIZE, demoAudience, demoAudienceTotals } from "../shop/audience";
 import { createDemoApi } from "../demoApi";
 
 const transport = () => createDemoTransport({ source: "fixtures", url: "" });
@@ -47,9 +49,40 @@ describe("public demo inventory wire reads", () => {
     expect((await identity.getUser({ environmentId: "env-dev", userId: "cus_4f1a9c" })).user).toBeUndefined();
     const first = await identity.listUsers({ environmentId: "env-dev", pageSize: 1 });
     const next = await identity.listUsers({ environmentId: "env-dev", pageSize: 1, pageToken: first.nextPageToken });
-    expect(first.users[0].userId).toBe(DEMO_SUBJECTS[0]);
-    expect(next.users[0].userId).toBe(DEMO_SUBJECTS[1]);
-    expect((await identity.listUsers({ environmentId: "env-dev", query: "AIKO." })).users).toHaveLength(1);
+    // Oldest first, as the real ListUsers sorts: the team that built shop, then its customers.
+    expect(first.users[0].email).toBe("jon@example.com");
+    expect(next.users[0].email).toBe("maya@example.com");
+    expect((await identity.listUsers({ environmentId: "env-dev", query: "AIKO." })).users.map((u) => u.userId)).toEqual([DEMO_SUBJECTS[2]]);
+  });
+
+  it("lists the one audience every page counts: totals, pages and customers agree", async () => {
+    const identity = createClient(IdentityService, transport());
+    for (const env of ["env-prod", "env-staging", "env-dev"]) {
+      const totals = demoAudienceTotals(env);
+      const page = await identity.listUsers({ environmentId: env, pageSize: 100 });
+      expect(page.totalSize, env).toBe(totals.accounts);
+      expect(page.totalSize, env).toBe(DEMO_AUDIENCE_SIZE[env]);
+      expect(page.users, env).toHaveLength(Math.min(100, totals.accounts));
+      // Every customer in Data is an account, by its identity subject.
+      const subjects = new Set(demoAudience(env).map((account) => account.id));
+      expect(demoIdentityUsers(env).every((row) => subjects.has(String(row.identity_subject))), env).toBe(true);
+      // Unique people on example.com, none signed in before they joined.
+      const accounts = demoAudience(env);
+      expect(new Set(accounts.map((a) => a.email)).size, env).toBe(accounts.length);
+      expect(accounts.every((a) => a.email.endsWith("@example.com") && (a.lastSignInAtMs === null || a.lastSignInAtMs >= a.createdAtMs)), env).toBe(true);
+    }
+    expect(demoAudienceTotals("env-prod")).toMatchObject({ accounts: 1284, locked: 2, invited: 1, disabled: 1 });
+    expect(demoAudienceTotals("env-staging")).toMatchObject({ locked: 1, invited: 0 });
+    const locked = await identity.listUsers({ environmentId: "env-prod", state: IdentityUserState.LOCKED });
+    expect(locked.totalSize).toBe(2);
+    let token = "";
+    let seen = 0;
+    do {
+      const page = await identity.listUsers({ environmentId: "env-prod", pageSize: 100, pageToken: token });
+      seen += page.users.length;
+      token = page.nextPageToken;
+    } while (token);
+    expect(seen).toBe(1284);
   });
 
   it("has real product names, and prod's only payment_failed orders are the incident's", async () => {

@@ -15,6 +15,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+
+import { rowItem, rowItemOrNull } from "./identityRowMenu";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Code, ConnectError } from "@connectrpc/connect";
 
@@ -128,8 +130,8 @@ describe("IdentityTab with no mail delivery", () => {
   it("offers no email verb, only the link", async () => {
     renderTab(fakeApi());
     const alice = await screen.findByTestId("identity-user-u-alice");
-    expect(within(alice).queryByRole("button", { name: "Email reset" })).not.toBeInTheDocument();
-    expect(within(alice).getByRole("button", { name: "Get reset link" })).toBeInTheDocument();
+    expect(await rowItemOrNull(alice, "Email reset")).toBeNull();
+    expect(await rowItem(alice, "Get reset link")).toBeInTheDocument();
 
     const invite = screen.getByTestId("identity-invite");
     expect(invite).toHaveTextContent("sends no email, so nothing is emailed");
@@ -143,7 +145,7 @@ describe("IdentityTab with no mail delivery", () => {
     renderTab(api);
     const alice = await screen.findByTestId("identity-user-u-alice");
 
-    await user.click(within(alice).getByRole("button", { name: "Get reset link" }));
+    await user.click(await rowItem(alice, "Get reset link"));
     await waitFor(() => expect(api.sendPasswordReset).toHaveBeenCalledWith("org-a", "env-staging", "u-alice", { returnCode: true }));
 
     const dialog = await screen.findByRole("dialog", { name: "Password reset link for alice@acme.test" });
@@ -165,7 +167,7 @@ describe("IdentityTab with no mail delivery", () => {
     const api = fakeApi({ sendPasswordReset: vi.fn(async () => code({ resetUrl: "" })) });
     renderTab(api);
     const alice = await screen.findByTestId("identity-user-u-alice");
-    await userEvent.click(within(alice).getByRole("button", { name: "Get reset link" }));
+    await userEvent.click(await rowItem(alice, "Get reset link"));
 
     const dialog = await screen.findByRole("dialog");
     expect(within(dialog).getByTestId("identity-code-value")).toHaveValue(CODE);
@@ -213,7 +215,7 @@ describe("IdentityTab with no mail delivery", () => {
     });
     renderTab(api);
     const alice = await screen.findByTestId("identity-user-u-alice");
-    await userEvent.click(within(alice).getByRole("button", { name: "Get reset link" }));
+    await userEvent.click(await rowItem(alice, "Get reset link"));
 
     const dialog = await screen.findByRole("dialog", { name: "You can't hand out password links here" });
     expect(within(dialog).getByTestId("identity-code-refused")).toHaveTextContent("identity:manage");
@@ -247,8 +249,8 @@ describe("IdentityTab with smtp", () => {
     renderTab(api);
     expect(await screen.findByTestId("identity-mail")).toHaveTextContent("own SMTP server");
     const alice = await screen.findByTestId("identity-user-u-alice");
-    expect(within(alice).getByRole("button", { name: "Email reset" })).toBeInTheDocument();
-    expect(within(alice).getByRole("button", { name: "Get reset link" })).toBeInTheDocument();
+    expect(await rowItem(alice, "Email reset")).toBeInTheDocument();
+    expect(await rowItem(alice, "Get reset link")).toBeInTheDocument();
   });
 
   it("emails an invitation by default, and hands back the link when asked", async () => {
@@ -272,6 +274,6 @@ describe("IdentityTab against a server that predates mail_delivery", () => {
     renderTab(fakeApi({ getStatus: vi.fn(async () => status({ mailDelivery: "unknown" })) }));
     const alice = await screen.findByTestId("identity-user-u-alice");
     expect(screen.queryByTestId("identity-mail")).not.toBeInTheDocument();
-    expect(within(alice).getByRole("button", { name: "Email reset" })).toBeInTheDocument();
+    expect(await rowItem(alice, "Email reset")).toBeInTheDocument();
   });
 });
