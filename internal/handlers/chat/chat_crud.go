@@ -727,12 +727,20 @@ func (s *Service) ListArchivedChats(
 // AGENT_MESSAGES_DRAINED updates are gone, NODE_EXECUTION keeps each node's
 // newest update and every other type each entity's newest, while THREAD,
 // WORKFLOW_STATUS, ERROR and QUESTION are whole. A poll from at or above it
-// gets every update; one from below it gets that compacted view, each
-// entity's current state without the transitions that led to it. A header,
-// not a response field: GetChatUpdatesResponse is public SDK API, which
-// changes in its own PR (sdk/go/README.md), and a header is invisible to every
-// client that does not look for it. 0: never compacted.
+// gets every update. A poll from below it fails with OutOfRange, reason
+// ChatHistoryCompactedReason, and this header on the error: a successful
+// replay there would be a partial one, and a poller that does not know about
+// compaction (every client released before it) would advance its cursor past
+// transitions it never saw. A poller that does know re-reads the chat's
+// current state (GetChat, ListMessages, its open gates) and resumes from the
+// watermark. A header, not a response field: GetChatUpdatesResponse is public
+// SDK API, which changes in its own PR (sdk/go/README.md), and a header is
+// invisible to every client that does not look for it. 0: never compacted.
 const ChatCompactedThroughHeader = "Reliant-Chat-Compacted-Through"
+
+// ChatHistoryCompactedReason is the error reason (svcerr.ReasonHeader) of a
+// GetChatUpdates poll from below the compaction watermark.
+const ChatHistoryCompactedReason = "chat_history_compacted"
 
 // GetChatUpdates fetches chat updates since a sequence number
 func (s *Service) GetChatUpdates(
@@ -771,6 +779,14 @@ func (s *Service) GetChatUpdates(
 	compactedThrough, err := s.deps.Repo.GetChatCompactedThrough(ctx, req.Msg.ChatId)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to read the chat's compaction watermark"))
+	}
+	// Below the watermark the log no longer holds every transition: refuse the
+	// replay rather than hand back a partial one a poller would advance past.
+	if req.Msg.SinceSeq < compactedThrough {
+		through := strconv.FormatInt(compactedThrough, 10)
+		return nil, svcerr.WithMetadata(svcerr.WithReason(svcerr.OutOfRange(fmt.Sprintf(
+			"chat updates through sequence %s were compacted, so a replay from %d would be incomplete: re-read the chat's current state and poll again from since_seq %s",
+			through, req.Msg.SinceSeq, through)), ChatHistoryCompactedReason), ChatCompactedThroughHeader, through)
 	}
 
 	// Convert to proto messages

@@ -100,8 +100,12 @@ its internal ones after 30 days.
   (`update_stream_counters.compacted_through_seq`). A cursor below it gets a
   snapshot instead of a replay, and every replay batch is verified against it
   before it is sent: a batch the watermark overtook is replaced by a snapshot.
-  Polling readers (`GetChatUpdates`) get the watermark in the response. Clients already handle a snapshot at any point, so
-  no client changes. The watermark is raised before any row under it is
+  Polling readers (`GetChatUpdates`) get the watermark in the response, and
+  a poll from below it fails with `OutOfRange` (reason
+  `chat_history_compacted`, the watermark in `Reliant-Chat-Compacted-Through`)
+  instead of a partial replay a poller would advance its cursor past; the Go
+  SDK's follow resumes from the watermark and says so. Streaming clients already handle a snapshot at any point, so
+  no change there. The watermark is raised before any row under it is
   deleted, so it never under-states what is gone.
 - **Isolation.** Unchanged: rows are keyed by chat, access is checked in the
   handler.
