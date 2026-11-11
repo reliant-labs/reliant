@@ -15,6 +15,7 @@
  *                                 (up to three starred dashboards nested under Dashboards)
  *   Data                          the scoped environment's databases, read-only
  *   Storage                       the scoped environment's buckets, read-only
+ *   Users                         who can sign in to the scoped environment (its managed identity)
  *   Configure
  *     Environments ›              one entry per long-lived environment, previews as one
  *     Secrets · Domains
@@ -37,7 +38,7 @@
  */
 
 import type { ReactNode } from "react";
-import { Activity, Database, Gauge, Globe, HardDrive, Home, KeyRound, Layers, Tag as TagIcon } from "lucide-react";
+import { Activity, Database, Gauge, Globe, HardDrive, Home, KeyRound, Layers, Tag as TagIcon, Users } from "lucide-react";
 
 import SidebarLayout, { type SidebarNavItem, type SidebarUserInfo } from "@/components/forge-ui/sidebar_layout";
 import Link from "@/components/forge-ui/link";
@@ -163,6 +164,7 @@ export function buildConsoleNav({ project, page, env, envs, alertsFiring = 0, st
       }),
       row("Data", { kind: "data" }, icon(Database)),
       row("Storage", { kind: "storage" }, icon(HardDrive)),
+      row("Users", { kind: "users" }, icon(Users)),
       row("Environments", { kind: "environments" }, icon(Layers), {
         section: "Configure",
         children: [
@@ -222,6 +224,8 @@ export function consoleCrumbs(
       return [{ label: "Storage" }];
     case "data":
       return [{ label: "Data" }];
+    case "users":
+      return [{ label: "Users" }];
     case "environments":
       return [{ label: "Environments" }];
     case "environment":

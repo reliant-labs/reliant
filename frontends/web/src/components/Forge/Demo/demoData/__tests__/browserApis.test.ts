@@ -11,7 +11,8 @@ describe("isolated demo browser clients", () => {
     try {
       const { data, storage, identity } = createDemoBrowserApis();
       expect(await identity.currentOrgId()).toBe("demo-org");
-      expect((await identity.listUsers("demo-org", "env-staging", {}, "")).users[0]?.email).toBe("lena.fischer@example.com");
+      expect((await identity.listUsers("demo-org", "env-staging", {}, "")).users[0]?.email).toBe("jon@example.com");
+      expect((await identity.listUsers("demo-org", "env-staging", { query: "lena.fischer" }, "")).users[0]?.userId).toBe(DEMO_SUBJECTS[0]);
       expect((await identity.getUser("demo-org", "env-staging", DEMO_SUBJECTS[0]))?.userId).toBe(DEMO_SUBJECTS[0]);
       await expect(identity.listUsers("foreign-org", "env-staging", {}, "")).rejects.toMatchObject({ code: Code.NotFound });
       await expect(identity.getStatus("demo-org", "foreign-env")).rejects.toMatchObject({ code: Code.NotFound });

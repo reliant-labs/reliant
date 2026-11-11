@@ -208,6 +208,8 @@ const ForgeConsoleStoragePage = lazyRoute(
   () => import('./components/Forge/Storage/StoragePage'), 'StoragePage')
 const ForgeConsoleDataPage = lazyRoute(
   () => import('./components/Forge/Data/DataPage'), 'DataPage')
+const ForgeConsoleUsersPage = lazyRoute(
+  () => import('./components/Forge/Users/UsersPage'), 'UsersPage')
 const ForgeConsoleSecretsPage = lazyRoute(
   () => import('./components/Forge/Console/ConsolePages'), 'SecretsPage')
 const ForgeConsoleActivityPage = lazyRoute(
@@ -803,6 +805,7 @@ const forgeConsoleRoutes = createForgeConsoleRoutes(() => authenticatedLayoutRou
   dashboard: gated(ForgeConsoleDashboardPage),
   storage: gated(ForgeConsoleStoragePage),
   data: gated(ForgeConsoleDataPage),
+  users: gated(ForgeConsoleUsersPage),
   environments: gated(ForgeEnvironmentsPage),
   environment: gated(ForgeEnvPage),
   secrets: gated(ForgeConsoleSecretsPage),
