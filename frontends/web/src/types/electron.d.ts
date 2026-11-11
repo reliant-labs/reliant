@@ -82,10 +82,25 @@ export interface ElectronAPI {
   toggleFullscreen: () => Promise<{ success: boolean; isFullScreen?: boolean; error?: string }>;
 
   // Auto-updater
-  checkForUpdates: () => Promise<{ success?: boolean; error?: string; updateInfo?: UpdateStatus }>;
+  /**
+   * `status` is the updater's state once the check answers ("available",
+   * "not-available", or a download already in flight or done, which a check
+   * does not interrupt).
+   */
+  checkForUpdates: () => Promise<{
+    success?: boolean;
+    error?: string;
+    updateAvailable?: boolean;
+    updateInfo?: { version?: string; releaseNotes?: unknown } | null;
+    status?: UpdateStatus | null;
+  }>;
   downloadUpdate: () => Promise<{ success?: boolean; error?: string }>;
   installUpdate: () => Promise<{ success?: boolean; error?: string }>;
   onUpdateStatus: (callback: (status: UpdateStatus) => void) => () => void;
+  /** The updater's current state, null before any check has answered. */
+  getUpdateStatus?: () => Promise<UpdateStatus | null>;
+  /** The app menu's "Check for Updates…" asks this window to show the update dialog. */
+  onUpdateReveal?: (callback: (status: UpdateStatus | null) => void) => () => void;
 
   // Event listeners
   onWorktreeContextChanged: (callback: (data: { worktreeId?: string; projectId?: string }) => void) => () => void;

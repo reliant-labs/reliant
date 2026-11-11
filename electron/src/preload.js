@@ -143,6 +143,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Auto-updater
   checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
+  // The updater's current state, for a window that mounts after a check.
+  getUpdateStatus: () => ipcRenderer.invoke('get-update-status'),
   downloadUpdate: () => ipcRenderer.invoke('download-update'),
   installUpdate: () => ipcRenderer.invoke('install-update'),
 
@@ -430,6 +432,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
     const listener = (event, status) => callback(status);
     ipcRenderer.on('update-status', listener);
     return () => ipcRenderer.removeListener('update-status', listener);
+  },
+
+  // The app menu's "Check for Updates…" found an update: show the update
+  // dialog with this status.
+  onUpdateReveal: (callback) => {
+    const listener = (event, status) => callback(status);
+    ipcRenderer.on('update-reveal', listener);
+    return () => ipcRenderer.removeListener('update-reveal', listener);
   },
 
 
