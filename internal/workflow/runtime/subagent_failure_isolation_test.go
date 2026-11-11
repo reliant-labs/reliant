@@ -93,6 +93,10 @@ type subAgentFailureEnv struct {
 	// callRuntime records the RuntimeContext each CallLLM was dispatched with,
 	// in call order, keyed "<who>#<turn>".
 	callRuntime map[string]types.RuntimeContext
+	// presetParams is what LoadPresetParams returns for a preset name (its
+	// params plus the runtime inputs its providers: block writes); any other
+	// name loads empty.
+	presetParams map[string]map[string]interface{}
 	// notices records the cross-provider notices the workflow asked for.
 	notices []map[string]interface{}
 	// cancelledCalls records CallLLM stubs whose activity context was
@@ -243,7 +247,10 @@ func newSubAgentFailureEnv(t *testing.T, env *testsuite.TestWorkflowEnvironment,
 	register("ValidateThreadOwnership", func(_ context.Context, _ map[string]interface{}) (interface{}, error) {
 		return map[string]interface{}{"valid": true}, nil
 	})
-	register("LoadPresetParams", func(_ context.Context, _ types.LoadPresetParamsInput) (map[string]interface{}, error) {
+	register("LoadPresetParams", func(_ context.Context, in types.LoadPresetParamsInput) (map[string]interface{}, error) {
+		if params, ok := e.presetParams[in.PresetName]; ok {
+			return params, nil
+		}
 		return map[string]interface{}{}, nil
 	})
 	register("ExecuteTools", func(_ context.Context, _ types.ActivityInput) (map[string]interface{}, error) {
