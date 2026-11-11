@@ -6,7 +6,8 @@ import { getAppURL } from '@/lib/constants'
 import { setTelemetryUserId } from '@/lib/telemetry'
 import { trackEvent } from '@/lib/analytics'
 import { queryClient } from '@/lib/query-client'
-import { setReaderPrincipal } from '@/components/Forge/AuditedAccess/readerSession'
+import { setSessionOwner } from '@/lib/auth/sessionOwner'
+import { getReaderSession, setReaderPrincipal } from '@/components/Forge/AuditedAccess/readerSession'
 import {
   startOAuthSignIn,
   oauthCallbackTransport,
@@ -14,6 +15,208 @@ import {
 } from '@/lib/oauth-signin'
 
 const isElectron = !!window.electronAPI
+
+/**
+ * Drops everything held for the signed-in user: the user-owned stores, the
+ * query cache and the cached identity answers.
+ *
+ * Runs on EVERY identity transition, not only this tab's signOut(): with the
+ * shared session cookie (lib/auth/sharedSession.ts) a sign-out or a sign-in as
+ * another user on forge.* reaches app.* only as an auth event, and adopting
+ * the next user's session over the previous user's chats, projects and cached
+ * answers would show one tenant's data to another. Idempotent. Only
+ * commitIdentity calls it, inside the serialized transition queue.
+ */
+const clearUserScopedState = async (): Promise<void> => {
+  // Clear all store data
+  // Import these dynamically to avoid circular dependencies
+  const { useChatStore } = await import('./chatStore')
+  const { useProjectStore } = await import('./projectStore')
+  const { useWorktreeStore } = await import('./worktreeStore')
+  const { resetWorktreeAnnouncements } = await import('../hooks/worktree-queries')
+  const { useChatNavigationStore } = await import('./chatNavigationStore')
+  const { useAttachmentStore } = await import('./attachmentStore')
+
+  // Reset all stores (order matters: navigation first to trigger chat cleanup, then everything else)
+  useChatNavigationStore.getState().reset()
+  useChatStore.getState().reset()
+  useProjectStore.getState().reset()
+  useWorktreeStore.getState().reset()
+  // Workspace rows are in the query cache (cleared below); forget which
+  // creates this session was waiting on.
+  resetWorktreeAnnouncements()
+  useAttachmentStore.getState().reset()
+
+  // The per-account singletons AuthInitializer fills on sign-in: the model
+  // list (which carries the user's local daemons, machine names and
+  // endpoints), the API-key check and the onboarding checklist. AuthInitializer
+  // re-runs its startup for the next user id; these must be empty by then.
+  const { useGlobalDataStore } = await import('./globalDataStore')
+  const { useApiKeySetupStore } = await import('./apiKeySetupStore')
+  const { useOnboardingChecklistStore } = await import('./onboardingChecklistStore')
+  useGlobalDataStore.getState().reset()
+  useApiKeySetupStore.getState().reset()
+  useOnboardingChecklistStore.getState().reset()
+  // The product tour's progress and its debounced save: left alive, a save
+  // queued for this user would write their progress into the next user's
+  // settings, and a load in flight would install this user's journeys.
+  const { useTourStore } = await import('./tourStore')
+  useTourStore.getState().reset()
+  // The settings cache the checklist (and every readSetting) is served from;
+  // left initialized it would answer the next user with this one's settings.
+  const { settingsSync } = await import('@/services/settingsSync')
+  settingsSync.reset()
+
+  // Drop every cached answer about who the user is.
+  //
+  // The QueryClient is a module-level singleton and the onboarding queries
+  // are keyed on ['onboarding', …] with no user id in the key, so without
+  // this the NEXT user inherits this one's answers for a full staleTime
+  // window. `currentUser.onboardingCompleted` is the gate ModernApp uses to
+  // decide whether to onboard at all — a brand-new anonymous account read
+  // the departed user's `true` and was sent straight into the app, never
+  // seeing onboarding. `cloud.getCurrentUser` keeps its own 30s promise
+  // cache for the same data, which is why clearing the query cache alone is
+  // not enough.
+  const { resetUserCache } = await import(
+    '@/services/controlPlane/onboarding'
+  )
+  resetUserCache()
+  await queryClient.cancelQueries()
+  queryClient.clear()
+}
+
+// The user whose chats, projects and cached answers this page may still hold:
+// the last identity installed with the previous user's state cleared first.
+// Tracked apart from the store's `user`, which several paths (a failed
+// refresh, an unreadable stored session) set to null WITHOUT clearing that
+// state, so "the store is signed out" never means "nothing is left to clear".
+let scopedStateUserId: string | null = null
+
+const CLEANUP_FAILED_MESSAGE =
+  'Your previous session could not be cleared from this page. Please reload the page to continue.'
+
+type SetAuthState = (partial: Partial<AuthState>) => void
+
+type AdoptOutcome = 'installed' | 'refused' | 'superseded'
+
+// The number of adoptions ever requested, and the last one in line: each
+// commit waits for the one before it.
+let adoptionSeq = 0
+let adoptionTail: Promise<AdoptOutcome> = Promise.resolve('installed')
+
+/**
+ * The one way a user and session are installed in the store: every sign-in,
+ * refresh, verification and auth event goes through it.
+ *
+ * A different identity from the one whose state the page holds (signed out,
+ * or another user signed in, often on another host sharing the session
+ * cookie) clears that state BEFORE the next one is installed. Fail closed: if
+ * the cleanup fails, NO identity is installed, the store goes signed out with
+ * an authError, and the cleanup stays owed, so every later adoption (including
+ * one for the same next user) retries it first. Returns whether the identity
+ * was installed; a caller that reports success to the user must check it.
+ */
+const adoptIdentity = async (
+  set: SetAuthState,
+  user: User | null,
+  session: Session | null,
+  // Clear the user-scoped state even when the page records nobody's: this
+  // tab's own signOut(), which must leave nothing behind whatever the store
+  // last believed. Ignored for a sign-in, whose clearing follows the rule above.
+  forceClear = false,
+): Promise<boolean> => {
+  // Transitions run one at a time, in the order they were requested, and one
+  // requested later supersedes any still waiting: adopting B awaits a cleanup,
+  // and an event for C arriving meanwhile must not be overwritten by B
+  // finishing second. A superseded call answers with the outcome of the
+  // transition that replaced it, which is the identity the page now holds.
+  // Audited reader authority stops the moment another identity is requested,
+  // not when its turn comes: the cleanup below awaits, and meanwhile requests
+  // already carry the next identity's token (it is in supabase's storage), so
+  // reading on as the previous principal would pair A's view with B's
+  // credential. The store subscription installs the next principal once the
+  // identity is.
+  const nextReader = user && !user.is_anonymous ? user.id : null
+  if (getReaderSession().principalId !== nextReader) setReaderPrincipal(null)
+  const ticket = ++adoptionSeq
+  const run = adoptionTail
+    .then(() => commitIdentity(set, user, session, ticket, forceClear))
+    .catch((): AdoptOutcome => 'refused')
+  adoptionTail = run
+  let outcome = await run
+  while (outcome === 'superseded') outcome = await adoptionTail
+  return outcome === 'installed'
+}
+
+const commitIdentity = async (
+  set: SetAuthState,
+  user: User | null,
+  session: Session | null,
+  ticket: number,
+  forceClear: boolean,
+): Promise<AdoptOutcome> => {
+  if (ticket !== adoptionSeq) return 'superseded'
+  const nextUserId = user?.id ?? null
+  if (
+    (scopedStateUserId !== null && scopedStateUserId !== nextUserId) ||
+    (forceClear && nextUserId === null)
+  ) {
+    // From here on the page acts for nobody: writes queued for the previous
+    // user that are still waiting to send are dropped (lib/auth/sessionOwner).
+    setSessionOwner(null)
+    try {
+      await clearUserScopedState()
+    } catch (error) {
+      logger.error('[AuthStore] Clearing the previous user\'s state failed; staying signed out:', error)
+      set({ user: null, session: null, authError: CLEANUP_FAILED_MESSAGE })
+      setTelemetryUserId(null)
+      return 'refused'
+    }
+    // The page now holds nobody's state, whichever identity is installed next.
+    scopedStateUserId = null
+  }
+  if (ticket !== adoptionSeq) return 'superseded'
+  scopedStateUserId = nextUserId
+  setSessionOwner(nextUserId)
+  set({ user, session })
+  return 'installed'
+}
+
+// What the auth listener last saw supabase's storage hold, and how many
+// events it has seen. The listener's events arrive in storage order; a store
+// action's return value does not: supabase emits the action's own event before
+// returning, so any event seen after that is newer than what the action holds.
+let observedEvents = 0
+let observedIdentity: { user: User | null; session: Session | null } | null = null
+
+/** A mark taken when a store action (or the /auth/callback exchange) starts. */
+export const identityActionMark = (): number => observedEvents
+
+/**
+ * adoptIdentity for the session a supabase call returned. If, since `mark`,
+ * the listener saw storage move to a different user (another host signed in
+ * or out through the shared cookie while the call was in flight), the
+ * returned identity is already stale: the latest one seen is adopted instead,
+ * so an action finishing late never reinstalls an identity storage has left.
+ */
+const adoptReturnedIdentity = (
+  set: SetAuthState,
+  user: User | null,
+  session: Session | null,
+  mark: number,
+  forceClear = false,
+): Promise<boolean> => {
+  if (
+    observedEvents > mark &&
+    observedIdentity !== null &&
+    (observedIdentity.user?.id ?? null) !== (user?.id ?? null)
+  ) {
+    logger.info('[AuthStore] Session changed while the call was in flight; adopting the newer identity')
+    return adoptIdentity(set, observedIdentity.user, observedIdentity.session)
+  }
+  return adoptIdentity(set, user, session, forceClear)
+}
 
 /**
  * Where the identity provider should send the user back to.
@@ -129,6 +332,12 @@ interface AuthState {
   ) => Promise<void>
   signInAnonymously: () => Promise<void>
   adoptSession: (tokens: { accessToken: string; refreshToken: string }) => Promise<User>
+  // Install a session supabase already holds (an /auth/callback exchange),
+  // clearing the previous user's state first; false when that failed and
+  // nothing was installed (authError says why). `mark` is identityActionMark()
+  // taken before the exchange began: a different user that storage moved to
+  // meanwhile is adopted instead of the exchange's stale result.
+  installIdentity: (user: User | null, session: Session | null, mark?: number) => Promise<boolean>
   signOut: () => Promise<void>
   setApiKeySession: (apiKey: string) => void
 
@@ -195,6 +404,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   clearAuthError: () => set({ authError: null }),
 
   signIn: async (email: string, password: string) => {
+    const mark = identityActionMark()
     const startedAt = Date.now()
     trackAuthFunnelEvent('login_attempted', {
       auth_method: 'password',
@@ -215,10 +425,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       throw error
     }
 
-    set({
-      user: data.user,
-      session: data.session,
-    })
+    if (!(await adoptReturnedIdentity(set, data.user, data.session, mark))) {
+      throw new Error(CLEANUP_FAILED_MESSAGE)
+    }
   },
 
   /**
@@ -366,6 +575,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
 
   signInAnonymously: async () => {
+    const mark = identityActionMark()
     trackAuthFunnelEvent('login_attempted', {
       auth_method: 'anonymous',
     })
@@ -380,10 +590,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       throw error
     }
 
-    set({
-      user: data.user,
-      session: data.session,
-    })
+    if (!(await adoptReturnedIdentity(set, data.user, data.session, mark))) {
+      throw new Error(CLEANUP_FAILED_MESSAGE)
+    }
 
     trackAuthFunnelEvent('login_succeeded', {
       auth_method: 'anonymous',
@@ -396,6 +605,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   // supabase so the session is persisted and refreshed like any other, and
   // every RPC after it carries the user's token. The tokens are never logged.
   adoptSession: async ({ accessToken, refreshToken }) => {
+    const mark = identityActionMark()
     const { data, error } = await supabase.auth.setSession({
       access_token: accessToken,
       refresh_token: refreshToken,
@@ -407,11 +617,19 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     if (!data.user || !data.session) {
       throw new Error('The released session could not be installed')
     }
-    set({ user: data.user, session: data.session })
+    if (!(await adoptReturnedIdentity(set, data.user, data.session, mark))) {
+      throw new Error(CLEANUP_FAILED_MESSAGE)
+    }
     return data.user
   },
 
+  installIdentity: (user: User | null, session: Session | null, mark?: number) =>
+    mark === undefined
+      ? adoptIdentity(set, user, session)
+      : adoptReturnedIdentity(set, user, session, mark),
+
   signOut: async () => {
+    const mark = identityActionMark()
     // Stop reader authority before any network/cleanup awaits, even if logout fails.
     set({ user: null, session: null, loading: true })
     try {
@@ -424,47 +642,14 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       // NOTE: supabase.auth.signOut() will automatically call our storage adapter's
       // removeItem() which clears the auth file. No need for manual authClear().
 
-      // Clear all store data
-      // Import these dynamically to avoid circular dependencies
-      const { useChatStore } = await import('./chatStore')
-      const { useProjectStore } = await import('./projectStore')
-      const { useWorktreeStore } = await import('./worktreeStore')
-      const { resetWorktreeAnnouncements } = await import('../hooks/worktree-queries')
-      const { useChatNavigationStore } = await import('./chatNavigationStore')
-      const { useAttachmentStore } = await import('./attachmentStore')
-
-      // Reset all stores (order matters: navigation first to trigger chat cleanup, then everything else)
-      useChatNavigationStore.getState().reset()
-      useChatStore.getState().reset()
-      useProjectStore.getState().reset()
-      useWorktreeStore.getState().reset()
-      // Workspace rows are in the query cache (cleared below); forget which
-      // creates this session was waiting on.
-      resetWorktreeAnnouncements()
-      useAttachmentStore.getState().reset()
-
-      // Drop every cached answer about who the user is.
-      //
-      // The QueryClient is a module-level singleton and the onboarding queries
-      // are keyed on ['onboarding', …] with no user id in the key, so without
-      // this the NEXT user inherits this one's answers for a full staleTime
-      // window. `currentUser.onboardingCompleted` is the gate ModernApp uses to
-      // decide whether to onboard at all — a brand-new anonymous account read
-      // the departed user's `true` and was sent straight into the app, never
-      // seeing onboarding. `cloud.getCurrentUser` keeps its own 30s promise
-      // cache for the same data, which is why clearing the query cache alone is
-      // not enough.
-      const { resetUserCache } = await import(
-        '@/services/controlPlane/onboarding'
-      )
-      resetUserCache()
-      queryClient.clear()
-
-      set({
-        user: null,
-        session: null,
-        loading: false,
-      })
+      // The cleanup runs inside the serialized transition, never before it,
+      // and against the mark taken before the sign-out began: a sign-in that
+      // reached this page meanwhile (another host, through the shared session
+      // cookie) is what gets adopted, and its stores are not reset under it.
+      if (!(await adoptReturnedIdentity(set, null, null, mark, true))) {
+        throw new Error(CLEANUP_FAILED_MESSAGE)
+      }
+      set({ loading: false })
     } catch (error) {
       set({ loading: false })
       throw error
@@ -631,6 +816,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
    * with "expired or invalid" for half of all users, on a code that is fine.
    */
   verifyEmailSignInCode: async (email: string, code: string) => {
+    const mark = identityActionMark()
     const { data, error } = await supabase.auth.verifyOtp({
       email,
       token: code,
@@ -646,7 +832,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       throw error
     }
 
-    set({ user: data.user, session: data.session })
+    if (!(await adoptReturnedIdentity(set, data.user, data.session, mark))) {
+      throw new Error(CLEANUP_FAILED_MESSAGE)
+    }
     trackAuthFunnelEvent('login_succeeded', { auth_method: 'email_otp' })
   },
 
@@ -668,6 +856,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   verifyPasswordResetOTP: async (email: string, code: string) => {
+    const mark = identityActionMark()
     try {
       const { data, error } = await supabase.auth.verifyOtp({
         email,
@@ -681,10 +870,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       }
 
       // Update auth state with the new session
-      set({
-        user: data.user,
-        session: data.session,
-      })
+      if (!(await adoptReturnedIdentity(set, data.user, data.session, mark))) {
+        throw new Error(CLEANUP_FAILED_MESSAGE)
+      }
     } catch (error) {
       logger.error('[AuthStore] verifyPasswordResetOTP error:', error)
       throw error
@@ -717,6 +905,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   verifyEmailOTP: async (code: string, emailOverride?: string) => {
+    const mark = identityActionMark()
     try {
       const { user } = get()
 
@@ -738,10 +927,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
       // verifyOtp can return a fresh session/user. Use it directly when available.
       if (data.session || data.user) {
-        set({
-          user: data.user ?? null,
-          session: data.session ?? null,
-        })
+        if (!(await adoptReturnedIdentity(set, data.user ?? null, data.session ?? null, mark))) {
+          throw new Error(CLEANUP_FAILED_MESSAGE)
+        }
       } else {
         await get().refreshSession()
       }
@@ -765,6 +953,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
    * creates the email identity on the SAME user id, and issues a session.
    */
   verifyEmailIdentityOTP: async (code: string, email: string) => {
+    const mark = identityActionMark()
     const { data, error } = await supabase.auth.verifyOtp({
       email,
       token: code,
@@ -777,7 +966,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
 
     if (data.session || data.user) {
-      set({ user: data.user ?? null, session: data.session ?? null })
+      if (!(await adoptReturnedIdentity(set, data.user ?? null, data.session ?? null, mark))) {
+        throw new Error(CLEANUP_FAILED_MESSAGE)
+      }
     } else {
       await get().refreshSession()
     }
@@ -934,19 +1125,17 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       // No need to manually load from file storage anymore
       const { data: { session } } = await supabase.auth.getSession()
 
-      set({
-        user: session?.user ?? null,
-        session: session,
-        loading: false,
-        initialized: true,
-      })
+      await adoptIdentity(set, session?.user ?? null, session)
+      set({ loading: false, initialized: true })
 
-      // Set up auth state listener to keep store in sync
+      // Set up auth state listener to keep store in sync. A different
+      // identity (signed out, or another user signed in on another host
+      // sharing the session cookie) clears the previous user's state first,
+      // and installs nothing if that fails: see adoptIdentity.
       supabase.auth.onAuthStateChange(async (_event: AuthChangeEvent, session: Session | null) => {
-        set({
-          user: session?.user ?? null,
-          session: session,
-        })
+        observedEvents++
+        observedIdentity = { user: session?.user ?? null, session }
+        if (!(await adoptIdentity(set, session?.user ?? null, session))) return
 
         // Attach the user to telemetry for error correlation
         setTelemetryUserId(session?.user ? { id: session.user.id } : null)
@@ -970,15 +1159,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   refreshSession: async () => {
+    const mark = identityActionMark()
     try {
       const { data: { session }, error } = await supabase.auth.refreshSession()
 
       if (error) throw error
 
-      set({
-        user: session?.user ?? null,
-        session: session,
-      })
+      await adoptReturnedIdentity(set, session?.user ?? null, session, mark)
     } catch (error) {
       logger.error('Failed to refresh session:', error)
       set({

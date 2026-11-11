@@ -56,7 +56,14 @@ interface GlobalDataState {
   // Actions
   prefetch: () => Promise<void>;
   refetchModels: () => Promise<void>;
+  /** Forget the signed-in user's models (an identity change: authStore). */
+  reset: () => void;
 }
+
+// Bumped by reset(): a fetch started for the previous user drops its answer
+// instead of installing that user's models (local daemons, machine names,
+// endpoints) for the next one.
+let generation = 0;
 
 export const useGlobalDataStore = create<GlobalDataState>((set, get) => ({
   // Initial state
@@ -81,6 +88,7 @@ export const useGlobalDataStore = create<GlobalDataState>((set, get) => ({
     }
     
     set({ isPrefetching: true });
+    const startedIn = generation;
 
     try {
       // Wait for backend configuration to be ready (especially in Electron)
@@ -122,8 +130,10 @@ export const useGlobalDataStore = create<GlobalDataState>((set, get) => ({
       isPrefetching: false,
     };
 
+    if (startedIn !== generation) return;
     set(newState);
     } catch (error) {
+      if (startedIn !== generation) return;
       // Unexpected error during prefetch - ensure state is reset
       logger.error("[GlobalDataStore] Unexpected error during prefetch:", error);
       set({ 
@@ -136,8 +146,10 @@ export const useGlobalDataStore = create<GlobalDataState>((set, get) => ({
   // Individual refetch methods (for manual refresh)
   refetchModels: async () => {
     set({ modelsLoading: true, modelsError: null });
+    const startedIn = generation;
     try {
       const response = await fetchModelList();
+      if (startedIn !== generation) return;
       set({
         models: response.models || [],
         tiers: response.tiers || {},
@@ -147,10 +159,22 @@ export const useGlobalDataStore = create<GlobalDataState>((set, get) => ({
       const errorMessage =
         error instanceof Error ? error.message : "Failed to fetch models";
       logger.error("[GlobalDataStore] Failed to refetch models:", error);
+      if (startedIn !== generation) return;
       set({ modelsError: errorMessage, modelsLoading: false });
     }
   },
 
+  reset: () => {
+    generation++;
+    set({
+      models: [],
+      tiers: {},
+      modelsLoading: false,
+      modelsError: null,
+      isInitialized: false,
+      isPrefetching: false,
+    });
+  },
 }));
 
 // React context for preloading - NOT CURRENTLY USED but keeping for future optimization

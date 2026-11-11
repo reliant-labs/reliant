@@ -113,4 +113,33 @@ describe("AuthInitializer checklist reset on sign-out", () => {
     vi.useRealTimers();
     await waitFor(() => expect(checklistReset).toHaveBeenCalledTimes(1));
   });
+
+  // Another host signing in through the shared session cookie replaces user
+  // A with user B directly, with no signed-out render in between.
+  it("resets per-user startup state when another user replaces the signed-in one", async () => {
+    authState = signedIn;
+    const { rerender } = render(
+      <AuthInitializer>
+        <div />
+      </AuthInitializer>,
+    );
+    await vi.advanceTimersByTimeAsync(10);
+    expect(checklistReset).not.toHaveBeenCalled();
+    expect(resetApiKeyCheck).not.toHaveBeenCalled();
+
+    authState = {
+      ...signedIn,
+      user: { id: "user-2", email: "b@example.com" },
+      session: { access_token: "t2" },
+    };
+    rerender(
+      <AuthInitializer>
+        <div />
+      </AuthInitializer>,
+    );
+
+    expect(resetApiKeyCheck).toHaveBeenCalledTimes(1);
+    vi.useRealTimers();
+    await waitFor(() => expect(checklistReset).toHaveBeenCalledTimes(1));
+  });
 });

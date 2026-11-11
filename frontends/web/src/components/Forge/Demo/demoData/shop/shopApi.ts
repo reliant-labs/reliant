@@ -61,7 +61,7 @@ export type AlertingKeys =
   | "testReceiver"
   | "listNotifications"
   | "markNotificationsRead";
-export type SessionKeys = "listSessions" | "getSession" | "getSessionTimeline" | "getSessionReplay";
+export type SessionKeys = "listSessions" | "getSession" | "getSessionTimeline" | "getSessionReplay" | "listFrontendReplay";
 export type DashboardKeys =
   | "listDashboards"
   | "listDashboardTemplates"
