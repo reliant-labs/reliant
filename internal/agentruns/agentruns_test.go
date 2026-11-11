@@ -356,3 +356,14 @@ func TestStartRunThroughTheRealLauncherRecordsLineageAndIsIdempotent(t *testing.
 	require.NoError(t, err)
 	assert.Equal(t, 1, live)
 }
+
+// An agent-started run launches in its calling chat's org, so it spends that
+// org's money and cannot land in another org's project.
+func TestStartRun_CarriesTheCallersOrgIntoTheLaunch(t *testing.T) {
+	launcher := &fakeLauncher{res: &launch.Result{Chat: &db.Chat{ID: "new-chat"}, RunID: "run-1"}}
+	_, err := New(launcher, nil).StartRun(context.Background(), tools.StartRunRequest{
+		OwnerUserID: "owner", ProjectID: "proj", Workflow: "builtin://agent", Message: "go", OrgID: "acme",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "acme", launcher.spec.OrgID)
+}

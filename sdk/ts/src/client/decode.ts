@@ -209,6 +209,7 @@ export function decodeUserUpdate(
     entity_id: update.entityId,
     data,
     created_at: update.createdAt,
+    ...(update.orgId ? { org_id: update.orgId } : {}),
   };
 }
 

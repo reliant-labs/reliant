@@ -21,8 +21,10 @@ import (
 //     already serving and closes this one once nothing is in flight on it.
 //     The drain waits for that, and ends what is still open at the deadline
 //     with Unavailable, the daemon's redial signal.
-//  3. activity_subscriber, tool_bridge, state_derivation: the NATS sides,
-//     after no daemon stream is left to route to.
+//  3. activity_subscriber, disconnect_subscriber, tool_bridge,
+//     state_derivation: the NATS sides, after no daemon stream is left to
+//     route to. The disconnect subscriber outlives the drain, so a daemon
+//     whose credential is revoked mid-drain still has its stream ended.
 //  4. tools_daemon_sweeper: ends anything the service still holds (an
 //     outbound connection), and stops the stale-connection sweeper.
 //
@@ -50,6 +52,9 @@ type Gateway struct {
 	Reconciler *ManagedReconciler
 	Daemon     *grpcserver.DaemonListener
 	Activity   *ActivitySubscriber
+	// Disconnects ends a daemon's established stream on the control plane's
+	// disconnect command (credential revoked, operator removed from the org).
+	Disconnects *DisconnectSubscriber
 	// Listeners registers after the bridge (and stops with nothing: it has
 	// no lifecycle of its own).
 	Listeners   *ConnectionListeners

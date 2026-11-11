@@ -75,6 +75,8 @@
 # slots are busy too. MG_LOGDIR=<dir> keeps the
 # phase logs there (default: a fresh directory under ~/.cache/reliant-merge-gate).
 set -uo pipefail
+# macOS ships bash 3.2: no mapfile/readarray, no associative arrays, and under
+# `set -u` an empty array expands as unbound unless written ${a[@]+"${a[@]}"}.
 cd "$(git rev-parse --show-toplevel)" || exit 2
 
 base="" amend=0 regen=0 queue=0 skip_lint=0
@@ -116,7 +118,7 @@ slot_wait=$(( t0 - ${MG_SLOT_T0:-$t0} ))
 # all its lanes uncapped, on a host where every other job takes all 32), and
 # each concurrent phase a part of that: the test phase (the longest) half for
 # Go and half for vitest, the others a quarter. MG_CPUS=<n> overrides it.
-cpus=$(nproc 2>/dev/null || echo 4)
+cpus=$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)
 load=$(cut -d' ' -f1 /proc/loadavg 2>/dev/null | cut -d. -f1); load=${load:-0}
 share=$(( cpus / 2 )); [ "$share" -ge 4 ] || share=4
 free=$(( cpus - load ))
@@ -223,7 +225,7 @@ scratch() {
   return 0
 }
 commit_amend() { git add -A && git -c user.name="${GIT_AUTHOR_NAME:-reliant-merge-gate}" -c user.email="${GIT_AUTHOR_EMAIL:-merge-gate@reliantlabs.io}" commit -q --amend --no-edit --no-verify; }
-cleanup() { local wt; for wt in "${scratches[@]}"; do git worktree remove --force "$wt" >/dev/null 2>&1; done; }
+cleanup() { local wt; for wt in ${scratches[@]+"${scratches[@]}"}; do git worktree remove --force "$wt" >/dev/null 2>&1; done; }
 scratches=()
 trap cleanup EXIT
 root=$(pwd)
@@ -323,10 +325,10 @@ prepare_dependencies() {
   if [ "$webfull" = true ] || [ "$nweb" -gt 0 ] || [ "$typecheck" = true ]; then need+=(. frontends/web); fi
   if [ "$elec" = true ]; then need+=(. electron); fi
   if [ "$fgen" = true ] && [ "$hooks_only" != true ]; then need+=(tools/protoc-gen-es); fi
-  for d in $(printf '%s\n' "${need[@]}" | sort -u); do
+  for d in $(printf '%s\n' ${need[@]+"${need[@]}"} | sort -u); do
     npm_install "$d" & npm_pids+=($!)
   done
-  for p in "${npm_pids[@]}"; do wait "$p" || fail=1; done
+  for p in ${npm_pids[@]+"${npm_pids[@]}"}; do wait "$p" || fail=1; done
 }
 prepare_dependencies
 
@@ -368,8 +370,8 @@ fi
 # test phase's to report, so it never fails the gate. The tree it compiles is
 # the one test judges: generate runs in a scratch checkout here.
 prewarm_tests() {
-  local pkgs
-  if [ "$gofull" = true ]; then pkgs=(./...); else mapfile -t pkgs < <(jq -r '.go.packages // [] | .[]' "$run_plan"); fi
+  local pkgs p
+  if [ "$gofull" = true ]; then pkgs=(./...); else pkgs=(); while IFS= read -r p; do pkgs+=("$p"); done < <(jq -r '.go.packages // [] | .[]' "$run_plan"); fi
   if [ ${#pkgs[@]} -eq 0 ]; then echo "prewarm: no Go test package selected"; return 0; fi
   echo "prewarm: compiling the tests of ${#pkgs[@]} package selection(s) beside forge generate"
   GOMAXPROCS=$quarter nice -n 10 go list -buildvcs=false -e -test -export -p "$quarter" "${pkgs[@]}" >/dev/null 2>&1 ||
@@ -436,8 +438,8 @@ fi
 # each package for its export data and exits non-zero naming any that does not
 # compile, main packages included.
 build_check() {
-  local pkgs
-  if [ "$gofull" = true ]; then pkgs=(./...); else mapfile -t pkgs < <(jq -r '.go.build // [] | .[]' "$run_plan"); fi
+  local pkgs p
+  if [ "$gofull" = true ]; then pkgs=(./...); else pkgs=(); while IFS= read -r p; do pkgs+=("$p"); done < <(jq -r '.go.build // [] | .[]' "$run_plan"); fi
   if [ ${#pkgs[@]} -eq 0 ]; then echo "build: no Go package's build contains a change"; return 0; fi
   echo "build: compiling ${pkgs[*]:0:20}$([ ${#pkgs[@]} -gt 20 ] && echo " ... (${#pkgs[@]} packages)")"
   # Errors go to stderr; the package list on stdout is noise.
@@ -493,7 +495,7 @@ if [ "$fail" = 0 ]; then
   # Build reach includes ordinary production packages with no test binary.
   # Keep test-only changes too: vet checks their tests even when Build is empty.
   if [ "$gofull" = true ]; then vet_pkgs=(./...); else
-    mapfile -t vet_pkgs < <(jq -r '((.go.build // []) + (.go.packages // [])) | unique | .[]' "$run_plan")
+    vet_pkgs=(); while IFS= read -r p; do vet_pkgs+=("$p"); done < <(jq -r '((.go.build // []) + (.go.packages // [])) | unique | .[]' "$run_plan")
   fi
   if [ ${#vet_pkgs[@]} -gt 0 ] && [ "$skip_lint" != 1 ]; then
     phase vet env GOMAXPROCS="$quarter" bash scripts/vet.sh "${vet_pkgs[@]}" & pids+=($!)
@@ -512,7 +514,7 @@ if [ "$fail" = 0 ]; then
 fi
 # Every launched phase is waited for, the generators too when the gate failed
 # before build: cleanup must not remove a checkout a generator still writes.
-for p in "${pids[@]}"; do wait "$p" || fail=1; done
+for p in ${pids[@]+"${pids[@]}"}; do wait "$p" || fail=1; done
 # --amend: a failed gate leaves no half-regenerated tree behind.
 if [ "$amend" = 1 ] && [ "$fail" != 0 ] && [ -n "$(git status --porcelain)" ]; then
   git reset -q --hard; git clean -fdq

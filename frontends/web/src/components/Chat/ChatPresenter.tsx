@@ -19,7 +19,7 @@ import { ScrollToBottomButton } from "./ScrollToBottomButton";
 import { TimelineCatchUpOverlay, TimelineCatchUpStatus } from "./TimelineCatchUpOverlay";
 import { useDelayedVisibility } from "../../hooks/useDelayedVisibility";
 import {
-  CATCH_UP_MIN_VISIBLE_MS,
+  CATCH_UP_EXIT_MS,
   CATCH_UP_SHOW_DELAY_MS,
   isTimelineCatchingUp,
 } from "../../lib/timelineCatchUp";
@@ -662,19 +662,21 @@ export const ChatPresenter = memo(function ChatPresenter({
   }, [selectedThreadMessages, messages]);
 
   // Catch-up overlay, for the timeline in view: the chat's (main thread) or
-  // the selected side thread's (lib/timelineCatchUp). Delayed so a cached,
-  // instant switch shows nothing, and held briefly once up so it never
-  // flickers.
+  // the selected side thread's (lib/timelineCatchUp). Delayed so a quick
+  // catch-up shows nothing. It stands for the catch-up only while that lasts:
+  // the render the timeline caught up in makes it usable, and the overlay
+  // just fades out over it ("leaving", which covers and blocks nothing).
   const timelineSync = useTimelineSync(chatId, selectedSideThreadId);
   const timelineCatchingUp = isTimelineCatchingUp({
     ...timelineSync,
     messages: timelineMessages,
     connectionStatus,
   });
-  const catchUpOverlayVisible = useDelayedVisibility(timelineCatchingUp, {
+  const catchUpOverlay = useDelayedVisibility(timelineCatchingUp, {
     showDelayMs: CATCH_UP_SHOW_DELAY_MS,
-    minVisibleMs: CATCH_UP_MIN_VISIBLE_MS,
+    exitMs: CATCH_UP_EXIT_MS,
   });
+  const catchUpOverlayVisible = catchUpOverlay === "shown";
   // The reader could not scroll while the overlay was up, so where they are
   // meant to be when it lifts is the end of the caught-up transcript.
   const catchUpOverlayWasVisibleRef = useRef(false);
@@ -684,8 +686,9 @@ export const ChatPresenter = memo(function ChatPresenter({
     }
     catchUpOverlayWasVisibleRef.current = catchUpOverlayVisible;
   }, [catchUpOverlayVisible, scrollToBottom]);
-  // The chat.open interaction selectChat started for this chat ends on the
-  // frame after the timeline is usable: caught up, overlay lifted.
+  // The chat.open interaction started for this chat (chatStore.selectChat,
+  // or the mobile chat route) ends on the frame after the timeline is
+  // usable: caught up, which lifts the overlay in the same render.
   useChatOpenEnd(chatId, {
     catchingUp: timelineCatchingUp,
     overlayVisible: catchUpOverlayVisible,
@@ -813,7 +816,9 @@ export const ChatPresenter = memo(function ChatPresenter({
           </div>
           {/* Overlaid rather than inserted, so the transcript never shifts
               when it appears or lifts. */}
-          {catchUpOverlayVisible && <TimelineCatchUpOverlay hasContent={showsTimeline} />}
+          {catchUpOverlay !== "hidden" && (
+            <TimelineCatchUpOverlay hasContent={showsTimeline} leaving={catchUpOverlay === "leaving"} />
+          )}
           {/* Inside the transcript frame, anchored to its bottom edge, so the
               band between the transcript and the composer (queued strip,
               background-work pill, permissions) can never sit on top of it. */}

@@ -965,7 +965,6 @@ To switch back to an account whose token is already stored:
 
 			// Clean up background processes on shutdown.
 			defer shell.GetBackgroundManager().KillAllRunning()
-			defer shell.GetProcessMonitor().Stop()
 
 			// NOTE: the localhost OAuth helper is NOT started here. It is
 			// opened ON DEMAND by the `auth.open_oauth_helper` daemon command
@@ -982,7 +981,8 @@ To switch back to an account whose token is already stored:
 					"listen_port", listenPort, "data_dir", dataDir)
 
 				err = daemonruntime.Start(ctx, daemonruntime.StartOptions{
-					StorageReaper: storageReaperConfig(base, host.Managed()),
+					StorageReaper:   storageReaperConfig(base, host.Managed()),
+					WorktreeReclaim: worktreeReclaimConfig(base),
 					BootstrapConfig: bootstrap.DaemonBootstrapConfig{
 						ServerMode: true,
 						ListenPort: listenPort,
@@ -1030,7 +1030,8 @@ To switch back to an account whose token is already stored:
 
 			startDaemon := func(c *auth.DaemonCredentials) error {
 				return daemonruntime.Start(ctx, daemonruntime.StartOptions{
-					StorageReaper: storageReaperConfig(base, host.Managed()),
+					StorageReaper:   storageReaperConfig(base, host.Managed()),
+					WorktreeReclaim: worktreeReclaimConfig(base),
 					BootstrapConfig: bootstrap.DaemonBootstrapConfig{
 						AuthToken: c.PAT,
 						GRPCURL:   daemonGRPCURL,

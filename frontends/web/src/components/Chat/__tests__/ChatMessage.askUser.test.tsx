@@ -24,6 +24,7 @@ const resultsByCallId: Record<string, { content: string; is_error: boolean }> = 
 
 vi.mock("../../../store/chatStoreHooks", () => ({
   useActiveChatId: () => "chat-1",
+  useChatIdOrActive: (chatId?: string | null) => chatId || "chat-1",
   useToolResultsByCallId: () => resultsByCallId,
   useToolCallStates: () => new Map(),
   useChat: () => ({ worktreeId: "worktree-1" }),

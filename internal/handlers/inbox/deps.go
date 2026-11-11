@@ -40,6 +40,9 @@ type Repository interface {
 	// GetChat names the agents whose processes fill a machine near its
 	// process limit.
 	GetChat(ctx context.Context, id string) (*db.Chat, error)
+	// GetProject decides an item about a project (a recovery, an automation)
+	// through authz: one of an org the caller has left is not listed.
+	GetProject(ctx context.Context, id string) (*db.Project, error)
 }
 
 // Sweeper starts a storage clean-up on one of the caller's machines.

@@ -86,7 +86,7 @@ export function Catalog({ metrics, selected, onPick, query, onQuery, truncated, 
         Search metrics
       </label>
       <div className="relative">
-        <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink-muted" aria-hidden="true" />
+        <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink-muted" aria-hidden="true" />
         <input
           id={searchId}
           type="search"
@@ -102,7 +102,7 @@ export function Catalog({ metrics, selected, onPick, query, onQuery, truncated, 
             }
           }}
           placeholder="Search metrics"
-          className={`${CONTROL_FIELD} h-8 w-full pl-7 pr-2 text-sm`}
+          className={`${CONTROL_FIELD} h-8 w-full pl-8 pr-2.5 text-sm`}
           data-testid="metrics-catalog-search"
           aria-busy={isFetching || undefined}
         />

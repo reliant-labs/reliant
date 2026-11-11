@@ -1,4 +1,4 @@
-import { test, type Page, type Route } from '@playwright/test';
+import { test, type Page, type Request, type Route } from '@playwright/test';
 
 // A signed-in, onboarded user whose project is a deployed forge app, against
 // no backend: every Connect RPC is answered here. Used by apps.spec.ts, which
@@ -166,6 +166,12 @@ export interface AppsMockOptions {
   environmentsByOrg?: Record<string, typeof ENVIRONMENTS>;
   /** Called with the org_id of every control-plane request that carried one (undefined: none named). */
   onOrgRequest?: (rpc: string, orgId: string | undefined) => void;
+  /**
+   * Reliant projects by org id, answered by ListProjects for the org the
+   * request names (an org without an entry has none); a project's chats are
+   * listed only with it. Default: PROJECT and every chat, whatever the org.
+   */
+  projectsByOrg?: Record<string, Array<typeof PROJECT & { orgId?: string }>>;
   /** Whether the user has finished onboarding. Default true. */
   onboarded?: boolean;
   /** The org's deploy environments. Default ENVIRONMENTS; [] for a user who has deployed nothing. */
@@ -197,11 +203,19 @@ export async function mockAppsBackend(page: Page, options: AppsMockOptions = {})
   await page.route('**/reliant.v1.DaemonRegistryService/ListDaemons', (route) =>
     json(route, { daemons: [{ daemonId: 'daemon_1', hostname: 'cloud-machine', status: 'DAEMON_STATUS_ACTIVE' }] }),
   );
-  await page.route('**/reliant.v1.ProjectService/ListProjects', (route) => json(route, { projects: [PROJECT] }));
+  const defaultOrgId = () => (options.orgs ?? []).find((o) => o.isDefault)?.id ?? 'org_acme';
+  const projectsFor = (request: Request) => {
+    if (!options.projectsByOrg) return [PROJECT];
+    const { orgId } = (request.postDataJSON() ?? {}) as { orgId?: string };
+    return options.projectsByOrg[orgId ?? defaultOrgId()] ?? [];
+  };
+  await page.route('**/reliant.v1.ProjectService/ListProjects', (route) => json(route, { projects: projectsFor(route.request()) }));
   await page.route('**/reliant.v1.ProjectService/GetProject', (route) => json(route, { project: PROJECT }));
-  await page.route('**/reliant.v1.ChatService/ListChats', (route) =>
-    json(route, { chats: CHATS, totalCount: CHATS.length, lastSequence: '1' }),
-  );
+  await page.route('**/reliant.v1.ChatService/ListChats', (route) => {
+    const projects = new Set(projectsFor(route.request()).map((p) => p.id));
+    const chats = options.projectsByOrg ? CHATS.filter((c) => projects.has(c.projectId)) : CHATS;
+    return json(route, { chats, totalCount: chats.length, lastSequence: '1' });
+  });
   await page.route('**/reliant.v1.ChatService/GetChat', (route) => {
     const { chatId } = route.request().postDataJSON() as { chatId?: string };
     return json(route, { chat: CHATS.find((c) => c.id === chatId) ?? CHATS[0] });
@@ -221,7 +235,8 @@ export async function mockAppsBackend(page: Page, options: AppsMockOptions = {})
   );
   // Observe requests independently of which route fulfils them.
   page.on('request', (request) => {
-    if (!request.url().includes('/controlplane.v1.DeployService/')) return;
+    const product = /\/reliant\.v1\.(ProjectService\/ListProjects|ChatService\/ListChats)$/.test(new URL(request.url()).pathname);
+    if (!request.url().includes('/controlplane.v1.DeployService/') && !product) return;
     const body = (request.postDataJSON() ?? {}) as { orgId?: string };
     options.onOrgRequest?.(new URL(request.url()).pathname.split('/').pop() ?? '', body.orgId);
   });

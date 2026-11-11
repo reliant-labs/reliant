@@ -95,3 +95,29 @@ export function demoTipKey(pathname: string, search: Record<string, unknown>): D
       return null;
   }
 }
+
+/** Search keys that open one item inside a list page: a trace, a span, an issue, a session, an alert rule… */
+const DETAIL_KEYS = ["trace", "span", "issue", "session", "rsession", "rule", "rpcId", "compare"] as const;
+
+/** The item a URL has open inside its page, if any ("" for none). */
+export function demoDetailOf(search: Record<string, unknown>): string {
+  for (const key of DETAIL_KEYS) {
+    const value = search[key];
+    if (typeof value === "string" && value) return `${key}=${value}`;
+  }
+  return "";
+}
+
+/**
+ * Whether a URL is a top-level section page, the only kind whose tip may open
+ * by itself: not one release, workload, environment or dashboard, and not a
+ * list page with one of its items open. Filters, ranges and tabs do not make
+ * a sub-page; they are not visits either (demoPageVisit).
+ */
+export function isDemoSectionPage(pathname: string, search: Record<string, unknown>): boolean {
+  if (demoDetailOf(search)) return false;
+  if (pathname === FORGE_DEMO_PATH || pathname.startsWith(`${FORGE_DEMO_PATH}/`)) return search.section !== DEMO_SECTION_BUILT;
+  const page = consolePageOf(pathname)?.page;
+  if (!page) return false;
+  return !["workload", "release", "environment", "dashboard"].includes(page.kind);
+}

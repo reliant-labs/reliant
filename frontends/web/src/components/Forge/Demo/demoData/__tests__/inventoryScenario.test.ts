@@ -13,7 +13,7 @@ import { DEMO_SUBJECTS } from "../inventoryScenario";
 import { createDemoApi } from "../demoApi";
 
 const transport = () => createDemoTransport({ source: "fixtures", url: "" });
-const request = { environmentId: "env-dev", database: "shop", table: "public.chats", limit: 50 };
+const request = { environmentId: "env-dev", database: "shop", table: "public.orders", limit: 50 };
 const cell = (value: { kind: { value?: unknown } }) => value.kind.value;
 
 describe("public demo inventory wire reads", () => {
@@ -23,78 +23,84 @@ describe("public demo inventory wire reads", () => {
       const t = transport();
       const data = createClient(AppDatabaseService, t);
       expect((await data.listBrowsableDatabases({ environmentId: "env-dev" })).databases.map((d) => d.name)).toEqual(["shop"]);
-      expect((await data.browseTable(request)).rows).toHaveLength(50);
-      expect((await createClient(IdentityService, t).getUser({ environmentId: "env-dev", userId: DEMO_SUBJECTS[0] })).user?.email).toBe("maya@example.com");
+      expect((await data.browseTable({ ...request, environmentId: "env-staging" })).rows).toHaveLength(50);
+      expect((await createClient(IdentityService, t).getUser({ environmentId: "env-dev", userId: DEMO_SUBJECTS[0] })).user?.email).toBe("lena.fischer@example.com");
       await expect(createClient(DeployService, t).getWorkloadConfig({ environmentId: "env-dev", workload: "api" })).resolves.toMatchObject({ releaseVersion: "v1.8.4" });
       await expect(createClient(IdentityService, t).deleteUser({ environmentId: "env-dev", userId: DEMO_SUBJECTS[0] })).rejects.toMatchObject({ code: 7 });
       expect(fetch).not.toHaveBeenCalled();
     } finally { fetch.mockRestore(); }
   });
 
-  it("exposes PK/FKs in both directions and distinct synthetic identity subjects", async () => {
+  it("is a shop's schema: customers, products, stock, orders and order items, with PK/FKs both ways", async () => {
     const t = transport(); const data = createClient(AppDatabaseService, t);
     const desc = await data.describeDatabase({ environmentId: "env-dev", database: "shop" });
-    const users = desc.tables.find((table) => table.name === "users")!;
-    expect(users.primaryKey).toEqual(["id"]);
-    expect(users.referencedBy.map((fk) => fk.table).sort()).toEqual(["chats", "machines"]);
-    expect(users.columns.find((column) => column.name === "identity_subject")?.comment).toBe("forge:identity-subject=id");
-    const row = await data.browseTable({ ...request, table: "public.users", columns: ["id", "identity_subject"] });
-    expect(row.rows[0].values.map(cell)).toEqual(["customer-1", "subject-maya"]);
+    expect(desc.tables.map((table) => table.name).sort()).toEqual(["customers", "order_items", "orders", "products", "stock"]);
+    const customers = desc.tables.find((table) => table.name === "customers")!;
+    expect(customers.primaryKey).toEqual(["id"]);
+    expect(customers.referencedBy.map((fk) => fk.table)).toEqual(["orders"]);
+    expect(desc.tables.find((table) => table.name === "products")!.referencedBy.map((fk) => fk.table).sort()).toEqual(["order_items", "stock"]);
+    expect(desc.tables.find((table) => table.name === "stock")!.primaryKey).toEqual(["sku"]);
+    expect(customers.columns.find((column) => column.name === "identity_subject")?.comment).toBe("forge:identity-subject=id");
+    const row = await data.browseTable({ ...request, table: "public.customers", columns: ["id", "identity_subject"], filters: [{ column: "email", op: BrowseFilterOp.EQ, values: ["lena.fischer@example.com"] }] });
+    expect(row.rows[0].values.map(cell)).toEqual(["cus_4f1a9c", DEMO_SUBJECTS[0]]);
     const identity = createClient(IdentityService, t);
-    expect((await identity.getUser({ environmentId: "env-dev", userId: "customer-1" })).user).toBeUndefined();
+    expect((await identity.getUser({ environmentId: "env-dev", userId: "cus_4f1a9c" })).user).toBeUndefined();
     const first = await identity.listUsers({ environmentId: "env-dev", pageSize: 1 });
     const next = await identity.listUsers({ environmentId: "env-dev", pageSize: 1, pageToken: first.nextPageToken });
-    expect(first.users[0].userId).toBe("subject-maya");
-    expect(next.users[0].userId).toBe("subject-jon");
-    expect((await identity.listUsers({ environmentId: "env-dev", query: "PRIYA@" })).users).toHaveLength(1);
+    expect(first.users[0].userId).toBe(DEMO_SUBJECTS[0]);
+    expect(next.users[0].userId).toBe(DEMO_SUBJECTS[1]);
+    expect((await identity.listUsers({ environmentId: "env-dev", query: "AIKO." })).users).toHaveLength(1);
+  });
+
+  it("has real product names, and prod's only payment_failed orders are the incident's", async () => {
+    const data = createClient(AppDatabaseService, transport());
+    const products = await data.browseTable({ ...request, table: "public.products", columns: ["name"] });
+    expect(products.rows.map((r) => String(cell(r.values[0]))).every((name) => !/ \/ \d+$/.test(name))).toBe(true);
+    const failed = { ...request, count: BrowseCount.EXACT, filters: [{ column: "state", op: BrowseFilterOp.EQ, values: ["payment_failed"] }] };
+    expect((await data.browseTable({ ...failed, environmentId: "env-staging" })).total).toBe(0n);
+    const prod = await data.browseTable({ ...failed, environmentId: "env-prod", confirmEnvId: "env-prod", reason: "incident orders", columns: ["created_at"] });
+    expect(prod.total).toBeGreaterThan(0n);
+    for (const r of prod.rows) expect(Date.now() - Date.parse(String(cell(r.values[0])).replace(" ", "T").replace("+00", "Z"))).toBeLessThan(45 * 60_000);
   });
 
   it("paginates stable row references without duplicates, with projection and counts", async () => {
     const data = createClient(AppDatabaseService, transport());
-    const first = await data.browseTable({ ...request, columns: ["id", "message_count"], count: BrowseCount.EXACT });
-    const second = await data.browseTable({ ...request, columns: ["id", "message_count"], offset: first.nextOffset });
-    expect(first.total).toBe(123n); expect(first.nextOffset).toBe(50n); expect(first.hasMore).toBe(true);
-    expect(first.columns.map((c) => c.name)).toEqual(["id", "message_count"]);
+    const items = { ...request, environmentId: "env-staging", table: "public.order_items", columns: ["id", "quantity"] };
+    const first = await data.browseTable({ ...items, count: BrowseCount.EXACT });
+    const second = await data.browseTable({ ...items, offset: first.nextOffset });
+    expect(first.total).toBeGreaterThan(100n); expect(first.nextOffset).toBe(50n); expect(first.hasMore).toBe(true);
+    expect(first.columns.map((c) => c.name)).toEqual(["id", "quantity"]);
     expect(second.total).toBeUndefined();
     const ids = [...first.rows, ...second.rows].map((row) => cell(row.values[0]));
     expect(new Set(ids).size).toBe(100);
-    const last = await data.browseTable({ ...request, offset: second.nextOffset });
-    expect(last.rows).toHaveLength(23); expect(last.hasMore).toBe(false);
+    expect(ids).toEqual([...ids].sort((a, b) => Number(a) - Number(b)));
   });
 
   it("applies typed AND filters, numeric sort, null semantics and SQL LIKE wildcards", async () => {
     const data = createClient(AppDatabaseService, transport());
-    const result = await data.browseTable({ ...request, table: "public.inventory", columns: ["quantity"], sort: [{ column: "quantity", desc: true }], filters: [{ column: "quantity", op: BrowseFilterOp.GT, values: ["9"] }, { column: "available", op: BrowseFilterOp.EQ, values: ["true"] }] });
-    expect(result.rows.map((row) => cell(row.values[0]))).toEqual(Array.from({ length: 28 }, (_, i) => 93 - i * 3));
-    const nulls = await data.browseTable({ ...request, count: BrowseCount.EXACT, filters: [{ column: "closed_at", op: BrowseFilterOp.IS_NULL }] });
-    expect(nulls.total).toBe(98n);
-    const neq = await data.browseTable({ ...request, filters: [{ column: "closed_at", op: BrowseFilterOp.NEQ, values: ["2026-01-10T12:00:00Z"] }] });
+    const stock = await data.browseTable({ ...request, table: "public.stock", columns: ["on_hand"], sort: [{ column: "on_hand", desc: true }], filters: [{ column: "on_hand", op: BrowseFilterOp.GT, values: ["9"] }] });
+    const onHand = stock.rows.map((row) => Number(cell(row.values[0])));
+    expect(onHand.length).toBeGreaterThan(0);
+    expect(onHand).toEqual([...onHand].sort((a, b) => b - a));
+    expect(onHand.every((n) => n > 9)).toBe(true);
+    const unpaid = await data.browseTable({ ...request, count: BrowseCount.EXACT, filters: [{ column: "paid_at", op: BrowseFilterOp.IS_NULL }] });
+    const cancelled = await data.browseTable({ ...request, count: BrowseCount.EXACT, filters: [{ column: "state", op: BrowseFilterOp.IN, values: ["cancelled", "payment_failed"] }] });
+    expect(unpaid.total).toBe(cancelled.total);
+    const neq = await data.browseTable({ ...request, filters: [{ column: "paid_at", op: BrowseFilterOp.NEQ, values: ["2026-01-10T12:00:00Z"] }, { column: "paid_at", op: BrowseFilterOp.IS_NULL }] });
     expect(neq.rows).toHaveLength(0);
-    const match = await data.browseTable({ ...request, count: BrowseCount.EXACT, filters: [{ column: "title", op: BrowseFilterOp.ILIKE, values: ["%ORDER_"] }, { column: "user_id", op: BrowseFilterOp.IN, values: ["customer-1", "customer-2"] }] });
-    expect(match.total).toBe(41n);
-    await expect(data.browseTable({ ...request, filters: [{ column: "message_count", op: BrowseFilterOp.EQ, values: ["10 OR true"] }] })).rejects.toMatchObject({ code: 3 });
+    const tees = await data.browseTable({ ...request, table: "public.products", count: BrowseCount.EXACT, filters: [{ column: "name", op: BrowseFilterOp.ILIKE, values: ["%COTTON TEE%"] }, { column: "sku", op: BrowseFilterOp.LIKE, values: ["TEE-ORG-_-INK"] }] });
+    expect(tees.total).toBe(2n);
+    await expect(data.browseTable({ ...request, filters: [{ column: "total_cents", op: BrowseFilterOp.EQ, values: ["10 OR true"] }] })).rejects.toMatchObject({ code: 3 });
     await expect(data.browseTable({ ...request, columns: ["password"] })).rejects.toMatchObject({ code: 3 });
     await expect(data.browseTable({ ...request, offset: -1n })).rejects.toMatchObject({ code: 3 });
   });
 
-  it("keeps synthetic inventory prices in cents on the wire, including typed price filtering and sorting", async () => {
+  it("keeps prices in cents on the wire, including typed price filtering and sorting", async () => {
     const data = createClient(AppDatabaseService, transport());
-    const inventory = { ...request, table: "public.inventory", columns: ["id", "price_cents"] };
-    const all = await data.browseTable(inventory);
-    expect(all.columns.map((column) => column.name)).toEqual(["id", "price_cents"]);
-    expect(all.rows[0].values.map(cell)).toEqual(["sku-001", 1200]);
-    expect(all.rows[31].values.map(cell)).toEqual(["sku-032", 4300]);
-    const filtered = await data.browseTable({
-      ...inventory,
-      filters: [{ column: "price_cents", op: BrowseFilterOp.GTE, values: ["4100"] }],
-      sort: [{ column: "price_cents", desc: true }],
-    });
-    expect(filtered.rows.map((row) => row.values.map(cell))).toEqual([
-      ["sku-032", 4300], ["sku-031", 4200], ["sku-030", 4100],
-    ]);
-    await expect(data.browseTable({
-      ...inventory, filters: [{ column: "price_cents", op: BrowseFilterOp.EQ, values: ["12.00"] }],
-    })).rejects.toMatchObject({ code: 3 });
+    const products = { ...request, table: "public.products", columns: ["sku", "price_cents"] };
+    const filtered = await data.browseTable({ ...products, filters: [{ column: "price_cents", op: BrowseFilterOp.GTE, values: ["6900"] }], sort: [{ column: "price_cents", desc: true }] });
+    expect(filtered.rows.map((row) => row.values.map(cell))).toEqual([["BLNK-WOOL-GRY", 11900], ["GRND-HAND-01", 8900], ["KETL-GOOSE-BLK", 6900]]);
+    await expect(data.browseTable({ ...products, filters: [{ column: "price_cents", op: BrowseFilterOp.EQ, values: ["12.00"] }] })).rejects.toMatchObject({ code: 3 });
   });
 
   it("requires prod confirmation plus reason, isolates foreign environments/databases", async () => {
@@ -125,32 +131,6 @@ describe("public demo inventory wire reads", () => {
     }
   });
 
-  it("links the observability frontend alias to its declared bundle and scoped config identity", async () => {
-    const api = createDemoApi({ wire: false });
-    const deploy = createClient(DeployService, transport());
-    for (const environmentId of ["env-dev", "env-staging", "env-prod"]) {
-      const req = { orgId: "org-demo", projectId: "shop", envIds: [environmentId], filters: [], window: { startMs: 1_794_168_000_000, endMs: 1_794_171_600_000 } };
-      const list = await api.listWorkloads(req);
-      expect(list.workloads.find((row) => row.workload === "web")).toBeDefined();
-      const detail = await api.getWorkload({ ...req, workload: "web" });
-      const frontend = detail.workloads.find((row) => row.workload === "web")!;
-      const config = await deploy.getWorkloadConfig({ environmentId, workload: "web" });
-      const canonical = await deploy.getWorkloadConfig({ environmentId, workload: "shop-web", bundleId: config.bundleId });
-      expect(frontend.declared?.bundleId).toBe(config.bundleId);
-      expect(frontend.declared?.name).toBe("web");
-      expect(frontend.releaseVersion).toBe(config.releaseVersion);
-      // Echo the caller's addressed identity so the real config adapter accepts
-      // either route, while resolving both to one immutable fixture projection.
-      expect(config.workload).toBe("web");
-      expect(canonical.workload).toBe("shop-web");
-      expect(config.objects).toEqual(canonical.objects);
-      expect(config.renderedYaml).toBe(canonical.renderedYaml);
-      expect(config.bundleDigest).toBe(canonical.bundleDigest);
-      expect(config.frontendConfigUnsupportedReason).toBe("Sample only: no deployed config.js is fetched.");
-      expect(frontend.declared?.image).toBe(`registry.example.com/shop/shop-web:${config.releaseVersion}`);
-    }
-  });
-
   it("pins historical config, derives YAML from redacted tree, and never fingerprints withheld values", async () => {
     const deploy = createClient(DeployService, transport());
     const current = await deploy.getWorkloadConfig({ environmentId: "env-dev", workload: "api" });
@@ -162,7 +142,7 @@ describe("public demo inventory wire reads", () => {
     expect(loadAll(current.renderedYaml)).toEqual(current.objects);
     expect(loadAll(historical.renderedYaml)).toEqual(historical.objects);
     expect(current.objects[0].data).toMatchObject({ ORDER_TIMEOUT_MS: "5000", DATABASE_URL: DEMO_WITHHELD, PAYMENTS_API_KEY: DEMO_WITHHELD });
-    expect(historical.objects[0].data).toMatchObject({ ORDER_TIMEOUT_MS: "2000", DATABASE_URL: DEMO_WITHHELD });
+    expect(historical.objects[0].data).toMatchObject({ ORDER_TIMEOUT_MS: "3000", DATABASE_URL: DEMO_WITHHELD });
     expect(current.renderedYaml).not.toMatch(/forge\.dev\/redacted:.*sha256/);
     await expect(deploy.getWorkloadConfig({ environmentId: "env-prod", workload: "api", bundleId: current.bundleId })).rejects.toMatchObject({ code: 5 });
     await expect(deploy.getWorkloadConfig({ environmentId: "env-dev", workload: "unknown" })).rejects.toMatchObject({ code: 5 });

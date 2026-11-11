@@ -190,6 +190,10 @@ var purgeSteps = []step{
 		DELETE FROM questions WHERE chat_id IN (SELECT id FROM chats WHERE user_id = $1)`},
 	{"chat_updates", `
 		DELETE FROM chat_updates WHERE chat_id IN (SELECT id FROM chats WHERE user_id = $1)`},
+	// The snapshot heads materialized from chat_updates: copies of its rows,
+	// payloads included, keyed by chat with no foreign key.
+	{"chat_update_heads", `
+		DELETE FROM chat_update_heads WHERE chat_id IN (SELECT id FROM chats WHERE user_id = $1)`},
 	{"background_process_output", `
 		DELETE FROM background_process_output WHERE process_id IN (
 			SELECT id FROM background_processes WHERE user_id = $1)`},

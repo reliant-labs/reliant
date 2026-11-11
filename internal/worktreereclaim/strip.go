@@ -86,6 +86,9 @@ func (r *Reclaimer) shedRegenerable(ctx context.Context, w Worktree, quiet time.
 		}
 	}
 	if res.StrippedBytes > 0 || len(res.Stripped) > 0 {
+		// The removals moved directory mtimes: they are the daemon's, not
+		// use (useCountsAfter).
+		r.recordOwnWrite(w.ID)
 		r.mu.Lock()
 		delete(r.sizes, w.Path) // the cached size is from before
 		r.mu.Unlock()

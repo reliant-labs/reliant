@@ -3060,7 +3060,7 @@ func (m *MockrunScenarioStore) GetChat(ctx context.Context, id string) (*db.Chat
 var _ runScenarioStore = (*MockrunScenarioStore)(nil)
 
 // forge:section MockworktreeStore
-// forge:hash=79bba44aba0d1823f9ceeaa462101533731c733cdefb622ec5d02d1e62fe46a6
+// forge:hash=e9c63573c29739275f38799d1c8ab9e79397bb99d29fb632bd1f23fd4d2d325f
 
 // MockworktreeStore is a test mock for the worktreeStore interface.
 //
@@ -3075,6 +3075,7 @@ type MockworktreeStore struct {
 	ArchiveWorktreeFunc          func(context.Context, string) error
 	GetLiveWorktreeByNameFunc    func(context.Context, string, string) (*db.Worktree, error)
 	ListWorktreesByBranchFunc    func(context.Context, string, string) ([]*db.Worktree, error)
+	SettleCheckoutTeardownFunc   func(context.Context, string, string, string) (*db.CheckoutTeardown, error)
 	GetRepoByProjectAndPathFunc  func(context.Context, string, string) (*core.Repo, error)
 	CreateRepoFunc               func(context.Context, *core.Repo) error
 	ListReposByProjectFunc       func(context.Context, string) ([]*core.Repo, error)
@@ -3129,6 +3130,15 @@ func (m *MockworktreeStore) ListWorktreesByBranch(ctx context.Context, projectID
 		return m.ListWorktreesByBranchFunc(ctx, projectID, branch)
 	}
 	return nil, contractkit.MockNotSet("MockworktreeStore", "ListWorktreesByBranch")
+}
+
+// SettleCheckoutTeardown records the call and delegates to SettleCheckoutTeardownFunc when set.
+func (m *MockworktreeStore) SettleCheckoutTeardown(ctx context.Context, id string, state string, detail string) (*db.CheckoutTeardown, error) {
+	m.Recorder.Record("SettleCheckoutTeardown", ctx, id, state, detail)
+	if m.SettleCheckoutTeardownFunc != nil {
+		return m.SettleCheckoutTeardownFunc(ctx, id, state, detail)
+	}
+	return nil, contractkit.MockNotSet("MockworktreeStore", "SettleCheckoutTeardown")
 }
 
 // GetRepoByProjectAndPath records the call and delegates to GetRepoByProjectAndPathFunc when set.

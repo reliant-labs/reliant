@@ -162,6 +162,14 @@ export function useTimelineVirtualizer(params: {
     // `height`, in JSX: the virtualizer owns both.
     directDomUpdates: true,
     directDomUpdatesMode: "transform",
+    // Re-render through a plain state update, not flushSync. Rows are
+    // measured from their ref callbacks, inside React's commit, and each
+    // measurement notifies: with flushSync every one re-rendered the
+    // transcript then and there, so mounting a screenful of rows (a chat
+    // switch) re-rendered it once per row, ~50ms of a ~100ms commit. A state
+    // update made during the commit is still applied before the browser
+    // paints (React flushes sync work before it yields), once.
+    useFlushSync: false,
     onChange: (instance) => {
       const element = instance.scrollElement;
       if (!element) return;

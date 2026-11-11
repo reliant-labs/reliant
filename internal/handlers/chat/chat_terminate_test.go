@@ -2,6 +2,7 @@ package chat
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -39,6 +40,13 @@ func (c *terminateTestTemporalClient) DescribeWorkflowExecution(
 			Execution: &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: "run-1"},
 		},
 	}, nil
+}
+
+// CancelWorkflow refuses, so TerminateChat takes the hard-terminate path these
+// tests pin: the bookkeeping a terminate must do because the run executes no
+// code of its own. The cooperative path is runs.Service's own tests.
+func (c *terminateTestTemporalClient) CancelWorkflow(context.Context, string, string) error {
+	return errors.New("this fake cannot cancel cooperatively")
 }
 
 func (c *terminateTestTemporalClient) TerminateWorkflow(

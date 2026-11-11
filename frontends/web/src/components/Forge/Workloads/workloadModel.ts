@@ -45,7 +45,7 @@ export type WorkloadTab = (typeof WORKLOAD_TABS)[number];
 
 /** The Overview's filters, as the URL spells them. */
 export const OVERVIEW_STATUS_FILTERS = ["attention"] as const;
-export const OVERVIEW_KIND_FILTERS = ["deployment", "statefulset", "daemonset"] as const;
+export const OVERVIEW_KIND_FILTERS = ["deployment", "statefulset", "daemonset", "job", "cronjob", "process"] as const;
 
 /** Worst first: the order "Needs attention" and a status filter rank by. */
 const HEALTH_RANK: Record<WorkloadHealth, number> = {

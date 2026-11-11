@@ -14,10 +14,11 @@ import { useActiveOrgStore } from "@/store/activeOrgStore";
 const listMemberPermissions = vi.fn();
 const updateMemberPermissions = vi.fn();
 
-vi.mock("../../../../services/controlPlane/memberPermissions", () => ({
+vi.mock("../../../../services/controlPlane/memberPermissions", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../../../services/controlPlane/memberPermissions")>()),
   listMemberPermissions: (orgId: string) => listMemberPermissions(orgId),
-  updateMemberPermissions: (userId: string, scopes: string[], orgId: string) =>
-    updateMemberPermissions(userId, scopes, orgId),
+  updateMemberPermissions: (userId: string, scopes: string[], orgId: string, environmentGrants: unknown[]) =>
+    updateMemberPermissions(userId, scopes, orgId, environmentGrants),
 }));
 
 import { MemberPermissions } from "../MemberPermissions";
@@ -34,15 +35,22 @@ const ADMIN_SET = [
   "token:write",
   "identity:read",
   "identity:manage",
+  "db:query",
+  "obs:write",
+  "billing:read",
+  "deploy:config:read",
+  "storage:read",
 ];
 
 function roster(grantable: string[] = ADMIN_SET) {
   return {
     members: [
-      { userId: "u-admin", email: "admin@example.test", role: "admin", scopes: ADMIN_SET },
-      { userId: "u-dev", email: "dev@example.test", role: "member", scopes: ["deploy:read"] },
+      { userId: "u-admin", email: "admin@example.test", role: "admin", scopes: ADMIN_SET, environmentGrants: [] },
+      { userId: "u-dev", email: "dev@example.test", role: "member", scopes: ["deploy:read"], environmentGrants: [] },
     ],
     grantable,
+    environments: [],
+    environmentScopes: [],
   };
 }
 
@@ -52,7 +60,7 @@ describe("MemberPermissions", () => {
     listMemberPermissions.mockReset().mockResolvedValue(roster());
     updateMemberPermissions.mockReset().mockImplementation(
       (userId: string, scopes: string[]) =>
-        Promise.resolve({ userId, email: "dev@example.test", role: "member", scopes })
+        Promise.resolve({ userId, email: "dev@example.test", role: "member", scopes, environmentGrants: [] })
     );
   });
 

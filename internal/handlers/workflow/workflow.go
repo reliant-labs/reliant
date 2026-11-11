@@ -101,20 +101,23 @@ func (s *Service) SaveWorkflow(
 		if err != nil {
 			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get workflow draft by ID"))
 		}
-		if authz.CanWriteWorkflow(ctx, userID, draft) {
-			existingUserWorkflow = draft
-			isUpdate = true
-			isRename = draft.Slug != slug
+		// A draft the caller may not change is not found: falling through
+		// to the slug lookup would let the same request reach it by name.
+		if !authz.CanWriteWorkflow(ctx, userID, draft) {
+			return nil, svcerr.NotFound("workflow draft")
+		}
+		existingUserWorkflow = draft
+		isUpdate = true
+		isRename = draft.Slug != slug
 
-			// If slug is changing (rename), check that the new slug doesn't conflict with another workflow
-			if isRename {
-				conflicting, err := s.deps.Repo.GetWorkflowDraftBySlug(ctx, userID, slug)
-				if err != nil {
-					return nil, svcerr.WrapOr(err, svcerr.Internal("failed to check slug conflict"))
-				}
-				if conflicting != nil && conflicting.ID != draft.ID {
-					return nil, svcerr.AlreadyExists(fmt.Sprintf("workflow name '%s' conflicts with an existing workflow; please choose a different name", protoWf.Name))
-				}
+		// If slug is changing (rename), check that the new slug doesn't conflict with another workflow
+		if isRename {
+			conflicting, err := s.deps.Repo.GetWorkflowDraftBySlug(ctx, userID, slug)
+			if err != nil {
+				return nil, svcerr.WrapOr(err, svcerr.Internal("failed to check slug conflict"))
+			}
+			if conflicting != nil && conflicting.ID != draft.ID {
+				return nil, svcerr.AlreadyExists(fmt.Sprintf("workflow name '%s' conflicts with an existing workflow; please choose a different name", protoWf.Name))
 			}
 		}
 	}
@@ -124,6 +127,11 @@ func (s *Service) SaveWorkflow(
 		draft, err := s.deps.Repo.GetWorkflowDraftBySlug(ctx, userID, slug)
 		if err != nil {
 			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to check existing workflow"))
+		}
+		// The store hides a draft the caller may not see; one they may see
+		// but not change still holds its slug, and is never overwritten.
+		if draft != nil && !authz.CanWriteWorkflow(ctx, userID, draft) {
+			return nil, svcerr.AlreadyExists(fmt.Sprintf("workflow name '%s' is taken; please choose a different name", protoWf.Name))
 		}
 		if draft != nil {
 			// Found existing workflow by slug - check if names match
@@ -285,15 +293,23 @@ func (s *Service) SaveWorkflow(
 
 	now := time.Now().UTC()
 	var draftID string
+	// A saved workflow's org is fixed at creation; an update keeps it.
+	var orgID *string
 	if existing != nil {
 		draftID = existing.ID
+		orgID = existing.OrgID
 	} else {
 		draftID = uuid.New().String()
+		var err error
+		if orgID, err = s.actingOrg(ctx, userID, req.Msg.GetOrgId()); err != nil {
+			return nil, err
+		}
 	}
 
 	draft := &db.WorkflowDraft{
 		ID:          draftID,
 		UserID:      userID,
+		OrgID:       orgID,
 		Name:        protoWf.Name,
 		Slug:        slug,
 		Description: ptr.StringIfNotEmpty(protoWf.Description),
@@ -459,6 +475,10 @@ func (s *Service) GetWorkflow(
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to look up workflow"))
 	}
+	// By name as by id: a draft the caller may not read is no draft.
+	if !authz.CanReadWorkflow(ctx, userID, draft) {
+		draft = nil
+	}
 
 	if draft == nil {
 		if resolveErr != nil && !errors.Is(resolveErr, workflowref.ErrNotFound) {
@@ -574,6 +594,9 @@ func (s *Service) automationsOfDeletedWorkflow(ctx context.Context, userID, slug
 	if err != nil {
 		return nil, fmt.Errorf("list automations: %w", err)
 	}
+	// Only automations the caller may still change are removed with it: one
+	// in an org they have left is the org's, and fails at launch instead.
+	all = authz.Visible(ctx, userID, all, authz.CanWriteTrigger)
 	shadowed := map[string]bool{}
 	var out []*core.Trigger
 	for _, t := range all {

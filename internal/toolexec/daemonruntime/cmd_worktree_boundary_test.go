@@ -69,7 +69,7 @@ func finishAcrossTheBoundary(t *testing.T, base string) (*db.Worktree, error) {
 		OwnerDaemonID: "d1",
 		WorkspaceID:   uniqueWorkspaceID(t, "reliant-telemetry"),
 	}
-	wt, err := workspacecreate.Insert(context.Background(), store, req)
+	wt, err := workspacecreate.Insert(context.Background(), store, nil, req)
 	if err != nil {
 		t.Fatalf("insert: %v", err)
 	}

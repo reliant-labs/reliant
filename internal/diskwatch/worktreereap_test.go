@@ -10,6 +10,10 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"google.golang.org/protobuf/proto"
+
+	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 )
 
 func gitT(t *testing.T, dir string, args ...string) {
@@ -34,6 +38,22 @@ func initRepo(t *testing.T, dir string) string {
 		t.Fatal(err)
 	}
 	return real
+}
+
+// fakeLinkedWorktree lays out, without running git, what worktreeRepos reads
+// of a linked worktree: a .git file at wt naming an admin dir under repo's
+// .git/worktrees. For tests that need a worktree to be found, not a real one.
+func fakeLinkedWorktree(t *testing.T, repo, wt string) {
+	t.Helper()
+	admin := filepath.Join(repo, ".git", "worktrees", filepath.Base(wt))
+	for _, d := range []string{admin, wt} {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(wt, ".git"), []byte("gitdir: "+admin+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 }
 
 // worktreeMachine is a home whose Reliant worktree root holds a Reliant
@@ -106,6 +126,134 @@ func TestWorktreeReap_ReapsEveryRepositoryOnItsScheduleFromTheReaperTick(t *test
 	w.reaper.lastRun = now
 	if !w.reaperTick(ctx) || len(reaped) != 4 {
 		t.Fatalf("did not reap again after WorktreeReapInterval: %v", reaped)
+	}
+}
+
+// The in-process worktree sweep rides the reap's schedule. In mode on it is
+// the machine's only worktree deleter: forge's subprocess no longer runs. In
+// dry-run it only reports, and forge's reap runs as it did; off (or no sweep)
+// is exactly the old reap.
+func TestWorktreeReap_SweepReplacesForgesReaperOnlyInModeOn(t *testing.T) {
+	for _, tc := range []struct {
+		mode        string
+		sweeps      int
+		forgeReaped bool
+	}{
+		{"on", 1, false},
+		{"dry-run", 1, true},
+		{"off", 0, true},
+		{"", 0, true},
+	} {
+		t.Run("mode="+tc.mode, func(t *testing.T) {
+			home := t.TempDir()
+			root := filepath.Join(home, ".reliant", "worktrees")
+			fakeLinkedWorktree(t, filepath.Join(home, "projects", "a"), filepath.Join(root, "proj", "ws-1", "a"))
+			fs := &fakeFS{
+				mounts: map[string]fsStat{home: {Dev: 8, Bsize: 4096, Blocks: 1 << 20, Bfree: 1 << 19, Bavail: 1 << 19, Files: 1000, Ffree: 900}},
+				exists: map[string]bool{home: true},
+			}
+			env := Environment{Getenv: func(string) string { return "" }, Home: home, GOOS: "test"}
+			now := time.Now()
+			w := watcherOn(t, fs, env, &now)
+			forge := 0
+			w.worktreeReap.run = func(context.Context, string) (reaperRun, error) { forge++; return reaperRun{}, nil }
+			var sweeps []string
+			w.ConfigureWorktreeSweep(WorktreeSweep{Mode: tc.mode, Run: func(_ context.Context, trigger string, _, approvedOnly bool) {
+				sweeps = append(sweeps, trigger)
+				if approvedOnly {
+					t.Error("a scheduled pass ran approved-only")
+				}
+			}})
+			w.ConfigureReaper(ReaperConfig{Enabled: true, Interval: time.Hour, PressureInterval: 10 * time.Minute, PolicyPath: filepath.Join(t.TempDir(), "storage.json")})
+			w.reaper.lastRun = now
+			w.reaperTick(context.Background())
+			if len(sweeps) != tc.sweeps || (forge > 0) != tc.forgeReaped {
+				t.Fatalf("sweeps %v, forge reaps %d; want %d sweeps, forge reaped %v", sweeps, forge, tc.sweeps, tc.forgeReaped)
+			}
+		})
+	}
+}
+
+// A person's approval is acted on within a minute, by an approved-only
+// sweep between scheduled passes, and only once per new approval.
+func TestWorktreeReap_ApprovalRunsAnApprovedOnlySweepBetweenPasses(t *testing.T) {
+	home := t.TempDir()
+	fs := &fakeFS{
+		mounts: map[string]fsStat{home: {Dev: 8, Bsize: 4096, Blocks: 1 << 20, Bfree: 1 << 19, Bavail: 1 << 19, Files: 1000, Ffree: 900}},
+		exists: map[string]bool{home: true},
+	}
+	env := Environment{Getenv: func(string) string { return "" }, Home: home, GOOS: "test"}
+	now := time.Now()
+	w := watcherOn(t, fs, env, &now)
+	w.worktreeReap.run = func(context.Context, string) (reaperRun, error) { return reaperRun{}, nil }
+	approvedAt := time.Time{}
+	var passes []bool
+	w.ConfigureWorktreeSweep(WorktreeSweep{
+		Mode:           "on",
+		Run:            func(_ context.Context, _ string, _, approvedOnly bool) { passes = append(passes, approvedOnly) },
+		ApprovalsSince: func(since time.Time) bool { return approvedAt.After(since) },
+	})
+	w.ConfigureReaper(ReaperConfig{Enabled: true, Interval: time.Hour, PressureInterval: 10 * time.Minute, PolicyPath: filepath.Join(t.TempDir(), "storage.json")})
+	w.reaper.lastRun = now
+	ctx := context.Background()
+	w.reaperTick(ctx) // the scheduled pass
+	if len(passes) != 1 || passes[0] {
+		t.Fatalf("passes %v, want one scheduled pass", passes)
+	}
+	now = now.Add(time.Minute)
+	w.reaper.lastRun = now
+	w.reaperTick(ctx)
+	if len(passes) != 1 {
+		t.Fatalf("an approved-only pass ran with no approval: %v", passes)
+	}
+	approvedAt = now.Add(time.Second)
+	now = now.Add(time.Minute)
+	w.reaper.lastRun = now
+	w.reaperTick(ctx)
+	if len(passes) != 2 || !passes[1] {
+		t.Fatalf("passes %v, want an approved-only pass after the approval", passes)
+	}
+	now = now.Add(time.Minute)
+	w.reaper.lastRun = now
+	w.reaperTick(ctx)
+	if len(passes) != 2 {
+		t.Fatalf("the same approval ran another pass: %v", passes)
+	}
+}
+
+// The gateway stores a report again when the machine's reclaim proposals
+// change (a new proposal, a changed state, a decision, a note), so the inbox
+// item lists what the machine proposes now.
+func TestReclaimProposalsChangeTheReportSignature(t *testing.T) {
+	base := &reliantv1.DiskReport{Volumes: []*reliantv1.DiskVolume{{Label: "home", TotalBytes: 100, FreeBytes: 50}}}
+	with := func(edit func(p *reliantv1.WorktreeReclaimProposal)) *reliantv1.DiskReport {
+		r := proto.Clone(base).(*reliantv1.DiskReport)
+		p := &reliantv1.WorktreeReclaimProposal{Key: "p-1", Fingerprint: "fp-1"}
+		if edit != nil {
+			edit(p)
+		}
+		r.WorktreeReclaim = &reliantv1.WorktreeReclaimProposals{Mode: "on", Total: 1, Proposals: []*reliantv1.WorktreeReclaimProposal{p}}
+		return r
+	}
+	sigs := map[string]string{
+		"none":     Signature(base),
+		"proposed": Signature(with(nil)),
+		"changed":  Signature(with(func(p *reliantv1.WorktreeReclaimProposal) { p.Fingerprint = "fp-2" })),
+		"decided":  Signature(with(func(p *reliantv1.WorktreeReclaimProposal) { p.Decision = "approve" })),
+		"noted":    Signature(with(func(p *reliantv1.WorktreeReclaimProposal) { p.NoteAtMs = 5 })),
+	}
+	seen := map[string]string{}
+	for name, s := range sigs {
+		if other, dup := seen[s]; dup {
+			t.Fatalf("%s and %s have the same signature", name, other)
+		}
+		seen[s] = name
+	}
+	if Signature(with(func(p *reliantv1.WorktreeReclaimProposal) { p.IdleSeconds = 99 })) != sigs["proposed"] {
+		t.Fatal("idle time drifting re-stored the report")
+	}
+	if UrgentSignature(with(nil)) == UrgentSignature(base) {
+		t.Fatal("a new proposal is not urgent")
 	}
 }
 

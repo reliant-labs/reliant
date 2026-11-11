@@ -97,7 +97,8 @@ export function EnvScopeControl({ value, long, previews, onChange, pinnedEnv, pl
           {option.name}
         </option>
       ))}
-      <option value={ENV_ALL}>All environments</option>
+      {/* "All environments" truncated in the phone's bar; the select's label names the control. */}
+      <option value={ENV_ALL}>All</option>
       {previews.length > 0 && (
         <optgroup label="Previews">
           {previews.map((option) => (

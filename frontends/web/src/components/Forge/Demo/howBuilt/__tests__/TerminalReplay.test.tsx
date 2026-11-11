@@ -132,14 +132,24 @@ describe("<TerminalReplay>", () => {
     expect(screenText()).not.toContain("one");
   });
 
+  it("opens on the run's outline and a play button, never an empty screen", () => {
+    render(<TerminalReplay cast={CAST} autoPlay={false} />);
+    const poster = screen.getByTestId("replay-poster");
+    expect(poster).toHaveTextContent("forge project new shop");
+    expect(screen.getByTestId("replay-poster-play")).toHaveTextContent("Play the recording");
+    fireEvent.click(screen.getByTestId("replay-step"));
+    expect(screen.queryByTestId("replay-poster")).toBeNull();
+  });
+
   it("copies exactly the command, or the proto you write", async () => {
     render(<TerminalReplay cast={CAST} autoPlay={false} />);
+    // Past the outline: the first command, finished.
+    fireEvent.click(screen.getByTestId("replay-step"));
     await act(async () => {
       fireEvent.click(within(screen.getByTestId("replay-step-0")).getByRole("button", { name: "Copy forge project new shop" }));
     });
     expect(writeText).toHaveBeenLastCalledWith("forge project new shop");
     expect(within(screen.getByTestId("replay-step-0")).getByRole("button", { name: "Copied forge project new shop" })).toBeInTheDocument();
-    fireEvent.click(screen.getByTestId("replay-step"));
     fireEvent.click(screen.getByTestId("replay-step"));
     await act(async () => {
       fireEvent.click(within(screen.getByTestId("replay-step-1")).getByRole("button", { name: /Copy the proto/ }));

@@ -579,6 +579,7 @@ func workflowToCore(row *Workflow) *core.Workflow {
 		Outcome:         row.Outcome,
 		FailureDetail:   row.FailureDetail,
 		OwnerUserID:     row.OwnerUserID,
+		OrgID:           row.OrgID,
 	}
 	if row.State != nil {
 		w.Status.State = *row.State

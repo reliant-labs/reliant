@@ -160,6 +160,30 @@ export function StorageNote({ icon, title, children, actions, testId }: { icon?:
   );
 }
 
+/** Where a person learns to declare a bucket (forge.Bucket in the environment's KCL). */
+export const STORAGE_BUCKETS_DOCS_URL = "https://docs.reliantlabs.io/forge/deploy-without-an-account#adding-file-uploads";
+
+/**
+ * The bucket list was read and the environment declares none. Only the
+ * buckets an app declares are listed, so this says that, and says what is
+ * deliberately missing: the platform's own storage (images, sites, backups)
+ * is never a bucket here. Shown only after a successful read: loading and a
+ * failed read are their own states, never "no buckets".
+ */
+export function StorageNoBuckets({ env }: { env: string }) {
+  return (
+    <StateFrame testId="storage-no-buckets" icon={<HardDrive className="h-4 w-4" />} title={`This project declares no storage buckets in ${env}`}>
+      <p>Buckets an app declares in its config appear here: each {code("forge.Bucket")} in this environment&apos;s last recorded release.</p>
+      <p>Platform storage (container images, static sites, backups) isn&apos;t listed here.</p>
+      <p>
+        <a href={STORAGE_BUCKETS_DOCS_URL} target="_blank" rel="noreferrer" className="text-primary-ink underline underline-offset-2" data-testid="storage-no-buckets-docs">
+          How to declare a bucket
+        </a>
+      </p>
+    </StateFrame>
+  );
+}
+
 /** The environment's policy refuses every read: say whose decision that is and where it lives. */
 export function StorageDenied({ env, unknown }: { env: string; unknown: boolean }) {
   return (

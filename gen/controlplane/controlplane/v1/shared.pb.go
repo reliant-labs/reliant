@@ -814,7 +814,14 @@ type Daemon struct {
 	// resize or re-create). Plain text: not for secrets.
 	Env map[string]string `protobuf:"bytes,35,rep,name=env,proto3" json:"env,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	// Where the machine's disk lives (managed daemons only); fixed at create.
-	DiskMode      DaemonDiskMode `protobuf:"varint,36,opt,name=disk_mode,json=diskMode,proto3,enum=controlplane.v1.DaemonDiskMode" json:"disk_mode,omitempty"`
+	DiskMode DaemonDiskMode `protobuf:"varint,36,opt,name=disk_mode,json=diskMode,proto3,enum=controlplane.v1.DaemonDiskMode" json:"disk_mode,omitempty"`
+	// The ONE organization that owns the machine: it pays for it and its
+	// policies apply (docs/design/orgs-and-members.md §3). Chosen when the
+	// machine is created or paired, never changed afterwards. owner_id /
+	// owner_type stay the person who runs it (the operator), who does not pay.
+	// Empty only for a machine recorded before owning orgs existed and not yet
+	// backfilled.
+	OrgId         string `protobuf:"bytes,37,opt,name=org_id,json=orgId,proto3" json:"org_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1057,6 +1064,13 @@ func (x *Daemon) GetDiskMode() DaemonDiskMode {
 		return x.DiskMode
 	}
 	return DaemonDiskMode_DAEMON_DISK_MODE_UNSPECIFIED
+}
+
+func (x *Daemon) GetOrgId() string {
+	if x != nil {
+		return x.OrgId
+	}
+	return ""
 }
 
 // DaemonDisk is a managed daemon's disk, in GiB of DATA: the part the customer
@@ -4161,7 +4175,7 @@ const file_controlplane_v1_shared_proto_rawDesc = "" +
 	"cpuRequest\x12\x1b\n" +
 	"\tcpu_limit\x18\x02 \x01(\tR\bcpuLimit\x12%\n" +
 	"\x0ememory_request\x18\x03 \x01(\tR\rmemoryRequest\x12!\n" +
-	"\fmemory_limit\x18\x04 \x01(\tR\vmemoryLimit\"\x8c\f\n" +
+	"\fmemory_limit\x18\x04 \x01(\tR\vmemoryLimit\"\xa3\f\n" +
 	"\x06Daemon\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x19\n" +
@@ -4198,7 +4212,8 @@ const file_controlplane_v1_shared_proto_rawDesc = "" +
 	"\x13default_port_access\x18\x1e \x01(\x0e2\x1f.controlplane.v1.PortAccessModeR\x11defaultPortAccess\x12/\n" +
 	"\x04disk\x18  \x01(\v2\x1b.controlplane.v1.DaemonDiskR\x04disk\x122\n" +
 	"\x03env\x18# \x03(\v2 .controlplane.v1.Daemon.EnvEntryR\x03env\x12<\n" +
-	"\tdisk_mode\x18$ \x01(\x0e2\x1f.controlplane.v1.DaemonDiskModeR\bdiskMode\x1a6\n" +
+	"\tdisk_mode\x18$ \x01(\x0e2\x1f.controlplane.v1.DaemonDiskModeR\bdiskMode\x12\x15\n" +
+	"\x06org_id\x18% \x01(\tR\x05orgId\x1a6\n" +
 	"\bEnvEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xe8\x01\n" +
