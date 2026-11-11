@@ -6,12 +6,14 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"net"
 	"net/http"
 	"testing"
 	"time"
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
+	"github.com/nats-io/nats-server/v2/server"
 	natstest "github.com/nats-io/nats-server/v2/test"
 	"github.com/nats-io/nats.go"
 	fat "github.com/reliant-labs/forge/pkg/accesstoken"
@@ -23,6 +25,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	grpcserver "github.com/reliant-labs/reliant/internal/grpc"
 	"github.com/reliant-labs/reliant/internal/handlers/tools_daemon"
+	"github.com/reliant-labs/reliant/internal/natsutil"
 	"github.com/reliant-labs/reliant/internal/tokenauthority"
 	"github.com/reliant-labs/reliant/pkg/config"
 	"github.com/reliant-labs/reliant/pkg/daemonwire"
@@ -229,4 +232,75 @@ func TestDisconnectCommandSubscriberStopIsIdempotent(t *testing.T) {
 	s := NewDisconnectCommandSubscriber(&recordingDisconnecter{})
 	s.Stop()
 	s.Stop()
+}
+
+// chanDisconnecter hands each disconnect it is asked for to a channel.
+type chanDisconnecter chan [2]string
+
+func (c chanDisconnecter) DisconnectDaemon(daemonID, reason string) bool {
+	c <- [2]string{daemonID, reason}
+	return true
+}
+
+// reliant#2610: a gateway that subscribes before the broker has loaded the
+// grant for the disconnect command is refused. It must re-subscribe once the
+// grant lands, and a command published after that must end the stream.
+func TestDisconnectCommandSubscriberRecoversFromARefusedSubscription(t *testing.T) {
+	gatewayOpts := func(port int, subscribe ...string) *server.Options {
+		opts := natstest.DefaultTestOptions
+		opts.Port = port
+		opts.Users = []*server.User{
+			{Username: "daemon-gateway", Password: "pw", Permissions: &server.Permissions{
+				Subscribe: &server.SubjectPermission{Allow: append([]string{"_INBOX.>"}, subscribe...)},
+			}},
+			{Username: "cp-core", Password: "pw"},
+		}
+		return &opts
+	}
+	srv := natstest.RunServer(gatewayOpts(-1)) // the grant has not rolled out yet
+	t.Cleanup(srv.Shutdown)
+	port := srv.Addr().(*net.TCPAddr).Port
+	connect := func(user string) *nats.Conn {
+		nc, err := natsutil.Connect(natsutil.Endpoint{URL: srv.ClientURL(), User: user, Password: "pw"})
+		require.NoError(t, err)
+		t.Cleanup(nc.Close)
+		return nc
+	}
+	gatewayConn, cpConn := connect("daemon-gateway"), connect("cp-core")
+
+	events := make(chan natsutil.SubscriptionEvent, 64)
+	await := func(kind natsutil.SubscriptionEventKind) {
+		t.Helper()
+		timeout := time.After(10 * time.Second)
+		for {
+			select {
+			case ev := <-events:
+				if ev.Kind == kind {
+					return
+				}
+			case <-timeout:
+				t.Fatalf("timed out waiting for the subscription to be %s", kind)
+			}
+		}
+	}
+	target := make(chanDisconnecter, 1)
+	sub := NewDisconnectCommandSubscriber(target,
+		natsutil.WithBackoff(10*time.Millisecond, 50*time.Millisecond),
+		natsutil.WithEvents(func(ev natsutil.SubscriptionEvent) { events <- ev }))
+	require.NoError(t, sub.Start(gatewayConn), "a refused subscription must not fail the gateway's start")
+	t.Cleanup(sub.Stop)
+	await(natsutil.SubscriptionRefused)
+
+	require.NoError(t, srv.ReloadOptions(gatewayOpts(port, daemonwire.SubjectDisconnectCommand)))
+	await(natsutil.SubscriptionRecovered)
+
+	body, err := json.Marshal(daemonwire.DisconnectCommand{DaemonID: "d-1", Reason: "credential revoked", RequestID: "r-1"})
+	require.NoError(t, err)
+	require.NoError(t, cpConn.Publish(daemonwire.SubjectDisconnectCommand, body))
+	select {
+	case got := <-target:
+		require.Equal(t, [2]string{"d-1", "credential revoked"}, got)
+	case <-time.After(10 * time.Second):
+		t.Fatal("a disconnect command published after the grant landed was not delivered")
+	}
 }

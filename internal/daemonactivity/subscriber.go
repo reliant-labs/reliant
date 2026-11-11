@@ -33,6 +33,7 @@ import (
 	"github.com/nats-io/nats.go"
 
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/natsutil"
 )
 
 const (
@@ -60,7 +61,7 @@ type UserTarget interface {
 // Subscriber holds the active NATS subscription. Safe for concurrent use.
 type Subscriber struct {
 	mu  sync.Mutex
-	sub *nats.Subscription
+	sub *natsutil.Subscription
 }
 
 // NewSubscriber returns an unstarted Subscriber.
@@ -74,7 +75,7 @@ func (s *Subscriber) Start(nc *nats.Conn, target UserTarget) error {
 	if s == nil {
 		return nil
 	}
-	sub, err := nc.Subscribe(SubjectWildcard, func(msg *nats.Msg) {
+	sub, err := natsutil.SubscribeWithRecovery(nc, SubjectWildcard, func(msg *nats.Msg) {
 		userID := strings.TrimPrefix(msg.Subject, Subject)
 		if userID == "" || strings.Contains(userID, ".") {
 			// Malformed: extra tokens or empty. Ignore — publisher bug.
@@ -102,7 +103,5 @@ func (s *Subscriber) Stop() {
 	sub := s.sub
 	s.sub = nil
 	s.mu.Unlock()
-	if sub != nil {
-		_ = sub.Unsubscribe()
-	}
+	sub.Stop()
 }

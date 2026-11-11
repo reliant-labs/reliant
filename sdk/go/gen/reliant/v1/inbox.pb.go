@@ -2636,7 +2636,7 @@ const file_reliant_v1_inbox_proto_rawDesc = "" +
 	"\x15CleanupStorageOutcome\x12'\n" +
 	"#CLEANUP_STORAGE_OUTCOME_UNSPECIFIED\x10\x00\x12$\n" +
 	" CLEANUP_STORAGE_OUTCOME_ACCEPTED\x10\x01\x12#\n" +
-	"\x1fCLEANUP_STORAGE_OUTCOME_SKIPPED\x10\x022\xbe\x05\n" +
+	"\x1fCLEANUP_STORAGE_OUTCOME_SKIPPED\x10\x022\x8d\b\n" +
 	"\fInboxService\x12J\n" +
 	"\tListInbox\x12\x1c.reliant.v1.ListInboxRequest\x1a\x1d.reliant.v1.ListInboxResponse\"\x00\x12\x85\x01\n" +
 	"\x0eCleanupStorage\x12!.reliant.v1.CleanupStorageRequest\x1a\".reliant.v1.CleanupStorageResponse\",\xa2\xbb\x18(:&\n" +
@@ -2644,6 +2644,12 @@ const file_reliant_v1_inbox_proto_rawDesc = "" +
 	"\x06daemon\x12\tdaemon_id\x12\x9d\x01\n" +
 	"\x15ForgetStorageWorktree\x12(.reliant.v1.ForgetStorageWorktreeRequest\x1a).reliant.v1.ForgetStorageWorktreeResponse\"/\xa2\xbb\x18+:)\n" +
 	"\x0eforget_storage\x12\x17\n" +
+	"\bworktree\x12\vworktree_id\x12\x9a\x01\n" +
+	"\x12KeepMarkedWorktree\x12%.reliant.v1.KeepMarkedWorktreeRequest\x1a&.reliant.v1.KeepMarkedWorktreeResponse\"5\xa2\xbb\x181:/\n" +
+	"\x14keep_marked_worktree\x12\x17\n" +
+	"\bworktree\x12\vworktree_id\x12\xaf\x01\n" +
+	"\x18ReclaimMarkedWorktreeNow\x12+.reliant.v1.ReclaimMarkedWorktreeNowRequest\x1a,.reliant.v1.ReclaimMarkedWorktreeNowResponse\"8\xa2\xbb\x184:2\n" +
+	"\x17reclaim_marked_worktree\x12\x17\n" +
 	"\bworktree\x12\vworktree_id\x12\xa4\x01\n" +
 	"\x10DismissInboxItem\x12#.reliant.v1.DismissInboxItemRequest\x1a$.reliant.v1.DismissInboxItemResponse\"E\xa2\xbb\x18A:?:=per-user inbox read state: hides items without resolving them\x12\x92\x01\n" +
 	"\x10RestoreInboxItem\x12#.reliant.v1.RestoreInboxItemRequest\x1a$.reliant.v1.RestoreInboxItemResponse\"3\xa2\xbb\x18/:-:+per-user inbox read state: undoes a dismissB:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
@@ -2732,15 +2738,19 @@ var file_reliant_v1_inbox_proto_depIdxs = []int32{
 	2,  // 25: reliant.v1.InboxService.ListInbox:input_type -> reliant.v1.ListInboxRequest
 	29, // 26: reliant.v1.InboxService.CleanupStorage:input_type -> reliant.v1.CleanupStorageRequest
 	27, // 27: reliant.v1.InboxService.ForgetStorageWorktree:input_type -> reliant.v1.ForgetStorageWorktreeRequest
-	15, // 28: reliant.v1.InboxService.DismissInboxItem:input_type -> reliant.v1.DismissInboxItemRequest
-	17, // 29: reliant.v1.InboxService.RestoreInboxItem:input_type -> reliant.v1.RestoreInboxItemRequest
-	3,  // 30: reliant.v1.InboxService.ListInbox:output_type -> reliant.v1.ListInboxResponse
-	30, // 31: reliant.v1.InboxService.CleanupStorage:output_type -> reliant.v1.CleanupStorageResponse
-	28, // 32: reliant.v1.InboxService.ForgetStorageWorktree:output_type -> reliant.v1.ForgetStorageWorktreeResponse
-	16, // 33: reliant.v1.InboxService.DismissInboxItem:output_type -> reliant.v1.DismissInboxItemResponse
-	18, // 34: reliant.v1.InboxService.RestoreInboxItem:output_type -> reliant.v1.RestoreInboxItemResponse
-	30, // [30:35] is the sub-list for method output_type
-	25, // [25:30] is the sub-list for method input_type
+	23, // 28: reliant.v1.InboxService.KeepMarkedWorktree:input_type -> reliant.v1.KeepMarkedWorktreeRequest
+	25, // 29: reliant.v1.InboxService.ReclaimMarkedWorktreeNow:input_type -> reliant.v1.ReclaimMarkedWorktreeNowRequest
+	15, // 30: reliant.v1.InboxService.DismissInboxItem:input_type -> reliant.v1.DismissInboxItemRequest
+	17, // 31: reliant.v1.InboxService.RestoreInboxItem:input_type -> reliant.v1.RestoreInboxItemRequest
+	3,  // 32: reliant.v1.InboxService.ListInbox:output_type -> reliant.v1.ListInboxResponse
+	30, // 33: reliant.v1.InboxService.CleanupStorage:output_type -> reliant.v1.CleanupStorageResponse
+	28, // 34: reliant.v1.InboxService.ForgetStorageWorktree:output_type -> reliant.v1.ForgetStorageWorktreeResponse
+	24, // 35: reliant.v1.InboxService.KeepMarkedWorktree:output_type -> reliant.v1.KeepMarkedWorktreeResponse
+	26, // 36: reliant.v1.InboxService.ReclaimMarkedWorktreeNow:output_type -> reliant.v1.ReclaimMarkedWorktreeNowResponse
+	16, // 37: reliant.v1.InboxService.DismissInboxItem:output_type -> reliant.v1.DismissInboxItemResponse
+	18, // 38: reliant.v1.InboxService.RestoreInboxItem:output_type -> reliant.v1.RestoreInboxItemResponse
+	32, // [32:39] is the sub-list for method output_type
+	25, // [25:32] is the sub-list for method input_type
 	25, // [25:25] is the sub-list for extension type_name
 	25, // [25:25] is the sub-list for extension extendee
 	0,  // [0:25] is the sub-list for field type_name

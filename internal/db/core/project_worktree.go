@@ -202,6 +202,10 @@ type CleanupMetadata struct {
 	ReclaimMarkedAt   *time.Time `json:"reclaim_marked_at,omitempty"`
 	ReclaimMarkUse    *time.Time `json:"reclaim_mark_use,omitempty"`
 	ReclaimMarkReason string     `json:"reclaim_mark_reason,omitempty"`
+	// ReclaimApprovedAt is when the person chose "Reclaim now" for this mark
+	// in the Inbox: the grace wait is skipped, and every other check of the
+	// reclaim still applies (worktreesweep mark.go). Cleared with the mark.
+	ReclaimApprovedAt *time.Time `json:"reclaim_approved_at,omitempty"`
 }
 
 // Marked reports whether the worktree carries a reclaim mark.

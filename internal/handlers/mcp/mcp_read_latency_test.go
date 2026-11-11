@@ -7,6 +7,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
@@ -202,41 +203,55 @@ func TestMCPListServers_ServesTheLastStatusWithoutAskingAgain(t *testing.T) {
 // had, answers with the configuration (status unknown) past it, and the next
 // load does not wait at all.
 func TestMCPListServers_DoesNotWaitOnAHungDaemon(t *testing.T) {
-	ctx, svc, repo, router := newMCPReadFixture(t, 4)
-	router.hang.Store(true)
-	svc.statuses.wait = 200 * time.Millisecond
-	svc.statuses.fetchTimeout = 5 * time.Second
+	synctest.Test(t, func(t *testing.T) {
+		ctx, svc, repo, router := newMCPReadFixture(t, 4)
+		router.hang.Store(true)
+		svc.statuses.wait = 200 * time.Millisecond
+		svc.statuses.fetchTimeout = 5 * time.Second
 
-	start := time.Now()
-	servers := listMCPServers(t, ctx, svc, repo.project.ID)
-	first := time.Since(start)
-	require.Len(t, servers, 4, "the configured servers are listed regardless")
-	for _, s := range servers {
-		assert.Equal(t, reliantv1.MCPServerStatus_MCP_SERVER_STATUS_UNSPECIFIED, s.GetStatus(), "status unknown, not an error")
-		assert.False(t, s.GetConnected())
-		assert.True(t, s.GetEnabled())
-	}
-	assert.Less(t, first, time.Second, "the first load waits for the daemon at most mcpStatusWait")
+		start := time.Now()
+		servers := listMCPServers(t, ctx, svc, repo.project.ID)
+		first := time.Since(start)
+		require.Len(t, servers, 4, "the configured servers are listed regardless")
+		for _, s := range servers {
+			assert.Equal(t, reliantv1.MCPServerStatus_MCP_SERVER_STATUS_UNSPECIFIED, s.GetStatus(), "status unknown, not an error")
+			assert.False(t, s.GetConnected())
+			assert.True(t, s.GetEnabled())
+		}
+		assert.Less(t, first, time.Second, "the first load waits for the daemon at most mcpStatusWait")
 
-	start = time.Now()
-	listMCPServers(t, ctx, svc, repo.project.ID)
-	assert.Less(t, time.Since(start), 100*time.Millisecond, "a later load does not wait on the same hung fetch")
-	assert.Equal(t, 1, router.count("mcp.server_status"), "one fetch in flight per project, not one per load")
+		start = time.Now()
+		listMCPServers(t, ctx, svc, repo.project.ID)
+		assert.Less(t, time.Since(start), 100*time.Millisecond, "a later load does not wait on the same hung fetch")
+		assert.Equal(t, 1, router.count("mcp.server_status"), "one fetch in flight per project, not one per load")
+
+		// The hung fetch ends at its own timeout; the bubble's clock moves
+		// only while the test is still in it.
+		time.Sleep(svc.statuses.fetchTimeout)
+		synctest.Wait()
+	})
 }
 
 // The request's own deadline bounds the wait too.
 func TestMCPListServers_RespectsTheRequestDeadline(t *testing.T) {
-	ctx, svc, repo, router := newMCPReadFixture(t, 1)
-	router.hang.Store(true)
-	svc.statuses.fetchTimeout = 5 * time.Second
+	synctest.Test(t, func(t *testing.T) {
+		ctx, svc, repo, router := newMCPReadFixture(t, 1)
+		router.hang.Store(true)
+		svc.statuses.fetchTimeout = 5 * time.Second
 
-	ctx, cancel := context.WithTimeout(ctx, 100*time.Millisecond)
-	defer cancel()
-	start := time.Now()
-	resp, err := svc.ListServers(ctx, connect.NewRequest(&reliantv1.ListServersRequest{ProjectId: repo.project.ID}))
-	require.NoError(t, err)
-	assert.Len(t, resp.Msg.GetServers(), 1)
-	assert.Less(t, time.Since(start), time.Second)
+		ctx, cancel := context.WithTimeout(ctx, 100*time.Millisecond)
+		defer cancel()
+		start := time.Now()
+		resp, err := svc.ListServers(ctx, connect.NewRequest(&reliantv1.ListServersRequest{ProjectId: repo.project.ID}))
+		require.NoError(t, err)
+		assert.Len(t, resp.Msg.GetServers(), 1)
+		assert.Less(t, time.Since(start), time.Second)
+
+		// The hung fetch ends at its own timeout; the bubble's clock moves
+		// only while the test is still in it.
+		time.Sleep(svc.statuses.fetchTimeout)
+		synctest.Wait()
+	})
 }
 
 // Starting, stopping or reconfiguring a server changes its status, so the
@@ -271,44 +286,46 @@ func TestMCPListServers_AllDisabledDoesNotAskTheDaemon(t *testing.T) {
 // than refreshWait before the previous answer is served — with one refresh
 // in flight however many reads arrive.
 func TestMCPStatusCache_RefreshesBoundedByRefreshWait(t *testing.T) {
-	var fetches atomic.Int32
-	release := make(chan struct{})
-	hangSecond := atomic.Bool{}
-	cache := newMCPStatusCache(func(ctx context.Context, _ string, _ projectcheckout.Target) (*daemonMCPServerStatus, error) {
-		n := fetches.Add(1)
-		if n == 3 && hangSecond.Load() {
-			<-release
+	synctest.Test(t, func(t *testing.T) {
+		var fetches atomic.Int32
+		release := make(chan struct{})
+		hangSecond := atomic.Bool{}
+		cache := newMCPStatusCache(func(ctx context.Context, _ string, _ projectcheckout.Target) (*daemonMCPServerStatus, error) {
+			n := fetches.Add(1)
+			if n == 3 && hangSecond.Load() {
+				<-release
+			}
+			return &daemonMCPServerStatus{Servers: []daemonMCPServerStatusEntry{{Name: fmt.Sprintf("v%d", n)}}}, nil
+		})
+		cache.refreshWait = 50 * time.Millisecond
+		now := time.Unix(1_000_000, 0)
+		var nowMu sync.Mutex
+		cache.now = func() time.Time { nowMu.Lock(); defer nowMu.Unlock(); return now }
+		advance := func(d time.Duration) { nowMu.Lock(); now = now.Add(d); nowMu.Unlock() }
+		get := func() string {
+			s := cache.get(context.Background(), "u", projectcheckout.Target{DaemonID: "d", Path: "/p"})
+			require.NotNil(t, s)
+			return s.Servers[0].Name
 		}
-		return &daemonMCPServerStatus{Servers: []daemonMCPServerStatusEntry{{Name: fmt.Sprintf("v%d", n)}}}, nil
+
+		assert.Equal(t, "v1", get())
+		assert.Equal(t, "v1", get(), "fresh: not fetched again")
+
+		// A prompt machine: the stale read waits for the refresh and gets it.
+		advance(mcpStatusFreshFor + time.Second)
+		assert.Equal(t, "v2", get(), "a prompt refresh is served, not the stale answer")
+
+		// A wedged machine: the stale read gives up after refreshWait.
+		hangSecond.Store(true)
+		advance(mcpStatusFreshFor + time.Second)
+		start := time.Now()
+		assert.Equal(t, "v2", get(), "the previous answer when the refresh is slow")
+		assert.Less(t, time.Since(start), 500*time.Millisecond)
+		assert.Equal(t, "v2", get())
+		assert.EqualValues(t, 3, fetches.Load(), "one refresh in flight, not one per read")
+
+		close(release)
+		require.Eventually(t, func() bool { return get() == "v3" }, time.Second, 5*time.Millisecond,
+			"the slow refresh still lands in the cache")
 	})
-	cache.refreshWait = 50 * time.Millisecond
-	now := time.Unix(1_000_000, 0)
-	var nowMu sync.Mutex
-	cache.now = func() time.Time { nowMu.Lock(); defer nowMu.Unlock(); return now }
-	advance := func(d time.Duration) { nowMu.Lock(); now = now.Add(d); nowMu.Unlock() }
-	get := func() string {
-		s := cache.get(context.Background(), "u", projectcheckout.Target{DaemonID: "d", Path: "/p"})
-		require.NotNil(t, s)
-		return s.Servers[0].Name
-	}
-
-	assert.Equal(t, "v1", get())
-	assert.Equal(t, "v1", get(), "fresh: not fetched again")
-
-	// A prompt machine: the stale read waits for the refresh and gets it.
-	advance(mcpStatusFreshFor + time.Second)
-	assert.Equal(t, "v2", get(), "a prompt refresh is served, not the stale answer")
-
-	// A wedged machine: the stale read gives up after refreshWait.
-	hangSecond.Store(true)
-	advance(mcpStatusFreshFor + time.Second)
-	start := time.Now()
-	assert.Equal(t, "v2", get(), "the previous answer when the refresh is slow")
-	assert.Less(t, time.Since(start), 500*time.Millisecond)
-	assert.Equal(t, "v2", get())
-	assert.EqualValues(t, 3, fetches.Load(), "one refresh in flight, not one per read")
-
-	close(release)
-	require.Eventually(t, func() bool { return get() == "v3" }, time.Second, 5*time.Millisecond,
-		"the slow refresh still lands in the cache")
 }

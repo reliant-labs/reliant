@@ -834,7 +834,7 @@ func TestMergeOnIdentityRewrite(t *testing.T) {
 		}
 
 		// Even though the placeholder is the NEWER row, the account with the real identity survives.
-		time.Sleep(10 * time.Millisecond)
+		time.Sleep(2 * time.Millisecond) // a clock tick: the patch below stamps the placeholder newer
 		_, err = repo2.PatchProviderAccount(ctx, "u1", phAcct.ID, core.AccountPatch{})
 		require.NoError(t, err)
 		u := claudeUpsert("u1", "dave", "o", "fresh-tok", "fresh-ref")
@@ -882,7 +882,7 @@ func TestIdentityMergeNeverDeletesTheAccountWithADistinctIdentity(t *testing.T) 
 		require.NoError(t, repo.BenchAccount(ctx, "u1", real.ID, until, "five_hour", false))
 		require.NoError(t, repo.ScheduleUsagePoll(ctx, real.ID, time.Now().Add(time.Minute), 0, ""))
 
-		time.Sleep(10 * time.Millisecond)
+		time.Sleep(2 * time.Millisecond) // a clock tick: the placeholder's timestamps follow the real row's
 		ph := claudeUpsert("u1", "x", "o", "ph-tok", "ph-ref")
 		ph.IdentityKey = core.PlaceholderIdentityKey("legacy-row")
 		mustUpsert(t, repo, ph) // newer than real

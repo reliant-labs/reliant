@@ -97,7 +97,7 @@ function useObservabilityHrefs(): DashboardHrefs {
       dashboards: href({ kind: "obs-view", view: "dashboards" }),
       list: href({ kind: "obs-view", view: "dashboards" }),
       releases: href({ kind: "releases" }),
-      release: (version: string) => href({ kind: "release", version }),
+      release: (version: string, extra?: Record<string, unknown>) => href({ kind: "release", version }, extra),
       trace: (traceId: string) => href({ kind: "obs-view", view: "traces" }, { trace: traceId, range: "7d" }),
       session: (sessionId: string) => href({ kind: "obs-view", view: "sessions" }, { session: sessionId }),
       workload: (name: string, envName?: string | null) => workloadPath(href, envName ?? env, name),

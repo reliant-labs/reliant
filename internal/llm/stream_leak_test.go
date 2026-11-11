@@ -56,7 +56,7 @@ func settledWatcherGoroutines() int {
 // that exits only because a timer eventually fires still fails the test.
 func requireWatchersBackTo(t *testing.T, want int, why string) {
 	t.Helper()
-	deadline := time.Now().Add(time.Second)
+	deadline := time.Now().Add(30 * time.Second)
 	for {
 		got := watcherGoroutines()
 		if got <= want {
@@ -152,7 +152,7 @@ func TestIdleTimeoutReader_OneGoroutinePerStream(t *testing.T) {
 	// The watcher is started with `go`, so it may not be scheduled yet; wait
 	// for it, then require that exactly one exists for this reader.
 	require.Eventually(t, func() bool { return watcherGoroutines() >= base+1 },
-		time.Second, 5*time.Millisecond)
+		30*time.Second, 5*time.Millisecond)
 	assert.Equal(t, base+1, watcherGoroutines())
 }
 

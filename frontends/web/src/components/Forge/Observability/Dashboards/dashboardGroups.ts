@@ -94,7 +94,9 @@ export interface GroupedDashboards {
 
 /**
  * The index in group order. Inside a group: built-in, then generated, repo
- * and workspace dashboards, each in the order the server lists them. Every
+ * and workspace dashboards, each in the order the server lists them (forge's
+ * built-in Users, Product and Acquisition dashboards first among the
+ * generated, in that order). Every
  * group is returned, empty ones included, so a caller decides whether to show
  * them.
  */
@@ -104,9 +106,20 @@ export function groupIndex(dashboards: readonly DashboardSummary[]): GroupedDash
   return DASHBOARD_GROUPS.map((group) => ({
     group,
     // Array.prototype.sort is stable: equal ranks keep the server's order.
-    dashboards: [...buckets.get(group)!].sort((a, b) => sourceRank(a) - sourceRank(b)),
+    dashboards: [...buckets.get(group)!].sort((a, b) => sourceRank(a) - sourceRank(b) || productRank(a) - productRank(b)),
   }));
 }
+
+/**
+ * forge's built-in product analytics dashboards (pkg/obsbuiltin), in the
+ * order a reader takes them: who the users are, what they do, where they come
+ * from. A server lists them by key, which would put Acquisition first.
+ */
+export const BUILTIN_PRODUCT_ORDER = ["users", "product", "acquisition"] as const;
+const productRank = (d: DashboardSummary) => {
+  const at = d.source === "generated" ? (BUILTIN_PRODUCT_ORDER as readonly string[]).indexOf(d.ref.key) : -1;
+  return at < 0 ? BUILTIN_PRODUCT_ORDER.length : at;
+};
 
 const SOURCE_RANK: Record<DashboardSummary["source"], number> = { builtin: 0, generated: 1, repo: 2, workspace: 3, template: 4 };
 const sourceRank = (d: DashboardSummary) => SOURCE_RANK[d.source] ?? 5;

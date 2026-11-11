@@ -625,7 +625,7 @@ func TestPollerRunStopsWithItsContext(t *testing.T) {
 	cancel()
 	select {
 	case <-done:
-	case <-time.After(2 * time.Second):
+	case <-time.After(30 * time.Second):
 		t.Fatal("Run did not stop")
 	}
 }

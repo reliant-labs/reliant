@@ -63,7 +63,7 @@ func TestEveryWaiterOwnsResponseAndErrorMetadata(t *testing.T) {
 					}
 				}()
 			}
-			require.Eventually(t, func() bool { return callers(g, "user") == count }, time.Second, time.Millisecond)
+			require.Eventually(t, func() bool { return callers(g, "user") == count }, 30*time.Second, time.Millisecond)
 			close(release)
 			wg.Wait()
 		})

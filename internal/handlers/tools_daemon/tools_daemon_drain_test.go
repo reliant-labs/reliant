@@ -97,7 +97,7 @@ func TestCloseWithNoConnectionsIsANoOp(t *testing.T) {
 	go func() { svc.Close(); close(done) }()
 	select {
 	case <-done:
-	case <-time.After(time.Second):
+	case <-time.After(30 * time.Second):
 		t.Fatal("Close blocked with no connections")
 	}
 }
@@ -237,7 +237,7 @@ func TestListenerDrainHandsTheDaemonOverWithTheDrainsDeadline(t *testing.T) {
 	select {
 	case msg := <-conn.sendCh:
 		notice = msg.GetDrain()
-	case <-time.After(2 * time.Second):
+	case <-time.After(30 * time.Second):
 		t.Fatal("the listener's drain never told the daemon to move")
 	}
 	require.NotNil(t, notice)

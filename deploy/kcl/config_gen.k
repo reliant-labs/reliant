@@ -1548,7 +1548,7 @@ vaultMaintenanceConfigEnvMap = lambda c: VaultMaintenanceConfig, config_secrets:
 }
 
 # forge:section schema WorkerConfig
-# forge:hash=7e46c8b44ab64f3973378f9c398f58d2d8c9f3a61020cca5efe5c9a3003a48c1
+# forge:hash=19c9837fa805f7ade03a50abad415e4177942517cc7203b45570d3069910740f
 schema WorkerConfig:
     # Private HTTPS workspace-controller endpoint for fixed hosted actions
     hosted_actions_url: str = ""
@@ -1582,12 +1582,21 @@ schema WorkerConfig:
     egress_host_max_concurrent: int = 16
     # Egress calls of one conversation turn run at once, per replica (the rest wait)
     egress_turn_max_parallel: int = 4
+    # Age past which a chat's update log is compacted to each entity's newest update (0: never; recommended 168h once every api-server reads the compaction watermark)
+    chat_update_retention: str = "0s"
+    # Age past which a finished run's internal step records are deleted (0: never; recommended 720h)
+    step_execution_retention: str = "0s"
+    # Wait after worker start before the first ledger retention pass, so an api-server rollout completes first (0: at once)
+    ledger_retention_start_delay: str = "1h"
 
     check:
         pre_stop_delay != "", "pre_stop_delay = \"\" cannot reach the process: an empty PRE_STOP_DELAY counts as unset, so it would load the default \"5s\" — set a value"
         shutdown_timeout != "", "shutdown_timeout = \"\" cannot reach the process: an empty SHUTDOWN_TIMEOUT counts as unset, so it would load the default \"30s\" — set a value"
         liveness_paths != "", "liveness_paths = \"\" cannot reach the process: an empty LIVENESS_PATHS counts as unset, so it would load the default \"/health,/healthz\" — set a value, or change its default in the proto"
         readiness_paths != "", "readiness_paths = \"\" cannot reach the process: an empty READINESS_PATHS counts as unset, so it would load the default \"/ready,/readyz\" — set a value, or change its default in the proto"
+        chat_update_retention != "", "chat_update_retention = \"\" cannot reach the process: an empty RELIANT_WORKER_CHAT_UPDATE_RETENTION counts as unset, so it would load the default \"0s\" — set a value"
+        step_execution_retention != "", "step_execution_retention = \"\" cannot reach the process: an empty RELIANT_WORKER_STEP_EXECUTION_RETENTION counts as unset, so it would load the default \"0s\" — set a value"
+        ledger_retention_start_delay != "", "ledger_retention_start_delay = \"\" cannot reach the process: an empty RELIANT_WORKER_LEDGER_RETENTION_START_DELAY counts as unset, so it would load the default \"1h\" — set a value"
 
 # forge:section env-map workerConfigEnvMap
 # forge:hash=73c8553dedb9f5b3bcefc972bda5c8ae27cb0bf15a6e1addcc5f36ef1a92c4d7
@@ -1634,7 +1643,7 @@ workerConfigEnvMap = lambda c: WorkerConfig, config_secrets: [str] -> {str: str 
         "workerConfigEnvMap: config_secrets names ${[_n for _n in config_secrets if _n not in _sensitive]}, which is not a `sensitive` field of WorkerConfig. Sensitive fields: ${sorted([_k for _k in _sensitive])}. Add `sensitive: true` to the field's (forge.v1.config) annotation in its config proto, or drop the name from this workload's config_secrets."
     {
         # forge:section workerConfigEnvMap values (root)
-        # forge:hash=3e9a9bbca41fd3e630b137a25a1af1b08675b1451588c2c3d6abae719f23988b
+        # forge:hash=dd30d3a5fea347b0bc051e9c5a037bcde4685d3aee23340bed4ffd6f2ab21445
         if c.hosted_actions_url != "":
             "RELIANT_WORKER_HOSTED_ACTIONS_URL" = c.hosted_actions_url
         if c.hosted_actions_ca_file != "":
@@ -1653,6 +1662,9 @@ workerConfigEnvMap = lambda c: WorkerConfig, config_secrets: [str] -> {str: str 
         "RELIANT_WORKER_EGRESS_USER_MAX_CONCURRENT" = str(c.egress_user_max_concurrent)
         "RELIANT_WORKER_EGRESS_HOST_MAX_CONCURRENT" = str(c.egress_host_max_concurrent)
         "RELIANT_WORKER_EGRESS_TURN_MAX_PARALLEL" = str(c.egress_turn_max_parallel)
+        "RELIANT_WORKER_CHAT_UPDATE_RETENTION" = c.chat_update_retention
+        "RELIANT_WORKER_STEP_EXECUTION_RETENTION" = c.step_execution_retention
+        "RELIANT_WORKER_LEDGER_RETENTION_START_DELAY" = c.ledger_retention_start_delay
 
         # forge:section workerConfigEnvMap values (end)
         # forge:hash=fa178fe4044cdbd75d3e720bd63a7af32e878a5551d581a0f83e855bb2cb706b
@@ -1660,7 +1672,7 @@ workerConfigEnvMap = lambda c: WorkerConfig, config_secrets: [str] -> {str: str 
 }
 
 # forge:section process-selector ReliantProcess
-# forge:hash=a9a70bc2ad3c299550a068fcfbe63880b2aff0718c39ee55b8fd9dc604725cc6
+# forge:hash=1f092c6212c02229b5201d057568f44b870ec8954b001adf2849ee9226c9f008
 # The `reliant` binary binds a config per subcommand, so a workload's env is the
 # binary's root config PLUS the config of the subcommand its process runs.
 # ReliantProcess carries the instances (config.k declares one); reliantProcessEnvMap
@@ -1792,7 +1804,7 @@ ROOTS: {str: Root} = {
     }
     "worker" = Root {
         args = ["server", "worker"]
-        env = ["RELIANT_LOG_LEVEL", "LOG_FORMAT", "RELIANT_ENV", "RELIANT_STORAGE_REAPER", "RELIANT_STORAGE_REAPER_INTERVAL", "RELIANT_STORAGE_REAPER_PRESSURE_INTERVAL", "FORGE_STORAGE_POLICY", "RELIANT_STORAGE_REAPER_GOCACHE_INTERVAL", "RELIANT_TRANSCRIPT_TOOL_BODY_STUBS", "RELIANT_WORKTREE_RECLAIM", "RELIANT_WORKTREE_RECLAIM_ROOTS", "RELIANT_WORKTREE_RECLAIM_CLEAN_IDLE", "RELIANT_WORKTREE_RECLAIM_APPROVAL_IDLE", "DATABASE_DRIVER", "RELIANT_DB_MAX_OPEN_CONNS", "RELIANT_DB_MAX_IDLE_CONNS", "DB_CONNECT_TIMEOUT", "RELIANT_DB_SCHEMA_WAIT_SECONDS", "RELIANT_CONTROL_PLANE_URL", "NATS_USER", "TEMPORAL_HOST", "TEMPORAL_PORT", "TEMPORAL_NAMESPACE", "DATA_DIR", "STREAMING_DRIVER", "PUBLIC_URL", "RELIANT_GITHUB_APP_SLUG", "RELIANT_GITHUB_BOT_USER_ID", "RELIANT_GITHUB_BOT_LOGIN", "OTEL_EXPORTER_OTLP_ENDPOINT", "OTEL_ENABLED", "PROMETHEUS_ENABLED", "ENVIRONMENT", "RELIANT_ANALYTICS_DISABLED", "RELIANT_API_BASE_URL", "VERTEXAI_PROJECT", "VERTEXAI_LOCATION", "RELIANT_LLM_STREAM_IDLE_TIMEOUT", "RELIANT_LLM_STREAM_CONTENT_STALL_TIMEOUT", "RELIANT_LLM_STREAM_PROGRESS_TIMEOUT", "RELIANT_LLM_STREAM_MID_BLOCK_STALL_TIMEOUT", "RELIANT_DEBUG_OPENAI_RESPONSES_INPUT", "RELIANT_DEBUG_OPENAI_TOOL_SCHEMAS", "PROXY_HOST", "WORKSPACE_BASE_DOMAIN", "WORKSPACE_URL_SCHEME", "WORKSPACE_URL_PORT", "RELIANT_ALLOW_PRIVATE_EGRESS", "RELIANT_WORKER_HOSTED_ACTIONS_URL", "RELIANT_WORKER_HOSTED_ACTIONS_CA_FILE", "HEALTH_PORT", "PPROF_PORT", "PRE_STOP_DELAY", "SHUTDOWN_TIMEOUT", "LIVENESS_PATHS", "READINESS_PATHS", "RELIANT_WORKER_MAX_CONCURRENT_WORKFLOW_TASKS", "RELIANT_WORKER_WORKFLOW_TASK_POLLERS", "RELIANT_WORKER_EGRESS_REPLICAS", "RELIANT_WORKER_EGRESS_USER_PER_MINUTE", "RELIANT_WORKER_EGRESS_USER_BURST", "RELIANT_WORKER_EGRESS_USER_MAX_CONCURRENT", "RELIANT_WORKER_EGRESS_HOST_MAX_CONCURRENT", "RELIANT_WORKER_EGRESS_TURN_MAX_PARALLEL"]
+        env = ["RELIANT_LOG_LEVEL", "LOG_FORMAT", "RELIANT_ENV", "RELIANT_STORAGE_REAPER", "RELIANT_STORAGE_REAPER_INTERVAL", "RELIANT_STORAGE_REAPER_PRESSURE_INTERVAL", "FORGE_STORAGE_POLICY", "RELIANT_STORAGE_REAPER_GOCACHE_INTERVAL", "RELIANT_TRANSCRIPT_TOOL_BODY_STUBS", "RELIANT_WORKTREE_RECLAIM", "RELIANT_WORKTREE_RECLAIM_ROOTS", "RELIANT_WORKTREE_RECLAIM_CLEAN_IDLE", "RELIANT_WORKTREE_RECLAIM_APPROVAL_IDLE", "DATABASE_DRIVER", "RELIANT_DB_MAX_OPEN_CONNS", "RELIANT_DB_MAX_IDLE_CONNS", "DB_CONNECT_TIMEOUT", "RELIANT_DB_SCHEMA_WAIT_SECONDS", "RELIANT_CONTROL_PLANE_URL", "NATS_USER", "TEMPORAL_HOST", "TEMPORAL_PORT", "TEMPORAL_NAMESPACE", "DATA_DIR", "STREAMING_DRIVER", "PUBLIC_URL", "RELIANT_GITHUB_APP_SLUG", "RELIANT_GITHUB_BOT_USER_ID", "RELIANT_GITHUB_BOT_LOGIN", "OTEL_EXPORTER_OTLP_ENDPOINT", "OTEL_ENABLED", "PROMETHEUS_ENABLED", "ENVIRONMENT", "RELIANT_ANALYTICS_DISABLED", "RELIANT_API_BASE_URL", "VERTEXAI_PROJECT", "VERTEXAI_LOCATION", "RELIANT_LLM_STREAM_IDLE_TIMEOUT", "RELIANT_LLM_STREAM_CONTENT_STALL_TIMEOUT", "RELIANT_LLM_STREAM_PROGRESS_TIMEOUT", "RELIANT_LLM_STREAM_MID_BLOCK_STALL_TIMEOUT", "RELIANT_DEBUG_OPENAI_RESPONSES_INPUT", "RELIANT_DEBUG_OPENAI_TOOL_SCHEMAS", "PROXY_HOST", "WORKSPACE_BASE_DOMAIN", "WORKSPACE_URL_SCHEME", "WORKSPACE_URL_PORT", "RELIANT_ALLOW_PRIVATE_EGRESS", "RELIANT_WORKER_HOSTED_ACTIONS_URL", "RELIANT_WORKER_HOSTED_ACTIONS_CA_FILE", "HEALTH_PORT", "PPROF_PORT", "PRE_STOP_DELAY", "SHUTDOWN_TIMEOUT", "LIVENESS_PATHS", "READINESS_PATHS", "RELIANT_WORKER_MAX_CONCURRENT_WORKFLOW_TASKS", "RELIANT_WORKER_WORKFLOW_TASK_POLLERS", "RELIANT_WORKER_EGRESS_REPLICAS", "RELIANT_WORKER_EGRESS_USER_PER_MINUTE", "RELIANT_WORKER_EGRESS_USER_BURST", "RELIANT_WORKER_EGRESS_USER_MAX_CONCURRENT", "RELIANT_WORKER_EGRESS_HOST_MAX_CONCURRENT", "RELIANT_WORKER_EGRESS_TURN_MAX_PARALLEL", "RELIANT_WORKER_CHAT_UPDATE_RETENTION", "RELIANT_WORKER_STEP_EXECUTION_RETENTION", "RELIANT_WORKER_LEDGER_RETENTION_START_DELAY"]
         secrets = ["DATABASE_URL", "DATABASE_DIRECT_URL", "INTERNAL_SERVICE_SECRET", "NATS_URL", "NATS_PASSWORD", "RELIANT_VAULT_KEY", "RELIANT_SLACK_SIGNING_SECRET", "RELIANT_GITHUB_WEBHOOK_SECRET", "RELIANT_TEST_INTEGRATION_SECRET"]
         required_secrets = ["DATABASE_URL", "NATS_URL"]
         families = [RootFamily {prefix = "RELIANT_OAUTH_", suffix = "_CLIENT_ID"}, RootFamily {prefix = "RELIANT_OAUTH_", suffix = "_CLIENT_SECRET", sensitive = True}]

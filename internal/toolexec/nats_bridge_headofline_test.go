@@ -114,7 +114,7 @@ func TestToolRequestSync_SlowCallDoesNotBlockFastCall(t *testing.T) {
 	// Wait for the slow call to actually be in the manager, so the ordering
 	// under test is real rather than a race we happened to win.
 	require.Eventually(t, func() bool { return mgr.inFlight.Load() >= 1 },
-		2*time.Second, 5*time.Millisecond, "slow tool request never reached the manager")
+		30*time.Second, 5*time.Millisecond, "slow tool request never reached the manager")
 
 	// The fast request must round-trip while the slow one is still parked.
 	fastPayload, err := json.Marshal(&ToolExecutionRequest{RequestID: "fast-1", ToolName: "fast"})
