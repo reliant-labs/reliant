@@ -246,6 +246,9 @@ func (s *Service) userUpdateToProto(update db.UserUpdate) *reliantv1.UserUpdateD
 	if update.ChatID != nil {
 		protoUpdate.ChatId = update.ChatID
 	}
+	if update.OrgID != nil && *update.OrgID != "" {
+		protoUpdate.OrgId = update.OrgID
+	}
 	return protoUpdate
 }
 

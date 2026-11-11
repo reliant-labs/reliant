@@ -118,6 +118,7 @@ import { toast } from "@/lib/toast-manager";
 import { machineDisplayName, type NameableMachine } from "@/lib/machineName";
 import { MachineAccess, activeGrantCounts, appCountLabel, useConnectors } from "./machineAccess";
 import { useMakeDefaultMachine } from "@/hooks/useMakeDefaultMachine";
+import { useMachineOrgs } from "@/hooks/useMachineOrgs";
 // The overage formatter, shared with the billing purchase grid so the two
 // surfaces cannot disagree about how a rate is written.
 
@@ -489,6 +490,7 @@ function EnvironmentsList({ cloud, onOpenDetail }: { cloud: boolean; onOpenDetai
     staleTime: 10_000,
     refetchInterval: 15_000,
   }));
+  const machineOrgs = useMachineOrgs();
 
   // Add machine is always offered: the sheet itself shows which sizes the
   // plan runs and takes payment in place for the rest. Eligibility here only
@@ -523,7 +525,8 @@ function EnvironmentsList({ cloud, onOpenDetail }: { cloud: boolean; onOpenDetai
   // dropdown per group) — a user picking "Suspended" wants every suspended
   // machine, cloud or self-hosted, and a second dropdown for a section that's
   // often empty would be clutter without a real use case.
-  const daemons = (daemonsQ.data ?? []).filter(
+  // With several orgs, the active org's machines (useMachineOrgs).
+  const daemons = machineOrgs.inActiveOrg(daemonsQ.data ?? []).filter(
     (d) => statusFilter === DaemonStatus.UNSPECIFIED || d.status === statusFilter,
   );
   const managedDaemons = daemons.filter((d) => !isExternalDaemon(d));
@@ -848,10 +851,13 @@ function MakeDefaultButton({ daemon }: { daemon: Daemon }) {
  */
 function MachineName({ daemon, appCount }: { daemon: Daemon; appCount: number }) {
   const build = machineBuildLabel(daemon);
+  const machineOrgs = useMachineOrgs();
+  const org = machineOrgs.multiOrg ? machineOrgs.orgOf(daemon.daemonId) : undefined;
   return (
     <span className="block">
       <span className="font-medium text-foreground">{daemonDisplayName(daemon)}</span>
       {daemon.isDefault && <Badge label="Default" variant="neutral" size="sm" className="ml-2 align-middle" />}
+      {org && <Badge label={org.name} variant="neutral" size="sm" className="ml-2 align-middle" />}
       <AppAccessIndicator count={appCount} />
       {build && <span className="mt-0.5 block text-xs text-muted-foreground">{build}</span>}
     </span>
@@ -1328,6 +1334,9 @@ function EnvironmentDetail({
   const [error, setError] = useState("");
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [restartOpen, setRestartOpen] = useState(false);
+  // The org that owns the machine, shown when there are several to tell apart.
+  const machineOrgs = useMachineOrgs();
+  const machineOrg = machineOrgs.multiOrg ? machineOrgs.orgOf(daemonId) : undefined;
   // Non-null only while THIS client is driving a restart. It gates every
   // lifecycle button (see lifecyclePlan) and drives the progress copy, since
   // a restart is two RPCs with a wait between them and the daemon's own
@@ -1774,6 +1783,7 @@ function EnvironmentDetail({
                       />
                     </>
                   )}
+                  {machineOrg && <InfoRow label="Organization" value={machineOrg.name} />}
                   <InfoRow label="Created" value={fmtTimestamp(daemon.createdAt)} />
                   <InfoRow label="Updated" value={fmtTimestamp(spec?.updatedAt)} />
                 </dl>

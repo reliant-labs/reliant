@@ -68,6 +68,7 @@ import { useProjects } from "../../hooks/project-queries";
 import { ProjectFilterMenu } from "./ProjectFilterMenu";
 import { MachineFilterMenu, machineFilterLabel } from "./MachineFilterMenu";
 import { useDaemonList } from "../../hooks/useOnboardingQueries";
+import { useMachineOrgs } from "../../hooks/useMachineOrgs";
 import { ALL_PROJECTS, useCachedWorktrees } from "../../hooks/worktree-queries";
 import {
   countByMachine,
@@ -1014,7 +1015,14 @@ function SidebarComponent({
     () => effectiveMachineFilter(machineFilterIds, machines ?? []),
     [machineFilterIds, machines],
   );
-  const showMachineFilter = (machines?.length ?? 0) > 1;
+  // The menu offers the active org's machines (with several orgs), plus any
+  // the filter already names; the chats it filters are the active org's.
+  const machineOrgs = useMachineOrgs();
+  const menuMachines = useMemo(
+    () => machineOrgs.inActiveOrg(machines ?? [], machineFilter ?? []),
+    [machineOrgs, machines, machineFilter],
+  );
+  const showMachineFilter = menuMachines.length > 1;
   const handleMachineFilterChange = useCallback(
     (filter: MachineFilter) => setMachineFilterIds(filter),
     [setMachineFilterIds],
@@ -2030,7 +2038,7 @@ function SidebarComponent({
           {showMachineFilter && (
             <MachineFilterMenu
               filter={machineFilter}
-              machines={machines ?? []}
+              machines={menuMachines}
               onChange={handleMachineFilterChange}
               includeNoMachine={hasNoMachineChats || !!machineFilter?.includes(NO_MACHINE)}
               needsYouByMachine={needsYouByMachine}

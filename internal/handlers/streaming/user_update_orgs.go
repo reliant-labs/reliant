@@ -138,7 +138,14 @@ func (g *orgGate) allows(ctx context.Context, update *db.UserUpdate) bool {
 		// owner's default (credentialReaches).
 		return authz.CanReadOwn(ctx, g.userID, nil)
 	}
-	return authz.CanReadOwn(ctx, g.userID, &org)
+	if !authz.CanReadOwn(ctx, g.userID, &org) {
+		return false
+	}
+	// The update goes out naming the org it was decided by
+	// (UserUpdateData.org_id), so a client showing one org can leave out
+	// another's. update is this stream's own copy of the event.
+	update.OrgID = &org
+	return true
 }
 
 // deletionMarker reports whether update announces a deletion, and if so

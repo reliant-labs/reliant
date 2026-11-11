@@ -1,7 +1,7 @@
 // Copyright (c) 2025 Reliant Labs
 
 import { useEffect, useRef } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 
 import { useActiveOrg } from "@/hooks/useOrgs";
 import { useAuthStore } from "@/store/authStore";
@@ -28,12 +28,15 @@ import {
  *      `not_org_member`;
  *   3. when the effective org changes (a switch, a reconcile, another tab),
  *      drops the org-scoped query caches so no screen keeps showing the
- *      previous org's answers.
+ *      previous org's answers, then calls `onSwitch`: the product app's
+ *      chats, projects, workflows, triggers and runs are the active org's
+ *      too (components/Orgs/followActiveOrg.ts), which a shell without them
+ *      (the forge shell) does not pass.
  *
  * The effective org is written to the store, not just derived: the transport
  * reads the store, so a reconciled choice must land there too.
  */
-export function ActiveOrgBinding() {
+export function ActiveOrgBinding({ onSwitch }: { onSwitch?: (orgId: string | null, client: QueryClient) => void } = {}) {
   const userId = useAuthStore((s) => s.user?.id ?? null);
   bindActiveOrgUser(userId);
 
@@ -65,9 +68,10 @@ export function ActiveOrgBinding() {
     const reconciled = used !== null && used !== activeOrgId;
     if (switched || reconciled) {
       for (const root of ORG_SCOPED_QUERY_ROOTS) void qc.resetQueries({ queryKey: [root] });
+      onSwitch?.(activeOrgId, qc);
     }
     settled.current = activeOrgId;
-  }, [userId, activeOrgId, chosenId, orgs.length, isLoading, error, qc]);
+  }, [userId, activeOrgId, chosenId, orgs.length, isLoading, error, qc, onSwitch]);
 
   // Another tab chose a different org: adopt it, so this tab does not keep
   // acting in the one the person just left.

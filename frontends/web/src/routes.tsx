@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 // The workflows journey's content and Reliant's end-of-tour landing (the demo bundle leaves them out).
 import './components/Onboarding/journeys/catalog'
 import { ActiveOrgBinding } from './components/Orgs/ActiveOrgBinding'
+import { followActiveOrg } from './components/Orgs/followActiveOrg'
 import { createRootRoute, createRoute, createRouter, Outlet, Navigate, useRouterState, useNavigate, type RouteComponent } from '@tanstack/react-router'
 import { SurfaceProvider } from './lib/surfaceContext'
 import { surfaceForPath } from './lib/surface'
@@ -298,7 +299,7 @@ function RootShell() {
   // /m/*); ModernApp and the workflow builder contribute their handlers to it.
   return (
     <SurfaceProvider surface={surfaceForPath(pathname)}>
-      <ActiveOrgBinding />
+      <ActiveOrgBinding onSwitch={followActiveOrg} />
       <PageVisitTracker />
       <ShortcutHost>
         <Outlet />

@@ -166,6 +166,40 @@ func TestStreamUserUpdates_ReplayWithholdsALeftOrgsUpdates(t *testing.T) {
 	require.Equal(t, int64(8), latest, "the cursor moves past the withheld rows")
 }
 
+// Every delivered update names the org it was decided by (org_id), so a client
+// showing one org can leave another's out: the stored org when it has one,
+// else its chat's, project's or saved workflow's, on replay and live. An
+// update about nothing of an org, or a resource with none yet, names none.
+func TestStreamUserUpdates_UpdatesNameTheirOrg(t *testing.T) {
+	stored := update(1, "c:unassigned-chat")
+	globex := "globex"
+	stored.OrgID = &globex
+	repo := orgUpdatesRepo{log: []db.UserUpdate{
+		stored, update(2, "p:home-project"), update(3, "d:acme-draft"), update(4, "personal"), update(5, "c:u-chat"),
+	}}
+	hub := newChanUserHub()
+	events := orgUserStream(t, repo, hub, &orgMembers{orgs: map[string]bool{"acme": true, "home": true, "globex": true}, def: "home"})
+	nextEvent(t, events, "sync", func(ev *reliantv1.UserStreamEvent) bool { return ev.GetSync() != nil })
+
+	orgs := func(batch *reliantv1.UserUpdateBatch) map[string]string {
+		out := map[string]string{}
+		for _, u := range batch.GetUpdates() {
+			out[u.GetId()] = u.GetOrgId()
+		}
+		return out
+	}
+	replay := nextEvent(t, events, "the replay", func(ev *reliantv1.UserStreamEvent) bool { return ev.GetUpdates() != nil }).GetUpdates()
+	require.Equal(t, map[string]string{
+		"c:unassigned-chat": "globex", "p:home-project": "home", "d:acme-draft": "acme", "personal": "", "c:u-chat": "",
+	}, orgs(replay))
+
+	<-hub.subscribed
+	live := update(6, "c:acme-chat")
+	hub.events <- streaming.UpdateEvent[db.UserUpdate]{SequenceNumber: live.SequenceNumber, Payload: live}
+	batch := nextEvent(t, events, "the live update", func(ev *reliantv1.UserStreamEvent) bool { return ev.GetUpdates() != nil }).GetUpdates()
+	require.Equal(t, map[string]string{"c:acme-chat": "acme"}, orgs(batch))
+}
+
 // On an open stream, updates about an org stop the moment its member is
 // removed; their personal updates and those of an org they are still in keep
 // arriving, and each batch's cursor is past the withheld ones.

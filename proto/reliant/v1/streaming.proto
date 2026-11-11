@@ -264,6 +264,12 @@ message UserUpdateData {
   string entity_id = 9;
   string data_json = 10;                       // JSON-encoded update data
   string created_at = 11;
+  // The org the update is about: the one it was stored with, else the org of
+  // the chat, project or saved workflow it names, as the stream decided when
+  // it chose to deliver it. Unset for an update about nothing of an org (a
+  // daemon signal), or about a resource not yet stamped with one. A client
+  // showing one org at a time ignores updates about another.
+  optional string org_id = 12;
 }
 
 // ============================================

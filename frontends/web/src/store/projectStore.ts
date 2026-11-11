@@ -196,6 +196,12 @@ interface ProjectStore {
   updateProject: (id: string, data: Partial<Project>) => Promise<void>;
   /** Delete a project; deleting the current one moves to the most recent other one. */
   deleteProject: (id: string) => Promise<void>;
+  /**
+   * The active org changed (components/Orgs/followActiveOrg.ts): a filter or
+   * context project of another org is left for the new org's most recent
+   * project, and the sidebar's list is re-read.
+   */
+  followActiveOrg: (orgId: string | null) => Promise<void>;
   reset: () => void;
 }
 
@@ -443,6 +449,44 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       const next = mostRecentProject(remaining);
       if (next && isCurrent()) await get().selectProject(next, { isCurrent });
     }
+  },
+
+  followActiveOrg: async (orgId: string | null) => {
+    const isCurrent = beginWorkspaceOpen();
+    let projects: Project[];
+    try {
+      // The list the server answers for the org requests now name.
+      projects = await fetchProjects({ fresh: true });
+    } catch (error) {
+      logger.warn("[ProjectStore] Could not load the new org's projects", { orgId, error });
+      return;
+    }
+    if (!isCurrent()) return;
+    const listed = (id: string) => projects.some((p) => p.id === id);
+    // A row names its org; one not stamped yet belongs if the new list has it.
+    const inOrg = (project: Project) =>
+      orgId && project.org_id ? project.org_id === orgId : listed(project.id);
+
+    const workspaceState = useWorkspaceStateStore.getState();
+    if (workspaceState.projectFilterId && !listed(workspaceState.projectFilterId)) {
+      workspaceState.setProjectFilterId(null);
+      syncProjectFilterUrl(null);
+    }
+
+    const current = get().currentProject;
+    if (current && !inOrg(current)) {
+      // Leave it as a delete leaves the current project, but keep its saved
+      // workspace state: switching back restores it.
+      useChatStore.getState().clearCurrentChat(null);
+      useViewerStore.getState().clearViewersForProjectSwitch();
+      useWorktreeStore.getState().reset();
+      set({ currentProject: null });
+      const next = mostRecentProject(projects);
+      if (next && isCurrent()) await get().selectProject(next, { isCurrent });
+    }
+    if (!isCurrent()) return;
+    // The new org's chats seed activity and the stream's resume point.
+    await useChatStore.getState().loadChats();
   },
 
   reset: () => {
