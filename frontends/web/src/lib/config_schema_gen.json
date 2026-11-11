@@ -5,6 +5,11 @@
   "message": "ReliantWebConfig",
   "keys": [
     {
+      "name": "ANALYTICS_MODE",
+      "type": "string",
+      "source": "runtime"
+    },
+    {
       "name": "API_URL",
       "type": "string",
       "source": "config",
