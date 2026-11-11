@@ -82,7 +82,7 @@ func TestTombstone_MarkPlacesItWhereAnAgentLooksAndGitNeverSees(t *testing.T) {
 		t.Fatalf("re-marked: %+v", res)
 	}
 	after, _ := os.Stat(filepath.Join(checkout, ".reliant", TombstoneFile))
-	if !before.ModTime().Equal(after.ModTime()) {
+	if !os.SameFile(before, after) {
 		t.Fatal("re-sending a mark rewrote the tombstone")
 	}
 

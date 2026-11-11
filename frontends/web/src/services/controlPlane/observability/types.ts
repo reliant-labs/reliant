@@ -262,6 +262,12 @@ export interface QueryPanelRequest extends ObsScope {
   groupBy?: string[];
   /** Compile the panel without running it: the result carries `compiledSql` and no data. */
   explain?: boolean;
+  /**
+   * The dashboard the panel belongs to. Sent as `Forge-Panel: <dashboard>/<panel>`, which
+   * control-plane stamps on the read's ClickHouse statements (log_comment), so query_log
+   * names the panel that ran each one. A label only: it changes nothing about the answer.
+   */
+  dashboardId?: string;
 }
 
 /**
