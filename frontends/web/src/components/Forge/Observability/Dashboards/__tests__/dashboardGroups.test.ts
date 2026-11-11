@@ -11,7 +11,7 @@ import { describe, expect, it } from "vitest";
 
 import type { DashboardSource, DashboardSummary } from "@/services/controlPlane/observability/dashboardTypes";
 
-import { groupCounts, groupIndex, groupOf, inferredGroup, workloadOf } from "../dashboardGroups";
+import { groupCounts, groupIndex, groupOf, inferredGroup, listSections, workloadOf } from "../dashboardGroups";
 import { filterIndex, starredOf } from "../dashboardModel";
 
 function summary(key: string, source: DashboardSource = "generated", extra: Partial<DashboardSummary> = {}): DashboardSummary {
@@ -101,6 +101,17 @@ describe("groupIndex", () => {
     expect(grouped.find((g) => g.group === "services")!.dashboards.map((d) => d.ref.key)).toEqual(["process-b", "process-a"]);
     expect(grouped.find((g) => g.group === "platform")!.dashboards.map((d) => d.ref.key)).toEqual(["org-costs", "workloads", "selfmon-db", "my-board"]);
     expect(groupCounts(index)).toEqual({ overview: 0, services: 2, jobs: 0, product: 0, platform: 4, releases: 0, custom: 0 });
+  });
+
+  it("lists Built-in first, then only the groups that hold something", () => {
+    const index = [summary("process-a"), summary("org-costs", "builtin", { group: "product" }), summary("my-board", "workspace")];
+    expect(listSections(index).map((s) => [s.id, s.dashboards.map((d) => d.ref.key)])).toEqual([
+      ["builtin", ["org-costs"]],
+      ["services", ["process-a"]],
+      ["custom", ["my-board"]],
+    ]);
+    expect(listSections([summary("process-a")]).map((s) => s.id)).toEqual(["services"]);
+    expect(listSections([])).toEqual([]);
   });
 });
 

@@ -44,9 +44,8 @@ describe("organization dashboard routes without deployments", () => {
     const api = createFixtureApi();
     api.listDashboards = vi.fn().mockResolvedValue({ dashboards: [builtin], canWrite: false });
     renderWithApi(api, <DashboardsPage />);
-    // The Overview hub lands first; the built-in has its own row above the groups.
-    expect(await screen.findByTestId("hub-builtin-org-costs")).toHaveTextContent("Organization costs");
-    expect(screen.getByTestId("hub-health-undeployed")).toBeInTheDocument();
+    // The list lands, its built-in section first.
+    expect(await screen.findByTestId("dashboards-group-builtin")).toHaveTextContent("Organization costs");
     expect(screen.getByTestId("observability-no-envs")).toBeInTheDocument();
   });
 
@@ -58,9 +57,8 @@ describe("organization dashboard routes without deployments", () => {
     const api = createFixtureApi();
     api.listDashboards = vi.fn().mockResolvedValue({ dashboards: [builtin], canWrite: false });
     renderWithApi(api, <DashboardsPage />);
-    expect(await screen.findByTestId("hub-health-unread")).toHaveTextContent("once shop's environments load");
+    expect(await screen.findByTestId("dashboards-group-builtin")).toHaveTextContent("Organization costs");
     expect(screen.queryByTestId("observability-no-envs")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("hub-health-undeployed")).not.toBeInTheDocument();
     expect(screen.getByTestId("forge-cloud-unreachable")).toBeInTheDocument();
     fireEvent.click(screen.getByTestId("obs-environments-retry"));
     expect(refetch).toHaveBeenCalledTimes(1);
@@ -86,7 +84,7 @@ describe("organization dashboard routes without deployments", () => {
     const api = createFixtureApi();
     api.listDashboards = vi.fn().mockResolvedValue({ dashboards: [builtin], canWrite: false });
     renderWithApi(api, <DashboardsPage />);
-    expect(await screen.findByTestId("hub-builtin")).toBeInTheDocument();
+    expect(await screen.findByTestId("dashboards-group-builtin")).toBeInTheDocument();
     expect(screen.queryByTestId("observability-no-envs")).not.toBeInTheDocument();
   });
 });

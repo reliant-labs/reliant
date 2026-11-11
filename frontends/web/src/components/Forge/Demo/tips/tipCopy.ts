@@ -99,7 +99,7 @@ export const DEMO_TIPS: Record<DemoTipKey, DemoTip> = {
     body: "Spot changes in traffic, failures and response times before they become bigger problems. Open a dashboard to compare services or releases over time.",
     help: "Your agent can query the same measurements and investigate an empty or unexpected panel.",
     command: "forge obs dashboards audit prod",
-    target: tid("hub-groups"),
+    target: tid("dashboards-list"),
   },
   traces: {
     title: "Traces",

@@ -726,7 +726,8 @@ export const forgeConsoleWorkloadSearchSchema = z.object({
  */
 export const forgeConsoleDashboardsSearchSchema = z.object({
   env: envScopeParam,
-  // Absent is the Overview hub; "all" is the grouped list.
+  // Retired: the page's Overview tab is gone (health is the project
+  // Overview's). Still parsed so an old `?view=all` link stays valid; ignored.
   view: z.enum(["all"]).optional().catch(undefined),
   q: z.string().optional().catch(undefined),
   group: z.enum(DASHBOARD_GROUPS).optional().catch(undefined),

@@ -1,7 +1,8 @@
 // @vitest-environment node
 /**
  * The forge console's control edge meets WCAG 1.4.11 (3:1 non-text contrast)
- * against the page and the card in every color scheme, light and dark.
+ * against the page and the card in every color scheme, light and dark, and
+ * its text ramp (ink-muted, ink-subtle) meets AA on every surface.
  *
  * The bug this pins: the console's filters, toggles and selects were drawn
  * with the structural border (1.3-1.4:1) or forge's `border-strong` (--input,
@@ -104,6 +105,22 @@ function consoleEdgeAlpha(): number {
   return parseFloat(match![1]!)
 }
 
+/** `fg` mixed with `other` in gamma-encoded sRGB, as CSS `color-mix(in srgb, fg P%, other)` does. */
+function mix(fg: Rgb, share: number, other: Rgb): Rgb {
+  return [0, 1, 2].map((i) => fg[i]! * share + other[i]! * (1 - share)) as Rgb
+}
+
+/** The console scope's muted ink: --muted-foreground mixed toward --foreground. Returns the muted share. */
+function consoleMutedShare(): number {
+  const scope = block(INDEX_CSS, '.forge-console {')
+  const match = scope.match(/--color-ink-muted:\s*color-mix\(in srgb,\s*hsl\(var\(--muted-foreground\)\)\s*([\d.]+)%,\s*hsl\(var\(--foreground\)\)\)/)
+  expect(match, '.forge-console must draw --color-ink-muted as color-mix(in srgb, hsl(var(--muted-foreground)) <P>%, hsl(var(--foreground)))').not.toBeNull()
+  return parseFloat(match![1]!) / 100
+}
+
+/** Text surfaces: a control or a row sits on the page or a card; a menu or tooltip on the popover. */
+const TEXT_SURFACES = ['background', 'card', 'popover'] as const
+
 describe.each(['light', 'dark'] as const)('console control edge (%s)', (mode) => {
   const all = themes(mode)
   const alpha = consoleEdgeAlpha()
@@ -119,7 +136,51 @@ describe.each(['light', 'dark'] as const)('console control edge (%s)', (mode) =>
       const fill = hsl(body, surface)
       if (!fill) continue
       const edge = over(toRgb(ink!), alpha, toRgb(fill))
-      expect(contrast(edge, toRgb(fill)), `control edge on --${surface}`).toBeGreaterThanOrEqual(3)
+      // 3:1 is WCAG 1.4.11's floor; the console keeps a margin over it (it read as faint at 3.3:1).
+      expect(contrast(edge, toRgb(fill)), `control edge on --${surface}`).toBeGreaterThanOrEqual(4)
+    }
+  })
+
+  it.each(all)('%s: the selected segment and a set filter (primary ring and ink) stand out from the track', (_name, body) => {
+    const primary = hsl(body, 'primary')
+    const primaryInk = hsl(body, 'primary-ink')
+    expect(primary, '--primary not declared').not.toBeNull()
+    for (const surface of SURFACES) {
+      const fill = hsl(body, surface)
+      if (!fill) continue
+      expect(contrast(toRgb(primary!), toRgb(fill)), `selected ring on --${surface}`).toBeGreaterThanOrEqual(3)
+      if (primaryInk) expect(contrast(toRgb(primaryInk), toRgb(fill)), `selected label on --${surface}`).toBeGreaterThanOrEqual(4.5)
+    }
+  })
+})
+
+/**
+ * The console's text ramp: placeholders, inactive segments, column headers
+ * and metadata lines are `ink-muted`; captions and icons `ink-subtle`. Both
+ * are text, so both clear AA on every surface, and the ramp keeps its order:
+ * ink above ink-muted above ink-subtle.
+ */
+describe.each(['light', 'dark'] as const)('console text ramp (%s)', (mode) => {
+  const all = themes(mode)
+  const share = consoleMutedShare()
+
+  it('subtle is the plain muted foreground', () => {
+    expect(block(INDEX_CSS, '.forge-console {')).toMatch(/--color-ink-subtle:\s*hsl\(var\(--muted-foreground\)\);/)
+  })
+
+  it.each(all)('%s: muted and subtle text are AA, in order, on every surface', (_name, body) => {
+    const ink = toRgb(hsl(body, 'foreground')!)
+    const subtle = toRgb(hsl(body, 'muted-foreground')!)
+    const muted = mix(subtle, share, ink)
+    for (const surface of TEXT_SURFACES) {
+      const fill = hsl(body, surface)
+      if (!fill) continue
+      const bg = toRgb(fill)
+      // Secondary metadata and placeholders read at 12-13px over these panels: a margin over AA.
+      expect(contrast(muted, bg), `ink-muted on --${surface}`).toBeGreaterThanOrEqual(6)
+      expect(contrast(subtle, bg), `ink-subtle on --${surface}`).toBeGreaterThanOrEqual(4.5)
+      expect(contrast(muted, bg), `ink-muted above ink-subtle on --${surface}`).toBeGreaterThan(contrast(subtle, bg))
+      expect(contrast(ink, bg), `ink above ink-muted on --${surface}`).toBeGreaterThan(contrast(muted, bg) * 1.5)
     }
   })
 })

@@ -24,17 +24,7 @@ import { DashboardView, type DashboardHrefs } from "../DashboardView";
 
 vi.mock("uplot", async () => (await import("../../__tests__/obsMocks")).obsMocks.uplot());
 
-const listHrefs = {
-  dashboard: (ref: DashboardRef) => `/d/${ref.kind}/${ref.key}`,
-  hub: {
-    alerts: "/alerts",
-    releases: "/releases",
-    errors: "/errors",
-    release: (version: string) => `/releases/${version}`,
-    workload: (name: string, env: string | null) => `/workloads/${env ?? "all"}/${name}`,
-    logs: (service: string) => `/logs?service=${service}`,
-  },
-};
+const listHrefs = { dashboard: (ref: DashboardRef) => `/d/${ref.kind}/${ref.key}` };
 
 const viewHrefs: DashboardHrefs = {
   logs: () => "/logs",
@@ -48,7 +38,7 @@ const viewHrefs: DashboardHrefs = {
 
 const calls = (onCall: ReturnType<typeof vi.fn>, rpc: string) => onCall.mock.calls.filter(([name]) => name === rpc).map(([, req]) => req);
 
-function renderList(initial: DashboardsSearch = { view: "all" }) {
+function renderList(initial: DashboardsSearch = {}) {
   const onCall = vi.fn();
   const api = createFixtureApi({ dashboardsStandardBuiltins: true, onCall });
   function Stateful() {
@@ -95,16 +85,17 @@ function renderView(key: string) {
 }
 
 describe("a project's standard built-in dashboards", () => {
-  it("are listed in their groups as read-only built-ins, the ones a release replaces left out", async () => {
+  it("are listed first, in the Built-in section, read-only, the ones a release replaces left out", async () => {
     renderList();
-    const services = await screen.findByTestId("dashboards-group-services");
-    const health = within(services).getByRole("link", { name: /Service health/ });
+    const builtins = await screen.findByTestId("dashboards-group-builtin");
+    expect(screen.getAllByTestId(/^dashboards-group-[a-z]+$/)[0]).toBe(builtins);
+    const health = within(builtins).getByRole("link", { name: /Service health/ });
     expect(health).toHaveAttribute("href", "/d/builtin/service-red");
     const row = health.closest("tr")!;
     expect(within(row).getByTestId("dashboards-row-source")).toHaveTextContent("built-in");
     // Not an organization view: no billing permission is asked of it.
     expect(row).not.toHaveTextContent("cost-read permission");
-    expect(within(screen.getByTestId("dashboards-group-product")).getByRole("link", { name: "Product usage" })).toHaveAttribute("href", "/d/builtin/usage");
+    expect(within(builtins).getByRole("link", { name: "Product usage" })).toHaveAttribute("href", "/d/builtin/usage");
     // The release carries overview and releases: its own versions replace the built-ins.
     expect(screen.queryAllByRole("link").map((a) => a.getAttribute("href"))).not.toContain("/d/builtin/overview");
     expect(screen.queryAllByRole("link").map((a) => a.getAttribute("href"))).not.toContain("/d/builtin/releases");
@@ -122,8 +113,8 @@ describe("a project's standard built-in dashboards", () => {
   it("star like any dashboard", async () => {
     const user = userEvent.setup();
     const { onCall } = renderList();
-    const services = await screen.findByTestId("dashboards-group-services");
-    const row = within(services).getByRole("link", { name: /Service health/ }).closest("tr")!;
+    const builtins = await screen.findByTestId("dashboards-group-builtin");
+    const row = within(builtins).getByRole("link", { name: /Service health/ }).closest("tr")!;
     await user.click(within(row).getByRole("button", { name: /star/i }));
     await waitFor(() => expect(calls(onCall, "StarDashboard")).toHaveLength(1));
     expect(calls(onCall, "StarDashboard")[0]).toMatchObject({ ref: { kind: "builtin", projectId: FIXTURE_PROJECT, key: "service-red" } });
