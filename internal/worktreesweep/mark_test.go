@@ -4,6 +4,7 @@ package worktreesweep
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"sync"
 	"testing"
 	"time"
@@ -44,6 +45,7 @@ type tombDaemon struct {
 	use       map[string]time.Time // worktree -> daemon's last-use stamp
 	noTombs   bool                 // a daemon that predates tombstones
 	notLanded bool
+	down      bool          // the machine cannot be reached
 	skew      time.Duration // how far the daemon's clock runs behind
 	cmds      []string
 	archived  []worktreereclaim.Worktree // archived requests, as sent
@@ -61,6 +63,9 @@ func (d *tombDaemon) SendDaemonCommandToDaemon(_ context.Context, _, _, cmd stri
 	}
 	d.mu.Lock()
 	defer d.mu.Unlock()
+	if d.down {
+		return nil, errors.New("daemon unreachable")
+	}
 	d.cmds = append(d.cmds, cmd)
 	resp := worktreereclaim.Response{}
 	for _, w := range req.Worktrees {
@@ -373,6 +378,37 @@ func TestMark_ReclaimNowSkipsOnlyTheWait(t *testing.T) {
 	require.NoError(t, e.s.ReclaimMarkedNow(context.Background(), e.marks, "u", "wt", markID))
 	e.s.WaitCleanups()
 	assert.Equal(t, []string{"wt"}, e.store.archived, "an hour after the mark, approved: reclaimed without the day's wait")
+}
+
+// "Reclaim now" is durable: when its immediate settles cannot reach the
+// machine, the approval stands, the next ordinary pass reclaims it without
+// the day's wait, and the person may ask again meanwhile.
+func TestMark_ReclaimNowThatCannotReachTheMachineIsRetried(t *testing.T) {
+	t.Parallel()
+	e := newMarkEnv(t, AutoArchiveOn, 25*time.Hour)
+	e.pass(t, 0)
+	markID := e.meta().ReclaimMarkID
+	e.clock.advance(time.Hour)
+
+	e.daemon.mu.Lock()
+	e.daemon.down = true
+	e.daemon.mu.Unlock()
+	require.NoError(t, e.s.ReclaimMarkedNow(context.Background(), e.marks, "u", "wt", markID))
+	e.s.WaitCleanups()
+	assert.Empty(t, e.store.archived, "the machine was unreachable")
+	require.NotNil(t, e.meta().ReclaimApprovedAt, "the approval stands")
+	assert.Equal(t, markID, e.meta().ReclaimMarkID)
+
+	// Asking again is allowed: the approval is re-recorded, nothing is lost.
+	require.NoError(t, e.s.ReclaimMarkedNow(context.Background(), e.marks, "u", "wt", markID))
+	e.s.WaitCleanups()
+	assert.Empty(t, e.store.archived, "still unreachable")
+
+	e.daemon.mu.Lock()
+	e.daemon.down = false
+	e.daemon.mu.Unlock()
+	e.pass(t, landedRecheck+time.Minute)
+	require.Equal(t, []string{"wt"}, e.store.archived, "the next ordinary pass reclaimed the approved mark, well inside the day's grace")
 }
 
 func TestMark_ReclaimNowStillRefusesAWorktreeInUse(t *testing.T) {

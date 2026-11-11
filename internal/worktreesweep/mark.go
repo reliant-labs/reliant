@@ -170,7 +170,10 @@ func (s *Sweeper) ReclaimMarkedNow(ctx context.Context, store MarkDecisionStore,
 	logging.InfoContext(ctx, "[WorktreeSweep] reclaim mark approved by the user", "worktreeID", id, "markID", markID)
 	// Settled in the background, as a clean-up is (WaitCleanups): once to
 	// re-check and archive it, and once more to remove the archived checkout
-	// instead of waiting for the next pass.
+	// instead of waiting for the next pass. These two are only a head start:
+	// the approval is on the row, so every ordinary pass (advanceMark) skips
+	// the grace wait for it until it is reclaimed or something cancels the
+	// mark, and asking again re-records it and starts two more.
 	s.cleanups.Add(1)
 	go func() {
 		defer s.cleanups.Done()

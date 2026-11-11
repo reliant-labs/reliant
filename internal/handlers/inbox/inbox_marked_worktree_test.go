@@ -15,7 +15,9 @@ import (
 	"github.com/stretchr/testify/require"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/orgs"
 	"github.com/reliant-labs/reliant/internal/ptr"
 	"github.com/reliant-labs/reliant/internal/worktreereclaim"
 	"github.com/reliant-labs/reliant/internal/worktreesweep"
@@ -172,4 +174,34 @@ func TestReclaimMarkedWorktreeNow_StillKeepsAWorktreeWhoseTombstoneIsGone(t *tes
 	require.NoError(t, err)
 	assert.Nil(t, wt.DeletedAt, "approval skips the wait, never a check")
 	assert.False(t, wt.CleanupMetadata.Marked(), "the mark is cancelled instead")
+}
+
+// A marked worktree is about its project: a project-scoped inbox lists it only
+// under that project (counting it among the other projects elsewhere), and an
+// org-scoped inbox only under that project's org.
+func TestListInbox_MarkedWorktreeFollowsItsProjectsScope(t *testing.T) {
+	f, _, _, sweeper := markedFixtureSweeper(t)
+	f.inbox = NewTestInbox(t, WithInboxDeps(Deps{Repo: f.repo, Sweeper: sweeper, Orgs: orgs.New(acmeAndHome{})}))
+	ctx := authz.WithMembership(f.ctx, memberOf{"home": true, "acme": true})
+	_, err := f.repo.ORM().Bun().NewRaw(`UPDATE projects SET org_id = 'acme' WHERE id = ?`, f.project()).Exec(ctx)
+	require.NoError(t, err)
+
+	marked := func(req *reliantv1.ListInboxRequest) (int, int32) {
+		t.Helper()
+		f.inbox.storageCache.Delete(f.userID)
+		resp, err := f.inbox.ListInbox(ctx, connect.NewRequest(req))
+		require.NoError(t, err)
+		return len(inboxByKind(resp.Msg.Items, reliantv1.InboxItemKind_INBOX_ITEM_KIND_WORKTREE_MARKED)), resp.Msg.OtherProjectsCount
+	}
+	n, _ := marked(&reliantv1.ListInboxRequest{})
+	require.Equal(t, 1, n, "no scope")
+	n, _ = marked(&reliantv1.ListInboxRequest{OrgId: ptr.Of("acme")})
+	assert.Equal(t, 1, n, "its project's org")
+	n, _ = marked(&reliantv1.ListInboxRequest{OrgId: ptr.Of("home")})
+	assert.Equal(t, 0, n, "an org its project is not in")
+	n, _ = marked(&reliantv1.ListInboxRequest{ProjectId: ptr.Of(f.project())})
+	assert.Equal(t, 1, n, "its own project")
+	n, others := marked(&reliantv1.ListInboxRequest{ProjectId: ptr.Of("p-elsewhere")})
+	assert.Equal(t, 0, n, "another project")
+	assert.Equal(t, int32(1), others, "counted among the other projects")
 }

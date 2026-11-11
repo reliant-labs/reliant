@@ -51,9 +51,11 @@ describe("MarkedWorktreeAction", () => {
     expect(api.reclaim).toHaveBeenCalledWith({ worktreeId: "wt-1", markId: "m-1" }, expect.anything());
   });
 
-  it("does not approve twice", () => {
+  it("lets an approved mark be tried again", () => {
     render(<MarkedWorktreeAction item={marked({ approved: true })} />);
-    expect(screen.getByRole("button", { name: "Reclaim now" })).toBeDisabled();
+    const retry = screen.getByRole("button", { name: "Reclaim now" });
+    expect(retry).toBeEnabled();
+    expect(retry).toHaveAttribute("title", expect.stringContaining("retried at every check"));
     expect(screen.getByRole("button", { name: "Keep" })).toBeEnabled();
   });
 });

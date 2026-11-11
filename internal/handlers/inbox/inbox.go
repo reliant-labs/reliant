@@ -329,7 +329,10 @@ func (s *Service) readInbox(ctx context.Context, userID string) (*inboxReads, er
 	// of their own (automation health, broken definitions), so ListInbox's
 	// org scope decides each one by what it is about, never by a key nobody
 	// read. Before the read is returned: it may be shared (sharedRead).
-	for _, section := range [][]*reliantv1.InboxItem{out.failing, out.declarations, out.recovery} {
+	// Storage carries the person's marked worktrees (markedItems), each about
+	// a project: its org is read here too, so an org scope lists only its own.
+	// A machine's own storage items name nothing and stay in every org.
+	for _, section := range [][]*reliantv1.InboxItem{out.failing, out.declarations, out.recovery, out.storage} {
 		for _, it := range section {
 			reads.resolveOrg(ctx, userID, it)
 		}

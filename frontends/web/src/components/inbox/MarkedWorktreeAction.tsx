@@ -73,8 +73,12 @@ export function MarkedWorktreeAction({ item }: { item: InboxWorktreeMarked }) {
       <Button
         size="sm"
         variant="outline"
-        disabled={busy || item.approved}
-        title={item.approved ? "Already approved" : "Skip the wait. A worktree used since it was marked is kept."}
+        disabled={busy}
+        title={
+          item.approved
+            ? "Approved: it is retried at every check. Try again now if its machine was unreachable."
+            : "Skip the wait. A worktree used since it was marked is kept."
+        }
         onClick={() =>
           reclaim.mutate(req, {
             onSuccess: () =>
