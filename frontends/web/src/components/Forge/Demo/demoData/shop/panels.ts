@@ -32,6 +32,7 @@ import {
 } from "../shopStory";
 import { shopDatabase } from "./database";
 import { shopMetricPanel } from "./metrics";
+import { productAnalyticsPanel, shopCommerce } from "./productAnalytics";
 import type { PanelKeys } from "./shopApi";
 
 const BLANK: Omit<PanelResult, "kind" | "unit"> = {
@@ -273,13 +274,19 @@ function tracesPanel(panel: Panel, req: QueryPanelRequest, now: number): PanelRe
   };
 }
 
-/** The storefront's funnel over a window: product views, carts, checkouts begun and purchases. */
+/**
+ * The storefront's funnel over a window, per session: product views, carts,
+ * checkouts begun and purchases. Read from the same audience as the Product
+ * dashboard's Buy funnel (productAnalytics.ts), so the two agree: the last
+ * step is the purchases, which since v1.8.3 fall short of the orders by the
+ * charges the incident failed.
+ */
 function funnelPanel(panel: Panel, req: QueryPanelRequest, now: number): PanelResult {
   const window = { startMs: req.window.startMs, endMs: Math.min(req.window.endMs, now) };
-  const env = { envIds: req.envIds.length ? (req.envIds as DemoEnvKey[]) : (["env-prod"] as DemoEnvKey[]), now, ...window };
-  const views = demoStats({ ...env, service: "api", op: "GET /products/{slug}" }).requests;
-  const checkout = demoStats({ ...env, service: "api", op: "checkout.v1.CheckoutService/Checkout" });
-  const counts = [Math.round(views * 1.6), Math.round(checkout.requests * 2.1), checkout.requests, checkout.requests - checkout.errors];
+  const envIds = (req.envIds.length ? DEMO_ENV_IDS.filter((e) => req.envIds.includes(e)) : [...DEMO_ENV_IDS]) as DemoEnvKey[];
+  const c = shopCommerce(envIds, window.startMs, window.endMs, now);
+  // A person views products in ≈1.3 sessions and returns to a cart in ≈1.1; a checkout and a purchase are one session each.
+  const counts = [Math.round(c.viewers * 1.3), Math.round(c.cart * 1.1), c.checkout, c.purchases];
   const steps = panel.funnel?.steps?.length ? panel.funnel.steps : ["view_product", "add_to_cart", "begin_checkout", "purchase"];
   return {
     kind: panel.kind,
@@ -400,6 +407,9 @@ export function shopPanels(now: number): Pick<ObservabilityApi, PanelKeys> {
       if (req.explain) return { kind: panel.kind, unit: panel.unit ?? "", ...BLANK, window: req.window };
       if (panel.signal === "metrics") return shopMetricPanel(panel, req.window, now, req) ?? { kind: panel.kind, unit: panel.unit ?? "", ...BLANK, window: req.window };
       if (panel.kind === "funnel") return funnelPanel(panel, req, now);
+      // The built-in product analytics dashboards' sql panels, by panel id.
+      const analytics = productAnalyticsPanel(req, now);
+      if (analytics) return analytics;
       if (panel.kind === "issues" || panel.kind === "sessions" || panel.kind === "search" || panel.kind === "sql" || panel.kind === "text") {
         // The browser kinds are read from issues/sessions by the views; search from SearchLogs.
         return { kind: panel.kind, unit: panel.unit ?? "", ...BLANK, window: req.window };
