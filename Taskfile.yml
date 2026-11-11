@@ -1,0 +1,368 @@
+# forge:hash=310d0181d3dc3b293633c928921249f9706799b1abb09d07626655dae230c4d3
+version: "3"
+
+# Task wrappers for the forge CLI. Kept intentionally minimal — only
+# the verbs that have an obvious meaning for a single-binary tool (build,
+# test, lint, fmt). Add more as the project grows.
+
+env:
+  # GOFLAGS gets -trimpath, merged into whatever GOFLAGS you already use (the
+  # same block the scaffold templates ship; internal/templates/project/
+  # Taskfile.yml.tmpl says why). Without it every worktree of forge compiles
+  # the module again and re-runs every test instead of reusing a sibling's
+  # build cache. An environment GOFLAGS wins; -trimpath=false opts out.
+  GOFLAGS:
+    sh: 'f="$(go env GOFLAGS 2>/dev/null)"; case " $f " in *" -trimpath"*|*" --trimpath"*) echo "$f" ;; *) echo "${f:+$f }-trimpath" ;; esac'
+
+vars:
+  # GOTESTRACE is a TOP-LEVEL var on purpose: only global vars can be
+  # overridden from the command line (`task test GOTESTRACE=`), which is how
+  # the generated CI workflow passes through forge.yaml's `ci.test.race`.
+  # Declared on the task itself it would silently win over the override.
+  GOTESTRACE: "-race"
+
+tasks:
+  default:
+    desc: List available tasks
+    cmds:
+      - task --list
+
+  deps:
+    desc: Install Go dependencies
+    cmds:
+      - go mod download
+
+  build:
+    desc: Build the CLI binary into ./bin/forge
+    cmds:
+      # -trimpath strips local filesystem paths so builds are reproducible
+      # across machines; -buildvcs=true embeds the commit/dirty flag for
+      # runtime correlation.
+      #
+      # DevForgeRoot is stamped here too, not only in install:dev. A binary
+      # built from a checkout is on no module proxy, so a scaffold cannot
+      # `require` it; -trimpath also erases the compile paths
+      # DiscoverDevForgeRootFromSource would otherwise find the checkout from.
+      # Without the stamp such a binary could neither pin nor bridge forge,
+      # and `go mod tidy` used to fill the gap with the retired
+      # github.com/reliant-labs/forge/pkg v0.1.15. `forge project new` now
+      # refuses that case outright; the stamp is what makes this target
+      # produce a binary that can scaffold at all.
+      - go build -trimpath -buildvcs=true -ldflags "-X github.com/reliant-labs/forge/internal/buildinfo.DevForgeRoot=$(git rev-parse --show-toplevel)" -o bin/forge ./cmd/forge
+
+  install:
+    desc: Install the CLI binary to $GOBIN (or $GOPATH/bin)
+    cmds:
+      # DevForgeRoot: see the note on `build` above — a checkout build must
+      # know its checkout to scaffold.
+      - go install -trimpath -buildvcs=true -ldflags "-X github.com/reliant-labs/forge/internal/buildinfo.DevForgeRoot=$(git rev-parse --show-toplevel)" ./cmd/forge
+
+  install:dev:
+    desc: "Contributor install: stamp the local forge source root so `forge project new --link-forge` bridges scaffolds to this checkout (gitignored go.work)"
+    cmds:
+      # Injects buildinfo.DevForgeRoot from the builder's OWN checkout
+      # (git rev-parse --show-toplevel) — nothing machine-specific is
+      # committed. On a binary built this way, `forge project new
+      # --link-forge` writes a gitignored go.work `use`ing <root> so the
+      # project builds against your in-development forge with no manual
+      # replace; generate/lint/doctor warn when this binary and that checkout
+      # stop being the same source (re-run this task). NOTE:
+      # no -trimpath here (-trimpath=false overrides the env block above) —
+      # the dev-vs-release discriminator (IsDevBuild) relies on the embedded
+      # "(devel)" version / vcs info a plain install records. Released
+      # binaries use `task install` (no stamp), so they never write a go.work.
+      - go install -trimpath=false -buildvcs=true -ldflags "-X github.com/reliant-labs/forge/internal/buildinfo.DevForgeRoot=$(git rev-parse --show-toplevel)" ./cmd/forge
+
+  release:forge:
+    desc: "Cut the forge release computed from the PR titles since the last tag (feat → minor, else patch; one tag, on main's newest green commit; never pushes main): task release:forge (-- --dry-run to validate only, -- --commit <sha> for another green commit)"
+    cmds:
+      # THE release command. forge is one module, so a release is one tag, on
+      # a commit main already has: by default the newest one whose full CI is
+      # green. In a private worktree at that commit: validate the version shape
+      # and that the tag does not exist; confirm the version was never
+      # published at another commit (the proxy is immutable); sync VERSION,
+      # internal/buildinfo/VERSION, NEXT_VERSION and CHANGELOG.md; build; then
+      # push the tag and the bookkeeping branch release/vX.Y.Z atomically and
+      # open its pull request. Nothing is pushed to main.
+      #
+      # The forge/pkg submodule this used to co-release is gone, and with it
+      # the second tag, the require bump, and the go.sum resolution dance. See
+      # docs/releasing.md.
+      - ./scripts/release-forge.sh {{.CLI_ARGS}}
+
+  release:web-runtime:
+    desc: "Publish @reliantlabs/forge-web-runtime for a commit if what it ships changed (version computed): task release:web-runtime -- [--plan|--dry-run] [--commit <sha>]"
+    cmds:
+      # Every forge release already runs this (release:forge, and the release
+      # train at each cut); run it alone only to see what it would publish
+      # (--plan) or to repair a publish. It computes the version from the
+      # commit (what changed since the last web-runtime/v* tag), validates the
+      # package (npm ci, typecheck, test, build, pack contents), pushes the
+      # web-runtime/vX.Y.Z tag whose workflow publishes it, and waits until npm
+      # serves it. Unchanged content publishes nothing.
+      - ./scripts/release-web-runtime.sh {{.CLI_ARGS}}
+
+  test:
+    # Scoping: `task test -- ./internal/lifecycle/...` runs ONLY those Go
+    # packages; with no `--` args it is the whole module. An unmatched pattern
+    # fails in `go test` itself, so a scoped run can never quietly widen into
+    # a whole-module run that reports success.
+    desc: "Run Go unit tests in CI's three lanes: unit, internal/cli, guards (excludes integration + e2e build tags)"
+    cmds:
+      # THE SAME THREE LANES AS ci.yml, from the same script. Unscoped, this
+      # is the whole module — pkg/* included — split by
+      # scripts/ci-test-packages.sh exactly as ci.yml's Test, Test
+      # (internal/cli) and test-short-warm's guards step split it, with their
+      # flags: the unit and cli lanes under {{.GOTESTRACE}}, the guards at -p 1
+      # without it (ci.yml's "WHY NO -race FOR THE GUARDS" says why; under -race removalguard
+      # alone took ~980s). Integration and e2e tests carry build tags and
+      # have their own tasks.
+      #
+      # ONE BUDGET PER LANE. -timeout bounds a test BINARY, so it has to fit
+      # the slowest package in the lane on a loaded machine, ~2x what a CI
+      # runner measures. The old single `-timeout 120s` fitted none of the
+      # slow three and could not pass: under -race in CI, internal/cli took
+      # 505-692s, the root package's TestCrossPlatformBuild (two whole-module
+      # cross-compiles in a subprocess) 339s, and internal/cluster 161-197s.
+      #   unit    15m  the root package, ~2x its CI time
+      #   cli     45m  internal/cli; a local -race run at load ~100 was still
+      #                going after 30 minutes
+      #   guards  30m  ci.yml's own budget for them
+      # These are hang detectors, not speed budgets. Speed comes from the
+      # inner loop: `task test:short`, scoped, cached.
+      #
+      # A scoped `task test -- <pkgs>` is one invocation at the largest budget:
+      # it may name internal/cli.
+      - cmd: go test {{.GOTESTRACE}} -count=1 -timeout 45m {{.CLI_ARGS}}
+        if: '[ -n "{{.CLI_ARGS}}" ]'
+      - cmd: go test {{.GOTESTRACE}} -count=1 -timeout 15m $(scripts/ci-test-packages.sh unit)
+        if: '[ -z "{{.CLI_ARGS}}" ]'
+      - cmd: go test {{.GOTESTRACE}} -count=1 -timeout 45m $(scripts/ci-test-packages.sh cli)
+        if: '[ -z "{{.CLI_ARGS}}" ]'
+      - cmd: go test -p 1 -count=1 -timeout 30m $(scripts/ci-test-packages.sh guards)
+        if: '[ -z "{{.CLI_ARGS}}" ]'
+
+  test:short:
+    # The inner-loop tier from reliant.md "Testing tiers": run it after each
+    # edit, scoped to what you touched (`task test:short -- ./internal/foo/...`),
+    # and run `task test` once at the end. Same shape as the `test:short` the
+    # scaffold templates ship to every forge project.
+    #
+    # NO `-count=1`, on purpose. Go's test cache keys on the test binary, the
+    # flags, and every env var and file the test reads, so a cached result is
+    # correct for a hermetic test — and re-running only what changed is the
+    # single biggest saving in the loop (most agent test time was measured as
+    # compile/link plus defeated caching, not test bodies). Nothing under
+    # -short needs a fresh run: tests that touch out-of-process state (a
+    # database, the network, docker) are behind the `integration`/`e2e` build
+    # tags or skip under testing.Short().
+    #
+    # The cache is only as sound as that hermeticity, and it has one blind
+    # spot: it tracks files THIS test process opens or stats, inside the
+    # module. Anything a CHILD process (go build, git, kcl, node, bash) or the
+    # native KCL runtime reads from the repo is invisible to it, so a cached
+    # PASS can outlive the edit that breaks it. Such a test must skip under
+    # -short, or open/stat those inputs itself so the cache keys on them.
+    #
+    # NO `-race` either: it builds everything under a separate cache key and
+    # slows execution several-fold. `task test` and CI keep `-race -count=1`.
+    #
+    # The timeout is a HANG detector, not the speed budget. Speed comes from
+    # scoping and the cache; the per-test budget (~2s under -short, else gate
+    # it with `if testing.Short() { t.Skip(...) }`, see reliant.md) is
+    # enforced by review, not by this flag. -timeout is per test BINARY, and
+    # on a loaded shared box ./internal/cli alone — the most-run package —
+    # measured 192-263s under -short, so a 60s value panicked with a
+    # goroutine dump on a healthy run and taught agents to abandon the tier.
+    # 300s still catches a genuine deadlock in one package within minutes.
+    desc: "Inner-loop Go tests: -short, cached, no race. Scope it: task test:short -- ./internal/foo/..."
+    cmds:
+      - go test -short -timeout 300s {{if .CLI_ARGS}}{{.CLI_ARGS}}{{else}}./...{{end}}
+
+  ci:
+    # THE PRE-MERGE GATE, locally: what the merge steward runs to gate a forge
+    # pull request, in about five minutes. ci.yml's merge tier on this
+    # machine — the whole -short tier (cached, no -race, no -count), the
+    # flake gate over the tests the branch adds or edits, and the checks job
+    # (generated code, KCL, pre-commit over the changed files, licenses, the
+    # CHANGELOG and pkg/ API guards) — run concurrently, in one table, non-zero
+    # if any step failed or was skipped. scripts/ci-premerge.sh says what each
+    # step runs and what it leaves to main (`task test`, lint, e2e).
+    #
+    #   task ci                     the branch against its merge base with origin/main
+    #   task ci -- <base>           against another base (a stacked branch's parent)
+    #   PR=<n> task ci              also read pull request n's labels and body (apigate)
+    #   CI_SKIP=pre-commit task ci  waive a step that cannot run here (still listed)
+    #
+    # It is a heavy command: run it in a host slot (`reliant forge slot run --
+    # task ci`, or the harness's heavy flag). Contributors verify with
+    # `task test:short -- <their packages>` instead.
+    desc: "The pre-merge gate (ci.yml's merge tier, locally, ~5 min): task ci [-- BASE]"
+    cmds:
+      - scripts/ci-premerge.sh {{.CLI_ARGS}}
+
+  test:e2e:
+    # The whole `-tags e2e` suite, TestE2ENightly* included: what CI runs
+    # across e2e-suite.yml's shards and nightly.yml, in one process. The
+    # tests are t.Parallel and share one forge build, so wall-clock is
+    # roughly the slowest fixture — still tens of minutes: run it in the
+    # background. It needs the toolchain CI installs (go, node/npm, buf,
+    # kcl, golangci-lint, the codegen plugins from `forge tools install`,
+    # docker); a missing tool skips its tests here and fails them in CI
+    # (FORGE_E2E_REQUIRE_TOOLS=1 makes it fail here too).
+    #
+    # Selected by name: a test is an e2e test exactly when it is named
+    # TestE2E*, which internal/e2eshard's naming guard enforces. Narrow a
+    # run with a later -run: `task test:e2e -- -run TestE2EFixtureCorpus`.
+    desc: "The e2e suite (-tags e2e, TestE2E*): narrow with task test:e2e -- -run <regex>"
+    cmds:
+      - go test -tags e2e -count=1 -timeout 60m -run '^TestE2E' ./internal/cli/ {{.CLI_ARGS}}
+
+  test:integration:
+    desc: Run integration tests (build tag `integration`, real dependencies expected)
+    cmds:
+      # Integration tests rely on out-of-process state (postgres, sqlite tmp
+      # dir, etc.) so they're gated behind the `integration` build tag and
+      # excluded from `task test`. Run this in an environment that satisfies
+      # the per-test setup contract; see the testing-integration skill.
+      - go test {{.GOTESTRACE}} -count=1 -timeout 600s -tags=integration {{if .CLI_ARGS}}{{.CLI_ARGS}}{{else}}./...{{end}}
+
+  test:all:
+    # The pre-merge sweep. `task test` stays the fast lane the edit loop and
+    # the CI test job run; this adds the tagged lane.
+    #
+    # The two lanes are separate `go test` invocations ON PURPOSE. Build tags
+    # ADD files rather than filter them, so `-tags=integration` already
+    # recompiles and reruns every untagged test — a single combined pass plus
+    # a plain pass would run the whole unit suite twice for no extra signal.
+    desc: Run the unit and integration suites in order
+    cmds:
+      - task: test
+      - task: test:integration
+
+  coverage:
+    # HTML coverage report at coverage.html. Race testing happens in
+    # `task test`; this task is purely for measuring exercised code.
+    desc: Run unit tests with coverage and emit coverage.html
+    cmds:
+      - go test -coverprofile=coverage.out -timeout 60s ./...
+      - go tool cover -html=coverage.out -o coverage.html
+      - cmd: echo "Coverage report written to coverage.html"
+        silent: true
+
+  generate:
+    # CLI/library kinds rarely have proto codegen, but contract-driven
+    # mock generation (`forge generate` emits mock_gen.go for any
+    # package with a contract.go) is universal. This task keeps the
+    # verb consistent across kinds so verify-generate has something
+    # canonical to call.
+    #
+    # THIS REPO ONLY: forge generates forge, so the mocks come first, from
+    # internal/tools/mockgen, which links no package that carries a generated
+    # mock. A contract that gained a method leaves its mock_gen.go stale, and
+    # a package forge imports then stops compiling — and with it the forge
+    # that would regenerate the mock (forge#1261). Then the forge built from
+    # this checkout runs the whole generate, the same one verify-generated in
+    # CI runs.
+    desc: Run forge generate (contract mocks, etc.)
+    cmds:
+      - go run ./internal/tools/mockgen
+      - go run ./cmd/forge generate
+
+  verify-generate:
+    # CI gate: regenerate everything, then assert nothing changed.
+    # Catches the silent codegen-mock drift class of failure where a
+    # contract gains a parameter and the mock_gen.go is not refreshed
+    # — a recurring pain point when working on contract-pack-style
+    # codegen packages. Mirrors the service-kind Taskfile's verbatim.
+    desc: Verify generated code is committed up-to-date (CI guard)
+    cmds:
+      - task: generate
+      - cmd: |
+          if ! git diff --exit-code; then
+            echo "ERROR: Generated files are out of date. Run 'forge generate' (or 'task generate') and commit the result." >&2
+            exit 1
+          fi
+
+  lint:
+    desc: Run golangci-lint over the repo, then pkg/ under its own config
+    cmds:
+      - golangci-lint run
+      # THIS REPO ONLY: the root config excludes pkg/, which answers to
+      # pkg/.golangci.yml (the typed-config guardrail) instead.
+      # golangci-lint discovers that file by walking up from its working
+      # directory, so it is only read by a run from pkg/. CI runs the same
+      # pair: ci.yml's lint job runs both.
+      - cmd: cd pkg && golangci-lint run
+
+  fmt:
+    desc: Format Go source
+    cmds:
+      - cmd: |
+          if ! command -v goimports >/dev/null 2>&1; then
+            echo "goimports not installed — run: go install golang.org/x/tools/cmd/goimports@latest" >&2
+            exit 1
+          fi
+          goimports -w .
+      - go mod tidy
+
+  fmt:web:
+    # The pre-commit hook's prettier, at its pin, over the files the hook
+    # formats — never a bare `npx prettier`, which resolves a different
+    # release and reformats lines nobody touched. No args: the files you
+    # changed since the merge-base with origin/main. `-- --check` reports.
+    desc: "Format changed frontend/docs files with the pinned prettier: task fmt:web [-- FILE...]"
+    cmds:
+      - scripts/prettier.sh {{.CLI_ARGS}}
+
+  docs:benefits:
+    # docs/benefits.md and README.md's `<!-- benefits:start -->` block are
+    # rendered from internal/benefits/benefits.yaml; edit the YAML, then run
+    # this. TestRenderedFilesAreCurrent fails while either file is stale.
+    # The renders are prettier-canonical by construction; the --check proves
+    # it for the prose the YAML carries verbatim (a claim prettier would
+    # rewrite would make the pre-commit hook and the test fight forever).
+    desc: Regenerate docs/benefits.md and the README benefits table from internal/benefits/benefits.yaml
+    cmds:
+      - go test -count=1 ./internal/benefits -run TestRenderedFilesAreCurrent -update
+      - scripts/prettier.sh --check docs/benefits.md README.md
+
+  canary:
+    # The consumer build check (dev-docs/consumer-canary.md): reliant and
+    # control-plane at their main, built against THIS checkout. The consumers
+    # are exported into a scratch directory and never modified; a diff that
+    # cannot reach a consumer skips in seconds.
+    #
+    #   task canary                      reliant + control-plane, vs origin/main
+    #   task canary -- -plan             what would run, nothing built
+    #   task canary -- -consumer reliant=/path/to/reliant   a local checkout
+    #   task canary -- -force            run even when the diff cannot reach one
+    #
+    # control-plane is private: fetching it needs your git credentials (ssh
+    # key or credential helper). Without them, name only reliant:
+    #   task canary -- -consumer reliant=https://github.com/reliant-labs/reliant.git
+    desc: "Build reliant and control-plane against this forge: task canary [-- -plan|-force|-consumer name=src[@ref]]"
+    cmds:
+      - go run ./internal/consumercanary {{.CLI_ARGS}}
+
+  apigate:
+    # The API-compatibility gate for pkg/ (dev-docs/api-breaks.md): an
+    # incompatible change to an exported API fails unless the PR declares it
+    # (`api-break` label or an `API-BREAK:` line) and ships a codemod or a
+    # migration playbook. Locally, pass the declaration with flags:
+    #   task apigate -- -body-file /tmp/pr-body.md
+    #   task apigate -- -label api-break
+    desc: "Fail on an undeclared incompatible change to forge/pkg: task apigate [-- -base REV -body-file FILE -label L]"
+    cmds:
+      - go run ./internal/apigate -base "$(git merge-base HEAD origin/main)" {{.CLI_ARGS}}
+
+  vet:
+    desc: Run go vet across the module
+    cmds:
+      - go vet ./...
+
+  clean:
+    desc: Clean build artifacts
+    cmds:
+      - rm -rf bin
+      - rm -f coverage.out coverage.html

@@ -1,0 +1,316 @@
+{
+  "version": "forge.dashboards/v1",
+  "sections": [
+    {
+      "id": "glance",
+      "title": "At a glance",
+      "description": "The headline figures, each beside its change against the previous period and its trend across the range."
+    },
+    {
+      "id": "users",
+      "title": "Users",
+      "description": "Who is active, how many of them are new, and who uses the product most."
+    },
+    {
+      "id": "activity",
+      "title": "What users do",
+      "description": "The records people write through the generated CRUD handlers, the pages they view and the events they send."
+    },
+    {
+      "id": "retention",
+      "title": "Retention",
+      "description": "Whether people come back: each weekly cohort's share active again in the weeks after its first."
+    }
+  ],
+  "id": "usage",
+  "title": "shop: product usage",
+  "description": "Who uses the product and what they do, from product events: active users, new against returning, weekly retention, the pages people view and the records they create, update and delete. CRUD events are emitted automatically by the generated handlers (signals.product_events = False turns them off); page_viewed comes from the browser runtime. Each headline figure opens beside its change against the previous period. Hosted environments only: a local forge env up has no product_events table.",
+  "group": "product",
+  "filters": [
+    {
+      "id": "service",
+      "label": "service.name",
+      "field": "service.name"
+    },
+    {
+      "id": "env",
+      "label": "deployment.environment.name",
+      "field": "deployment.environment.name"
+    }
+  ],
+  "defaultRange": "30d",
+  "defaultCompare": "period",
+  "panels": [
+    {
+      "section": "glance",
+      "id": "dau",
+      "title": "Daily active users",
+      "description": "Distinct signed-in users with any product event in the 24 hours before the end of the range; the trend is each UTC day's.",
+      "kind": "sql",
+      "sql": "SELECT uniqExact(UserId) AS \"Daily active users\"\nFROM product_events\nWHERE UserId != '' AND Timestamp \u003e= {to:DateTime64(9)} - INTERVAL 1 DAY AND Timestamp \u003c {to:DateTime64(9)} AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, EnvId)) AND (empty({services:Array(String)}) OR has({services:Array(String)}, ServiceName))",
+      "trendSql": "SELECT toDate(Timestamp) AS day, uniqExact(UserId) AS \"Daily active users\"\nFROM product_events\nWHERE UserId != '' AND Timestamp \u003e= {from:DateTime64(9)} AND Timestamp \u003c {to:DateTime64(9)} AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, EnvId)) AND (empty({services:Array(String)}) OR has({services:Array(String)}, ServiceName))\nGROUP BY day ORDER BY day",
+      "display": {
+        "color": "blue"
+      },
+      "unit": "count",
+      "width": 6,
+      "height": 4
+    },
+    {
+      "section": "glance",
+      "id": "wau",
+      "title": "Weekly active users",
+      "description": "Distinct signed-in users with any product event in the 7 days before the end of the range; the trend is the 7 days ending each UTC day.",
+      "kind": "sql",
+      "sql": "SELECT uniqExact(UserId) AS \"Weekly active users\"\nFROM product_events\nWHERE UserId != '' AND Timestamp \u003e= {to:DateTime64(9)} - INTERVAL 7 DAY AND Timestamp \u003c {to:DateTime64(9)} AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, EnvId)) AND (empty({services:Array(String)}) OR has({services:Array(String)}, ServiceName))",
+      "trendSql": "SELECT addDays(seen, offset) AS day, uniqExact(UserId) AS \"Weekly active users\"\nFROM (\n    SELECT DISTINCT UserId, toDate(Timestamp) AS seen\n    FROM product_events\n    WHERE UserId != '' AND Timestamp \u003e= toStartOfDay({from:DateTime64(9)}) - INTERVAL 6 DAY AND Timestamp \u003c {to:DateTime64(9)} AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, EnvId)) AND (empty({services:Array(String)}) OR has({services:Array(String)}, ServiceName))\n)\nARRAY JOIN range(7) AS offset\nWHERE day \u003e= toDate({from:DateTime64(9)}) AND toDateTime(day) \u003c {to:DateTime64(9)}\nGROUP BY day ORDER BY day",
+      "display": {
+        "color": "cyan"
+      },
+      "unit": "count",
+      "width": 6,
+      "height": 4
+    },
+    {
+      "section": "glance",
+      "id": "mau",
+      "title": "Monthly active users",
+      "description": "Distinct signed-in users with any product event in the 30 days before the end of the range; the trend is the 30 days ending each UTC day.",
+      "kind": "sql",
+      "sql": "SELECT uniqExact(UserId) AS \"Monthly active users\"\nFROM product_events\nWHERE UserId != '' AND Timestamp \u003e= {to:DateTime64(9)} - INTERVAL 30 DAY AND Timestamp \u003c {to:DateTime64(9)} AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, EnvId)) AND (empty({services:Array(String)}) OR has({services:Array(String)}, ServiceName))",
+      "trendSql": "SELECT addDays(seen, offset) AS day, uniqExact(UserId) AS \"Monthly active users\"\nFROM (\n    SELECT DISTINCT UserId, toDate(Timestamp) AS seen\n    FROM product_events\n    WHERE UserId != '' AND Timestamp \u003e= toStartOfDay({from:DateTime64(9)}) - INTERVAL 29 DAY AND Timestamp \u003c {to:DateTime64(9)} AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, EnvId)) AND (empty({services:Array(String)}) OR has({services:Array(String)}, ServiceName))\n)\nARRAY JOIN range(30) AS offset\nWHERE day \u003e= toDate({from:DateTime64(9)}) AND toDateTime(day) \u003c {to:DateTime64(9)}\nGROUP BY day ORDER BY day",
+      "display": {
+        "color": "violet"
+      },
+      "unit": "count",
+      "width": 6,
+      "height": 4
+    },
+    {
+      "section": "glance",
+      "id": "stickiness",
+      "title": "Stickiness (DAU / MAU)",
+      "description": "The share of the month's active users who were active in the last day: how habitual the product is. The trend is each UTC day's.",
+      "kind": "sql",
+      "sql": "SELECT round(uniqExactIf(UserId, Timestamp \u003e= {to:DateTime64(9)} - INTERVAL 1 DAY) / nullIf(uniqExact(UserId), 0), 4) AS \"DAU / MAU\"\nFROM product_events\nWHERE UserId != '' AND Timestamp \u003e= {to:DateTime64(9)} - INTERVAL 30 DAY AND Timestamp \u003c {to:DateTime64(9)} AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, EnvId)) AND (empty({services:Array(String)}) OR has({services:Array(String)}, ServiceName))",
+      "trendSql": "SELECT addDays(seen, offset) AS day, round(uniqExactIf(UserId, offset = 0) / nullIf(uniqExact(UserId), 0), 4) AS \"DAU / MAU\"\nFROM (\n    SELECT DISTINCT UserId, toDate(Timestamp) AS seen\n    FROM product_events\n    WHERE UserId != '' AND Timestamp \u003e= toStartOfDay({from:DateTime64(9)}) - INTERVAL 29 DAY AND Timestamp \u003c {to:DateTime64(9)} AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, EnvId)) AND (empty({services:Array(String)}) OR has({services:Array(String)}, ServiceName))\n)\nARRAY JOIN range(30) AS offset\nWHERE day \u003e= toDate({from:DateTime64(9)}) AND toDateTime(day) \u003c {to:DateTime64(9)}\nGROUP BY day ORDER BY day",
+      "display": {
+        "color": "violet"
+      },
+      "unit": "percent",
+      "width": 6,
+      "height": 4
+    },
+    {
+      "section": "glance",
+      "id": "new-users",
+      "title": "New users",
+      "description": "Signed-in users whose first event (within the 90 days before the end of the range) falls in the range; the trend is each UTC day's.",
+      "kind": "sql",
+      "sql": "SELECT countIf(first_seen \u003e= {from:DateTime64(9)}) AS \"New users\"\nFROM (\n    SELECT UserId, min(Timestamp) AS first_seen\n    FROM product_events\n    WHERE UserId != '' AND Timestamp \u003e= least({from:DateTime64(9)}, {to:DateTime64(9)} - INTERVAL 90 DAY) AND Timestamp \u003c {to:DateTime64(9)} AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, EnvId)) AND (empty({services:Array(String)}) OR has({services:Array(String)}, ServiceName))\n    GROUP BY UserId\n)",
+      "trendSql": "SELECT toDate(first_seen) AS day, count() AS \"New users\"\nFROM (\n    SELECT UserId, min(Timestamp) AS first_seen\n    FROM product_events\n    WHERE UserId != '' AND Timestamp \u003e= least({from:DateTime64(9)}, {to:DateTime64(9)} - INTERVAL 90 DAY) AND Timestamp \u003c {to:DateTime64(9)} AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, EnvId)) AND (empty({services:Array(String)}) OR has({services:Array(String)}, ServiceName))\n    GROUP BY UserId\n)\nWHERE first_seen \u003e= {from:DateTime64(9)}\nGROUP BY day ORDER BY day",
+      "display": {
+        "color": "amber"
+      },
+      "unit": "count",
+      "width": 6,
+      "height": 4
+    },
+    {
+      "section": "glance",
+      "id": "events",
+      "title": "Events",
+      "description": "Every product event in the range, automatic or tracked by the app, signed in or anonymous.",
+      "kind": "sql",
+      "sql": "SELECT count() AS \"Events\"\nFROM product_events\nWHERE Timestamp \u003e= {from:DateTime64(9)} AND Timestamp \u003c {to:DateTime64(9)} AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, EnvId)) AND (empty({services:Array(String)}) OR has({services:Array(String)}, ServiceName))",
+      "trendSql": "SELECT toDate(Timestamp) AS day, count() AS \"Events\"\nFROM product_events\nWHERE Timestamp \u003e= {from:DateTime64(9)} AND Timestamp \u003c {to:DateTime64(9)} AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, EnvId)) AND (empty({services:Array(String)}) OR has({services:Array(String)}, ServiceName))\nGROUP BY day ORDER BY day",
+      "display": {
+        "color": "fuchsia"
+      },
+      "unit": "count",
+      "width": 6,
+      "height": 4
+    },
+    {
+      "section": "glance",
+      "id": "events-per-user",
+      "title": "Events per active user",
+      "description": "Product events in the range over the signed-in users active in it; the trend is each UTC day's.",
+      "kind": "sql",
+      "sql": "SELECT round(count() / nullIf(uniqExactIf(UserId, UserId != ''), 0), 1) AS \"Events per active user\"\nFROM product_events\nWHERE Timestamp \u003e= {from:DateTime64(9)} AND Timestamp \u003c {to:DateTime64(9)} AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, EnvId)) AND (empty({services:Array(String)}) OR has({services:Array(String)}, ServiceName))",
+      "trendSql": "SELECT toDate(Timestamp) AS day, round(count() / nullIf(uniqExactIf(UserId, UserId != ''), 0), 1) AS \"Events per active user\"\nFROM product_events\nWHERE Timestamp \u003e= {from:DateTime64(9)} AND Timestamp \u003c {to:DateTime64(9)} AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, EnvId)) AND (empty({services:Array(String)}) OR has({services:Array(String)}, ServiceName))\nGROUP BY day ORDER BY day",
+      "display": {
+        "color": "fuchsia"
+      },
+      "width": 6,
+      "height": 4
+    },
+    {
+      "section": "glance",
+      "id": "records-written",
+      "title": "Records written",
+      "description": "Creates, updates and deletes through the generated CRUD handlers in the range.",
+      "kind": "sql",
+      "sql": "SELECT count() AS \"Records written\"\nFROM product_events\nWHERE match(EventName, '_(created|updated|deleted)$') AND Timestamp \u003e= {from:DateTime64(9)} AND Timestamp \u003c {to:DateTime64(9)} AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, EnvId)) AND (empty({services:Array(String)}) OR has({services:Array(String)}, ServiceName))",
+      "trendSql": "SELECT toDate(Timestamp) AS day, count() AS \"Records written\"\nFROM product_events\nWHERE match(EventName, '_(created|updated|deleted)$') AND Timestamp \u003e= {from:DateTime64(9)} AND Timestamp \u003c {to:DateTime64(9)} AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, EnvId)) AND (empty({services:Array(String)}) OR has({services:Array(String)}, ServiceName))\nGROUP BY day ORDER BY day",
+      "display": {
+        "color": "cyan"
+      },
+      "unit": "count",
+      "width": 6,
+      "height": 4
+    },
+    {
+      "section": "users",
+      "id": "active-users-over-time",
+      "title": "Active users",
+      "description": "Distinct signed-in users per UTC day, and over the 7 days ending that day (the rolling weekly active users), drawn as areas.",
+      "kind": "sql",
+      "sql": "SELECT addDays(seen, offset) AS day, uniqExact(UserId) AS \"Weekly active (rolling 7 days)\",\n       uniqExactIf(UserId, offset = 0) AS \"Daily active\"\nFROM (\n    SELECT DISTINCT UserId, toDate(Timestamp) AS seen\n    FROM product_events\n    WHERE UserId != '' AND Timestamp \u003e= toStartOfDay({from:DateTime64(9)}) - INTERVAL 6 DAY AND Timestamp \u003c {to:DateTime64(9)} AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, EnvId)) AND (empty({services:Array(String)}) OR has({services:Array(String)}, ServiceName))\n)\nARRAY JOIN range(7) AS offset\nWHERE day \u003e= toDate({from:DateTime64(9)}) AND toDateTime(day) \u003c {to:DateTime64(9)}\nGROUP BY day ORDER BY day",
+      "minStep": "1d",
+      "display": {
+        "style": "area",
+        "colors": {
+          "Daily active": "blue",
+          "Weekly active (rolling 7 days)": "cyan"
+        }
+      },
+      "width": 12,
+      "height": 9
+    },
+    {
+      "section": "users",
+      "id": "new-vs-returning",
+      "title": "New vs returning users per day",
+      "description": "Each day's active users in exactly one class: new on the day of their first event, returning after it. First-seen is the first event in the 90 days before the end of the range (or since the start of a longer range), so a user idle for longer than that counts as new again on their return.",
+      "kind": "sql",
+      "sql": "SELECT a.day AS day,\n       countIf(a.day = f.first_day) AS \"New\",\n       countIf(a.day \u003e f.first_day) AS \"Returning\"\nFROM (\n    SELECT toStartOfDay(Timestamp) AS day, UserId\n    FROM product_events\n    WHERE UserId != '' AND Timestamp \u003e= {from:DateTime64(9)} AND Timestamp \u003c {to:DateTime64(9)} AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, EnvId)) AND (empty({services:Array(String)}) OR has({services:Array(String)}, ServiceName))\n    GROUP BY day, UserId\n) AS a\nINNER JOIN (\n    SELECT UserId, toStartOfDay(min(Timestamp)) AS first_day\n    FROM product_events\n    WHERE UserId != '' AND Timestamp \u003e= least({from:DateTime64(9)}, {to:DateTime64(9)} - INTERVAL 90 DAY) AND Timestamp \u003c {to:DateTime64(9)} AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, EnvId)) AND (empty({services:Array(String)}) OR has({services:Array(String)}, ServiceName))\n    GROUP BY UserId\n) AS f ON a.UserId = f.UserId\nGROUP BY day ORDER BY day",
+      "minStep": "1d",
+      "display": {
+        "style": "bars",
+        "stack": true,
+        "colors": {
+          "New": "amber",
+          "Returning": "blue"
+        }
+      },
+      "width": 12,
+      "height": 9
+    },
+    {
+      "section": "users",
+      "id": "most-active-users",
+      "title": "Most active users",
+      "description": "Signed-in users by product events in the range, with the days they were active and when they were last seen.",
+      "kind": "sql",
+      "sql": "SELECT UserId AS \"User\", count() AS \"Events\",\n       uniqExact(toDate(Timestamp)) AS \"Active days\",\n       uniqExact(EventName) AS \"Distinct events\",\n       formatDateTime(max(Timestamp), '%Y-%m-%d %H:%i') AS \"Last seen (UTC)\"\nFROM product_events\nWHERE UserId != '' AND Timestamp \u003e= {from:DateTime64(9)} AND Timestamp \u003c {to:DateTime64(9)} AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, EnvId)) AND (empty({services:Array(String)}) OR has({services:Array(String)}, ServiceName))\nGROUP BY UserId ORDER BY count() DESC, UserId LIMIT 25",
+      "width": 24,
+      "height": 9
+    },
+    {
+      "section": "activity",
+      "id": "records-by-entity",
+      "title": "Records written per entity",
+      "description": "The automatic CRUD product events (creates, updates and deletes together), one colour per entity, stacked: the top edge is every write.",
+      "kind": "sql",
+      "sql": "SELECT toStartOfInterval(Timestamp, toIntervalSecond({step:UInt32})) AS t,\n       replaceRegexpOne(EventName, '_(created|updated|deleted)$', '') AS entity,\n       count() AS records\nFROM product_events\nWHERE match(EventName, '_(created|updated|deleted)$') AND Timestamp \u003e= {from:DateTime64(9)} AND Timestamp \u003c {to:DateTime64(9)} AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, EnvId)) AND (empty({services:Array(String)}) OR has({services:Array(String)}, ServiceName))\nGROUP BY t, entity ORDER BY t",
+      "display": {
+        "style": "bars",
+        "stack": true,
+        "topN": 12
+      },
+      "width": 12,
+      "height": 9
+    },
+    {
+      "section": "activity",
+      "id": "actions-per-entity",
+      "title": "Creates, updates and deletes per entity",
+      "description": "The CRUD mix of each entity in the range: one bar per entity, a colour per action.",
+      "kind": "sql",
+      "sql": "SELECT replaceRegexpOne(EventName, '_(created|updated|deleted)$', '') AS entity,\n       countIf(endsWith(EventName, '_created')) AS \"Created\",\n       countIf(endsWith(EventName, '_updated')) AS \"Updated\",\n       countIf(endsWith(EventName, '_deleted')) AS \"Deleted\"\nFROM product_events\nWHERE match(EventName, '_(created|updated|deleted)$') AND Timestamp \u003e= {from:DateTime64(9)} AND Timestamp \u003c {to:DateTime64(9)} AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, EnvId)) AND (empty({services:Array(String)}) OR has({services:Array(String)}, ServiceName))\nGROUP BY entity ORDER BY count() DESC LIMIT 20",
+      "display": {
+        "style": "bars",
+        "stack": true,
+        "colors": {
+          "Created": "cyan",
+          "Deleted": "amber",
+          "Updated": "violet"
+        }
+      },
+      "width": 12,
+      "height": 9
+    },
+    {
+      "section": "activity",
+      "id": "top-pages",
+      "title": "Top pages",
+      "description": "page_viewed events by route, signed-in views against anonymous ones.",
+      "kind": "sql",
+      "sql": "SELECT Props['route'] AS route,\n       countIf(UserId != '') AS \"Signed in\",\n       countIf(UserId = '') AS \"Anonymous\"\nFROM product_events\nWHERE EventName = 'page_viewed' AND Timestamp \u003e= {from:DateTime64(9)} AND Timestamp \u003c {to:DateTime64(9)} AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, EnvId)) AND (empty({services:Array(String)}) OR has({services:Array(String)}, ServiceName))\nGROUP BY route ORDER BY count() DESC LIMIT 15",
+      "display": {
+        "style": "bars",
+        "stack": true,
+        "colors": {
+          "Anonymous": "slate",
+          "Signed in": "blue"
+        }
+      },
+      "width": 12,
+      "height": 9
+    },
+    {
+      "section": "activity",
+      "id": "events-by-name",
+      "title": "Events by name",
+      "description": "The most frequent product events in the range, automatic or tracked by the app, signed in against anonymous.",
+      "kind": "sql",
+      "sql": "SELECT EventName AS event,\n       countIf(UserId != '') AS \"Signed in\",\n       countIf(UserId = '') AS \"Anonymous\"\nFROM product_events\nWHERE Timestamp \u003e= {from:DateTime64(9)} AND Timestamp \u003c {to:DateTime64(9)} AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, EnvId)) AND (empty({services:Array(String)}) OR has({services:Array(String)}, ServiceName))\nGROUP BY EventName ORDER BY count() DESC LIMIT 20",
+      "display": {
+        "style": "bars",
+        "stack": true,
+        "colors": {
+          "Anonymous": "slate",
+          "Signed in": "blue"
+        }
+      },
+      "width": 12,
+      "height": 9
+    },
+    {
+      "section": "retention",
+      "id": "weekly-retention",
+      "title": "Weekly retention by cohort",
+      "description": "One row per weekly cohort: users grouped by the week (Monday, UTC) of their first event, over the 12 weeks before the end of the range (whatever range is selected), with the cohort's size. Each cell is the share of the cohort active again N weeks later (W1 is the week after the cohort's), darker for more. A week that has not happened yet is empty. A user's first event is their first in the 90 days before the end of the range, so one idle for longer joins the cohort of their return.",
+      "kind": "sql",
+      "sql": "SELECT concat(toString(cohort), ' · ', toString(count()), if(count() = 1, ' user', ' users')) AS \"Cohort (week of)\",\n       if(cohort + INTERVAL 1 WEEK \u003c= toMonday({to:DateTime64(9)}), round(1 * countIf(has(weeks, cohort + INTERVAL 1 WEEK)) / count(), 4), NULL) AS \"W1\",\n       if(cohort + INTERVAL 2 WEEK \u003c= toMonday({to:DateTime64(9)}), round(1 * countIf(has(weeks, cohort + INTERVAL 2 WEEK)) / count(), 4), NULL) AS \"W2\",\n       if(cohort + INTERVAL 3 WEEK \u003c= toMonday({to:DateTime64(9)}), round(1 * countIf(has(weeks, cohort + INTERVAL 3 WEEK)) / count(), 4), NULL) AS \"W3\",\n       if(cohort + INTERVAL 4 WEEK \u003c= toMonday({to:DateTime64(9)}), round(1 * countIf(has(weeks, cohort + INTERVAL 4 WEEK)) / count(), 4), NULL) AS \"W4\",\n       if(cohort + INTERVAL 5 WEEK \u003c= toMonday({to:DateTime64(9)}), round(1 * countIf(has(weeks, cohort + INTERVAL 5 WEEK)) / count(), 4), NULL) AS \"W5\",\n       if(cohort + INTERVAL 6 WEEK \u003c= toMonday({to:DateTime64(9)}), round(1 * countIf(has(weeks, cohort + INTERVAL 6 WEEK)) / count(), 4), NULL) AS \"W6\",\n       if(cohort + INTERVAL 7 WEEK \u003c= toMonday({to:DateTime64(9)}), round(1 * countIf(has(weeks, cohort + INTERVAL 7 WEEK)) / count(), 4), NULL) AS \"W7\",\n       if(cohort + INTERVAL 8 WEEK \u003c= toMonday({to:DateTime64(9)}), round(1 * countIf(has(weeks, cohort + INTERVAL 8 WEEK)) / count(), 4), NULL) AS \"W8\",\n       if(cohort + INTERVAL 9 WEEK \u003c= toMonday({to:DateTime64(9)}), round(1 * countIf(has(weeks, cohort + INTERVAL 9 WEEK)) / count(), 4), NULL) AS \"W9\",\n       if(cohort + INTERVAL 10 WEEK \u003c= toMonday({to:DateTime64(9)}), round(1 * countIf(has(weeks, cohort + INTERVAL 10 WEEK)) / count(), 4), NULL) AS \"W10\",\n       if(cohort + INTERVAL 11 WEEK \u003c= toMonday({to:DateTime64(9)}), round(1 * countIf(has(weeks, cohort + INTERVAL 11 WEEK)) / count(), 4), NULL) AS \"W11\"\nFROM (\n    SELECT UserId, min(week) AS cohort, groupUniqArray(week) AS weeks\n    FROM (\n        SELECT UserId, toMonday(Timestamp) AS week\n        FROM product_events\n        WHERE UserId != '' AND Timestamp \u003e= {to:DateTime64(9)} - INTERVAL 90 DAY AND Timestamp \u003c {to:DateTime64(9)} AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, EnvId)) AND (empty({services:Array(String)}) OR has({services:Array(String)}, ServiceName))\n    )\n    GROUP BY UserId\n)\nWHERE cohort \u003e= toMonday({to:DateTime64(9)}) - INTERVAL 11 WEEK\nGROUP BY cohort ORDER BY cohort",
+      "display": {
+        "style": "heatmap",
+        "color": "blue"
+      },
+      "unit": "percent",
+      "width": 24,
+      "height": 11
+    },
+    {
+      "section": "retention",
+      "id": "retention-curve",
+      "title": "Retention by cohort: weeks 1, 2, 4 and 8",
+      "description": "For each weekly cohort (users by the Monday, UTC, of their first event, the 12 weeks before the end of the range), the share active again 1, 2, 4 and 8 weeks later. A week that has not happened yet is a gap, not a drop.",
+      "kind": "sql",
+      "sql": "SELECT cohort,\n       if(cohort + INTERVAL 1 WEEK \u003c= toMonday({to:DateTime64(9)}), round(1 * countIf(has(weeks, cohort + INTERVAL 1 WEEK)) / count(), 4), NULL) AS \"Week 1\",\n       if(cohort + INTERVAL 2 WEEK \u003c= toMonday({to:DateTime64(9)}), round(1 * countIf(has(weeks, cohort + INTERVAL 2 WEEK)) / count(), 4), NULL) AS \"Week 2\",\n       if(cohort + INTERVAL 4 WEEK \u003c= toMonday({to:DateTime64(9)}), round(1 * countIf(has(weeks, cohort + INTERVAL 4 WEEK)) / count(), 4), NULL) AS \"Week 4\",\n       if(cohort + INTERVAL 8 WEEK \u003c= toMonday({to:DateTime64(9)}), round(1 * countIf(has(weeks, cohort + INTERVAL 8 WEEK)) / count(), 4), NULL) AS \"Week 8\"\nFROM (\n    SELECT UserId, min(week) AS cohort, groupUniqArray(week) AS weeks\n    FROM (\n        SELECT UserId, toMonday(Timestamp) AS week\n        FROM product_events\n        WHERE UserId != '' AND Timestamp \u003e= {to:DateTime64(9)} - INTERVAL 90 DAY AND Timestamp \u003c {to:DateTime64(9)} AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, EnvId)) AND (empty({services:Array(String)}) OR has({services:Array(String)}, ServiceName))\n    )\n    GROUP BY UserId\n)\nWHERE cohort \u003e= toMonday({to:DateTime64(9)}) - INTERVAL 11 WEEK\nGROUP BY cohort ORDER BY cohort",
+      "minStep": "7d",
+      "display": {
+        "colors": {
+          "Week 1": "blue",
+          "Week 2": "cyan",
+          "Week 4": "violet",
+          "Week 8": "fuchsia"
+        }
+      },
+      "unit": "percent",
+      "width": 24,
+      "height": 8
+    }
+  ]
+}

@@ -1,0 +1,4229 @@
+# The registry of every benefit forge gives a project — the one source of
+# docs/benefits.md and the README's "Everything included" table (and the
+# landing page, which snapshots this file). Edit it, then run
+# `task docs:benefits`.
+#
+# Schema (internal/benefits/benefits.go is authoritative; Validate enforces it):
+#
+#   categories[]  id, title, intro           ordered; rendering follows it
+#   benefits[]    id                         kebab-case, unique; the docs anchor
+#                 category                   a categories[].id
+#                 title                      <= 6 words (a README table cell)
+#                 claim                      one sentence, user benefit first, true today
+#                 status                     enforced (default) | recorded | in-progress
+#                 availability               forge | hosted | reliant
+#                 headline                   in the README table; never when in-progress
+#                 use, why, docs             optional; use/why are markdown, docs an https URL
+#                 evidence[]                 >= 1, each item exactly ONE of:
+#                   command:  <cobra path under `forge`> [--flag]
+#                   analyzer: --<forge lint flag>
+#                   marker:   forge:<name>          (a markerSpecs() name)
+#                   skill:    <embedded skill path>
+#                   library:  pkg/<name>
+#                   path:     <file or dir in this repo>
+#                   external: <control-plane|reliant|landing-page>:<path>
+#                 rules[]                    lint families: {id, lane, bug_class}; lane is
+#                                            the `forge lint` flag that runs the rule
+#                                            alone, or "" when only a bare `forge lint` does
+#
+# internal/cli's TestBenefitsEvidenceExists resolves every evidence item
+# against the binary and this repo; TestEveryGradableRuleIsABenefit holds the
+# rules lists equal to the rules `lint.rules` can grade.
+
+categories:
+  - id: build
+    title: Build
+    intro: >-
+      Services, workers, jobs, operators, CLIs and frontends, scaffolded from a
+      proto and a migration. What forge writes on the first commit is what runs
+      in production, configured differently, and everything it scaffolds is
+      yours to edit.
+  - id: data
+    title: Data
+    intro: >-
+      SQL is the schema language: the applied migrations are the single source
+      of truth, and the entities, ORM, stores and CRUD are projections of them,
+      so there is one declaration of every table. Forge checks each migration
+      against what a running release and a populated table can survive before it
+      ships.
+  - id: test
+    title: Test
+    intro: >-
+      Three test tiers with the subject real at every tier: generated mocks for
+      unit tests, a real Postgres for integration tests and a running stack for
+      end-to-end tests. Slow tests say so, so the fast tier stays fast.
+  - id: dev
+    title: Dev
+    intro: >-
+      One command brings up the whole stack on your machine, under hot reload,
+      with every log in one directory. Each git worktree gets a stack of its
+      own, so parallel agents never share a port or a database.
+  - id: guardrails
+    title: Guardrails
+    intro: >-
+      `forge lint` is one report-only gate over forge's own analyzers and the
+      standard linters, with one verdict: it writes nothing unless `--fix`, and
+      every fixer's rewrite is type-checked and taken back if it breaks its
+      package. Each forge rule names the bug class it prevents, and the
+      lint-family entries below list every rule `lint.rules` can grade with the
+      flag that runs it alone; every lane except the opt-in ones also runs in a
+      bare `forge lint`. A rule new in a release warns before it gates. Related
+      checks outside `forge lint`: `forge doctor`, `forge ci verify-generated`,
+      `forge ci test-budget`, `forge ci vuln-scan` and `forge ci validate-kcl`.
+  - id: security
+    title: Security
+    intro: >-
+      Production-grade defaults on the first commit: auth that fails closed,
+      errors that never leak internals, secrets that never sit in a `.env` file,
+      and scanned dependencies. Authentication is a middleware: an interceptor
+      validates the credential and puts the claims on the context. Forge
+      authenticates; it does not authorize, and says so: what a caller may do is
+      the handler's logic.
+  - id: ship
+    title: Ship
+    intro: >-
+      Any number of environments, each declared as a directory of KCL. A release
+      is built once, recorded as an immutable, content-addressed set of
+      artifacts and promoted between environments by that record, so what ran in
+      staging is what runs in prod. This is the part of Forge that most reduces
+      deploy-day toil.
+  - id: host
+    title: Host
+    intro: >-
+      Optional Reliant hosting runs what forge builds: services, workers and
+      jobs, managed Postgres, static sites behind a CDN and custom domains, with
+      no cluster of your own. Rebinding an environment to a cluster you run is a
+      one-line change.
+  - id: run
+    title: Run
+    intro: >-
+      Logs, traces and metrics on every boundary from day 0, the same signals
+      locally and in production, and a post-deploy check that proves a release
+      good from its telemetry. The signals are OpenTelemetry and the app never
+      learns the backend: it reads the standard `OTEL_*` variables.
+  - id: agents
+    title: Agents
+    intro: >-
+      Forge is built to make an LLM agent effective in a project, and several
+      features exist only for that: its whole surface prints from the binary,
+      its skills ship inside it and match the version in use, and a defect in
+      forge is one command to report. When a skill and the binary disagree, the
+      binary is right.
+
+benefits:
+  - id: entity-from-one-marker
+    category: build
+    title: One marker, a whole entity
+    claim: >-
+      Mark a proto message `// forge:entity` and one `forge scaffold` writes the
+      create-table migration, the CRUD rpcs, the managed fields, the ORM
+      projection, a lifecycle test, the list, detail, create and edit pages, nav
+      and mock data.
+    availability: forge
+    headline: true
+    use: "`// forge:entity` above `message X`, then `forge scaffold`."
+    evidence:
+      - marker: forge:entity
+      - command: scaffold
+      - skill: db/birth
+      - command: scaffold entity
+      - skill: db
+
+  - id: proto-to-everything
+    category: build
+    title: Proto in, full stack out
+    claim: >-
+      One proto definition generates Connect handlers, CRUD wiring, typed
+      frontend hooks and tests, so API, server and UI cannot disagree.
+    availability: forge
+    headline: true
+    use: >-
+      Declare the rpc in the proto, then `forge scaffold rpc <svc> <Name>` and
+      `forge generate`.
+    why: >-
+      An rpc's logic is a `*Service` method in
+      `internal/handlers/<svc>/rpc_<name>.go`; the scaffolded method is
+      correctly signed and comes with a self-destructing test row, so nothing is
+      hand-written to the stub.
+    evidence:
+      - command: generate
+      - library: pkg/crud
+      - library: pkg/mountkit
+
+  - id: scaffold-verbs
+    category: build
+    title: Scaffold every shape
+    claim: >-
+      `forge scaffold` births services, rpcs, entities, workers, operators,
+      CRDs, adapters, webhooks, packages, binaries and frontends in the
+      project's conventions, and is a no-op when nothing is missing.
+    availability: forge
+    why: >-
+      Service (Connect RPC on the server), worker (in the server's lifecycle),
+      binary (its own `cmd/<bin>` and Deployment) and operator
+      (controller-runtime with CRDs) each have a scaffold and a decision table
+      in the `binaries` and `services` skills.
+    evidence:
+      - command: scaffold service
+      - command: scaffold rpc
+      - command: scaffold entity
+      - command: scaffold worker
+      - command: scaffold operator
+      - command: scaffold webhook
+      - command: scaffold adapter
+      - command: scaffold frontend
+
+  - id: owned-seams-disown
+    category: build
+    title: Every generated file has an exit
+    claim: >-
+      Generated code sits beside owned seams you edit freely, and `forge project
+      disown` permanently hands any generated file to you.
+    availability: forge
+    evidence:
+      - command: project disown
+      - command: project rescaffold
+      - command: project scaffolded
+
+  - id: project-upgrade
+    category: build
+    title: Guided forge upgrades
+    claim: >-
+      `forge project upgrade` moves a project to a newer forge and applies every
+      mechanical fix for the version range, and `forge project upgrade
+      list|apply` tracks the one-time playbooks for the rest.
+    availability: forge
+    evidence:
+      - command: project upgrade
+      - command: project upgrade list
+      - command: project upgrade apply
+
+  - id: adopt-existing-project
+    category: build
+    title: Adopt an existing app
+    claim: >-
+      An app that already exists, in any language, keeps its code: your agent
+      declares its Dockerfile in `forge.yaml` and `deploy/kcl/` from the
+      `adopt` skill's templates, then works in tiers you can stop after (ship
+      it, see it with OpenTelemetry, harden it with gated promotion and CI, and
+      move pieces onto forge's Go stack only when that pays).
+      `forge project new --in-place` and `forge project migrate import` bring an
+      existing repository onto forge without a rewrite, with migration skills for
+      service, CLI and library projects.
+    availability: forge
+    evidence:
+      - command: project new
+      - command: project migrate import
+      - skill: adopt
+      - skill: migration
+      - skill: migration-service
+      - skill: migration-cli
+      - skill: migration-upgrade
+
+  - id: adopt-frontend
+    category: build
+    title: Adopt any Vite or Next app
+    claim: >-
+      An existing Vite or Next.js app moves under `frontends/` (or is named by a
+      KCL path) and forge generates into it with one writer per `src/gen`, with
+      an opt-in pnpm workspace for sharing code between web and mobile.
+    availability: forge
+    evidence:
+      - skill: frontend-workspaces
+      - command: project new
+      - skill: frontend/adopt
+
+  - id: rest-openapi
+    category: build
+    title: REST and OpenAPI, free
+    claim: >-
+      `api.openapi: true` emits OpenAPI 3 from the proto in the buf pipeline and
+      `connectrpc.com/vanguard` transcodes REST URLs onto the same Connect
+      handlers at runtime, with no parallel codegen.
+    availability: forge
+    evidence:
+      - skill: api-openapi
+      - skill: api-rest
+      - command: api curl
+      - skill: api/http
+
+  - id: service-catalog
+    category: build
+    title: Browsable API inventory
+    claim: >-
+      `forge generate` writes `gen/forge_service_catalog.json`
+      (`forge.dev/service-catalog/v1`): processes, the proto services each
+      serves, methods with auth and idempotency, and components with source
+      locations, with no server needed.
+    availability: forge
+    evidence:
+      - library: pkg/servicecatalog
+      - path: docs/service-catalog.md
+
+  - id: lib-validate
+    category: build
+    title: Request validation at the edge
+    claim: >-
+      `buf.validate` rules in the proto are enforced on every rpc by an
+      interceptor, so request validation is declared once, beside the field.
+    availability: forge
+    evidence:
+      - library: pkg/validate
+
+  - id: lib-config
+    category: build
+    title: Typed config from proto
+    claim: >-
+      Configuration is a proto message projected into KCL and into a typed Go
+      struct, so no component parses its own environment.
+    availability: forge
+    evidence:
+      - library: pkg/config
+
+  - id: web-runtime
+    category: build
+    title: Frontend runtime twin of forge/pkg
+    claim: >-
+      `@reliantlabs/forge-web-runtime` gives a frontend typed errors with a
+      total `.reason` vocabulary, auth and always-on `traceparent` interceptors,
+      the app shell and a `<Resource>` table with loading, error, empty and data
+      states and cursor pagination.
+    availability: forge
+    evidence:
+      - path: web-runtime
+      - skill: frontend-runtime
+      - skill: frontend-runtime/transport
+      - skill: frontend-runtime/resource
+
+  - id: frontend-runtime-config
+    category: build
+    title: One bundle, every env
+    claim: >-
+      Frontend config is a typed `config_gen.ts` read at runtime from a per-env
+      `config.js`, so one bundle promotes unchanged, a key not in the schema
+      gets a did-you-mean, and build-time env inlining is a lint error.
+    availability: forge
+    use: >-
+      Read config through the generated `config_gen.ts`; the platform writes
+      `<basePath>/config.js` per env.
+    evidence:
+      - analyzer: --conventions
+      - skill: frontend/runtime-config
+      - skill: frontend-runtime/config
+
+  - id: workers-lifecycle
+    category: build
+    title: Workers with graceful drain
+    claim: >-
+      `forge scaffold worker` writes a supervised component sharing the server's
+      typed Deps and graceful shutdown, with a lifecycle test.
+    availability: forge
+    evidence:
+      - command: scaffold worker
+      - library: pkg/lifecyclekit
+
+  - id: lib-cron-lease
+    category: build
+    title: Coordinated cron and singletons
+    claim: >-
+      `pkg/cronkit` runs each scheduled tick at most once across replicas that
+      share its claim store (a missed tick is not retried), with the same
+      scheduled time on every replica, and `pkg/lease` gives a named singleton
+      over Postgres advisory locks with hot standby.
+    availability: forge
+    use: '`forge scaffold worker <name> --kind cron --schedule "*/5 * * * *"`'
+    why: >-
+      It removes the "the nightly job ran three times" bug: every replica sees
+      the same scheduled time (`cronkit.TickTime`).
+    evidence:
+      - library: pkg/cronkit
+      - library: pkg/lease
+      - skill: workers
+
+  - id: operators-crds
+    category: build
+    title: Operators and CRDs scaffolded
+    claim: >-
+      `forge scaffold operator` and `forge scaffold crd` give a reconciler with
+      `pkg/controller` runtime helpers, and a StatefulSet whose declared volume
+      grew is converged by a pre-rollout resize job.
+    availability: forge
+    evidence:
+      - command: scaffold operator
+      - library: pkg/controller
+      - library: pkg/appkit
+      - library: pkg/stsresize
+      - library: pkg/cmdkit
+      - command: scaffold crd
+      - skill: binaries
+      - skill: deploy/statefulset-volumes
+
+  - id: cli-library-kinds
+    category: build
+    title: CLIs and libraries too
+    claim: >-
+      `forge project new --kind cli` gives a cobra binary on `pkg/cmdkit` with
+      per-binary typed config loadable from a file, and `--kind library` gives a
+      Go module with no server.
+    availability: forge
+    evidence:
+      - command: project new
+      - library: pkg/cmdkit
+      - skill: binaries
+      - skill: binaries/config-files
+      - skill: binaries/subtrees
+
+  - id: adapters
+    category: build
+    title: Vendor-neutral outbound adapters
+    claim: >-
+      `forge scaffold adapter` writes one narrow boundary per third-party
+      system, and lint keeps it outbound-only.
+    availability: forge
+    evidence:
+      - command: scaffold adapter
+      - analyzer: --contract
+
+  - id: mobile-expo
+    category: build
+    title: Mobile apps with Expo
+    claim: >-
+      `forge scaffold frontend --kind mobile` produces an Expo React Native app
+      on the same generated Connect hooks, with an optional `ui-native`
+      workspace package.
+    availability: forge
+    why: >-
+      The app gets `app/` screens and `app:background` / `app:foreground`
+      events.
+    evidence:
+      - command: scaffold frontend
+      - skill: ui-native-package
+
+  - id: lib-money
+    category: build
+    title: Correct money type
+    claim: >-
+      `forge/pkg/money` represents amounts as integer minor units plus currency,
+      so no float rounding ever touches a price.
+    availability: forge
+    evidence:
+      - library: pkg/money
+
+  - id: lib-approval
+    category: build
+    title: Human approval queue
+    claim: >-
+      `pkg/approval` holds items an agent proposed until a person approves or
+      rejects them, expires the undecided at their deadline and hands each
+      decided item to the app's follow-up exactly once.
+    availability: forge
+    evidence:
+      - library: pkg/approval
+
+  - id: sql-first-schema
+    category: data
+    title: SQL migrations are the schema
+    claim: >-
+      You write plain SQL migrations; forge applies them to a real ephemeral
+      Postgres and projects the entity structs, typed ORM, per-entity stores and
+      CRUD wiring from the result, so the code cannot disagree with the
+      database.
+    availability: forge
+    headline: true
+    use: >-
+      `forge generate`; `COMMENT ON TABLE t IS 'forge:no-entity'` opts a table
+      out.
+    why: >-
+      Forge runs `db/migrations/*.up.sql` in order against a real ephemeral
+      Postgres and generates from the result.
+    evidence:
+      - library: pkg/schemadef
+      - library: pkg/orm
+      - command: db introspect
+      - skill: db/generated-orm
+      - skill: db/store
+      - skill: db
+
+  - id: migration-safety
+    category: data
+    title: Migration safety checks
+    claim: >-
+      Every migration declares whether the previous release survives it, and
+      `forge lint --migration-safety` refuses an unsafe column add, a statement
+      that cannot run in a transaction, a colliding version or an undeclared
+      rollback break before it ships.
+    availability: forge
+    headline: true
+    use: >-
+      Start each migration with `-- forge:backward-compatible — <why>` or `--
+      forge:breaks-rollback <why>`; run `forge lint --migration-safety`, or
+      `forge ci migration-safety` in CI. A pragma in the migration file
+      suppresses one rule beside the SQL it is about.
+    why: >-
+      A migration that a populated table or the previous release cannot survive
+      passes every test on a fresh database and fails on the first real one.
+    evidence:
+      - command: lint --migration-safety
+      - command: ci migration-safety
+      - analyzer: --migration-safety
+      - path: internal/linter/migrationlint
+      - skill: db
+      - path: internal/linter/migrationlint/compat_declaration.go
+      - path: internal/linter/migrationlint/add_column.go
+      - path: internal/linter/migrationlint/transaction_block.go
+      - path: internal/cli/lint/lint_rules.go
+    rules:
+      - id: no-down-migration
+        lane: --migration-safety
+        bug_class: >-
+          A down migration claims to undo a release and cannot: by the time
+          anyone would run it, rows are in the new shape and other services have
+          read them
+      - id: duplicate-migration-version
+        lane: --migration-safety
+        bug_class: >-
+          Two files claiming one version, so whichever reached a shared database
+          first leaves the other permanently unapplied
+      - id: non-timestamp-migration-version
+        lane: --migration-safety
+        bug_class: >-
+          Sequential numbering makes parallel branches collide; a UTC timestamp
+          cannot without two allocations in one second
+      - id: migration-version-below-merged-head
+        lane: --migration-safety
+        bug_class: >-
+          A new migration numbered at or below the default branch's head is
+          invisible: every already-migrated database never runs it
+      - id: destructive-change
+        lane: --migration-safety
+        bug_class: >-
+          A `DROP`/`TRUNCATE`-class statement; split it into data-preserving
+          steps or allow it by `forge:allow-destructive`
+      - id: unsafe-add-not-null-column
+        lane: --migration-safety
+        bug_class: >-
+          `ADD COLUMN … NOT NULL` without a default fails on a populated table
+      - id: set-not-null-without-backfill
+        lane: --migration-safety
+        bug_class: >-
+          `SET NOT NULL` with no earlier backfill fails on a populated table
+      - id: volatile-default
+        lane: --migration-safety
+        bug_class: >-
+          A volatile `DEFAULT` in `ADD COLUMN` can rewrite and lock a populated
+          table
+      - id: non-transactional-statement
+        lane: --migration-safety
+        bug_class: >-
+          `CREATE INDEX CONCURRENTLY` and kin cannot run in a transaction block;
+          the statement must be alone in its file
+      - id: enum-value-used-before-commit
+        lane: --migration-safety
+        bug_class: >-
+          Using an enum value the same file adds fails with SQLSTATE 55P04
+      - id: invalid-adopts-directive
+        lane: --migration-safety
+        bug_class: >-
+          A `-- forge:adopts` baseline declaration the migrator would refuse at
+          boot on every database
+      - id: migration-compat-conflict
+        lane: --migration-safety
+        bug_class: >-
+          A migration that declares both `forge:backward-compatible` and
+          `forge:breaks-rollback`
+      - id: migration-compat-reason
+        lane: --migration-safety
+        bug_class: >-
+          A compatibility declaration with no reason, so the rollback decision
+          that reads it has nothing to go on
+      - id: migration-compat-undeclared
+        lane: --migration-safety
+        bug_class: >-
+          A migration that says neither `forge:backward-compatible` nor
+          `forge:breaks-rollback`, which a rollback decision and the release
+          guard read
+
+  - id: managed-postgres-backups
+    category: data
+    title: Backups and point-in-time restore
+    claim: >-
+      A hosted database is built for continuous WAL archiving and a daily base
+      backup to object storage, and restoring is a declaration:
+      a new `ManagedDatabase` with `restore = {sourceDatabase, pointInTime}`
+      boots from the source's backups replayed to that moment.
+    availability: hosted
+    use: >-
+      `forge.ManagedDatabase { spec.restore = forge.DatabaseRestore {
+      sourceDatabase = "db", pointInTime = "2026-11-10T14:05:00Z" } }`, then
+      `forge env deploy <env>`.
+    why: >-
+      A restore applies once, at creation, and never overwrites the source, so a
+      mistaken one cannot destroy the original; there is no restore button or
+      command. Each database's archive is written by its own workload identity
+      with access to its own stream only. Claimable (unclaimed) databases are
+      not backed up, and a database reports that its backups are not active
+      until the environment's backup store is ready: read deploy status to see
+      whether yours are.
+    evidence:
+      - external: control-plane:internal/operators/manageddatabase/backup.go
+      - external: control-plane:internal/operators/manageddatabase/backup_streams.go
+      - external: control-plane:internal/operators/manageddatabase/backup_identity.go
+      - external: control-plane:internal/operators/manageddatabase/backupgcs
+      - external: control-plane:deploy/kcl/lib/mdb_backups.k
+      - external: control-plane:deploy/kcl/lib/hosted_deploy.k
+      - path: pkg/deploy/v1alpha1/manageddatabase_types.go
+      - path: kcl/tiers/tiers_gen.k
+
+  - id: schema-behavior-from-columns
+    category: data
+    title: Behavior from real columns
+    claim: >-
+      `created_at` and `updated_at` columns give managed timestamps, a
+      time-typed `deleted_at` gives soft delete and text columns give generated
+      list search, so behaviour comes from the schema rather than from
+      annotations.
+    availability: forge
+    use: >-
+      `COMMENT ON COLUMN t.deleted_at IS 'forge:no-soft-delete'` makes
+      `deleted_at` a plain archive stamp.
+    evidence:
+      - library: pkg/orm
+
+  - id: write-policy-markers
+    category: data
+    title: Write policy beside the column
+    claim: >-
+      `forge:read-only`, `forge:computed`, `forge:generated`, `forge:guards`,
+      `forge:immutable`, `forge:version` (optimistic concurrency) and
+      `forge:append-only` declare who may write a column, and lint makes a field
+      nothing writes a build failure.
+    availability: forge
+    evidence:
+      - command: project annotations
+      - analyzer: --read-only-fields
+      - skill: db/write-policy
+
+  - id: append-only-ledgers
+    category: data
+    title: Append-only ledgers, enforced twice
+    claim: >-
+      `forge:append-only` removes Update/Delete from the store and installs a
+      trigger rejecting every UPDATE and DELETE.
+    availability: forge
+    evidence:
+      - skill: db/append-only
+
+  - id: tx-after-commit
+    category: data
+    title: Transactions state their correctness
+    claim: >-
+      `RunTx` has no default isolation — SERIALIZABLE with retry or a lock under
+      READ COMMITTED, never both — and `orm.AfterCommit` holds side effects
+      until commit.
+    availability: forge
+    use: "forge fix tx-isolation"
+    evidence:
+      - library: pkg/orm
+      - analyzer: --conventions
+      - command: fix tx-isolation
+      - skill: service-layer/transactions
+
+  - id: never-waiting-migrations
+    category: data
+    title: Migrations that never wedge prod
+    claim: >-
+      A migration never waits for a lock without a limit (`lock_timeout` 5s,
+      five attempts with backoff, `statement_timeout` 30m, overridable per
+      file), and `CREATE INDEX CONCURRENTLY` cleans up an invalid index, so one
+      slow reader plus one `ALTER TABLE` is not an outage.
+    availability: forge
+    use: >-
+      `-- forge:lock-timeout` and `-- forge:statement-timeout` override the
+      limits for one file.
+    evidence:
+      - command: db migrate up
+      - library: pkg/migratekit
+      - skill: db/migration-timeouts
+      - skill: db/deploy-migrations
+
+  - id: migration-tooling
+    category: data
+    title: Migration lifecycle commands
+    claim: >-
+      `forge db migration new` allocates a timestamp version, `forge db
+      migration rebase` re-versions a branch's migrations after everything
+      merged, and `forge db migrate` and `forge db squash` apply, inspect and
+      compact them.
+    availability: forge
+    evidence:
+      - command: db migration new
+      - command: db migration rebase
+      - command: db migrate status
+      - command: db squash
+      - library: pkg/migratekit
+      - skill: db/versioning
+
+  - id: seed-data
+    category: data
+    title: Realistic seed data
+    claim: >-
+      `forge db seed apply` materializes deterministic, foreign-key-coherent
+      rows from the applied schema, satisfying CHECKs, UNIQUEs, composite keys
+      and status lifecycles, and learns your nouns from `db/seeds/vocab.yaml`.
+    availability: forge
+    use: "`forge db seed apply|reset|status`"
+    evidence:
+      - command: db seed apply
+      - command: db seed reset
+      - library: pkg/seedplan
+      - skill: db/seeding
+      - command: db seed status
+
+  - id: dev-db-recovery
+    category: data
+    title: Wedged dev DB recovers
+    claim: >-
+      `forge db migrate force` repairs and clears dirty migration state, and
+      `forge db reset` drops, recreates, migrates and seeds a dev database (dev
+      only).
+    availability: forge
+    evidence:
+      - command: db migrate force
+      - command: db reset
+      - skill: db/recovery
+
+  - id: db-dashboards-privileges
+    category: data
+    title: Dashboards bounded by DB privileges
+    claim: >-
+      Dashboard panels read through a `forge_dash` role granted exactly their
+      columns by migration, with row cap, timeout and concurrency limit.
+    availability: forge
+    evidence:
+      - library: pkg/dbbrowse
+      - library: pkg/dbgrants
+      - skill: db/dashboards
+
+  - id: object-storage-bucket
+    category: data
+    title: Object storage per env
+    claim: >-
+      Declare a `forge.Bucket` per env (MinIO in dev, any S3-compatible bucket
+      elsewhere) and `pkg/blobstore` presigns uploads that go from the browser
+      straight to the bucket, so file bytes never pass through your API.
+    availability: forge
+    evidence:
+      - library: pkg/blobstore
+      - skill: storage/blobstore
+
+  - id: managed-buckets
+    category: data
+    title: Managed object storage
+    claim: >-
+      A declared `forge.Bucket` becomes a platform-owned bucket in hosted envs
+      (MinIO in dev), with credentials and CORS origins managed for you.
+    availability: hosted
+    evidence:
+      - external: control-plane:internal/operators/managedbucket
+      - external: control-plane:internal/operators/workload/bucket.go
+
+  - id: managed-postgres-restore-drill
+    category: data
+    title: Restores are drilled, not assumed
+    claim: >-
+      An automated drill takes a real backup, destroys the cluster and volumes,
+      restores to a timestamp, and asserts rows before it came back and rows
+      after it did not.
+    availability: hosted
+    why: >-
+      The first drill attempt failed ("Expected empty archive") because a
+      restored cluster archived into its source's stream; each restore now gets
+      its own stream (TestSecondRestoreGetsItsOwnStream).
+    evidence:
+      - external: control-plane:internal/operators/manageddatabase/restore_drill_integration_test.go
+
+  - id: pgtest-real-postgres
+    category: test
+    title: Real Postgres in every test
+    claim: >-
+      Database tests run against a real embedded Postgres shared machine-wide,
+      each test on its own copy of a migrated template, with no Docker and no
+      database mocks, so they belong in the fast tier.
+    availability: forge
+    headline: true
+    use: "`testkit.NewPostgresDB(t)`, or `pkg/pgtest` directly."
+    evidence:
+      - library: pkg/pgtest
+      - library: pkg/testkit
+      - skill: testing
+
+  - id: generated-mocks
+    category: test
+    title: A generated mock per interface
+    claim: >-
+      Every interface in a package's `contract.go` gets a recording mock in
+      `mock_gen.go`, configured per method by field, so unit tests never
+      hand-roll a fake.
+    availability: forge
+    headline: true
+    use: >-
+      Set `MockService.<Method>Func` in a test; `forge generate` keeps the mock
+      in step with the interface.
+    evidence:
+      - library: pkg/contractkit
+      - path: internal/generator/contract
+      - skill: contracts
+      - command: fix harness-mocks
+
+  - id: test-tiers
+    category: test
+    title: Three tiers, real subject
+    claim: >-
+      Unit tests use the real subject plus generated mocks, integration tests a
+      real migrated Postgres and end-to-end tests a running dev stack, so the
+      subject under test stays real at every tier.
+    availability: forge
+    use: >-
+      `task test:short -- ./internal/<pkg>/...` while iterating, `task test`
+      once at the end, `task test:integration`, `task test:e2e`.
+    evidence:
+      - skill: testing
+
+  - id: slow-test-enforcement
+    category: test
+    title: Fast test tier stays fast
+    claim: >-
+      A test that execs a tool, drives a container or dials the network calls
+      `testkit.Slow` and skips under `-short`, and `forge lint --slow-tests`
+      fails one that does not, so the fast tier stays fast.
+    availability: forge
+    use: >-
+      `testkit.Slow(t, "<why>", testkit.Inputs("deploy/**"))` first thing in the
+      test.
+    why: >-
+      A plain `if testing.Short() { t.Skip(...) }` also counts. Two guards hold
+      the line because neither sees everything: `forge lint --slow-tests` before
+      a test ever runs, and `go test -short -json ./... | forge ci test-budget`
+      after.
+    evidence:
+      - command: lint --slow-tests
+      - path: internal/linter/slowtest
+      - library: pkg/testkit
+
+  - id: cache-soundness
+    category: test
+    title: No stale cached passes
+    claim: >-
+      A test whose child process reads repo files must skip under `-short` or
+      open those inputs itself, so Go's test cache cannot replay a PASS after
+      the edit that broke it.
+    availability: forge
+    why: >-
+      `forge-slow-test-inputs` reads the declared inputs from source. Never set
+      a private `GOCACHE`, and do not add `-count=1` or `-race` to inner-loop
+      runs: they defeat a cache that is correct for hermetic tests.
+    evidence:
+      - command: lint --slow-tests
+      - library: pkg/testkit
+      - skill: testing
+
+  - id: test-budget
+    category: test
+    title: Test time budgets
+    claim: >-
+      `forge ci test-budget` reads a `go test -json` run and flags unmarked
+      tests that blew the fast-tier budget.
+    availability: forge
+    evidence:
+      - command: ci test-budget
+      - path: internal/cli/ci_test_budget.go
+
+  - id: skipped-pass-detector
+    category: test
+    title: A skipped suite isn't green
+    claim: >-
+      `forge ci verify-test-run` reports packages that skipped so much that
+      their pass proves nothing.
+    availability: forge
+    evidence:
+      - command: ci verify-test-run
+
+  - id: tdd-library
+    category: test
+    title: Table-driven tests, batteries included
+    claim: >-
+      `pkg/tdd` gives table-driven helpers for rpcs, the database, mocks and
+      e2e, every scaffolded rpc gets a test row to start from, and `forge
+      project migrate tdd` converts hand-rolled tables.
+    availability: forge
+    evidence:
+      - path: pkg/tdd/rpc.go
+      - path: pkg/tdd/db.go
+      - path: pkg/tdd/mock.go
+      - path: pkg/tdd/e2e.go
+      - command: project migrate tdd
+      - analyzer: --tests
+      - skill: testing/patterns
+      - skill: testing/flow
+
+  - id: entity-lifecycle-tests
+    category: test
+    title: CRUD tests come free
+    claim: >-
+      Scaffolding an entity also writes its CRUD lifecycle test, so new tables
+      are tested from their first commit.
+    availability: forge
+    evidence:
+      - command: scaffold entity
+      - command: lint --fixture-drift
+
+  - id: flow-tests-seedgraph
+    category: test
+    title: Flow tests over real data
+    claim: >-
+      `seedplan.SeedGraph` seeds the foreign-key spine so a flow test drives the
+      real service against a migrated database.
+    availability: forge
+    evidence:
+      - library: pkg/seedplan
+      - skill: testing/flow
+
+  - id: frontend-hook-tests
+    category: test
+    title: Generated hooks are tested
+    claim: >-
+      Lint requires a test beside every generated hooks file and fails a hook
+      test whose assertions can never pass, such as a query-shaped test on a
+      mutation hook.
+    availability: forge
+    evidence:
+      - command: lint --tests
+      - analyzer: --tests
+      - analyzer: --conventions
+
+  - id: kcl-eval-tests
+    category: test
+    title: Test what you declared
+    claim: >-
+      `forge/pkg/kcleval` lets a Go test assert against the project's KCL
+      declarations instead of restating them.
+    availability: forge
+    evidence:
+      - library: pkg/kcleval
+      - command: kcl eval
+
+  - id: env-up-dev
+    category: dev
+    title: The whole stack, one command
+    claim: >-
+      `forge env up dev` builds, launches and hot-reloads every service, worker
+      and frontend with Postgres, the IdP, the observability stack and mail
+      ready before anything dials them, and the scaffolded `dev` needs neither
+      Docker nor a cluster.
+    availability: forge
+    headline: true
+    use: >-
+      `forge env up dev [--no-build] [--target <workload>] [-D name=value]
+      [--background|--watch]`
+    evidence:
+      - command: env up
+      - command: env up --target
+      - skill: dev
+      - command: env status
+      - command: env down
+
+  - id: per-worktree-devstacks
+    category: dev
+    title: A dev stack per worktree
+    claim: >-
+      Every checkout gets its own port block and its own data, so ten worktrees
+      (or ten agents) run ten dev stacks side by side without sharing a port or
+      a database.
+    availability: forge
+    headline: true
+    use: >-
+      `forge env ps` lists every stack on the machine; `forge env devstack
+      list|port|prune|release` manage the blocks.
+    why: >-
+      `allocate_port(base, key)` derives each port from the worktree's block,
+      and the default ceiling is `max_stacks: 8`.
+    evidence:
+      - command: env devstack list
+      - command: env devstack port
+      - command: env devstack prune
+      - path: internal/cli/devstack.go
+      - analyzer: --conventions
+      - path: internal/config/config.go
+      - skill: dev
+
+  - id: browser-logs-on-disk
+    category: dev
+    title: Browser console logs on disk
+    claim: >-
+      Every `console.*` call, uncaught error and unhandled rejection from a
+      scaffolded frontend lands in `.forge/logs/<env>/frontend_<name>.log`,
+      prefixed `[browser:<level>]`, beside the backend logs, so what the browser
+      did is a grep.
+    availability: forge
+    use: "`grep '\\[browser:error\\]' .forge/logs/dev/*.log`"
+    why: >-
+      An uncaught `TypeError` has no `console` call in your source; it is in
+      that file.
+    evidence:
+      - path: internal/templates/frontend/vite-spa/src/lib/devlog-plugin.ts
+      - skill: debug
+      - skill: frontend-runtime/telemetry
+      - path: internal/templates/frontend/nextjs/src/app/%5F_forge/log/route.ts
+
+  - id: mock-mode
+    category: dev
+    title: Build UI before the backend
+    claim: >-
+      `mock_api` answers every rpc from its descriptor with deterministic,
+      schema-valid messages (streams included), named scenarios stub specific
+      calls, and fixtures are checked for freshness, so a UI is built and tested
+      before the backend exists.
+    availability: forge
+    use: >-
+      `mock_api` = `""`, `true` or `hybrid`; `forge scaffold scenario` stubs
+      specific rpcs.
+    evidence:
+      - path: internal/templates/frontend/mocks/mock-transport.ts.tmpl
+      - command: scaffold scenario
+      - path: internal/templates/frontend/mocks/fixture-freshness.test.ts.tmpl
+      - path: internal/templates/frontend/mocks/scenarios
+      - skill: frontend/mock-mode
+
+  - id: hot-reload
+    category: dev
+    title: Hot reload per workload
+    claim: >-
+      A host workload runs under `air`, `go-run` or a binary runner, and
+      `--target` scopes a whole run to one workload.
+    availability: forge
+    evidence:
+      - command: env up
+
+  - id: up-timings
+    category: dev
+    title: Every dev boot measured
+    claim: >-
+      Each `forge env up` prints a phase-timing table and appends one JSON line
+      to `.forge/logs/<env>/up-timings.jsonl`, so a dev-loop speedup is measured
+      before it is claimed.
+    availability: forge
+    why: "Each line is a `forge.env.up.timings/v1` document."
+    evidence:
+      - path: internal/cli/up_timings.go
+
+  - id: env-down-self-safe
+    category: dev
+    title: Stopping never kills yourself
+    claim: >-
+      `forge env down` walks its own parent chain first, so it can't end the
+      agent or shell that started it.
+    availability: forge
+    evidence:
+      - command: env down
+
+  - id: env-exec-config
+    category: dev
+    title: Inspect and exec into envs
+    claim: >-
+      `forge env config` prints what an environment hands each workload, `forge
+      env exec` runs a command with it, `forge env options` lists the render
+      options and `forge doctor parity` diffs host mode against cluster mode.
+    availability: forge
+    evidence:
+      - command: env config
+      - command: env ps
+      - command: env exec
+      - command: env diff
+      - command: env options
+
+  - id: generate-cache-lock
+    category: dev
+    title: Fast, concurrency-safe codegen
+    claim: >-
+      `forge generate` never overwrites hand-written logic, finishes in seconds
+      with `nothing to do` on an unchanged tree, and queues parallel runs on a
+      project lock the OS releases when the holder exits.
+    availability: forge
+    use: >-
+      `forge generate`; `--no-cache` forces a full run. The lock is
+      `.forge/forge.lock`.
+    evidence:
+      - command: generate
+      - path: internal/cli/generate_cache.go
+      - skill: forge
+
+  - id: heavy-slot-scheduler
+    category: dev
+    title: Machine-wide heavy-work queue
+    claim: >-
+      Builds, test lanes, codegen and full lints queue for a host-wide slot
+      (default min(CPUs/2, memory GiB/8)), so many agents or terminals on one
+      machine never thrash it, and a crashed holder never strands a slot.
+    availability: forge
+    use: "`forge slot run`, `forge slot status`, `FORGE_HEAVY_SLOTS`"
+    why: >-
+      Measured on a 16 vCPU host, `go build ./...` took 36-50s beside 0-3 other
+      heavy jobs and 101-155s beside 8 or more, and a full local gate went from
+      about 40 minutes to about 2.3 hours when everything ran at once.
+    evidence:
+      - command: slot run
+      - command: slot status
+      - library: pkg/hostslot
+      - skill: ci/slots
+
+  - id: storage-gc
+    category: dev
+    title: Disk kept in check
+    claim: >-
+      `forge storage` reports host capacity, refuses a build below the
+      free-space reserve, trims Go build caches and removes idle, clean, pushed
+      worktrees.
+    availability: forge
+    evidence:
+      - command: storage status
+      - command: storage gc
+      - command: storage worktrees
+
+  - id: debugger-cli
+    category: dev
+    title: Debugger from the command line
+    claim: >-
+      `forge debug` drives Delve against a running service (breakpoints,
+      stepping, locals, goroutines) from a terminal or an agent.
+    availability: forge
+    evidence:
+      - command: debug start
+      - command: debug break
+      - command: debug goroutines
+
+  - id: api-curl
+    category: dev
+    title: Call any rpc from the CLI
+    claim: >-
+      `forge api curl` prints a copy-pasteable curl for any rpc of the project.
+    availability: forge
+    evidence:
+      - command: api curl
+
+  - id: local-k3d-cluster
+    category: dev
+    title: Local Kubernetes when you need it
+    claim: >-
+      `forge cluster up` gives a local k3d cluster with ingress URLs, logs and
+      reload, and per-worktree namespaces share one cluster behind a
+      kubectl-context pin.
+    availability: forge
+    evidence:
+      - command: cluster up
+      - command: cluster urls
+      - command: cluster logs
+
+  - id: doctor
+    category: dev
+    title: Environment doctor
+    claim: >-
+      `forge doctor` checks the toolchain, payload caps, probes, resource
+      requests and limits of every declared env with nothing running, and `forge
+      doctor parity` checks host mode against cluster mode.
+    availability: forge
+    evidence:
+      - command: doctor
+      - command: doctor parity
+
+  - id: pinned-tools
+    category: dev
+    title: Pinned toolchain, auto-installed
+    claim: >-
+      `forge tools install` installs exactly the tool versions the project pins,
+      so "works on my machine" stops being a variable.
+    availability: forge
+    evidence:
+      - command: tools install
+      - command: tools pins
+
+  - id: component-library
+    category: dev
+    title: A 70+ component library
+    claim: >-
+      `forge component search` and `forge component install` add ready-made
+      frontend components, and scaffolded pages already carry enum-aware status
+      badges and foreign-key pickers.
+    availability: forge
+    use: "`forge component search|install|list`"
+    evidence:
+      - command: component search
+      - command: component install
+      - skill: frontend/components
+      - skill: frontend/design/verify
+      - command: component list
+
+  - id: cloud-dev-machines
+    category: dev
+    title: Cloud dev machines
+    claim: >-
+      Agents and forge stacks can run on cloud machines that wake on demand and
+      suspend when idle, with docker and k3d available.
+    availability: reliant
+    evidence:
+      - external: reliant:docs/machines/cloud.mdx
+      - external: control-plane:internal/operators/workspace
+
+  - id: one-lint-gate
+    category: guardrails
+    title: Bug-class linters, one verdict
+    claim: >-
+      `forge lint` runs forge's analyzers, each rule naming the bug class it
+      prevents, beside golangci-lint, buf, eslint and the typecheck, and prints
+      one verdict last.
+    availability: forge
+    headline: true
+    use: >-
+      `forge lint`; `--quiet` prints only what failed, `--scope <path>` lints a
+      slice of a shared checkout, `--json` and `--gate-json` are for machines,
+      `--skip-frontends` is a backend-only gate, and `lint.frontend.typecheck`
+      dials the frontend typecheck.
+    why: >-
+      `lint.rules` in `forge.yaml` grades every forge rule `error`, `warn` or
+      `off` identically in every output mode. Never pipe `forge lint` through
+      `head`: the verdict is the last line.
+    evidence:
+      - command: lint
+      - command: lint --scope
+      - path: internal/cli/lint
+
+  - id: local-ci-gate
+    category: guardrails
+    title: The whole CI gate, locally
+    claim: >-
+      `forge ci gate` (`task ci`) runs verify-generated, lint, buf, migration
+      safety, frontend checks, build, vulnerability and license scans, KCL
+      validation, tests and integration tests in one table, and a skipped check
+      fails the gate.
+    availability: forge
+    headline: true
+    use: >-
+      `task ci`; `CI_SKIP=<check>` accepts a named skip, `CI_FULL=1` unit-tests
+      every package.
+    why: >-
+      The CI workflow is a thin wrapper around the same tasks, so "CI did not
+      run" never has to mean "unverified". `forge ci gate --list` names the
+      checks, a `CI_SKIP` name that matches no check is an error, tools are
+      pinned so a copy on PATH at another version is never used, verdicts are
+      cached on an unchanged committed tree (`PASS (cached <sha>)`), and a
+      branch unit-tests only the packages its change reaches.
+    evidence:
+      - command: ci gate
+      - path: internal/cigate
+      - command: ci run
+      - command: ci summarize
+      - command: gate record
+      - skill: ci/gate
+
+  - id: generated-drift
+    category: guardrails
+    title: Stale codegen can't merge
+    claim: >-
+      `forge ci verify-generated` regenerates in a scratch copy and fails when
+      the committed output differs, and `forge lint --generated-drift` fails a
+      generated file someone edited by hand.
+    availability: forge
+    evidence:
+      - command: ci verify-generated
+      - command: lint --generated-drift
+      - path: internal/cli/ci_verify_scratch.go
+
+  - id: lint-rollout-grace
+    category: guardrails
+    title: New rules warn before gating
+    claim: >-
+      A lint rule new in a forge release warns, with a "new in vX; gates from
+      vY" note, and gates only from the next release, so bumping the forge pin
+      never turns your build red overnight.
+    availability: forge
+    why: >-
+      Every gradable rule has an `IntroducedIn` and a `GatesFrom` row in the
+      rollout table, and `TestEveryGradableRuleDeclaresItsRollout` fails a rule
+      without one. `lint.rules` wins in both directions: `{rule: error}` opts in
+      early, `{rule: warn}` extends the grace period. The verdict line counts
+      the warnings, so a green run never hides that a pin bump will turn red. A
+      rule that must gate on arrival breaks every pinned consumer, so it is the
+      owner's call.
+    evidence:
+      - path: internal/cli/lint/lint_rollout_table.go
+      - path: internal/cli/lint/lint_rollout.go
+      - skill: ci/lint-rollout
+
+  - id: suppression-ledger
+    category: guardrails
+    title: Every suppression, with its reason
+    claim: >-
+      A suppression is a comment that must give its reason, and `forge lint
+      --show-suppressed` lists every one the project declares with file, line
+      and stated reason, so waivers stay visible.
+    availability: forge
+    use: >-
+      `// forge:lint-disable-next-line <rule>: <why>` (the
+      `forge:lint-disable-*` family)
+    evidence:
+      - command: lint --show-suppressed
+      - path: internal/linter/suppress
+
+  - id: lint-skip-is-failure
+    category: guardrails
+    title: A skipped lane never passes
+    claim: >-
+      A gating lint lane that could not run fails the build unless you accept
+      the skip by name with a reason, and `--strict` escalates advisory findings
+      to errors.
+    availability: forge
+    use: "`forge lint --allow-skip LANE=REASON`"
+    evidence:
+      - command: lint --allow-skip
+      - command: lint --strict
+
+  - id: lint-autofix
+    category: guardrails
+    title: Type-checked auto-fixes
+    claim: >-
+      `forge lint --fix` applies the mechanical fixes (formatting, traced
+      logging, prettier, eslint) and takes back any Go rewrite that breaks its
+      package, and `--check` or `--no-fix` print each pending fix's diff and
+      fail.
+    availability: forge
+    evidence:
+      - command: lint --fix
+      - command: fix
+
+  - id: codemod-fixers
+    category: guardrails
+    title: Codemods for convention moves
+    claim: >-
+      `forge fix` rewrites a project onto a new convention in one command
+      (Connect errors, narrow Deps, transaction isolation, harness mocks, the
+      composition graph, operatorkit, the config proto package), and takes back
+      a rewrite that fails.
+    availability: forge
+    evidence:
+      - command: fix connect-errors
+      - command: fix narrow-deps
+      - command: fix tx-isolation
+      - command: fix harness-mocks
+      - command: fix composition-graph
+      - command: fix operatorkit
+      - command: fix config-proto-package
+
+  - id: version-skew-guard
+    category: guardrails
+    title: Pinned forge, no skew
+    claim: >-
+      Forge refuses to lint or generate with a binary other than the one
+      `forge.yaml` pins, so every machine and CI produce the same output.
+    availability: forge
+    evidence:
+      - command: lint --allow-version-skew
+      - command: tools pins
+
+  - id: unwritten-fields
+    category: guardrails
+    title: Catches fields nothing writes
+    claim: >-
+      A read-only or computed field that no code populates fails lint, instead
+      of every row shipping a silent zero.
+    availability: forge
+    evidence:
+      - command: lint --read-only-fields
+      - command: lint --computed-fields
+      - analyzer: --read-only-fields
+      - analyzer: --computed-fields
+
+  - id: guarded-field-bypass
+    category: guardrails
+    title: Guarded fields stay guarded
+    claim: >-
+      Lint flags an edit page or handler that writes a `forge:guards` column
+      directly, bypassing the rpc that owns its state transitions.
+    availability: forge
+    evidence:
+      - command: lint --guarded-fields
+      - analyzer: --guarded-fields
+
+  - id: create-nullability
+    category: guardrails
+    title: Create requests keep presence
+    claim: >-
+      Lint fails when a field's optional label differs between an entity and its
+      Create request, which would silently drop "unset" vs "zero".
+    availability: forge
+    evidence:
+      - command: lint --create-nullability
+      - analyzer: --create-nullability
+
+  - id: list-filter-optional
+    category: guardrails
+    title: List filters that actually filter
+    claim: >-
+      A List filter field without `optional` has no presence, so "no filter"
+      would collapse into "filter by zero"; lint rejects it.
+    availability: forge
+    evidence:
+      - analyzer: --conventions
+
+  - id: closed-set-check
+    category: guardrails
+    title: Enums and CHECKs agree
+    claim: >-
+      A database CHECK marked `forge:closed-set` must list exactly the Go set it
+      mirrors, and lint prints the forward migration that fixes a mismatch.
+    availability: forge
+    evidence:
+      - command: lint --closed-sets
+
+  - id: db-grants-lint
+    category: guardrails
+    title: Credential columns need a decision
+    claim: >-
+      A token-, password- or key-shaped column must be marked secret or readable
+      with a reason before the read-only database role may see it.
+    availability: forge
+    evidence:
+      - command: lint --db-grants
+      - library: pkg/dbgrants
+
+  - id: time-bucketing-lint
+    category: guardrails
+    title: Timezone-safe date bucketing
+    claim: >-
+      Lint flags a two-argument `date_trunc` over a `TIMESTAMPTZ`, which
+      truncates in the session timezone and moves every daily total with the
+      deploy host.
+    availability: forge
+    use: "`date_trunc('day', col, 'UTC')`"
+    evidence:
+      - command: lint --time-bucketing
+      - skill: db/time-buckets
+
+  - id: bun-placeholder-lints
+    category: guardrails
+    title: Raw-SQL placeholder bugs caught
+    claim: >-
+      Lint catches `$1`-style placeholders and literal `?` in bun raw SQL, both
+      of which fail at runtime or bind shifted arguments.
+    availability: forge
+    evidence:
+      - analyzer: --conventions
+
+  - id: fixture-drift-lint
+    category: guardrails
+    title: Test fixtures checked against schema
+    claim: >-
+      `forge lint --fixture-drift` runs every scaffolded CRUD fixture statement
+      against a shadow Postgres and reports what the current schema rejects.
+    availability: forge
+    evidence:
+      - command: lint --fixture-drift
+
+  - id: contract-lint
+    category: guardrails
+    title: Package contracts enforced
+    claim: >-
+      An internal package with exported methods and no `contract.go` is flagged,
+      so every component is visible to wiring, mocks, the observability
+      decorator and the reporters.
+    availability: forge
+    evidence:
+      - command: lint --contract
+      - path: internal/linter/contract
+      - analyzer: --contract
+
+  - id: deps-boundary-lints
+    category: guardrails
+    title: Dependency injection stays honest
+    claim: >-
+      Lint keeps Deps interface-typed and narrow, forbids downcasts and
+      container-style deps, and pushes scalars into typed config, so every
+      component unit-tests against mocks.
+    availability: forge
+    use: >-
+      `forge fix narrow-deps` narrows a Deps interface to the methods the
+      package uses.
+    evidence:
+      - analyzer: --contract
+      - analyzer: --conventions
+      - command: lint --config-deps
+
+  - id: optional-deps-guard
+    category: guardrails
+    title: No nil-dep panics
+    claim: >-
+      Lint flags an unguarded dereference of a Deps field marked
+      `forge:optional-dep`, a nil-pointer panic no construction-time check can
+      catch.
+    availability: forge
+    evidence:
+      - command: lint --optional-deps-guard
+      - analyzer: --conventions
+
+  - id: composition-graph-lint
+    category: guardrails
+    title: Wiring checked as a graph
+    claim: >-
+      `forge lint --graph` fails a composition graph that does not assemble, a
+      component no root reaches, and a listener serving a service of another
+      audience.
+    availability: forge
+    evidence:
+      - command: lint --graph
+      - library: pkg/graphkit
+
+  - id: config-hygiene-lints
+    category: guardrails
+    title: Config read the typed way
+    claim: >-
+      Lint rejects a component reading `os.Getenv` or a frontend reading
+      `process.env`, and flags a config message no binary or frontend ever
+      loads.
+    availability: forge
+    evidence:
+      - analyzer: --conventions
+      - command: lint --config-reach
+
+  - id: marker-typo-lints
+    category: guardrails
+    title: Misspelled markers are caught
+    claim: >-
+      A misspelled `forge:` marker in Go, proto or a SQL comment, or a
+      `(forge.v1.*)` option this binary does not define, fails lint instead of
+      being silently inert.
+    availability: forge
+    why: >-
+      `forge project capabilities` lists every marker and where it goes, in four
+      families: entity and write policy (`entity`, `soft-delete`, `append-only`,
+      `read-only`, `computed`, `generated`, `guards`, `immutable`, `version`,
+      `fill`, `owner`, `secret`, `readable`, `closed-set`, `ref`, `go-type`,
+      `identity-subject`), rpc behaviour (`custom`, `mutation`, `query-scope`,
+      `unmanaged`), composition (`constructor`, `service`, `contract`,
+      `no-observe`, `exclude-contract`, `external-component`, `not-a-component`,
+      `root`, `root-only`, `standby`, `audience`, `optional-dep`, `tx-opener`,
+      `resolves-caller`) and lint control (`allow`, `auth-unscoped-ok`,
+      `optional-checked`), plus the `forge:lint-disable-*` suppression comments.
+    evidence:
+      - command: lint --go-markers
+      - command: lint --proto-markers
+      - command: lint --column-markers
+      - command: lint --proto-options
+      - skill: proto
+      - command: project capabilities
+
+  - id: vendored-proto-drift
+    category: guardrails
+    title: Vendored proto drift detection
+    claim: >-
+      A vendored `forge.proto` that drifted from the binary's copy fails lint
+      instead of compiling annotations nothing reads.
+    availability: forge
+    evidence:
+      - command: lint --vendored-protos
+
+  - id: proto-breaking-gate
+    category: guardrails
+    title: Breaking API changes gated
+    claim: >-
+      A generated `proto-breaking.yml` runs `buf breaking`, so a change that
+      would break existing clients fails CI, and the `proto-breaking` skill
+      carries the reserved-tag discipline.
+    availability: forge
+    evidence:
+      - skill: proto-breaking
+
+  - id: open-signup-lint
+    category: guardrails
+    title: Open signup is deliberate
+    claim: >-
+      A bare `forge lint` flags a login broker that mounts open registration
+      unconditionally, so outside development an unverified address never gets a
+      signed-in account by accident.
+    availability: forge
+    evidence:
+      - command: lint
+
+  - id: secrets-model-lint
+    category: guardrails
+    title: Secrets wiring verified per env
+    claim: >-
+      `forge lint --secrets` checks every env's secrets model: each key a
+      workload reads is produced by exactly one declaration, and an
+      ExternalSecret never deletes its Secret on a store outage.
+    availability: forge
+    evidence:
+      - command: lint --secrets
+
+  - id: static-export-lint
+    category: guardrails
+    title: Static-export breakage caught early
+    claim: >-
+      For a statically hosted Next.js app, `forge lint --static-export` names
+      each route, server action, `cookies()` call or `next/image` use the export
+      would refuse, with file and line.
+    availability: forge
+    evidence:
+      - command: lint --static-export
+      - path: internal/linter/staticexport
+      - skill: frontend/serving
+
+  - id: frontend-convention-lints
+    category: guardrails
+    title: Frontend conventions enforced
+    claim: >-
+      Lint keeps server data out of Zustand stores and forge-owned variables out
+      of committed dotenv files, so React Query stays the one source of truth
+      and a mock build never ships.
+    availability: forge
+    evidence:
+      - command: lint --frontend-stores
+      - analyzer: --frontend-stores
+      - analyzer: --conventions
+
+  - id: lint-rules-data-integrity
+    category: guardrails
+    title: Data-integrity rules
+    claim: >-
+      A column nothing writes, a filter that no-ops or a CHECK drifting from Go
+      fails lint instead of shipping silent wrong data.
+    availability: forge
+    evidence:
+      - path: internal/cli/lint/lint_rules.go
+    rules:
+      - id: forgeconv-read-only-field-unwritten
+        lane: --read-only-fields
+        bug_class: >-
+          A `forge:read-only` column nothing populates ships as the type's zero
+          (a `$0.00` total) with no error anywhere; no constraint, test or log
+          catches it
+      - id: forgeconv-computed-field-unwritten
+        lane: --computed-fields
+        bug_class: >-
+          Same silent zero for a `forge:computed` field no non-generated Go file
+          assigns; the consequence text is derived from the field's type
+      - id: forgeconv-guarded-field-written
+        lane: --guarded-fields
+        bug_class: >-
+          A scaffolded edit page whose `update_mask` still names a
+          `forge:guards` column writes it raw and bypasses the rpc that owns it
+      - id: forgeconv-create-request-nullability
+        lane: --create-nullability
+        bug_class: >-
+          An entity field and its `Create<Entity>Request` field disagree on
+          `optional`, silently dropping write presence
+      - id: forgeconv-list-filter-optional
+        lane: --conventions
+        bug_class: >-
+          A List filter without `optional` has no presence, so "no filter"
+          collapses into "filter by zero" and generated filters no-op
+      - id: forgeconv-crud-owner-resolver
+        lane: --conventions
+        bug_class: >-
+          An owner-scoping wrapper takes its owner from a different principal
+          than its siblings (a `tenant_id` column scoped by a user id):
+          compiles, runs, returns nothing or someone else's rows
+      - id: forge-column-markers
+        lane: --column-markers
+        bug_class: >-
+          A misspelled or misplaced `forge:` marker in a `COMMENT ON` statement
+          does nothing and postgres stores it verbatim (`forge:immutible`)
+      - id: forge-identity-subject-unreadable
+        lane: --column-markers
+        bug_class: >-
+          A `forge:identity-subject` column the read-only role cannot read, so
+          the console never draws the identity link
+      - id: forge-closed-set
+        lane: --closed-sets
+        bug_class: >-
+          A CHECK whose value list drifts from the Go set it mirrors: a value Go
+          grants and the CHECK refuses fails every write of it; the finding
+          carries the forward migration
+      - id: forge-db-grants-undecided
+        lane: --db-grants
+        bug_class: >-
+          A credential-shaped column (`token`, `password`, `key`, `hash`) that
+          nobody decided is readable by the read-only `forge_ro` role
+      - id: forge-db-grants-unverified
+        lane: --db-grants
+        bug_class: >-
+          A credential-shaped column (`token`, `password`, `key`, `hash`) that
+          nobody decided is readable by the read-only `forge_ro` role
+      - id: forge-fixture-rejected
+        lane: --fixture-drift
+        bug_class: >-
+          A scaffolded CRUD test fixture the current schema rejects (a GENERATED
+          column, a UNIQUE clash, a dangling FK, a later CHECK), found by
+          running each statement in a rolled-back transaction
+      - id: forge-fixture-unverified
+        lane: --fixture-drift
+        bug_class: >-
+          A scaffolded CRUD test fixture the current schema rejects (a GENERATED
+          column, a UNIQUE clash, a dangling FK, a later CHECK), found by
+          running each statement in a rolled-back transaction
+      - id: forge-time-bucket-session-tz
+        lane: --time-bucketing
+        bug_class: >-
+          A two-argument `date_trunc` over a `TIMESTAMPTZ` truncates in the
+          session timezone, so every daily total moves with the deploy host
+      - id: forgeconv-bun-dollar-placeholder
+        lane: --conventions
+        bug_class: >-
+          `$1`-style placeholders ported into bun-formatted SQL, which bun does
+          not bind, so the statement fails at runtime
+      - id: forgeconv-bun-literal-question-mark
+        lane: --conventions
+        bug_class: >-
+          A literal `?` in bun-formatted SQL, which bun consumes as a
+          placeholder, so the statement runs against shifted arguments
+      - id: forgeconv-tx-lock-under-serializable
+        lane: --conventions
+        bug_class: >-
+          A `SELECT … FOR UPDATE` or advisory lock inside a SERIALIZABLE or
+          REPEATABLE READ transaction: the snapshot predates the wait, so each
+          contended wait costs a full rollback or drops the update
+      - id: forgeconv-service-dir-consistency
+        lane: --conventions
+        bug_class: >-
+          A proto service name that disagrees with its `proto/services/`
+          directory, so scaffolds and handler directories land where nothing
+          expects them
+
+  - id: lint-rules-composition-deps
+    category: guardrails
+    title: Architecture stays testable
+    claim: >-
+      Lint keeps Deps interface-typed and narrow, every component reachable and
+      audience-correct, so services stay mockable and wired.
+    availability: forge
+    evidence:
+      - path: internal/cli/lint/lint_rules.go
+    rules:
+      - id: forgeconv-internal-package-contract-names
+        lane: --contract
+        bug_class: >-
+          A non-canonical `contract.go` (`Service`, `Deps`, `New(Deps)
+          Service`): the generated bootstrap hard-codes those names and would
+          not compile. `forgeconv-contract-names` in an old `lint.rules` still
+          grades it, with a rename warning
+      - id: forgeconv-internal-package-missing-contract
+        lane: --contract
+        bug_class: >-
+          A component built by hand without `contract.go` is invisible to
+          wiring, mocks, the observability decorator and every reporter
+      - id: forgeconv-deps-are-interfaces
+        lane: --contract
+        bug_class: >-
+          A concrete Deps field defeats the all-mock unit-test surface
+          `New(Deps)` exists for
+      - id: forgeconv-outbound-io-no-rpc
+        lane: --contract
+        bug_class: >-
+          A package marked `// forge:outbound-io` that also serves an inbound
+          handler contradicts its own marker
+      - id: forgeconv-deps-surface
+        lane: --conventions
+        bug_class: >-
+          A Deps interface declaring methods the package never uses: the
+          abstraction is wider than the need, so it leaks (autofix: `forge fix
+          narrow-deps`)
+      - id: forgeconv-no-container-deps
+        lane: --conventions
+        bug_class: >-
+          A Deps field that is a container (the composition root's types, a
+          locator, `any`): the dependency graph hides in a bag
+      - id: forgeconv-deps-no-downcast
+        lane: --conventions
+        bug_class: >-
+          A type assertion turning a Deps field back into a concrete type
+      - id: forgeconv-no-getenv
+        lane: --conventions
+        bug_class: >-
+          A component reading the process environment itself instead of its
+          typed config
+      - id: forgeconv-deps-root-config
+        lane: --conventions
+        bug_class: >-
+          A Deps field holding the whole root config instead of the component's
+          own block
+      - id: forgeconv-optional-dep-marker-position
+        lane: --conventions
+        bug_class: >-
+          A `// forge:optional-dep` that is misplaced is silently ignored, so
+          `validateDeps` still gates a field the author thinks is optional
+      - id: forge-optional-deps-guard
+        lane: --optional-deps-guard
+        bug_class: >-
+          An unguarded dereference of an optional dep is a latent nil-pointer
+          panic no construction-time gate can catch
+      - id: forge-config-deps
+        lane: --config-deps
+        bug_class: >-
+          A scalar Deps field is configuration, not a collaborator; wiring
+          leaves a typed zero and a TODO forever
+      - id: forge-config-unreachable
+        lane: --config-reach
+        bug_class: >-
+          A config message no binary and no frontend loads still generates Go,
+          KCL and env projections and is read by nobody
+      - id: forgeconv-config-service-name
+        lane: --conventions
+        bug_class: >-
+          A config field bound to `OTEL_SERVICE_NAME` overrides the per-workload
+          name project-wide, so every workload files telemetry as service
+          `unknown`
+      - id: forge-graph-unreachable
+        lane: --graph
+        bug_class: >-
+          A component or provider no root reaches: no process constructs it
+      - id: forge-graph-audience
+        lane: --graph
+        bug_class: >-
+          A listener serving a service through a chain authenticated by another
+          audience: a daemon caller could reach a user service
+      - id: forge-graph-assemble
+        lane: --graph
+        bug_class: >-
+          A composition graph that does not assemble (the error `generate` would
+          fail with)
+      - id: forgeconv-allocate-port-spacing
+        lane: --conventions
+        bug_class: >-
+          Two `allocate_port` bases congruent mod the block size collide at some
+          worktree number, so two listeners bind one port once the stack ceiling
+          is raised
+      - id: component-drift/orphan-entry
+        lane: ""
+        bug_class: >-
+          A `workloads.k` entry with no component in the code behind it
+      - id: component-drift/undeclared-component
+        lane: ""
+        bug_class: >-
+          A component in the code with no `workloads.k` entry, so nothing
+          deploys it
+      - id: component-drift/no-such-command
+        lane: ""
+        bug_class: >-
+          A workload whose args select a command the binary does not have
+      - id: forgeconv-handler-file-size
+        lane: --conventions
+        bug_class: >-
+          One handler file grown past `lint.handler_file_max_loc`; split per rpc
+          with `forge scaffold handler-file`
+
+  - id: lint-rules-api-errors
+    category: guardrails
+    title: API and error-handling rules
+    claim: >-
+      Lint stops internal error text leaking to callers, misspelled markers
+      going inert and holes in activity history.
+    availability: forge
+    evidence:
+      - path: internal/cli/lint/lint_rules.go
+    rules:
+      - id: forgeconv-handler-connect-error
+        lane: --conventions
+        bug_class: >-
+          `connect.NewError(code, err)` publishes `err.Error()` (a driver's SQL,
+          a DSN, an internal host) to the caller and pins a guessed code over a
+          classified one (autofix: `forge fix connect-errors`)
+      - id: forgeconv-unwrapped-domain-error
+        lane: --conventions
+        bug_class: >-
+          A handler returning a collaborator's error unwrapped puts a domain
+          error on the wire as `500 unknown` and drops the reason header
+      - id: forgeconv-no-handler-error-mapping
+        lane: --conventions
+        bug_class: >-
+          A hand-rolled `toConnectError` switch re-created per service
+      - id: forgeconv-one-service-per-file
+        lane: --conventions
+        bug_class: "A multi-service proto file"
+      - id: forgeconv-activity-declared
+        lane: --conventions
+        bug_class: >-
+          A mutating rpc that does not declare its activity event (or `activity:
+          { none: "<why>" }`) leaves a hole in a user's history; judged from the
+          compiled descriptors, so it cannot disagree with the runtime
+          interceptor
+      - id: forge-proto-markers
+        lane: --proto-markers
+        bug_class: >-
+          A misspelled `// forge:` marker in a `.proto` comment is inert and
+          warns nowhere
+      - id: forge-proto-options
+        lane: --proto-options
+        bug_class: >-
+          A `(forge.v1.*)` annotation naming a field this binary does not define
+          compiles under buf and is read by nothing
+      - id: forge-vendored-proto-drift
+        lane: --vendored-protos
+        bug_class: >-
+          A vendored `forge.proto` that diverged from the binary's copy:
+          annotations compile, then are ignored
+      - id: forge-go-markers
+        lane: --go-markers
+        bug_class: >-
+          A `//forge:` comment in Go that forge does not read, an unknown name
+          or a spelling its parser ignores
+      - id: forgeconv-open-signup
+        lane: ""
+        bug_class: >-
+          A login broker that mounts `POST /auth/register` unconditionally:
+          outside development an unverified address gets a signed-in account,
+          which opens email-bound invitations to takeover (advisory)
+      - id: forgeconv-identity-methods
+        lane: ""
+        bug_class: >-
+          A `forge.ManagedIdentity` declaring a sign-in method or signup mode
+          the project's own broker does not serve, so the declaration is
+          converged and silently ignored
+      - id: typed-config-guardrail
+        lane: ""
+        bug_class: >-
+          An `os.Getenv` the typed-config forbidigo guard reports (advisory
+          unless `--strict`)
+
+  - id: lint-rules-tracing
+    category: guardrails
+    title: Traces that never break
+    claim: >-
+      `forge lint --tracing` names every place a request's trace is cut (a log
+      call without its context, a hand-built HTTP client, an untraced database
+      pool, an uninstrumented contract) and `--fix` rewrites most of them.
+    availability: forge
+    why: >-
+      All four rules are AST passes over owned source that err toward silence
+      where the code may already be right; a logging wrapper of your own joins
+      through `lint.tracing.log_wrappers`.
+    evidence:
+      - path: internal/cli/lint/lint_rules.go
+      - command: lint --tracing
+      - path: internal/linter/tracinglint
+      - skill: observability/tracing-lint
+    rules:
+      - id: forge-tracing-log-without-ctx
+        lane: --tracing
+        bug_class: >-
+          A log call made where a context is in scope but not passed has no
+          `trace_id` and cannot be joined to anything (autofixed to the
+          `…Context` form by `forge lint --tracing --fix`)
+      - id: forge-tracing-raw-http-client
+        lane: --tracing
+        bug_class: >-
+          A hand-built `*http.Client` or `http.Get` cuts the trace at the call;
+          use `observe.NewHTTPClient`
+      - id: forge-tracing-raw-sql-open
+        lane: --tracing
+        bug_class: >-
+          `sql.Open`/`pgxpool.New` with no tracer drops every query span; use
+          `dbtrace`
+      - id: forge-tracing-contract-uninstrumented
+        lane: --tracing
+        bug_class: >-
+          A contract's `New(…)` used without its generated decorator (autofixed
+          to `NewInstrumented`)
+
+  - id: lint-rules-tests
+    category: guardrails
+    title: Test-hygiene rules
+    claim: >-
+      Unmarked slow tests, stale cached passes and hook tests that can never
+      pass are caught before merge.
+    availability: forge
+    evidence:
+      - path: internal/cli/lint/lint_rules.go
+    rules:
+      - id: forge-slow-test-unmarked
+        lane: --slow-tests
+        bug_class: >-
+          A test that execs `go`, `forge`, `kcl`, `node`, `npm`, `git` or
+          `docker`, drives containers or dials an external host without
+          `testkit.Slow` runs in the blocking `-short` tier, and a file its
+          child process reads is invisible to Go's test cache, so a stale PASS
+          replays after an edit
+      - id: forge-slow-test-inputs
+        lane: --slow-tests
+        bug_class: >-
+          A test that execs `go`, `forge`, `kcl`, `node`, `npm`, `git` or
+          `docker`, drives containers or dials an external host without
+          `testkit.Slow` runs in the blocking `-short` tier, and a file its
+          child process reads is invisible to Go's test cache, so a stale PASS
+          replays after an edit
+      - id: forgeconv-handler-tests-use-tdd
+        lane: --tests
+        bug_class: >-
+          Hand-rolled `{name, call}` tables instead of `tdd.RunRPCCases`
+          (codemod: `forge project migrate tdd`)
+      - id: forgeconv-frontend-hook-tests
+        lane: --tests
+        bug_class: "A generated hooks file with no sibling test"
+      - id: forgeconv-frontend-hook-test-shape
+        lane: --conventions
+        bug_class: >-
+          A hook test whose assertions can never pass (a query-shaped test on a
+          mutation hook, or the reverse)
+
+  - id: lint-rules-frontends
+    category: guardrails
+    title: Frontend build rules
+    claim: >-
+      What a static export would refuse, build-time env inlining and lockfile
+      drift fail with file:line.
+    availability: forge
+    evidence:
+      - path: internal/cli/lint/lint_rules.go
+    rules:
+      - id: static-export-not-exported
+        lane: --static-export
+        bug_class: >-
+          A frontend bound to a static runtime whose build is not a static
+          export (`output: "export"`), so there is nothing to publish
+      - id: static-export-dynamic-segment
+        lane: --static-export
+        bug_class: >-
+          A dynamic route with no `generateStaticParams`, which `next build`
+          refuses because an export renders every page at build time
+      - id: static-export-route-handler
+        lane: --static-export
+        bug_class: >-
+          A route-handler GET not declared static, which `next build` refuses,
+          or another method the export drops so a static host answers it with
+          404
+      - id: static-export-middleware
+        lane: --static-export
+        bug_class: >-
+          Middleware that runs only under `next dev`: a static host has no
+          server, so whatever it guards, rewrites or redirects is unguarded in
+          production
+      - id: static-export-server-action
+        lane: --static-export
+        bug_class: >-
+          A `'use server'` Server Action, which needs the Next.js server a
+          static export does not have
+      - id: static-export-next-headers
+        lane: --static-export
+        bug_class: >-
+          `cookies()`, `headers()` or `draftMode()` from `next/headers`, which
+          read a request a static export never has
+      - id: static-export-dynamic-config
+        lane: --static-export
+        bug_class: >-
+          `export const dynamic = "force-dynamic"` or `revalidate = 0`, which
+          ask for per-request rendering an export cannot do
+      - id: static-export-next-image
+        lane: --static-export
+        bug_class: >-
+          `next/image` with its default server-side optimizer, which the export
+          refuses unless `images.unoptimized` is set
+      - id: static-export-config-routes
+        lane: --static-export
+        bug_class: >-
+          `rewrites`, `redirects` or `headers` in `next.config` not gated to
+          development: they work under `next dev` and 404 or vanish on a static
+          host
+      - id: static-export-trailing-slash
+        lane: --static-export
+        bug_class: >-
+          A frontend on a bucket with `trailingSlash` off: the export writes
+          `<route>.html` and a bucket serves objects by exact name, so every
+          route but `/` 404s
+      - id: forgeconv-frontend-process-env
+        lane: --conventions
+        bug_class: >-
+          Reading `process.env` or `import.meta.env` in frontend source freezes
+          the bundle to the environment it was built for, defeating build-once
+          promotion, and bypasses the typed schema and the secret refusal
+      - id: forgeconv-frontend-env-forge-owned
+        lane: --conventions
+        bug_class: >-
+          A committed dotenv line setting a forge-owned variable (mock API, API
+          URL) drifts from KCL and risks shipping a mock build
+      - id: forgeconv-frontend-stores-no-server-data
+        lane: --frontend-stores
+        bug_class: >-
+          A Zustand store importing a generated Connect client creates a second
+          source of truth beside React Query
+      - id: forge-frontend-lock-drift
+        lane: ""
+        bug_class: >-
+          A `package.json` range the lockfile does not record: the state `npm
+          ci` and `pnpm --frozen-lockfile` refuse
+
+  - id: lint-rules-deploy-secrets
+    category: guardrails
+    title: Deploy and secrets rules
+    claim: >-
+      Undrainable PDBs, wrong-arch builds, reconcile-breaking Flux Jobs and
+      missing secret keys are caught from each env's real render.
+    availability: forge
+    evidence:
+      - path: internal/cli/lint/lint_rules.go
+    rules:
+      - id: pdb-blocks-drain
+        lane: ""
+        bug_class: >-
+          A PodDisruptionBudget that can never allow a disruption blocks every
+          node drain forever (checked over each env's real render, hand-written
+          manifests included)
+      - id: hosted-image-base/host-bearing-image
+        lane: ""
+        bug_class: >-
+          An image naming a registry host on a hosted workload, where the
+          platform admits only its own subtree
+      - id: flux-job-ttl
+        lane: ""
+        bug_class: >-
+          A Job with a TTL, which Flux re-creates every interval after the TTL
+          deletes it, so it runs again and again
+      - id: flux-job-unhashed
+        lane: ""
+        bug_class: >-
+          A Job whose name carries no spec hash, so every reconcile after its
+          first change fails on the immutable Job
+      - id: flux-force-on-data
+        lane: ""
+        bug_class: >-
+          A force-recreate annotation on a kind that holds data, so a reconcile
+          can delete and re-create it
+      - id: identity-share-with
+        lane: ""
+        bug_class: >-
+          A `ManagedIdentity.share_with` one env's render cannot judge: a
+          missing or chained owner env
+      - id: shellbuild-tokens/retired-token
+        lane: ""
+        bug_class: >-
+          A retired `${TARGETARCH}` token left in a ShellBuild command: the
+          shell resolves it empty, `GOARCH=` builds for the host, and an amd64
+          cluster silently receives an arm64 binary
+      - id: no-dotenv
+        lane: ""
+        bug_class: >-
+          A `.env` file: injected wholesale into host services so values never
+          have to be declared in KCL, which is how config stops being
+          reproducible
+      - id: secrets-cluster-kind
+        lane: --secrets
+        bug_class: >-
+          A cluster-scoped ESO kind, `PushSecret` or generator the operator
+          forge installs has disabled: inert at best, a cluster-wide credential
+          path at worst
+      - id: secrets-es-policy
+        lane: --secrets
+        bug_class: >-
+          An ExternalSecret that would delete its Secret on a store outage, or
+          polls its store faster than the cluster's admission policy allows
+      - id: secrets-key-coverage
+        lane: --secrets
+        bug_class: >-
+          A pod stuck in `CreateContainerConfigError` because no declaration
+          produces a key it reads
+      - id: secrets-unreferenced-key
+        lane: --secrets
+        bug_class: >-
+          A declared Secret or key no workload of the env reads (advisory: a
+          controller or another env may still read it)
+      - id: secrets-immutable-pin
+        lane: --secrets
+        bug_class: >-
+          A floating read of an immutable store name, so rotating the value in
+          the store silently changes what the pod gets
+      - id: secrets-out-of-band-reason
+        lane: --secrets
+        bug_class: >-
+          An out-of-band Secret whose reason restates the fact or is a
+          placeholder instead of saying why it is not synced from the store
+      - id: secrets-single-owner
+        lane: --secrets
+        bug_class: "A Secret with two owners that fight over its keys"
+      - id: openbao-wildcard-read
+        lane: --secrets
+        bug_class: >-
+          An OpenBao policy that reads a path glob with no stated reason
+      - id: secrets-escrow-in-cluster
+        lane: --secrets
+        bug_class: >-
+          An OpenBao whose seal key and init output are escrowed in the cluster
+          they protect, so losing the cluster loses every backup of the store
+      - id: secrets-env-not-rendered
+        lane: --secrets
+        bug_class: >-
+          An env whose render fails, so its secrets could not be judged (a
+          warning; `forge env render` reports the render error itself)
+
+  - id: lint-rules-scaffold-ownership
+    category: guardrails
+    title: Generated code stays honest
+    claim: >-
+      Hand-edited generated files, ignored generated code and committed
+      machine-local state fail lint.
+    availability: forge
+    evidence:
+      - path: internal/cli/lint/lint_rules.go
+      - path: internal/linter/scaffolds
+      - command: lint --generated-drift
+    rules:
+      - id: forge-generated-file-edited
+        lane: --generated-drift
+        bug_class: >-
+          A `Code generated … DO NOT EDIT` file hand-edited after forge wrote
+          it, which the next `generate` silently overwrites
+      - id: forge-generated-file-unverified
+        lane: --generated-drift
+        bug_class: >-
+          A `Code generated … DO NOT EDIT` file hand-edited after forge wrote
+          it, which the next `generate` silently overwrites
+      - id: generated-code-ignored
+        lane: ""
+        bug_class: >-
+          A `.gitignore` that ignores generated code, so CI fails on
+          `undefined:` symbols that live in ignored files while
+          `verify-generated` is blind to ignored paths
+      - id: machine-local-state-tracked
+        lane: ""
+        bug_class: "A machine-local file committed to the repository"
+      - id: tool-derived-file-tracked
+        lane: ""
+        bug_class: "A tool-only generated output committed to the repository"
+      - id: forge-state-ignored
+        lane: ""
+        bug_class: >-
+          A `.forge/` ignore line that voids the scaffold's re-includes, so
+          deleted scaffolds come back in every clone
+      - id: scaffold-not-customized
+        lane: ""
+        bug_class: >-
+          A file still carrying `FORGE_SCAFFOLD` placeholders (a warning: an
+          uncustomized scaffold is pending work, not a defect)
+      - id: gen-missing-header
+        lane: ""
+        bug_class: >-
+          A `_gen` file that does not claim to be generated, so nothing marks it
+          as forge's to overwrite
+      - id: gen-missing-source
+        lane: ""
+        bug_class: >-
+          A `_gen` file that names no input, so nobody can tell what regenerates
+          it
+      - id: workaround-testing-extras
+        lane: --check-workarounds
+        bug_class: >-
+          A `testing_extras.go` papering over a missing test primitive
+      - id: workaround-cmd-not-in-binaries
+        lane: --check-workarounds
+        bug_class: "A `cmd/<name>.go` binary the project never declared"
+      - id: golangci-build-tags
+        lane: ""
+        bug_class: >-
+          A finding in a file behind a project build tag (`//go:build
+          integration`), which golangci-lint, run once with no tags, never saw
+
+  - id: lint-rules-forge-internal
+    category: guardrails
+    title: Forge's own template checks
+    claim: >-
+      Forge lints its own templates for the ownership banner each tier must
+      carry and for symbols a regenerated template no longer defines, so a forge
+      release never scaffolds a project that fails to build.
+    availability: forge
+    why: >-
+      These rules guard forge's own source tree and are a no-op in a project;
+      they are gradable, so they are listed rather than left out. `--scaffolds`,
+      `--banners`, `--check-workarounds`, `--exported-vars` and the
+      `--suggest-*` helpers are the hidden maintainer lanes.
+    evidence:
+      - analyzer: --banners
+      - analyzer: --scaffolds
+      - path: internal/linter/scaffolds
+    rules:
+      - id: cross-tier-derived-symbol
+        lane: --scaffolds
+        bug_class: >-
+          Forge-internal: a template emitting a reference to a per-component
+          symbol no regenerated template defines (the `c.WorkerNightly
+          undefined` build break after a component is added)
+      - id: banner-tier1-missing-generated-header
+        lane: --banners
+        bug_class: >-
+          Forge-internal: a template that does not carry its ownership tier's
+          banner
+      - id: banner-tier2-missing-scaffold-header
+        lane: --banners
+        bug_class: >-
+          Forge-internal: a template that does not carry its ownership tier's
+          banner
+      - id: banner-unclassified
+        lane: --banners
+        bug_class: >-
+          Forge-internal: a template that does not carry its ownership tier's
+          banner
+
+  - id: auth-fail-closed
+    category: security
+    title: Auth that fails closed
+    claim: >-
+      Every rpc needs a valid credential unless its proto says `auth_required:
+      false`, so a forgotten annotation never publishes an endpoint and there is
+      no second allow-list to drift.
+    availability: forge
+    headline: true
+    use: >-
+      `option (forge.v1.method) = { auth_required: false }` publishes exactly
+      one rpc.
+    why: >-
+      The setting is projected into `pkg/middleware/procedures_gen.go`, so there
+      is one source.
+    evidence:
+      - path: pkg/authn/authn.go
+      - path: internal/assets/proto/forge/v1/forge.proto
+      - command: project audit
+      - skill: auth
+
+  - id: svcerr-redaction
+    category: security
+    title: Errors never leak internals
+    claim: >-
+      A handler returns `svcerr.Wrap(err)` and the caller gets a classified
+      Connect code while a driver's SQL, a DSN or an internal host stays in the
+      server's log, and the fault class (server, user, canceled) sets the log
+      level.
+    availability: forge
+    headline: true
+    use: >-
+      `return nil, svcerr.Wrap(err)` from every rpc (`svcerr.WithReason`,
+      `svcerr.WithClass`); `forge fix connect-errors` rewrites hand-built
+      Connect errors.
+    why: >-
+      `svcerr.Classify` sets each record's `error_class` (`server`, `user`,
+      `canceled`), so ERROR means "we must act" and alerts, forwarders and
+      post-deploy checks can trust it.
+    evidence:
+      - library: pkg/svcerr
+      - command: fix connect-errors
+      - analyzer: --conventions
+      - path: pkg/svcerr/interceptor.go
+      - skill: observability
+
+  - id: secrets-model
+    category: security
+    title: Secrets never in git
+    claim: >-
+      A secret is declared once as a reference and bound per env to a provider,
+      so rendered KCL only ever carries references, and `forge secret set`
+      requires the env so a value cannot land in the wrong one.
+    availability: forge
+    headline: true
+    use: >-
+      A `sensitive` config field or `EnvVar.secret_ref`; `forge secret set --env
+      <env> <KEY>`.
+    evidence:
+      - command: secret set
+      - library: pkg/secretaccess
+      - skill: secrets
+
+  - id: vuln-scan
+    category: security
+    title: Dependency and image scanning
+    claim: >-
+      `forge ci vuln-scan` runs govulncheck, npm audit and image scans per
+      `forge.yaml`, refuses a pass it did not verify, and takes reviewed,
+      expiring exemptions instead of silent ignores.
+    availability: forge
+    headline: true
+    evidence:
+      - command: ci vuln-scan
+      - path: internal/cli/ci_vuln_npm.go
+      - path: internal/cli/ci_vuln_exempt.go
+
+  - id: image-supply-chain
+    category: security
+    title: Signed images, SBOM and provenance
+    claim: >-
+      The generated `build-images.yml` attaches an SPDX SBOM, a keyless cosign
+      signature and a build-provenance attestation to every image, bound to its
+      digest.
+    availability: forge
+    headline: true
+    why: >-
+      This is the generated GitHub workflow only; `forge env build` itself does
+      not sign, and the DeliveryPolicy
+      `provenance_sbom`/`trusted_builder`/`admission_verify` controls are
+      recorded, not enforced.
+    evidence:
+      - path: internal/templates/ci/github/build-images.yml.tmpl
+
+  - id: managed-identity
+    category: security
+    title: Managed identity, declared once
+    claim: >-
+      Users, roles, owners, signup mode and sign-in methods are declared once in
+      `deploy/kcl/identity.k`, and forge fills the issuer, audience and broker
+      credentials per env: a dev IdP locally, the control plane's identity
+      instance in staging and prod.
+    availability: forge
+    use: "`forge.ManagedIdentity` in `deploy/kcl/identity.k`."
+    why: >-
+      A workload that sets `JWT_ISSUER`, `JWT_AUDIENCE`, `OIDC_CLIENT_ID`,
+      `OIDC_REDIRECT_URI` or `IDP_BASE` beside `Bundle.identity` is refused at
+      render, so each field has one source.
+    evidence:
+      - path: internal/templates/deploy/kcl/identity.k.tmpl
+      - library: pkg/auth
+      - library: pkg/identity
+      - skill: auth
+      - skill: deploy/managed-identity
+
+  - id: local-dev-idp
+    category: security
+    title: Real sign-in locally, no setup
+    claim: >-
+      `forge env up` converges a checksum-verified Zitadel as a host process and
+      a local login broker, so the sign-in you test in dev is the one production
+      runs — no throwaway auth shim.
+    availability: forge
+    use: "`forge env up dev`"
+    why: >-
+      This removes the usual detour through a hand-rolled credential-injecting
+      shim that has to be deleted later. Mail goes to a declared Mailpit.
+    evidence:
+      - command: env up
+      - library: pkg/devidp
+      - skill: auth/dev-loop
+
+  - id: login-broker-methods
+    category: security
+    title: Passwords, passkeys, magic links, social
+    claim: >-
+      The scaffolded login broker serves passwords (with a complexity policy),
+      passkeys, magic links and social sign-in as declared in KCL, and lint
+      fails a method the broker does not serve.
+    availability: forge
+    evidence:
+      - path: pkg/devidp/passkey.go
+      - path: pkg/devidp/magic.go
+      - path: pkg/devidp/social.go
+      - path: pkg/devidp/password_policy.go
+      - path: internal/cli/lint/lint_identity_methods.go
+      - path: internal/cli/lint/lint_open_signup.go
+      - skill: auth/frontend
+
+  - id: hosted-identity-admin
+    category: security
+    title: User admin from the CLI
+    claim: >-
+      `forge cloud identity` lists, invites, resets, locks, re-roles, signs out,
+      exports and deletes a hosted environment's users, and shows the state of
+      its identity instance.
+    availability: hosted
+    use: >-
+      `forge cloud identity
+      users|invite|reset|lock|unlock|set-roles|revoke-sessions|export|delete`
+    evidence:
+      - command: cloud identity users
+      - command: cloud identity status
+      - external: control-plane:internal/identityapi
+
+  - id: unscoped-auth-audit
+    category: security
+    title: Find rpcs that ignore the caller
+    claim: >-
+      `forge project audit` includes an `unscoped_auth` list of authenticated
+      rpcs that never resolve who is calling, with `// forge:auth-unscoped-ok:
+      <reason>` as the only acknowledged exception.
+    availability: forge
+    use: "`forge project audit --json`"
+    evidence:
+      - command: project audit
+      - marker: forge:auth-unscoped-ok
+
+  - id: audience-isolation
+    category: security
+    title: One listener per caller type
+    claim: >-
+      `// forge:audience` names each authenticator's trust domain and `forge
+      lint --graph` fails a listener serving another audience, so a daemon token
+      cannot reach a user service.
+    availability: forge
+    use: "`// forge:audience <word>` on an authenticator."
+    evidence:
+      - marker: forge:audience
+      - command: lint --graph
+      - skill: architecture/graph-checks
+
+  - id: principal-chokepoint
+    category: security
+    title: Owner scoping at one chokepoint
+    claim: >-
+      Claims are enriched by stable subject (never email) before any handler
+      runs, and a `forge:owner` column makes forge scaffold the owner-scoping
+      wrapper that lint keeps consistent across siblings.
+    availability: forge
+    why: >-
+      `enrichClaims` runs after validation and before any handler, hydrating by
+      the stable subject. Binding an invitation or membership by email must
+      require a verified email.
+    evidence:
+      - marker: forge:owner
+      - analyzer: --conventions
+      - skill: auth/authorization
+
+  - id: api-keys
+    category: security
+    title: API keys never pass as tokens
+    claim: >-
+      API keys are routed by shape to your own table, hashed and compared in
+      constant time, and the credential kind is stamped by the authenticator so
+      a token can't impersonate a key.
+    availability: forge
+    why: >-
+      `X-API-Key` or `Bearer fk_…` is routed by shape to a validator over your
+      own table, and the authenticator stamps `Claims.Credential` itself, so a
+      per-tenant key can carry its tenant and role and a handler can refuse key
+      management made with a key.
+    evidence:
+      - library: pkg/apikey
+      - path: pkg/auth/credential.go
+      - library: pkg/auth
+      - library: pkg/authn
+      - library: pkg/oauth2
+      - skill: auth/api-keys
+
+  - id: machine-tokens
+    category: security
+    title: Scoped machine access tokens
+    claim: >-
+      `pkg/accesstoken` gives one machine credential with a closed scope
+      vocabulary that can never grant authority its holder lacks; org automation
+      tokens come from `forge cloud token create`.
+    availability: forge
+    why: >-
+      The token is the `rlat_` wire format, hashed and compared in constant
+      time.
+    evidence:
+      - library: pkg/accesstoken
+      - command: cloud token create
+
+  - id: jwks-outage-survival
+    category: security
+    title: Restarts survive an IdP outage
+    claim: >-
+      A JWKS snapshot lets a service restart and keep validating tokens while
+      its issuer is down.
+    availability: forge
+    evidence:
+      - path: pkg/auth/jwks_snapshot.go
+      - skill: auth/shared-issuer
+
+  - id: byo-issuer
+    category: security
+    title: Bring your own IdP
+    claim: >-
+      Declare no identity in an env and set `jwt_issuer` and `oidc_client_id` in
+      its config, and Auth0, Okta, Keycloak or any OIDC issuer plugs in.
+    availability: forge
+    evidence:
+      - path: pkg/auth/providers.go
+      - path: pkg/auth/multi.go
+
+  - id: edge-hygiene
+    category: security
+    title: Security headers and request limits
+    claim: >-
+      Security headers, CORS, Connect payload caps and request-id middleware
+      ship in the chain, and `forge doctor` checks caps, probes and resource
+      limits of every env with nothing running.
+    availability: forge
+    use: "`forge doctor`"
+    evidence:
+      - path: pkg/middleware/security_headers.go
+      - path: pkg/middleware/cors.go
+      - path: pkg/middleware/httpstack.go
+      - command: doctor
+
+  - id: middleware-hardening
+    category: security
+    title: Rate limits, idempotency, webhook checks
+    claim: >-
+      Ready-made middleware for rate limits, idempotency keys, webhook signature
+      checks, log redaction and per-request audit records ships in
+      `pkg/middleware`.
+    availability: forge
+    evidence:
+      - path: pkg/middleware/ratelimit.go
+      - path: pkg/middleware/idempotency.go
+      - path: pkg/middleware/webhook.go
+      - path: pkg/middleware/redact.go
+      - path: pkg/middleware/audit.go
+
+  - id: ssrf-guard
+    category: security
+    title: Outbound SSRF guard
+    claim: >-
+      `pkg/netguard` refuses outbound connections to loopback, private,
+      link-local, cloud-metadata and in-cluster destinations, removing the SSRF
+      review from every fetch-by-URL.
+    availability: forge
+    use: "`forge project libraries netguard`"
+    evidence:
+      - path: pkg/netguard/netguard.go
+      - path: pkg/netguard/ranges.go
+      - library: pkg/netguard
+
+  - id: secret-providers
+    category: security
+    title: Pluggable secret providers per env
+    claim: >-
+      `forge.FileSecrets` (a gitignored file store) for dev,
+      `forge.HostedSecrets` (write-only) for hosted envs,
+      `forge.ExternalSecrets` and the `forge.ExternalSecretsOperator` component
+      for a cluster, a self-run `forge.OpenBao` with JWT-only client auth, and
+      `forge.ControlPlaneSecret` for a value the control plane renews with no
+      restart.
+    availability: forge
+    evidence:
+      - command: secret allow
+      - command: secret access
+      - path: pkg/deploy/openbao
+      - path: pkg/deploy/eso
+      - skill: secrets
+      - skill: deploy/external-secrets
+      - skill: deploy/openbao
+      - skill: deploy/control-plane-secret
+
+  - id: hosted-secrets
+    category: security
+    title: Write-only hosted secrets
+    claim: >-
+      Hosted secrets are stored in an OpenBao-backed store, write-only (set
+      once, never read back), scoped to one (org, env), with per-workflow access
+      grants.
+    availability: hosted
+    use: >-
+      `forge secret set --env <env> <KEY>`; `forge secret allow|deny|access`
+    evidence:
+      - command: secret set
+      - command: secret allow
+      - external: control-plane:internal/tenantsecret
+      - external: control-plane:internal/secretstore
+      - external: control-plane:docs/openbao-secret-store.md
+
+  - id: no-dotenv
+    category: security
+    title: No .env files
+    claim: >-
+      A bare `forge lint` fails on a `.env` file, because a dotenv is injected
+      wholesale into every host service and its values never have to be declared
+      in KCL.
+    availability: forge
+    evidence:
+      - command: lint
+      - analyzer: --conventions
+
+  - id: secret-verify
+    category: security
+    title: Verify live secrets without seeing them
+    claim: >-
+      `forge env secrets verify` compares a live Secret with its store copy per
+      key — match or no-match, never a value or hash — and `adopt` hands a
+      verified one to ESO.
+    availability: forge
+    why: "`forge env shape` never carries a secret value either."
+    evidence:
+      - command: env secrets verify
+      - command: env secrets adopt
+      - command: lint --secrets
+      - skill: deploy/shape
+
+  - id: secretgen
+    category: security
+    title: Generated keys and certificates
+    claim: >-
+      `forge generate` mints random keys, passwords that meet a complexity
+      policy, and key pairs and certificates into the file secret store.
+    availability: forge
+    evidence:
+      - library: pkg/secretgen
+
+  - id: key-rotation
+    category: security
+    title: Encryption with key rotation
+    claim: >-
+      `pkg/crypto` seals values with AES-256-GCM under a versioned keyring, so
+      keys rotate without making data unreadable.
+    availability: forge
+    evidence:
+      - library: pkg/crypto
+
+  - id: outbound-redaction
+    category: security
+    title: Credentials redacted on the way out
+    claim: >-
+      `pkg/redact` strips credential shapes and personal paths from text leaving
+      the process, and `forge report-bug --dry-run` shows exactly what would be
+      sent.
+    availability: forge
+    evidence:
+      - library: pkg/redact
+      - command: report-bug
+      - path: docs/report-bug.md
+
+  - id: guarded-db-query
+    category: security
+    title: Audited read-only prod queries
+    claim: >-
+      `forge db query` runs one statement in a READ ONLY transaction as a role
+      that cannot read `forge:secret` columns, demands `--confirm-env` and a
+      reason, and on a hosted env needs the org's `db:query` grant and records
+      an audit row and an activity event.
+    availability: forge
+    use: '`forge db query <env> "<sql>" --confirm-env <env> --reason "<why>"`'
+    why: >-
+      A `forge:secret` column is refused by name and through `select *`,
+      `upper(col)` and `row_to_json`, and the env's `data_access` policy
+      (`open`, `audited`, `deny`) applies.
+    evidence:
+      - command: db query
+      - path: internal/cli/db_query_audit.go
+      - library: pkg/dbquery
+      - marker: forge:secret
+      - library: pkg/dbgrants
+      - library: pkg/dbbrowse
+      - skill: db/query
+
+  - id: go-license-check
+    category: security
+    title: Forbidden licenses fail the gate
+    claim: >-
+      A generated project's `forge ci gate` runs go-licenses over its Go
+      dependencies and fails on one whose license type is forbidden or
+      restricted; there is no license check for npm dependencies.
+    availability: forge
+    evidence:
+      - path: internal/cigate/license.go
+      - command: ci gate
+
+  - id: signed-forge-releases
+    category: security
+    title: Signed, verified forge installs
+    claim: >-
+      Every forge release ships checksums and a Sigstore attestation over its
+      archives, and `install.sh` verifies them (with gh or cosign) before
+      installing.
+    availability: forge
+    evidence:
+      - path: .github/workflows/release-attest.yml
+      - path: install.sh
+      - path: scripts/build-release-assets.sh
+
+  - id: dependabot-codeowners
+    category: security
+    title: Dependabot and CODEOWNERS shipped
+    claim: >-
+      New projects get Dependabot updates and a CODEOWNERS file out of the box.
+    availability: forge
+    evidence:
+      - path: internal/templates/ci/github/dependabot.yml.tmpl
+      - path: internal/templates/ci/github/CODEOWNERS.tmpl
+
+  - id: signed-delivery
+    category: security
+    title: Signed release delivery
+    claim: >-
+      Delivery bundles are signed with the org's key and the cluster applies a
+      digest only if the signature verifies.
+    availability: hosted
+    evidence:
+      - external: control-plane:internal/deliverysign
+      - external: control-plane:internal/workers/delivery_signer
+
+  - id: hosted-sandbox-isolation
+    category: security
+    title: Tenant workloads sandboxed
+    claim: >-
+      Hosted workloads run on an isolated-pool runtime with per-(org, env)
+      namespaces, and a cross-tenant acceptance suite proves no query, secret or
+      network path crosses tenants.
+    availability: hosted
+    evidence:
+      - external: control-plane:internal/isolation
+      - external: control-plane:internal/operators/workload/decorate.go
+      - external: control-plane:internal/tenantnetpol
+
+  - id: managed-postgres-network-containment
+    category: security
+    title: Databases fenced off by default
+    claim: >-
+      A hosted database gets a namespace default-deny, ingress only from your
+      own workloads, and no internet egress (only its backup store and the API
+      server), so a data-only environment is never left open.
+    availability: hosted
+    evidence:
+      - external: control-plane:internal/operators/manageddatabase/netpol.go
+      - external: control-plane:internal/operators/workload/netpol.go
+
+  - id: managed-postgres-role-secrets
+    category: security
+    title: Credentials the platform never holds
+    claim: >-
+      The database owner credential is generated in-cluster and published to
+      your workloads; the control plane holds no credential that can open a
+      tenant database.
+    availability: hosted
+    evidence:
+      - external: control-plane:internal/operators/manageddatabase/rolesecrets.go
+      - external: control-plane:internal/operators/workload/database_identity.go
+
+  - id: build-once-promote-by-digest
+    category: ship
+    title: Build once, promote by digest
+    claim: >-
+      `forge env build --release` records an immutable set of artifact digests,
+      and `forge env deploy prod --from staging` deploys exactly the bytes that
+      passed staging.
+    availability: forge
+    headline: true
+    use: >-
+      `forge env build <env> --release <v>`, then `forge env deploy prod --from
+      staging`.
+    why: >-
+      A pipeline that rebuilds per environment ships something slightly
+      different from what it tested. `--from` works within one control plane;
+      `--from-promotion` pins the source promotion and the deploy exits 3
+      `source_moved` if it moved.
+    evidence:
+      - command: env build --release
+      - command: env deploy --from
+      - library: pkg/release
+      - skill: deploy/release
+      - command: env build
+      - command: env deploy
+      - skill: deploy/build
+
+  - id: workload-once-bind-per-env
+    category: ship
+    title: Deploy anywhere, declare once
+    claim: >-
+      A `fw.Workload` is declared once in `workloads.k` and each env binds it to
+      host processes, Docker Compose, a Kubernetes cluster you run, Reliant
+      hosting or build-only, so no env file restates a command or build that
+      could drift.
+    availability: forge
+    headline: true
+    use: >-
+      `OnHost`, `OnCompose`, `OnCluster`, `OnHosted` or `BuildOnly` per env;
+      `forge env render|shape|diff` show the result.
+    evidence:
+      - path: pkg/deploy/workload_render.go
+      - path: internal/deploytarget/compose.go
+      - path: internal/deploytarget/hosted.go
+      - path: internal/deploytarget/firebase.go
+      - skill: deploy/model
+      - command: env render
+
+  - id: prod-from-day-0
+    category: ship
+    title: Production from the first commit
+    claim: >-
+      What `forge project new` scaffolds on the first commit is what runs in
+      production, configured differently, so there is no toy mode to replace
+      before shipping.
+    availability: forge
+    evidence:
+      - command: project new
+      - path: internal/templates/deploy/kcl
+
+  - id: envs-in-kcl
+    category: ship
+    title: Environments as typed code
+    claim: >-
+      dev, staging and prod are typed KCL from day 0, and `forge ci
+      validate-kcl` proves every env renders manifests the cluster will accept,
+      so a broken deploy declaration fails CI, not the deploy.
+    availability: forge
+    evidence:
+      - path: internal/templates/deploy/kcl
+      - command: ci validate-kcl
+      - command: env render
+      - command: env shape
+
+  - id: env-new
+    category: ship
+    title: New environment in one command
+    claim: >-
+      `forge env new` scaffolds an environment from an existing one, and `forge
+      env options` lists the render options it takes.
+    availability: forge
+    evidence:
+      - command: env new
+      - command: env options
+
+  - id: env-diff
+    category: ship
+    title: Diff your code against deployed
+    claim: >-
+      `forge env diff` renders this checkout and shows how each environment
+      would change.
+    availability: forge
+    evidence:
+      - command: env diff
+      - command: release bundle
+
+  - id: declared-env-catalog
+    category: ship
+    title: Every env in the release
+    claim: >-
+      A released bundle carries one `declared_envs` entry per
+      `deploy/kcl/<env>/main.k`, so the console lists environments that never
+      recorded anything, and `forge env status --json` with no env prints the
+      whole project's topology.
+    availability: forge
+    evidence:
+      - library: pkg/topology
+      - command: env status
+      - skill: deploy/shape
+      - path: internal/bundle/declared_envs_test.go
+
+  - id: release-ledger
+    category: ship
+    title: Release timeline per environment
+    claim: >-
+      Every promotion is an append-only ledger entry, so `forge env releases`
+      answers what was live at any moment (or for any trace id) and what
+      changed: commits, PRs, shape diff, migrations, gates, health.
+    availability: forge
+    use: >-
+      `forge env releases at prod 2026-10-21T14:05:00Z`, or `at` a trace id.
+    evidence:
+      - command: env releases list
+      - command: env releases show
+      - command: env releases at
+      - command: release where
+      - skill: observability/query
+      - library: pkg/release
+
+  - id: deploy-plan-approval
+    category: ship
+    title: Deploy plans with binding approval
+    claim: >-
+      `forge env deploy` prints its plan and writes nothing until confirmed,
+      `--plan-only` then `--approve <digest>` refuses a plan that changed in
+      between, and a data-loss finding needs an explicit acknowledgement even
+      with `--yes`.
+    availability: forge
+    use: >-
+      `forge env deploy <env> [--plan-only|--approve
+      <digest>|--acknowledge-destructive <code>]`
+    why: >-
+      With no terminal and no `--yes` the deploy exits 5 having built, pushed
+      and cut but promoted nothing. A plan that changed between stages is
+      refused with exit 3 `plan_stale` rather than re-approved blind, and
+      stop-class findings (`stateful_deletion`, `lb_identity_change`) need
+      `--acknowledge-destructive <code>`, so a `--yes` hard-coded in CI cannot
+      pre-approve a future data loss. Plan field paths name list items by `name`
+      and never carry a value, so a plan is safe to print into CI logs.
+    evidence:
+      - command: env deploy
+      - path: internal/cli/deploy_plan_gate.go
+      - path: internal/cli/deploy_confirm.go
+      - skill: deploy/plan
+
+  - id: hosted-deploy-plan
+    category: ship
+    title: Server-side deploy plan
+    claim: >-
+      On Reliant hosting the plan is computed from the bundle last applied, not
+      from the declared shape, with unknown fields refused, so the diff you
+      approve is the change that happens.
+    availability: hosted
+    evidence:
+      - command: env deploy --plan-only
+      - external: control-plane:internal/deployplan/assemble.go
+
+  - id: promote-cas
+    category: ship
+    title: No stale deploy overwrites a hotfix
+    claim: >-
+      Every promote is a compare-and-set against the promotion the plan read, so
+      a CI job that waited on approval cannot overwrite a hotfix that landed
+      meanwhile, and a retry that already landed is a no-op.
+    availability: forge
+    use: >-
+      `forge env deploy <env> --expect-current <promotion-id>` (the default is
+      the one the plan read).
+    why: >-
+      The expectation is a promotion id, not a version, because v1 to v2 to v1
+      makes "current is v1" ambiguous. A never-promoted env takes
+      `--expect-current unbound` or `--expect-unbound`.
+    evidence:
+      - path: internal/cli/promote_cas.go
+
+  - id: rollout-not-trampled
+    category: ship
+    title: In-flight rollouts aren't trampled
+    claim: >-
+      Promoting while the current promotion is still rolling out is refused
+      (exit 4) unless `--supersede` is given, and the override is recorded on
+      the new entry.
+    availability: forge
+    evidence:
+      - command: env deploy --supersede
+      - path: internal/cli/deploy.go
+
+  - id: exit-code-contract
+    category: ship
+    title: Exit codes pipelines can branch on
+    claim: >-
+      Every verb shares one exit-code table (0 success, 1 wrong, 2 could not
+      tell, 3 conflict, 4 refused, 5 plan unconfirmed, 6 superseded, 7 queued on
+      a person, 8 timed out), so a pipeline branches without parsing messages.
+    availability: forge
+    evidence:
+      - path: internal/cli/exitcodes.go
+
+  - id: frozen-env
+    category: ship
+    title: Freeze an environment declaratively
+    claim: >-
+      An env whose reconcile policy is `pinned` refuses every promote with exit
+      4 `environment_pinned`, so a freeze is declared state, not a convention.
+    availability: forge
+    evidence:
+      - path: internal/cli/exitcodes.go
+
+  - id: migrations-gate-rollout
+    category: ship
+    title: Migrations gate every rollout
+    claim: >-
+      Deployed envs apply migrations from a rendered initContainer under a
+      Postgres advisory lock before any new pod starts, so replicas never race
+      to apply one and no pod runs on an unmigrated schema.
+    availability: forge
+    evidence:
+      - path: pkg/migratekit/runlock.go
+      - path: pkg/deploy/workload_render.go
+      - command: ci migration-safety
+      - skill: db/deploy-migrations
+
+  - id: migration-release-guard
+    category: ship
+    title: Out-of-order migrations refused
+    claim: >-
+      A release records the migrations it embeds, and the cut and deploy refuse
+      one whose migrations the env's schema already passed, instead of
+      discovering it as crash-looping pods.
+    availability: forge
+    use: >-
+      `forge env build <env> --release`; waive with `--allow-passed-migrations`
+      or `--allow-unmerged-migrations`; backfill old releases with `forge env
+      releases backfill-migrations`.
+    why: "This is the 2026-10-24 reliant incident, encoded."
+    evidence:
+      - command: env releases backfill-migrations
+      - command: env build
+      - skill: db/release-guard
+
+  - id: interrupted-cut-resume
+    category: ship
+    title: A half-pushed release resumes
+    claim: >-
+      A cut that died after pushing images is resumed from its journal by
+      re-running the same build, rebuilding nothing.
+    availability: forge
+    use: "`forge env releases interrupted <env> <v>`"
+    evidence:
+      - command: env releases interrupted
+      - skill: deploy/interrupted-cut
+
+  - id: ledger-portability
+    category: ship
+    title: Portable, verifiable release ledgers
+    claim: >-
+      `forge ledger where|show|export|import` says which backend holds an env's
+      ledger and moves history between backends, `forge release verify` proves
+      every artifact a release names exists and matches, and `forge release
+      bundle` diffs a recorded bundle against the live clusters.
+    availability: forge
+    evidence:
+      - command: ledger where
+      - command: ledger export
+      - command: release verify
+      - command: release bundle
+      - skill: deploy/offline-ledger
+      - skill: deploy/release
+      - command: ledger import
+
+  - id: offline-breakglass
+    category: ship
+    title: Break-glass deploy without control plane
+    claim: >-
+      When the control plane is down, `forge env deploy <env> --offline-ledger
+      --to previous` deploys a cached release by its recorded digests and
+      replays the promotion on the next contact.
+    availability: forge
+    evidence:
+      - path: internal/cli/offline_ledger.go
+      - command: env deploy --offline-ledger
+      - skill: deploy/offline-ledger
+
+  - id: roll-forward
+    category: ship
+    title: Roll forward, deliberately
+    claim: >-
+      A failed deploy leaves the previous ReplicaSet serving and a bad migration
+      is stopped before any workload changes, so recovery is a new release, and
+      binding an older release is an ordinary promote labelled BEHIND in the
+      plan and the ledger.
+    availability: forge
+    use: '`forge env deploy <env> --release <older> --note "<why>"`'
+    why: >-
+      There is no rollback command and no down migration, deliberately; the plan
+      and the ledger label an older release `direction BEHIND`. A per-env
+      rollback floor ("never deploy anything older than X") is designed and not
+      shipped; do not cite it until it is.
+    evidence:
+      - command: env deploy --note
+      - analyzer: --migration-safety
+
+  - id: release-health-gate
+    category: ship
+    title: Prod gated on staging's verdict
+    claim: >-
+      A declared `HealthGate` makes the control plane refuse a prod promote
+      until staging holds a PASS for that release, inside the promotion's
+      transaction, with an audited override for incidents.
+    availability: hosted
+    use: >-
+      `delivery_policy = forge.DeliveryPolicy { health_gate = forge.HealthGate {
+      after = ["staging"] } }`
+    why: >-
+      Enforced by a control plane that advertises `shape-health-gate`; recorded
+      only on a self-hosted env. The refusals are distinct:
+      `health_gate_pending` (exit 4, the window is still open),
+      `health_gate_unproven` (exit 4) and `health_gate_regressed` (exit 1). A
+      release prod already ran with a PASS is admitted without staging, so a
+      rollback needs no detour, and the incident override
+      `--override-health-gate "<why>"` is recorded with who, why and what
+      staging showed.
+    evidence:
+      - library: pkg/releasehealth
+      - skill: deploy/delivery-policy
+
+  - id: release-health-policy
+    category: ship
+    title: Release health policy as code
+    claim: >-
+      Thresholds and the failing set are `forge.ReleaseHealth` on each env,
+      recorded in the release, so the CLI, the console and alerting judge a
+      release the same way.
+    availability: forge
+    use: >-
+      `release_health = forge.ReleaseHealth { ... }` in
+      `deploy/kcl/<env>/main.k`; `--threshold`, `--fail-on` and `--window`
+      override one call.
+    why: >-
+      The thresholds are `window`, `min_requests`, `max_error_rate_increase`,
+      `max_p95_ratio` and `new_issue_min_events`, the failing set is `fail_on`,
+      and the check's document says where each effective value came from.
+      `--wait --early-pass 8m` ends a wait with a PASS only once 8 minutes are
+      observed, every judged service reached its own `min_requests` on the new
+      version, and nothing fired.
+    evidence:
+      - path: pkg/releasehealth/releasehealth.go
+      - command: obs check
+
+  - id: delivery-policy-recorded
+    category: ship
+    title: Delivery policy, stated honestly
+    claim: >-
+      `forge.DeliveryPolicy` declares per env what a release must prove, each
+      control `off`, `audit` or `enforce`: `health_gate`, `signing` and
+      `flux_verify` are enforced on a control plane, while `provenance_sbom`,
+      `trusted_builder`, `admission_verify`, `signed_promotions`, `vuln_gate`,
+      `bundle_kinds` and `approvals` are recorded and refuse nothing yet.
+    status: recorded
+    availability: forge
+    use: >-
+      `delivery_policy = forge.DeliveryPolicy { ... }` in
+      `deploy/kcl/<env>/main.k`
+    why: >-
+      Setting a recorded control to `enforce` today is a declaration of intent.
+      `forge env build` does not sign images; only an env with a control plane
+      gets its bundles signed, by the platform. A control that cannot block a
+      deploy defaults to `enforce`; one that can defaults to `audit`, so you
+      read its would-deny verdicts before turning it on.
+    evidence:
+      - skill: deploy/delivery-policy
+      - library: pkg/approval
+
+  - id: gate-evidence
+    category: ship
+    title: Check results attached to releases
+    claim: >-
+      `forge gate record` attaches a lint, test, smoke or manual sign-off result
+      to the promotion it is about, with who and when, and `forge env deploy
+      --gate` reads them; nothing refuses a promotion on a gate's status.
+    status: recorded
+    availability: forge
+    evidence:
+      - command: gate record
+      - command: gate list
+
+  - id: deploy-waits-for-health
+    category: ship
+    title: Deploys wait, then smoke-test
+    claim: >-
+      `forge env deploy` records, applies and waits for health, and `forge env
+      smoke` probes every declared ingress route for TLS, routing and CORS.
+    availability: forge
+    evidence:
+      - command: env deploy
+      - command: env smoke
+
+  - id: config-check-before-push
+    category: ship
+    title: Config errors caught before push
+    claim: >-
+      `forge env build --push`, `--release` and `forge env deploy` boot each
+      workload with its rendered env under `FORGE_CONFIG_CHECK=1` before
+      pushing, so a missing required config value is found before the image is
+      public.
+    availability: forge
+    use: "`--config-check=gate|warn|off`"
+    evidence:
+      - command: env build
+      - skill: deploy/config-check
+
+  - id: flux-safe
+    category: ship
+    title: Reconciler-safe manifests
+    claim: >-
+      Forge refuses a Job that a GitOps reconciler would re-run or wedge (a TTL,
+      an unhashed name) and a force-recreate on a kind that holds data at bundle
+      build, and a bare `forge lint` catches them earlier across every env.
+    availability: forge
+    evidence:
+      - command: lint
+      - skill: deploy/flux-safe
+      - skill: deploy/flux
+
+  - id: overrides-byo-yaml
+    category: ship
+    title: Override any field, bring any YAML
+    claim: >-
+      `Bundle.overrides`, keyed by `Kind/name`, changes one field of a rendered
+      object without forking the template (a conflict fails the render), and
+      `forge.Manifests` brings your own YAML or Helm chart.
+    availability: forge
+    evidence:
+      - skill: deploy
+      - skill: deploy/overrides
+      - skill: deploy/byo-yaml
+
+  - id: cluster-connect
+    category: ship
+    title: Connect a cluster you run
+    claim: >-
+      `forge cluster connect` registers a Kubernetes cluster you run as one
+      env's binding, with a ServiceAccount token scoped to exactly what the hub
+      applies.
+    availability: forge
+    evidence:
+      - command: cluster connect
+      - skill: deploy/cluster-connect
+
+  - id: static-site-first-class
+    category: ship
+    title: Static sites are full projects
+    claim: >-
+      A landing page, docs site, SPA or PWA gets dev, staging and prod,
+      build-once releases promoted by digest and per-env runtime config without
+      a rebuild, and an existing Vite or Next.js app is adopted in place.
+    availability: forge
+    use: >-
+      `forge project new site --kind site`, or `forge project new --in-place
+      --kind site`.
+    evidence:
+      - command: project new
+      - path: internal/codegen/frontend_config_ts.go
+      - path: internal/linter/staticexport/nextconfig.go
+      - skill: deploy/static-site
+
+  - id: generated-ci-workflows
+    category: ship
+    title: Generated CI and deploy workflows
+    claim: >-
+      A new project gets `ci.yml`, `proto-breaking.yml`, `build-images.yml`, a
+      per-env `deploy.yml`, `e2e.yml` and `pre-commit.yml`, each labelled
+      regenerated or yours, and each a thin wrapper around the local tasks.
+    availability: forge
+    use: >-
+      `ci.gate.extra_checks` adds a check; from CI, `forge env build <env>
+      --push` then `forge env deploy <env> --yes`.
+    evidence:
+      - path: internal/generator/ci_workflows.go
+      - path: internal/templates/ci/github/ci.yml.tmpl
+      - path: internal/templates/ci/github/deploy.yml.tmpl
+      - path: internal/templates/ci/github/proto-breaking.yml.tmpl
+      - path: internal/templates/ci/github/forge-deploy-action.yml.tmpl
+      - skill: ci
+      - skill: ci/extending
+
+  - id: ci-evidence-tools
+    category: ship
+    title: CI runs you can read back
+    claim: >-
+      `forge ci summarize` renders any `--json` verdict as a job summary, and
+      `forge ci run` shows one run's timeline across the cut, checks, promotes
+      and rollouts.
+    availability: forge
+    evidence:
+      - command: ci verify-test-run
+      - command: ci test-budget
+      - command: ci summarize
+      - command: ci run
+
+  - id: managed-postgres
+    category: host
+    title: Managed Postgres
+    claim: >-
+      An environment on Reliant hosting gets Postgres the platform provisions
+      and operates, each database its own server in your (org, environment)
+      namespace, so no other tenant shares it and staging can never get a
+      credential for prod's data.
+    availability: hosted
+    headline: true
+    use: >-
+      `forge.ManagedDatabase { spec = { instances = 1..3, storageGiB = 1..500 }
+      }`, then `forge env deploy <env>`.
+    evidence:
+      - external: control-plane:internal/operators/manageddatabase
+      - skill: deploy/hosting
+      - path: pkg/deploy/v1alpha1/manageddatabase_types.go
+      - path: kcl/tiers/tiers_gen.k
+      - external: control-plane:internal/operators/manageddatabase/doc.go
+      - external: control-plane:internal/operators/manageddatabase/controller.go
+
+  - id: static-hosting-cdn
+    category: host
+    title: Static hosting with a CDN
+    claim: >-
+      A static site is served from a platform-owned bucket behind a CDN,
+      invalidated on release, with per-env runtime config without a rebuild and
+      old releases retained.
+    availability: hosted
+    headline: true
+    evidence:
+      - external: control-plane:internal/operators/staticsite/cloudcdn
+      - external: control-plane:internal/operators/staticsite/invalidation.go
+      - external: control-plane:internal/operators/staticsite/runtimeconfig.go
+      - external: control-plane:internal/operators/staticsite/retention.go
+
+  - id: custom-domains-tls
+    category: host
+    title: Custom domains with automatic HTTPS
+    claim: >-
+      Claim a hostname, publish the DNS records forge prints, and the platform
+      verifies it, issues and renews the certificate and serves it, with bind
+      and rebind between envs and no spec edit.
+    availability: hosted
+    headline: true
+    use: "`forge domain add|bind|verify|ls|show|unbind|rm`"
+    evidence:
+      - command: domain add
+      - command: domain bind
+      - external: control-plane:internal/customdomain
+      - external: control-plane:internal/domaincerts
+      - external: control-plane:docs/custom-domains.md
+      - command: domain verify
+      - path: internal/deploytarget/hosted_domains.go
+      - skill: deploy/domains
+
+  - id: hosted-by-default
+    category: host
+    title: Staging and prod hosted by default
+    claim: >-
+      A new project's staging and prod are bound to Reliant hosting (managed
+      Postgres, the API as a workload, the frontend on a CDN, per-env secrets
+      and custom domains) and rebinding to your own cluster is a one-line
+      change.
+    availability: hosted
+    use: >-
+      `forge env deploy staging`, then `forge env deploy prod --from staging`.
+    evidence:
+      - command: env deploy
+      - external: control-plane:internal/operators/workload
+      - external: control-plane:internal/operators/staticsite
+      - external: control-plane:internal/operators/manageddatabase
+      - skill: deploy/hosting
+
+  - id: claimable-deploys
+    category: host
+    title: Deploy with no account
+    claim: >-
+      `forge env deploy <env> --claimable` publishes one static site, or one
+      service with one database, with no signup and prints a live URL plus a
+      claim link valid 72 hours.
+    availability: hosted
+    use: "`forge env deploy <env> --claimable`"
+    why: >-
+      It is refused when you are signed in; opening the claim link signs the
+      person up free and makes the deploy theirs.
+    evidence:
+      - command: env deploy --claimable
+      - path: internal/cloud/claimable.go
+      - external: control-plane:internal/claimable
+      - external: control-plane:internal/operators/workload/claimable.go
+      - path: internal/cli/deploy_claimable.go
+      - path: internal/cli/claimable_limits.go
+
+  - id: free-static-site
+    category: host
+    title: One static site free
+    claim: >-
+      One hosted static site is free per owning person, counted across every env
+      and every org they own without a plan, with metered egress above the free
+      tier.
+    availability: hosted
+    why: >-
+      The allowance is per person, not per org, because a per-org allowance
+      would multiply free sites (owner decision, 2026-10-26).
+    evidence:
+      - external: control-plane:internal/freesite
+      - external: control-plane:internal/staticfreetier
+
+  - id: live-hostname
+    category: host
+    title: A live URL on deploy
+    claim: >-
+      Every hosted app and site gets its own platform hostname the moment it
+      deploys.
+    availability: hosted
+    evidence:
+      - external: control-plane:internal/operators/staticsite/hostname.go
+      - external: control-plane:internal/hostname
+
+  - id: hosted-workloads
+    category: host
+    title: Services, workers and jobs hosted
+    claim: >-
+      Services, workers and gating jobs run hosted under a restricted profile
+      (read-only root filesystem, no service-account token, restricted pod
+      security, quota and egress containment); cron-kind workloads and operators
+      need a cluster you run.
+    availability: hosted
+    evidence:
+      - external: control-plane:internal/operators/workload/doc.go
+      - external: control-plane:internal/operators/workload/decorate.go
+
+  - id: hosted-registry
+    category: host
+    title: A private registry included
+    claim: >-
+      Hosted envs push to a per-org registry subtree authenticated by your
+      Reliant token, so there is no registry account to create and the platform
+      admits only your own images.
+    availability: hosted
+    evidence:
+      - command: registry login
+      - command: lint
+      - external: control-plane:internal/ociregistry
+      - external: control-plane:internal/registryauth
+
+  - id: hosted-not-ready-policy
+    category: host
+    title: Broken workloads stop billing
+    claim: >-
+      A workload with no ready replica past its limit is scaled to zero and
+      marked failed instead of crash-looping forever.
+    availability: hosted
+    evidence:
+      - external: control-plane:internal/operators/workload/notready.go
+
+  - id: billing-queued-exit7
+    category: host
+    title: Billing never fails silently
+    claim: >-
+      A deploy that needs billing is recorded and queued (exit 7) with the link
+      to fix it, and proceeds on its own when the hold clears.
+    availability: hosted
+    use: "`forge env deploy <env> --wait` blocks until it is live."
+    why: "A capacity pre-flight runs before anything builds."
+    evidence:
+      - path: internal/cli/deploy_queued.go
+      - path: internal/cli/env_wait.go
+      - external: control-plane:internal/deployhold
+      - skill: deploy/hosted-capacity
+
+  - id: hosted-env-lifecycle
+    category: host
+    title: Env lifecycle from the CLI
+    claim: >-
+      `forge env stop`, `start` and `delete` operate a hosted env (delete shows
+      what goes and refuses while a custom domain is bound), and `forge env list
+      --orphaned` finds hosted envs the project no longer declares.
+    availability: hosted
+    evidence:
+      - command: env deploy
+      - external: control-plane:internal/operators/workload/lapse.go
+      - command: env stop
+      - command: env delete
+      - command: env list
+      - skill: deploy/lifecycle
+
+  - id: llm-no-key
+    category: host
+    title: LLM access without a key
+    claim: >-
+      Declare `forge.LLM { runtime = forge.OnHosted {} }` and give a workload
+      `forge.llm_env()`, and the platform puts a per-env, capped, billed key in
+      the pod for the official OpenAI and Anthropic SDKs, unmodified, so the app
+      never holds a provider key.
+    availability: hosted
+    why: >-
+      Reliant's gateway speaks both wire formats, streaming and image generation
+      included, so `anthropic.NewClient()` reads `ANTHROPIC_BASE_URL` and
+      `ANTHROPIC_API_KEY` unmodified; dev and a cluster you run use
+      `forge.LLMEndpoint`, including a local Ollama.
+    evidence:
+      - skill: llm
+      - external: control-plane:internal/operators/workload/llminject.go
+      - external: control-plane:internal/llmgateway
+      - skill: deploy/llm
+
+  - id: managed-postgres-placement
+    category: host
+    title: Databases on stable nodes
+    claim: >-
+      Database instances are placed on non-scale-to-zero nodes so the autoscaler
+      never reclaims a node holding your data.
+    availability: hosted
+    evidence:
+      - external: control-plane:internal/operators/manageddatabase/placement.go
+
+  - id: web-forge-console
+    category: host
+    title: A console for every project
+    claim: >-
+      The Reliant web app has a Forge console per project: workloads, releases,
+      observability and dashboards, data, storage, environments, secrets,
+      domains, monitoring and activity.
+    availability: reliant
+    evidence:
+      - external: reliant:frontends/web/src/forgeConsoleRoutes.tsx
+      - external: reliant:frontends/web/src/forgeShellRoutes.tsx
+
+  - id: hosted-console-data-storage-browser
+    category: host
+    title: Data and storage browsers
+    claim: >-
+      The web console browses an environment's database and its buckets
+      read-only, scoped to owned, ready resources of your org.
+    availability: hosted
+    evidence:
+      - external: control-plane:internal/storagebrowse
+      - external: control-plane:internal/handlers/storage_browser
+      - external: reliant:frontends/web/src/forgeConsoleRoutes.tsx
+
+  - id: local-clickstack
+    category: run
+    title: Observability stack included
+    claim: >-
+      `forge env up` brings up ClickHouse, HyperDX and an OTLP collector in one
+      container on loopback ports, with logs, traces and metrics sources
+      pre-created and no sign-in, so you can debug from the first boot.
+    availability: forge
+    headline: true
+    use: "`forge env up dev`; opt out with `_observability = False`."
+    evidence:
+      - command: env up
+      - path: internal/clickstack/clickstack.go
+
+  - id: default-alerts
+    category: run
+    title: Production alerts out of the box
+    claim: >-
+      Every env gets default alert rules for error rate, latency, silent
+      services, frontend errors and LCP, new, regressed and spiking issues,
+      regressed releases, anomalies, uptime, certificates, crash loops, OOM
+      kills, memory, image pulls, evictions, failed deploys and observability
+      quota, evaluated locally and delivered in-app, to Slack or to PagerDuty
+      when hosted.
+    availability: forge
+    headline: true
+    why: >-
+      The defaults are `ServiceErrorRateHigh`, `ServiceLatencyP95High`,
+      `ServiceSilent`, `FrontendJSErrorSpike`, `FrontendLCPPoor`, `NewIssue`,
+      `IssueRegressed`, `IssueSpike`, `ReleaseRegressed`, `ServiceAnomaly`,
+      `UptimeCheckFailing`, `UptimeCheckDown`, `CertificateExpiring`,
+      `CertificateExpiringSoon`, `WorkloadCrashLooping`, `WorkloadOOMKilled`,
+      `WorkloadMemoryNearLimit`, `WorkloadImagePullFailed`, `WorkloadEvicted`,
+      `DeployFailed`, `ObservabilityQuotaOver100` and
+      `ObservabilityQuotaOver150`, each tunable or off. Error-rate rules read
+      tail-sampled spans correctly rather than over-stating the rate.
+    evidence:
+      - path: internal/obsdash/alerts.go
+      - library: pkg/alerting
+      - command: obs alerts
+      - external: control-plane:docs/observability/builtin-alerts.md
+      - external: control-plane:internal/alerting
+      - external: control-plane:internal/handlers/alerting/helpers.go
+
+  - id: obs-check
+    category: run
+    title: Prove each deploy is good
+    claim: >-
+      `forge obs check <env>` compares the window after a promotion with the
+      equal window before it, per service, lists what the release opened, and
+      exits pass, fail, could not tell or timed out.
+    availability: forge
+    headline: true
+    use: "`forge obs check prod --wait --json`"
+    why: >-
+      Error rate is weighted for tail sampling, client-cancelled requests are
+      not errors, and latency is judged per endpoint. A gate must treat exit 2
+      as "not proven good", never as a pass.
+    evidence:
+      - command: obs check
+      - library: pkg/releasehealth
+      - skill: observability/query
+
+  - id: edge-telemetry
+    category: run
+    title: Every request traced and measured
+    claim: >-
+      Each RPC is one span, one metric sample and one log record at the edge
+      with a W3C trace and request id, and every component call and ORM query is
+      a child span — no hand-written tracing.
+    availability: forge
+    use: >-
+      Nothing to do; opt a package out with `// forge:no-observe`, read it with
+      `forge obs trace`.
+    why: >-
+      The RPC interceptor chain (`serverkit.NewChain`) records the span, the
+      metric sample and the log record for every call. A package whose
+      constructor returns its contract gets a generated `middleware_gen.go`
+      decorator through an owned `observe_chain.go` seam, and the ORM registers
+      a `bunotel` hook, so internal calls and queries show up in traces with no
+      hand-written span.
+    evidence:
+      - library: pkg/observe
+      - library: pkg/serverkit
+      - marker: forge:no-observe
+      - skill: observability/component-chain
+      - library: pkg/orm
+
+  - id: one-log-path
+    category: run
+    title: One log path, never double-counted
+    claim: >-
+      The server writes JSON lines to stdout with its process resource; locally
+      a collector tails `.forge/logs/<env>/*.log`, on a cluster a node agent
+      reads container logs, and `trace_id` and `span_id` become each line's
+      trace link.
+    availability: forge
+    why: >-
+      The stdout path and the OTLP logs exporter are mutually exclusive by
+      design, so a line is never stored twice.
+    evidence:
+      - skill: observability
+      - library: pkg/observe
+
+  - id: probes-graceful-shutdown
+    category: run
+    title: Probes and zero-drop shutdown
+    claim: >-
+      A service gets `/readyz` and `/healthz`, and the pod's grace period is
+      derived from the drain settings, so a rollout never kills a pod mid-drain
+      and a draining replica reports its in-flight calls as canceled, not as
+      errors.
+    availability: forge
+    why: "The grace period is `PRE_STOP_DELAY + SHUTDOWN_TIMEOUT` + 5s."
+    evidence:
+      - path: pkg/serverkit/serverkit.go
+      - path: pkg/serverkit/pooler_drain.go
+      - path: pkg/lifecyclekit/lifecyclekit.go
+      - command: doctor
+      - library: pkg/serverkit
+      - library: pkg/lifecyclekit
+      - library: pkg/middleware
+      - skill: deploy/model
+
+  - id: telemetry-proven
+    category: run
+    title: Proves telemetry actually arrives
+    claim: >-
+      `forge env status` reads the store itself and reports which services sent
+      traces, metrics, logs and profiles in the last 15 minutes, and missing
+      evidence is UNDETERMINED, never PASS.
+    availability: forge
+    use: "`forge env status dev --signal traces|metrics|logs|profiles|app`"
+    evidence:
+      - command: env status
+
+  - id: obs-cli
+    category: run
+    title: Query prod from the shell
+    claim: >-
+      `forge obs logs`, `traces`, `trace`, `metrics`, `query` and the rest
+      answer against the local ClickStack or a hosted env through one query
+      compiler, as JSON with runnable `suggested[]` next commands.
+    availability: forge
+    use: >-
+      `forge obs logs prod --service api --severity error --json`; `--explain`
+      prints the compiled statements.
+    why: >-
+      Each verb answers in one `forge.obs.<verb>/v1` document carrying `ok`,
+      `exit_code`, `scope`, bounded lists with `next_page_token` and up to three
+      runnable `suggested[]` follow-ups, so a query that works locally means the
+      same against prod. Raw SQL goes through a read-only guard.
+    evidence:
+      - library: pkg/obsquery
+      - command: obs logs
+      - command: obs trace
+      - command: obs query
+      - command: obs metrics query
+      - skill: observability/query
+
+  - id: obs-status-changes
+    category: run
+    title: What's wrong, what changed
+    claim: >-
+      `forge obs status` summarizes services, open issues, firing alerts and the
+      release in force; `forge obs changes` lists promotions, rollbacks, failed
+      deploys and activity.
+    availability: forge
+    evidence:
+      - command: obs status
+      - command: obs changes
+
+  - id: readable-traces
+    category: run
+    title: Traces that show missing spans
+    claim: >-
+      `forge obs trace` prints a capped tree with errors and the critical path
+      expanded, linked logs, and how much time went to uninstrumented code.
+    availability: forge
+    why: >-
+      Each span says how it ended (`rpc=CANCELED`, `http=403`), and any
+      attribute filters, e.g. `--filter span.attr.chat.id=<id>`.
+    evidence:
+      - command: obs trace
+
+  - id: error-fingerprints
+    category: run
+    title: Stacks and stable error fingerprints
+    claim: >-
+      Server faults carry a bounded stack and a fingerprint folding in the
+      normalized cause, so one outage is one issue, not six.
+    availability: forge
+    why: >-
+      Internal, Unknown, DataLoss and Unavailable errors capture a capped stack
+      into `exception.stacktrace`, and the fingerprint folds in the normalized
+      cause (the SQLSTATE, the refused dial target), so one "Transaction failed"
+      is not six different outages in one issue.
+    evidence:
+      - command: obs issues
+      - library: pkg/svcerr
+      - skill: observability/error-stacks
+
+  - id: issues-triage
+    category: run
+    title: Error issues tied to releases
+    claim: >-
+      Errors group into issues with culprit, frames, trace, events per version
+      and suspect commits, and `resolve --in next` ties a fix to a release so a
+      later event from an older one is a regression.
+    availability: forge
+    use: >-
+      `forge obs issue <id>`; `forge obs issues --since-release|--since-deploy`
+      lists what a release introduced.
+    why: >-
+      Issues are fingerprinted with one algorithm, at query time locally and at
+      ingest on the control plane; issues that share a cause and first fired
+      together collapse into one incident without being merged, and triage
+      (`resolve`, `ignore`, `assign`, `comment`) is a verb.
+    evidence:
+      - command: obs issue
+      - command: obs issues
+      - command: obs issue resolve
+      - command: obs issue ignore
+      - command: obs issue assign
+      - skill: observability/query
+
+  - id: issues-symbolication
+    category: run
+    title: Grouped errors with real stacks
+    claim: >-
+      Browser and server errors are grouped into issues with triage verbs, and
+      minified browser stacks are symbolicated from source maps that are never
+      served publicly.
+    availability: hosted
+    evidence:
+      - command: obs issues
+      - command: obs issue resolve
+      - external: control-plane:internal/issues
+      - external: control-plane:internal/symbolicate
+
+  - id: declared-metrics
+    category: run
+    title: Cardinality-safe declared metrics
+    claim: >-
+      Each metric is declared with its unit and attribute keys, and an
+      undeclared attribute panics in development and is dropped and counted in
+      production, so cardinality never silently explodes.
+    availability: forge
+    use: >-
+      Declare instruments in `internal/metrics/metrics.go`; `<bin> metrics
+      schema --json` and `forge obs metrics declared` print the set.
+    evidence:
+      - command: obs metrics declared
+      - command: obs metrics describe
+
+  - id: continuous-profiling
+    category: run
+    title: Continuous profiling, no setup
+    claim: >-
+      Every process samples a CPU profile every five minutes and a heap snapshot
+      every two hours over OTLP, and `forge obs profile` exports pprof,
+      speedscope or collapsed stacks.
+    availability: forge
+    evidence:
+      - command: obs profile
+      - path: pkg/observe/PROFILES.md
+      - library: pkg/profilequery
+      - skill: observability/profiles
+
+  - id: alerts-as-code
+    category: run
+    title: Alerts as code, run locally
+    claim: >-
+      `forge.AlertRule`, `forge.AlertRoute` and `forge.AlertDefault` are KCL
+      validated at render and recorded in the release, and `forge obs alerts
+      check|run` evaluates them locally through a real Alertmanager.
+    availability: forge
+    why: >-
+      An `AlertRule`'s `expr` is ClickHouse SQL, and every row it returns is a
+      firing instance.
+    evidence:
+      - command: obs alerts check
+      - command: obs alerts run
+      - path: pkg/alerting/alertmanager.go
+      - skill: observability/alerts
+
+  - id: release-regressed-alert
+    category: run
+    title: Bad releases flagged automatically
+    claim: >-
+      For an env on a control plane, every promotion is judged when its window
+      closes, with the env's declared policy and no client overrides, and a FAIL
+      raises `ReleaseRegressed` naming the findings, the release and its commit
+      range.
+    availability: hosted
+    use: "`forge obs check <env> --release <v>` reproduces the verdict."
+    evidence:
+      - command: obs check
+      - external: control-plane:internal/releasehealth
+      - external: control-plane:docs/observability/builtin-alerts.md
+      - skill: observability/alerts
+
+  - id: uptime-cert-probes
+    category: run
+    title: Uptime and certificate probes
+    claim: >-
+      The platform probes a hosted env's public frontends and routes from
+      outside on a schedule with no declaration, and alerts on failing checks
+      and on certificates expiring within 14 and 3 days.
+    availability: hosted
+    use: "`forge.UptimeCheck` adds checks beyond the derived ones."
+    evidence:
+      - external: control-plane:internal/uptimeprobe
+      - external: control-plane:docs/observability/uptime-prober.md
+      - path: internal/obsdash/alerts.go
+      - skill: observability/uptime
+
+  - id: generated-dashboards
+    category: run
+    title: Dashboards derived from code
+    claim: >-
+      Process and role dashboards are generated from the deployed commands and
+      the composition graph, and `forge obs dashboards audit` replays an empty
+      panel to say why it is empty.
+    availability: forge
+    why: >-
+      Dashboards are HyperDX JSON in `deploy/observability/dashboards/`, and
+      only `*_gen.json` is forge's.
+    evidence:
+      - command: obs dashboards check
+      - command: obs dashboards audit
+      - command: obs dashboards add-panel
+      - path: internal/obsdash/bundleset.go
+      - library: pkg/dashspec
+      - skill: observability/dashboards
+      - skill: debug/dashboards
+
+  - id: release-markers
+    category: run
+    title: Release markers on dashboards
+    claim: >-
+      Releases are marked on generated dashboards so a regression lines up with
+      the deploy that caused it.
+    availability: forge
+    evidence:
+      - path: internal/obsdash/releases.go
+
+  - id: rum-sessions
+    category: run
+    title: Real-user sessions and replay
+    claim: >-
+      The browser SDK reports through a same-origin relay that never forwards
+      cookies or `authorization`, and `forge obs session` prints what one user
+      did as a text timeline; replay is opt-in and always masked.
+    availability: forge
+    why: >-
+      The relay is same-origin (`/_otel`), and source maps are extracted to a
+      registry sidecar and never served.
+    evidence:
+      - command: obs sessions
+      - command: obs session
+      - path: pkg/obsquery/rum_sessions.go
+      - path: pkg/obsquery/rum_replay.go
+      - skill: frontend-runtime/telemetry
+
+  - id: telemetry-anywhere
+    category: run
+    title: Send telemetry anywhere
+    claim: >-
+      `forge.Observability` names any OTLP endpoint, a headers secret reference,
+      the signals and the sampling, and forge renders the collector for the
+      runtime.
+    availability: forge
+    why: >-
+      A local env can store its telemetry in the org's hosted store
+      (`dev_telemetry`, `--telemetry=auto|hosted|local`).
+    evidence:
+      - skill: observability/destination
+      - path: kcl/schema.k
+      - library: pkg/observe
+
+  - id: real-opt-out
+    category: run
+    title: Opt-out enforced at the source
+    claim: >-
+      Turning telemetry off for an env, or for one category (traces, metrics,
+      logs, profiles, metadata, browser), means it is never collected or stored,
+      so never billed, and session replay is opt-in.
+    availability: forge
+    use: >-
+      `observability = forge.Observability { enabled = False }`, or one category
+      off.
+    evidence:
+      - skill: observability
+      - path: kcl/schema.k
+
+  - id: hosted-otel-injection
+    category: run
+    title: Telemetry wired with no keys
+    claim: >-
+      The platform injects the OTLP endpoint and a per-env telemetry token into
+      every hosted pod, so logs, traces and metrics flow with nothing to
+      configure.
+    availability: hosted
+    evidence:
+      - external: control-plane:internal/operators/workload/otelinject.go
+      - external: control-plane:internal/telemetrytoken
+
+  - id: hosted-observability-store
+    category: run
+    title: Hosted observability store
+    claim: >-
+      Hosted envs store logs, traces, metrics and profiles in the org's own
+      ClickHouse scope, queried by the same `forge obs` verbs and console as
+      local ClickStack, with quota and opt-out enforced at the source.
+    availability: hosted
+    evidence:
+      - command: obs query
+      - external: control-plane:internal/obstenant
+      - external: control-plane:internal/obspolicy
+      - external: control-plane:internal/obsqueryquota
+      - external: control-plane:docs/observability/query-service.md
+
+  - id: managed-postgres-backup-status-alert
+    category: run
+    title: Backup health you can see
+    claim: >-
+      Deploy status reports base-backup age, WAL archiving and the oldest
+      restorable point separately, and a built-in alert pages when a database's
+      backups are on and failing.
+    availability: hosted
+    evidence:
+      - external: control-plane:proto/controlplane/v1/deploy.proto
+      - external: control-plane:internal/alerting/mdb_backup.go
+
+  - id: database-dashboards-panels
+    category: run
+    title: Live panels over your data
+    claim: >-
+      Opt a managed database into dashboards and the console runs live panels as
+      a read-only role that sees only what your migrations GRANT it.
+    availability: hosted
+    evidence:
+      - path: kcl/schema.k
+      - external: control-plane:internal/dbpanel
+
+  - id: audit-activity
+    category: run
+    title: Audit trail and activity stream
+    claim: >-
+      Every rpc writes a structured audit record, `pkg/audit` persists a
+      queryable trail, and the activity stream is declared on the rpc and
+      written by one interceptor, never by hand.
+    availability: forge
+    use: >-
+      Declare `(forge.v1.method).activity` (verb, target, env) on a mutating
+      rpc; `pkg/audit` serves a scoped `ListAuditEvents`.
+    evidence:
+      - library: pkg/audit
+      - path: pkg/activity/interceptor.go
+      - analyzer: --conventions
+      - library: pkg/activity
+      - skill: observability/audit-log
+      - skill: activity
+
+  - id: dora-metrics
+    category: run
+    title: DORA metrics from the ledger
+    claim: >-
+      Change-failure rate and time to restore are computed from the release
+      ledger and alert history, not hand-reported.
+    status: recorded
+    availability: hosted
+    evidence:
+      - external: control-plane:internal/dora
+      - external: control-plane:internal/handlers/delivery_insights
+
+  - id: skills-in-the-binary
+    category: agents
+    title: Skills that match your forge
+    claim: >-
+      `forge skill list`, `load` and `search` serve 180+ skills built into the
+      forge you run, so an agent never reads guidance written for another
+      version.
+    availability: forge
+    headline: true
+    use: "`forge skill load forge`"
+    why: "A skill that disagrees with the project is reported as a forge bug."
+    evidence:
+      - command: skill load
+      - command: skill search
+      - path: internal/templates/project/skills
+      - skill: forge
+
+  - id: mcp-server
+    category: agents
+    title: Built-in MCP server
+    claim: >-
+      `forge mcp` exposes forge on stdio to any MCP-capable harness, deploys and
+      bug reports included, with no shell scraping.
+    availability: forge
+    headline: true
+    evidence:
+      - command: mcp
+      - path: internal/cli/mcp_tools.go
+      - path: internal/cli/mcp_deploy.go
+
+  - id: capabilities-introspection
+    category: agents
+    title: Whole surface in one call
+    claim: >-
+      `forge project capabilities --json` enumerates every command, lint
+      analyzer and marker from the binary itself, and `forge project
+      annotations` the entity-authoring vocabulary, so neither can drift from
+      the code.
+    availability: forge
+    evidence:
+      - command: project capabilities
+      - command: project annotations
+
+  - id: shapes-map
+    category: agents
+    title: Find any symbol instantly
+    claim: >-
+      `forge project shapes` locates every rpc, message, table, handler, hook
+      and store with file:line, and `project map` annotates ownership.
+    availability: forge
+    evidence:
+      - command: project shapes
+      - command: project map
+      - command: project graph
+
+  - id: libraries-introspection
+    category: agents
+    title: Library API without source diving
+    claim: >-
+      `forge project libraries <pkg>` prints every signature of a `forge/pkg`
+      package, which `go doc` renders as `struct{ ... }`, so an agent adopts an
+      existing utility instead of re-implementing it.
+    availability: forge
+    evidence:
+      - command: project libraries
+
+  - id: project-audit
+    category: agents
+    title: Project state snapshot
+    claim: >-
+      `forge project audit --json` reports services, rpcs, entities, drift,
+      unwired stubs and ownership in one document.
+    availability: forge
+    evidence:
+      - command: project audit
+      - command: project introspect handlers
+      - library: pkg/diagnostics
+
+  - id: machine-readable-json
+    category: agents
+    title: JSON everywhere, with next steps
+    claim: >-
+      `--json` on lint, obs, deploy plans and status emits documented schemas
+      with the shared exit codes and `suggested[]` next commands an agent runs
+      instead of paraphrasing.
+    availability: forge
+    evidence:
+      - command: lint --json
+      - path: docs/mcp.md
+
+  - id: report-bug
+    category: agents
+    title: Agents report framework bugs
+    claim: >-
+      `forge report-bug` sends a redacted defect report with evidence,
+      deduplicated, and sends nothing unless invoked; `--dry-run` prints exactly
+      what would go.
+    availability: forge
+    evidence:
+      - command: report-bug
+      - path: internal/cli/report_bug.go
+      - library: pkg/redact
+      - path: docs/report-bug.md
+
+  - id: project-memory
+    category: agents
+    title: Agent memory file generated
+    claim: >-
+      `forge project memory` renders the framework guide every agent session
+      loads, kept current with the pinned forge.
+    availability: forge
+    evidence:
+      - command: project memory
+      - path: internal/templates/project/reliant.md.tmpl
+
+  - id: harness-pointers
+    category: agents
+    title: Works in Claude Code, Cursor
+    claim: >-
+      Forge writes thin pointers for Claude Code and Cursor that route an agent
+      to `forge skill`, never copies of skill bodies that would go stale.
+    availability: forge
+    evidence:
+      - command: skill list
+
+  - id: predictable-layout
+    category: agents
+    title: Layout agents can predict
+    claim: >-
+      Every project shares one enforced layout (one service per proto file, a
+      service's files in one directory, contracts beside their packages), so an
+      agent knows where code goes.
+    availability: forge
+    evidence:
+      - analyzer: --conventions
+      - command: project features
+
+  - id: design-discipline
+    category: agents
+    title: Design asks for a brief
+    claim: >-
+      The `frontend/design` skill makes an agent get a product brief before
+      styling and will not invent an aesthetic, and the scaffolded UI is
+      labelled starter code.
+    availability: forge
+    evidence:
+      - skill: frontend
+
+  - id: llm-placement-guidance
+    category: agents
+    title: The LLM proposes, code decides
+    claim: >-
+      The `llm` skill puts agentic or judgement work in a Reliant workflow that
+      calls the app's API, keeps money, limits and approvals as rules in the
+      app, and never calls a model from the browser.
+    availability: forge
+    why: >-
+      The rule is "the LLM proposes, code decides": an inline call's output is
+      untrusted input.
+    evidence:
+      - skill: llm
+
+  - id: build-an-app-workflow
+    category: agents
+    title: Build an App workflow
+    claim: >-
+      A built-in workflow scopes the app with you, scaffolds it with forge, gets
+      it green, fans out the implementation and verifies it in one review loop.
+    availability: reliant
+    evidence:
+      - external: reliant:internal/workflow/builtin/forge-one-shot.yaml
+
+  - id: move-to-forge-workflow
+    category: agents
+    title: Move to Forge workflow
+    claim: >-
+      A built-in workflow migrates an existing codebase into a forge project,
+      gated on forge's exit codes with approval steps.
+    availability: reliant
+    evidence:
+      - external: reliant:internal/workflow/builtin/forge-migrate.yaml
+
+  - id: oncall-agent
+    category: agents
+    title: An on-call first responder
+    claim: >-
+      Every paging alert and new, regressed or spiking error becomes a GitHub
+      issue investigated read-only, with severity, evidence, suspected cause and
+      a proposed fix.
+    availability: reliant
+    evidence:
+      - external: reliant:internal/workflow/builtin/autopilot-oncall.yaml
+      - external: control-plane:internal/handlers/autopilot_receiver_internal
+
+  - id: ai-pr-security-review
+    category: agents
+    title: AI code and security review
+    claim: >-
+      Built-in reviewers comment on every pull request: one finds defects
+      (comment or request-changes, never approves), one threat-models the diff
+      with file:line evidence and exploit sketches.
+    availability: reliant
+    evidence:
+      - external: reliant:internal/workflow/builtin/autopilot-pr-review.yaml
+      - external: reliant:internal/workflow/builtin/autopilot-security-review.yaml
+
+  - id: agent-forge-deploy-tool
+    category: agents
+    title: Agents deploy with guardrails
+    claim: >-
+      Reliant agents get forge read tools plus a deploy tool that plans first,
+      applies asynchronously and waits, the only cluster-mutating path, kept
+      deliberately conservative.
+    availability: reliant
+    evidence:
+      - external: reliant:internal/toolexec/daemonruntime/cmd_forge_deploy.go
+      - external: reliant:internal/toolexec/daemonruntime/cmd_forge.go
+      - external: reliant:internal/toolexec/daemonruntime/cmd_forge_promote.go
