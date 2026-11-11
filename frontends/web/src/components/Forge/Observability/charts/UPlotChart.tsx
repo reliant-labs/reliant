@@ -481,16 +481,21 @@ export function UPlotChart({
 /**
  * The data columns of a stacked chart: each solid series' running total, in
  * order, so a column's top edge is the sum of it and every solid series before
- * it. A null point is a gap in that series (the total carries on without it);
- * a dashed series is left as it is.
+ * it. Positive and negative values stack apart, up and down from zero (a
+ * lifecycle chart's churned users sit below the axis, under the new, retained
+ * and resurrected above it), so a negative segment never eats into the
+ * positive ones. A null point is a gap in that series (the total carries on
+ * without it); a dashed series is left as it is.
  */
 export function stackValues(series: readonly ChartSeries[]): (number | null)[][] {
   const length = Math.max(0, ...series.map((s) => s.values.length));
-  const running = new Array<number>(length).fill(0);
+  const up = new Array<number>(length).fill(0);
+  const down = new Array<number>(length).fill(0);
   return series.map((s) => {
     if (s.dashed) return s.values;
     return s.values.map((value, i) => {
       if (value === null || !Number.isFinite(value)) return null;
+      const running = value < 0 ? down : up;
       running[i] += value;
       return running[i];
     });

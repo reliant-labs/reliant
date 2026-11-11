@@ -26,6 +26,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/machinepool"
+	"github.com/reliant-labs/reliant/internal/orgs"
 	"github.com/reliant-labs/reliant/internal/triggers"
 	"github.com/reliant-labs/reliant/internal/workflow"
 	v2 "github.com/reliant-labs/reliant/internal/workflow/runtime"
@@ -653,7 +654,7 @@ func (s *Service) requireProjectWritable(ctx context.Context, trigger *core.Trig
 	case err == nil:
 		return nil
 	case errors.Is(err, authz.ErrMembershipUnavailable):
-		return svcerr.WithCause(svcerr.Unavailable("could not verify the trigger's organization; try again"), err)
+		return orgs.LookupFailed(ctx, "could not verify the trigger's organization; try again", err)
 	case errors.Is(err, core.ErrProjectNotFound):
 		return svcerr.NotFound("trigger")
 	default:

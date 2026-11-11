@@ -105,6 +105,9 @@ type Repository interface {
 
 	// The chat and user update logs.
 	GetLatestUpdateSequence(ctx context.Context, chatID string) (int64, error)
+	// The compaction watermark: at or below it the log keeps only each
+	// entity's newest update.
+	GetChatCompactedThrough(ctx context.Context, chatID string) (int64, error)
 	GetUpdatesSince(ctx context.Context, chatID string, sinceSeq int64, limit int) ([]db.ChatUpdate, error)
 	ListErrorUpdatesInRange(ctx context.Context, chatID string, from *time.Time, thread string, beforeSeq int64) ([]db.ChatUpdate, error)
 	GetLatestWorkflowNodeUpdates(ctx context.Context, chatID, workflowID string) ([]db.ChatUpdate, error)

@@ -62,6 +62,35 @@ export function sqlAggregate(data: Pick<PanelResult, "truncated" | "rows" | "col
   return !data.truncated && data.rows.length === 1 && data.columns.length > 0 && Object.keys(data.rows[0].group).length === 0;
 }
 
+/** A figure column that holds the period before the figure beside it ("Previous 7 days"). */
+const PREVIOUS = /^previous\b/i;
+
+/**
+ * A row of figures that carries its own comparison: each figure followed by a
+ * column named "Previous …" (forge's built-in Overview counts users over a
+ * fixed 7 days, whatever the range, and returns the 7 days before beside
+ * them). Split into the figures and their previous values, labelled from
+ * that column ("previous 7 days"), so each figure is drawn once, with its
+ * change. Null when the row has no such column.
+ */
+export function sqlPreviousFigures(data: PanelResult): { current: PanelResult; previous: PanelResult; label: string } | null {
+  if (!sqlAggregate(data)) return null;
+  const cols = data.columns;
+  const pairs: { at: number; prev: number }[] = [];
+  for (let i = 0; i < cols.length - 1; i++) {
+    if (!PREVIOUS.test(cols[i]) && PREVIOUS.test(cols[i + 1])) pairs.push({ at: i, prev: i + 1 });
+  }
+  if (!pairs.length) return null;
+  const kept = cols.map((_, i) => i).filter((i) => !pairs.some((p) => p.prev === i));
+  const values = data.rows[0].values;
+  const row = (pick: (i: number) => number | null) => [{ group: {}, values: kept.map(pick) }];
+  return {
+    current: { ...data, columns: kept.map((i) => cols[i]), rows: row((i) => values[i] ?? null) },
+    previous: { ...data, columns: kept.map((i) => cols[i]), rows: row((i) => values[pairs.find((p) => p.at === i)?.prev ?? -1] ?? null) },
+    label: cols[pairs[0].prev].toLowerCase(),
+  };
+}
+
 /** sql styles that draw no figure, so take no sparkline and no comparison. */
 const FIGURELESS_STYLES = new Set(["funnel", "heatmap"]);
 

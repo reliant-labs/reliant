@@ -64,6 +64,40 @@ service InboxService {
     };
   }
 
+  // KeepMarkedWorktree answers a marked worktree's item with "Keep": the
+  // reclaim mark the person saw (mark_id) is cancelled and its tombstone
+  // removed, and the worktree's quiet period starts again. NOT_FOUND for a
+  // worktree of the caller's that is not marked; FAILED_PRECONDITION when it
+  // carries a different mark than the one shown (refresh and decide again).
+  rpc KeepMarkedWorktree(KeepMarkedWorktreeRequest) returns (KeepMarkedWorktreeResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "keep_marked_worktree"
+        target: {
+          kind: "worktree"
+          id: "worktree_id"
+        }
+      }
+    };
+  }
+
+  // ReclaimMarkedWorktreeNow answers a marked worktree's item with "Reclaim
+  // now": the mark's waiting period is skipped and the worktree is checked
+  // at once. Every other check still applies: if it was used since the mark,
+  // its tombstone is gone, or it has new work, the mark is cancelled instead
+  // and nothing is removed. Errors as KeepMarkedWorktree.
+  rpc ReclaimMarkedWorktreeNow(ReclaimMarkedWorktreeNowRequest) returns (ReclaimMarkedWorktreeNowResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "reclaim_marked_worktree"
+        target: {
+          kind: "worktree"
+          id: "worktree_id"
+        }
+      }
+    };
+  }
+
   // DismissInboxItem hides items from the caller's inbox. Every kind can be
   // dismissed. Hiding an approval or a question does not resolve it: the run
   // still waits, and the chat still shows it. A newer failure of the same

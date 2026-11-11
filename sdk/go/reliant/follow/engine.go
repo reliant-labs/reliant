@@ -39,6 +39,19 @@ const DefaultInterval = 2 * time.Second
 // maxConsecutiveErrors bounds transient poll failures before giving up.
 const maxConsecutiveErrors = 15
 
+// HistoryCompactedError is what Source.Updates returns when the server
+// compacted the feed past sinceSeq: the updates through Through are gone, so a
+// replay from below it would be incomplete. The engine resumes from Through;
+// the run's open gates and its terminal state are re-read every poll
+// (Source.Pending, Source.Root), so neither is lost with the history.
+type HistoryCompactedError struct {
+	Through int64
+}
+
+func (e *HistoryCompactedError) Error() string {
+	return fmt.Sprintf("updates through sequence %d were compacted", e.Through)
+}
+
 // RawUpdate is one row from the chat update feed (ChatService.GetChatUpdates).
 type RawUpdate struct {
 	Seq       int64
@@ -292,6 +305,14 @@ func (e *Engine) Run(ctx context.Context) (int, error) {
 func (e *Engine) drain(ctx context.Context, cursor int64) (int64, error) {
 	for {
 		updates, latest, err := e.Source.Updates(ctx, cursor)
+		var compacted *HistoryCompactedError
+		if errors.As(err, &compacted) && compacted.Through > cursor {
+			// Said, not skipped silently: the transitions below Through are
+			// gone, and the next read starts where the log is whole again.
+			fmt.Fprintf(e.log(), "reliant: the session's history through update %d was compacted; following from there\n", compacted.Through)
+			cursor = compacted.Through
+			continue
+		}
 		if err != nil {
 			return cursor, err
 		}
