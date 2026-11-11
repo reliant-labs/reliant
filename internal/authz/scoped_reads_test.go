@@ -117,6 +117,7 @@ var userScopedReads = map[string]string{
 	"ListDaemonsByUserID":               readOrgless,
 	"ListFreshDaemonAttachmentsForUser": readOrgless,
 	"ListHeldWorktreesForUser":          readOrgless,
+	"ListMarkedWorktreesForUser":        readOrgless,
 	"ListTriggerEvents":                 readOrgless,
 
 	"CountLiveLaunchedRuns":            readBackground,

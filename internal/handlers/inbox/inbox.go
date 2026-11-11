@@ -59,13 +59,16 @@ const (
 	// A worktree-reclaim id names the machine and the set of proposals it
 	// asks about (reclaimItemID).
 	inboxWorktreeReclaimPrefix = "worktree_reclaim:"
+	// A marked worktree's id names the worktree and the mark: a new mark
+	// after a cancel is a new item (markedItemID).
+	inboxWorktreeMarkedPrefix = "worktree_marked:"
 )
 
 var inboxItemPrefixes = []string{
 	inboxApprovalPrefix, inboxQuestionPrefix, inboxWaitingForMachinePrefix,
 	inboxFailingPrefix, inboxLaunchFailedPrefix, inboxStoragePrefix,
 	inboxNeedsSetupPrefix, inboxRecoveryPrefix, inboxRunPausedPrefix, inboxDefinitionBrokenPrefix,
-	inboxWorktreeReclaimPrefix,
+	inboxWorktreeReclaimPrefix, inboxWorktreeMarkedPrefix,
 }
 
 // maxInboxDismissBatch bounds one Dismiss/Restore call ("Dismiss all" on a
@@ -326,7 +329,10 @@ func (s *Service) readInbox(ctx context.Context, userID string) (*inboxReads, er
 	// of their own (automation health, broken definitions), so ListInbox's
 	// org scope decides each one by what it is about, never by a key nobody
 	// read. Before the read is returned: it may be shared (sharedRead).
-	for _, section := range [][]*reliantv1.InboxItem{out.failing, out.declarations, out.recovery} {
+	// Storage carries the person's marked worktrees (markedItems), each about
+	// a project: its org is read here too, so an org scope lists only its own.
+	// A machine's own storage items name nothing and stay in every org.
+	for _, section := range [][]*reliantv1.InboxItem{out.failing, out.declarations, out.recovery, out.storage} {
 		for _, it := range section {
 			reads.resolveOrg(ctx, userID, it)
 		}
@@ -808,7 +814,21 @@ func firstQuestionPrompt(metadata string) string {
 // storageItems returns one item per machine with a volume under disk pressure
 // or archived worktrees it declined to remove. Storage items are not tied to a
 // project, so they appear in every project scope.
+// storageItems is every machine's storage items, and the user's marked
+// worktrees (markedItems).
 func (s *Service) storageItems(ctx context.Context, userID string) ([]*reliantv1.InboxItem, error) {
+	out, err := s.machineStorageItems(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	marked, err := s.markedItems(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	return append(out, marked...), nil
+}
+
+func (s *Service) machineStorageItems(ctx context.Context, userID string) ([]*reliantv1.InboxItem, error) {
 	machines, err := s.storageView(ctx, userID)
 	if err != nil || len(machines) == 0 {
 		return nil, err

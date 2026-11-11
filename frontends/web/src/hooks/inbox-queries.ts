@@ -28,6 +28,8 @@ import {
   inboxServiceKeys,
   useCleanupStorage as useCleanupStorageRpc,
   useForgetStorageWorktree as useForgetStorageWorktreeRpc,
+  useKeepMarkedWorktree as useKeepMarkedWorktreeRpc,
+  useReclaimMarkedWorktreeNow as useReclaimMarkedWorktreeNowRpc,
   useDismissInboxItem,
   useListInbox,
   useRestoreInboxItem,
@@ -223,6 +225,34 @@ export function useForgetStorageWorktree() {
   const queryClient = useQueryClient();
   return useForgetStorageWorktreeRpc({
     onError: () => {
+      void invalidateInbox(queryClient);
+    },
+  });
+}
+
+/**
+ * Keep a worktree marked to be reclaimed (`mutate({ worktreeId, markId })`):
+ * the mark shown is cancelled and its tombstone removed. The inbox is read
+ * again either way.
+ */
+export function useKeepMarkedWorktree() {
+  const queryClient = useQueryClient();
+  return useKeepMarkedWorktreeRpc({
+    onSettled: () => {
+      void invalidateInbox(queryClient);
+    },
+  });
+}
+
+/**
+ * Reclaim a marked worktree now (`mutate({ worktreeId, markId })`): the
+ * mark's wait is skipped and the worktree checked at once; one used since it
+ * was marked is kept. The inbox is read again either way.
+ */
+export function useReclaimMarkedWorktreeNow() {
+  const queryClient = useQueryClient();
+  return useReclaimMarkedWorktreeNowRpc({
+    onSettled: () => {
       void invalidateInbox(queryClient);
     },
   });
