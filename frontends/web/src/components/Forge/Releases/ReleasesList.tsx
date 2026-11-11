@@ -43,7 +43,6 @@ import {
   Note,
   PreviewsMark,
   PromoteTargetDialog,
-  RECORDED_PROMOTE_REASON,
   ReleaseTags,
   INK_BUTTON,
   INK_LINK,
@@ -332,10 +331,7 @@ function rowMenu(
   const target = actionEnvOf(env, model);
   const base = target ? (bases.get(target) ?? null) : null;
   const rank = (v: string | null) => (v ? model.rows.findIndex((candidate) => candidate.release.version === v) : -1);
-  // A recorded release is deployed by the team's own pipeline: forge never
-  // promotes it, and the control plane refuses to bind it to an env forge
-  // applies, so the menu says so rather than offering a write that fails.
-  const blocked = (row.release.recordOnly ? RECORDED_PROMOTE_REASON : promote.blockedReason) ?? undefined;
+  const blocked = promote.blockedReason ?? undefined;
   const items: MenuItem[] = [
     { label: "Promote to…", disabled: !!blocked, hint: blocked, testId: "release-menu-promote", onSelect: () => openPromote(version) },
   ];

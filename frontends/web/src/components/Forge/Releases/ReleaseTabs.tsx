@@ -673,11 +673,7 @@ export function ArtifactsTab({ release, env, promotion }: { release: ReleaseReco
     <div className="space-y-4" data-testid="release-artifacts">
       <Panel title="Artifacts" meta={release.artifacts.length} flush>
         {release.artifacts.length === 0 ? (
-          <p className="px-4 pb-4 text-sm text-ink-muted">
-            {release.recordOnly
-              ? "Version-only record: your pipeline recorded the version and commit it deployed, with no image digests."
-              : "This release recorded no artifacts."}
-          </p>
+          <p className="px-4 pb-4 text-sm text-ink-muted">This release recorded no artifacts.</p>
         ) : (
           <Table<ReleaseArtifact>
             label="Artifacts"
