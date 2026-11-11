@@ -34,18 +34,7 @@ import type { ReleasePromotion } from "@/services/forge/releases";
 
 import { formatSpan } from "../Observability/deliveryScope";
 import { ArtifactsTab, ChangesTab, ChecksTab, EnvPicker, HealthTab, RolloutTab } from "./ReleaseTabs";
-import {
-  Ago,
-  Chain,
-  ChecksMark,
-  Facts,
-  INK_LINK,
-  Panel,
-  PromoteTargetDialog,
-  RECORDED_BY_CI,
-  RECORDED_BY_CI_TITLE,
-  RECORDED_PROMOTE_REASON,
-} from "./releaseParts";
+import { Ago, Chain, ChecksMark, Facts, INK_LINK, Panel, PromoteTargetDialog } from "./releaseParts";
 import {
   RELEASE_TABS,
   defaultBaseOf,
@@ -177,8 +166,7 @@ export function ReleaseDetail({
   // outside the loaded list (rank -1) is older than nothing we can name.
   const canRollBack =
     !!actionEnv && !!actionBase && actionBase !== version && rank(actionBase) >= 0 && rank(version) > rank(actionBase);
-  // A recorded release is deployed by the team's own pipeline, never by forge.
-  const blocked = record.recordOnly ? RECORDED_PROMOTE_REASON : promote.blockedReason;
+  const blocked = promote.blockedReason;
   // THIS release is what the environment runs: offer the way back, named.
   const rollbackTo =
     actionEnv && actionBase === version ? previousReleaseOf(data.promotions.get(actionEnv.id), version) : null;
@@ -231,7 +219,6 @@ export function ReleaseDetail({
               <span title={status.previews.length ? `Previews: ${status.previews.join(", ")}` : undefined}>
                 <Status tone={status.tone} label={status.label} />
               </span>
-              {record.recordOnly && <Tag title={RECORDED_BY_CI_TITLE}>{RECORDED_BY_CI}</Tag>}
               {row.scoped.length > 0 && <Tag title={`A scoped deploy moved only ${row.scoped.join(", ")}`}>scoped: {row.scoped.join(", ")}</Tag>}
               {row.rolledBack.map((name) => (
                 <Tag key={name} tone="danger">
@@ -243,8 +230,7 @@ export function ReleaseDetail({
           meta={
             <>
               <span>
-                {record.recordOnly ? "recorded" : "cut"}
-                {creator ? ` by ${creator}` : ""}
+                cut{creator ? ` by ${creator}` : ""}
                 {record.branch ? ` from ${record.branch}` : ""}
               </span>
               {record.gitCommit && <Mono value={record.gitCommit} />}

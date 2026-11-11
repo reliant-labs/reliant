@@ -121,19 +121,9 @@ export function scopedLabel(targets: string[]): string {
   return targets.length > 1 ? `${targets[0]} +${targets.length - 1}` : (targets[0] ?? "");
 }
 
-/** The label a release recorded from an outside pipeline carries, and why. */
-export const RECORDED_BY_CI = "recorded by CI";
-export const RECORDED_BY_CI_TITLE =
-  "Your own pipeline built and deployed this release; forge recorded it with `forge release record`.";
-/** Why a recorded release offers no promote or rollback: forge never deploys it. */
-export const RECORDED_PROMOTE_REASON = "Recorded by CI: your pipeline deploys this release, so forge does not promote or roll it back.";
-
-export function ReleaseTags({ row }: { row: Pick<ReleaseRow, "scoped" | "rolledBack"> & { release?: Pick<ReleaseRow["release"], "recordOnly"> } }) {
+export function ReleaseTags({ row }: { row: Pick<ReleaseRow, "scoped" | "rolledBack"> }) {
   return (
     <>
-      {row.release?.recordOnly && (
-        <Tag title={RECORDED_BY_CI_TITLE}>{RECORDED_BY_CI}</Tag>
-      )}
       {row.scoped.length > 0 && (
         <Tag title={`A scoped deploy moved only ${row.scoped.join(", ")}`}>scoped: {scopedLabel(row.scoped)}</Tag>
       )}

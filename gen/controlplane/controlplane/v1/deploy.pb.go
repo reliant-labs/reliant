@@ -3252,15 +3252,7 @@ type DeployRelease struct {
 	// it from every release an environment applied, to refuse a release whose
 	// migration that environment's schema has already passed. Evidence, not
 	// identity: a re-cut is still a retry whatever it carries here.
-	Migrations *DeployMigrationManifest `protobuf:"bytes,15,opt,name=migrations,proto3" json:"migrations,omitempty"`
-	// The release was RECORDED, not built, by forge (forge's
-	// release.Release.RecordOnly): a pipeline forge does not run built and
-	// deployed it, and `forge release record` wrote down what it shipped.
-	// Such a release may name no artifacts at all — its version and git_commit
-	// are then its whole content — and is never applied by forge: it may be
-	// promoted only to an environment whose promotions forge does not apply.
-	// Readers label it "recorded by CI".
-	RecordOnly    bool `protobuf:"varint,16,opt,name=record_only,json=recordOnly,proto3" json:"record_only,omitempty"`
+	Migrations    *DeployMigrationManifest `protobuf:"bytes,15,opt,name=migrations,proto3" json:"migrations,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3391,13 +3383,6 @@ func (x *DeployRelease) GetMigrations() *DeployMigrationManifest {
 		return x.Migrations
 	}
 	return nil
-}
-
-func (x *DeployRelease) GetRecordOnly() bool {
-	if x != nil {
-		return x.RecordOnly
-	}
-	return false
 }
 
 // DeployMigrationManifest is forge's release.MigrationManifest: one set per
@@ -4560,11 +4545,7 @@ type DeployPromotion struct {
 	// name X, and a release is live on an env only for what it moved (forge's
 	// release.Promotion.Moved). Without it a one-workload deploy read as the whole
 	// environment running the release.
-	Targets []string `protobuf:"bytes,30,rep,name=targets,proto3" json:"targets,omitempty"`
-	// The promoted release is record-only (DeployRelease.record_only): an
-	// outside pipeline applied it, and this row is the deploy marker it left.
-	// Derived from the release, never sent by a client.
-	RecordOnly    bool `protobuf:"varint,31,opt,name=record_only,json=recordOnly,proto3" json:"record_only,omitempty"`
+	Targets       []string `protobuf:"bytes,30,rep,name=targets,proto3" json:"targets,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -4793,13 +4774,6 @@ func (x *DeployPromotion) GetTargets() []string {
 		return x.Targets
 	}
 	return nil
-}
-
-func (x *DeployPromotion) GetRecordOnly() bool {
-	if x != nil {
-		return x.RecordOnly
-	}
-	return false
 }
 
 // DeploySourceProvenance is where a thing came from, in enough detail to find
@@ -7769,7 +7743,7 @@ const file_controlplane_v1_deploy_proto_rawDesc = "" +
 	"\x04repo\x18\x01 \x01(\tR\x04repo\x12\x10\n" +
 	"\x03ref\x18\x02 \x01(\tR\x03ref\x12\x16\n" +
 	"\x06subdir\x18\x03 \x01(\tR\x06subdir\x12\x16\n" +
-	"\x06commit\x18\x04 \x01(\tR\x06commit\"\xb9\x05\n" +
+	"\x06commit\x18\x04 \x01(\tR\x06commit\"\x98\x05\n" +
 	"\rDeployRelease\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x18\n" +
 	"\aversion\x18\x02 \x01(\tR\aversion\x12\x1d\n" +
@@ -7791,9 +7765,7 @@ const file_controlplane_v1_deploy_proto_rawDesc = "" +
 	"\acommits\x18\x0e \x01(\v2\".controlplane.v1.DeployCommitRangeR\acommits\x12H\n" +
 	"\n" +
 	"migrations\x18\x0f \x01(\v2(.controlplane.v1.DeployMigrationManifestR\n" +
-	"migrations\x12\x1f\n" +
-	"\vrecord_only\x18\x10 \x01(\bR\n" +
-	"recordOnlyJ\x04\b\v\x10\f\"R\n" +
+	"migrationsJ\x04\b\v\x10\f\"R\n" +
 	"\x17DeployMigrationManifest\x127\n" +
 	"\x04sets\x18\x01 \x03(\v2#.controlplane.v1.DeployMigrationSetR\x04sets\"Z\n" +
 	"\x12DeployMigrationSet\x12\x16\n" +
@@ -7884,7 +7856,7 @@ const file_controlplane_v1_deploy_proto_rawDesc = "" +
 	"\x0eactual_current\x18\x04 \x01(\v2 .controlplane.v1.DeployPromotionR\ractualCurrent\x12F\n" +
 	"\factual_phase\x18\x05 \x01(\x0e2#.controlplane.v1.DeployRolloutPhaseR\vactualPhase\x12\x16\n" +
 	"\x06detail\x18\x06 \x01(\tR\x06detail\x12>\n" +
-	"\fcurrent_plan\x18\b \x01(\v2\x1b.controlplane.v1.DeployPlanR\vcurrentPlanJ\x04\b\a\x10\b\"\xa9\f\n" +
+	"\fcurrent_plan\x18\b \x01(\v2\x1b.controlplane.v1.DeployPlanR\vcurrentPlanJ\x04\b\a\x10\b\"\x88\f\n" +
 	"\x0fDeployPromotion\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12%\n" +
 	"\x0eenvironment_id\x18\x02 \x01(\tR\renvironmentId\x12\x1d\n" +
@@ -7918,9 +7890,7 @@ const file_controlplane_v1_deploy_proto_rawDesc = "" +
 	"\tbundle_id\x18\x1b \x01(\tR\bbundleId\x12#\n" +
 	"\rbundle_digest\x18\x1c \x01(\tR\fbundleDigest\x123\n" +
 	"\bsnapshot\x18\x1d \x01(\v2\x17.google.protobuf.StructR\bsnapshot\x12\x18\n" +
-	"\atargets\x18\x1e \x03(\tR\atargets\x12\x1f\n" +
-	"\vrecord_only\x18\x1f \x01(\bR\n" +
-	"recordOnly\x1aD\n" +
+	"\atargets\x18\x1e \x03(\tR\atargets\x1aD\n" +
 	"\x16ResolvedArtifactsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\x1aa\n" +

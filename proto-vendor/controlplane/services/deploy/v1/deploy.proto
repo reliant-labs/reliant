@@ -1524,10 +1524,9 @@ message CutReleaseRequest {
   // different artifacts is AlreadyExists.
   string version = 1;
 
-  // The artifact set this version names. At least one is required unless
-  // record_only is set: a forge-built release that names nothing cannot be
-  // promoted, and recording one would put a version in the picker that
-  // deploys an empty pin set. A record-only release may be version-only.
+  // The artifact set this version names. At least one is required: a release
+  // that names nothing cannot be promoted, and recording one would put a
+  // version in the picker that deploys an empty pin set.
   //
   // The digest/kind asymmetry is the DeployArtifact contract and is enforced
   // by the database: an OCI artifact requires a canonical sha256 digest and
@@ -1577,14 +1576,6 @@ message CutReleaseRequest {
   // org. A person must be a member of it; a machine credential may name only
   // its own org.
   optional string org_id = 12;
-
-  // Record a release an outside pipeline built and deployed, rather than
-  // one forge built (DeployRelease.record_only). With it set, artifacts may
-  // be EMPTY — a version-only record, identified by version and git_commit —
-  // or carry the image digests CI pushed. Without it the "at least one
-  // artifact" rule above stands. In a snapshot_release document the same
-  // flag is the document's own record_only field, which must agree.
-  bool record_only = 13;
 }
 
 // RecordReleaseMigrationsRequest records the migration manifest of a release
@@ -2489,10 +2480,6 @@ message LedgerImportRelease {
 
   // The commits the release recorded at its cut, when it did.
   DeployCommitRange commits = 6;
-
-  // The file ledger recorded this release from an outside pipeline
-  // (CutReleaseRequest.record_only): it may name no artifacts.
-  bool record_only = 7;
 }
 
 // LedgerImportEnvironment is one historical environment.
