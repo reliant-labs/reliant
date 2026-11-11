@@ -11,7 +11,7 @@
  */
 
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { Interceptor } from '@connectrpc/connect'
+import { createContextValues, type Interceptor } from '@connectrpc/connect'
 import type { TransportBackend } from '../transport'
 
 // Stub the lib/constants module so importing transport.ts in the test env
@@ -141,6 +141,8 @@ describe('x-daemon-last-seen scoping', () => {
       method: { name: 'Ping', input: { fields: [] } },
       header: new Headers(),
       signal: new AbortController().signal,
+      // Every real Connect request carries context values; the org stage reads them.
+      contextValues: createContextValues(),
       message: {},
     } as unknown as Parameters<Next>[0])
 
