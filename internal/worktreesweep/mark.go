@@ -78,20 +78,18 @@ func (s *Sweeper) GraceFor(wt *core.Worktree) time.Time {
 	return m.ReclaimMarkedAt.Add(s.marks.grace)
 }
 
-// markedFor finds the user's marked live worktree id carrying markID.
-func markedFor(ctx context.Context, store MarkDecisionStore, userID, id, markID string) (*core.HeldWorktree, error) {
+// markedFor finds the user's marked live worktree id: the ownership check.
+// Whether it still carries markID is decided under its row lock, by the
+// store call that records the decision (false is ErrMarkChanged).
+func markedFor(ctx context.Context, store MarkDecisionStore, userID, id string) (*core.HeldWorktree, error) {
 	rows, err := store.ListMarkedWorktreesForUser(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
 	for _, h := range rows {
-		if h.Worktree.ID != id {
-			continue
+		if h.Worktree.ID == id {
+			return h, nil
 		}
-		if h.Worktree.CleanupMetadata.ReclaimMarkID != markID {
-			return nil, ErrMarkChanged
-		}
-		return h, nil
 	}
 	return nil, ErrNotMarked
 }
@@ -100,7 +98,7 @@ func markedFor(ctx context.Context, store MarkDecisionStore, userID, id, markID 
 // its tombstone removed (best effort: a tombstone with no mark on the row
 // authorizes nothing). The worktree's quiet clock starts again.
 func (s *Sweeper) KeepMarked(ctx context.Context, store MarkDecisionStore, userID, id, markID string) error {
-	h, err := markedFor(ctx, store, userID, id, markID)
+	h, err := markedFor(ctx, store, userID, id)
 	if err != nil {
 		return err
 	}
@@ -123,7 +121,7 @@ func (s *Sweeper) KeepMarked(ctx context.Context, store MarkDecisionStore, userI
 // other check still applies, so a worktree that is in use, lost its
 // tombstone or has new work is not reclaimed: its mark is cancelled instead.
 func (s *Sweeper) ReclaimMarkedNow(ctx context.Context, store MarkDecisionStore, userID, id, markID string) error {
-	h, err := markedFor(ctx, store, userID, id, markID)
+	h, err := markedFor(ctx, store, userID, id)
 	if err != nil {
 		return err
 	}
