@@ -40,6 +40,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/machinepool"
+	"github.com/reliant-labs/reliant/internal/natsutil"
 	"github.com/reliant-labs/reliant/internal/orgs"
 	"github.com/reliant-labs/reliant/internal/runs"
 	"github.com/reliant-labs/reliant/internal/temporal"
@@ -707,7 +708,7 @@ func NewTemporalWorker(d TemporalWorkerDeps) (*workersetup.Worker, error) {
 	// the subscription cannot be made, stops still arrive on the regular
 	// heartbeat, one throttle window later: degrade, never refuse to run.
 	nudges := stopnudge.NewHub()
-	if _, err := d.NATS.Conn.Subscribe(stopnudge.Subject, func(m *nats.Msg) { nudges.HandleMessage(m.Data) }); err != nil {
+	if _, err := natsutil.SubscribeWithRecovery(d.NATS.Conn, stopnudge.Subject, func(m *nats.Msg) { nudges.HandleMessage(m.Data) }); err != nil {
 		slog.Default().Warn("stop nudges are DISABLED on this worker: pause and interrupt reach running activities on their next heartbeat",
 			"subject", stopnudge.Subject, "error", err)
 	}
