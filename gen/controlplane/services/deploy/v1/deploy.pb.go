@@ -3418,9 +3418,10 @@ type CutReleaseRequest struct {
 	// re-cutting it identically is a successful retry, re-cutting it with
 	// different artifacts is AlreadyExists.
 	Version string `protobuf:"bytes,1,opt,name=version,proto3" json:"version,omitempty"`
-	// The artifact set this version names. At least one is required: a release
-	// that names nothing cannot be promoted, and recording one would put a
-	// version in the picker that deploys an empty pin set.
+	// The artifact set this version names. At least one is required unless
+	// record_only is set: a forge-built release that names nothing cannot be
+	// promoted, and recording one would put a version in the picker that
+	// deploys an empty pin set. A record-only release may be version-only.
 	//
 	// The digest/kind asymmetry is the DeployArtifact contract and is enforced
 	// by the database: an OCI artifact requires a canonical sha256 digest and
@@ -3463,7 +3464,14 @@ type CutReleaseRequest struct {
 	// The org this request acts in (docs/orgs.md). Unset: the caller's default
 	// org. A person must be a member of it; a machine credential may name only
 	// its own org.
-	OrgId         *string `protobuf:"bytes,12,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
+	OrgId *string `protobuf:"bytes,12,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
+	// Record a release an outside pipeline built and deployed, rather than
+	// one forge built (DeployRelease.record_only). With it set, artifacts may
+	// be EMPTY — a version-only record, identified by version and git_commit —
+	// or carry the image digests CI pushed. Without it the "at least one
+	// artifact" rule above stands. In a snapshot_release document the same
+	// flag is the document's own record_only field, which must agree.
+	RecordOnly    bool `protobuf:"varint,13,opt,name=record_only,json=recordOnly,proto3" json:"record_only,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3580,6 +3588,13 @@ func (x *CutReleaseRequest) GetOrgId() string {
 		return *x.OrgId
 	}
 	return ""
+}
+
+func (x *CutReleaseRequest) GetRecordOnly() bool {
+	if x != nil {
+		return x.RecordOnly
+	}
+	return false
 }
 
 // RecordReleaseMigrationsRequest records the migration manifest of a release
@@ -8153,7 +8168,10 @@ type LedgerImportRelease struct {
 	// with the version inside it imports as what it actually is.
 	ImportedFrom string `protobuf:"bytes,5,opt,name=imported_from,json=importedFrom,proto3" json:"imported_from,omitempty"`
 	// The commits the release recorded at its cut, when it did.
-	Commits       *v1.DeployCommitRange `protobuf:"bytes,6,opt,name=commits,proto3" json:"commits,omitempty"`
+	Commits *v1.DeployCommitRange `protobuf:"bytes,6,opt,name=commits,proto3" json:"commits,omitempty"`
+	// The file ledger recorded this release from an outside pipeline
+	// (CutReleaseRequest.record_only): it may name no artifacts.
+	RecordOnly    bool `protobuf:"varint,7,opt,name=record_only,json=recordOnly,proto3" json:"record_only,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -8228,6 +8246,13 @@ func (x *LedgerImportRelease) GetCommits() *v1.DeployCommitRange {
 		return x.Commits
 	}
 	return nil
+}
+
+func (x *LedgerImportRelease) GetRecordOnly() bool {
+	if x != nil {
+		return x.RecordOnly
+	}
+	return false
 }
 
 // LedgerImportEnvironment is one historical environment.
@@ -9151,7 +9176,7 @@ const file_services_deploy_v1_deploy_proto_rawDesc = "" +
 	"\x05lines\x18\x01 \x03(\v2\x1e.controlplane.v1.DeployLogLineR\x05lines\x12\x1f\n" +
 	"\vis_snapshot\x18\x02 \x01(\bR\n" +
 	"isSnapshot\x12'\n" +
-	"\x0flatest_sequence\x18\x03 \x01(\x03R\x0elatestSequence\"\xc5\x04\n" +
+	"\x0flatest_sequence\x18\x03 \x01(\x03R\x0elatestSequence\"\xe6\x04\n" +
 	"\x11CutReleaseRequest\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\tR\aversion\x12=\n" +
 	"\tartifacts\x18\x02 \x03(\v2\x1f.controlplane.v1.DeployArtifactR\tartifacts\x12\x1d\n" +
@@ -9170,7 +9195,9 @@ const file_services_deploy_v1_deploy_proto_rawDesc = "" +
 	"\n" +
 	"migrations\x18\v \x01(\v2(.controlplane.v1.DeployMigrationManifestR\n" +
 	"migrations\x12\x1a\n" +
-	"\x06org_id\x18\f \x01(\tH\x00R\x05orgId\x88\x01\x01B\t\n" +
+	"\x06org_id\x18\f \x01(\tH\x00R\x05orgId\x88\x01\x01\x12\x1f\n" +
+	"\vrecord_only\x18\r \x01(\bR\n" +
+	"recordOnlyB\t\n" +
 	"\a_org_id\"\xc5\x01\n" +
 	"\x1eRecordReleaseMigrationsRequest\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\tR\aversion\x12\x18\n" +
@@ -9562,7 +9589,7 @@ const file_services_deploy_v1_deploy_proto_rawDesc = "" +
 	"\x06source\x18\a \x01(\tR\x06source\x12\x17\n" +
 	"\adry_run\x18\b \x01(\bR\x06dryRun\x12\x1a\n" +
 	"\x06org_id\x18\t \x01(\tH\x00R\x05orgId\x88\x01\x01B\t\n" +
-	"\a_org_id\"\xd5\x02\n" +
+	"\a_org_id\"\xf6\x02\n" +
 	"\x13LedgerImportRelease\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\tR\aversion\x12=\n" +
 	"\tartifacts\x18\x02 \x03(\v2\x1f.controlplane.v1.DeployArtifactR\tartifacts\x12G\n" +
@@ -9572,7 +9599,9 @@ const file_services_deploy_v1_deploy_proto_rawDesc = "" +
 	"\n" +
 	"created_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x12#\n" +
 	"\rimported_from\x18\x05 \x01(\tR\fimportedFrom\x12<\n" +
-	"\acommits\x18\x06 \x01(\v2\".controlplane.v1.DeployCommitRangeR\acommits\"\xc9\x01\n" +
+	"\acommits\x18\x06 \x01(\v2\".controlplane.v1.DeployCommitRangeR\acommits\x12\x1f\n" +
+	"\vrecord_only\x18\a \x01(\bR\n" +
+	"recordOnly\"\xc9\x01\n" +
 	"\x17LedgerImportEnvironment\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12:\n" +
 	"\x04kind\x18\x02 \x01(\x0e2&.controlplane.v1.DeployEnvironmentKindR\x04kind\x129\n" +

@@ -106,6 +106,12 @@ export interface ReleaseRecord {
   run: { id: string; url: string; provider: string } | null;
   artifacts: ReleaseArtifact[];
   commits: ReleaseCommitRange | null;
+  /**
+   * Recorded, not built, by forge: the team's own CI built and deployed it and
+   * `forge release record` wrote it down. It may name no artifacts, and forge
+   * never promotes it. Absent on releases forge built.
+   */
+  recordOnly?: boolean;
 }
 
 export type GateStatus = "passed" | "failed" | "skipped" | "error";
@@ -140,6 +146,8 @@ export interface ReleasePromotion {
   bundleDigest: string;
   /** The release's artifacts as this promotion froze them: artifact name → digest. */
   resolvedArtifacts: Record<string, string>;
+  /** The deploy marker an outside pipeline left (a promotion of a record-only release). */
+  recordOnly?: boolean;
 }
 
 export type CommitComparisonState = "computed" | "same" | "by-cut-time" | "unrecorded" | "unknown";
@@ -320,6 +328,7 @@ export function toReleaseRecord(msg: DeployRelease): ReleaseRecord {
     run: run && (run.id || run.url) ? { id: run.id, url: run.url, provider: run.provider } : null,
     artifacts: (msg.artifacts ?? []).map(toArtifact).sort((a, b) => a.name.localeCompare(b.name)),
     commits: toCommitRange(msg.commits),
+    recordOnly: msg.recordOnly === true,
   };
 }
 
@@ -358,6 +367,7 @@ export function toReleasePromotion(msg: DeployPromotion): ReleasePromotion {
     bundleId: msg.bundleId,
     bundleDigest: msg.bundleDigest,
     resolvedArtifacts: { ...(msg.resolvedArtifacts ?? {}) },
+    recordOnly: msg.recordOnly === true,
   };
 }
 
