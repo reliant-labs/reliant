@@ -678,11 +678,21 @@ func (r *Repo) GetLatestUpdateSequence(ctx context.Context, chatID string) (int6
 // CreateChatUpdate creates a new chat update (for dual-write pattern)
 // This operation is atomic - the sequence number generation and insert happen in a transaction
 // to prevent race conditions when multiple parallel operations try to create updates.
+//
+// It runs at READ COMMITTED for the reason CreateUserUpdate does: every update
+// for a chat is allocated from ONE counter row, and every thread, tool call and
+// sub-agent of the chat writes through it. Under SERIALIZABLE each commit on
+// that row aborts every writer waiting behind it with SQLSTATE 40001 ("could
+// not serialize access due to concurrent update"); prod's reliant-pg logged
+// thousands a day from this statement. At READ COMMITTED a waiter takes the
+// next number in its one transaction, the row lock still keeps sequence order
+// equal to commit order, and the insert reads nothing but the value the upsert
+// returned. A call that joins an outer transaction inherits its isolation.
 func (r *Repo) CreateChatUpdate(ctx context.Context, chatID string, updateType reliantv1.ChatUpdateType, entityID string, data string) error {
 	// The allocation and the insert share one transaction: the counter's row
 	// lock is what keeps sequence order equal to commit order, and a rollback
 	// must take both back (store.AllocateUpdateSequence).
-	return r.RunTx(ctx, orm.Serializable, func(ctx context.Context) error {
+	return r.RunTx(ctx, orm.ReadCommitted.WithMaxAttempts(orm.DefaultTxMaxAttempts), func(ctx context.Context) error {
 		chatUpdate, err := store.AppendChatUpdate(ctx, r.ORM(), chatID, updateType, entityID, data)
 		if err != nil {
 			return err
@@ -784,11 +794,11 @@ func (r *Repo) GetLatestNonMessageUpdatesPerEntity(ctx context.Context, chatID s
 	// calls.
 	//
 	// "Few" only holds if they can be FOUND without reading the rest:
-	// idx_chat_updates_snapshot_rekeyed is a partial index over exactly the
-	// re-keyed types. Without it the re-keyed read rechecked every row
-	// idx_chat_updates_snapshot_heads holds for the chat (165,843 on chat
-	// 8bb0a875, almost all NODE_EXECUTION) to keep 758: ~350ms of a ~475ms
-	// query. With it, ~3ms.
+	// idx_chat_updates_snapshot_rekey_heads is a partial index over exactly
+	// the re-keyed types, keyed by their dedup key. Without such an index the
+	// re-keyed read rechecked every row the old idx_chat_updates_snapshot_heads
+	// held for the chat (165,843 on chat 8bb0a875, almost all NODE_EXECUTION)
+	// to keep 758: ~350ms of a ~475ms query. With one, ~3ms.
 	//
 	// WORKFLOW_STATUS and NODE_EXECUTION are excluded: they are workflow state,
 	// keyed per workflow and per workflow node, so every run a chat ever made
@@ -1269,8 +1279,18 @@ type ChatMove = store.ChatMove
 // MoveChatToProject moves an idle (or errored) chat, with its plans, to
 // another project. moved is false, and nothing is written, when the chat is
 // gone, has left m.FromProjectID, or is not idle.
+//
+// It takes the owner's org lock (store.LockUserOrgs) first, before the
+// chat's row lock: call it first in its transaction.
 func (r *Repo) MoveChatToProject(ctx context.Context, m ChatMove) (moved bool, err error) {
-	return store.MoveChatToProject(ctx, r.ORM(), m)
+	err = r.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
+		if err := store.LockUserOrgs(ctx, r.ORM(), m.UserID); err != nil {
+			return err
+		}
+		moved, err = store.MoveChatToProject(ctx, r.ORM(), m)
+		return err
+	})
+	return moved, err
 }
 
 // PinChatDaemonIfUnset pins an unpinned chat that is on a machine to daemonID

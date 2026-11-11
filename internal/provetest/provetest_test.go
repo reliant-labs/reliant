@@ -431,6 +431,68 @@ func TestProve_RefusesPathsOutsideTheWorkspace(t *testing.T) {
 	assert.Equal(t, fixedCalc, readFile(t, other, "calc.go"))
 }
 
+// The worktree tool puts a chat's branch checkouts under ~/.reliant/worktrees,
+// outside the project the chat is bound to. They are worktrees of the
+// project's own repositories, so a fix made there can be proven; a worktree
+// of any other repository still cannot.
+func TestProve_AdmitsAFileInAnotherWorktreeOfAWorkspaceRepo(t *testing.T) {
+	testkit.Slow(t, "creates git worktrees and runs git as real subprocesses")
+	t.Parallel()
+
+	// The project layout: a workspace root that is not itself a repository,
+	// holding a nested repo, and a branch worktree of it made elsewhere.
+	workspace := t.TempDir()
+	repo := filepath.Join(workspace, "app")
+	require.NoError(t, os.Rename(gitRepo(t), repo))
+	git(t, repo, "checkout", "-q", "--", "calc.go") // the main checkout holds no fix
+	branch := filepath.Join(t.TempDir(), "app-branch")
+	git(t, repo, "worktree", "add", "-q", "-b", "fix/add", branch)
+	writeFile(t, branch, "calc.go", fixedCalc)
+
+	obs := &observingRunner{dir: branch}
+	report, err := Prove(context.Background(), Options{
+		Workspace: workspace,
+		Repos:     []string{workspace, repo},
+		Files:     []string{filepath.Join(branch, "calc.go")},
+		Run:       obs.run,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, VerdictProven, report.Verdict, "the before-run saw the bug and the after-run the fix")
+	assert.Equal(t, []string{buggyCalc, fixedCalc}, obs.seen)
+	assert.Equal(t, fixedCalc, readFile(t, branch, "calc.go"), "the branch worktree's fix is restored")
+	assert.Equal(t, buggyCalc, readFile(t, repo, "calc.go"), "the main checkout is never touched")
+
+	t.Run("a worktree of another repository is refused", func(t *testing.T) {
+		other := gitRepo(t)
+		otherBranch := filepath.Join(t.TempDir(), "other-branch")
+		git(t, other, "worktree", "add", "-q", "-b", "fix/other", otherBranch)
+		writeFile(t, otherBranch, "calc.go", fixedCalc)
+
+		called := false
+		_, err := Prove(context.Background(), Options{
+			Workspace: workspace,
+			Repos:     []string{workspace, repo},
+			Files:     []string{filepath.Join(otherBranch, "calc.go")},
+			Run:       func(context.Context) RunOutcome { called = true; return RunOutcome{} },
+		})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "outside the workspace")
+		assert.False(t, called, "a refused call must not run anything")
+		assert.Equal(t, fixedCalc, readFile(t, otherBranch, "calc.go"))
+	})
+
+	t.Run("its .git is still refused", func(t *testing.T) {
+		_, err := Prove(context.Background(), Options{
+			Workspace: workspace,
+			Repos:     []string{workspace, repo},
+			Files:     []string{filepath.Join(branch, ".git")},
+			Run:       func(context.Context) RunOutcome { return RunOutcome{} },
+		})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), ".git")
+	})
+}
+
 func TestProve_SerializesConcurrentCallsOnTheSameFile(t *testing.T) {
 	testkit.Slow(t, "runs the fix's test runner and git as real subprocesses")
 	t.Parallel()
@@ -480,7 +542,7 @@ func TestProve_SerializesConcurrentCallsOnTheSameFile(t *testing.T) {
 func orphanSwap(t *testing.T, dir, rel string) {
 	t.Helper()
 	ctx := context.Background()
-	files, err := resolveFiles(dir, "", []string{rel})
+	files, err := resolveFiles(ctx, dir, "", nil, []string{rel})
 	require.NoError(t, err)
 	r, files, err := openRepo(ctx, files)
 	require.NoError(t, err)

@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/daemonerr"
 	"github.com/reliant-labs/reliant/internal/daemonplacement"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -31,7 +32,7 @@ import (
 // exists.
 func (s *Service) ownedMachine(ctx context.Context, userID, daemonID string) (*db.Daemon, error) {
 	d, err := s.deps.Repo.GetDaemon(ctx, daemonID)
-	if err != nil || d == nil || d.UserID != userID {
+	if err != nil || !authz.CanWriteMachine(ctx, userID, d) {
 		return nil, svcerr.NotFound("machine")
 	}
 	return d, nil

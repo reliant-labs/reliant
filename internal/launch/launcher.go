@@ -19,6 +19,7 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/chatselection"
 	"github.com/reliant-labs/reliant/internal/daemonplacement"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -162,7 +163,7 @@ func (l *Launcher) replayOfNamedStart(ctx context.Context, ev Event, spec Spec, 
 		return nil, ErrClientMessageReused
 	}
 	chat, err := l.repo.GetChat(ctx, already.ChatID)
-	if err != nil || chat == nil || chat.UserID != spec.OwnerUserID {
+	if err != nil || !authz.CanWriteChat(ctx, spec.OwnerUserID, chat) {
 		return nil, nil
 	}
 	result := &Result{Chat: chat, WorkflowID: chat.MainThreadID(), EventID: stored.ID}
@@ -271,6 +272,10 @@ func (l *Launcher) launchNew(ctx context.Context, ev Event, spec Spec, seed seed
 	if err != nil {
 		return nil, projectLookupError(err)
 	}
+	orgID, err := chatOrg(spec, project)
+	if err != nil {
+		return nil, err
+	}
 
 	// Resolve workflow - use user's default if not specified
 	workflowName := l.ResolveDefaultWorkflow(ctx, userID, spec.Workflow)
@@ -288,6 +293,7 @@ func (l *Launcher) launchNew(ctx context.Context, ev Event, spec Spec, seed seed
 		UserID:       userID,
 		Title:        title,
 		ProjectID:    spec.ProjectID,
+		OrgID:        orgID,
 		WorkflowName: &workflowName,
 		State:        db.ChatStateIdle,
 		// Who started it decides whether it is a conversation (the chat
@@ -492,6 +498,12 @@ func (l *Launcher) launchNew(ctx context.Context, ev Event, spec Spec, seed seed
 	var attemptAt time.Time
 	if err := l.repo.RunTx(ctx, launchTx, func(txCtx context.Context) error {
 		attemptAt = time.Now()
+		// The owner's org lock first, before the guard's or any other row
+		// lock: the chat's org was decided from its project's, which no
+		// backfill may stamp between that decision and this insert.
+		if err := l.repo.LockUserOrgs(txCtx, userID, db.OrgRead{Table: "projects", ID: project.ID, Org: project.OrgID}); err != nil {
+			return err
+		}
 		if spec.Guard != nil {
 			reason, err := spec.Guard(txCtx)
 			if err != nil {
@@ -577,6 +589,9 @@ func (l *Launcher) launchNew(ctx context.Context, ev Event, spec Spec, seed seed
 		if errors.Is(err, ErrClientMessageReused) {
 			return nil, ErrClientMessageReused
 		}
+		if errors.Is(err, db.ErrOrgChanged) {
+			return nil, &ValidationError{Kind: ValidationFailedPrecondition, Reason: "the project's organization changed while the chat was being started; try again"}
+		}
 		logging.ErrorContext(ctx, "Failed to create chat", "error", err, "chatID", chatID)
 		return nil, &InternalError{Reason: "failed to create chat", Err: err}
 	}
@@ -627,7 +642,7 @@ func (l *Launcher) launchPending(ctx context.Context, ev Event, spec Spec, seed 
 	if err != nil && !errors.Is(err, core.ErrChatNotFound) {
 		return nil, &InternalError{Reason: "failed to load chat", Err: err}
 	}
-	if err != nil || chat == nil || chat.UserID != userID {
+	if err != nil || !authz.CanWriteChat(ctx, userID, chat) {
 		return nil, &NotFoundError{Reason: "chat not found", Err: err}
 	}
 
@@ -895,7 +910,7 @@ func (l *Launcher) startRecorded(ctx context.Context, recorded *core.TriggerEven
 	if err != nil && !errors.Is(err, core.ErrChatNotFound) {
 		return nil, &InternalError{Reason: "failed to load chat", Err: err}
 	}
-	if err != nil || chat == nil || chat.UserID != spec.OwnerUserID {
+	if err != nil || !authz.CanWriteChat(ctx, spec.OwnerUserID, chat) {
 		return nil, &NotFoundError{Reason: "chat not found", Err: err}
 	}
 
@@ -979,7 +994,7 @@ func (l *Launcher) finishExisting(ctx context.Context, ev Event, spec Spec, seed
 	if err != nil && !errors.Is(err, core.ErrChatNotFound) {
 		return nil, &InternalError{Reason: "failed to load chat", Err: err}
 	}
-	if err != nil || chat == nil || chat.UserID != spec.OwnerUserID {
+	if err != nil || !authz.CanWriteChat(ctx, spec.OwnerUserID, chat) {
 		return nil, &NotFoundError{Reason: "chat not found", Err: err}
 	}
 
@@ -1084,6 +1099,27 @@ func seedFingerprint(messages []SeedMessage, attachments []string) string {
 
 // projectLookupError separates a project that is not there (final) from a
 // store failure (worth retrying).
+// chatOrg is the organization a new chat belongs to: its project's, when the
+// project has one (a chat and its project are in one org, so a request naming
+// another is refused), else the org the request named, else the creator's
+// default org, else none.
+func chatOrg(spec Spec, project *db.Project) (*string, error) {
+	if project != nil && project.OrgID != nil && *project.OrgID != "" {
+		if spec.OrgID != "" && spec.OrgID != *project.OrgID {
+			return nil, &ValidationError{Kind: ValidationFailedPrecondition,
+				Reason: "the project belongs to another organization: open it from that organization to start a chat in it"}
+		}
+		org := *project.OrgID
+		return &org, nil
+	}
+	for _, org := range []string{spec.OrgID, spec.DefaultOrgID} {
+		if org != "" {
+			return &org, nil
+		}
+	}
+	return nil, nil
+}
+
 func projectLookupError(err error) error {
 	if errors.Is(err, core.ErrProjectNotFound) {
 		return &NotFoundError{Reason: "project not found", Err: err}

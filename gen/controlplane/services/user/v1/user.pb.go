@@ -290,7 +290,9 @@ func (*CompleteOnboardingResponse) Descriptor() ([]byte, []int) {
 // it, rather than showing a generic error.
 type AccountDeletionBlocker struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Machine-readable reason: "paid_subscription".
+	// Machine-readable reason: "paid_subscription", or
+	// "sole_owner_of_shared_org" (the caller is the only owner of an org with
+	// other members; they make someone else an owner, or leave, first).
 	Reason string `protobuf:"bytes,1,opt,name=reason,proto3" json:"reason,omitempty"`
 	// Human-readable sentence the UI may render verbatim.
 	Detail        string `protobuf:"bytes,2,opt,name=detail,proto3" json:"detail,omitempty"`

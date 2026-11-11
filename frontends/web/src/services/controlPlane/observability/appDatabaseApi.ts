@@ -17,6 +17,7 @@
  */
 
 import { create, toJson, type JsonValue } from "@bufbuild/protobuf";
+import type { Client } from "@connectrpc/connect";
 import { TimestampSchema, ValueSchema, type Timestamp } from "@bufbuild/protobuf/wkt";
 
 import {
@@ -294,8 +295,9 @@ function foreignKey(fk: DatabaseForeignKey): DbForeignKey {
   };
 }
 
-export async function listBrowsableDatabases(environmentId: string, options: { signal?: AbortSignal } = {}): Promise<BrowsableDb[]> {
-  const res = await client().listBrowsableDatabases({ environmentId }, options.signal ? { signal: options.signal } : undefined);
+export function createDataBrowserApi(browserClient: Pick<Client<typeof AppDatabaseService>, "listBrowsableDatabases" | "describeDatabase" | "browseTable">) {
+async function listBrowsableDatabases(environmentId: string, options: { signal?: AbortSignal } = {}): Promise<BrowsableDb[]> {
+  const res = await browserClient.listBrowsableDatabases({ environmentId }, options.signal ? { signal: options.signal } : undefined);
   return res.databases.map((db) => ({
     name: db.name,
     kind: DB_KINDS[db.kind] ?? "unknown",
@@ -305,11 +307,11 @@ export async function listBrowsableDatabases(environmentId: string, options: { s
   }));
 }
 
-export async function describeDatabase(
+async function describeDatabase(
   req: { environmentId: string; database: string; access?: DataAccessConfirmation },
   options: { signal?: AbortSignal } = {}
 ): Promise<DbDescription> {
-  const res = await client().describeDatabase(
+  const res = await browserClient.describeDatabase(
     { environmentId: req.environmentId, database: req.database, ...accessFields(req.access) },
     options.signal ? { signal: options.signal } : undefined
   );
@@ -330,8 +332,8 @@ export async function describeDatabase(
   };
 }
 
-export async function browseTable(req: BrowseInput, options: { signal?: AbortSignal } = {}): Promise<BrowsePage> {
-  const res = await client().browseTable(
+async function browseTable(req: BrowseInput, options: { signal?: AbortSignal } = {}): Promise<BrowsePage> {
+  const res = await browserClient.browseTable(
     {
       environmentId: req.environmentId,
       database: req.database,
@@ -363,6 +365,14 @@ export async function browseTable(req: BrowseInput, options: { signal?: AbortSig
     replica: res.replica,
   };
 }
+
+return { listBrowsableDatabases, describeDatabase, browseTable };
+}
+
+// Lazy production client resolution preserves the authenticated transport boundary.
+export const listBrowsableDatabases = (...args: Parameters<ReturnType<typeof createDataBrowserApi>["listBrowsableDatabases"]>) => createDataBrowserApi(client()).listBrowsableDatabases(...args);
+export const describeDatabase = (...args: Parameters<ReturnType<typeof createDataBrowserApi>["describeDatabase"]>) => createDataBrowserApi(client()).describeDatabase(...args);
+export const browseTable = (...args: Parameters<ReturnType<typeof createDataBrowserApi>["browseTable"]>) => createDataBrowserApi(client()).browseTable(...args);
 
 /** One database a postgres panel may read: its limits, and what the dashboard role may SELECT. */
 export interface DashboardDatabase {

@@ -70,7 +70,7 @@ const eventSupplied = "\u27e8event-supplied\u27e9"
 var inputsReference = regexp.MustCompile(`\binputs\b\s*(?:\.\s*([A-Za-z_][A-Za-z0-9_]*)|\[\s*['"]([^'"]+)['"]\s*\])?`)
 
 // runtimeNamespaces are the CEL namespaces a run fills and an approval cannot.
-var runtimeNamespaces = []wfcel.CELNamespace{wfcel.CELNodes, wfcel.CELTrigger, wfcel.CELIter, wfcel.CELOutput, wfcel.CELOutputs, wfcel.CELFailure}
+var runtimeNamespaces = []wfcel.CELNamespace{wfcel.CELNodes, wfcel.CELTrigger, wfcel.CELIter, wfcel.CELOutput, wfcel.CELOutputs, wfcel.CELFailure, wfcel.CELRun}
 
 // referencesRuntime reports whether a {{ }} template reads a value only a run
 // has (see above). It answers by parsing, so a namespace mentioned only inside

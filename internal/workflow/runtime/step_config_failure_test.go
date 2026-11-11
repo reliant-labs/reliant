@@ -52,7 +52,7 @@ const (
 func registerFailStep(e *subAgentFailureEnv) {
 	e.env.RegisterActivityWithOptions(func(_ context.Context, in map[string]interface{}) (map[string]interface{}, error) {
 		msg, _ := in["error"].(string)
-		return nil, temporal.NewNonRetryableApplicationError("workflow validation failed: "+msg, "", nil)
+		return nil, temporal.NewNonRetryableApplicationError("step cannot run as configured: "+msg, "", nil)
 	}, activity.RegisterOptions{Name: "FailStep"})
 }
 

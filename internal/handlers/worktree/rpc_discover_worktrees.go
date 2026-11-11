@@ -150,11 +150,11 @@ func (s *Service) ImportWorktree(
 	if moves {
 		createReq.WorkspaceID = worktreepath.WorkspaceDirName(project.Name, name)
 	}
-	worktree, err := workspacecreate.Insert(ctx, s.deps.Repo, createReq)
+	machine := worktreeMachine{s: s, userID: userID, target: placement}
+	worktree, err := workspacecreate.Insert(ctx, s.deps.Repo, machine, createReq)
 	if err != nil {
 		return nil, insertWorktreeError(err, name)
 	}
-	machine := worktreeMachine{s: s, userID: userID, target: placement}
 
 	if !moves {
 		var def struct {

@@ -10,7 +10,7 @@ import (
 
 type ControlRunParams struct {
 	RunID  string `json:"run_id" jsonschema:"required,description=The run id (chat id), from start_run or list_runs."`
-	Action string `json:"action" jsonschema:"required,enum=pause,enum=resume,enum=cancel,description=pause parks the run so it can be resumed. resume continues a paused or interrupted run. cancel hard-stops it for good."`
+	Action string `json:"action" jsonschema:"required,enum=pause,enum=resume,enum=cancel,description=pause parks the run so it can be resumed. resume continues a paused or interrupted run. cancel stops it for good, after its finally cleanup."`
 }
 
 const (
@@ -19,7 +19,7 @@ const (
 
 - pause: park the run at its next step boundary. It stays alive and resumable.
 - resume: continue a paused (or interrupted) run from where it stopped.
-- cancel: hard-stop the run. This is terminal — a cancelled run is not resumed; sending it a message starts a fresh run in the same chat.
+- cancel: stop the run for good. Its in-flight steps are cancelled (a running command is stopped on its machine), then its workflow's finally: handler runs, so it releases what it holds. This is terminal — a cancelled run is not resumed; sending it a message starts a fresh run in the same chat.
 
 THE RECEIPT IS HONEST: pause and cancel REQUEST the stop. A run in the middle of a long tool call stops when that call returns. Confirm with get_run.
 
@@ -112,6 +112,6 @@ func (c *controlRunTool) Execute(rctx *rctx.ToolContext, params ControlRunParams
 			return NewTextErrorResponse(fmt.Sprintf("Could not cancel run %s: %v", chat.ID, err)), nil
 		}
 		return NewTextResponse(fmt.Sprintf(
-			"Cancel REQUESTED for run %s. The run is hard-stopped and will not resume. Confirm with get_run.", chat.ID)), nil
+			"Cancel REQUESTED for run %s. Its in-flight steps are stopped, its finally cleanup (if it declares one) runs, and it will not resume. Confirm with get_run.", chat.ID)), nil
 	}
 }

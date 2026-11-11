@@ -126,6 +126,12 @@ func TestForgeReadsFromModuleGraph(t *testing.T) {
 		t.Fatal("Forge() returned an empty string; it must return \"unknown\" when unresolvable")
 	}
 
+	// A forge replaced by a local directory (forge's consumer canary builds
+	// reliant this way, with a -modfile replace) reports "(devel)": the
+	// module graph has no version to compare with the pin.
+	if got == "(devel)" {
+		t.Skip("forge is replaced by a local checkout, which carries no version; nothing to compare with go.mod's pin")
+	}
 	pinned := forgePinFromGoMod(t)
 	if got != "unknown" && got != pinned {
 		t.Errorf("Forge() = %q but go.mod pins %q — the reported version must come "+

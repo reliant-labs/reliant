@@ -60,7 +60,8 @@ const runRowsSQL = `
         COALESCE(c.display_state, 1)::integer AS display_state,
         c.state AS chat_state,
         COALESCE(pe.parent_chat_id, '')::text AS parent_chat_id,
-        pc.title AS parent_chat_title
+        pc.title AS parent_chat_title,
+        c.org_id
     FROM chats_with_activity c
     LEFT JOIN workflows rw ON rw.id = c.workflow_id
     LEFT JOIN triggers t ON t.id = c.trigger_id AND t.user_id = c.user_id
@@ -131,6 +132,14 @@ func ListRuns(ctx context.Context, db orm.Context, filters core.RunListFilters) 
 		q = q.Where("r.chat_state IS DISTINCT FROM ?", core.ChatStateArchived)
 	}
 	q = whereProjectAndWorkflows(q, filters)
+	if filters.Org != nil {
+		// A run's org is its chat's (workflows_inherit_chat_org).
+		if filters.Org.IncludeUnassigned {
+			q = q.Where("(r.org_id = ? OR r.org_id IS NULL)", filters.Org.OrgID)
+		} else {
+			q = q.Where("r.org_id = ?", filters.Org.OrgID)
+		}
+	}
 	if filters.TriggerID != nil {
 		q = q.Where("r.trigger_id = ?", *filters.TriggerID)
 	}
@@ -232,7 +241,7 @@ func ListUnlaunchedTriggerEvents(ctx context.Context, db orm.Context, filters co
 		Join("JOIN triggers AS t ON t.id = te.trigger_id AND t.user_id = te.user_id").
 		ColumnExpr("te.id, te.trigger_id, t.name AS trigger_name, t.workflow AS workflow_name").
 		ColumnExpr("COALESCE(t.workflow_trigger, '') AS workflow_trigger, t.project_id, te.kind").
-		ColumnExpr("te.occurred_at, te.outcome, te.outcome_detail").
+		ColumnExpr("te.occurred_at, te.outcome, te.outcome_detail, t.org_id").
 		Where("te.user_id = ?", filters.UserID).
 		Where("te.outcome IN (?, ?)", core.TriggerEventSkipped, core.TriggerEventFailed).
 		Where("te.chat_id IS NULL")
@@ -241,6 +250,15 @@ func ListUnlaunchedTriggerEvents(ctx context.Context, db orm.Context, filters co
 	}
 	if len(filters.Workflows) > 0 {
 		q = q.Where("t.workflow = ANY(?)", pgdialect.Array(filters.Workflows))
+	}
+	// An event's org is its trigger's: the org-scoped run log lists only
+	// that org's events (with the caller's unassigned ones in their default).
+	if filters.Org != nil {
+		if filters.Org.IncludeUnassigned {
+			q = q.Where("(t.org_id = ? OR t.org_id IS NULL)", filters.Org.OrgID)
+		} else {
+			q = q.Where("t.org_id = ?", filters.Org.OrgID)
+		}
 	}
 	if filters.TriggerID != nil {
 		q = q.Where("te.trigger_id = ?", *filters.TriggerID)
@@ -286,6 +304,7 @@ func ListUnlaunchedTriggerEvents(ctx context.Context, db orm.Context, filters co
 			OccurredAt:      row.OccurredAt,
 			Outcome:         core.TriggerEventOutcome(row.Outcome),
 			OutcomeDetail:   row.OutcomeDetail,
+			OrgID:           row.OrgID,
 		}
 	}
 	return events, hasMore, nil
@@ -302,6 +321,7 @@ type unlaunchedEventRow struct {
 	OccurredAt      time.Time `bun:"occurred_at"`
 	Outcome         string    `bun:"outcome"`
 	OutcomeDetail   string    `bun:"outcome_detail"`
+	OrgID           *string   `bun:"org_id"`
 }
 
 // runRow is one row of runRowsSQL.
@@ -326,6 +346,8 @@ type runRow struct {
 	ChatState       *core.ChatState          `bun:"chat_state"`
 	ParentChatID    string                   `bun:"parent_chat_id"`
 	ParentChatTitle *string                  `bun:"parent_chat_title"`
+	// OrgID is the run's chat's org, read only to filter (RunListFilters.Org).
+	OrgID *string `bun:"org_id"`
 }
 
 func runItems(rows []runRow) []*core.RunListItem {
@@ -350,6 +372,7 @@ func runItems(rows []runRow) []*core.RunListItem {
 			ParentChatID:    row.ParentChatID,
 			ParentChatTitle: deref(row.ParentChatTitle),
 			Archived:        row.ChatState != nil && *row.ChatState == core.ChatStateArchived,
+			OrgID:           row.OrgID,
 		}
 		// The zero status when the chat has no root workflow row yet: the
 		// join leaves both halves NULL.

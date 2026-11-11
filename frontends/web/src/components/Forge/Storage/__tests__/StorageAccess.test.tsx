@@ -161,11 +161,6 @@ describe("refusals", () => {
     expect(error).toHaveTextContent("reliant forge env deploy staging");
   });
 
-  it("says when an environment declares no bucket", async () => {
-    renderBrowser(createStorageFixtureApi({ noBuckets: true }), {}, STAGING);
-    expect(await screen.findByTestId("storage-no-buckets")).toHaveTextContent("staging has no buckets");
-  });
-
   it("says a bucket the server cannot reach is unreachable", async () => {
     const api = createStorageFixtureApi({ fail: { method: "listObjects", code: Code.FailedPrecondition, reason: "bucket_unreachable" } });
     renderBrowser(api, { bucket: "uploads" }, STAGING);

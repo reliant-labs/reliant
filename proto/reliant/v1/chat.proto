@@ -640,6 +640,10 @@ message Chat {
   // rewritten). The chat list (ListChats, SearchChats, the Archived tab) holds
   // USER chats plus runs the user adopted; every other origin lives in Runs.
   ChatOrigin origin = 43;
+  // The organization the chat belongs to, fixed at creation; its LLM usage
+  // bills this org. Unset for a chat created before orgs or where no org
+  // could be resolved: such a chat belongs to its creator's default org.
+  optional string org_id = 44;
 }
 
 // ChatOrigin is who started a chat. It is the chat list's policy key: a USER
@@ -899,6 +903,15 @@ message StartChatRequest {
   // makes no promise: every call starts a new chat. A value that is not a UUID
   // is refused with INVALID_ARGUMENT.
   optional string client_message_id = 21;
+
+  // The organization to act in (control-plane organizations.id); the web
+  // fills it with the active org. It must be one the caller is a live member
+  // of (PERMISSION_DENIED otherwise), and a machine credential may name only
+  // its own org. Unset is the caller's default org. A new chat in a project
+  // that belongs to an org belongs to that org: naming another is
+  // FAILED_PRECONDITION. Ignored when chat_id names an existing chat, whose
+  // org never changes.
+  optional string org_id = 23;
 }
 
 // StartChatResponse returns the started chat and the ids of its root run.
@@ -982,6 +995,11 @@ message ListChatsRequest {
   // pages runs in.
   reserved 3;
   reserved "sidebar_only";
+  // List only this organization's chats. It must be one the caller is a
+  // live member of (PERMISSION_DENIED otherwise). Chats created before orgs
+  // list under the caller's default org. Unset lists every chat the caller
+  // owns, in any org, as before this field existed.
+  optional string org_id = 4;
 }
 
 // ListChatsResponse returns the list of chats

@@ -292,7 +292,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
           : undefined;
         if (!isCurrent()) return;
         if (chat) {
-          await openChatInWorkspace(chat, { isCurrent });
+          await openChatInWorkspace(chat, { isCurrent, openEntry: "restore" });
           if (!isCurrent()) return;
         }
       }

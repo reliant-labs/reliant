@@ -277,8 +277,8 @@ func TestPreparedMessages_Opus55MatchesCaptureShape(t *testing.T) {
 	if got.MaxTokens != capture.MaxTokens {
 		t.Errorf("max_tokens = %d, want %d", got.MaxTokens, capture.MaxTokens)
 	}
-	if !jsonEquivalent(t, got.Thinking, capture.Thinking) {
-		t.Errorf("thinking = %s, want %s", got.Thinking, capture.Thinking)
+	if want := capturedThinkingAsSent(t, capture.Thinking); !jsonEquivalent(t, got.Thinking, want) {
+		t.Errorf("thinking = %s, want %s", got.Thinking, want)
 	}
 	if !jsonEquivalent(t, got.OutputConfig, capture.OutputConfig) {
 		t.Errorf("output_config = %s, want %s", got.OutputConfig, capture.OutputConfig)

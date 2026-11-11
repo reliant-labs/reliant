@@ -36,6 +36,7 @@ import (
 	v2activities "github.com/reliant-labs/reliant/internal/workflow/runtime/activities"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/handlers"
 
+	"github.com/reliant-labs/reliant/internal/authz"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/interceptor"
@@ -80,6 +81,12 @@ type Config struct {
 	// no launcher fails loudly and is retried on one that has it, instead of
 	// being silently dropped.
 	TriggerLauncher triggers.Launcher
+
+	// Membership is on every activity's context (authz.WithMembership,
+	// through worker.Options.BackgroundActivityContext), so a tool, a launch
+	// or a trigger fire decides org resources against live membership as an
+	// API request does. nil is a deployment with no orgs: owner-only.
+	Membership authz.Membership
 
 	// TriggerPollers looks up a polled integration's poll function. nil
 	// registers the poll workflow without its activity: a poll that reaches
@@ -346,7 +353,14 @@ func NewWorker(cfg *Config) (*Worker, *v2.ActivityRegistry, error) {
 // workerOptions is the shared worker's worker.Options, gomaxprocs being the
 // runtime's (a parameter so the derivation is testable).
 func workerOptions(cfg *Config, onFatalError func(error), gomaxprocs int) worker.Options {
+	membership := cfg.Membership
+	if membership == nil {
+		membership = authz.NoOrgs{}
+	}
 	return worker.Options{
+		// Every activity's context derives from it: authz reads membership
+		// there (Config.Membership).
+		BackgroundActivityContext: authz.WithMembership(context.Background(), membership),
 		// How Worker.Run learns the worker died; see temporalWorker.
 		OnFatalError:                 onFatalError,
 		StickyScheduleToStartTimeout: 5 * time.Second,

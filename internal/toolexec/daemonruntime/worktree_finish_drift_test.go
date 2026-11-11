@@ -29,7 +29,7 @@ func TestWorktreeFinishDriftPreservesExistingWorktreeAndBranch(t *testing.T) {
 	store := &finishDriftStore{}
 	machine := &finishDriftMachine{}
 	req := workspacecreate.Request{Project: &db.Project{ID: "p", Name: "p", Path: r.clone}, Checkout: r.clone, Repos: []*core.Repo{{ID: "r", Name: "r", RelativePath: ""}}, Name: "review", Branch: "worktree/review", Force: true, FetchRepoID: "r", FetchBranch: "feat/x", ExpectedHead: expected}
-	wt, err := workspacecreate.Insert(context.Background(), store, req)
+	wt, err := workspacecreate.Insert(context.Background(), store, nil, req)
 	require.NoError(t, err)
 	err = workspacecreate.Finish(context.Background(), store, machine, req, wt)
 	require.Error(t, err)
@@ -80,7 +80,10 @@ type finishDriftStore struct{}
 
 func (*finishDriftStore) CreateWorktree(context.Context, *db.Worktree) error { return nil }
 func (*finishDriftStore) UpdateWorktree(context.Context, *db.Worktree) error { return nil }
-func (*finishDriftStore) ArchiveWorktree(context.Context, string) error      { return nil }
+func (*finishDriftStore) SettleCheckoutTeardown(context.Context, string, string, string) (*db.CheckoutTeardown, error) {
+	return nil, nil
+}
+func (*finishDriftStore) ArchiveWorktree(context.Context, string) error { return nil }
 func (*finishDriftStore) GetLiveWorktreeByName(context.Context, string, string) (*db.Worktree, error) {
 	return nil, nil
 }

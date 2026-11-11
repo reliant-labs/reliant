@@ -72,6 +72,7 @@ import { EnvPageHeader } from "./EnvPageHeader";
 import { envHeadline } from "./envHeadline";
 import { IdentityTab } from "./IdentityTab";
 import { QueuedDeployBanner } from "./QueuedDeployBanner";
+import { EnvPromotions } from "./EnvPromotions";
 import { OverviewTab, RunningTab } from "./EnvTabPanels";
 import { resolveTab, retiredTabOf, RETIRED_TABS, tabNeedsDaemon, tabParam, tabsFor, type EnvTab } from "./envTabs";
 import Link from "@/components/forge-ui/link";
@@ -364,6 +365,16 @@ export function ForgeEnvPage() {
             cloudStatus={cloudStatus.data}
             cloudStatusLoading={cloudStatus.isLoading}
             domainsHref={href({ kind: "domains" })}
+            promotions={
+              liveEnv && projectName.name && lifecycle !== "local" ? (
+                <EnvPromotions
+                  project={projectName.name}
+                  env={{ id: liveEnv.id, name: envName }}
+                  releaseHref={(version) => href({ kind: "release", version }, { env: envName })}
+                  releasesHref={href({ kind: "releases" }, { env: envName })}
+                />
+              ) : undefined
+            }
           />
         ) : tab === "identity" ? (
           <IdentityTab

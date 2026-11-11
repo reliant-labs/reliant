@@ -16,6 +16,7 @@ import (
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/launch"
 	"github.com/reliant-labs/reliant/internal/machinepool"
@@ -55,6 +56,9 @@ func (s *Service) ListReplayEvents(
 	if err != nil {
 		return nil, triggerDBError("list triggers", err)
 	}
+	// Firings of a trigger the caller may no longer read (an org they left,
+	// a credential's other org) are not candidates.
+	mine = authz.Visible(ctx, userID, mine, authz.CanReadTrigger)
 	var candidates []*reliantv1.ReplayCandidate
 	for _, t := range mine {
 		if t.WorkflowTrigger == nil || !sameWorkflowRef(t.Workflow, msg.GetWorkflow()) {
@@ -187,7 +191,7 @@ func (s *Service) activationOf(ctx context.Context, userID string, msg *reliantv
 	if err != nil {
 		return nil
 	}
-	for _, t := range mine {
+	for _, t := range authz.Visible(ctx, userID, mine, authz.CanReadTrigger) {
 		if t.WorkflowTrigger != nil && sameWorkflowRef(t.Workflow, msg.GetWorkflow()) &&
 			(triggerName == "" || *t.WorkflowTrigger == triggerName) {
 			return t

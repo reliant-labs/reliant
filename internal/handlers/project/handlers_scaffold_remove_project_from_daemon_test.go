@@ -22,7 +22,7 @@ func TestRemoveProjectFromDaemon_Generated(t *testing.T) {
 		deleted = append(deleted, projectID+" "+daemonID)
 		return nil
 	}
-	svc := newService(t, store, answering("git.remove", `{"path":"/clone"}`, `{"success":true,"removed":true}`))
+	svc := newService(t, store, answering("git.remove", `{"op_id":"op-1","path":"/clone"}`, `{"success":true,"removed":true}`))
 
 	tdd.RunRPCCases(t, []tdd.RPCCase[pb.RemoveProjectFromDaemonRequest, pb.RemoveProjectFromDaemonResponse]{
 		{

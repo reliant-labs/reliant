@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/daemonerr"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -99,7 +100,9 @@ func (s *Service) forgeFallbackTargets(ctx context.Context, userID string, proje
 		logging.WarnContext(ctx, "forge: failed to list the caller's projects", "error", err, "project_id", project.ID)
 		return targets
 	}
-	for _, other := range projects {
+	// Only projects the caller may still read lend their machines: none of
+	// an org they have left, or of a credential's other org.
+	for _, other := range authz.Visible(ctx, userID, projects, authz.CanReadProject) {
 		if other == nil || other.ID == project.ID || forgeNameOf(other) != name || githubRepoOf(other.RemoteURL) != repo {
 			continue
 		}

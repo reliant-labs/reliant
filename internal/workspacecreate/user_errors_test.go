@@ -97,7 +97,7 @@ func TestFinish_DiagnosedCheckoutFailuresAreUserErrors(t *testing.T) {
 			if tc.adopt {
 				req.Existing = map[string]ExistingCheckout{"r1": {Path: "/w/demo/feat-1/a", Base: "main"}}
 			}
-			wt, err := Insert(context.Background(), st, req)
+			wt, err := Insert(context.Background(), st, nil, req)
 			require.NoError(t, err)
 
 			err = Finish(context.Background(), st, m, req, wt)
@@ -130,7 +130,7 @@ func TestFinish_UndiagnosedCheckoutFailureIsAServerFault(t *testing.T) {
 	resp := checkoutResponse{Error: "fatal: write error: No space left on device\n"}
 	st, m := &fakeStore{}, &fakeMachine{root: "/w/demo/feat-1", failRepo: "b", failWith: &resp}
 	req := twoRepoReq()
-	wt, err := Insert(context.Background(), st, req)
+	wt, err := Insert(context.Background(), st, nil, req)
 	require.NoError(t, err)
 
 	err = Finish(context.Background(), st, m, req, wt)
@@ -150,7 +150,7 @@ func TestFinish_UserErrorNeverBecomesAnIssue(t *testing.T) {
 	st, m := &fakeStore{}, &fakeMachine{root: "/w/demo/feat-1", failRepo: "b"}
 	req := twoRepoReq()
 	req.BaseBranch = "feat/telemetry-delivery-c2"
-	wt, err := Insert(context.Background(), st, req)
+	wt, err := Insert(context.Background(), st, nil, req)
 	require.NoError(t, err)
 	require.Error(t, Finish(context.Background(), st, m, req, wt))
 
@@ -167,7 +167,7 @@ func TestFinish_UserErrorNeverBecomesAnIssue(t *testing.T) {
 	disk := checkoutResponse{Error: "fatal: write error: No space left on device\n"}
 	st, m = &fakeStore{}, &fakeMachine{root: "/w/demo/feat-2", failRepo: "b", failWith: &disk}
 	req = twoRepoReq()
-	wt, err = Insert(context.Background(), st, req)
+	wt, err = Insert(context.Background(), st, nil, req)
 	require.NoError(t, err)
 	require.Error(t, Finish(context.Background(), st, m, req, wt))
 	assert.NotEmpty(t, errorLines(t, lines), "a server fault on the same path must still be an ERROR")
@@ -222,7 +222,7 @@ func TestFinish_MachineThatNeverAnsweredIsAWarningNotAnIssue(t *testing.T) {
 			lines := installProcessLogging(t)
 			st, m := &fakeStore{}, &fakeMachine{root: "/w/demo/feat-1", failRepo: "b", sendErr: tc.sendErr}
 			req := twoRepoReq()
-			wt, err := Insert(context.Background(), st, req)
+			wt, err := Insert(context.Background(), st, nil, req)
 			require.NoError(t, err)
 
 			err = Finish(context.Background(), st, m, req, wt)
@@ -248,7 +248,7 @@ func TestInsert_RefusalsAreUserErrors(t *testing.T) {
 		st := &fakeStore{}
 		req := twoRepoReq()
 		req.Branch = "bad..name"
-		_, err := Insert(context.Background(), st, req)
+		_, err := Insert(context.Background(), st, nil, req)
 		require.Error(t, err)
 		assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
 		assert.Equal(t, svcerr.ClassUser, svcerr.Classify(err))
@@ -259,9 +259,9 @@ func TestInsert_RefusalsAreUserErrors(t *testing.T) {
 	t.Run("name taken", func(t *testing.T) {
 		st := &fakeStore{}
 		req := twoRepoReq()
-		_, err := Insert(context.Background(), st, req)
+		_, err := Insert(context.Background(), st, nil, req)
 		require.NoError(t, err)
-		_, err = Insert(context.Background(), st, req)
+		_, err = Insert(context.Background(), st, nil, req)
 		var taken *NameTakenError
 		require.ErrorAs(t, err, &taken)
 		assert.Equal(t, svcerr.ClassUser, svcerr.Classify(err))
@@ -269,7 +269,7 @@ func TestInsert_RefusalsAreUserErrors(t *testing.T) {
 
 	t.Run("name taken by a concurrent create", func(t *testing.T) {
 		st := &racingStore{fakeStore: &fakeStore{}}
-		_, err := Insert(context.Background(), st, twoRepoReq())
+		_, err := Insert(context.Background(), st, nil, twoRepoReq())
 		var taken *NameTakenError
 		require.ErrorAs(t, err, &taken)
 		assert.ErrorIs(t, err, core.ErrWorktreeNameTaken)
@@ -279,10 +279,10 @@ func TestInsert_RefusalsAreUserErrors(t *testing.T) {
 	t.Run("branch held by another worktree", func(t *testing.T) {
 		st := &fakeStore{}
 		req := twoRepoReq()
-		_, err := Insert(context.Background(), st, req)
+		_, err := Insert(context.Background(), st, nil, req)
 		require.NoError(t, err)
 		req.Name = "other"
-		_, err = Insert(context.Background(), st, req)
+		_, err = Insert(context.Background(), st, nil, req)
 		var held *BranchHeldError
 		require.ErrorAs(t, err, &held)
 		assert.Equal(t, svcerr.ClassUser, svcerr.Classify(err))
