@@ -30,6 +30,7 @@ import {
 } from './routeSchemas'
 import { reportCaughtError, RouteErrorFallback } from './components/ErrorBoundary'
 import { lazyRoute } from './lib/lazyRoute'
+import { watchRoutedChatOpens } from './lib/routedChatOpen'
 import { AuthGuard } from './components/AuthGuard'
 import { ModalLayer } from './components/Modals/ModalLayer'
 import { AddProjectDialogHost } from './components/Projects/AddProjectDialog'
@@ -1079,6 +1080,15 @@ export const router = createRouter({
   // rather than just itself.
   defaultErrorComponent: RouteErrorFallback,
   defaultOnCatch: (error, errorInfo) => reportCaughtError(error, errorInfo.componentStack),
+})
+
+// The mobile chat screen opens its chat from the URL, not through
+// chatStore.selectChat: time each of those opens from the navigation that
+// starts it (lib/routedChatOpen). Subscribed here, with the router, so the
+// app's first navigation (a reload, a deep link) is seen too.
+watchRoutedChatOpens(router, (pathname) => {
+  const { foundRoute, routeParams } = router.getMatchedRoutes(pathname)
+  return foundRoute?.id === mobileChatRoute.id ? routeParams.chatId : undefined
 })
 
 // Register the router on globalThis so non-React modules (e.g. projectStore)

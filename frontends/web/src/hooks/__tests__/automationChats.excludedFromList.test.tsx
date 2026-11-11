@@ -179,7 +179,8 @@ describe("workspace restore", () => {
     await waitFor(() => expect(result.current.isComplete).toBe(true));
     expect(selectChat).toHaveBeenCalledWith(
       expect.objectContaining({ id: "auto-chat" }),
-      { deferPersist: true },
+      // Timed as a restore, not a click (lib/chatOpenInteraction ChatOpenEntry).
+      { deferPersist: true, openEntry: "restore" },
     );
     // The stored active chat was NOT cleared as "no longer exists".
     expect(setActiveChatId).not.toHaveBeenCalled();
