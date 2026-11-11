@@ -66,6 +66,14 @@ type approveResponse struct {
 func (s *Service) sendApprovals(ctx context.Context, userID, daemonID string, decisions []*pb.WorktreeReclaimDecision,
 	shown map[string]*pb.WorktreeReclaimProposal, results []*pb.WorktreeReclaimDecisionResult, approved []int,
 ) {
+	// DecideWorktreeReclaim already refuses without a Sender; this keeps the
+	// helper safe on its own (forge-optional-deps-guard).
+	if s.deps.Sender == nil {
+		for _, i := range approved {
+			refuse(results[i], "unavailable", "no machine can be reached; the approval is recorded, approve again to remove it")
+		}
+		return
+	}
 	send := approveRequest{ApprovedBy: "inbox:" + userID, CommandID: uuid.NewString(), IssuedAtMs: time.Now().UnixMilli()}
 	sentAt := map[string]int{}
 	for _, i := range approved {
