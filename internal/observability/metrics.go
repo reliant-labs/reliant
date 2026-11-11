@@ -228,6 +228,32 @@ var (
 		},
 		[]string{"subject", "error_type"},
 	)
+	// NATSSubscriptionsRefused is how many subscriptions the NATS server has
+	// refused and this process is still re-subscribing (natsutil.
+	// SubscribeWithRecovery), by subject pattern. A permissions roll that
+	// lands after the process started holds it above zero for a few seconds;
+	// minutes means a grant is missing from control-plane
+	// deploy/nats/permissions.yaml.
+	NATSSubscriptionsRefused = newGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: "reliant",
+			Subsystem: "nats",
+			Name:      "subscriptions_refused",
+			Help:      "Subscriptions the NATS server refused that are not active yet and are being retried, by subject pattern.",
+		},
+		[]string{"subject"},
+	)
+	// NATSSubscriptionRefusalsTotal counts the server's refusals of those
+	// subscriptions, one per attempt.
+	NATSSubscriptionRefusalsTotal = newCounterVec(
+		prometheus.CounterOpts{
+			Namespace: "reliant",
+			Subsystem: "nats",
+			Name:      "subscription_refusals_total",
+			Help:      "NATS subscription attempts the server refused (permissions violation), by subject pattern.",
+		},
+		[]string{"subject"},
+	)
 )
 
 // ─── Database Metrics ───────────────────────────────────────────────────────
@@ -515,6 +541,8 @@ func initMetrics() {
 		NATSReceiveTotal,
 		NATSRequestDuration,
 		NATSErrorsTotal,
+		NATSSubscriptionsRefused,
+		NATSSubscriptionRefusalsTotal,
 		// Egress
 		EgressLimitedTotal,
 		// Daemon link liveness
