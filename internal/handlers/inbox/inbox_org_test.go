@@ -187,25 +187,55 @@ func TestInboxReads_ItemOrg(t *testing.T) {
 	acme, home := "acme", "home"
 	r := &inboxReads{orgs: map[string]*string{"chat:c": &acme, "trigger:t": &home, "project:p": &acme, "project:legacy": nil}}
 	cases := []struct {
-		it      *reliantv1.InboxItem
-		org     *string
-		decided bool
+		it     *reliantv1.InboxItem
+		org    *string
+		placed itemPlacement
 	}{
-		{&reliantv1.InboxItem{ChatId: "c", TriggerId: "t", ProjectId: "p"}, &acme, true},
-		{&reliantv1.InboxItem{TriggerId: "t", ProjectId: "p"}, &home, true},
-		{&reliantv1.InboxItem{ProjectId: "p"}, &acme, true},
-		{&reliantv1.InboxItem{ProjectId: "legacy"}, nil, true},
+		{&reliantv1.InboxItem{ChatId: "c", TriggerId: "t", ProjectId: "p"}, &acme, placedInOrg},
+		{&reliantv1.InboxItem{TriggerId: "t", ProjectId: "p"}, &home, placedInOrg},
+		{&reliantv1.InboxItem{ProjectId: "p"}, &acme, placedInOrg},
+		{&reliantv1.InboxItem{ProjectId: "legacy"}, nil, placedInOrg},
 		// A key nobody read falls through to the next one.
-		{&reliantv1.InboxItem{ChatId: "unread", TriggerId: "unlisted", ProjectId: "p"}, &acme, true},
-		{&reliantv1.InboxItem{ProjectId: "unread"}, nil, false},
-		{&reliantv1.InboxItem{Kind: reliantv1.InboxItemKind_INBOX_ITEM_KIND_STORAGE}, nil, true},
-		{&reliantv1.InboxItem{Kind: reliantv1.InboxItemKind_INBOX_ITEM_KIND_WORKTREE_RECLAIM, ProjectId: "unread"}, nil, true},
+		{&reliantv1.InboxItem{ChatId: "unread", TriggerId: "unlisted", ProjectId: "p"}, &acme, placedInOrg},
+		{&reliantv1.InboxItem{ProjectId: "unread"}, nil, placedUnknown},
+		{&reliantv1.InboxItem{Kind: reliantv1.InboxItemKind_INBOX_ITEM_KIND_STORAGE}, nil, placedEveryOrg},
+		{&reliantv1.InboxItem{Kind: reliantv1.InboxItemKind_INBOX_ITEM_KIND_WORKTREE_RECLAIM, ProjectId: "unread"}, nil, placedEveryOrg},
 	}
 	for _, c := range cases {
-		org, decided := r.itemOrg(c.it)
-		require.Equal(t, c.decided, decided, "%v", c.it)
+		org, placed := r.itemOrg(c.it)
+		require.Equal(t, c.placed, placed, "%v", c.it)
 		require.Equal(t, c.org, org, "%v", c.it)
 	}
+}
+
+// Under an org that is not the caller's default (IncludeUnassigned false),
+// a machine's items still list (they are about no org's resource, so every
+// org's), while an item of no org yet (it belongs to the default org) and one
+// whose org could not be read do not. The default org lists the machine's
+// items and the item of no org, never the unknown one.
+func TestInboxReads_InScopeKeepsMachineItemsInEveryOrg(t *testing.T) {
+	acme := "acme"
+	r := &inboxReads{orgs: map[string]*string{"project:p-acme": &acme, "project:p-legacy": nil}}
+	items := func() []*reliantv1.InboxItem {
+		return []*reliantv1.InboxItem{
+			{ItemId: "storage", Kind: reliantv1.InboxItemKind_INBOX_ITEM_KIND_STORAGE},
+			{ItemId: "reclaim", Kind: reliantv1.InboxItemKind_INBOX_ITEM_KIND_WORKTREE_RECLAIM, ProjectId: "p-acme"},
+			{ItemId: "acme", ProjectId: "p-acme"},
+			{ItemId: "legacy", ProjectId: "p-legacy"},
+			{ItemId: "unknown", ProjectId: "p-unread"},
+		}
+	}
+	ids := func(scope *core.OrgScope) []string {
+		var out []string
+		for _, it := range r.inScope(items(), scope) {
+			out = append(out, it.ItemId)
+		}
+		return out
+	}
+	require.Equal(t, []string{"storage", "reclaim", "acme"}, ids(&core.OrgScope{OrgID: "acme"}), "a non-default org")
+	require.Equal(t, []string{"storage", "reclaim"}, ids(&core.OrgScope{OrgID: "globex"}), "another non-default org")
+	require.Equal(t, []string{"storage", "reclaim", "legacy"}, ids(&core.OrgScope{OrgID: "home", IncludeUnassigned: true}), "the default org")
+	require.Equal(t, []string{"storage", "reclaim", "acme", "legacy", "unknown"}, ids(nil), "no org named")
 }
 
 // A broken workflow file's item carries only its project: its org is read
