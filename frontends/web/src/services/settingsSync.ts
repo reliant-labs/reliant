@@ -65,6 +65,9 @@ export class SettingsSyncService {
   private settingsAppliedToDOM = false;
   private settingsCache = new Map<string, Setting>();
   private initPromise: Promise<void> | null = null;
+  // Bumped by reset(): a load started for the previous user drops its answer
+  // instead of filling the next user's cache with that user's settings.
+  private generation = 0;
   private initListeners = new Set<() => void>();
 
   /**
@@ -81,13 +84,31 @@ export class SettingsSyncService {
     return this.initPromise;
   }
 
+  /**
+   * Forget the signed-in user's settings (an identity change: authStore).
+   *
+   * The cache is per user: readSetting() serves straight from it once
+   * initialized, so without this the next user reads the previous one's
+   * settings (the onboarding checklist's welcome/completion/dismissal among
+   * them) and initialize() never loads theirs.
+   */
+  reset(): void {
+    this.generation++;
+    this.settingsCache.clear();
+    this.initialized = false;
+    this.initPromise = null;
+    this.settingsAppliedToDOM = false;
+  }
+
   private async doInitialize(): Promise<void> {
+    const startedIn = this.generation;
 
     const attemptLoad = async (retryCount = 0): Promise<void> => {
       try {
         // Fetch all appearance settings from the database (via gRPC)
         logger.info('[SettingsSync] Fetching settings from database...');
         const response = await fetchSettings();
+        if (startedIn !== this.generation) return;
         
         const settings = response.settings || [];
         logger.info(`[SettingsSync] Received ${settings.length} total settings from database`);
@@ -139,6 +160,7 @@ export class SettingsSyncService {
           logger.info(`[SettingsSync] No saved appearance settings; keeping localStorage/default values`);
         }
       } catch (error) {
+        if (startedIn !== this.generation) return;
         const errorMessage = error instanceof Error ? error.message : String(error);
         
         // Retry on network/gRPC errors - these often happen if gRPC isn't ready yet
@@ -155,12 +177,14 @@ export class SettingsSyncService {
           try {
             await waitForConfig(5000);
             await new Promise(resolve => setTimeout(resolve, delay));
+            if (startedIn !== this.generation) return;
             return attemptLoad(retryCount + 1);
           } catch (configErr) {
             logger.error('[SettingsSync] Config wait failed:', configErr);
           }
         }
         
+        if (startedIn !== this.generation) return;
         logger.error("[SettingsSync] Failed to initialize after retries:", errorMessage);
         logger.warn("[SettingsSync] Continuing with localStorage-only mode - settings may not persist across restarts");
         // Continue with localStorage-only mode on error
@@ -170,7 +194,9 @@ export class SettingsSyncService {
     };
     
     await attemptLoad();
-    this.notifyInitialized();
+    // A load reset() superseded initialized nothing: its listeners wait for
+    // the next user's load.
+    if (startedIn === this.generation) this.notifyInitialized();
   }
 
   /**

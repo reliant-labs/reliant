@@ -93,6 +93,29 @@ Each step undoes independently; do them in this order.
 
 After a rollback, re-run check 6 to confirm `app.reliantlabs.io` is unaffected.
 
+## One session across app.* and forge.* (AUTH_COOKIE_DOMAIN)
+
+Unset, each host keeps its own supabase-js session in localStorage and a user
+signs in once per host. With `AUTH_COOKIE_DOMAIN = ".reliantlabs.io"` in prod's
+`reliant-web` runtime config (control-plane `deploy/kcl/lib/reliant_web.k`, not
+`lib/env.k`, whose document is also the desktop release config), the session
+moves to chunked cookies `supabase-auth.0..n` on that domain (`Secure;
+SameSite=Lax`, 400-day rolling lifetime) and is shared: a sign-in, refresh or
+sign-out on one host applies to the other (lib/auth/sharedSession.ts).
+
+- Only https pages inside the domain use it. Electron, dev servers, localhost,
+  preview hosts and the demo host (and the demo shell) keep their own storage.
+- The first load after it is set moves an existing localStorage session into
+  the cookie, so nobody is signed out.
+- The PKCE code verifier stays per origin; the OAuth round trip returns to the
+  host that started it.
+- **Every host under the domain receives and can read the session.** Before
+  setting it, make sure no subdomain serves third-party or user content
+  (research/2026-11-05-console-health/shared-auth-cookie.md lists them).
+- Rollback: unset the key. Pages fall back to localStorage, which the
+  migration emptied, so users sign in once more; the shared cookies expire
+  unused (or clear them by signing out before the rollback ships).
+
 ## The demo (demo.reliantlabs.io) is not this bundle
 
 `demo.reliantlabs.io` is its own build and its own env: the `forge-demo`

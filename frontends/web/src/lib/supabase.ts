@@ -1,8 +1,25 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js'
-import type { SupportedStorage } from '@supabase/auth-js'
+import { navigatorLock } from '@supabase/auth-js'
+import type { LockFunc, SupportedStorage } from '@supabase/auth-js'
 import { devAuthGrpc } from '@/api/grpc-unauth'
+import {
+  type AuthStorageMode,
+  type RotationTracker,
+  type SessionCookieStore,
+  cookiesWritable,
+  createRotationTracker,
+  createSessionCookieStore,
+  createSharedLock,
+  createSharedSessionStorage,
+  followSharedSession,
+  migrateLocalSession,
+  normalizeCookieDomain,
+  resolveAuthStorageMode,
+  sessionNearExpiry,
+} from './auth/sharedSession'
 import { loadConfig } from './config_gen'
 import { getIsDev } from './constants'
+import { demoAppHost, isDemoShell } from './shell'
 
 // Read per call, not at module scope: the runtime config (config.js) is the
 // one source, and a module-scope copy is what a test resetting it never sees.
@@ -253,19 +270,81 @@ const grpcStorage: SupportedStorage = {
   },
 }
 
-// Select the appropriate storage based on environment
-const getStorage = (): SupportedStorage => {
-  if (isElectron) {
-    return electronStorage
+const STORAGE_KEY = 'supabase-auth'
+
+/** The storage mode for this page load (lib/auth/sharedSession.ts resolveAuthStorageMode). */
+export const authStorageMode = (): AuthStorageMode =>
+  resolveAuthStorageMode({
+    electron: isElectron,
+    devGrpc: getIsDev() && loadConfig().AUTH_MODE !== 'cloud',
+    cookieDomain: loadConfig().AUTH_COOKIE_DOMAIN,
+    hostname: window.location.hostname,
+    protocol: window.location.protocol,
+    demoHost: demoAppHost(),
+    demoShell: isDemoShell(),
+  })
+
+interface SharedCookieSession {
+  storage: SupportedStorage
+  store: SessionCookieStore
+  lock: LockFunc
+  rotation: RotationTracker
+}
+
+/**
+ * The session shared by every host under AUTH_COOKIE_DOMAIN, or null when
+ * this browser refuses the cookie (the page then keeps its per-origin
+ * localStorage session, as before the cookie existed).
+ */
+const sharedCookieSession = (): SharedCookieSession | null => {
+  const domain = normalizeCookieDomain(loadConfig().AUTH_COOKIE_DOMAIN)
+  if (!navigator.cookieEnabled || !cookiesWritable({ domain })) {
+    console.warn('[SharedSession] Cookies on', domain, 'are refused; keeping this origin\'s session')
+    return null
   }
-  if (getIsDev() && loadConfig().AUTH_MODE !== 'cloud') {
+  const store = createSessionCookieStore({ key: STORAGE_KEY, domain })
+  const migrated = migrateLocalSession({ key: STORAGE_KEY, local: window.localStorage, store })
+  if (migrated === 'failed') {
+    // The session did not land whole in the cookie; it is still in localStorage.
+    console.warn('[SharedSession] The session does not fit in cookies on', domain, '; keeping this origin\'s session')
+    return null
+  }
+  if (migrated !== 'none') console.info('[SharedSession] localStorage session:', migrated)
+  const rotation = createRotationTracker()
+  const nearExpiry = sessionNearExpiry(() => store.read())
+  return {
+    store,
+    rotation,
+    storage: createSharedSessionStorage({ key: STORAGE_KEY, store, local: window.localStorage }),
+    lock: createSharedLock({
+      name: `${STORAGE_KEY}-lock`,
+      domain,
+      refreshLikely: () => rotation.active() || nearExpiry(),
+      localLock: globalThis.navigator?.locks ? navigatorLock : undefined,
+    }),
+  }
+}
+
+// Select the appropriate storage based on environment
+const getStorage = (): { storage: SupportedStorage; shared: SharedCookieSession | null } => {
+  const mode = authStorageMode()
+  if (mode === 'electron') {
+    return { storage: electronStorage, shared: null }
+  }
+  if (mode === 'dev-grpc') {
     // In browser dev mode, use gRPC storage to access global auth file on backend
     // (falls back to localStorage if DevAuth endpoints aren't available)
-    return grpcStorage
+    return { storage: grpcStorage, shared: null }
   }
-  // In production browser mode, use localStorage
-  return window.localStorage
+  if (mode === 'shared-cookie') {
+    const shared = sharedCookieSession()
+    if (shared) return { storage: shared.storage, shared }
+  }
+  // Any other hosted browser (localhost, preview hosts, the demo, a host
+  // outside AUTH_COOKIE_DOMAIN): this origin's localStorage
+  return { storage: window.localStorage, shared: null }
 }
+
 
 /** True when this build carries the config Supabase needs to start. */
 export const isSupabaseConfigured = (): boolean => Boolean(supabaseAnonKey())
@@ -302,16 +381,26 @@ const getClient = (): SupabaseClient => {
   const anonKey = supabaseAnonKey()
   if (!anonKey) throw new Error(MISSING_ANON_KEY_MESSAGE)
 
+  const { storage, shared } = getStorage()
   client = createClient(supabaseUrl(), anonKey, {
     auth: {
       autoRefreshToken: true,
       persistSession: true,
       detectSessionInUrl: false,
-      storage: getStorage(),
-      storageKey: 'supabase-auth',
+      storage,
+      storageKey: STORAGE_KEY,
       flowType: 'pkce',
+      // The shared session refreshes under a lease across hosts, not just
+      // this origin's Web Lock (createSharedLock).
+      ...(shared ? { lock: shared.lock } : {}),
     },
   })
+  // Another host's sign-in, refresh or sign-out becomes this client's event.
+  if (shared) {
+    // refreshSession/setSession rotate whatever the expiry: take the lease for them.
+    shared.rotation.track(client.auth)
+    followSharedSession(client.auth, shared.store)
+  }
   return client
 }
 
