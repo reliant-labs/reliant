@@ -204,7 +204,15 @@ type ListInboxRequest struct {
 	Limit *int32 `protobuf:"varint,1,opt,name=limit,proto3,oneof" json:"limit,omitempty"`
 	// Only items of this project. Unset lists every project. The counts follow
 	// the same scope.
-	ProjectId     *string `protobuf:"bytes,2,opt,name=project_id,json=projectId,proto3,oneof" json:"project_id,omitempty"`
+	ProjectId *string `protobuf:"bytes,2,opt,name=project_id,json=projectId,proto3,oneof" json:"project_id,omitempty"`
+	// Only items of this organization: those about its chats, projects and
+	// automations. It must be one the caller is a live member of
+	// (PERMISSION_DENIED otherwise). Items about something created before orgs
+	// list under the caller's default org; a machine's storage and worktree
+	// items belong to no org and list in every one. Unset lists every item,
+	// in any org, as before this field existed. The counts follow the same
+	// scope.
+	OrgId         *string `protobuf:"bytes,3,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -249,6 +257,13 @@ func (x *ListInboxRequest) GetLimit() int32 {
 func (x *ListInboxRequest) GetProjectId() string {
 	if x != nil && x.ProjectId != nil {
 		return *x.ProjectId
+	}
+	return ""
+}
+
+func (x *ListInboxRequest) GetOrgId() string {
+	if x != nil && x.OrgId != nil {
+		return *x.OrgId
 	}
 	return ""
 }
@@ -2421,13 +2436,15 @@ var File_reliant_v1_inbox_proto protoreflect.FileDescriptor
 const file_reliant_v1_inbox_proto_rawDesc = "" +
 	"\n" +
 	"\x16reliant/v1/inbox.proto\x12\n" +
-	"reliant.v1\x1a\x14forge/v1/forge.proto\x1a\x19reliant/v1/approval.proto\x1a\x1dreliant/v1/tools_daemon.proto\x1a\x18reliant/v1/trigger.proto\"j\n" +
+	"reliant.v1\x1a\x14forge/v1/forge.proto\x1a\x19reliant/v1/approval.proto\x1a\x1dreliant/v1/tools_daemon.proto\x1a\x18reliant/v1/trigger.proto\"\x91\x01\n" +
 	"\x10ListInboxRequest\x12\x19\n" +
 	"\x05limit\x18\x01 \x01(\x05H\x00R\x05limit\x88\x01\x01\x12\"\n" +
 	"\n" +
-	"project_id\x18\x02 \x01(\tH\x01R\tprojectId\x88\x01\x01B\b\n" +
+	"project_id\x18\x02 \x01(\tH\x01R\tprojectId\x88\x01\x01\x12\x1a\n" +
+	"\x06org_id\x18\x03 \x01(\tH\x02R\x05orgId\x88\x01\x01B\b\n" +
 	"\x06_limitB\r\n" +
-	"\v_project_id\"\xe4\x01\n" +
+	"\v_project_idB\t\n" +
+	"\a_org_id\"\xe4\x01\n" +
 	"\x11ListInboxResponse\x12+\n" +
 	"\x05items\x18\x01 \x03(\v2\x15.reliant.v1.InboxItemR\x05items\x12%\n" +
 	"\x0eblocking_count\x18\x02 \x01(\x05R\rblockingCount\x12+\n" +
