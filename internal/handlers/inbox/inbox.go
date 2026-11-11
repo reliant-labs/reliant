@@ -124,15 +124,7 @@ func (s *Service) ListInbox(
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list inbox"))
 	}
 
-	if scope != nil {
-		inOrg := items[:0]
-		for _, it := range items {
-			if org, about := read.itemOrg(it); !about || scope.Includes(org) {
-				inOrg = append(inOrg, it)
-			}
-		}
-		items = inOrg
-	}
+	items = read.inScope(items, scope)
 
 	resp := &reliantv1.ListInboxResponse{}
 	if projectID != "" {
@@ -327,23 +319,69 @@ func (s *Service) readInbox(ctx context.Context, userID string) (*inboxReads, er
 	if err := g.Wait(); err != nil {
 		return nil, err
 	}
-	out.orgs = reads.orgs
 	for k, v := range triggerOrgs {
-		out.orgs[k] = v
+		reads.orgs[k] = v
 	}
+	// Read the org of every item the sections built without an authz read
+	// of their own (automation health, broken definitions), so ListInbox's
+	// org scope decides each one by what it is about, never by a key nobody
+	// read. Before the read is returned: it may be shared (sharedRead).
+	for _, section := range [][]*reliantv1.InboxItem{out.failing, out.declarations, out.recovery} {
+		for _, it := range section {
+			reads.resolveOrg(ctx, userID, it)
+		}
+	}
+	out.orgs = reads.orgs
 	return &out, nil
 }
 
-// itemOrg is the org an item is about: its chat's, else its automation's,
-// else its project's (nil: one with no org yet, or a project that is gone).
-// about is false for an item about none of them (a machine's storage and its
-// worktrees), which belongs to no org and lists in every scope.
-func (r *inboxReads) itemOrg(it *reliantv1.InboxItem) (org *string, about bool) {
-	for _, key := range []string{"chat:" + it.ChatId, "trigger:" + it.TriggerId, "project:" + it.ProjectId} {
-		if strings.HasSuffix(key, ":") {
-			continue
+// inScope keeps the items of scope's org (all of them for a nil scope). An
+// item whose org could not be read is left out of every named org, the
+// default included (fail closed): it is never taken for one of no org.
+func (r *inboxReads) inScope(items []*reliantv1.InboxItem, scope *core.OrgScope) []*reliantv1.InboxItem {
+	if scope == nil {
+		return items
+	}
+	kept := items[:0]
+	for _, it := range items {
+		if org, decided := r.itemOrg(it); decided && scope.Includes(org) {
+			kept = append(kept, it)
 		}
-		return r.orgs[key], true
+	}
+	return kept
+}
+
+// itemOrgKeys is what an item's org is decided by, in order: its chat, else
+// its automation, else its project. None for an item about a machine (its
+// storage, its worktrees), which belongs to no org.
+func itemOrgKeys(it *reliantv1.InboxItem) []string {
+	switch it.Kind {
+	case reliantv1.InboxItemKind_INBOX_ITEM_KIND_STORAGE, reliantv1.InboxItemKind_INBOX_ITEM_KIND_WORKTREE_RECLAIM:
+		return nil
+	}
+	var keys []string
+	for _, k := range [][2]string{{"chat:", it.ChatId}, {"trigger:", it.TriggerId}, {"project:", it.ProjectId}} {
+		if k[1] != "" {
+			keys = append(keys, k[0]+k[1])
+		}
+	}
+	return keys
+}
+
+// itemOrg is the org an item is about: the first of its keys (itemOrgKeys)
+// whose org was read, nil for one with no org yet (or a project that is
+// gone). decided is false when it names something but no org of it was read
+// (a failed read); an item about a machine is decided, with no org, and
+// lists in every scope.
+func (r *inboxReads) itemOrg(it *reliantv1.InboxItem) (org *string, decided bool) {
+	keys := itemOrgKeys(it)
+	if len(keys) == 0 {
+		return nil, true
+	}
+	for _, key := range keys {
+		if org, read := r.orgs[key]; read {
+			return org, true
+		}
 	}
 	return nil, false
 }
@@ -1202,6 +1240,34 @@ func (r *itemReads) project(ctx context.Context, userID, id string) bool {
 		r.projects[id] = ok
 	}
 	return ok
+}
+
+// resolveOrg reads the org of what it is about (itemOrgKeys), unless one of
+// its keys already was: a chat, or a project; a trigger's org is known from
+// the triggers listed.
+func (r *itemReads) resolveOrg(ctx context.Context, userID string, it *reliantv1.InboxItem) {
+	keys := itemOrgKeys(it)
+	r.mu.Lock()
+	for _, key := range keys {
+		if _, read := r.orgs[key]; read {
+			r.mu.Unlock()
+			return
+		}
+	}
+	r.mu.Unlock()
+	if it.ChatId != "" {
+		r.chat(ctx, userID, it.ChatId)
+		r.mu.Lock()
+		_, read := r.orgs["chat:"+it.ChatId]
+		r.mu.Unlock()
+		if read {
+			return
+		}
+	}
+	// No chat, or its read failed: the project decides.
+	if it.ProjectId != "" {
+		r.project(ctx, userID, it.ProjectId)
+	}
 }
 
 func (r *itemReads) pending(ctx context.Context, userID string, p *core.InboxPending) bool {

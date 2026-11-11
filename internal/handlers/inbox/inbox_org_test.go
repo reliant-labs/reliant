@@ -3,17 +3,21 @@ package inbox
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"sort"
 	"testing"
 	"time"
 
 	"connectrpc.com/connect"
+	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/require"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/accesstokenclient"
 	"github.com/reliant-labs/reliant/internal/authz"
+	"github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/orgs"
@@ -139,6 +143,9 @@ func TestListInbox_ScopedToTheNamedOrg(t *testing.T) {
 				{Kind: core.InboxPendingApproval, ItemKey: "chat-home", ChatID: "c-home", ProjectID: "p-home", WaitingSince: now},
 				{Kind: core.InboxPendingApproval, ItemKey: "chat-legacy", ChatID: "c-legacy", ProjectID: "p-acme", WaitingSince: now},
 				{Kind: core.InboxPendingApproval, ItemKey: "run-acme", ProjectID: "p-acme", WaitingSince: now},
+				// A trigger's item whose trigger is not among those listed:
+				// its project places it.
+				{Kind: core.InboxPendingApproval, ItemKey: "trigger-only", TriggerID: "unlisted", ProjectID: "p-acme", WaitingSince: now},
 			}, nil
 		}
 		repo.ListWorktreeRecoveriesFunc = func(context.Context, string, string) ([]*core.WorktreeRecovery, error) {
@@ -162,9 +169,9 @@ func TestListInbox_ScopedToTheNamedOrg(t *testing.T) {
 	sorted := func(s ...string) []string { sort.Strings(s); return s }
 	approval := func(key string) string { return inboxApprovalPrefix + key }
 
-	require.Equal(t, sorted(approval("chat-acme"), approval("chat-home"), approval("chat-legacy"), approval("run-acme"), "recovery:gone"),
+	require.Equal(t, sorted(approval("chat-acme"), approval("chat-home"), approval("chat-legacy"), approval("run-acme"), approval("trigger-only"), "recovery:gone"),
 		itemIDs(nil), "no org named: every org's, as before")
-	require.Equal(t, sorted(approval("chat-acme"), approval("run-acme")), itemIDs(ptr.Of("acme")), "acme")
+	require.Equal(t, sorted(approval("chat-acme"), approval("run-acme"), approval("trigger-only")), itemIDs(ptr.Of("acme")), "acme")
 	require.Equal(t, sorted(approval("chat-home"), approval("chat-legacy"), "recovery:gone"), itemIDs(ptr.Of("home")),
 		"home, the default org, with the items of no org")
 
@@ -172,25 +179,111 @@ func TestListInbox_ScopedToTheNamedOrg(t *testing.T) {
 	require.Equal(t, connect.CodePermissionDenied, svcerr.Code(err), "an org the caller is not in")
 }
 
-// An item is judged by its chat, else its automation, else its project; a
-// machine's storage item is about none of them and belongs to every org.
+// An item is judged by its chat, else its automation, else its project,
+// whichever of them was read; one naming something whose org nobody read is
+// undecided (left out of every named org), and a machine's storage item is
+// about no org and lists in every one.
 func TestInboxReads_ItemOrg(t *testing.T) {
 	acme, home := "acme", "home"
 	r := &inboxReads{orgs: map[string]*string{"chat:c": &acme, "trigger:t": &home, "project:p": &acme, "project:legacy": nil}}
 	cases := []struct {
-		it    *reliantv1.InboxItem
-		org   *string
-		about bool
+		it      *reliantv1.InboxItem
+		org     *string
+		decided bool
 	}{
 		{&reliantv1.InboxItem{ChatId: "c", TriggerId: "t", ProjectId: "p"}, &acme, true},
 		{&reliantv1.InboxItem{TriggerId: "t", ProjectId: "p"}, &home, true},
 		{&reliantv1.InboxItem{ProjectId: "p"}, &acme, true},
 		{&reliantv1.InboxItem{ProjectId: "legacy"}, nil, true},
-		{&reliantv1.InboxItem{Kind: reliantv1.InboxItemKind_INBOX_ITEM_KIND_STORAGE}, nil, false},
+		// A key nobody read falls through to the next one.
+		{&reliantv1.InboxItem{ChatId: "unread", TriggerId: "unlisted", ProjectId: "p"}, &acme, true},
+		{&reliantv1.InboxItem{ProjectId: "unread"}, nil, false},
+		{&reliantv1.InboxItem{Kind: reliantv1.InboxItemKind_INBOX_ITEM_KIND_STORAGE}, nil, true},
+		{&reliantv1.InboxItem{Kind: reliantv1.InboxItemKind_INBOX_ITEM_KIND_WORKTREE_RECLAIM, ProjectId: "unread"}, nil, true},
 	}
 	for _, c := range cases {
-		org, about := r.itemOrg(c.it)
-		require.Equal(t, c.about, about, "%v", c.it)
+		org, decided := r.itemOrg(c.it)
+		require.Equal(t, c.decided, decided, "%v", c.it)
 		require.Equal(t, c.org, org, "%v", c.it)
 	}
+}
+
+// A broken workflow file's item carries only its project: its org is read
+// from the project, so it lists under that org (acme) and not under the
+// caller's default (home), and with no org named, as before.
+func TestListInbox_BrokenDefinitionListsUnderItsProjectsOrg(t *testing.T) {
+	f := newInboxFixture(t)
+	f.inbox = NewTestInbox(t, WithInboxDeps(Deps{Repo: f.repo, Orgs: orgs.New(acmeAndHome{})}))
+	ctx := authz.WithMembership(f.ctx, memberOf{"home": true, "acme": true})
+	_, err := f.repo.ORM().Bun().NewRaw(`UPDATE projects SET org_id = 'acme' WHERE id = ?`, f.project()).Exec(ctx)
+	require.NoError(t, err)
+
+	cicdID := uuid.NewString()
+	host := "cicd"
+	require.NoError(t, f.repo.UpsertDaemon(ctx, &db.Daemon{ID: cicdID, UserID: f.userID, Hostname: &host}))
+	push := func(at int64, content string) {
+		t.Helper()
+		wj, err := config.EncodeCatalogJSON([]config.StoredWorkflow{{Slug: "release", Name: "release", RelativePath: ".reliant/workflows/release.yaml", YAMLContent: content}})
+		require.NoError(t, err)
+		sj, err := config.EncodeCatalogJSON([]config.SyncedRepoState{{Repo: "app", Branch: "main", Commit: "1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b", DefaultBranch: "main"}})
+		require.NoError(t, err)
+		_, err = f.repo.SyncProjectConfigSnapshot(ctx, &db.ProjectConfigRecord{
+			ProjectID: f.project(), DaemonID: cicdID, ProjectWorkflowsJSON: wj, RepoStatesJSON: sj, PushedAt: time.UnixMilli(at).UTC(),
+		}, false)
+		require.NoError(t, err)
+	}
+	push(1000, releaseWorkflow)
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	cfg, _ := json.Marshal(core.ScheduleConfig{Cron: []string{"0 9 * * *"}})
+	declared := "merged"
+	acme := "acme"
+	require.NoError(t, f.repo.CreateTrigger(ctx, &core.Trigger{
+		ID: "act-" + uuid.NewString()[:8], UserID: f.userID, ProjectID: f.project(), OrgID: &acme, Name: "Release",
+		Kind: core.TriggerKindSchedule, Enabled: true, Workflow: "release", WorkflowTrigger: &declared,
+		DaemonID: cicdID, Presets: map[string]string{}, Params: map[string]any{}, Config: cfg, CreatedAt: now, UpdatedAt: now,
+	}))
+	push(2000, "name: release\nentry: [a\n")
+
+	broken := func(orgID *string) int {
+		t.Helper()
+		f.inbox.storageCache.Delete(f.userID)
+		resp, err := f.inbox.ListInbox(ctx, connect.NewRequest(&reliantv1.ListInboxRequest{OrgId: orgID}))
+		require.NoError(t, err)
+		return len(inboxByKind(resp.Msg.Items, reliantv1.InboxItemKind_INBOX_ITEM_KIND_AUTOMATION_DEFINITION_BROKEN))
+	}
+	require.Equal(t, 1, broken(nil), "no org named")
+	require.Equal(t, 1, broken(ptr.Of("acme")), "its project's org")
+	require.Equal(t, 0, broken(ptr.Of("home")), "the default org, which it is not about")
+}
+
+// An item whose org read failed is undecided: it is never taken for one of no
+// org, so the default org (which lists the rows with no org yet) does not get
+// it, nor does any other named org; the unscoped list keeps it.
+func TestInboxReads_AFailedOrgReadFailsClosed(t *testing.T) {
+	repo := newInflightRepo(0)
+	repo.GetProjectFunc = func(_ context.Context, id string) (*db.Project, error) {
+		if id == "p-broken" {
+			return nil, errors.New("database unavailable")
+		}
+		return &db.Project{ID: id, UserID: "user-1"}, nil // no org yet
+	}
+	svc := NewTestInbox(t, WithInboxDeps(Deps{Repo: repo}))
+	ctx := authz.WithMembership(userCtx(), memberOf{"home": true, "acme": true})
+	reads := svc.readableItem()
+	failed := &reliantv1.InboxItem{ItemId: "failed", Kind: reliantv1.InboxItemKind_INBOX_ITEM_KIND_AUTOMATION_DEFINITION_BROKEN, ProjectId: "p-broken"}
+	legacy := &reliantv1.InboxItem{ItemId: "legacy", Kind: reliantv1.InboxItemKind_INBOX_ITEM_KIND_AUTOMATION_DEFINITION_BROKEN, ProjectId: "p-legacy"}
+	for _, it := range []*reliantv1.InboxItem{failed, legacy} {
+		reads.resolveOrg(ctx, "user-1", it)
+	}
+	read := &inboxReads{orgs: reads.orgs}
+	ids := func(scope *core.OrgScope) []string {
+		var out []string
+		for _, it := range read.inScope([]*reliantv1.InboxItem{failed, legacy}, scope) {
+			out = append(out, it.ItemId)
+		}
+		return out
+	}
+	require.Equal(t, []string{"failed", "legacy"}, ids(nil), "no org named")
+	require.Equal(t, []string{"legacy"}, ids(&core.OrgScope{OrgID: "home", IncludeUnassigned: true}), "the default org: the legacy item, never the undecided one")
+	require.Empty(t, ids(&core.OrgScope{OrgID: "acme"}), "another org")
 }
