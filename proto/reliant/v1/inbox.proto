@@ -141,6 +141,13 @@ enum InboxItemKind {
   // it, worktree by worktree.
   // Informational: no run waits on it.
   INBOX_ITEM_KIND_WORKTREE_RECLAIM = 12;
+  // A live worktree is marked to be reclaimed: it has been quiet for a day,
+  // its work has landed (or it is clean and idle), and its machine placed a
+  // tombstone in it (.reliant/RECLAIM_PENDING). It is reclaimed at
+  // reclaim_at unless something happens in it first. One item per mark:
+  // KeepMarkedWorktree cancels it, ReclaimMarkedWorktreeNow skips the wait.
+  // Informational: nothing has to be done to keep a worktree that is used.
+  INBOX_ITEM_KIND_WORKTREE_MARKED = 13;
 }
 
 message ListInboxRequest {
@@ -222,6 +229,7 @@ message InboxItem {
     InboxAutomationRunPaused automation_run_paused = 29;
     InboxAutomationDefinitionBroken automation_definition_broken = 30;
     InboxWorktreeReclaim worktree_reclaim = 31;
+    InboxWorktreeMarked worktree_marked = 32;
   }
   // 25 was run_finished (InboxRunFinished); see INBOX_ITEM_KIND 6.
   reserved 25;
@@ -427,6 +435,45 @@ message InboxWorktreeReclaim {
   repeated WorktreeReclaimProposal proposals = 6;
   int32 total = 7;
 }
+
+// InboxWorktreeMarked is a live worktree marked to be reclaimed. The item's
+// project_id and project_name are the worktree's project; waiting_since is
+// when it was marked.
+message InboxWorktreeMarked {
+  string worktree_id = 1;
+  string name = 2;
+  string path = 3;
+  string branch = 4;
+  string daemon_id = 5;
+  string daemon_name = 6;
+  // The mark this item is about; KeepMarkedWorktree and
+  // ReclaimMarkedWorktreeNow act only while the worktree still carries it.
+  string mark_id = 7;
+  // RFC 3339: when it was marked, and when it will be reclaimed if nothing
+  // happens in it before then.
+  string marked_at = 8;
+  string reclaim_at = 9;
+  // Why it qualified: "landed" (its work is merged) or "recoverable-idle"
+  // (clean, pushed and unused).
+  string reason = 10;
+  // True once the person chose "Reclaim now": it is reclaimed at the next
+  // check that finds nothing has happened in it.
+  bool approved = 11;
+}
+
+message KeepMarkedWorktreeRequest {
+  string worktree_id = 1;
+  string mark_id = 2;
+}
+
+message KeepMarkedWorktreeResponse {}
+
+message ReclaimMarkedWorktreeNowRequest {
+  string worktree_id = 1;
+  string mark_id = 2;
+}
+
+message ReclaimMarkedWorktreeNowResponse {}
 
 message ForgetStorageWorktreeRequest {
   string worktree_id = 1;

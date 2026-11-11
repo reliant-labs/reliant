@@ -15707,6 +15707,12 @@
               "kind": "message",
               "type_name": "reliant.v1.InboxWorktreeReclaim",
               "oneof": "payload"
+            },
+            {
+              "name": "worktree_marked",
+              "kind": "message",
+              "type_name": "reliant.v1.InboxWorktreeMarked",
+              "oneof": "payload"
             }
           ],
           "reliant.v1.InboxQuestion": [
@@ -15789,6 +15795,52 @@
             {
               "name": "daemon_name",
               "kind": "string"
+            }
+          ],
+          "reliant.v1.InboxWorktreeMarked": [
+            {
+              "name": "worktree_id",
+              "kind": "string"
+            },
+            {
+              "name": "name",
+              "kind": "string"
+            },
+            {
+              "name": "path",
+              "kind": "string"
+            },
+            {
+              "name": "branch",
+              "kind": "string"
+            },
+            {
+              "name": "daemon_id",
+              "kind": "string"
+            },
+            {
+              "name": "daemon_name",
+              "kind": "string"
+            },
+            {
+              "name": "mark_id",
+              "kind": "string"
+            },
+            {
+              "name": "marked_at",
+              "kind": "string"
+            },
+            {
+              "name": "reclaim_at",
+              "kind": "string"
+            },
+            {
+              "name": "reason",
+              "kind": "string"
+            },
+            {
+              "name": "approved",
+              "kind": "bool"
             }
           ],
           "reliant.v1.InboxWorktreeReclaim": [
@@ -16145,6 +16197,7 @@
           "reliant.v1.InboxRefusedAutomation": "reliant/v1/inbox.proto",
           "reliant.v1.InboxStorage": "reliant/v1/inbox.proto",
           "reliant.v1.InboxWaitingForMachine": "reliant/v1/inbox.proto",
+          "reliant.v1.InboxWorktreeMarked": "reliant/v1/inbox.proto",
           "reliant.v1.InboxWorktreeReclaim": "reliant/v1/inbox.proto",
           "reliant.v1.ListInboxRequest": "reliant/v1/inbox.proto",
           "reliant.v1.ListInboxResponse": "reliant/v1/inbox.proto",
@@ -16186,7 +16239,8 @@
             "INBOX_ITEM_KIND_RECOVERY",
             "INBOX_ITEM_KIND_AUTOMATION_RUN_PAUSED",
             "INBOX_ITEM_KIND_AUTOMATION_DEFINITION_BROKEN",
-            "INBOX_ITEM_KIND_WORKTREE_RECLAIM"
+            "INBOX_ITEM_KIND_WORKTREE_RECLAIM",
+            "INBOX_ITEM_KIND_WORKTREE_MARKED"
           ],
           "reliant.v1.TriggerHealthStatus": [
             "TRIGGER_HEALTH_STATUS_UNSPECIFIED",
@@ -16226,7 +16280,8 @@
             9,
             10,
             11,
-            12
+            12,
+            13
           ],
           "reliant.v1.TriggerHealthStatus": [
             0,
