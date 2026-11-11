@@ -91,15 +91,24 @@ func (s *Service) ImportWorkflow(
 
 	now := time.Now().UTC()
 	var draftID string
+	// A saved workflow's org is fixed at creation; an import over one keeps
+	// it. A new one is the caller's default org (the request names none).
+	var orgID *string
 	if existing != nil {
 		draftID = existing.ID
+		orgID = existing.OrgID
 	} else {
 		draftID = uuid.New().String()
+		var err error
+		if orgID, err = s.actingOrg(ctx, userID, ""); err != nil {
+			return nil, err
+		}
 	}
 
 	draft := &db.WorkflowDraft{
 		ID:          draftID,
 		UserID:      userID,
+		OrgID:       orgID,
 		Name:        protoWf.Name,
 		Slug:        slug,
 		Description: nil,

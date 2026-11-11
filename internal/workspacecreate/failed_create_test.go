@@ -119,12 +119,12 @@ func TestRetryAfterALostCreateAnswerSucceedsOnTheSameBranch(t *testing.T) {
 	st, m := &fakeStore{}, &diskMachine{loseAnswerFor: "/proj/app"}
 	req := oneRepoReq()
 
-	first, err := Insert(ctx, st, req)
+	first, err := Insert(ctx, st, nil, req)
 	require.NoError(t, err)
 	require.Error(t, Finish(ctx, st, m, req, first))
 	require.Equal(t, int32(reliantv1.WorktreeStatus_WORKTREE_STATUS_FAILED), st.rows[first.ID].Status)
 
-	retry, err := Insert(ctx, st, req)
+	retry, err := Insert(ctx, st, nil, req)
 	require.NoError(t, err, "a FAILED row releases its name and branch")
 	require.NoError(t, Finish(ctx, st, m, req, retry))
 	row := st.rows[retry.ID]
@@ -143,10 +143,10 @@ func TestRetryKeepsTheRefusalWhenTheLeftoverIsKept(t *testing.T) {
 	ctx := context.Background()
 	st, m := &fakeStore{}, &diskMachine{loseAnswerFor: "/proj/app", keep: "it has uncommitted, untracked or ignored files"}
 	req := oneRepoReq()
-	first, _ := Insert(ctx, st, req)
+	first, _ := Insert(ctx, st, nil, req)
 	_ = Finish(ctx, st, m, req, first)
 
-	retry, _ := Insert(ctx, st, req)
+	retry, _ := Insert(ctx, st, nil, req)
 	err := Finish(ctx, st, m, req, retry)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "already checked out")
@@ -160,10 +160,10 @@ func TestRetryWithAnOlderDaemonFailsAsBefore(t *testing.T) {
 	ctx := context.Background()
 	st, m := &fakeStore{}, &diskMachine{loseAnswerFor: "/proj/app", noCommand: true}
 	req := oneRepoReq()
-	first, _ := Insert(ctx, st, req)
+	first, _ := Insert(ctx, st, nil, req)
 	_ = Finish(ctx, st, m, req, first)
 
-	retry, _ := Insert(ctx, st, req)
+	retry, _ := Insert(ctx, st, nil, req)
 	require.Error(t, Finish(ctx, st, m, req, retry))
 	assert.Equal(t, 2, m.creates)
 }

@@ -189,51 +189,6 @@ func (m *Middleware) requireAuth(next http.Handler, tokens AccessTokenIntrospect
 	})
 }
 
-// DomainWhitelist is HTTP middleware that rejects authenticated requests whose
-// email domain is not in the allowed list. If allowedDomains is empty, all
-// domains are allowed. Unauthenticated requests pass through unchanged.
-func DomainWhitelist(allowedDomains []string) func(http.Handler) http.Handler {
-	domainSet := make(map[string]bool, len(allowedDomains))
-	for _, d := range allowedDomains {
-		d = strings.TrimSpace(strings.ToLower(d))
-		if d != "" {
-			domainSet[d] = true
-		}
-	}
-
-	return func(next http.Handler) http.Handler {
-		if len(domainSet) == 0 {
-			return next
-		}
-
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			email, ok := GetUserEmailFromContext(r.Context())
-			if !ok || email == "" {
-				next.ServeHTTP(w, r)
-				return
-			}
-
-			parts := strings.SplitN(email, "@", 2)
-			if len(parts) != 2 {
-				next.ServeHTTP(w, r)
-				return
-			}
-			domain := strings.ToLower(parts[1])
-
-			if !domainSet[domain] {
-				logging.WarnContext(r.Context(), "[Domain Whitelist] Rejected email domain",
-					"domain", domain,
-					"path", r.URL.Path,
-				)
-				http.Error(w, `{"error": "forbidden", "message": "email domain not allowed in this environment"}`, http.StatusForbidden)
-				return
-			}
-
-			next.ServeHTTP(w, r)
-		})
-	}
-}
-
 // isWebSocketUpgrade checks if the request is a WebSocket upgrade request
 func isWebSocketUpgrade(r *http.Request) bool {
 	// Connection header may contain multiple values like "Upgrade, keep-alive"
@@ -241,39 +196,4 @@ func isWebSocketUpgrade(r *http.Request) bool {
 	upgrade := strings.ToLower(r.Header.Get("Upgrade"))
 
 	return strings.Contains(connection, "upgrade") && upgrade == "websocket"
-}
-
-// OptionalAuth is a middleware that extracts auth if present but doesn't require it
-func (m *Middleware) OptionalAuth(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Get token from Authorization header first
-		var tokenString string
-		authHeader := r.Header.Get("Authorization")
-		if authHeader != "" {
-			tokenString = strings.TrimPrefix(authHeader, "Bearer ")
-		}
-
-		// For WebSocket upgrade requests, allow query parameter as fallback
-		if tokenString == "" && isWebSocketUpgrade(r) {
-			tokenString = r.URL.Query().Get("token")
-		}
-
-		// If no token, continue without auth
-		if tokenString == "" {
-			next.ServeHTTP(w, r)
-			return
-		}
-
-		// Try to validate, but don't fail if invalid
-		claims, err := m.validator.ValidateToken(tokenString)
-		if err != nil {
-			next.ServeHTTP(w, r)
-			return
-		}
-
-		// Add claims to context
-		ctx := WithUser(r.Context(), claims.Sub, claims.Role, claims.Email)
-
-		next.ServeHTTP(w, r.WithContext(ctx))
-	})
 }

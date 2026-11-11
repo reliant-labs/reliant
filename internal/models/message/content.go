@@ -164,7 +164,6 @@ func (BinaryContent) isPart() {}
 // Related types:
 //   - message.ToolCall: alias for this type
 //   - tools.ToolCall: alias for this type
-//   - mock_static.ToolCall: test fixture with json.RawMessage Input, converts to this
 type ToolCall struct {
 	ID               string `json:"id"`
 	Name             string `json:"name"`

@@ -30,6 +30,9 @@ type Store interface {
 	ArchiveWorktree(ctx context.Context, id string) error
 	GetLiveWorktreeByName(ctx context.Context, projectID, name string) (*db.Worktree, error)
 	ListWorktreesByBranch(ctx context.Context, projectID, branch string) ([]*db.Worktree, error)
+	// SettleCheckoutTeardown records how a remove or reclone of the checkout
+	// ended, once the machine says (checkoutteardown.Query).
+	SettleCheckoutTeardown(ctx context.Context, id, state, detail string) (*db.CheckoutTeardown, error)
 }
 
 // FailedCreateStore is the slice of *db.Repo that RemoveFailedCreatesOn reads

@@ -71,14 +71,18 @@ const ORG_PERMISSIONS = [
 // Holding this is what makes someone a permission administrator.
 const ADMIN_PERMISSION = "token:write";
 
-export function MemberPermissions() {
+/**
+ * `embedded`: rendered as the Permissions tab of the Members page
+ * (members/MembersPage.tsx), which owns the page heading.
+ */
+export function MemberPermissions({ embedded = false }: { embedded?: boolean } = {}) {
   const orgId = useActiveOrgStore((s) => s.effectiveId);
   // Separate lifetimes also protect A → B → A: A's first request must not
   // overwrite a newer roster merely because the selected id matches again.
-  return <OrgMemberPermissions key={orgId ?? ""} orgId={orgId} />;
+  return <OrgMemberPermissions key={orgId ?? ""} orgId={orgId} embedded={embedded} />;
 }
 
-function OrgMemberPermissions({ orgId }: { orgId: string | null }) {
+function OrgMemberPermissions({ orgId, embedded }: { orgId: string | null; embedded: boolean }) {
   const live = useRef(true);
   const isCurrent = useCallback(() => live.current && useActiveOrgStore.getState().effectiveId === orgId, [orgId]);
   useEffect(() => {
@@ -155,10 +159,16 @@ function OrgMemberPermissions({ orgId }: { orgId: string | null }) {
 
   return (
     <div className="space-y-6">
-      <SettingsPageHeader
-        title="Members"
-        description="Control what each member of your organization is allowed to do. A token acting on someone's behalf can never carry more permissions than that person holds."
-      />
+      {embedded ? (
+        <p className="text-sm text-muted-foreground">
+          What each member may do, one permission at a time. Changing someone&apos;s role resets these to that role&apos;s set. A token acting on someone&apos;s behalf can never carry more permissions than that person holds.
+        </p>
+      ) : (
+        <SettingsPageHeader
+          title="Members"
+          description="Control what each member of your organization is allowed to do. A token acting on someone's behalf can never carry more permissions than that person holds."
+        />
+      )}
 
       {error && (
         <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-3">

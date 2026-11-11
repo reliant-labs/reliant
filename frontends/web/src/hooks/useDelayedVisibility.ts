@@ -1,31 +1,39 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 
 /**
- * Visibility for a loading indicator that must neither flash nor flicker.
+ * A loading indicator's state:
  *
- * Becomes true only once `active` has held for `showDelayMs` (so work that
- * finishes quickly shows nothing), and once true stays true for at least
- * `minVisibleMs` (so a state that clears just after appearing does not blink).
- * `active` returning during that minimum keeps it up without a gap.
+ *   hidden   nothing on screen
+ *   shown    up, and standing for the work: what it covers is not usable yet
+ *   leaving  the work is done and what it covers is usable now; the indicator
+ *            is only still painted so it can fade out rather than blink out
+ */
+export type DelayedVisibility = "hidden" | "shown" | "leaving";
+
+/**
+ * Visibility for a loading indicator that must neither flash nor hold up the
+ * content it covers.
+ *
+ * "shown" only once `active` has held for `showDelayMs`, so work that finishes
+ * quickly shows nothing. The render in which `active` ends is already
+ * "leaving" — never a minimum time "shown", which would keep finished content
+ * covered for nothing — and "leaving" lasts `exitMs`, long enough to fade.
+ * `active` returning while it leaves brings it straight back to "shown",
+ * without the delay and without a gap.
  */
 export function useDelayedVisibility(
   active: boolean,
-  { showDelayMs, minVisibleMs }: { showDelayMs: number; minVisibleMs: number },
-): boolean {
-  const [visible, setVisible] = useState(false);
-  const shownAtRef = useRef(0);
+  { showDelayMs, exitMs }: { showDelayMs: number; exitMs: number },
+): DelayedVisibility {
+  // Painted: shown, or still leaving.
+  const [up, setUp] = useState(false);
 
   useEffect(() => {
-    if (active === visible) return;
-    const delay = active
-      ? showDelayMs
-      : Math.max(0, minVisibleMs - (Date.now() - shownAtRef.current));
-    const timer = setTimeout(() => {
-      if (active) shownAtRef.current = Date.now();
-      setVisible(active);
-    }, delay);
+    if (active === up) return;
+    const timer = setTimeout(() => setUp(active), active ? showDelayMs : exitMs);
     return () => clearTimeout(timer);
-  }, [active, visible, showDelayMs, minVisibleMs]);
+  }, [active, up, showDelayMs, exitMs]);
 
-  return visible;
+  if (!up) return "hidden";
+  return active ? "shown" : "leaving";
 }

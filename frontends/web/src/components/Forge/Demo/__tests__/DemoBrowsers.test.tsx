@@ -26,4 +26,12 @@ describe("synthetic browsers across demo shells", () => {
       expect(fetch).not.toHaveBeenCalled();
     } finally { fetch.mockRestore(); }
   });
+
+  it("shows shop's dev as a project that declares no storage buckets", async () => {
+    render(<QueryClientProvider client={new QueryClient()}><DemoBrowserProviders>
+      <StorageBrowser env={{ id: "env-dev", name: "dev" }} search={{}} onNavigate={() => {}} href={() => "#"} />
+    </DemoBrowserProviders></QueryClientProvider>);
+    expect(await screen.findByTestId("storage-no-buckets")).toHaveTextContent("This project declares no storage buckets in dev");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
 });

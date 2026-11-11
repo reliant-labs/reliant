@@ -36,4 +36,11 @@ describe("isolated demo browser clients", () => {
     await expect(storage.getObjectMetadata({ ...target, access: { confirmEnvId: "env-staging", reason: "wrong env" } })).rejects.toMatchObject({ code: Code.FailedPrecondition });
     expect((await storage.getObjectMetadata({ ...target, access: { confirmEnvId: "env-prod", reason: "Inspect synthetic sample" } })).key).toBe("README.txt");
   });
+
+  it("declares no bucket in dev, so the demo shows the empty Storage state there, and reads nothing from it", async () => {
+    const { storage } = createDemoBrowserApis();
+    expect(await storage.listBrowsableBuckets("env-dev")).toMatchObject({ buckets: [], policy: "open" });
+    expect((await storage.listBrowsableBuckets("env-prod")).buckets.map((bucket) => bucket.name)).toEqual(["uploads"]);
+    await expect(storage.getObjectMetadata({ environmentId: "env-dev", bucket: "uploads", key: "README.txt" })).rejects.toMatchObject({ code: Code.NotFound });
+  });
 });

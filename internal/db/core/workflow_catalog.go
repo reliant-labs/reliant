@@ -12,8 +12,11 @@ import (
 // when Status is WorkflowDraftStatusComplete and IsHidden=false. Validity is never
 // stored — it is computed on read and re-checked at run start.
 type WorkflowDraft struct {
-	ID          string              `json:"id"`
-	UserID      string              `json:"user_id"`
+	ID     string `json:"id"`
+	UserID string `json:"user_id"`
+	// OrgID is the organization the saved workflow belongs to, fixed at
+	// creation. nil: written before orgs, or no org could be resolved.
+	OrgID       *string             `json:"org_id,omitempty"`
 	Name        string              `json:"name"` // Display name (can have spaces, caps)
 	Slug        string              `json:"slug"` // Runtime reference name (lowercase, hyphenated)
 	Description *string             `json:"description,omitempty"`

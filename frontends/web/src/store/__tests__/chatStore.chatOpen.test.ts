@@ -58,6 +58,13 @@ describe("selectChat starts the chat.open interaction", () => {
     expect(opens()[0]!.attributes["interaction.outcome"]).toBe("superseded");
   });
 
+  it("says where the open came from: a switch, or the workspace restoring its chat", () => {
+    useChatStore.getState().selectChat({ id: "c1" } as Chat);
+    useChatStore.getState().selectChat({ id: "c2" } as Chat, { openEntry: "restore" });
+
+    expect(opens().map((o) => o.attributes["chat.open.entry"])).toEqual(["switch", "restore"]);
+  });
+
   it("does not start one when the chat is already open", () => {
     useChatStore.getState().selectChat({ id: "c1" } as Chat);
     useChatStore.getState().selectChat({ id: "c1" } as Chat);

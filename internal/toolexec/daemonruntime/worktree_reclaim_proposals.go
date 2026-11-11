@@ -23,11 +23,10 @@ import (
 // as worktree.reclaim_decide, recorded exactly as `reliant worktree reclaim
 // approve|decline` records it, bound to the fingerprint the person was shown.
 // A decline keeps the worktree until its state changes. An approval is
-// recorded with who made it (decided_by), but the sweep does not act on it
-// yet: approvals.json is a file any process running as the user can write,
-// so nothing proves an approval there is a person's
-// (worktreereclaim.SweepOptions.ApprovalsVerified stays false) and the
-// worktree stays proposed ("approved, not verified").
+// recorded with who made it (decided_by); a server that can also sends it as
+// worktree.reclaim_approve, which is what removes the worktree
+// (worktree_reclaim_approve.go). An approval only in approvals.json, a file
+// any process running as the user can write, removes nothing.
 
 // WorktreeReclaimDecideCommand records a person's decisions about proposals.
 const WorktreeReclaimDecideCommand = "worktree.reclaim_decide"

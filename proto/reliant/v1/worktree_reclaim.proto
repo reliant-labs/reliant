@@ -9,23 +9,27 @@ option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
 
 // WorktreeReclaimService answers a machine's worktree-reclaim inbox item
 // (INBOX_ITEM_KIND_WORKTREE_RECLAIM). The machine's daemon proposes removing
-// idle worktrees that hold work only they have, and removes none of them
-// (worktreereclaim's SweepOptions.ApprovalsVerified); this is where the
-// person keeps or approves each, bound to the exact state shown. It manages the caller's own machine, so it is not part of the
-// public SDK (proto/public-api.txt), like InboxService.CleanupStorage.
+// idle worktrees that hold work only they have, and removes one only when the
+// person approves that exact state here: the approval reaches the daemon as a
+// command from this server, the only source of authority it acts on. It
+// manages the caller's own machine, so it is not part of the public SDK
+// (proto/public-api.txt), like InboxService.CleanupStorage.
 service WorktreeReclaimService {
   // DecideWorktreeReclaim approves or declines removing each proposed
   // worktree, as the person saw it. Every decision names the proposal's
   // fingerprint; the server refuses one that is not on the machine's last
   // report ("not_shown"), and the machine records it only while that is
   // still the worktree's state ("changed" otherwise). Declining keeps it
-  // until its state changes. An approval is recorded, with who made it, but
-  // the machine does not remove an approved worktree yet: nothing on the
-  // machine can prove an approval is a person's, so it stays proposed as
-  // approved. When the machine does reclaim one, it first saves everything
-  // git can see of it to a local ref (refs/reliant/reclaimed/...), from which
-  // `reliant worktree restore` brings it back. FAILED_PRECONDITION when the machine is
-  // offline; NOT_FOUND for a machine that is not the caller's.
+  // until its state changes. An approval is recorded, with who made it, and
+  // sent to the machine as worktree.reclaim_approve, which removes exactly
+  // that worktree at exactly that state: first saved, with everything git
+  // can see of it, to a local ref (refs/reliant/reclaimed/...), from which
+  // `reliant worktree restore` brings it back. The machine checks it all
+  // again first (the state, the capture, that nothing is using it), and the
+  // server refuses a Reliant workspace whose chat is still open; a refusal
+  // is in the result's removal fields and puts the proposal back in the
+  // item. FAILED_PRECONDITION when the machine is offline; NOT_FOUND for a
+  // machine the caller may not write.
   rpc DecideWorktreeReclaim(DecideWorktreeReclaimRequest) returns (DecideWorktreeReclaimResponse) {
     option (forge.v1.method) = {
       activity: {
@@ -68,5 +72,16 @@ message WorktreeReclaimDecisionResult {
   // item will list its new state), "unknown" (the machine no longer proposes
   // it), "not_shown" (not on the machine's last report).
   string reason = 3;
+  // For a recorded approval, what became of the removal (empty otherwise,
+  // and from a server that does not send it): "removing" (the machine
+  // accepted it and is removing it now; the item drops it when done),
+  // "removed", "refused" (nothing was removed; removal_reason says why:
+  // "changed", "live_chat", "reclaim_off", "in_use", "capture_missing", …),
+  // or "not_supported" (the machine's daemon predates removal on approval;
+  // the approval is recorded and nothing is removed).
+  string removal = 4;
+  string removal_reason = 5;
+  // A sentence for the person.
+  string removal_detail = 6;
 }
 

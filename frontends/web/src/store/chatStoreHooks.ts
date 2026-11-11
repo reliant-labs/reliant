@@ -50,6 +50,18 @@ export function useActiveChatId(): string | null {
 }
 
 /**
+ * `chatId` when given, else the active chat's id.
+ *
+ * For a component that is usually handed its chat and falls back to the
+ * active one. Selected as one value, so one bound to its chat does not
+ * re-render when the active chat changes: on a chat switch, every message row
+ * of the chat being left would otherwise re-render, markdown and all.
+ */
+export function useChatIdOrActive(chatId: string | null | undefined): string | null {
+  return useChatStore((state) => chatId || state.activeChatId);
+}
+
+/**
  * Get the currently active chat object (full chat data).
  *
  * activeChatId is UI navigation state and stays in Zustand; the Chat object

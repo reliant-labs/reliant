@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"time"
 )
 
@@ -32,6 +33,92 @@ func persistRetirementState(path string, data []byte) error {
 	}
 	defer dir.Close()
 	return dir.Sync()
+}
+
+// archiveTime is the moment a row was archived, read from its fence: the
+// server writes the archive time in nanoseconds (worktreesweep.Fence). A fence
+// that is not such a time (before 2020) carries none.
+func archiveTime(fence string) (time.Time, bool) {
+	ns, err := strconv.ParseInt(fence, 10, 64)
+	if err != nil {
+		return time.Time{}, false
+	}
+	at := time.Unix(0, ns)
+	return at, at.After(time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC))
+}
+
+// DefaultArchiveClockSkew is how far the daemon's clock may trail the
+// database's before the veto misses real use: an archive is decided only after
+// hours of quiet, so holding on a change in the few minutes before it costs
+// nothing and catches use on a machine whose clock is behind.
+const DefaultArchiveClockSkew = 10 * time.Minute
+
+// useCountsAfter is the moment after which a change in w's checkouts is use the
+// archive did not see: the archive time (less the allowed clock skew), or the
+// end of the reclaimer's own last shedding in it, whichever is later. Shedding
+// regenerable output from a worktree held for its work moves directory mtimes
+// after the archive; that is the daemon, not a user, and must not hold the
+// worktree forever once its hold clears. false when the fence carries no time.
+func (r *Reclaimer) useCountsAfter(w Worktree) (time.Time, bool) {
+	at, ok := archiveTime(w.Fence)
+	if !ok {
+		return time.Time{}, false
+	}
+	at = at.Add(-r.ArchiveClockSkew)
+	if own, ok := r.lastOwnWrite(w.ID); ok && own.After(at) {
+		at = own
+	}
+	return at, true
+}
+
+// ownWritePath records, per row, when this reclaimer last changed the
+// worktree itself (shedding): <root>/.reclaim/<id>.shed.
+func (r *Reclaimer) ownWritePath(id string) string {
+	return filepath.Join(r.Root, ".reclaim", id+".shed")
+}
+
+// recordOwnWrite stamps the end of a shedding pass in w. The stamp is the
+// machine's wall clock, the clock the file times it is compared with use.
+func (r *Reclaimer) recordOwnWrite(id string) {
+	if r.Root == "" || id == "" {
+		return
+	}
+	p := r.ownWritePath(id)
+	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+		return
+	}
+	tmp := p + ".tmp"
+	if err := os.WriteFile(tmp, []byte(strconv.FormatInt(time.Now().UnixNano(), 10)), 0o600); err != nil {
+		return
+	}
+	_ = os.Rename(tmp, p)
+}
+
+func (r *Reclaimer) lastOwnWrite(id string) (time.Time, bool) {
+	if r.Root == "" || id == "" {
+		return time.Time{}, false
+	}
+	b, err := os.ReadFile(r.ownWritePath(id))
+	if err != nil {
+		return time.Time{}, false
+	}
+	ns, err := strconv.ParseInt(string(b), 10, 64)
+	if err != nil {
+		return time.Time{}, false
+	}
+	return time.Unix(0, ns), true
+}
+
+// usedAfterArchive is the hold for a checkout something changed after its
+// row was archived: the archive decided on activity the server could see (the
+// chats and threads bound to the row), and this shows use it could not, such
+// as an agent working in the checkout by path, or a chat paused mid-run. Such
+// a worktree is held, never retired on that archive; using it through a bound
+// chat revives the row (ReviveArchivedWorktree), and a later archive carries a
+// later fence (Reliant bug 7576a754, 2026-11-10).
+func usedAfterArchive(last, archivedAt time.Time) string {
+	return fmt.Sprintf("used after it was archived: changed %s, archived %s",
+		last.UTC().Format(time.RFC3339), archivedAt.UTC().Format(time.RFC3339))
 }
 
 // DefaultDisposalCheckEvery paces the full admission and process check while a
@@ -166,6 +253,10 @@ func (r *Reclaimer) retireWorkspace(ctx context.Context, w Worktree, checkouts [
 			original.close()
 			return rollback(ReasonRecentlyActive, "a file in the checkout changed recently")
 		}
+		if at, ok := r.useCountsAfter(w); ok && original.newest.After(at) {
+			original.close()
+			return rollback(ReasonUsedAfterArchive, usedAfterArchive(original.newest, at))
+		}
 		if err := original.validate(ctx); err != nil {
 			original.close()
 			return rollback(ReasonUnverified, err.Error())
@@ -268,6 +359,7 @@ func (r *Reclaimer) retireWorkspace(ctx context.Context, w Worktree, checkouts [
 		return held(w, ReasonOutsideFiles, "checkouts retired but unexpected workspace files remain")
 	}
 	_ = os.Remove(r.quarantineRoot(w.ID))
+	_ = os.Remove(r.ownWritePath(w.ID))
 	return Result{ID: w.ID, Outcome: OutcomeRemoved, Detail: fmt.Sprintf("retired %d complete checkout(s)", len(parked))}
 }
 
@@ -454,6 +546,9 @@ func (r *Reclaimer) resumeRetirement(ctx context.Context, w Worktree, parked []s
 		// had has its directories' mtimes moved by the unlinks themselves.
 		if !disposingUnder(q, w.Fence) && r.IdleFloor > 0 && r.now().Sub(tree.newest) < r.IdleFloor {
 			return r.heldQuarantined(w, parked, "a parked checkout changed recently")
+		}
+		if at, ok := r.useCountsAfter(w); ok && !disposingUnder(q, w.Fence) && tree.newest.After(at) {
+			return r.heldQuarantined(w, parked, usedAfterArchive(tree.newest, at))
 		}
 		if err := tree.validate(ctx); err != nil {
 			return r.heldQuarantined(w, parked, err.Error())

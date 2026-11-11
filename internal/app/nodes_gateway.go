@@ -21,6 +21,7 @@ import (
 	grpcserver "github.com/reliant-labs/reliant/internal/grpc"
 	"github.com/reliant-labs/reliant/internal/handlers/tools_daemon"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/orgs"
 	"github.com/reliant-labs/reliant/internal/servergateway"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/pkg/config"
@@ -67,6 +68,8 @@ type DaemonListenerDeps struct {
 	Chain   *grpcserver.DaemonChain
 	Routes  *DaemonRoutes
 	Logger  *slog.Logger
+	// Membership decides org resources (authz); the org resolver.
+	Membership *orgs.Resolver
 }
 
 // NewDaemonListener is the address daemons dial (TOOLS_DAEMON_PORT on
@@ -81,6 +84,7 @@ func NewDaemonListener(d DaemonListenerDeps) (*grpcserver.DaemonListener, error)
 		Chain:       d.Chain,
 		Routes:      d.Routes,
 		Logger:      d.Logger,
+		Membership:  d.Membership,
 	})
 }
 

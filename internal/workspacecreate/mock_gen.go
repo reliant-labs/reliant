@@ -44,7 +44,7 @@ func (m *MockMachine) Send(ctx context.Context, commandType string, payload any,
 var _ Machine = (*MockMachine)(nil)
 
 // forge:section MockStore
-// forge:hash=1a0a061421b5ee3e33793dd805a5a8bbcfd191f3c3a79f13cec81683fb9764bf
+// forge:hash=f0cd5d4ef9ed10b053282c3a7c682701479ea22935e159086f6825578c53bbc2
 
 // MockStore is a test mock for the Store interface.
 //
@@ -54,11 +54,12 @@ var _ Machine = (*MockMachine)(nil)
 // "MockStore.<Method>Func not set" error.
 type MockStore struct {
 	contractkit.Recorder
-	CreateWorktreeFunc        func(context.Context, *db.Worktree) error
-	UpdateWorktreeFunc        func(context.Context, *db.Worktree) error
-	ArchiveWorktreeFunc       func(context.Context, string) error
-	GetLiveWorktreeByNameFunc func(context.Context, string, string) (*db.Worktree, error)
-	ListWorktreesByBranchFunc func(context.Context, string, string) ([]*db.Worktree, error)
+	CreateWorktreeFunc         func(context.Context, *db.Worktree) error
+	UpdateWorktreeFunc         func(context.Context, *db.Worktree) error
+	ArchiveWorktreeFunc        func(context.Context, string) error
+	GetLiveWorktreeByNameFunc  func(context.Context, string, string) (*db.Worktree, error)
+	ListWorktreesByBranchFunc  func(context.Context, string, string) ([]*db.Worktree, error)
+	SettleCheckoutTeardownFunc func(context.Context, string, string, string) (*db.CheckoutTeardown, error)
 }
 
 // CreateWorktree records the call and delegates to CreateWorktreeFunc when set.
@@ -104,6 +105,15 @@ func (m *MockStore) ListWorktreesByBranch(ctx context.Context, projectID string,
 		return m.ListWorktreesByBranchFunc(ctx, projectID, branch)
 	}
 	return nil, contractkit.MockNotSet("MockStore", "ListWorktreesByBranch")
+}
+
+// SettleCheckoutTeardown records the call and delegates to SettleCheckoutTeardownFunc when set.
+func (m *MockStore) SettleCheckoutTeardown(ctx context.Context, id string, state string, detail string) (*db.CheckoutTeardown, error) {
+	m.Recorder.Record("SettleCheckoutTeardown", ctx, id, state, detail)
+	if m.SettleCheckoutTeardownFunc != nil {
+		return m.SettleCheckoutTeardownFunc(ctx, id, state, detail)
+	}
+	return nil, contractkit.MockNotSet("MockStore", "SettleCheckoutTeardown")
 }
 
 // Compile-time check.

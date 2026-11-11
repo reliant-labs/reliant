@@ -11,11 +11,18 @@ const files = {
   "README.txt": { type: "text/plain", text: "Synthetic shop uploads. These sample files never contact a real backend." },
   "orders/sample.json": { type: "application/json", text: '{"order":"demo-order-001","status":"paid","synthetic":true}' },
 } as const;
+/**
+ * Which environments declare shop's one bucket. dev declares none, so the
+ * demo shows the browser's "declares no storage buckets" state there (switch
+ * the console to dev); prod (audited) and staging (open) browse `uploads`.
+ */
+const DECLARES_UPLOADS: ReadonlySet<string> = new Set(["env-staging", "env-prod"]);
+
 const bytes = (key: keyof typeof files) => new TextEncoder().encode(files[key].text);
 
 export function storageScenarioHandlers() {
   function admit(req: { environmentId: string; bucket: string; confirmEnvId?: string; reason?: string }) {
-    if (!demoEnvId(req.environmentId) || req.bucket !== "uploads") throw new ConnectError("No such sample bucket.", Code.NotFound);
+    if (!demoEnvId(req.environmentId) || !DECLARES_UPLOADS.has(req.environmentId) || req.bucket !== "uploads") throw new ConnectError("No such sample bucket.", Code.NotFound);
     if (req.environmentId === "env-prod" && (req.confirmEnvId !== req.environmentId || !req.reason?.trim())) throw new ConnectError("Sample prod reads need confirmation and a reason.", Code.FailedPrecondition);
   }
   function file(req: { key: string }) {
@@ -25,7 +32,7 @@ export function storageScenarioHandlers() {
   return completed(StorageBrowserService, mockService(StorageBrowserService, {
     listBrowsableBuckets: (req) => {
       if (!demoEnvId(req.environmentId)) throw new ConnectError("No such sample environment.", Code.NotFound);
-      return { policy: req.environmentId === "env-prod" ? StorageAccessPolicy.AUDITED : StorageAccessPolicy.OPEN, buckets: [{ name: "uploads", runtime: BucketRuntimeKind.HOSTED, reachable: true, publicRead: false }] };
+      return { policy: req.environmentId === "env-prod" ? StorageAccessPolicy.AUDITED : StorageAccessPolicy.OPEN, buckets: DECLARES_UPLOADS.has(req.environmentId) ? [{ name: "uploads", runtime: BucketRuntimeKind.HOSTED, reachable: true, publicRead: false }] : [] };
     },
     listObjects: (req) => {
       admit(req);

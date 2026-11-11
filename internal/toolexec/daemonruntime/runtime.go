@@ -338,6 +338,10 @@ func Start(ctx context.Context, opts StartOptions) error {
 	// Only after the claim above, so a second daemon that is about to be
 	// refused never rewrites the incumbent's records.
 	installBackgroundJournal(ctx, opts.BootstrapConfig.DataDir)
+	// Checkout removes and reclones the server acknowledged by op id
+	// (checkout_teardown.go): loaded before the first command can arrive, and
+	// after the claim for the same reason as the background journal.
+	initializeCheckoutTeardowns(ctx, opts.BootstrapConfig.DataDir)
 
 	client, err := newDaemonClient(opts.BootstrapConfig, opts.Host, opts.Guards, mcp.WithChromeBrowserURL(opts.ChromeBrowserURL))
 	if err != nil {
@@ -394,6 +398,9 @@ func Start(ctx context.Context, opts StartOptions) error {
 	// then reclaimed, or only reported in dry-run (worktree_sweep.go).
 	client.diskWatcher.ConfigureWorktreeSweep(worktreeSweep(opts.WorktreeReclaim))
 	client.reclaimMode = opts.WorktreeReclaim.Mode
+	// An Inbox approval (worktree.reclaim_approve) runs with the same roots,
+	// thresholds and mode.
+	setReclaimSweepConfig(opts.WorktreeReclaim)
 	go client.diskWatcher.RunReaper(ctx)
 	// The disk guard reclaims with the same pass, at once, when a volume
 	// crosses its reclaim threshold — where the routine runs at all: a
@@ -2036,6 +2043,9 @@ func (d *daemonClient) executeTool(s *gatewaySession, req *reliantv1.ToolRequest
 	// daemon was serving. Empty for a call with no project context, which
 	// only a $HOME fault refuses.
 	workspaceRoot := resolveProjectPathFromContext(contextMap, "", "")
+	// Use of the workspace it works in and of every one its input names
+	// (worktree_use.go), recorded even if it is refused below: it was asked.
+	noteWorktreeUse(workspaceRoot, req.GetToolInput())
 	// Admitted where the call works, before it does anything: it holds only
 	// that worktree, and a worktree being retired refuses it.
 	releaseRecovery, admissionErr := beginRecoveryWorkIn(workspaceRoot)

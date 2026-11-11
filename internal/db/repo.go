@@ -794,11 +794,11 @@ func (r *Repo) GetLatestNonMessageUpdatesPerEntity(ctx context.Context, chatID s
 	// calls.
 	//
 	// "Few" only holds if they can be FOUND without reading the rest:
-	// idx_chat_updates_snapshot_rekeyed is a partial index over exactly the
-	// re-keyed types. Without it the re-keyed read rechecked every row
-	// idx_chat_updates_snapshot_heads holds for the chat (165,843 on chat
-	// 8bb0a875, almost all NODE_EXECUTION) to keep 758: ~350ms of a ~475ms
-	// query. With it, ~3ms.
+	// idx_chat_updates_snapshot_rekey_heads is a partial index over exactly
+	// the re-keyed types, keyed by their dedup key. Without such an index the
+	// re-keyed read rechecked every row the old idx_chat_updates_snapshot_heads
+	// held for the chat (165,843 on chat 8bb0a875, almost all NODE_EXECUTION)
+	// to keep 758: ~350ms of a ~475ms query. With one, ~3ms.
 	//
 	// WORKFLOW_STATUS and NODE_EXECUTION are excluded: they are workflow state,
 	// keyed per workflow and per workflow node, so every run a chat ever made
@@ -1279,8 +1279,18 @@ type ChatMove = store.ChatMove
 // MoveChatToProject moves an idle (or errored) chat, with its plans, to
 // another project. moved is false, and nothing is written, when the chat is
 // gone, has left m.FromProjectID, or is not idle.
+//
+// It takes the owner's org lock (store.LockUserOrgs) first, before the
+// chat's row lock: call it first in its transaction.
 func (r *Repo) MoveChatToProject(ctx context.Context, m ChatMove) (moved bool, err error) {
-	return store.MoveChatToProject(ctx, r.ORM(), m)
+	err = r.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
+		if err := store.LockUserOrgs(ctx, r.ORM(), m.UserID); err != nil {
+			return err
+		}
+		moved, err = store.MoveChatToProject(ctx, r.ORM(), m)
+		return err
+	})
+	return moved, err
 }
 
 // PinChatDaemonIfUnset pins an unpinned chat that is on a machine to daemonID

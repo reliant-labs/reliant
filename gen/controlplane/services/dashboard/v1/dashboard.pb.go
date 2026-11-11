@@ -36,9 +36,12 @@ const (
 	DashboardSource_DASHBOARD_SOURCE_REPO DashboardSource = 2
 	// Authored in the console. Editable.
 	DashboardSource_DASHBOARD_SOURCE_WORKSPACE DashboardSource = 3
-	// A built-in starting point. Read-only; SaveAsCopy instantiates it.
+	// A gallery starting point. Read-only; SaveAsCopy instantiates it.
 	DashboardSource_DASHBOARD_SOURCE_TEMPLATE DashboardSource = 4
-	// Server-owned view, discovered without release or workspace copy.
+	// Defined by the platform, discovered without a release or a workspace
+	// copy. Read-only. Either an organization view (view_kind set, no spec) or
+	// one of the standard dashboards every project gets (category "standard",
+	// ref.project_id the project, a spec over the project's data).
 	DashboardSource_DASHBOARD_SOURCE_BUILTIN DashboardSource = 5
 )
 
@@ -147,10 +150,12 @@ type DashboardRef struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// GENERATED and REPO both mean a release dashboard.
 	Source DashboardSource `protobuf:"varint,1,opt,name=source,proto3,enum=controlplane.v1.DashboardSource" json:"source,omitempty"`
-	// The forge project ("" = project-less). Ignored for a template.
+	// The forge project ("" = project-less). Ignored for a template. A
+	// project built-in names its project; an organization view has none.
 	ProjectId string `protobuf:"bytes,2,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
 	// A release dashboard's id (the spec's own id, e.g. "service-admin-server"),
-	// a workspace dashboard's slug, a template's id.
+	// a workspace dashboard's slug, a template's id, a built-in's id (a project
+	// built-in: overview, service-red, frontend, usage, releases, workloads).
 	Key           string `protobuf:"bytes,3,opt,name=key,proto3" json:"key,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -345,8 +350,8 @@ type DashboardWorkspaceInfo struct {
 	UpdatedBy *DashboardUser         `protobuf:"bytes,3,opt,name=updated_by,json=updatedBy,proto3" json:"updated_by,omitempty"`
 	CreatedAt *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	UpdatedAt *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
-	// "release:<id>", "template:<id>" or "workspace:<slug>"; empty when started
-	// blank.
+	// "release:<id>", "builtin:<id>", "template:<id>" or "workspace:<slug>";
+	// empty when started blank.
 	ForkedFrom string `protobuf:"bytes,6,opt,name=forked_from,json=forkedFrom,proto3" json:"forked_from,omitempty"`
 	// Set once the promote-to-code pull request exists (not wired yet).
 	PromotedPrUrl string `protobuf:"bytes,7,opt,name=promoted_pr_url,json=promotedPrUrl,proto3" json:"promoted_pr_url,omitempty"`
@@ -463,7 +468,9 @@ type DashboardSummary struct {
 	Release *DashboardReleaseInfo `protobuf:"bytes,10,opt,name=release,proto3" json:"release,omitempty"`
 	// Set for a workspace dashboard.
 	Workspace *DashboardWorkspaceInfo `protobuf:"bytes,11,opt,name=workspace,proto3" json:"workspace,omitempty"`
-	// Templates: "generated" (derived from what forge generates) or "platform".
+	// Templates: "platform" ("generated" from a server that still listed the
+	// standard dashboards as templates). Built-ins: "billing" (an organization
+	// view) or "standard" (a project's standard dashboard).
 	Category string `protobuf:"bytes,12,opt,name=category,proto3" json:"category,omitempty"`
 	// ORGANIZATION_COSTS calls BillingService.GetOrganizationCostSummary.
 	// ORGANIZATION_USAGE and ORGANIZATION_BILLING call
@@ -1195,10 +1202,11 @@ func (x *SaveDashboardResponse) GetVersion() *DashboardVersionInfo {
 type SaveAsCopyRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	OrgId string                 `protobuf:"bytes,1,opt,name=org_id,json=orgId,proto3" json:"org_id,omitempty"`
-	// What to fork: a release dashboard, a template or a workspace dashboard.
+	// What to fork: a release dashboard, a project built-in, a template or a
+	// workspace dashboard.
 	From *DashboardRef `protobuf:"bytes,2,opt,name=from,proto3" json:"from,omitempty"`
 	// The project the copy belongs to ("" = project-less). Unset = the source's
-	// project (a template has none).
+	// project (a project built-in's is its ref's; a template has none).
 	ProjectId *string `protobuf:"bytes,3,opt,name=project_id,json=projectId,proto3,oneof" json:"project_id,omitempty"`
 	// Empty = derived from the source's key, made unique with a numeric suffix.
 	Slug string `protobuf:"bytes,4,opt,name=slug,proto3" json:"slug,omitempty"`
