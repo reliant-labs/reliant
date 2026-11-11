@@ -12,8 +12,9 @@
 // this is the app's environment around it (its logger, the page-resume signal,
 // the tab-switch profiler and the phases of the chat-open interaction).
 
-import { ChatStream } from "@reliantlabs/sdk/client";
+import { ChatStream, type StreamingClient } from "@reliantlabs/sdk/client";
 import { connectClient } from "../lib/connect";
+import { withRequestSent } from "./transport";
 import { logger } from "../lib/logger";
 import { pageActivity } from "../lib/pageActivity";
 import { tabSwitchProfiler } from "../lib/tabSwitchProfiler";
@@ -21,6 +22,32 @@ import { TRANSCRIPT_TOOL_BODIES } from "../lib/toolBodies";
 import { markChatOpen, noteChatOpenSync } from "../lib/chatOpenInteraction";
 import { StreamingService } from "../gen/reliant/v1/streaming_pb";
 import type { ChatStreamCallbacks } from "../types/streaming";
+
+/**
+ * The streaming client, with each StreamChatUpdates request marking its
+ * chat's open `stream_requested` when it is handed to fetch (see
+ * api/transport.ts requestSentKey). Between `subscribe` (selectChat asked for
+ * the stream) and this mark is the time the request spent in the page: the
+ * interceptors, the token lookup, and anything that held the main thread.
+ */
+function markingStreamRequests(client: StreamingClient): StreamingClient {
+  return {
+    ...client,
+    streamChatUpdates: (request, options) => {
+      const chatId = request.chatId ?? "";
+      const sinceSequence = Number(request.sinceSeq ?? 0n);
+      return client.streamChatUpdates(request, {
+        ...options,
+        contextValues: withRequestSent(options?.contextValues, () => {
+          markChatOpen(chatId, "stream_requested", { since_sequence: sinceSequence });
+          if (tabSwitchProfiler.isEnabled()) {
+            tabSwitchProfiler.mark("grpc-stream-request-sent", { chatId });
+          }
+        }),
+      });
+    },
+  };
+}
 
 export class ChatStreamingService extends ChatStream {
   constructor(callbacks: ChatStreamCallbacks, projectId?: string) {
@@ -30,7 +57,7 @@ export class ChatStreamingService extends ChatStream {
       // The snapshot and replay send finished calls' bodies elided; live
       // frames stay full (lib/toolBodies.ts).
       toolBodies: TRANSCRIPT_TOOL_BODIES,
-      client: () => connectClient(StreamingService),
+      client: () => markingStreamRequests(connectClient(StreamingService)),
       logger,
       onConnectionLost: () => pageActivity().noteConnectionLost(),
       hooks: {

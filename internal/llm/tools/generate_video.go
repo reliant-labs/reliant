@@ -16,6 +16,7 @@ import (
 	"github.com/invopop/jsonschema"
 	"github.com/reliant-labs/reliant/internal/attachment"
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/videogen"
 	"github.com/reliant-labs/reliant/internal/llm/models"
@@ -325,7 +326,7 @@ func (t *generateVideoTool) tierUnavailable(tc *rctx.ToolContext, userID string,
 // call. It never Submits: the provider job is already running (or finished),
 // and a second Submit is a second billed clip.
 func (t *generateVideoTool) resume(tc *rctx.ToolContext, userID string, prior *videojobs.Job, params GenerateVideoParams) (ToolResponse, error) {
-	if prior.UserID != userID {
+	if !authz.CanAccessPersonal(userID, prior.UserID) {
 		return NewTextErrorResponse("Video job unavailable."), nil
 	}
 	request := videogen.Request{
@@ -504,7 +505,7 @@ func videoErrorMessage(prefix string, err error) string {
 func (t *generateVideoTool) lookupEdit(ctx context.Context, userID, handle string) (*videojobs.Job, *ToolResponse) {
 	const unavailable = "Edit handle unavailable; regenerate with a full prompt instead."
 	prior, err := t.jobs.GetByAttachment(ctx, handle)
-	if err != nil || prior == nil || prior.UserID != userID || prior.State != videojobs.StateCompleted {
+	if err != nil || prior == nil || !authz.CanAccessPersonal(userID, prior.UserID) || prior.State != videojobs.StateCompleted {
 		resp := NewTextErrorResponse(unavailable)
 		return nil, &resp
 	}
@@ -591,7 +592,7 @@ func tierOf(registry *models.ModelRegistry, modelID string) string {
 
 func (t *generateVideoTool) loadImage(ctx context.Context, userID, attachmentID string) (*videogen.Image, error) {
 	att, err := t.repo.GetAttachment(ctx, attachmentID)
-	if err != nil || att == nil || att.UserID != userID {
+	if err != nil || att == nil || !authz.CanAccessPersonal(userID, att.UserID) {
 		return nil, fmt.Errorf("attachment %s was not found", attachmentID)
 	}
 	if att.AttachmentType != string(attachment.TypeImage) || len(att.Content) == 0 {

@@ -6,6 +6,7 @@ import (
 	"errors"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
+	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/daemonplacement"
 	"github.com/reliant-labs/reliant/internal/db/core"
 )
@@ -43,7 +44,7 @@ func (s *Service) checkWorkspaceMachine(ctx context.Context, userID, worktreeID,
 	if err != nil && !errors.Is(err, svcerr.ErrNotFound) {
 		return svcerr.WrapOr(err, svcerr.Internal("failed to load the workspace"))
 	}
-	if project == nil || project.UserID != userID {
+	if !authz.CanWriteProject(ctx, userID, project) {
 		return svcerr.NotFound("worktree")
 	}
 	owner := daemonplacement.WorktreeOwner(worktree)

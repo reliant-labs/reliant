@@ -17,6 +17,7 @@ import (
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/daemonerr"
 	"github.com/reliant-labs/reliant/internal/daemonplacement"
 	"github.com/reliant-labs/reliant/internal/daemonpolicy"
@@ -1260,7 +1261,7 @@ func (s *Service) pickerMachine(ctx context.Context, userID, daemonID string) (m
 		return machinewake.Target{}, nil
 	}
 	d, err := s.deps.Repo.GetDaemon(ctx, daemonID)
-	if err != nil || d == nil || d.UserID != userID {
+	if err != nil || !authz.CanWriteMachine(ctx, userID, d) {
 		return machinewake.Target{}, svcerr.NotFound("machine")
 	}
 	return machinewake.Target{DaemonID: daemonID}, nil

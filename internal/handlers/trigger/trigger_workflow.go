@@ -18,6 +18,7 @@ import (
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/launch"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -62,6 +63,12 @@ func (s *Service) EnableWorkflow(
 	if msg.ProjectId == "" {
 		return nil, svcerr.InvalidArgument("project_id is required")
 	}
+	// The activations are the project's, in its org: a caller who may not
+	// work in the project (authz: another owner, an org they left, a
+	// credential of another org) enables nothing, before anything is read.
+	if _, err := s.deps.Repo.GetProjectWithUserCheck(ctx, msg.ProjectId, userID); err != nil {
+		return nil, triggerDBError("get project", err)
+	}
 
 	// Enabling activates the workflow's triggers: resolve it as they will.
 	wf, err := launch.ResolveValidatedRunWorkflowOn(ctx, s.deps.Repo, launch.AutomationScope(userID, msg.ProjectId, msg.GetDaemonId()), msg.Workflow)
@@ -91,8 +98,10 @@ func (s *Service) EnableWorkflow(
 	activations := map[string]*core.Trigger{}
 	taken := map[string]bool{}
 	for _, t := range mine {
+		// Every stored name is taken, but only a trigger the caller may
+		// still change is an activation to update.
 		taken[t.Name] = true
-		if t.WorkflowTrigger != nil && sameWorkflowRef(t.Workflow, msg.Workflow) {
+		if t.WorkflowTrigger != nil && sameWorkflowRef(t.Workflow, msg.Workflow) && authz.CanWriteTrigger(ctx, userID, t) {
 			activations[*t.WorkflowTrigger] = t
 		}
 	}
@@ -616,7 +625,9 @@ func (s *Service) DisableWorkflow(
 		return nil, triggerDBError("list triggers", err)
 	}
 	resp := &reliantv1.DisableWorkflowResponse{}
-	for _, t := range mine {
+	// With no project named this is every project's: only activations the
+	// caller may still change are paused or reported.
+	for _, t := range authz.Visible(ctx, userID, mine, authz.CanWriteTrigger) {
 		if t.WorkflowTrigger == nil || !sameWorkflowRef(t.Workflow, req.Msg.Workflow) {
 			continue
 		}

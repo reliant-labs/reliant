@@ -1,7 +1,7 @@
 // Copyright (c) 2025 Reliant Labs
 
-import { Building2, Check, ChevronsUpDown } from "lucide-react";
-import { useRef } from "react";
+import { Building2, Check, ChevronsUpDown, Plus } from "lucide-react";
+import { useRef, useState } from "react";
 
 import DropdownMenu, { type MenuGroup } from "@/components/forge-ui/dropdown_menu";
 import { useActiveOrg, useSetDefaultOrg } from "@/hooks/useOrgs";
@@ -9,12 +9,16 @@ import { cn } from "@/lib/utils";
 import { toast } from "@/lib/toast-manager";
 import type { MyOrg } from "@/services/controlPlane/orgs";
 
+import { CreateOrganizationDialog } from "./CreateOrganizationDialog";
+
 /**
- * Which org the app is acting in, and a way to change it.
+ * Which org the app is acting in, a way to change it, and a way to make one.
  *
- * A person with ONE org gets no chrome at all: a switcher with a single
- * option is a control that does nothing, and most people never have a second
- * org. It appears the moment ListMyOrganizations returns two.
+ * The sidebar menu shows for everyone with an org, one included: it names the
+ * org the app acts in and is the entry point to "Create organization", which a
+ * person with one org needs most (control-plane docs/design/orgs-and-members.md
+ * §2.12). The phone and approve-page LIST stays a choice between orgs, so it
+ * still needs two.
  *
  * Switching changes what THIS app shows and acts on (ActiveOrgBinding resets
  * the org-scoped caches). "Make default" is the separate, server-side
@@ -23,12 +27,9 @@ import type { MyOrg } from "@/services/controlPlane/orgs";
  */
 export function OrgSwitcher({ variant = "sidebar" }: { variant?: "sidebar" | "list" }) {
   const { orgs, active, canSwitch, select } = useActiveOrg();
-  if (!canSwitch || !active) return null;
-  return variant === "list" ? (
-    <OrgList orgs={orgs} activeId={active.id} onSelect={select} />
-  ) : (
-    <SidebarOrgSwitcher orgs={orgs} active={active} onSelect={select} />
-  );
+  if (!active) return null;
+  if (variant === "list") return canSwitch ? <OrgList orgs={orgs} activeId={active.id} onSelect={select} /> : null;
+  return <SidebarOrgSwitcher orgs={orgs} active={active} onSelect={select} />;
 }
 
 /** The org's role, in words. */
@@ -38,6 +39,7 @@ function roleLabel(org: MyOrg): string {
 
 function SidebarOrgSwitcher({ orgs, active, onSelect }: { orgs: MyOrg[]; active: MyOrg; onSelect: (id: string) => void }) {
   const setDefault = useSetDefaultOrg();
+  const [creating, setCreating] = useState(false);
 
   const groups: MenuGroup[] = [
     {
@@ -66,34 +68,47 @@ function SidebarOrgSwitcher({ orgs, active, onSelect }: { orgs: MyOrg[]; active:
       ],
     });
   }
+  groups.push({
+    items: [
+      {
+        label: "Create organization",
+        icon: <Plus className="h-4 w-4" aria-hidden="true" />,
+        testId: "org-create",
+        onClick: () => setCreating(true),
+      },
+    ],
+  });
 
   return (
-    <DropdownMenu
-      groups={groups}
-      align="left"
-      label="Switch organization"
-      density="compact"
-      menuClassName="min-w-[220px] max-w-[280px]"
-      triggerClassName="w-full"
-      trigger={(props) => (
-        <button
-          {...props}
-          type="button"
-          data-testid="org-switcher"
-          className={cn(
-            "flex h-8 w-full items-center gap-2 rounded-md px-2 text-left text-sm transition-colors",
-            "text-foreground/85 hover:bg-muted/50 hover:text-foreground",
-            "focus:outline-none focus:ring-2 focus:ring-ring"
-          )}
-        >
-          <Building2 className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-          <span className="min-w-0 flex-1 truncate" data-testid="org-switcher-name">
-            {active.name}
-          </span>
-          <ChevronsUpDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
-        </button>
-      )}
-    />
+    <>
+      <DropdownMenu
+        groups={groups}
+        align="left"
+        label="Switch organization"
+        density="compact"
+        menuClassName="min-w-[220px] max-w-[280px]"
+        triggerClassName="w-full"
+        trigger={(props) => (
+          <button
+            {...props}
+            type="button"
+            data-testid="org-switcher"
+            className={cn(
+              "flex h-8 w-full items-center gap-2 rounded-md px-2 text-left text-sm transition-colors",
+              "text-foreground/85 hover:bg-muted/50 hover:text-foreground",
+              "focus:outline-none focus:ring-2 focus:ring-ring"
+            )}
+          >
+            <Building2 className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+            <span className="min-w-0 flex-1 truncate" data-testid="org-switcher-name">
+              {active.name}
+            </span>
+            <ChevronsUpDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
+          </button>
+        )}
+      />
+      <CreateOrganizationDialog open={creating} onClose={() => setCreating(false)} />
+    </>
   );
 }
 

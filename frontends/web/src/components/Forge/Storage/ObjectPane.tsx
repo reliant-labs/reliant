@@ -31,6 +31,7 @@ import { storageErrorKind } from "@/services/controlPlane/storageBrowser/errors"
 
 import type { AccessConfirmation } from "../AuditedAccess/accessSession-model";
 import { formatWhen } from "../Observability/format";
+import { useObsReadOnly } from "../Observability/obsReadOnly";
 import { exactBytes, formatSize, previewKindOf, previewText, TEXT_PREVIEW_CAP } from "./storageObject-model";
 import { StorageError, StorageLoading, StorageNote } from "./StorageStates";
 import { basename } from "./storageUrl-model";
@@ -52,6 +53,7 @@ export function ObjectPane({ env, bucket, objectKey, access, closeHref, onConfir
   const target: ObjectInput = { environmentId: env.id, bucket, key: objectKey, ...(access ? { access } : {}) };
   const metadata = useObjectMetadata(target);
   const download = useObjectDownload(onDownloadUrl);
+  const readOnly = useObsReadOnly();
   const name = basename(objectKey) || objectKey;
 
   const confirmationLost = [metadata.isFetching ? null : metadata.error, download.error].some((error) => error && storageErrorKind(error) === "confirmation");
@@ -98,7 +100,8 @@ export function ObjectPane({ env, bucket, objectKey, access, closeHref, onConfir
                 className="min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0"
                 onClick={startDownload}
                 loading={download.isPending}
-                disabled={download.isPending}
+                disabled={download.isPending || readOnly.readOnly}
+                title={readOnly.readOnly ? readOnly.reason : undefined}
                 leftIcon={<Download className="h-3.5 w-3.5" />}
                 data-testid="storage-download"
               >

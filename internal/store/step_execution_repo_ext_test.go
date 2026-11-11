@@ -3,6 +3,7 @@ package store_test
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -554,5 +555,49 @@ VALUES($1,'wf-s1','stopped','SaveMessage',$2,1,now() + $3 * interval '1 second')
 	}
 	if !fromPtr(older.Success) || older.ErrorMessage != nil || strings.Contains(fromPtr(older.OutputJSON), "message_id") {
 		t.Fatalf("older attempt must be untouched and keep only the projection: %+v", older)
+	}
+}
+
+// A NUL in a step's output is written by encoding/json as the escape \u0000,
+// which jsonb refuses (SQLSTATE 22P05). step_executions casts output_json to
+// jsonb in its generated saved_message_id column, so in prod a SaveMessage
+// step whose tool output held a NUL failed its INSERT and lost its history.
+// The row is stored with U+FFFD in the NUL's place, the message id is still
+// derived, and an escaped backslash followed by "u0000" (text, not a NUL)
+// survives as written.
+func TestInsertStepExecutionStoresEscapedNUL(t *testing.T) {
+	env := storetest.New(t)
+	ctx := context.Background()
+	out, err := json.Marshal(map[string]any{"message_id": "m-nul", "message": map[string]any{"text": "a\x00b"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	literal := `{"message_id":"m-lit","note":"C:\\u0000dir"}`
+	for id, body := range map[string]string{"nul": string(out), "literal": literal} {
+		if err := store.InsertStepExecution(ctx, env.ORM, &core.StepExecution{ID: id, WorkflowID: "wf-nul", StepID: "execute_tools-save",
+			ActivityName: "SaveMessage", OutputJSON: nstr(body), InputJSON: nstr(body), ErrorMessage: nstr("bad\x00byte"), CreatedAt: time.Now()}); err != nil {
+			t.Fatalf("insert %s: %v", id, err)
+		}
+	}
+	got, err := store.LoadStepExecution(ctx, env.ORM, "nul")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fromPtr(got.SavedMessageID) != "m-nul" {
+		t.Fatalf("saved_message_id = %v, want m-nul", got.SavedMessageID)
+	}
+	var decoded struct{ Message struct{ Text string } }
+	if err := json.Unmarshal([]byte(fromPtr(got.OutputJSON)), &decoded); err != nil || decoded.Message.Text != "a\uFFFDb" {
+		t.Fatalf("output_json = %q (%v), want the NUL stored as U+FFFD", fromPtr(got.OutputJSON), err)
+	}
+	if fromPtr(got.ErrorMessage) != "bad\uFFFDbyte" {
+		t.Fatalf("error_message = %q, want the NUL stored as U+FFFD", fromPtr(got.ErrorMessage))
+	}
+	got, err = store.LoadStepExecution(ctx, env.ORM, "literal")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fromPtr(got.OutputJSON) != literal || fromPtr(got.InputJSON) != literal || fromPtr(got.SavedMessageID) != "m-lit" {
+		t.Fatalf("an escaped backslash before u0000 was rewritten: output %q input %q saved %v", fromPtr(got.OutputJSON), fromPtr(got.InputJSON), got.SavedMessageID)
 	}
 }

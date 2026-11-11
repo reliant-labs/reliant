@@ -11,6 +11,7 @@ import (
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/launch"
@@ -351,7 +352,7 @@ func connectionSenderID(ctx context.Context, repo any, t *core.Trigger) string {
 		return ""
 	}
 	conn, err := reader.GetConnection(ctx, t.UserID, *t.ConnectionID)
-	if err != nil || conn == nil || conn.UserID != t.UserID || conn.IntegrationID != "github" || conn.SenderID == nil {
+	if err != nil || conn == nil || !authz.CanAccessPersonal(t.UserID, conn.UserID) || conn.IntegrationID != "github" || conn.SenderID == nil {
 		return ""
 	}
 	return *conn.SenderID

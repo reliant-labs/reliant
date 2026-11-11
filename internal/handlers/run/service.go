@@ -29,6 +29,12 @@ type Deps struct {
 	// in sync, and the guarantee this service needs is that it cannot
 	// diverge.
 	Chats Chat
+	// Orgs says which organization a create acts in and verifies the org a
+	// list names (internal/orgs). Nil, or a nil *orgs.Resolver, is a
+	// deployment with no orgs: rows are created with none and lists ignore
+	// org_id.
+	// forge:optional-dep
+	Orgs OrgResolver
 }
 
 // validateDeps returns an error if any required Deps field is nil. The

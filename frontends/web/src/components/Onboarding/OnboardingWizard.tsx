@@ -18,6 +18,7 @@
 import { useEffect } from "react";
 import { useLocation } from "@tanstack/react-router";
 import { isClaimPath } from "../../lib/claimLink";
+import { isAcceptInvitePath } from "../../lib/inviteLink";
 import { trackEvent } from "../../lib/analytics";
 import { useAuthStore } from "../../store/authStore";
 import { useOnboardingChecklistStore } from "../../store/onboardingChecklistStore";
@@ -69,9 +70,12 @@ export function OnboardingWizard() {
   // The dedicated /onboarding route IS the onboarding experience — showing
   // the post-onboarding "Setup Guide" floating panel on top of it is a
   // bad-UX dupe of the same information. /claim owns the screen for the same
-  // reason: someone is mid-way through taking over a site.
+  // reason: someone is mid-way through taking over a site; /accept-invite,
+  // mid-way through joining an org.
   const isOnboardingRoute =
-    location.pathname.startsWith("/onboarding") || isClaimPath(location.pathname);
+    location.pathname.startsWith("/onboarding") ||
+    isClaimPath(location.pathname) ||
+    isAcceptInvitePath(location.pathname);
 
   // Onboarding is per-USER state, so none of it may render to a signed-out
   // visitor (a forced sign-out drops the user on the sign-in screen without

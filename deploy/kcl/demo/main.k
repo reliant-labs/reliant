@@ -1,6 +1,14 @@
 """
 reliant's `demo` environment: demo.reliantlabs.io, the public forge demo.
 
+DEPRECATED (2026-11-10). The demo now ships with prod: control-plane's prod env
+declares the same `forge-demo` build from reliant-web's pinned source
+(control-plane deploy/kcl/lib/reliant_web.k), so every release promotes it by
+digest. This env keeps working, as the domain's rollback target, until
+prod has served demo.reliantlabs.io through a release; then it is retired
+(dev-docs/forge-demo-cutover.md, "Into prod"). Keep the two declarations'
+build (WEB_BUILD_TARGET, public_dir) and runtime keys alike until then.
+
 ONE HOSTED STATIC SITE AND NOTHING ELSE. `forge-demo` is a second build of
 frontends/web (vite.config.ts's demo target: entry demo.html →
 src/demoBundle/main.tsx), containing the forge console's pages, the demo's mock
@@ -14,7 +22,7 @@ backend: every RPC is answered in the browser.
     forge env deploy demo <v>                    # publish; the platform writes config.js
     forge obs check demo --wait --json
 
-WHY HERE, AND NOT IN control-plane's prod. The demo is built from THIS
+WHY IT WAS HERE, AND NOT IN control-plane's prod (superseded above). The demo is built from THIS
 checkout (`path`, not a GitSource pin), so it ships whenever reliant main
 moves, on its own schedule: no pin bump in control-plane, none of prod's
 release train, and no coupling to the API it does not call. A second reliant

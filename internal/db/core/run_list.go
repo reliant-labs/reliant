@@ -46,6 +46,9 @@ type UnlaunchedTriggerEvent struct {
 	OccurredAt    time.Time
 	Outcome       TriggerEventOutcome
 	OutcomeDetail string
+	// OrgID is the org of the event's trigger (nil: none yet), which decides
+	// whether its owner may still see it (authz).
+	OrgID *string
 }
 
 // RunListFilters narrows the cross-cutting run list. UserID is mandatory and
@@ -54,7 +57,10 @@ type UnlaunchedTriggerEvent struct {
 // Slices and pointers mean "unset" when empty or nil, so an unset filter never
 // narrows the result.
 type RunListFilters struct {
-	UserID        string
+	UserID string
+	// Org narrows the list to one organization's runs (a run's is its
+	// chat's); nil lists every run UserID owns (every client before orgs).
+	Org           *OrgScope
 	ProjectID     *string
 	Workflows     []string
 	TriggerID     *string
@@ -104,4 +110,8 @@ type RunListItem struct {
 
 	// Archived is whether the run's chat is archived.
 	Archived bool
+
+	// OrgID is the org of the run's chat (nil: none yet), which decides
+	// whether its owner may still see it (authz).
+	OrgID *string
 }

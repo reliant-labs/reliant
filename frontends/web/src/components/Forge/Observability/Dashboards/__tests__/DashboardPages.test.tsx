@@ -44,8 +44,8 @@ describe("organization dashboard routes without deployments", () => {
     const api = createFixtureApi();
     api.listDashboards = vi.fn().mockResolvedValue({ dashboards: [builtin], canWrite: false });
     renderWithApi(api, <DashboardsPage />);
-    // The Overview hub lands first; the built-in is in its Platform group.
-    expect(await screen.findByTestId("hub-group-platform")).toHaveTextContent("Organization costs");
+    // The Overview hub lands first; the built-in has its own row above the groups.
+    expect(await screen.findByTestId("hub-builtin-org-costs")).toHaveTextContent("Organization costs");
     expect(screen.getByTestId("hub-health-undeployed")).toBeInTheDocument();
     expect(screen.getByTestId("observability-no-envs")).toBeInTheDocument();
   });
@@ -66,12 +66,27 @@ describe("organization dashboard routes without deployments", () => {
     expect(refetch).toHaveBeenCalledTimes(1);
   });
 
+  // A project's standard built-in reads its environments: unlike an
+  // organization view, it waits behind the roster like a release dashboard.
+  it("opens a project's standard built-in in the project, behind the roster", async () => {
+    route.params = { kind: "builtin", key: "usage" };
+    try {
+      const api = createFixtureApi();
+      api.getDashboard = vi.fn().mockRejectedValue(new Error("not reached"));
+      renderWithApi(api, <DashboardPage />);
+      expect(await screen.findByTestId("observability-no-envs")).toBeInTheDocument();
+      expect(api.getDashboard).not.toHaveBeenCalled();
+    } finally {
+      route.params = { kind: "builtin", key: "org-costs" };
+    }
+  });
+
   it("claims nothing about environments while the roster is still loading", async () => {
     consoleState.roster = { ...EMPTY_ROSTER, isLoading: true };
     const api = createFixtureApi();
     api.listDashboards = vi.fn().mockResolvedValue({ dashboards: [builtin], canWrite: false });
     renderWithApi(api, <DashboardsPage />);
-    expect(await screen.findByTestId("hub-group-platform")).toBeInTheDocument();
+    expect(await screen.findByTestId("hub-builtin")).toBeInTheDocument();
     expect(screen.queryByTestId("observability-no-envs")).not.toBeInTheDocument();
   });
 });

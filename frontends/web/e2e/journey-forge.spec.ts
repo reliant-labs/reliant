@@ -89,16 +89,17 @@ const endCardCommands = (page: Page, text: string) => page.getByTestId('tour-com
 
 /**
  * Reliant's and the forge shell's eleven steps, intro to Ask an agent, each by its required action. A
- * required action moves the tour on by itself (no Next, no Skip step); fg-logs and fg-ask hold for Next.
+ * required action moves the tour on by itself (no Skip step), and Next stays enabled beside it so a visitor
+ * who cannot find the target is never stuck (#2567); fg-logs and fg-ask hold for Next.
  * Leaves the end card open.
  */
 async function walkToEndCard(page: Page) {
   const T = 11;
-  await atStep(page, 1, T, 'What is forge?');
+  await atStep(page, 1, T, 'What is Forge?');
   await expect(page.getByTestId('onboarding-nav-bar')).toHaveCount(0);
   await next(page);
 
-  await atStep(page, 2, T, "A forge app's console");
+  await atStep(page, 2, T, "A Forge app's console");
   await expect(page.locator("[data-tour='forge-console']")).toBeVisible();
   await next(page);
 
@@ -107,7 +108,7 @@ async function walkToEndCard(page: Page) {
   await next(page);
 
   await atStep(page, 4, T, 'One request, end to end');
-  await expect(page.getByTestId('tour-next')).toBeDisabled();
+  await expect(page.getByTestId('tour-next')).toBeEnabled();
   await openTrace(page);
   await expect(page).toHaveURL(new RegExp(`trace=${TRACE_ID}`));
 
@@ -211,7 +212,7 @@ test.describe('the forge journey in the forge shell', () => {
     await mockForgeShellSignedOut(page);
     await page.goto('/demo?shell=forge&tour=forge:fg-intro', { waitUntil: 'domcontentloaded' });
     await expect(page).toHaveURL(/\/forge\/demo\?/, LOADED);
-    await atStep(page, 1, 11, 'What is forge?');
+    await atStep(page, 1, 11, 'What is Forge?');
   });
 
   test('?journey=workflows offers Reliant and runs no journey here', async ({ page }) => {
@@ -236,7 +237,7 @@ test.describe('the demo page-entry tour', () => {
     await page.route('**/config.js', route => route.fulfill({status:200,contentType:'text/javascript',body:`window.__FORGE_CONFIG__ = ${JSON.stringify({CONTROL_PLANE_API_URL:origin,DEMO_TELEMETRY:'off'})};`}));
     await page.goto(path);
   }
-  test('automatically explains direct Logs, revisits and refresh without a start click', async ({page}) => {
+  test('explains direct Logs by itself once a session; the ? brings it back after a refresh', async ({page}) => {
     await openDemo(page, '/forge/p/shop/observability/logs?shell=demo');
     await expect(page.getByTestId('tour-callout')).toContainText('Read what your app recorded', LOADED);
     // A one-step tour shows no step count (TourControls: #2399).
@@ -244,13 +245,16 @@ test.describe('the demo page-entry tour', () => {
     await expect(page.getByTestId('demo-page-tour-start')).toHaveCount(0);
     await page.getByTestId('tour-next').click();
     await expect(page.getByTestId('tour-callout')).toHaveCount(0);
+    // A section's tip opens by itself once per session (#2567), so a refresh
+    // keeps it closed and the corner ? brings it back.
     await page.reload();
-    await expect(page.getByTestId('tour-callout')).toContainText('Logs', LOADED);
-    await page.getByTestId('tour-next').click();
-    await expect(page).toHaveURL(/observability\/logs/);
+    await expect(page.getByTestId('demo-page-info')).toBeVisible(LOADED);
     await expect(page.getByTestId('tour-callout')).toHaveCount(0);
     await page.getByTestId('demo-page-info').click();
     await expect(page.getByTestId('tour-callout')).toContainText('Logs');
+    await page.getByTestId('tour-next').click();
+    await expect(page).toHaveURL(/observability\/logs/);
+    await expect(page.getByTestId('tour-callout')).toHaveCount(0);
     await expect(page.getByTestId('onboarding-nav-bar')).toHaveCount(0);
   });
   test('legacy logs link has no prerequisite or cross-site sequence', async ({page}) => {

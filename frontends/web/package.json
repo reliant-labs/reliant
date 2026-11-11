@@ -40,6 +40,7 @@
       "TriggerService",
       "UsageService",
       "WorkflowService",
+      "WorktreeReclaimService",
       "WorktreeService"
     ]
   },
@@ -107,9 +108,7 @@
     "react-dom": "^19.1.1",
     "react-hook-form": "^7.62.0",
     "react-markdown": "^10.1.0",
-    "react-resizable-panels": "^3.0.6",
     "react-virtuoso": "^4.18.1",
-    "reconnecting-websocket": "^4.4.0",
     "rehype-highlight": "^7.0.2",
     "remark-gfm": "^4.0.1",
     "sonner": "^2.0.7",
@@ -144,7 +143,6 @@
     "jsdom": "^26.1.0",
     "monaco-editor": "^0.57.0",
     "playwright": "^1.55.0",
-    "rollup-plugin-visualizer": "^7.1.1",
     "stylelint": "^17.9.1",
     "stylelint-config-standard": "^40.0.0",
     "terser": "^5.44.0",
