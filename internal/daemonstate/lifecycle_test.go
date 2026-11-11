@@ -122,7 +122,10 @@ func TestDerivation_LifecycleIsOutOfOrderSafe(t *testing.T) {
 		DaemonID: "d-ooo", UserID: "u-1", Type: daemonwire.EventLifecycle,
 		At: early, Phase: daemonwire.LifecyclePhaseProvisioning,
 	})
-	time.Sleep(100 * time.Millisecond)
+	// The repository has been asked to apply it (and, being older, refused).
+	if !waitFor(t, 30*time.Second, func() bool { return repo.lifecycleCallCount() >= 2 }) {
+		t.Fatal("the stale lifecycle event never reached the repository")
+	}
 
 	row, _ := repo.daemonSnapshot("d-ooo")
 	if got := *row.LifecyclePhase; got != string(daemonwire.LifecyclePhaseReady) {

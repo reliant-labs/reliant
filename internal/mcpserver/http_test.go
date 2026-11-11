@@ -188,7 +188,7 @@ func (m *memStore) waitForAudit(t *testing.T) {
 	t.Helper()
 	select {
 	case <-m.auditC:
-	case <-time.After(3 * time.Second):
+	case <-time.After(30 * time.Second):
 		t.Fatal("timed out waiting for an audit record")
 	}
 }

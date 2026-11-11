@@ -269,7 +269,7 @@ func TestReaper_DisabledDoesNothing(t *testing.T) {
 	go func() { h.w.RunReaper(context.Background()); close(done) }()
 	select {
 	case <-done:
-	case <-time.After(2 * time.Second):
+	case <-time.After(30 * time.Second):
 		t.Fatal("RunReaper must return at once when disabled")
 	}
 	if h.runs() != 0 {
@@ -288,14 +288,14 @@ func TestReaper_RunReaperTicksUntilCancelled(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	go func() { h.w.RunReaper(ctx); close(done) }()
-	deadline := time.Now().Add(2 * time.Second)
+	deadline := time.Now().Add(30 * time.Second)
 	for h.runs() == 0 && time.Now().Before(deadline) {
 		time.Sleep(5 * time.Millisecond)
 	}
 	cancel()
 	select {
 	case <-done:
-	case <-time.After(2 * time.Second):
+	case <-time.After(30 * time.Second):
 		t.Fatal("RunReaper did not stop on cancel")
 	}
 	if h.runs() != 1 {

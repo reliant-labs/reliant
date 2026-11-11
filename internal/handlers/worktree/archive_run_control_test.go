@@ -22,6 +22,9 @@ func TestArchiveWorktreeChat_WaitsForADeliveryHoldingTheRunControlLock(t *testin
 		runControl sync.Mutex
 		mu         sync.Mutex
 		events     []string
+		// atLock closes when the archive asks for the run-control lock.
+		atLock     = make(chan struct{})
+		atLockOnce sync.Once
 	)
 	record := func(e string) {
 		mu.Lock()
@@ -30,6 +33,7 @@ func TestArchiveWorktreeChat_WaitsForADeliveryHoldingTheRunControlLock(t *testin
 	}
 	repo := &MockRepository{
 		LockChatRunControlFunc: func(context.Context, string) (func(), error) {
+			atLockOnce.Do(func() { close(atLock) })
 			runControl.Lock()
 			return runControl.Unlock, nil
 		},
@@ -54,7 +58,11 @@ func TestArchiveWorktreeChat_WaitsForADeliveryHoldingTheRunControlLock(t *testin
 		svc.archiveWorktreeChat(context.Background(), &db.Chat{ID: "chat-1", WorkflowID: &workflowID})
 	}()
 
-	time.Sleep(50 * time.Millisecond)
+	select {
+	case <-atLock:
+	case <-time.After(30 * time.Second):
+		t.Fatal("the archive never asked for the chat's run-control lock")
+	}
 	record("delivery started run")
 	runControl.Unlock()
 	<-done
