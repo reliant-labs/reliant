@@ -1106,6 +1106,15 @@ message DeployRelease {
   // migration that environment's schema has already passed. Evidence, not
   // identity: a re-cut is still a retry whatever it carries here.
   DeployMigrationManifest migrations = 15;
+
+  // The release was RECORDED, not built, by forge (forge's
+  // release.Release.RecordOnly): a pipeline forge does not run built and
+  // deployed it, and `forge release record` wrote down what it shipped.
+  // Such a release may name no artifacts at all — its version and git_commit
+  // are then its whole content — and is never applied by forge: it may be
+  // promoted only to an environment whose promotions forge does not apply.
+  // Readers label it "recorded by CI".
+  bool record_only = 16;
 }
 
 // DeployMigrationManifest is forge's release.MigrationManifest: one set per
@@ -1600,6 +1609,11 @@ message DeployPromotion {
   // release.Promotion.Moved). Without it a one-workload deploy read as the whole
   // environment running the release.
   repeated string targets = 30;
+
+  // The promoted release is record-only (DeployRelease.record_only): an
+  // outside pipeline applied it, and this row is the deploy marker it left.
+  // Derived from the release, never sent by a client.
+  bool record_only = 31;
 }
 
 // === Source of truth: provenance, bundles, applies, plans ===
