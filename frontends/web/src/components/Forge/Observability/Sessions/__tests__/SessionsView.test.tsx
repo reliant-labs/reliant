@@ -13,6 +13,11 @@ import { describe, expect, it, vi, afterEach, beforeEach } from "vitest";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
+import { Code, ConnectError } from "@connectrpc/connect";
+
+import type { FrontendReplay, FrontendReplayList } from "@/services/controlPlane/observability/frontendReplayApi";
+import type { ObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
+import type { SessionSummary } from "@/services/controlPlane/observability/rumTypes";
 import type { PanelResult } from "@/services/controlPlane/observability/types";
 
 import { createFixtureApi, fixtureTrace } from "../../__fixtures__/fixtureApi";
@@ -163,16 +168,17 @@ describe("the session list", () => {
     expect(harness.current().os).toBeUndefined();
   });
 
-  it("explains an empty unfiltered window as no replays, with both switches that turn replay on", async () => {
-    const harness = renderPanel(createFixtureApi({ sessions: "empty" }), { view: "sessions", range: "24h" }, ENV_PLACE);
+  it("explains an empty unfiltered window as no replays, with both switches, when the console cannot read replay state", async () => {
+    // A control plane from before ListFrontendReplay: the console cannot see either switch.
+    const harness = renderPanel(createFixtureApi({ sessions: "empty", frontendReplay: "not-configured" }), { view: "sessions", range: "24h" }, ENV_PLACE);
     const note = await screen.findByTestId("obs-sessions-replay-off");
     expect(note).toHaveAttribute("role", "status");
     expect(note).toHaveTextContent("No replays recorded in the last 24 hours");
     // The console cannot see either switch: it says how to turn replay on, never that it is off.
     expect(note).toHaveTextContent("If replay isn't on yet");
     const steps = within(note).getByTestId("obs-sessions-replay-off-steps");
-    expect(steps).toHaveTextContent("VITE_OTEL_REPLAY=true");
-    expect(steps).toHaveTextContent("NEXT_PUBLIC_OTEL_REPLAY=true");
+    expect(steps).toHaveTextContent('runtime_config = {OTEL_REPLAY = "true"}');
+    expect(steps).not.toHaveTextContent("VITE_OTEL_REPLAY");
     expect(steps).toHaveTextContent("forge.Observability");
     expect(steps).toHaveTextContent("replay = True");
     expect(note).toHaveTextContent("redeploy");
@@ -193,6 +199,188 @@ describe("the session list", () => {
   it("explains a control plane without sessions", async () => {
     renderPanel(createFixtureApi({ sessions: "not-configured" }), { view: "sessions" }, ENV_PLACE);
     expect(await screen.findByTestId("obs-sessions-not-configured")).toBeInTheDocument();
+  });
+});
+
+describe("the empty list's replay state, per frontend", () => {
+  const frontend = (over: Partial<FrontendReplay> = {}): FrontendReplay => ({
+    envId: "env-prod",
+    envName: "prod",
+    frontend: "web",
+    state: "on",
+    source: "live",
+    sampleRate: 1,
+    ...over,
+  });
+  const replayList = (frontends: FrontendReplay[], unavailableEnvIds: string[] = []): FrontendReplayList => ({ frontends, unavailableEnvIds });
+  const known = async () => {
+    await waitFor(() => expect(screen.getByTestId("obs-sessions-replay-state")).toHaveAttribute("data-known", "true"));
+    return screen.getByTestId("obs-sessions-replay-off");
+  };
+  const line = (envId: string, fe: string) => screen.getByTestId(`obs-sessions-replay-frontend-${envId}-${fe}`);
+
+  it("says a frontend that is on just has not recorded yet, with its sample rate", async () => {
+    renderPanel(createFixtureApi({ sessions: "empty", frontendReplay: replayList([frontend({ sampleRate: 0.25 })]) }), { view: "sessions", range: "24h" }, ENV_PLACE);
+    const note = await known();
+    expect(line("env-prod", "web")).toHaveAttribute("data-state", "on");
+    expect(line("env-prod", "web")).toHaveTextContent("Replay is on for web in prod (25% of sessions); no replays recorded in this range yet.");
+    expect(note).toHaveTextContent("No replays recorded in the last 24 hours");
+    expect(within(note).queryByTestId("obs-sessions-replay-off-steps")).not.toBeInTheDocument();
+  });
+
+  it("says a frontend that is off is off, and the switches the pinned forge has that turn it on", async () => {
+    const onCall = vi.fn();
+    renderPanel(createFixtureApi({ onCall, sessions: "empty", frontendReplay: replayList([frontend({ state: "off" })]) }), { view: "sessions", range: "24h" }, ENV_PLACE);
+    const note = await known();
+    expect(line("env-prod", "web")).toHaveAttribute("data-state", "off");
+    expect(line("env-prod", "web")).toHaveTextContent(
+      'Replay is off for web in prod — set runtime_config = {OTEL_REPLAY = "true"} on that frontend\'s forge.Frontend and signals = forge.ObservabilitySignals {replay = True} in prod\'s forge.Observability (a scaffolded prod sets both from _session_replay = True), then redeploy.'
+    );
+    // forge.BrowserTelemetry.replay is not in the forge reliant pins (forge#1983): never name it.
+    expect(note).not.toHaveTextContent("BrowserTelemetry");
+    expect(within(note).queryByTestId("obs-sessions-replay-off-steps")).not.toBeInTheDocument();
+    // It looked for build-flag replays over the last 7 days in that environment, and found none.
+    const evidence = listCalls(onCall).find((req) => (req as ListReq & { pageSize?: number }).pageSize === 100);
+    expect(evidence).toMatchObject({ envIds: ["env-prod"], hasReplay: true });
+  });
+
+  it("reads an off frontend whose replays still arrive as on via its build flag", async () => {
+    const recorded = (await createFixtureApi().listSessions({ orgId: "o", envIds: [], window: { startMs: 0, endMs: Date.now() + 1 }, hasError: false, hasReplay: true, userId: "", pathContains: "", pageSize: 1 })).sessions[0]!;
+    const base = createFixtureApi({ sessions: "empty", frontendReplay: replayList([frontend({ state: "off" })]) });
+    const api: ObservabilityApi = {
+      ...base,
+      // Nothing in the window on screen; a replay from prod's web two days ago.
+      listSessions: async (req) =>
+        req.window.endMs - req.window.startMs > 24 * 3_600_000
+          ? { sessions: [{ ...recorded, envId: "env-prod", service: "shop-web" }], nextPageToken: "" }
+          : { sessions: [], nextPageToken: "" },
+    };
+    renderPanel(api, { view: "sessions", range: "1h" }, ENV_PLACE);
+    await known();
+    expect(line("env-prod", "web")).toHaveAttribute("data-state", "build-flag");
+    expect(line("env-prod", "web")).toHaveTextContent("Replay is on for web in prod via its build flag.");
+  });
+
+  /** The evidence read's pages: `pages[i]` is page i's sessions; every page but the last has a token. */
+  const pagedEvidence = (pages: SessionSummary[][], onEvidence: (pageToken: string | undefined) => void = () => {}): ObservabilityApi["listSessions"] => async (req) => {
+    if (req.window.endMs - req.window.startMs <= 24 * 3_600_000) return { sessions: [], nextPageToken: "" };
+    onEvidence(req.pageToken);
+    const at = req.pageToken ? Number(req.pageToken.replace(/^e:/, "")) : 0;
+    return { sessions: pages[at] ?? [], nextPageToken: at + 1 < pages.length ? `e:${at + 1}` : "" };
+  };
+
+  it("follows the evidence read's page token: a replay only on page two still counts", async () => {
+    const recorded = (await createFixtureApi().listSessions({ orgId: "o", envIds: [], window: { startMs: 0, endMs: Date.now() + 1 }, hasError: false, hasReplay: true, userId: "", pathContains: "", pageSize: 1 })).sessions[0]!;
+    const other = { ...recorded, envId: "env-prod", service: "shop-admin" };
+    const tokens: (string | undefined)[] = [];
+    const base = createFixtureApi({ sessions: "empty", frontendReplay: replayList([frontend({ state: "off" }), frontend({ frontend: "docs", state: "off" })]) });
+    const api: ObservabilityApi = {
+      ...base,
+      listSessions: pagedEvidence([Array(100).fill(other), [{ ...recorded, envId: "env-prod", service: "shop-web" }]], (token) => tokens.push(token)),
+    };
+    renderPanel(api, { view: "sessions", range: "1h" }, ENV_PLACE);
+    await known();
+    expect(tokens).toEqual([undefined, "e:1"]);
+    expect(line("env-prod", "web")).toHaveAttribute("data-state", "build-flag");
+    // The read reached the end of the window: docs has no replay, so it is off.
+    expect(line("env-prod", "docs")).toHaveAttribute("data-state", "off");
+  });
+
+  it("stops the evidence read at 10 pages, and then does not call a frontend with no replay found off", async () => {
+    const recorded = (await createFixtureApi().listSessions({ orgId: "o", envIds: [], window: { startMs: 0, endMs: Date.now() + 1 }, hasError: false, hasReplay: true, userId: "", pathContains: "", pageSize: 1 })).sessions[0]!;
+    const tokens: (string | undefined)[] = [];
+    const base = createFixtureApi({ sessions: "empty", frontendReplay: replayList([frontend({ state: "off" })]) });
+    const pages = Array.from({ length: 12 }, () => [{ ...recorded, envId: "env-prod", service: "shop-admin" }]);
+    renderPanel({ ...base, listSessions: pagedEvidence(pages, (token) => tokens.push(token)) }, { view: "sessions", range: "1h" }, ENV_PLACE);
+    const note = await known();
+    expect(tokens).toHaveLength(10);
+    expect(line("env-prod", "web")).toHaveAttribute("data-state", "unknown");
+    expect(within(note).getByTestId("obs-sessions-replay-off-steps")).toBeInTheDocument();
+  });
+
+  it("says when a frontend records replays the environment's policy drops, and how to fix it", async () => {
+    renderPanel(createFixtureApi({ sessions: "empty", frontendReplay: replayList([frontend({ state: "blocked" })]) }), { view: "sessions", range: "24h" }, ENV_PLACE);
+    await known();
+    const blocked = line("env-prod", "web");
+    expect(blocked).toHaveAttribute("data-state", "blocked");
+    expect(blocked).toHaveTextContent("web records replays but prod's observability policy drops them.");
+    expect(blocked).toHaveTextContent("The environment has to opt in to replay: set signals = forge.ObservabilitySignals {replay = True} in prod's forge.Observability, then redeploy.");
+    expect(blocked).not.toHaveTextContent("telemetry.replay");
+  });
+
+  it("falls back to the generic how-to for a frontend whose state is unknown", async () => {
+    renderPanel(
+      createFixtureApi({ sessions: "empty", frontendReplay: replayList([frontend({ state: "unknown", source: "none" }), frontend({ frontend: "admin", state: "blocked" })]) }),
+      { view: "sessions", range: "7d" },
+      ENV_PLACE
+    );
+    const note = await known();
+    expect(line("env-prod", "web")).toHaveAttribute("data-state", "unknown");
+    expect(line("env-prod", "web")).toHaveTextContent("couldn't tell whether replay is on for web in prod");
+    expect(line("env-prod", "admin")).toHaveAttribute("data-state", "blocked");
+    expect(within(note).getByTestId("obs-sessions-replay-off-steps")).toHaveTextContent('runtime_config = {OTEL_REPLAY = "true"}');
+  });
+
+  it("says an environment's config could not be read, never that it is off", async () => {
+    renderPanel(
+      createFixtureApi({ sessions: "empty", frontendReplay: replayList([frontend()], ["env-staging"]) }),
+      { view: "sessions", range: "24h" },
+      PROJECT_PLACE
+    );
+    const note = await known();
+    const unavailable = screen.getByTestId("obs-sessions-replay-unavailable-env-staging");
+    expect(unavailable).toHaveTextContent("staging's frontend config couldn't be read");
+    expect(unavailable).not.toHaveTextContent(/off/i);
+    expect(within(note).getByTestId("obs-sessions-replay-off-steps")).toBeInTheDocument();
+  });
+
+  it("keeps the generic note while the replay state loads", async () => {
+    const pending = createFixtureApi({ sessions: "empty" });
+    renderPanel({ ...pending, listFrontendReplay: () => new Promise(() => {}) }, { view: "sessions", range: "24h" }, ENV_PLACE);
+    const note = await screen.findByTestId("obs-sessions-replay-off");
+    expect(screen.getByTestId("obs-sessions-replay-state")).toHaveAttribute("data-known", "false");
+    expect(note).toHaveTextContent("If replay isn't on yet");
+    expect(within(note).queryByTestId("obs-sessions-replay-frontends")).not.toBeInTheDocument();
+  });
+
+  it("keeps the generic note when the read fails", async () => {
+    const onCall = vi.fn();
+    renderPanel(createFixtureApi({ onCall, sessions: "empty", frontendReplay: "failed" }), { view: "sessions", range: "24h" }, ENV_PLACE);
+    await waitFor(() => expect(onCall.mock.calls.some(([rpc]) => rpc === "ListFrontendReplay")).toBe(true));
+    const note = await screen.findByTestId("obs-sessions-replay-off");
+    expect(screen.getByTestId("obs-sessions-replay-state")).toHaveAttribute("data-known", "false");
+    expect(note).toHaveTextContent("If replay isn't on yet");
+    expect(screen.queryByTestId(/^obs-error-/)).not.toBeInTheDocument();
+  });
+
+  it("does not call an off frontend off when its replays could not be looked for", async () => {
+    const base = createFixtureApi({ sessions: "empty", frontendReplay: replayList([frontend({ state: "off" })]) });
+    const api: ObservabilityApi = {
+      ...base,
+      listSessions: async (req) => {
+        if (req.window.endMs - req.window.startMs > 24 * 3_600_000) throw new ConnectError("boom", Code.Internal);
+        return { sessions: [], nextPageToken: "" };
+      },
+    };
+    renderPanel(api, { view: "sessions", range: "1h" }, ENV_PLACE);
+    const note = await known();
+    expect(line("env-prod", "web")).toHaveAttribute("data-state", "unknown");
+    expect(within(note).getByTestId("obs-sessions-replay-off-steps")).toBeInTheDocument();
+  });
+
+  it("needs no second read over 7 days: the empty page is the evidence", async () => {
+    const onCall = vi.fn();
+    renderPanel(createFixtureApi({ onCall, sessions: "empty", frontendReplay: replayList([frontend({ state: "off" })]) }), { view: "sessions", range: "7d" }, ENV_PLACE);
+    await known();
+    expect(line("env-prod", "web")).toHaveAttribute("data-state", "off");
+    expect(listCalls(onCall)).toHaveLength(1);
+  });
+
+  it("reads no replay state for a filtered empty list", async () => {
+    const onCall = vi.fn();
+    renderPanel(createFixtureApi({ onCall, sessions: "empty" }), { view: "sessions", errors: true }, ENV_PLACE);
+    expect(await screen.findByTestId("obs-no-data")).toBeInTheDocument();
+    expect(onCall.mock.calls.some(([rpc]) => rpc === "ListFrontendReplay")).toBe(false);
   });
 });
 

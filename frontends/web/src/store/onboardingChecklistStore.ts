@@ -214,6 +214,11 @@ function isPanelState(value: string | null): value is ChecklistPanelState {
   return value === "collapsed" || value === "expanded" || value === "dismissed";
 }
 
+// Bumped by reset() (an identity change: authStore): a load or detection
+// started for the previous user drops its answer instead of installing that
+// user's progress, and re-mirroring it, for the next one.
+let generation = 0;
+
 // ─── Store ────────────────────────────────────────────────────────────────────
 
 export const useOnboardingChecklistStore = create<OnboardingChecklistState>(
@@ -251,12 +256,14 @@ export const useOnboardingChecklistStore = create<OnboardingChecklistState>(
     loadState: async () => {
       if (get().isLoading) return;
       set({ isLoading: true });
+      const startedIn = generation;
 
       const [completedRead, panelRead, welcomeRead] = await Promise.all([
         readSetting(CHECKLIST_SETTINGS_KEYS.COMPLETED_ITEMS),
         readSetting(CHECKLIST_SETTINGS_KEYS.PANEL_STATE),
         readSetting(CHECKLIST_SETTINGS_KEYS.WELCOME_SHOWN),
       ]);
+      if (startedIn !== generation) return;
 
       const remotePanel =
         panelRead.status === "found" && isPanelState(panelRead.value)
@@ -368,6 +375,7 @@ export const useOnboardingChecklistStore = create<OnboardingChecklistState>(
     },
 
     detectCompletedItems: async () => {
+      const startedIn = generation;
       const { completedItems } = get();
       const newItems = new Set(completedItems);
       let changed = false;
@@ -473,6 +481,7 @@ export const useOnboardingChecklistStore = create<OnboardingChecklistState>(
 
       // 9. Read docs — manually marked only
 
+      if (startedIn !== generation) return;
       if (changed) {
         set({ completedItems: newItems });
         const serialized = serializeItems(newItems);
@@ -631,6 +640,7 @@ export const useOnboardingChecklistStore = create<OnboardingChecklistState>(
     },
 
     reset: () => {
+      generation++;
       set({
         completedItems: new Set(),
         welcomeShown: false,

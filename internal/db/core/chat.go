@@ -344,9 +344,12 @@ type ChatSearchFilters struct {
 	// user's projects.
 	ProjectID   string
 	SearchQuery string
-	State       *ChatState
-	Limit       int
-	Offset      int
+	// Org narrows the search to one organization; nil searches every chat
+	// UserID owns, in any org or none (every client before orgs).
+	Org    *OrgScope
+	State  *ChatState
+	Limit  int
+	Offset int
 }
 
 // ChatUpdate represents an update in the chat_updates table.

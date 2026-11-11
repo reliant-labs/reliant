@@ -142,6 +142,11 @@ message ReliantWebConfig {
     description: "The Supabase project's PUBLISHABLE (anon) key. Public by design. Unset: Supabase sign-in is unavailable and the app says so."
   }];
 
+  string auth_cookie_domain = 29 [(forge.v1.config) = {
+    env_var: "AUTH_COOKIE_DOMAIN"
+    description: "Parent domain (e.g. \".reliantlabs.io\") whose hosts share ONE sign-in session through chunked cookies on that domain (Secure, SameSite=Lax), so signing in, refreshing or signing out on one host (app.*, forge.*) applies to all of them. Only a hosted https page whose hostname is inside the domain uses it, and never the demo host; the desktop app, dev servers and every other host keep the per-origin localStorage session. EVERY host under the domain can read the session. Unset: per-origin sessions (lib/auth/sharedSession.ts)."
+  }];
+
   string auto_anon_sign_in = 9 [(forge.v1.config) = {
     env_var: "AUTO_ANON_SIGN_IN"
     description: "\"true\": sign a visitor in anonymously instead of showing the sign-in screen (local demos). Never set it for a deployed environment."
