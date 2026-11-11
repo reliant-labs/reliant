@@ -180,7 +180,9 @@ describe("the toured trace", () => {
     for (let h = 0; h < 24; h++) {
       const at = Date.UTC(2026, 10, 11, h, 7, 0);
       for (const envIds of [[], ["env-prod"]]) {
-        const res = await createBusyApp(at).listTraces(traces({ startMs: at - HOUR, endMs: at }, { envIds, limit: 100 }));
+        // The last five minutes: only what started after the toured trace can rank above it,
+        // and an hour-long window per hour of the day made this test slow under load.
+        const res = await createBusyApp(at).listTraces(traces({ startMs: at - 5 * 60_000, endMs: at }, { envIds, limit: 100 }));
         const rank = res.traces.findIndex((t) => t.traceId === TOURED);
         expect(rank, `at ${h}:07 UTC in ${JSON.stringify(envIds)}`).toBeGreaterThanOrEqual(0);
         expect(rank, `at ${h}:07 UTC in ${JSON.stringify(envIds)}`).toBeLessThan(10);
