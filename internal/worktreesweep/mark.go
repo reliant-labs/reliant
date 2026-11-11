@@ -3,6 +3,7 @@ package worktreesweep
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/google/uuid"
@@ -50,6 +51,114 @@ type MarkStore interface {
 	ClearWorktreeMark(ctx context.Context, id, markID string) (bool, error)
 	ArchiveMarkedWorktree(ctx context.Context, id, markID string) (bool, error)
 }
+
+// MarkDecisionStore is what the Inbox's keep and reclaim-now decisions need.
+type MarkDecisionStore interface {
+	ListMarkedWorktreesForUser(ctx context.Context, userID string) ([]*core.HeldWorktree, error)
+	ClearWorktreeMark(ctx context.Context, id, markID string) (bool, error)
+	ApproveWorktreeMark(ctx context.Context, id, markID string) (bool, error)
+}
+
+// Errors of KeepMarked and ReclaimMarkedNow.
+var (
+	// ErrNotMarked: the user has no live worktree with that id under a mark.
+	ErrNotMarked = errors.New("worktree is not marked for reclaim")
+	// ErrMarkChanged: it is marked, but not with the mark the person saw
+	// (the mark was cancelled and the worktree marked again).
+	ErrMarkChanged = errors.New("worktree's reclaim mark changed")
+)
+
+// GraceFor is when the marked worktree wt will be reclaimed unless
+// something cancels the mark; zero when it is not marked or marks are off.
+func (s *Sweeper) GraceFor(wt *core.Worktree) time.Time {
+	m := wt.CleanupMetadata
+	if s.marks == nil || !m.Marked() || m.ReclaimMarkedAt == nil {
+		return time.Time{}
+	}
+	return m.ReclaimMarkedAt.Add(s.marks.grace)
+}
+
+// markedFor finds the user's marked live worktree id carrying markID.
+func markedFor(ctx context.Context, store MarkDecisionStore, userID, id, markID string) (*core.HeldWorktree, error) {
+	rows, err := store.ListMarkedWorktreesForUser(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	for _, h := range rows {
+		if h.Worktree.ID != id {
+			continue
+		}
+		if h.Worktree.CleanupMetadata.ReclaimMarkID != markID {
+			return nil, ErrMarkChanged
+		}
+		return h, nil
+	}
+	return nil, ErrNotMarked
+}
+
+// KeepMarked is the Inbox's "Keep": the mark the person saw is cancelled and
+// its tombstone removed (best effort: a tombstone with no mark on the row
+// authorizes nothing). The worktree's quiet clock starts again.
+func (s *Sweeper) KeepMarked(ctx context.Context, store MarkDecisionStore, userID, id, markID string) error {
+	h, err := markedFor(ctx, store, userID, id, markID)
+	if err != nil {
+		return err
+	}
+	cleared, err := store.ClearWorktreeMark(ctx, id, markID)
+	if err != nil {
+		return err
+	}
+	if !cleared {
+		return ErrMarkChanged
+	}
+	logging.InfoContext(ctx, "[WorktreeSweep] reclaim mark kept by the user", "worktreeID", id, "markID", markID)
+	if wt := h.Worktree; wt.DaemonID != nil && *wt.DaemonID != "" {
+		s.removeTombstone(ctx, userID, *wt.DaemonID, wt, h.ProjectPath, markID)
+	}
+	return nil
+}
+
+// ReclaimMarkedNow is the Inbox's "Reclaim now": the grace wait of the mark
+// the person saw is skipped, and the worktree is settled at once. Every
+// other check still applies, so a worktree that is in use, lost its
+// tombstone or has new work is not reclaimed: its mark is cancelled instead.
+func (s *Sweeper) ReclaimMarkedNow(ctx context.Context, store MarkDecisionStore, userID, id, markID string) error {
+	h, err := markedFor(ctx, store, userID, id, markID)
+	if err != nil {
+		return err
+	}
+	approved, err := store.ApproveWorktreeMark(ctx, id, markID)
+	if err != nil {
+		return err
+	}
+	if !approved {
+		return ErrMarkChanged
+	}
+	logging.InfoContext(ctx, "[WorktreeSweep] reclaim mark approved by the user", "worktreeID", id, "markID", markID)
+	// Settled in the background, as a clean-up is (WaitCleanups): once to
+	// re-check and archive it, and once more to remove the archived checkout
+	// instead of waiting for the next pass.
+	s.cleanups.Add(1)
+	go func() {
+		defer s.cleanups.Done()
+		ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*reclaimNowTimeout)
+		defer cancel()
+		for range 2 {
+			cur, err := s.store.GetWorktree(ctx, id)
+			if err != nil || cur == nil {
+				return
+			}
+			s.Settle(ctx, userID, &core.ReclaimCandidate{Worktree: cur, OwnerUserID: userID, ProjectPath: h.ProjectPath})
+			if after, err := s.store.GetWorktree(ctx, id); err != nil || after == nil || after.DeletedAt == nil {
+				return // not reclaimed (the checks said no): nothing to remove
+			}
+		}
+	}()
+	return nil
+}
+
+// reclaimNowTimeout bounds each settle ReclaimMarkedNow starts.
+const reclaimNowTimeout = 5 * time.Minute
 
 type reclaimMarks struct {
 	store        MarkStore
@@ -106,7 +215,9 @@ func (s *Sweeper) advanceMark(ctx context.Context, userID, daemonID string, wt *
 		s.cancelMark(ctx, userID, daemonID, wt, projectPath, why)
 		return
 	}
-	if s.now().Before(meta.ReclaimMarkedAt.Add(m.grace)) {
+	// "Reclaim now" in the Inbox skips only this wait: every check above
+	// and under the row lock still applies.
+	if meta.ReclaimApprovedAt == nil && s.now().Before(meta.ReclaimMarkedAt.Add(m.grace)) {
 		return
 	}
 	if s.auto == nil || s.auto.mode != AutoArchiveOn {

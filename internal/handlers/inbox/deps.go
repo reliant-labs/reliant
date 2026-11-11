@@ -19,6 +19,8 @@ import (
 type Repository interface {
 	ListWorktreeRecoveries(context.Context, string, string) ([]*core.WorktreeRecovery, error)
 	worktreesweep.StorageStore
+	// MarkDecisionStore lists marked worktrees and records keep / reclaim now.
+	worktreesweep.MarkDecisionStore
 	// WorkflowResolver reads an activation's workflow, to tell which
 	// automations still need setting up.
 	launch.WorkflowResolver
@@ -49,4 +51,9 @@ type Repository interface {
 // *worktreesweep.Sweeper implements it.
 type Sweeper interface {
 	StartCleanup(ctx context.Context, store worktreesweep.StorageStore, userID, daemonID string, wantIDs []string) (accepted []string, skipped []worktreesweep.CleanupResult, err error)
+	// KeepMarked and ReclaimMarkedNow answer a marked worktree's item.
+	KeepMarked(ctx context.Context, store worktreesweep.MarkDecisionStore, userID, id, markID string) error
+	ReclaimMarkedNow(ctx context.Context, store worktreesweep.MarkDecisionStore, userID, id, markID string) error
+	// GraceFor is when a marked worktree will be reclaimed.
+	GraceFor(wt *core.Worktree) time.Time
 }

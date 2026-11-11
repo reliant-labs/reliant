@@ -41,6 +41,18 @@ func (r *Repo) ClearWorktreeMark(ctx context.Context, id, markID string) (bool, 
 	return store.ClearWorktreeMark(ctx, r.ORM(), id, markID)
 }
 
+// ApproveWorktreeMark records "Reclaim now" for a mark
+// (store.ApproveWorktreeMark).
+func (r *Repo) ApproveWorktreeMark(ctx context.Context, id, markID string) (bool, error) {
+	return store.ApproveWorktreeMark(ctx, r.ORM(), id, markID)
+}
+
+// ListMarkedWorktreesForUser lists the user's marked live worktrees
+// (store.ListMarkedWorktreesForUser).
+func (r *Repo) ListMarkedWorktreesForUser(ctx context.Context, userID string) ([]*core.HeldWorktree, error) {
+	return store.ListMarkedWorktreesForUser(ctx, r.ORM(), userID)
+}
+
 // ArchiveMarkedWorktree reclaims a worktree under its reclaim mark
 // (store.ArchiveMarkedWorktree).
 func (r *Repo) ArchiveMarkedWorktree(ctx context.Context, id, markID string) (bool, error) {
