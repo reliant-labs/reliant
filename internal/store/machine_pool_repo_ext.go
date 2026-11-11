@@ -174,7 +174,8 @@ func CountMachinePoolMemberLiveRuns(ctx context.Context, db orm.Context, poolID,
 // CountTriggerCapacityHeldByMember is, per member, how many slots of one
 // trigger-capacity scope the runs pool placed there still hold: admitted
 // (capacity_order set), launched and not released, the same predicate
-// CanLaunchTriggerCapacity counts as occupied.
+// CanLaunchTriggerCapacity counts as occupied (occupiedForAdmission): a run
+// parked on a provider holds no slot.
 func CountTriggerCapacityHeldByMember(ctx context.Context, db orm.Context, poolID, userID, projectID, workflowRef string) (map[string]int, error) {
 	var rows []struct {
 		DaemonID string `bun:"daemon_id"`
@@ -182,10 +183,10 @@ func CountTriggerCapacityHeldByMember(ctx context.Context, db orm.Context, poolI
 	}
 	err := db.Bun().NewRaw(`
 SELECT ch.active_daemon_id AS daemon_id, count(*) AS held
-FROM trigger_events e
-JOIN chats ch ON ch.id = e.chat_id
-WHERE e.user_id = ?1 AND e.capacity_project_id = ?2 AND e.capacity_workflow_ref = ?3
-  AND e.capacity_order IS NOT NULL AND e.outcome = 'launched' AND NOT e.capacity_released
+FROM trigger_events occupied
+JOIN chats ch ON ch.id = occupied.chat_id
+WHERE occupied.user_id = ?1 AND occupied.capacity_project_id = ?2 AND occupied.capacity_workflow_ref = ?3
+  AND `+occupiedForAdmission+`
   AND ch.machine_pool_id = ?0 AND ch.active_daemon_id IS NOT NULL
 GROUP BY ch.active_daemon_id`, poolID, userID, projectID, workflowRef).Scan(ctx, &rows)
 	if err != nil {
