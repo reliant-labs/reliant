@@ -182,8 +182,9 @@ const (
 	// ReasonUsedAfterArchive: something in the checkout (a file or directory,
 	// its HEAD or its reflog) changed after the row was archived, so the archive
 	// was decided on activity that did not see this use. The worktree is in
-	// use: it is never retired on that archive, and the server should treat
-	// the row as un-archived.
+	// use: it is never retired on that archive. Today's servers record it as
+	// an ordinary hold (shown in the Inbox, re-checked with back-off); the
+	// server change that un-archives such a row is tracked separately.
 	ReasonUsedAfterArchive HeldReason = "used_after_archive"
 	// ReasonStale: the request's fence no longer matches the lock.
 	ReasonStale HeldReason = "stale"
