@@ -322,3 +322,83 @@ func TestMark_UseIsJudgedOnTheDaemonsOwnClock(t *testing.T) {
 	e.pass(t, 30*time.Hour)
 	assert.Empty(t, e.store.archived)
 }
+
+// Inbox decisions (KeepMarked, ReclaimMarkedNow): markStore answers them
+// as the real store does.
+
+func (m markStore) ListMarkedWorktreesForUser(_ context.Context, userID string) ([]*core.HeldWorktree, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var out []*core.HeldWorktree
+	for _, id := range m.order {
+		c := m.rows[id]
+		if c.OwnerUserID == userID && c.Worktree.DeletedAt == nil && c.Worktree.CleanupMetadata.Marked() {
+			cp := *c.Worktree
+			out = append(out, &core.HeldWorktree{Worktree: &cp, ProjectPath: c.ProjectPath})
+		}
+	}
+	return out, nil
+}
+
+func (m markStore) ApproveWorktreeMark(_ context.Context, id, markID string) (bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	wt := m.rows[id].Worktree
+	if wt.DeletedAt != nil || !wt.CleanupMetadata.Marked() || wt.CleanupMetadata.ReclaimMarkID != markID {
+		return false, nil
+	}
+	meta := *wt.CleanupMetadata
+	at := m.clock.now()
+	meta.ReclaimApprovedAt = &at
+	wt.CleanupMetadata = &meta
+	return true, nil
+}
+
+func TestMark_ReclaimNowSkipsOnlyTheWait(t *testing.T) {
+	t.Parallel()
+	e := newMarkEnv(t, AutoArchiveOn, 25*time.Hour)
+	e.pass(t, 0)
+	markID := e.meta().ReclaimMarkID
+	require.NotEmpty(t, markID)
+
+	require.ErrorIs(t, e.s.ReclaimMarkedNow(context.Background(), e.marks, "u", "wt", "stale"), ErrMarkChanged)
+	require.ErrorIs(t, e.s.ReclaimMarkedNow(context.Background(), e.marks, "someone-else", "wt", markID), ErrNotMarked)
+	assert.Nil(t, e.meta().ReclaimApprovedAt, "neither recorded an approval")
+
+	e.clock.advance(time.Hour)
+	require.NoError(t, e.s.ReclaimMarkedNow(context.Background(), e.marks, "u", "wt", markID))
+	e.s.WaitCleanups()
+	assert.Equal(t, []string{"wt"}, e.store.archived, "an hour after the mark, approved: reclaimed without the day's wait")
+}
+
+func TestMark_ReclaimNowStillRefusesAWorktreeInUse(t *testing.T) {
+	t.Parallel()
+	e := newMarkEnv(t, AutoArchiveOn, 25*time.Hour)
+	e.pass(t, 0)
+	markID := e.meta().ReclaimMarkID
+	e.clock.advance(time.Hour)
+	e.daemon.mu.Lock()
+	e.daemon.use["wt"] = e.clock.now() // used by path since the mark
+	e.daemon.mu.Unlock()
+
+	require.NoError(t, e.s.ReclaimMarkedNow(context.Background(), e.marks, "u", "wt", markID))
+	e.s.WaitCleanups()
+	assert.Empty(t, e.store.archived, "approval skips the wait, never a check")
+	assert.False(t, e.meta().Marked(), "the use cancelled the mark instead")
+}
+
+func TestMark_KeepCancelsTheMarkShown(t *testing.T) {
+	t.Parallel()
+	e := newMarkEnv(t, AutoArchiveOn, 25*time.Hour)
+	e.pass(t, 0)
+	markID := e.meta().ReclaimMarkID
+
+	require.ErrorIs(t, e.s.KeepMarked(context.Background(), e.marks, "u", "wt", "stale"), ErrMarkChanged)
+	require.True(t, e.meta().Marked())
+	require.NoError(t, e.s.KeepMarked(context.Background(), e.marks, "u", "wt", markID))
+	assert.False(t, e.meta().Marked())
+	assert.Empty(t, e.daemon.marks, "its tombstone removed")
+	e.pass(t, 30*time.Hour)
+	assert.Empty(t, e.store.archived)
+	assert.NotEqual(t, markID, e.meta().ReclaimMarkID, "quiet a day again: a new mark, never the kept one")
+}
