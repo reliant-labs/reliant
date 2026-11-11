@@ -197,3 +197,32 @@ func TestTombstone_CommandsTouchOnlyActiveWorktrees(t *testing.T) {
 		t.Fatalf("got %+v, want the archived refused and the active one settled", got)
 	}
 }
+
+func TestTombstone_EveryCheckoutMustCarryTheSameMark(t *testing.T) {
+	t.Parallel()
+	a, b := t.TempDir(), t.TempDir()
+	put := func(dir, id string) {
+		t.Helper()
+		if err := os.MkdirAll(filepath.Join(dir, ".reliant"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(tombstonePath(dir), []byte(tombstoneText(ReclaimMark{ID: id, ReclaimAt: time.Now()})), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	put(a, "m-1")
+	if got := tombstoneMark([]string{a, b}); got != "" {
+		t.Fatalf("one checkout lost its tombstone: got %q, want none", got)
+	}
+	put(b, "m-2")
+	if got := tombstoneMark([]string{a, b}); got != "" {
+		t.Fatalf("the checkouts disagree: got %q, want none", got)
+	}
+	put(b, "m-1")
+	if got := tombstoneMark([]string{a, b}); got != "m-1" {
+		t.Fatalf("both carry m-1: got %q", got)
+	}
+	if got := tombstoneMark(nil); got != "" {
+		t.Fatalf("no checkouts: %q", got)
+	}
+}
