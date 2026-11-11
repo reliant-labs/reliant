@@ -104,6 +104,12 @@ type APISettings struct {
 	// (configuration name retained); no live-file shedding is performed.
 	// auto-archive on is required; 0 disables idle retirement.
 	WorktreeLiveShedIdle time.Duration
+	// WorktreeReclaimQuiet and WorktreeReclaimGrace are the two phases of an
+	// automatic reclaim (RELIANT_WORKTREE_RECLAIM_QUIET / _GRACE): quiet
+	// before a worktree is marked, then the mark's standing before it is
+	// reclaimed. Both floored at 24h (worktreesweep.WithReclaimMarks).
+	WorktreeReclaimQuiet time.Duration
+	WorktreeReclaimGrace time.Duration
 	// PayloadGCHorizon is how long an unreferenced Temporal payload blob is
 	// kept (RELIANT_PAYLOAD_BLOB_GC_HORIZON).
 	PayloadGCHorizon time.Duration
@@ -143,6 +149,8 @@ func NewAPISettings(d APISettingsDeps) (*APISettings, error) {
 		WorktreeAutoArchive:  worktreesweep.ParseAutoArchiveMode(api.GetWorktreeAutoArchive()),
 		WorktreeLandedIdle:   api.GetWorktreeLandedIdle().AsDuration(),
 		WorktreeLiveShedIdle: api.GetWorktreeLiveShedIdle().AsDuration(),
+		WorktreeReclaimQuiet: api.GetWorktreeReclaimQuiet().AsDuration(),
+		WorktreeReclaimGrace: api.GetWorktreeReclaimGrace().AsDuration(),
 		PayloadGCHorizon:     api.GetPayloadBlobGcHorizon().AsDuration(),
 	}
 	logging.Info("Starting Reliant API server (stateless)",
@@ -909,7 +917,10 @@ type WorktreeSweepDeps struct {
 
 // The sweep records the use a daemon reports through the optional UseStore;
 // a Repo that lost the method would silently stop recording it.
-var _ worktreesweep.UseStore = (*db.Repo)(nil)
+var (
+	_ worktreesweep.UseStore  = (*db.Repo)(nil)
+	_ worktreesweep.MarkStore = (*db.Repo)(nil)
+)
 
 // NewWorktreeSweep settles archived worktrees' directories through their
 // daemons: WorktreeService and InboxService settle one at a time through it,
@@ -945,7 +956,8 @@ func NewWorktreeSweep(d WorktreeSweepDeps) (*worktreesweep.Sweeper, error) {
 					logging.WarnContext(ctx, "worktree sweep: could not emit worktree refetch", "worktreeID", worktreeID, "error", err)
 				}
 			}).
-		WithLandedIdle(d.Settings.WorktreeLandedIdle), nil
+		WithLandedIdle(d.Settings.WorktreeLandedIdle).
+		WithReclaimMarks(database, d.Settings.WorktreeReclaimQuiet, d.Settings.WorktreeReclaimGrace), nil
 }
 
 // worktreeSweepInterval is how often the server asks each daemon to settle its
