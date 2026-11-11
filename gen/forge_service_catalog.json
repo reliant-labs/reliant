@@ -39963,6 +39963,10 @@
             {
               "name": "exclude_ambient_memory",
               "kind": "bool"
+            },
+            {
+              "name": "exclude_skill_catalog",
+              "kind": "bool"
             }
           ],
           "reliant.v1.CallLLMMessageInput": [
