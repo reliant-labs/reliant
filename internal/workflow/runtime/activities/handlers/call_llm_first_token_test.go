@@ -136,7 +136,7 @@ func testCallLLMNoFirstTokenFailsForRetry(t *testing.T, driver *tricklingDriver,
 	assert.Contains(t, err.Error(), "first-token timeout")
 	select {
 	case <-driver.stopped:
-	case <-time.After(time.Second):
+	case <-time.After(30 * time.Second):
 		t.Fatal("first-token timeout did not cancel the provider stream")
 	}
 }

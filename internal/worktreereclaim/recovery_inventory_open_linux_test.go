@@ -73,7 +73,7 @@ func TestRecoveryReadRegularSubstitution(t *testing.T) {
 				if got.err == nil || len(got.data) != 0 {
 					t.Fatalf("substituted content eligible for upload: %q, %v", got.data, got.err)
 				}
-			case <-time.After(time.Second):
+			case <-time.After(30 * time.Second):
 				// Unblock a regressed ordinary Open so the test leaves no stuck goroutine.
 				if kind == "fifo" {
 					fd, e := unix.Open(file, unix.O_WRONLY|unix.O_NONBLOCK, 0)

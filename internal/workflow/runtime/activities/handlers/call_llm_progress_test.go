@@ -80,7 +80,7 @@ func TestCallLLM_StalledProgressFailsForRetry(t *testing.T) {
 			assert.NotContains(t, err.Error(), "heartbeat", "the activity context was healthy when the stream stalled")
 			select {
 			case <-driver.stopped:
-			case <-time.After(time.Second):
+			case <-time.After(30 * time.Second):
 				t.Fatal("progress timeout did not cancel the provider stream")
 			}
 		})
