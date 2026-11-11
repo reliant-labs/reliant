@@ -188,6 +188,7 @@ Send a prompt to a language model and get a response
 | `system_prompt` | string | No | - | Optional instructions for how the model should behave on this call |
 | `skills` | array | No | - | Skills to preload into this call, by path, so the model starts with their instructions |
 | `exclude_ambient_memory` | boolean | No | - | Exclude automatic saved memories (default false); not full context isolation |
+| `exclude_skill_catalog` | boolean | No | - | Exclude configured skills for this call (default false); rejects skill preloads, does not redact history or restrict other tools |
 
 ### Outputs
 

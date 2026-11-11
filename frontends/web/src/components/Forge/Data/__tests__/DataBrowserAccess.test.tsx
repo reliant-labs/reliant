@@ -15,14 +15,15 @@ import { Code } from "@connectrpc/connect";
 
 import { createDataFixtureApi } from "../__fixtures__/fixtureDataApi";
 import { readAccess, writeAccess } from "../dataAccess-model";
-import { browseCalls, PROD, renderBrowser, STAGING } from "./dataTestUtils";
+import { browseCalls, PROD, renderBrowser, STAGING, searchOf } from "./dataTestUtils";
+import { decodeFilter } from "../dataUrl-model";
 
 vi.mock("@tanstack/react-router", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@tanstack/react-router")>()),
   useNavigate: () => vi.fn(),
 }));
 
-afterEach(() => window.sessionStorage.clear());
+afterEach(() => { window.sessionStorage.clear(); vi.unstubAllEnvs(); });
 
 const described = (api: ReturnType<typeof createDataFixtureApi>) => api.calls.filter((call) => call.method === "describeDatabase");
 
@@ -124,6 +125,61 @@ describe("an audited environment", () => {
     await waitFor(() => expect(screen.getByTestId("data-grid")).toHaveAttribute("data-state", "ready"));
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(browseCalls(api)[0]).not.toHaveProperty("access");
+  });
+});
+
+describe("Identity app data discovery", () => {
+  const subject = JSON.stringify({ environmentId: "env-prod", userId: "subject-1", email: "ada@example.com" });
+  it("waits for the existing reason flow, then describes one chosen database without rows or counts", async () => {
+    const api = createDataFixtureApi({ onlyShop: true });
+    renderBrowser(api, { db: "shop", subject }, PROD);
+    await screen.findByRole("dialog");
+    expect(described(api)).toHaveLength(0);
+    expect(browseCalls(api)).toHaveLength(0);
+    fireEvent.change(screen.getByTestId("data-access-reason"), { target: { value: "Support case 42" } });
+    fireEvent.click(screen.getByTestId("data-access-confirm"));
+    expect(await screen.findByTestId("data-identity-tables")).toHaveTextContent("No explicit identity-subject");
+    expect(described(api)).toHaveLength(1);
+    expect(described(api)[0]!.req).toMatchObject({ access: { reason: "Support case 42", confirmEnvId: "env-prod" } });
+    expect(browseCalls(api)).toHaveLength(0);
+  });
+  it("turns only explicitly marked described columns into exact bound links without reading rows", async () => {
+    const api = createDataFixtureApi({ onlyShop: true });
+    const original = api.describeDatabase.bind(api);
+    api.describeDatabase = async (...args) => {
+      const description = await original(...args);
+      return { ...description, tables: description.tables.map((t) => ({ ...t, columns: t.columns.map((c, i) => ({ ...c, identitySubject: t.name === "users" && i === 0 ? "id" as const : undefined })) })) };
+    };
+    writeAccess("env-prod", "Case 42");
+    renderBrowser(api, { db: "shop", subject }, PROD);
+    const discovery = await screen.findByTestId("data-identity-tables");
+    const link = within(discovery).getByRole("link");
+    const search = searchOf(link.getAttribute("href"));
+    expect(search.db).toBe("shop");
+    expect(search.table).toBe("public.users");
+    expect(decodeFilter(search.f![0]!)?.values).toEqual(["subject-1"]);
+    expect(browseCalls(api)).toHaveLength(0);
+  });
+  it("offers no subject links or row reads from an old URL in a contained build", async () => {
+    vi.stubEnv("VITE_IDENTITY_DATA_LINKS", "disabled");
+    const api = createDataFixtureApi({ onlyShop: true });
+    renderBrowser(api, { db: "shop", subject }, STAGING);
+    expect(await screen.findByTestId("data-identity-tables")).toHaveTextContent("crosslinks are disabled");
+    expect(within(screen.getByTestId("data-identity-tables")).queryByRole("link")).not.toBeInTheDocument();
+    expect(browseCalls(api)).toHaveLength(0);
+  });
+  it("never probes after metadata admission is refused", async () => {
+    const api = createDataFixtureApi({ fail: { method: "listBrowsableDatabases", code: Code.PermissionDenied } });
+    renderBrowser(api, { subject }, PROD);
+    await screen.findByTestId("data-databases-error");
+    expect(described(api)).toHaveLength(0);
+    expect(browseCalls(api)).toHaveLength(0);
+  });
+  it("does not link a prod subject in staging and never reads a count", async () => {
+    const api = createDataFixtureApi({ onlyShop: true });
+    renderBrowser(api, { db: "shop", subject }, STAGING);
+    expect(await screen.findByTestId("data-identity-tables")).toHaveTextContent("another environment");
+    expect(browseCalls(api)).toHaveLength(0);
   });
 });
 

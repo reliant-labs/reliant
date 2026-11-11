@@ -30,6 +30,7 @@ import {
   type IntegrationAuthMethod as ProtoAuthMethod,
   type IntegrationConnectionParam as ProtoConnectionParam,
   type ListConnectionsResponse,
+  type ListIntegrationsResponse,
 } from "../gen/reliant/v1/connection_pb";
 import { unavailableIntegrationIds } from "../lib/integrationAvailability";
 import { catalogServiceKeys } from "./catalog-service-hooks_gen";
@@ -196,6 +197,13 @@ const connectionsOf = (response: ListConnectionsResponse) => response.connection
 /** Every connection the caller has, to any integration (Settings → Integrations). */
 export function useAllConnections() {
   return useListConnections({}, { staleTime: 30_000, select: connectionsOf });
+}
+
+const integrationsOf = (response: ListIntegrationsResponse) => response.integrations.map(integrationFromProto);
+
+/** Every integration this deployment lists, with the ways to connect each (ListIntegrations). */
+export function useIntegrations() {
+  return useListIntegrations({}, { staleTime: 5 * 60_000, select: integrationsOf });
 }
 
 /** Integration id → its display name ("github" → "GitHub"), from ListIntegrations. */

@@ -48,6 +48,12 @@ func Available(self string) error {
 // self is the program that dispatches HelperArg: os.Executable() in the daemon,
 // the test binary's own path in a test.
 func Apply(cmd *exec.Cmd, self string, plan Plan) (refusal string) {
+	return apply(cmd, self, plan, liveness)
+}
+
+// apply is Apply with the liveness pipe as a parameter, so a test can hand the
+// helper one whose starter is already gone.
+func apply(cmd *exec.Cmd, self string, plan Plan, alive func() (*os.File, error)) (refusal string) {
 	if !Enabled() {
 		return ""
 	}
@@ -103,8 +109,13 @@ func Apply(cmd *exec.Cmd, self string, plan Plan) (refusal string) {
 		}
 	}
 
+	aliveR, err := alive()
+	if err != nil {
+		return abandon(fmt.Errorf("making the sandbox's liveness pipe: %w", err))
+	}
 	// The run directory and its parent travel as descriptors the helper
-	// inherits, after the caller's own ExtraFiles, then the spec's pipe.
+	// inherits, after the caller's own ExtraFiles, then the spec's pipe, then
+	// the liveness pipe (dieWithParent).
 	first := 3 + len(cmd.ExtraFiles)
 	payload, err := json.Marshal(spec{Plan: plan, Path: cmd.Path, Argv: cmd.Args, Dir: cmd.Dir,
 		RunDir: runDir, RunDirFD: first, RunParentFD: first + 1, TmpRoot: os.TempDir()})
@@ -125,9 +136,11 @@ func Apply(cmd *exec.Cmd, self string, plan Plan) (refusal string) {
 
 	cmd.Path = self
 	cmd.Args = []string{self, HelperArg}
-	cmd.ExtraFiles = append(cmd.ExtraFiles, runDirFile, parentFile, r)
+	cmd.ExtraFiles = append(cmd.ExtraFiles, runDirFile, parentFile, r, aliveR)
+	// The liveness pipe is this process's, shared by every init it starts:
+	// Release never closes it.
 	sandboxFiles.Store(cmd, []*os.File{runDirFile, parentFile, r})
-	cmd.Env = append(cmd.Env, specFDEnv+"="+strconv.Itoa(first+2))
+	cmd.Env = append(cmd.Env, specFDEnv+"="+strconv.Itoa(first+2), parentFDEnv+"="+strconv.Itoa(first+3))
 	if cmd.SysProcAttr == nil {
 		cmd.SysProcAttr = &syscall.SysProcAttr{}
 	}
@@ -154,6 +167,75 @@ func namespaces(a *syscall.SysProcAttr) {
 // specFDEnv names the file descriptor the helper reads its spec from. The
 // helper removes it from the environment before the command starts.
 const specFDEnv = "RELIANT_CRED_SANDBOX_FD"
+
+// parentFDEnv names the descriptor of the starting process's liveness pipe
+// the helper inherits (dieWithParent). The helper removes it from the
+// environment before the command starts.
+const parentFDEnv = "RELIANT_CRED_SANDBOX_PARENT_FD"
+
+// liveness is this process's liveness pipe. Its read end goes to every sandbox
+// init the process starts; its write end is held, close-on-exec, for the life
+// of the process and closed by nothing but the process's exit. An init that
+// finds the pipe hung up knows the process that started it is gone.
+//
+// The write end is a bare descriptor, never wrapped in an *os.File: an
+// *os.File that became unreachable would be closed by its finalizer, hanging
+// up the pipe under every live init.
+var liveness = sync.OnceValues(func() (*os.File, error) {
+	var fds [2]int
+	if err := unix.Pipe2(fds[:], unix.O_CLOEXEC); err != nil {
+		return nil, err
+	}
+	return os.NewFile(uintptr(fds[0]), "reliant-cred-sandbox-liveness"), nil
+})
+
+// dieWithParent makes this init die with the process that started it (the
+// daemon, a test binary), so a sandbox is never left running with nobody to
+// end it: an orphaned init is uninspectable (undumpable) and holds every
+// worktree reclaim on the machine (Reliant bug e5c97001). A sandboxed command
+// therefore does not survive a restart of the daemon that started it (owner
+// decision, 2026-11-10).
+//
+// The signal is SIGKILL, not SIGTERM: this init forwards SIGTERM to its
+// command and waits for it, so a command that ignores SIGTERM, or is stopped,
+// would keep the orphan alive with no parent left to escalate (the orphan on
+// 2026-11-10 was exactly that: its command stopped, SIGTERM forwarded and
+// pending). Killing a PID namespace's init kills every process in it, and the
+// daemon removes the run directory of a killed init (sweepRunDirs).
+//
+// The kernel sends the signal when the thread that forked this process exits;
+// the daemon never locks the goroutine that starts a command to its thread,
+// and Go does not end unlocked threads, so that thread lives as long as the
+// daemon (go.dev/issue/27505). A starter that exited before the prctl took
+// effect sends nothing: the liveness pipe catches that. getppid() cannot,
+// because the starter is outside this PID namespace, where it reads as 0.
+func dieWithParent() error {
+	if err := unix.Prctl(unix.PR_SET_PDEATHSIG, uintptr(unix.SIGKILL), 0, 0, 0); err != nil {
+		return fmt.Errorf("setting the parent-death signal: %w", err)
+	}
+	fd, err := strconv.ParseInt(os.Getenv(parentFDEnv), 10, 32) //nolint:forbidigo // the helper's private channel from its parent; not configuration
+	if err != nil || fd < 3 {
+		// The availability probe: run and waited for by its starter, so it
+		// cannot outlive it; the prctl above still holds.
+		return nil
+	}
+	unix.CloseOnExec(int(fd))
+	for {
+		fds := []unix.PollFd{{Fd: int32(fd), Events: unix.POLLIN}}
+		n, err := unix.Poll(fds, 0)
+		if errors.Is(err, unix.EINTR) {
+			continue
+		}
+		if err != nil {
+			return fmt.Errorf("checking that the process that started this sandbox is alive: %w", err)
+		}
+		// Nothing is ever written to the pipe: any event is its hang-up.
+		if n > 0 && fds[0].Revents != 0 {
+			return errors.New("the process that started this sandbox has exited")
+		}
+		return nil
+	}
+}
 
 type spec struct {
 	Plan Plan
@@ -262,6 +344,10 @@ func runHelper() int {
 		fmt.Fprintf(os.Stderr, "credsandbox: "+format+"\n", a...)
 		return RefusedExitCode
 	}
+	// First, before anything this init sets up could outlive its starter.
+	if err := dieWithParent(); err != nil {
+		return fail("%v", err)
+	}
 
 	fd, err := strconv.Atoi(os.Getenv(specFDEnv)) //nolint:forbidigo // the helper's private channel from its parent; not configuration
 	if err != nil || fd < 3 {
@@ -355,6 +441,12 @@ func runHelper() int {
 	if err := dropPrivileges(); err != nil {
 		return fail("dropping privileges: %v", err)
 	}
+	// Again, after every change to this init's credentials and just before
+	// the command starts: it re-asserts the signal and re-checks the starter
+	// at the last moment it matters.
+	if err := dieWithParent(); err != nil {
+		return fail("%v", err)
+	}
 	code := superviseCommand(s)
 	if s.RunDir != "" {
 		reportDiscarded(s.Plan, runDir)
@@ -407,7 +499,7 @@ func superviseCommand(s spec) int {
 func withoutSpecFD(env []string) []string {
 	out := make([]string, 0, len(env))
 	for _, kv := range env {
-		if !strings.HasPrefix(kv, specFDEnv+"=") {
+		if !strings.HasPrefix(kv, specFDEnv+"=") && !strings.HasPrefix(kv, parentFDEnv+"=") {
 			out = append(out, kv)
 		}
 	}
