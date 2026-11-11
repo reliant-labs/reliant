@@ -19,7 +19,7 @@ import (
 )
 
 // forge:section MockRepository
-// forge:hash=fa8730a76e5b6839cda43ab726c2fbbbc5f16e7cc69ed6fdf452e541d1def560
+// forge:hash=8ab7a829cd5afef2d70ea41834792bdf29c024778bc4a1cbcb8be666058e046b
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -42,6 +42,9 @@ type MockRepository struct {
 	MergeWorktreeCleanupMetadataFunc        func(context.Context, string, func(m *core.CleanupMetadata, archived bool) bool) error
 	TryAdvisoryLockFunc                     func(context.Context, int64) (func(), bool, error)
 	UpdateWorktreeCleanupMetadataFunc       func(context.Context, string, *core.CleanupMetadata) error
+	ListMarkedWorktreesForUserFunc          func(context.Context, string) ([]*core.HeldWorktree, error)
+	ClearWorktreeMarkFunc                   func(context.Context, string, string) (bool, error)
+	ApproveWorktreeMarkFunc                 func(context.Context, string, string) (bool, error)
 	GetWorkflowDraftBySlugFunc              func(context.Context, string, string) (*db.WorkflowDraft, error)
 	GetUsableWorkflowBySlugFunc             func(context.Context, string, string) (*db.WorkflowDraft, error)
 	GetPresetBySlugFunc                     func(context.Context, string, string) (*db.Preset, error)
@@ -180,6 +183,33 @@ func (m *MockRepository) UpdateWorktreeCleanupMetadata(ctx context.Context, id s
 		return m.UpdateWorktreeCleanupMetadataFunc(ctx, id, metadata)
 	}
 	return contractkit.MockNotSet("MockRepository", "UpdateWorktreeCleanupMetadata")
+}
+
+// ListMarkedWorktreesForUser records the call and delegates to ListMarkedWorktreesForUserFunc when set.
+func (m *MockRepository) ListMarkedWorktreesForUser(ctx context.Context, userID string) ([]*core.HeldWorktree, error) {
+	m.Recorder.Record("ListMarkedWorktreesForUser", ctx, userID)
+	if m.ListMarkedWorktreesForUserFunc != nil {
+		return m.ListMarkedWorktreesForUserFunc(ctx, userID)
+	}
+	return nil, contractkit.MockNotSet("MockRepository", "ListMarkedWorktreesForUser")
+}
+
+// ClearWorktreeMark records the call and delegates to ClearWorktreeMarkFunc when set.
+func (m *MockRepository) ClearWorktreeMark(ctx context.Context, id string, markID string) (bool, error) {
+	m.Recorder.Record("ClearWorktreeMark", ctx, id, markID)
+	if m.ClearWorktreeMarkFunc != nil {
+		return m.ClearWorktreeMarkFunc(ctx, id, markID)
+	}
+	return false, contractkit.MockNotSet("MockRepository", "ClearWorktreeMark")
+}
+
+// ApproveWorktreeMark records the call and delegates to ApproveWorktreeMarkFunc when set.
+func (m *MockRepository) ApproveWorktreeMark(ctx context.Context, id string, markID string) (bool, error) {
+	m.Recorder.Record("ApproveWorktreeMark", ctx, id, markID)
+	if m.ApproveWorktreeMarkFunc != nil {
+		return m.ApproveWorktreeMarkFunc(ctx, id, markID)
+	}
+	return false, contractkit.MockNotSet("MockRepository", "ApproveWorktreeMark")
 }
 
 // GetWorkflowDraftBySlug records the call and delegates to GetWorkflowDraftBySlugFunc when set.
@@ -375,7 +405,7 @@ func (m *MockRepository) GetProject(ctx context.Context, id string) (*db.Project
 var _ Repository = (*MockRepository)(nil)
 
 // forge:section MockSweeper
-// forge:hash=ff0945deba8c0a79fe06df9de18779b79751de5ef9e0f5b40896f40ed349cea0
+// forge:hash=e04952228d72e25acaa13eecd8c5824eb81c0603168149bb0abdff6634a9fd5f
 
 // MockSweeper is a test mock for the Sweeper interface.
 //
@@ -385,7 +415,10 @@ var _ Repository = (*MockRepository)(nil)
 // "MockSweeper.<Method>Func not set" error.
 type MockSweeper struct {
 	contractkit.Recorder
-	StartCleanupFunc func(context.Context, worktreesweep.StorageStore, string, string, []string) ([]string, []worktreesweep.CleanupResult, error)
+	StartCleanupFunc     func(context.Context, worktreesweep.StorageStore, string, string, []string) ([]string, []worktreesweep.CleanupResult, error)
+	KeepMarkedFunc       func(context.Context, worktreesweep.MarkDecisionStore, string, string, string) error
+	ReclaimMarkedNowFunc func(context.Context, worktreesweep.MarkDecisionStore, string, string, string) error
+	GraceForFunc         func(*core.Worktree) time.Time
 }
 
 // StartCleanup records the call and delegates to StartCleanupFunc when set.
@@ -395,6 +428,33 @@ func (m *MockSweeper) StartCleanup(ctx context.Context, store worktreesweep.Stor
 		return m.StartCleanupFunc(ctx, store, userID, daemonID, wantIDs)
 	}
 	return nil, nil, contractkit.MockNotSet("MockSweeper", "StartCleanup")
+}
+
+// KeepMarked records the call and delegates to KeepMarkedFunc when set.
+func (m *MockSweeper) KeepMarked(ctx context.Context, store worktreesweep.MarkDecisionStore, userID string, id string, markID string) error {
+	m.Recorder.Record("KeepMarked", ctx, store, userID, id, markID)
+	if m.KeepMarkedFunc != nil {
+		return m.KeepMarkedFunc(ctx, store, userID, id, markID)
+	}
+	return contractkit.MockNotSet("MockSweeper", "KeepMarked")
+}
+
+// ReclaimMarkedNow records the call and delegates to ReclaimMarkedNowFunc when set.
+func (m *MockSweeper) ReclaimMarkedNow(ctx context.Context, store worktreesweep.MarkDecisionStore, userID string, id string, markID string) error {
+	m.Recorder.Record("ReclaimMarkedNow", ctx, store, userID, id, markID)
+	if m.ReclaimMarkedNowFunc != nil {
+		return m.ReclaimMarkedNowFunc(ctx, store, userID, id, markID)
+	}
+	return contractkit.MockNotSet("MockSweeper", "ReclaimMarkedNow")
+}
+
+// GraceFor records the call and delegates to GraceForFunc when set.
+func (m *MockSweeper) GraceFor(wt *core.Worktree) time.Time {
+	m.Recorder.Record("GraceFor", wt)
+	if m.GraceForFunc != nil {
+		return m.GraceForFunc(wt)
+	}
+	return *new(time.Time)
 }
 
 // Compile-time check.
