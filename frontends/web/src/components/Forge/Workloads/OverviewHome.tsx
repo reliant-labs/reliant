@@ -200,7 +200,7 @@ export function OverviewHome({
   const jobRuns = useMemo(() => (listed.data?.jobs ?? []).filter((run) => all || run.envName === env), [listed.data, all, env]);
   const jobWindow = useMemo(() => resolveWindow(range), [range, listed.dataUpdatedAt]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // The list's request side: GetServiceOverview for the scope (the read the Dashboards hub's Processes makes, so one cached answer).
+  // The list's request side: GetServiceOverview for the scope.
   const redGroupBy = useMemo(() => (kpiScope?.envIds.length === 0 ? [ENV_KEY] : []), [kpiScope]);
   const red = useServiceOverview(kpiScope, range, [], redGroupBy);
   // Its own state: a failed telemetry read blanks only the figures, never the rows the workload read drew.
