@@ -476,3 +476,129 @@ func TestSubscribeWithRecoveryEndsWhenTheConnectionIsClosed(t *testing.T) {
 	}
 	sub.Stop() // still safe
 }
+
+// registered reports whether sub's router still routes refusals to it.
+func registered(sub *Subscription) bool {
+	sub.router.mu.Lock()
+	defer sub.router.mu.Unlock()
+	_, ok := sub.router.subs[subKey{sub.subject, sub.cfg.queue}][sub]
+	return ok
+}
+
+// TestSubscribeWithRecoveryRetryRaceWithTheConnection — the connection
+// changes state between a retry's connectivity check and its Subscribe. Every
+// such attempt must end in one of two outcomes, never neither: a closed
+// connection ends the subscription with Stop's full cleanup, and a
+// reconnectable drop schedules another retry that recovers.
+func TestSubscribeWithRecoveryRetryRaceWithTheConnection(t *testing.T) {
+	t.Run("closed", func(t *testing.T) {
+		recordLogs(t)
+		const subject = "test.race.closed.commands.disconnect"
+		srv := runPermissionedServer(t)
+		nc := srv.connect(t, "gateway")
+
+		clk := newFakeClock()
+		evs := make(events, 64)
+		var closeNext atomic.Bool
+		sub, err := SubscribeWithRecovery(nc, subject, func(*nats.Msg) {}, withClock(clk), WithEvents(evs.hook),
+			withBeforeSubscribe(func(c *nats.Conn) {
+				if closeNext.CompareAndSwap(true, false) {
+					c.Close()
+				}
+			}))
+		if err != nil {
+			t.Fatalf("SubscribeWithRecovery: %v", err)
+		}
+		evs.await(t, "the first refusal", refusedEvent(1))
+		if !registered(sub) {
+			t.Fatal("a refused subscription must stay registered for its refusals")
+		}
+
+		closeNext.Store(true)
+		clk.Advance(time.Second)
+		ev := evs.await(t, "recovery to end", func(ev SubscriptionEvent) bool { return ev.Kind == SubscriptionClosed })
+		if ev.Err == nil {
+			t.Error("SubscriptionClosed carries no cause")
+		}
+		if sub.Active() {
+			t.Fatal("Active() = true on a closed connection")
+		}
+		if registered(sub) {
+			t.Fatal("the subscription is still registered after its connection closed")
+		}
+		if got := refusedGauge(subject); got != 0 {
+			t.Fatalf("subscriptions_refused = %v after the connection closed, want 0", got)
+		}
+		sub.mu.Lock()
+		pending := sub.retrying || sub.timer != nil
+		sub.mu.Unlock()
+		if pending {
+			t.Fatal("a retry is still scheduled on a closed connection")
+		}
+	})
+
+	t.Run("reconnectable drop", func(t *testing.T) {
+		recordLogs(t)
+		const subject = "test.race.drop.commands.disconnect"
+		srv := runPermissionedServer(t)
+		disconnected, reconnected := make(chan struct{}, 8), make(chan struct{}, 8)
+		nc, err := Connect(Endpoint{URL: srv.srv.ClientURL(), User: "gateway", Password: "pw"},
+			nats.ReconnectWait(10*time.Millisecond),
+			nats.DisconnectErrHandler(func(*nats.Conn, error) { disconnected <- struct{}{} }),
+			nats.ReconnectHandler(func(*nats.Conn) { reconnected <- struct{}{} }))
+		if err != nil {
+			t.Fatalf("Connect: %v", err)
+		}
+		t.Cleanup(nc.Close)
+
+		clk := newFakeClock()
+		evs := make(events, 64)
+		delivered := make(chan string, 4)
+		var dropNext atomic.Bool
+		sub, err := SubscribeWithRecovery(nc, subject, func(m *nats.Msg) { delivered <- string(m.Data) },
+			withClock(clk), WithEvents(evs.hook),
+			withRetryFlush(func(c *nats.Conn) error { return c.FlushTimeout(200 * time.Millisecond) }),
+			withBeforeSubscribe(func(*nats.Conn) {
+				if dropNext.CompareAndSwap(true, false) {
+					srv.srv.Shutdown()
+					awaitSignal(t, disconnected, "the connection to drop")
+				}
+			}))
+		if err != nil {
+			t.Fatalf("SubscribeWithRecovery: %v", err)
+		}
+		t.Cleanup(sub.Stop)
+		evs.await(t, "the first refusal", refusedEvent(1))
+
+		dropNext.Store(true)
+		clk.Advance(time.Second)
+		if ev := evs.await(t, "a retry scheduled after the drop", kindEvent(SubscriptionDeferred, 2)); ev.RetryIn != 2*time.Second {
+			t.Fatalf("after the drop: retry in %v, want 2s", ev.RetryIn)
+		}
+		if sub.Active() || !registered(sub) {
+			t.Fatalf("after a reconnectable drop: Active()=%v registered=%v, want false, true", sub.Active(), registered(sub))
+		}
+
+		back := natstest.RunServer(gatewayOptions(srv.port, subject))
+		t.Cleanup(back.Shutdown)
+		awaitSignal(t, reconnected, "the reconnect")
+		clk.Advance(2 * time.Second)
+		evs.await(t, "the scheduled retry", resubscribedEvent(2))
+		clk.Advance(time.Second)
+		evs.await(t, "recovery", func(ev SubscriptionEvent) bool { return ev.Kind == SubscriptionRecovered })
+
+		pub, err := Connect(Endpoint{URL: back.ClientURL(), User: "publisher", Password: "pw"})
+		if err != nil {
+			t.Fatalf("connect publisher: %v", err)
+		}
+		t.Cleanup(pub.Close)
+		if err := pub.Publish(subject, []byte("revoke d-3")); err != nil {
+			t.Fatal(err)
+		}
+		select {
+		case <-delivered:
+		case <-time.After(10 * time.Second):
+			t.Fatal("a message published after recovery was not delivered")
+		}
+	})
+}

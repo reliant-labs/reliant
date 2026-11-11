@@ -131,19 +131,26 @@ func withClock(clk clock) SubscribeOption {
 	return func(c *subscribeConfig) { c.clock = clk }
 }
 
+// withBeforeSubscribe runs f in a retry between its connectivity check and
+// its Subscribe call (tests: the connection changing state in that window).
+func withBeforeSubscribe(f func(*nats.Conn)) SubscribeOption {
+	return func(c *subscribeConfig) { c.beforeSubscribe = f }
+}
+
 // withRetryFlush replaces a retry's round trip (tests).
 func withRetryFlush(f func(*nats.Conn) error) SubscribeOption {
 	return func(c *subscribeConfig) { c.retryFlush = f }
 }
 
 type subscribeConfig struct {
-	queue         string
-	initial       time.Duration
-	max           time.Duration
-	escalateAfter time.Duration
-	events        func(SubscriptionEvent)
-	clock         clock
-	retryFlush    func(*nats.Conn) error
+	queue           string
+	initial         time.Duration
+	max             time.Duration
+	escalateAfter   time.Duration
+	events          func(SubscriptionEvent)
+	clock           clock
+	retryFlush      func(*nats.Conn) error
+	beforeSubscribe func(*nats.Conn)
 }
 
 // delay is the wait after the n-th refusal (n from 0): initial·2ⁿ, capped.
@@ -401,14 +408,26 @@ func (s *Subscription) retry() {
 	attempt := s.refusals
 	s.mu.Unlock()
 
-	if s.connectionClosed() {
-		return
+	// Invariant: every outcome of an attempt goes through settle, which
+	// either ends the subscription (Stop's full cleanup) or schedules the
+	// next retry; a successful attempt has scheduled its acceptance check.
+	// No attempt leaves the subscription inactive with nothing pending.
+	s.settle(s.resubscribe(gen, attempt))
+}
+
+// resubscribe makes one attempt: nil once the server has the new SUB (the
+// acceptance check is then scheduled), else why it does not.
+func (s *Subscription) resubscribe(gen uint64, attempt int) error {
+	if s.nc.IsClosed() || s.nc.IsDraining() {
+		return nats.ErrConnectionClosed
 	}
 	if !s.nc.IsConnected() {
 		// Keep the current SUB: nats.go resends it on reconnect, and the
 		// next retry replaces it either way.
-		s.scheduleRetry(errNotConnected, false)
-		return
+		return errNotConnected
+	}
+	if s.cfg.beforeSubscribe != nil {
+		s.cfg.beforeSubscribe(s.nc)
 	}
 
 	s.mu.Lock()
@@ -420,18 +439,18 @@ func (s *Subscription) retry() {
 		// client side, and the server ignores the UNSUB.
 		_ = old.Unsubscribe()
 	}
+	// The connection may have closed since the checks above: Subscribe then
+	// fails with ErrConnectionClosed or ErrConnectionDraining, which settle
+	// treats as terminal.
 	sub, err := s.subscribeOnce()
 	if err != nil {
-		if !s.connectionClosed() {
-			s.scheduleRetry(err, false)
-		}
-		return
+		return err
 	}
 	s.mu.Lock()
 	if s.stopped {
 		s.mu.Unlock()
 		_ = sub.Unsubscribe()
-		return
+		return nil
 	}
 	s.sub = sub
 	s.mu.Unlock()
@@ -440,10 +459,7 @@ func (s *Subscription) retry() {
 		// The SUB may never have reached the server, or its answer never
 		// came back: it is not accepted. It stays registered client-side
 		// (resent on reconnect); the next retry replaces it.
-		if !s.connectionClosed() {
-			s.scheduleRetry(fmt.Errorf("subscribe %s: flush: %w", s.subject, err), false)
-		}
-		return
+		return flushError{subject: s.subject, err: err}
 	}
 
 	s.mu.Lock()
@@ -452,21 +468,55 @@ func (s *Subscription) retry() {
 	}
 	s.mu.Unlock()
 	s.emit(SubscriptionEvent{Kind: SubscriptionResubscribed, Attempt: attempt})
+	return nil
 }
 
-// connectionClosed ends the subscription if its connection is closed or
-// draining. Both are terminal in nats.go — a closed *nats.Conn never
-// reconnects, and Connect retries forever, so it closes only when the process
-// closes it — and there is nothing left to re-subscribe on.
-func (s *Subscription) connectionClosed() bool {
-	if !s.nc.IsClosed() && !s.nc.IsDraining() {
-		return false
+// settle decides an attempt that did not succeed: the subscription ends if
+// it was stopped (Stop already cleaned up) or its connection is gone for
+// good, and otherwise the next retry is scheduled.
+func (s *Subscription) settle(err error) {
+	if err == nil {
+		return
 	}
-	logging.Info("NATS connection closed; a refused subscription stops re-subscribing",
-		"subject", s.subject, "queue", s.cfg.queue)
-	s.Stop()
-	s.emit(SubscriptionEvent{Kind: SubscriptionClosed})
-	return true
+	s.mu.Lock()
+	stopped := s.stopped
+	s.mu.Unlock()
+	if stopped {
+		return
+	}
+	if s.terminal(err) {
+		logging.Info("NATS connection closed; a refused subscription stops re-subscribing",
+			"subject", s.subject, "queue", s.cfg.queue, "error", err)
+		s.Stop()
+		s.emit(SubscriptionEvent{Kind: SubscriptionClosed, Err: err})
+		return
+	}
+	s.scheduleRetry(err, false)
+}
+
+// terminal reports whether the connection is closed or draining. Both are
+// terminal in nats.go — a closed *nats.Conn never reconnects, and Connect
+// retries forever, so it closes only when the process closes it — and there
+// is nothing left to re-subscribe on. Subscribe's ErrConnectionClosed and
+// ErrConnectionDraining mean exactly that state; a flush's do not (nats.go
+// also returns ErrConnectionClosed from a round trip cut short by a
+// disconnect), which is why flushError does not unwrap.
+func (s *Subscription) terminal(err error) bool {
+	if s.nc.IsClosed() || s.nc.IsDraining() {
+		return true
+	}
+	return errors.Is(err, nats.ErrConnectionClosed) || errors.Is(err, nats.ErrConnectionDraining)
+}
+
+// flushError is a retry's failed round trip. It deliberately does not unwrap,
+// so its cause is never read as the connection having closed.
+type flushError struct {
+	subject string
+	err     error
+}
+
+func (e flushError) Error() string {
+	return fmt.Sprintf("subscribe %s: flush: %v", e.subject, e.err)
 }
 
 // confirm ends the refusal episode if attempt gen went unrefused.
