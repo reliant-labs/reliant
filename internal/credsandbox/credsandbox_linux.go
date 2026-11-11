@@ -177,17 +177,17 @@ const parentFDEnv = "RELIANT_CRED_SANDBOX_PARENT_FD"
 // init the process starts; its write end is held, close-on-exec, for the life
 // of the process and closed by nothing but the process's exit. An init that
 // finds the pipe hung up knows the process that started it is gone.
+//
+// The write end is a bare descriptor, never wrapped in an *os.File: an
+// *os.File that became unreachable would be closed by its finalizer, hanging
+// up the pipe under every live init.
 var liveness = sync.OnceValues(func() (*os.File, error) {
-	r, w, err := os.Pipe()
-	if err != nil {
+	var fds [2]int
+	if err := unix.Pipe2(fds[:], unix.O_CLOEXEC); err != nil {
 		return nil, err
 	}
-	livenessWrite = w
-	return r, nil
+	return os.NewFile(uintptr(fds[0]), "reliant-cred-sandbox-liveness"), nil
 })
-
-// livenessWrite keeps the write end reachable, so no finalizer closes it.
-var livenessWrite *os.File
 
 // dieWithParent makes this init die with the process that started it (the
 // daemon, a test binary), so a sandbox is never left running with nobody to
@@ -213,13 +213,13 @@ func dieWithParent() error {
 	if err := unix.Prctl(unix.PR_SET_PDEATHSIG, uintptr(unix.SIGKILL), 0, 0, 0); err != nil {
 		return fmt.Errorf("setting the parent-death signal: %w", err)
 	}
-	fd, err := strconv.Atoi(os.Getenv(parentFDEnv)) //nolint:forbidigo // the helper's private channel from its parent; not configuration
+	fd, err := strconv.ParseInt(os.Getenv(parentFDEnv), 10, 32) //nolint:forbidigo // the helper's private channel from its parent; not configuration
 	if err != nil || fd < 3 {
 		// The availability probe: run and waited for by its starter, so it
 		// cannot outlive it; the prctl above still holds.
 		return nil
 	}
-	unix.CloseOnExec(fd)
+	unix.CloseOnExec(int(fd))
 	for {
 		fds := []unix.PollFd{{Fd: int32(fd), Events: unix.POLLIN}}
 		n, err := unix.Poll(fds, 0)
