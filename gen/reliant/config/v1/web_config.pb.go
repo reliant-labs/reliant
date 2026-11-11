@@ -86,10 +86,11 @@ type ReliantWebConfig struct {
 	DemoDataUrl    string `protobuf:"bytes,28,opt,name=demo_data_url,json=demoDataUrl,proto3" json:"demo_data_url,omitempty"`
 	DisableTls     string `protobuf:"bytes,5,opt,name=disable_tls,json=disableTls,proto3" json:"disable_tls,omitempty"`
 	// ── Identity ──────────────────────────────────────────────────────────
-	AuthMode        string `protobuf:"bytes,6,opt,name=auth_mode,json=authMode,proto3" json:"auth_mode,omitempty"`
-	SupabaseUrl     string `protobuf:"bytes,7,opt,name=supabase_url,json=supabaseUrl,proto3" json:"supabase_url,omitempty"`
-	SupabaseAnonKey string `protobuf:"bytes,8,opt,name=supabase_anon_key,json=supabaseAnonKey,proto3" json:"supabase_anon_key,omitempty"`
-	AutoAnonSignIn  string `protobuf:"bytes,9,opt,name=auto_anon_sign_in,json=autoAnonSignIn,proto3" json:"auto_anon_sign_in,omitempty"`
+	AuthMode         string `protobuf:"bytes,6,opt,name=auth_mode,json=authMode,proto3" json:"auth_mode,omitempty"`
+	SupabaseUrl      string `protobuf:"bytes,7,opt,name=supabase_url,json=supabaseUrl,proto3" json:"supabase_url,omitempty"`
+	SupabaseAnonKey  string `protobuf:"bytes,8,opt,name=supabase_anon_key,json=supabaseAnonKey,proto3" json:"supabase_anon_key,omitempty"`
+	AuthCookieDomain string `protobuf:"bytes,29,opt,name=auth_cookie_domain,json=authCookieDomain,proto3" json:"auth_cookie_domain,omitempty"`
+	AutoAnonSignIn   string `protobuf:"bytes,9,opt,name=auto_anon_sign_in,json=autoAnonSignIn,proto3" json:"auto_anon_sign_in,omitempty"`
 	// ── Billing ───────────────────────────────────────────────────────────
 	StripePublishableKey   string `protobuf:"bytes,10,opt,name=stripe_publishable_key,json=stripePublishableKey,proto3" json:"stripe_publishable_key,omitempty"`
 	OtelEndpoint           string `protobuf:"bytes,16,opt,name=otel_endpoint,json=otelEndpoint,proto3" json:"otel_endpoint,omitempty"`
@@ -232,6 +233,13 @@ func (x *ReliantWebConfig) GetSupabaseAnonKey() string {
 	return ""
 }
 
+func (x *ReliantWebConfig) GetAuthCookieDomain() string {
+	if x != nil {
+		return x.AuthCookieDomain
+	}
+	return ""
+}
+
 func (x *ReliantWebConfig) GetAutoAnonSignIn() string {
 	if x != nil {
 		return x.AutoAnonSignIn
@@ -292,7 +300,7 @@ var File_reliant_config_v1_web_config_proto protoreflect.FileDescriptor
 
 const file_reliant_config_v1_web_config_proto_rawDesc = "" +
 	"\n" +
-	"\"reliant/config/v1/web_config.proto\x12\x11reliant.config.v1\x1a\x14forge/v1/forge.proto\"\xd10\n" +
+	"\"reliant/config/v1/web_config.proto\x12\x11reliant.config.v1\x1a\x14forge/v1/forge.proto\"\xad5\n" +
 	"\x10ReliantWebConfig\x12\xa0\x03\n" +
 	"\aapi_url\x18\x01 \x01(\tB\x86\x03\x82\xce\x18\x81\x03\n" +
 	"\aAPI_URL*\xe1\x02Origin of the reliant api-server (Connect RPCs, the terminal WebSocket). Also what the onboarding's `reliant daemon start` command tells a daemon to dial. Unset: the generated dev floor (src/lib/apiurl_gen.ts). Under the Vite dev server the browser calls its own origin and the dev proxy forwards to the API, so this is only the CLI-command value there.r\x12\n" +
@@ -327,7 +335,9 @@ const file_reliant_config_v1_web_config_proto_rawDesc = "" +
 	"\tauth_mode\x12\x05cloudR\vsupabaseUrl\x12\xd7\x01\n" +
 	"\x11supabase_anon_key\x18\b \x01(\tB\xaa\x01\x82\xce\x18\xa5\x01\n" +
 	"\x11SUPABASE_ANON_KEY*|The Supabase project's PUBLISHABLE (anon) key. Public by design. Unset: Supabase sign-in is unavailable and the app says so.r\x12\n" +
-	"\tauth_mode\x12\x05cloudR\x0fsupabaseAnonKey\x12\xca\x01\n" +
+	"\tauth_mode\x12\x05cloudR\x0fsupabaseAnonKey\x12\xd9\x04\n" +
+	"\x12auth_cookie_domain\x18\x1d \x01(\tB\xaa\x04\x82\xce\x18\xa5\x04\n" +
+	"\x12AUTH_COOKIE_DOMAIN*\x8e\x04Parent domain (e.g. \".reliantlabs.io\") whose hosts share ONE sign-in session through chunked cookies on that domain (Secure, SameSite=Lax), so signing in, refreshing or signing out on one host (app.*, forge.*) applies to all of them. Only a hosted https page whose hostname is inside the domain uses it, and never the demo host; the desktop app, dev servers and every other host keep the per-origin localStorage session. EVERY host under the domain can read the session. Unset: per-origin sessions (lib/auth/sharedSession.ts).R\x10authCookieDomain\x12\xca\x01\n" +
 	"\x11auto_anon_sign_in\x18\t \x01(\tB\x9e\x01\x82\xce\x18\x99\x01\n" +
 	"\x11AUTO_ANON_SIGN_IN*\x83\x01\"true\": sign a visitor in anonymously instead of showing the sign-in screen (local demos). Never set it for a deployed environment.R\x0eautoAnonSignIn\x12\xbb\x02\n" +
 	"\x16stripe_publishable_key\x18\n" +

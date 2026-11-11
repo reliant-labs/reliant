@@ -18,6 +18,7 @@
 import { Code, ConnectError } from "@connectrpc/connect";
 
 import type { ObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
+import type { FrontendReplayList } from "@/services/controlPlane/observability/frontendReplayApi";
 import type { ReplayPage, RrwebEvent, SessionSummary, TimelineEntry } from "@/services/controlPlane/observability/rumTypes";
 import { NO_CLIENT, type ClientInfo } from "@/services/controlPlane/observability/client";
 
@@ -39,6 +40,12 @@ export interface SessionsFixtureOptions {
   replay?: "ok" | "partial" | "no-snapshot" | "unreadable" | "none";
   /** Replay events per page. Default 8. */
   replayPageEvents?: number;
+  /**
+   * ListFrontendReplay's answer. Default: `web` on (live, every session) in
+   * each environment asked for. "not-configured": a control plane from before
+   * it (Unimplemented). "failed": the read fails (Internal).
+   */
+  frontendReplay?: FrontendReplayList | "not-configured" | "failed";
 }
 
 // ── Sessions ────────────────────────────────────────────────────────────────
@@ -294,7 +301,18 @@ export function fixtureRecording(session: SessionSummary, durationMs: number, op
 
 // ── The API ─────────────────────────────────────────────────────────────────
 
-type SessionsApi = Pick<ObservabilityApi, "listSessions" | "getSession" | "getSessionTimeline" | "getSessionReplay">;
+type SessionsApi = Pick<ObservabilityApi, "listSessions" | "getSession" | "getSessionTimeline" | "getSessionReplay" | "listFrontendReplay">;
+
+const FIXTURE_ENV_NAMES: Record<string, string> = { "env-dev": "dev", "env-staging": "staging", "env-prod": "prod" };
+
+/** Every environment asked for (the fixture's three when none is) runs `web`, replay on. */
+function fixtureFrontendReplay(envIds: readonly string[]): FrontendReplayList {
+  const envs = envIds.length ? envIds : Object.keys(FIXTURE_ENV_NAMES);
+  return {
+    frontends: envs.map((envId) => ({ envId, envName: FIXTURE_ENV_NAMES[envId] ?? envId, frontend: "web", state: "on", source: "live", sampleRate: 1 })),
+    unavailableEnvIds: [],
+  };
+}
 
 export function createSessionsFixture(
   options: SessionsFixtureOptions,
@@ -372,6 +390,14 @@ export function createSessionsFixture(
           nextPageToken: next < available.length ? `p:${next}` : "",
           resumeToken: events.length ? `p:${next}` : "",
         };
+      }),
+
+    listFrontendReplay: (req) =>
+      call("ListFrontendReplay", req, (): FrontendReplayList => {
+        const answer = options.frontendReplay;
+        if (answer === "not-configured") throw new ConnectError("procedure controlplane.v1.ObservabilityService/ListFrontendReplay not implemented", Code.Unimplemented);
+        if (answer === "failed") throw new ConnectError("reading frontend replay state failed", Code.Internal);
+        return answer ?? fixtureFrontendReplay(req.envIds);
       }),
   };
 }

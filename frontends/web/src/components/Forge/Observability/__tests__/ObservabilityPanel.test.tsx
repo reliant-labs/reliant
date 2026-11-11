@@ -122,7 +122,7 @@ describe("ObservabilityPanel", () => {
     // The console nav picks the view (the panel draws no tabs): open it by URL.
     renderPanel(createFixtureApi({ empty: true, sessions: "empty", signals: { services: [], truncated: false } }), { view: "sessions" });
     const note = await screen.findByTestId("obs-sessions-replay-off");
-    expect(note).toHaveTextContent("VITE_OTEL_REPLAY=true");
+    expect(note).toHaveTextContent('runtime_config = {OTEL_REPLAY = "true"}');
     expect(note).toHaveTextContent("signals = forge.ObservabilitySignals {replay = True}");
     expect(screen.queryByTestId("obs-nothing-yet")).not.toBeInTheDocument();
   });

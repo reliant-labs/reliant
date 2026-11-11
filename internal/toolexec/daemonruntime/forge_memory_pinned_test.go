@@ -107,6 +107,63 @@ func TestForgeMemory_APinnedProjectGetsThePinnedForgesGuide(t *testing.T) {
 	assert.Len(t, f.runs, 2, "a changed forge.yaml reused the old guide")
 }
 
+// The guide describes the project as it is (its deploy envs, its own test
+// commands, its unmanaged services, its migration tool), so changing any of
+// those renders it again; editing what it does not read reuses the cached one,
+// across a restart too.
+func TestForgeMemory_APinnedGuideIsRenderedAgainWhenWhatItDescribesChanges(t *testing.T) {
+	f := useFakePinnedForges(t)
+	dir := forgeDir(t, "app", "v1.0.4")
+	writeRepoFile(t, dir, "Taskfile.yml", "version: '3'\ntasks:\n  build: {cmds: [go build ./...]}\n")
+	protoDir := filepath.Join(dir, "proto", "services", "billing", "v1")
+	const proto = "syntax = \"proto3\";\n\n// Billing charges customers.\nservice BillingService {\n  rpc Charge(ChargeRequest) returns (ChargeResponse);\n}\n\nmessage ChargeRequest {}\n"
+	writeRepoFile(t, protoDir, "billing.proto", proto)
+	writeRepoFile(t, filepath.Join(dir, "deploy", "kcl", "dev"), "main.k", "")
+	writeRepoFile(t, filepath.Join(dir, "internal", "billing"), "charge.go", "package billing\n")
+
+	render := func() { _ = projectMemoryWithForgeFramework(dir, nil) }
+	render()
+	steps := []struct {
+		what     string
+		edit     func()
+		rerender bool
+	}{
+		{"a Taskfile edit (the test command)", func() {
+			writeRepoFile(t, dir, "Taskfile.yml", "version: '3'\ntasks:\n  test: {cmds: [go test ./...]}\n")
+		}, true},
+		{"a new deploy env", func() { writeRepoFile(t, filepath.Join(dir, "deploy", "kcl", "staging"), "main.k", "") }, true},
+		{"deploy/kcl/workloads.k", func() { writeRepoFile(t, filepath.Join(dir, "deploy", "kcl"), "workloads.k", "") }, true},
+		{"a Makefile", func() { writeRepoFile(t, dir, "Makefile", "test:\n\tgo test ./...\n") }, true},
+		{"a migration tool's marker", func() { writeRepoFile(t, filepath.Join(dir, "prisma"), "schema.prisma", "") }, true},
+		{"monitoring: in forge.yaml", func() {
+			writeRepoFile(t, dir, "forge.yaml", "name: app\nmodule_path: example.com/app\nforge_version: v1.0.4\nmonitoring: true\n")
+		}, true},
+		{"a // forge:unmanaged service", func() {
+			writeRepoFile(t, protoDir, "billing.proto", strings.Replace(proto, "// Billing charges customers.\n", "// Billing charges customers.\n// forge:unmanaged\n", 1))
+		}, true},
+		{"a message edit in a proto", func() {
+			writeRepoFile(t, protoDir, "billing.proto", strings.Replace(proto, "// Billing charges customers.\n", "// Billing charges customers.\n// forge:unmanaged\n", 1)+"message ChargeResponse { string id = 1; }\n")
+		}, false},
+		{"a source package the guide does not read", func() { writeRepoFile(t, filepath.Join(dir, "internal", "refunds"), "refund.go", "package refunds\n") }, false},
+	}
+	for _, s := range steps {
+		before := len(f.runs)
+		s.edit()
+		render()
+		if s.rerender {
+			assert.Len(t, f.runs, before+1, "%s reused the stale guide", s.what)
+		} else {
+			assert.Len(t, f.runs, before, "%s rendered the guide again", s.what)
+		}
+	}
+
+	// A new process with the same disk cache renders nothing new.
+	before := len(f.runs)
+	f.restart(f.deps.Resolve, f.deps.Run, f.deps.CacheDir())
+	render()
+	assert.Len(t, f.runs, before, "a restart rendered an unchanged project's guide again")
+}
+
 // No pin: the forge compiled into reliant renders it, as before.
 func TestForgeMemory_AnUnpinnedProjectGetsTheEmbeddedGuide(t *testing.T) {
 	f := useFakePinnedForges(t)
@@ -157,4 +214,55 @@ func TestCollectRepoMemories_EachForgeCarriesItsOwnGuide(t *testing.T) {
 	assert.Contains(t, string(mem["c"]), "`a`", "c shares a's forge, so it points at a's guide")
 	assert.Less(t, len(mem["c"]), 1000)
 	assert.Contains(t, string(mem["d"]), "Use forge skills", "d has no pin: the embedded guide")
+}
+
+// A proto rewrite that keeps the file's size and mtime (an atomic replace with
+// copied timestamps, a coarse-mtime filesystem) still moves the key: the
+// declarations are read from the content, not trusted to a stamp.
+func TestProtoServiceDecls_ARewriteKeepingSizeAndMtimeIsSeen(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "billing.proto")
+	before := "// Billing charges.\nservice BillingService {}\n"
+	after := "// forge:unmanaged.\nservice BillingService {}\n" // same length as before
+	require.Len(t, after, len(before))
+	writeRepoFile(t, dir, "billing.proto", before)
+	info, err := os.Stat(path)
+	require.NoError(t, err)
+	first := protoServiceDecls(dir)
+
+	writeRepoFile(t, dir, "billing.proto", after)
+	require.NoError(t, os.Chtimes(path, info.ModTime(), info.ModTime()))
+	again, err := os.Stat(path)
+	require.NoError(t, err)
+	require.Equal(t, info.Size(), again.Size())
+	require.True(t, info.ModTime().Equal(again.ModTime()))
+
+	assert.NotEqual(t, string(first), string(protoServiceDecls(dir)), "a same-size, same-mtime rewrite kept the old declarations")
+	assert.Contains(t, string(protoServiceDecls(dir)), "// forge:unmanaged")
+}
+
+// A proto subtree that cannot be read is part of the key, so the key built
+// while it is unreadable is not the one built once it can be read again.
+func TestProtoServiceDecls_AnUnreadableSubtreeMovesTheKey(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("host resource missing: running as root, so a 0o000 directory is still readable")
+	}
+	dir := t.TempDir()
+	sub := filepath.Join(dir, "billing", "v1")
+	writeRepoFile(t, sub, "billing.proto", "service BillingService {}\n")
+	readable := protoServiceDecls(dir)
+	require.Contains(t, string(readable), "service BillingService")
+
+	require.NoError(t, os.Chmod(sub, 0o000))
+	t.Cleanup(func() { _ = os.Chmod(sub, 0o755) })
+	unreadable := protoServiceDecls(dir)
+	assert.NotContains(t, string(unreadable), "service BillingService")
+	assert.Contains(t, string(unreadable), "!unreadable", "an unreadable subtree left no mark in the key")
+	assert.NotEqual(t, string(readable), string(unreadable))
+
+	require.NoError(t, os.Chmod(sub, 0o755))
+	assert.Equal(t, string(readable), string(protoServiceDecls(dir)), "the key did not return once the subtree was readable")
+
+	// A missing proto directory is simply empty: no services, not an error.
+	assert.Empty(t, protoServiceDecls(filepath.Join(dir, "absent")))
 }
