@@ -338,6 +338,24 @@ describe("a day-grained dashboard (the empty-dashboards audit)", () => {
     await waitFor(() => expect(within(panel).getByTestId("chart-bucket-note")).toHaveTextContent("1-day buckets: UTC calendar dates"));
   });
 
+  it("captions a weekly panel's buckets from its minStep, not from the Date column the server reads as a day", async () => {
+    renderDashboard(usage(), {}, grained);
+    const panel = await screen.findByTestId("dashboard-panel-signups-weekly");
+    await waitFor(() => expect(within(panel).getByTestId("chart-bucket-note")).toHaveTextContent("7-day buckets: UTC calendar dates"));
+  });
+
+  it("offers no Explore or Create alert on a delivery panel, which has no spans or query", async () => {
+    const user = userEvent.setup();
+    renderDashboard(usage(), {}, grained);
+    await user.click(await screen.findByTestId("dashboard-panel-menu-promotions"));
+    expect(await screen.findByRole("menuitem", { name: /Ask Reliant/ })).toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: /Explore in/ })).not.toBeInTheDocument();
+    expect(screen.queryByTestId("dashboard-panel-alert-promotions")).not.toBeInTheDocument();
+    await user.keyboard("{Escape}");
+    await user.click(await screen.findByTestId("dashboard-panel-menu-workflows-by-outcome"));
+    expect(await screen.findByTestId("dashboard-panel-alert-workflows-by-outcome")).toBeInTheDocument();
+  });
+
   it("widens a day panel opened on a shorter range to hold two buckets, and says so, while a step panel keeps the range", async () => {
     const { onCall } = renderDashboard(usage(), { range: "1h" }, grained);
     const note = await screen.findByTestId("dashboard-panel-widened-workflows-by-outcome");

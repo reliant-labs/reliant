@@ -79,6 +79,18 @@ export function formatValue(value: number | null | undefined, unit: ValueUnit | 
   }
 }
 
+/**
+ * A figure for a panel: formatValue, or, with `exact` (dashspec
+ * display.exact), a count in full with its digits grouped (1,284, not 1.3k),
+ * so it matches a page that states it exactly. Units with their own scale
+ * (ms, bytes, percent) are drawn as formatValue draws them either way.
+ */
+export function formatFigure(value: number | null | undefined, unit: ValueUnit | undefined, exact = false): string {
+  if (!exact || value === null || value === undefined || !Number.isFinite(value)) return formatValue(value, unit);
+  if (unit && unit !== "count") return formatValue(value, unit);
+  return value.toLocaleString("en-US", { maximumFractionDigits: 2 });
+}
+
 /** A log or span timestamp: local wall clock to the millisecond, the date only when it is not today. */
 export function formatTimestamp(ms: number, now: number = Date.now()): string {
   const date = new Date(ms);

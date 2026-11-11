@@ -2,7 +2,11 @@
 
 /**
  * shop's dashboards: the ones its release bundle carries (forge's generated
- * overview, OrdersService, workloads and releases dashboards, and the two
+ * overview, OrdersService, workloads and releases dashboards, the built-in
+ * Users, Product and Acquisition dashboards — forge-dashboards.json, as forge
+ * #2075's pkg/obsbuiltin and #2111's Releases builder make them for shop;
+ * regenerate it with scripts/demo/regen-forge-dashboards.sh, whose header
+ * names the exact forge refs and command — and the two
  * the repo declares: the checkout funnel and the storefront), plus two the
  * team built in the console. Every author is the cast or CI. The `shop`
  * database answers Postgres panels.
@@ -112,7 +116,13 @@ interface Row {
 }
 
 function rowsOf(now: number): Row[] {
-  const generated = (JSON.parse(forgeDashboardsRaw) as { dashboards: (Dashboard & { annotations?: { source: string; label?: string }[] })[] }).dashboards.map((d) => ({ ...d, filters: d.filters ?? [], annotations: d.annotations ?? [] }));
+  const generated = (JSON.parse(forgeDashboardsRaw) as { dashboards: (Dashboard & { annotations?: { source: string; label?: string }[] })[] }).dashboards.map((d) => ({
+    ...d,
+    filters: d.filters ?? [],
+    annotations: d.annotations ?? [],
+    // A sql panel's spec omits the intent fields it does not use; the console's Panel always has them.
+    panels: d.panels.map((p) => ({ ...p, signal: p.signal ?? "", series: p.series ?? [] })),
+  }));
   const shipped = (spec: Dashboard, source: "generated" | "repo", version: string, filePath: string): Row => {
     const promoted = now - RUNNING["env-staging"].age;
     return {
@@ -168,6 +178,8 @@ export function shopDashboards(now: number): Pick<ObservabilityApi, DashboardKey
     release: row.release,
     workspace: row.workspace,
     category: "",
+    // The spec's own group (forge's built-in product dashboards declare `product`), else the demo's.
+    ...((row.spec as { group?: string }).group ? { group: (row.spec as { group?: string }).group } : {}),
     ...(GROUPING[keyOf(row.ref)] ?? {}),
   });
   const find = (ref: DashboardRef) => {

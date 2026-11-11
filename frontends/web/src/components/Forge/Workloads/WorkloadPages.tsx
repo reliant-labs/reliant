@@ -24,6 +24,7 @@ import type { ForgeHostedWorkload } from "@/services/forge/topology";
 
 import { useForgeConsole } from "../Console/consoleContext";
 import { deployStatusUnread } from "../Console/DeployStatusUnread";
+import { ENV_ALL } from "../Console/envScope";
 import { consolePath, withSearch } from "../Console/paths";
 import { CloudNotice } from "../SourceNotices";
 import { DeployRunsBanner } from "../Deploy/DeployRuns";
@@ -179,8 +180,11 @@ export function OverviewPage() {
       releases: href({ kind: "releases" }),
       alerts: href({ kind: "obs-view", view: "alerts" }),
       scoped: (envName) => href({ kind: "overview" }, { env: envName, q: search.q, status: search.status, kind: search.kind, range: search.range }),
+      // The Users page, scoped to the environment in scope (prod, the first, when every environment is).
+      users: href({ kind: "users" }, { env: env !== ENV_ALL ? env : (envs[0]?.name ?? "prod") }),
+      dashboard: (key) => href({ kind: "dashboard", dashKind: "release", key }),
     }),
-    [href, search.range, search.q, search.status, search.kind]
+    [href, search.range, search.q, search.status, search.kind, env, envs]
   );
   return (
     <div className="space-y-4" data-testid="console-overview">
