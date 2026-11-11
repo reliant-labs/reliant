@@ -15,6 +15,11 @@ import { renderPanel } from "./obsTestUtils";
 
 vi.mock("uplot", async () => (await import("./obsMocks")).obsMocks.uplot());
 vi.mock("@tanstack/react-virtual", async () => (await import("./obsMocks")).obsMocks.virtual());
+// Opening a trace's browser session mounts the replay player, which loads
+// rrweb lazily. The real one cannot rebuild a page in jsdom and threw an
+// unhandled error whenever its import won the race with the test's end.
+vi.mock("@rrweb/replay", async () => ({ Replayer: (await import("../Sessions/__tests__/fakeReplayer")).FakeReplayer }));
+vi.mock("@rrweb/replay/dist/style.css", () => ({}));
 
 describe("trace list", () => {
   it("shows the server's RED summary above the traces", async () => {
@@ -44,6 +49,124 @@ describe("trace list", () => {
     );
   });
 
+  it("shows who each trace served and where, and narrows to a user from the list or the box", async () => {
+    const user = userEvent.setup();
+    const api = createFixtureApi();
+    const listTraces = vi.spyOn(api, "listTraces");
+    const harness = renderPanel(api, { view: "traces" });
+    const [first] = await screen.findAllByTestId("obs-trace-row");
+    expect(first).toHaveTextContent("u_8812");
+    expect(first).toHaveTextContent(/Berlin/);
+    await user.click(within(first).getByTestId("obs-trace-user"));
+    expect(harness.current()).toMatchObject({ user: "u_8812" });
+    await waitFor(() =>
+      expect(listTraces).toHaveBeenLastCalledWith(expect.objectContaining({ userId: "u_8812" }), expect.objectContaining({ signal: expect.anything() }))
+    );
+    await user.click(screen.getByTestId("obs-traces-user-clear"));
+    expect(harness.current().user).toBeUndefined();
+    await user.type(screen.getByTestId("obs-traces-user"), "u_42{Enter}");
+    expect(harness.current()).toMatchObject({ user: "u_42" });
+  });
+
+  it("shows which client called and which builds served, and narrows by them", async () => {
+    const user = userEvent.setup();
+    const api = createFixtureApi();
+    const listTraces = vi.spyOn(api, "listTraces");
+    const harness = renderPanel(api, { view: "traces" });
+    const [first, second] = await screen.findAllByTestId("obs-trace-row");
+    // Fixture trace 0: a browser on Chrome / macOS made the call from build v1.8.3; api and worker v1.8.3 served it.
+    // Each service shows its own version.
+    expect(within(first).getByTestId("obs-trace-client")).toHaveTextContent("Chrome 156 · macOS 15.1");
+    const versions = within(first).getByTestId("obs-trace-versions");
+    expect(versions).toHaveTextContent("shop-web v1.8.3");
+    expect(versions).toHaveTextContent("api v1.8.3");
+    expect(versions).toHaveTextContent("+1 more");
+    // Trace 1: no browser started it, so no client and no frontend build.
+    expect(within(second).queryByTestId("obs-trace-client")).not.toBeInTheDocument();
+
+    await user.type(screen.getByTestId("obs-traces-client-fe"), "1.8.16");
+    await user.type(screen.getByTestId("obs-traces-client-be"), "v1.7.92");
+    await user.click(screen.getByTestId("obs-traces-client-apply"));
+    expect(harness.current()).toMatchObject({ fe: "1.8.16", be: "v1.7.92" });
+    await waitFor(() =>
+      expect(listTraces).toHaveBeenLastCalledWith(
+        expect.objectContaining({ frontendVersion: "1.8.16", backendVersion: "v1.7.92" }),
+        expect.objectContaining({ signal: expect.anything() })
+      )
+    );
+    await waitFor(() => expect(screen.getAllByTestId("obs-trace-versions").every((c) => c.textContent?.includes("1.8.16"))).toBe(true));
+  });
+
+  it("refuses rows a control plane answered without the client filters", async () => {
+    const api = createFixtureApi();
+    const real = api.listTraces.bind(api);
+    // An older control plane ignores the unknown fields and answers unfiltered.
+    vi.spyOn(api, "listTraces").mockImplementation((req, options) => real({ ...req, browser: undefined }, options));
+    renderPanel(api, { view: "traces", browser: "Firefox" });
+    expect(await screen.findByText(/can't filter traces by browser yet/)).toBeInTheDocument();
+  });
+
+  it("keeps a service's traces from one browser, whose rows carry no client of their own", async () => {
+    const api = createFixtureApi();
+    const real = api.listTraces.bind(api);
+    // Narrowed to a backend service, the rows are that service's spans: the
+    // browser span that names the client is not one of them, so a control
+    // plane that applied the filter answers with the client empty.
+    vi.spyOn(api, "listTraces").mockImplementation(async (req, options) => {
+      const result = await real({ ...req, browser: undefined }, options);
+      return { ...result, traces: result.traces.map((t) => ({ ...t, client: { ...t.client, browserName: "", osName: "" }, frontendVersion: "" })) };
+    });
+    renderPanel(api, { view: "traces", service: "api", browser: "Chrome" });
+    expect((await screen.findAllByTestId("obs-trace-row")).length).toBeGreaterThan(0);
+    expect(screen.queryByTestId("obs-error-filter-unsupported")).not.toBeInTheDocument();
+  });
+
+  it("finds a trace by the operation its row is titled with", async () => {
+    const user = userEvent.setup();
+    const api = createFixtureApi();
+    const listTraces = vi.spyOn(api, "listTraces");
+    const harness = renderPanel(api, { view: "traces" });
+    await screen.findAllByTestId("obs-trace-row");
+    await user.type(screen.getByTestId("obs-trace-query"), "ChatService.SendMessage{Enter}");
+    // The URL keeps what was typed; the server is sent a substring of the stored name.
+    expect(harness.current()).toMatchObject({ q: "ChatService.SendMessage" });
+    await waitFor(() =>
+      expect(listTraces).toHaveBeenLastCalledWith(
+        expect.objectContaining({ rootSpanName: "ChatService/SendMessage" }),
+        expect.objectContaining({ signal: expect.anything() })
+      )
+    );
+  });
+
+  it("lists one browser session's traces, says so, and links back to it", async () => {
+    const user = userEvent.setup();
+    const api = createFixtureApi();
+    const listTraces = vi.spyOn(api, "listTraces");
+    const harness = renderPanel(api, { view: "traces", rsession: "sess-001003" });
+    const bar = await screen.findByTestId("obs-traces-session");
+    await waitFor(() =>
+      expect(listTraces).toHaveBeenLastCalledWith(expect.objectContaining({ sessionId: "sess-001003" }), expect.objectContaining({ signal: expect.anything() }))
+    );
+    await user.click(within(bar).getByTestId("obs-traces-session-open"));
+    expect(harness.current()).toMatchObject({ view: "sessions", session: "sess-001003" });
+  });
+
+  it.each([
+    ["user", { user: "u_8812" }, "can't filter traces by user"],
+    ["browser session", { rsession: "sess-001003" }, "can't filter traces by browser session"],
+  ])("never shows an older control plane's unfiltered traces as one %s's", async (_, search, copy) => {
+    const api = createFixtureApi();
+    const listTraces = api.listTraces;
+    // A control plane from before user_id/session_id: it ignores both fields, and fills neither.
+    api.listTraces = async (req, options) => {
+      const result = await listTraces({ ...req, userId: undefined, sessionId: undefined }, options);
+      return { ...result, traces: result.traces.map((t) => ({ ...t, userId: "", sessionId: "" })) };
+    };
+    renderPanel(api, { view: "traces", ...search });
+    expect(await screen.findByTestId("obs-error-filter-unsupported")).toHaveTextContent(copy);
+    expect(screen.queryAllByTestId("obs-trace-row")).toHaveLength(0);
+  });
+
   it("shows the root span's duration, and the whole trace's when work outlived it", async () => {
     renderPanel(createFixtureApi(), { view: "traces" });
     const [first] = await screen.findAllByTestId("obs-trace-row");
@@ -65,9 +188,28 @@ describe("trace list", () => {
     const user = userEvent.setup();
     const harness = renderPanel(createFixtureApi(), { view: "traces" });
     const [first] = await screen.findAllByTestId("obs-trace-row");
-    await user.click(within(first).getByRole("button"));
+    await user.click(within(first).getByRole("button", { name: /^Open trace/ }));
     expect(harness.current().trace).toBe(FIXTURE_TRACE_ID);
     expect(await screen.findByTestId("trace-detail")).toBeInTheDocument();
+  });
+
+  it("a latency band reads past the first page, and never lists a trace above its high edge", async () => {
+    const api = createFixtureApi();
+    const original = api.listTraces.bind(api);
+    // ListTraces bounds only the low end: page one is every trace too slow for
+    // the band, page two the band's own.
+    const listTraces = vi.spyOn(api, "listTraces").mockImplementation(async (req, options) => {
+      const res = await original(req, options);
+      const durationMs = req.cursor ? 150 : 5_000;
+      const traces = res.traces.slice(0, 5).map((t, i) => ({ ...t, traceId: `${req.cursor ? "b" : "a"}${i}`.padEnd(32, "0"), durationMs, rootDurationMs: durationMs }));
+      return { ...res, traces, nextCursor: req.cursor ? "" : "page-2" };
+    });
+    renderPanel(api, { view: "traces", lat: "100-200" });
+    const rows = await screen.findAllByTestId("obs-trace-row");
+    expect(rows).toHaveLength(5);
+    expect(listTraces).toHaveBeenCalledWith(expect.objectContaining({ minDurationMs: 100, cursor: "page-2" }), expect.anything());
+    expect(screen.queryByTestId("obs-trace-region-empty")).not.toBeInTheDocument();
+    expect(screen.getByTestId("obs-trace-region")).toHaveTextContent("5 of 10");
   });
 });
 
@@ -162,7 +304,7 @@ describe("trace waterfall", () => {
       await screen.findAllByTestId("obs-trace-row");
       arrived = true;
       now += 16_000;
-      await user.click(within(screen.getAllByTestId("obs-trace-row")[0]).getByRole("button"));
+      await user.click(within(screen.getAllByTestId("obs-trace-row")[0]).getByRole("button", { name: /^Open trace/ }));
       await waitFor(() => expect(within(screen.getByRole("region", { name: "Related traces" })).getByRole("button")).toBeInTheDocument());
       expect(getTrace).toHaveBeenCalledTimes(2);
       arrived = false;
@@ -206,6 +348,18 @@ describe("trace waterfall", () => {
     expect(within(await screen.findByRole("tree")).getAllByRole("treeitem")).toHaveLength(9);
     await user.click(within(related).getByRole("button"));
     expect(harness.current()).toMatchObject({ trace: linkedTrace, span: "d".repeat(16), envs: ["prod"], range: "1h" });
+  });
+
+  it("shows each service's own build on the span where the trace enters it", async () => {
+    renderPanel(createFixtureApi(), { view: "traces", trace: FIXTURE_TRACE_ID });
+    const tree = await screen.findByRole("tree", { name: "Spans of this trace" });
+    const items = within(tree).getAllByRole("treeitem");
+    const entries = items.filter((item) => within(item).queryByTestId("waterfall-span-version"));
+    // The root, and each span that crosses into another service; never a span inside one.
+    expect(entries[0]).toBe(items[0]);
+    expect(entries.length).toBeLessThan(items.length);
+    for (const e of entries) expect(within(e).getByTestId("waterfall-span-version")).toHaveTextContent("v1.8.3");
+    expect(screen.getByTestId("trace-builds")).toHaveTextContent("v1.8.3");
   });
 
   it("draws every span as a tree item, with the failed ones said aloud", async () => {

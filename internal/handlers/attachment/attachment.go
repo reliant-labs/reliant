@@ -17,6 +17,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/attachment"
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/logging"
 )
@@ -167,7 +168,7 @@ func (s *Service) GetAttachment(
 	}
 
 	// Verify ownership
-	if dbAttachment.UserID != userID {
+	if !authz.CanAccessPersonal(userID, dbAttachment.UserID) {
 		return nil, svcerr.NotFound("attachment")
 	}
 
@@ -199,7 +200,7 @@ func (s *Service) DeleteAttachment(
 	if dbAttachment == nil {
 		return nil, svcerr.NotFound("attachment")
 	}
-	if dbAttachment.UserID != userID {
+	if !authz.CanAccessPersonal(userID, dbAttachment.UserID) {
 		return nil, svcerr.NotFound("attachment")
 	}
 

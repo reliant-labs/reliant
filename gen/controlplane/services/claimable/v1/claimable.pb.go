@@ -289,12 +289,12 @@ func (x *StartClaimableDeployRequest) GetPowNonce() string {
 
 type StartClaimableDeployResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// An ordinary `rlat_` token for the anonymous user's personal org, scoped
+	// An ordinary `rlat_` token for the anonymous user's first org, scoped
 	// to deploy:read and deploy:write only, expiring at purge_after. The CLI
 	// stores it under the credential client id "forge-cli-claimable", never
 	// under "forge-cli".
 	AccessToken string `protobuf:"bytes,1,opt,name=access_token,json=accessToken,proto3" json:"access_token,omitempty"`
-	// The anonymous user's personal org: the org every deploy lands in.
+	// The anonymous user's first org: the org every deploy lands in.
 	OrgId string `protobuf:"bytes,2,opt,name=org_id,json=orgId,proto3" json:"org_id,omitempty"`
 	// https://app.reliant.dev/claim#rcl_<token>. Hand it to a human; whoever
 	// claims first owns the deploy. Returned again, identical, on every reused
@@ -1065,8 +1065,16 @@ func (x *GetClaimResponse) GetClaimedAt() *timestamppb.Timestamp {
 }
 
 type OpenClaimSessionRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ClaimToken    string                 `protobuf:"bytes,1,opt,name=claim_token,json=claimToken,proto3" json:"claim_token,omitempty"`
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	ClaimToken string                 `protobuf:"bytes,1,opt,name=claim_token,json=claimToken,proto3" json:"claim_token,omitempty"`
+	// retry_key makes a lost response recoverable. A random value the browser
+	// makes once per claim attempt (at least 128 bits, 22 to 128 base64url
+	// characters) and sends again on a retry. A retry carrying the same key
+	// within two minutes of the release gets the SAME session again, instead of
+	// claimable_session_released; every other caller is still refused. Optional:
+	// without it a release is answered once, as before. Malformed is
+	// InvalidArgument.
+	RetryKey      string `protobuf:"bytes,2,opt,name=retry_key,json=retryKey,proto3" json:"retry_key,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1104,6 +1112,13 @@ func (*OpenClaimSessionRequest) Descriptor() ([]byte, []int) {
 func (x *OpenClaimSessionRequest) GetClaimToken() string {
 	if x != nil {
 		return x.ClaimToken
+	}
+	return ""
+}
+
+func (x *OpenClaimSessionRequest) GetRetryKey() string {
+	if x != nil {
+		return x.RetryKey
 	}
 	return ""
 }
@@ -1640,10 +1655,11 @@ const file_services_claimable_v1_claimable_proto_rawDesc = "" +
 	"\vpurge_after\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"purgeAfter\x129\n" +
 	"\n" +
-	"claimed_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\tclaimedAt\":\n" +
+	"claimed_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\tclaimedAt\"W\n" +
 	"\x17OpenClaimSessionRequest\x12\x1f\n" +
 	"\vclaim_token\x18\x01 \x01(\tR\n" +
-	"claimToken\"\x81\x01\n" +
+	"claimToken\x12\x1b\n" +
+	"\tretry_key\x18\x02 \x01(\tR\bretryKey\"\x81\x01\n" +
 	"\x18OpenClaimSessionResponse\x12!\n" +
 	"\faccess_token\x18\x01 \x01(\tR\vaccessToken\x12#\n" +
 	"\rrefresh_token\x18\x02 \x01(\tR\frefreshToken\x12\x1d\n" +

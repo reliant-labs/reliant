@@ -2,6 +2,7 @@
 package provetest
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -26,7 +27,12 @@ type resolvedFile struct {
 
 // resolveFiles turns the caller's paths into real locations inside the
 // workspace, refusing anything a write could escape through.
-func resolveFiles(workspace, dir string, paths []string) ([]*resolvedFile, error) {
+//
+// A file outside the workspace is admitted when it lies in another git
+// worktree of one of repos — the workspace's repositories — such as the
+// checkout the worktree tool makes under ~/.reliant/worktrees. That is the
+// same repository, so the same trust; see linkedWorktrees.
+func resolveFiles(ctx context.Context, workspace, dir string, repos, paths []string) ([]*resolvedFile, error) {
 	if workspace == "" || !filepath.IsAbs(workspace) {
 		return nil, fmt.Errorf("provetest: workspace must be an absolute path, got %q", workspace)
 	}
@@ -37,6 +43,10 @@ func resolveFiles(workspace, dir string, paths []string) ([]*resolvedFile, error
 	if dir == "" {
 		dir = workspace
 	}
+
+	// Listed once per call, and only if some file needs it.
+	var worktrees []string
+	listed := false
 
 	seen := make(map[string]bool, len(paths))
 	files := make([]*resolvedFile, 0, len(paths))
@@ -53,9 +63,21 @@ func resolveFiles(workspace, dir string, paths []string) ([]*resolvedFile, error
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", p, err)
 		}
-		rel, err := filepath.Rel(realWorkspace, real)
-		if err != nil || rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || filepath.IsAbs(rel) {
-			return nil, fmt.Errorf("refusing %s: it resolves to %s, outside the workspace %s. prove_test only touches files inside the workspace", p, real, realWorkspace)
+		rel, inside := relInside(realWorkspace, real)
+		if !inside {
+			if !listed {
+				worktrees, listed = linkedWorktrees(ctx, realWorkspace, repos), true
+			}
+			var root string
+			for _, wt := range worktrees {
+				if r, ok := relInside(wt, real); ok {
+					root, rel = wt, r
+					break
+				}
+			}
+			if root == "" {
+				return nil, fmt.Errorf("refusing %s: it resolves to %s, outside the workspace %s and every git worktree of its repositories. prove_test only touches files inside the workspace or one of those worktrees", p, real, realWorkspace)
+			}
 		}
 		for _, part := range strings.Split(rel, string(filepath.Separator)) {
 			if part == ".git" {
@@ -81,6 +103,61 @@ func resolveFiles(workspace, dir string, paths []string) ([]*resolvedFile, error
 		files = append(files, &resolvedFile{abs: real})
 	}
 	return files, nil
+}
+
+// relInside returns path relative to root, and whether path is strictly
+// inside root. Both are real paths.
+func relInside(root, path string) (string, bool) {
+	rel, err := filepath.Rel(root, path)
+	if err != nil || rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || filepath.IsAbs(rel) {
+		return "", false
+	}
+	return rel, true
+}
+
+// linkedWorktrees returns the real roots of the git worktrees of repos (the
+// workspace itself when repos is empty) that are not the workspace's own
+// checkouts: the worktrees `git worktree list` names for the same
+// repositories, wherever they live on disk.
+//
+// A worktree that CONTAINS the workspace is never returned. That is the
+// workspace's own repository seen from a subdirectory (a project inside a
+// monorepo), and the workspace boundary exists to keep the rest of it out.
+// One inside the workspace needs no admission: the workspace check took it.
+//
+// A repository git cannot list contributes nothing, so a failure here only
+// ever refuses.
+func linkedWorktrees(ctx context.Context, realWorkspace string, repos []string) []string {
+	if len(repos) == 0 {
+		repos = []string{realWorkspace}
+	}
+	seen := map[string]bool{}
+	var out []string
+	for _, repo := range repos {
+		listing, err := runGit(ctx, repo, "worktree", "list", "--porcelain")
+		if err != nil {
+			continue
+		}
+		for _, line := range strings.Split(string(listing), "\n") {
+			path, ok := strings.CutPrefix(strings.TrimRight(line, "\r"), "worktree ")
+			if !ok || path == "" {
+				continue
+			}
+			real, err := filepath.EvalSymlinks(path)
+			if err != nil || seen[real] {
+				continue // pruned, or already listed by a sibling repository
+			}
+			seen[real] = true
+			if _, holdsWorkspace := relInside(real, realWorkspace); holdsWorkspace || real == realWorkspace {
+				continue
+			}
+			if _, insideWorkspace := relInside(realWorkspace, real); insideWorkspace {
+				continue
+			}
+			out = append(out, real)
+		}
+	}
+	return out
 }
 
 // realPath resolves every symlink in path's EXISTING ancestors and re-attaches

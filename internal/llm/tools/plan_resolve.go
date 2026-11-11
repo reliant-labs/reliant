@@ -3,10 +3,9 @@ package tools
 
 import (
 	"context"
-	"database/sql"
-	"errors"
 	"fmt"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/reliant-labs/reliant/internal/db"
 )
 
@@ -16,10 +15,11 @@ import (
 // cycle in the data to hang a tool call.
 const maxPlanAncestorWalk = 8
 
-// errNoPlanInChain is the sentinel every plan tool branches on. It wraps
-// sql.ErrNoRows so a walk that ends without finding a plan is indistinguishable
-// from a thread that never had one: both mean "call create_plan".
-var errNoPlanInChain = fmt.Errorf("no plan for this thread or any ancestor: %w", sql.ErrNoRows)
+// errNoPlanInChain is the sentinel every plan tool branches on. It is a
+// svcerr NotFound, like core.ErrPlanNotFound, so a walk that ends without
+// finding a plan is indistinguishable from a thread that never had one: both
+// mean "call create_plan".
+var errNoPlanInChain = svcerr.WithMessage(svcerr.NotFound("plan"), "no plan for this thread or any ancestor")
 
 // resolvedPlan is a plan together with where it was found.
 type resolvedPlan struct {
@@ -59,7 +59,7 @@ func resolvePlanForRead(ctx context.Context, repo planLookupStore, threadID stri
 	if err == nil {
 		return &resolvedPlan{plan: plan, ownerThreadID: threadID}, nil
 	}
-	if !errors.Is(err, sql.ErrNoRows) {
+	if !svcerr.IsNotFound(err) {
 		return nil, err
 	}
 
@@ -85,7 +85,7 @@ func resolvePlanForRead(ctx context.Context, repo planLookupStore, threadID stri
 		if planErr == nil {
 			return &resolvedPlan{plan: parentPlan, inherited: true, ownerThreadID: parentID}, nil
 		}
-		if !errors.Is(planErr, sql.ErrNoRows) {
+		if !svcerr.IsNotFound(planErr) {
 			return nil, planErr
 		}
 		currentID = parentID

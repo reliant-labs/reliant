@@ -21,7 +21,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/daemonliveness"
 	"github.com/reliant-labs/reliant/internal/daemonpolicy"
 	"github.com/reliant-labs/reliant/internal/db"
-	"github.com/reliant-labs/reliant/internal/errreason"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/nomachine"
@@ -1041,12 +1040,10 @@ func (r *NATSDaemonRouter) SendToolExecutionBackground(ctx context.Context, user
 // "no daemon connected".
 func daemonRequestError(op string, err error) error {
 	if err == nats.ErrNoResponders {
-		// The reason is set on the wire error itself as well: this one is
-		// returned as a *connect.Error, which some paths hand to the client
-		// without svcerr.ToConnect reading the chain.
-		ce := connect.NewError(connect.CodeUnavailable, errDaemonNotConnected)
-		ce.Meta().Set(svcerr.ReasonHeader, errreason.DaemonNotConnected)
-		return ce
+		// Returned as a *connect.Error, which some paths hand to the client
+		// without svcerr.ToConnect reading the chain; ToConnect puts the
+		// reason on it.
+		return svcerr.ToConnect(errDaemonNotConnected)
 	}
 	if errors.Is(err, nats.ErrTimeout) {
 		return fmt.Errorf("%s via NATS failed: %w: %w", op, ErrDaemonTimeout, err)
@@ -1359,11 +1356,25 @@ func (e daemonReportedFailure) Is(target error) bool { return target == errDaemo
 // forge.topology and fs.get_tree for a path only their laptop had produced 70
 // ERROR issue events in two days (2026-10-23..25). Any other daemon failure
 // keeps no opinion (svcerr.ClassNone), so its code decides.
+//
+// The daemon refusing a credential store (daemonpolicy.ErrCredentialFile,
+// ErrViewerCredential) is a user error too: the daemon's own policy said no to
+// what a tool or the file viewer asked for, as designed. Logged as a server
+// fault it was an ERROR "machinewake.AfterFailure" issue (prod issue
+// 1e396220, 2026-11-09) for a refusal that worked.
 func (e daemonReportedFailure) ErrorClass() svcerr.Class {
-	if IsMissingPathText(string(e)) {
+	if IsMissingPathText(string(e)) || isCredentialRefusalText(string(e)) {
 		return svcerr.ClassUser
 	}
 	return svcerr.ClassNone
+}
+
+// isCredentialRefusalText reports whether a daemon's failure text is its
+// refusal to read or write a credential store. The refusal crosses the wire
+// as text, so its sentinel's message is what there is to match.
+func isCredentialRefusalText(text string) bool {
+	return strings.Contains(text, daemonpolicy.ErrCredentialFile.Error()) ||
+		strings.Contains(text, daemonpolicy.ErrViewerCredential.Error())
 }
 
 // missingPathMarkers are how a daemon's error text says "that path does not
@@ -1371,13 +1382,18 @@ func (e daemonReportedFailure) ErrorClass() svcerr.Class {
 // is what there is to match: Go's ENOENT on Unix, the two Win32 messages for a
 // missing file and directory, and the prefixes daemonruntime writes for a
 // missing pkg working dir (pkgDirNotExistPrefix) and forge project dir
-// (forgeProjectDirNotExistPrefix).
+// (forgeProjectDirNotExistPrefix), and the one fs.preview_info writes for a
+// file it could not open ("file not found: <path>"). Without that last one a
+// preview of a path that is not on the machine was Internal: an ERROR "rpc
+// failed" on the server and a browser issue per click (prod, 2026-11-03..05,
+// issues 55ada191, 1e396220, b52cdbdb, 584d1a9a).
 var missingPathMarkers = []string{
 	"no such file or directory",
 	"cannot find the file specified",
 	"cannot find the path specified",
 	"working dir does not exist",
 	"forge project dir does not exist",
+	"file not found: ",
 }
 
 // IsMissingPathText reports whether a daemon's failure text says the path it
@@ -1590,6 +1606,16 @@ func (r *NATSDaemonRouter) SendToolRequestSyncWithSelector(ctx context.Context, 
 }
 
 func (r *NATSDaemonRouter) SendLoadProjectConfigs(ctx context.Context, userID string, projectPath string, requestID string) error {
+	resolvedDaemonID, err := r.resolveFollowUpDaemonID(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("resolving daemon for config load: %w", err)
+	}
+	return r.SendLoadProjectConfigsToDaemon(ctx, userID, resolvedDaemonID, projectPath, requestID)
+}
+
+// SendLoadProjectConfigsToDaemon is SendLoadProjectConfigs on one named
+// machine: for a checkout path that is true only on that machine's disk.
+func (r *NATSDaemonRouter) SendLoadProjectConfigsToDaemon(ctx context.Context, userID, daemonID string, projectPath string, requestID string) error {
 	payload, err := json.Marshal(map[string]string{
 		"project_path": projectPath,
 		"request_id":   requestID,
@@ -1597,11 +1623,7 @@ func (r *NATSDaemonRouter) SendLoadProjectConfigs(ctx context.Context, userID st
 	if err != nil {
 		return err
 	}
-	resolvedDaemonID, err := r.resolveFollowUpDaemonID(ctx, userID)
-	if err != nil {
-		return fmt.Errorf("resolving daemon for config load: %w", err)
-	}
-	subject := daemonSubject(configLoadSubject, userID, resolvedDaemonID)
+	subject := daemonSubject(configLoadSubject, userID, daemonID)
 	msg := natsotel.NewMsg(ctx, subject, payload)
 	if err := r.nc.PublishMsg(msg); err != nil {
 		observability.NATSErrorsTotal.WithLabelValues("daemon.config.load", "publish").Inc()
@@ -1612,6 +1634,16 @@ func (r *NATSDaemonRouter) SendLoadProjectConfigs(ctx context.Context, userID st
 }
 
 func (r *NATSDaemonRouter) SendWatchProjectConfigs(ctx context.Context, userID string, projectPath string, includeInitial bool) error {
+	resolvedDaemonID, err := r.resolveFollowUpDaemonID(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("resolving daemon for config watch: %w", err)
+	}
+	return r.SendWatchProjectConfigsToDaemon(ctx, userID, resolvedDaemonID, projectPath, includeInitial)
+}
+
+// SendWatchProjectConfigsToDaemon is SendWatchProjectConfigs on one named
+// machine.
+func (r *NATSDaemonRouter) SendWatchProjectConfigsToDaemon(ctx context.Context, userID, daemonID string, projectPath string, includeInitial bool) error {
 	payload, err := json.Marshal(map[string]interface{}{
 		"project_path":    projectPath,
 		"include_initial": includeInitial,
@@ -1619,11 +1651,7 @@ func (r *NATSDaemonRouter) SendWatchProjectConfigs(ctx context.Context, userID s
 	if err != nil {
 		return err
 	}
-	resolvedDaemonID, err := r.resolveFollowUpDaemonID(ctx, userID)
-	if err != nil {
-		return fmt.Errorf("resolving daemon for config watch: %w", err)
-	}
-	subject := daemonSubject(configWatchSubject, userID, resolvedDaemonID)
+	subject := daemonSubject(configWatchSubject, userID, daemonID)
 	msg := natsotel.NewMsg(ctx, subject, payload)
 	if err := r.nc.PublishMsg(msg); err != nil {
 		observability.NATSErrorsTotal.WithLabelValues("daemon.config.watch", "publish").Inc()
@@ -1683,20 +1711,30 @@ func (r *NATSDaemonRouter) SubscribeTerminalOutput(ctx context.Context, userID s
 	if err != nil {
 		return nil, nil, fmt.Errorf("resolving daemon for terminal output: %w", err)
 	}
-	ch := make(chan *TerminalOutputEvent, 64)
+	queue := NewTerminalOutputQueue(sessionID, TerminalOutputQueueCapacity, terminalOutputSendTimeout)
 	subject := daemonSubject(terminalOutputSubject, userID, resolvedDaemonID) + "." + sessionID
 
+	// The callback runs on this subscription's own goroutine, so waiting in
+	// it for the websocket pump holds up only this session. A pump still full
+	// after terminalOutputSendTimeout ends the session (TerminalOutputQueue);
+	// so does a subscription that NATS itself had to drop messages from as a
+	// slow consumer, the one loss the queue cannot see.
 	sub, err := r.nc.Subscribe(subject, func(msg *nats.Msg) {
+		if dropped, _ := msg.Sub.Dropped(); dropped > 0 {
+			r.terminalOutputOverflowed(ctx, msg.Sub, "nats", userID, sessionID, "dropped", dropped)
+			queue.Fail()
+			return
+		}
 		var evt TerminalOutputEvent
 		if err := json.Unmarshal(msg.Data, &evt); err != nil {
 			return
 		}
-		select {
-		case ch <- &evt:
-		default:
+		if err := queue.Send(&evt); errors.Is(err, ErrTerminalOutputOverflow) {
+			r.terminalOutputOverflowed(ctx, msg.Sub, "api", userID, sessionID, "timeout", terminalOutputSendTimeout)
 		}
 	})
 	if err != nil {
+		queue.Close()
 		return nil, nil, fmt.Errorf("subscribe to terminal output via NATS: %w", err)
 	}
 
@@ -1707,26 +1745,42 @@ func (r *NATSDaemonRouter) SubscribeTerminalOutput(ctx context.Context, userID s
 	// established and the initial shell prompt can no longer be dropped. Mirrors
 	// SubscribeProcessOutput, but with the publish deliberately ordered after the
 	// subscribe (the whole point of the terminal fix).
+	unsub := func() {
+		_ = sub.Unsubscribe()
+		queue.Close()
+	}
 	reqPayload, err := json.Marshal(struct {
 		SessionID string `json:"session_id"`
 	}{SessionID: sessionID})
 	if err != nil {
-		_ = sub.Unsubscribe()
+		unsub()
 		return nil, nil, err
 	}
 	subscribeSubject := daemonSubject(terminalSubscribeSubject, userID, resolvedDaemonID) + "." + sessionID
 	subMsg := natsotel.NewMsg(ctx, subscribeSubject, reqPayload)
 	if err := r.nc.PublishMsg(subMsg); err != nil {
 		observability.NATSErrorsTotal.WithLabelValues("daemon.terminal.subscribe", "publish").Inc()
-		_ = sub.Unsubscribe()
+		unsub()
 		return nil, nil, fmt.Errorf("publish terminal output subscribe request via NATS: %w", err)
 	}
 	observability.NATSPublishTotal.WithLabelValues("daemon.terminal.subscribe").Inc()
 
-	unsub := func() {
-		_ = sub.Unsubscribe()
-	}
-	return ch, unsub, nil
+	return queue.C(), unsub, nil
+}
+
+// terminalOutputSendTimeout bounds how long the api-server's NATS callback
+// for a terminal session waits for the websocket pump to take a chunk. A
+// variable so tests can shrink it.
+var terminalOutputSendTimeout = 5 * time.Second
+
+// terminalOutputOverflowed records a terminal session whose output fell
+// behind at stage, and stops its NATS subscription: the queue has failed and
+// delivers the overflow error after what it already holds.
+func (r *NATSDaemonRouter) terminalOutputOverflowed(ctx context.Context, sub *nats.Subscription, stage, userID, sessionID string, detail ...any) {
+	_ = sub.Unsubscribe()
+	observability.TerminalOutputOverflowTotal.WithLabelValues(stage).Inc()
+	logging.WarnContext(ctx, "[NATSDaemonRouter] Terminal output fell behind; ending the session",
+		append([]any{"stage", stage, "user_id", userID, "session_id", sessionID}, detail...)...)
 }
 
 func (r *NATSDaemonRouter) SubscribeProcessOutput(ctx context.Context, userID string, processID string, newOnly bool) (<-chan *ProcessOutputEvent, func(), error) {

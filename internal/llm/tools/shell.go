@@ -43,7 +43,11 @@ type ShellParams struct {
 	// (bound, so the model is never shown it); "" is the daemon's own
 	// environment.
 	Credentials string `json:"credentials,omitempty" jsonschema:"enum=none,enum=inherit"`
-	Repo        string `json:"repo,omitempty" jsonschema:"description=Multi-repo only. Which repo to run the command in: 'root' for the project root\\, or a repo name (e.g. 'api'\\, 'web'). Omit in single-repo projects. The system prompt lists available repos when this matters."`
+	// WritableCheckouts are the shared project checkouts a credentials-none
+	// command may write (daemon.RunCommandRequest.WritableCheckouts). Only a
+	// run node's value is used: Run ignores it in a model's call.
+	WritableCheckouts []string `json:"writable_checkouts,omitempty"`
+	Repo              string   `json:"repo,omitempty" jsonschema:"description=Multi-repo only. Which repo to run the command in: 'root' for the project root\\, or a repo name (e.g. 'api'\\, 'web'). Omit in single-repo projects. The system prompt lists available repos when this matters."`
 	// Heavy declares the command heavy so it queues for one of the machine's
 	// heavy slots (see daemon.RunCommandRequest.Heavy). Its schema
 	// description is attached in JSONSchemaExtend.
@@ -97,6 +101,39 @@ func (ShellParams) JSONSchemaExtend(s *jsonschema.Schema) {
 	if prop, ok := s.Properties.Get("keep_alive"); ok {
 		prop.Description = shellKeepAliveParamDoc
 	}
+	if prop, ok := s.Properties.Get("writable_checkouts"); ok {
+		prop.Description = shellWritableCheckoutsParamDoc
+	}
+}
+
+// shellWritableCheckoutsParamDoc is the schema description for
+// ShellParams.WritableCheckouts. Only a workflow's value is used
+// (workflowWritableCheckouts), so a model naming checkouts unfreezes nothing.
+const shellWritableCheckoutsParamDoc = "Set only by a workflow: a run node's writable_checkouts, or a binding of this parameter in tool_params; a value in any other call is ignored."
+
+// workflowWritableCheckouts is the one place a shell call's writable
+// checkouts come from, and only ever from the workflow, never from the model:
+//
+//   - a run node's command (rctx.RunStep, set by the server): the node's
+//     writable_checkouts, shared checkouts and cache hand-offs alike;
+//   - an agent's call where the workflow bound the parameter
+//     (rctx.IsBound, from the server's capability set; tools.ApplyBindings
+//     put the bound value in the input and refused a call that set another):
+//     hand-off directories only (daemon.WritableScopeBoundShell), since the
+//     commands are the model's.
+//
+// Anything else, a model's own value included, is dropped. The daemon decides
+// what each entry may name (credsandbox.Writable, writableFor), for both alike.
+func workflowWritableCheckouts(tc *rctx.ToolContext, params ShellParams) ([]string, string) {
+	switch {
+	case len(params.WritableCheckouts) == 0:
+		return nil, ""
+	case tc.RunStep:
+		return params.WritableCheckouts, ""
+	case tc.IsBound("writable_checkouts"):
+		return params.WritableCheckouts, daemon.WritableScopeBoundShell
+	}
+	return nil, ""
 }
 
 // shellKeepAliveParamDoc is the schema description for ShellParams.KeepAlive.
@@ -198,6 +235,19 @@ const (
 	// literal timeout: above it at load, so the two must be one value.
 	MaxRunStepTimeout    = model.MaxRunStepTimeout
 	MaxShellOutputLength = 16000
+	// MaxRunStepOutputLength caps stdout of a workflow `run` node's command
+	// (stderr gets half), in place of MaxShellOutputLength. A run node's
+	// stdout is workflow data, not model context: workflows json.decode it,
+	// and the model's 16 KB cut a 19.8 KB JSON verdict into text that no
+	// longer decoded (control-plane pr-review, 2026-10-31). The bound is what
+	// a Temporal activity result carries comfortably: the run step returns
+	// stdout, stderr and their concatenation, well under the 512 KiB blob
+	// warning. A cut sets ShellResponseMetadata.Truncated, which the run node
+	// reports as `truncated`.
+	MaxRunStepOutputLength = 128 << 10
+	// MaxRunStepOutputSize is a run step's encoded-result budget, in place of
+	// MaxOutputSize (fitShellOutputToBudget, and the ToolWrapper's ceiling).
+	MaxRunStepOutputSize = 2*MaxRunStepOutputLength + MaxRunStepOutputLength/2
 )
 
 // ShellTimeoutUnit is the duration one unit of a shell call's `timeout`
@@ -512,6 +562,11 @@ func (s *shellTool) execute(rctx *rctx.ToolContext, params ShellParams, outcome 
 	if err != nil {
 		return NewTextErrorResponse(err.Error()), nil
 	}
+	// A workflow run node starts in its work_dir (rctx.RunWorkDir, which only
+	// the server sets, and only for a run step).
+	if rctx.RunStep && rctx.RunWorkDir != "" && strings.TrimSpace(params.Repo) == "" {
+		workingDir = rctx.RunWorkDir
+	}
 	if workingDir == "" {
 		return NewTextErrorResponse("No project working directory available - ensure you're working within a project"), nil
 	}
@@ -547,6 +602,7 @@ func (s *shellTool) execute(rctx *rctx.ToolContext, params ShellParams, outcome 
 		ThreadID:    rctx.Thread,
 		KeepAlive:   params.KeepAlive,
 	}
+	req.WritableCheckouts, req.WritableCheckoutsScope = workflowWritableCheckouts(rctx, params)
 	if credentials == daemonpolicy.CredentialsNone {
 		// A daemon older than the credentials field ignores it but applies env,
 		// so the neutral assignments keep it from failing open. A caller's own
@@ -614,8 +670,13 @@ func (s *shellTool) execute(rctx *rctx.ToolContext, params ShellParams, outcome 
 	interrupted := result.TimedOut
 	outcome.completed(exitCode, result.DurationMs, interrupted)
 
-	// Apply custom output limits if specified
-	maxOutput := MaxShellOutputLength
+	// Apply custom output limits if specified. A run step's output is
+	// workflow data and gets the run step's larger caps; a model may not ask
+	// for them (max_output still applies to its own call).
+	maxOutput, outputBudget := MaxShellOutputLength, MaxOutputSize
+	if rctx.RunStep {
+		maxOutput, outputBudget = MaxRunStepOutputLength, MaxRunStepOutputSize
+	}
 	if params.MaxOutput > 0 {
 		maxOutput = params.MaxOutput
 	}
@@ -646,7 +707,7 @@ func (s *shellTool) execute(rctx *rctx.ToolContext, params ShellParams, outcome 
 	// tool_wrapper truncation head+tail-cuts the JSON *string*, corrupting the
 	// envelope (and appending a misleading "use offset parameter" hint the
 	// foreground shell tool doesn't support).
-	stdout, stderr = fitShellOutputToBudget(stdout, stderr, stdoutCap, stderrCap, exitCode, MaxOutputSize)
+	stdout, stderr = fitShellOutputToBudget(stdout, stderr, stdoutCap, stderrCap, exitCode, outputBudget)
 
 	wasTruncated := len(stdout) < originalStdoutSize || len(stderr) < originalStderrSize
 
@@ -815,10 +876,11 @@ func shouldRunInBackground(command string) bool {
 
 // ChatIDEnv names the chat a shell command runs for. Every command a chat runs
 // carries it, so what the command makes can say whose it is: a pull request
-// opened from the shell embeds `<!-- reliant-chat: $RELIANT_CHAT_ID -->`
-// (github__pr_create adds the marker itself), and automations that react to
-// the pull request later (control-plane's pr-fix) hand their news to that
-// chat before starting anyone else.
+// opened from the shell with `gh pr create` gets
+// `<!-- reliant-chat: $RELIANT_CHAT_ID -->` in its body from the daemon's gh
+// shim (internal/ghshim; github__pr_create adds the marker itself), and
+// automations that react to the pull request later (control-plane's pr-fix)
+// hand their news to that chat before starting anyone else.
 const ChatIDEnv = "RELIANT_CHAT_ID"
 
 // withChatEnv is the request env with ChatIDEnv set to chatID, unless the

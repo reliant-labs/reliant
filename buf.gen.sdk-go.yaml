@@ -1,0 +1,89 @@
+# buf.gen.sdk-go.yaml - the Go SDK's generated protobuf code (sdk/go/gen), run
+# by the `sdk-go-gen` generate hook in forge.yaml (scripts/sdk-go-gen.sh, which
+# also strips the forgepb import so the SDK module needs no forge).
+#
+# The SDK (sdk/go) is its own Go module, and the published copy of the PUBLIC
+# protos: the files proto/public-api.txt exports from, plus the reliant files
+# they import. They are generated here a second time, under the SDK's import
+# path, from the same proto/ the app's gen/ comes from, so the two cannot drift.
+#
+# Two Go packages that register the same proto file panic at init when linked
+# into one binary. Today nothing links both: the app (root module) does not
+# import the SDK. The app moves onto these packages (and gen/reliant/v1 stops
+# generating them) in a separate change that pins sdk/go by version; until
+# then, never import sdk/go/gen from the root module.
+#
+# paths=import + module= place each file by the import path the M lines give it
+# (the protos' own go_package names the app's gen/). The Connect stubs are
+# filtered to the public rpcs (`types`), so a withheld rpc has no client in the
+# published module. internal/buildmode's sdk_public_api_test.go keeps this
+# file, proto/public-api.txt and sdk/go/gen in step, and
+# buf_plugin_pins_test.go holds the plugin pins (same local `go tool` plugins as
+# buf.gen.yaml; see its header).
+version: v2
+managed:
+  enabled: false
+inputs:
+  - directory: proto
+    paths:
+      - proto/reliant/v1/common.proto
+      - proto/reliant/v1/worktree.proto
+      - proto/reliant/v1/chat.proto
+      - proto/reliant/v1/run.proto
+      - proto/reliant/v1/trigger.proto
+      - proto/reliant/v1/approval.proto
+      - proto/reliant/v1/question.proto
+      - proto/reliant/v1/inbox.proto
+      - proto/reliant/v1/tools_daemon.proto
+plugins:
+  - local: [go, tool, protoc-gen-go]
+    strategy: all
+    out: sdk/go
+    opt:
+      - paths=import
+      - module=github.com/reliant-labs/reliant/sdk/go
+      - Mreliant/v1/common.proto=github.com/reliant-labs/reliant/sdk/go/gen/reliant/v1;reliantv1
+      - Mreliant/v1/worktree.proto=github.com/reliant-labs/reliant/sdk/go/gen/reliant/v1;reliantv1
+      - Mreliant/v1/chat.proto=github.com/reliant-labs/reliant/sdk/go/gen/reliant/v1;reliantv1
+      - Mreliant/v1/run.proto=github.com/reliant-labs/reliant/sdk/go/gen/reliant/v1;reliantv1
+      - Mreliant/v1/trigger.proto=github.com/reliant-labs/reliant/sdk/go/gen/reliant/v1;reliantv1
+      - Mreliant/v1/approval.proto=github.com/reliant-labs/reliant/sdk/go/gen/reliant/v1;reliantv1
+      - Mreliant/v1/question.proto=github.com/reliant-labs/reliant/sdk/go/gen/reliant/v1;reliantv1
+      - Mreliant/v1/inbox.proto=github.com/reliant-labs/reliant/sdk/go/gen/reliant/v1;reliantv1
+      - Mreliant/v1/tools_daemon.proto=github.com/reliant-labs/reliant/sdk/go/gen/reliant/v1;reliantv1
+
+  - local: [go, tool, protoc-gen-connect-go]
+    strategy: all
+    out: sdk/go
+    opt:
+      - paths=import
+      - module=github.com/reliant-labs/reliant/sdk/go
+      - Mreliant/v1/common.proto=github.com/reliant-labs/reliant/sdk/go/gen/reliant/v1;reliantv1
+      - Mreliant/v1/worktree.proto=github.com/reliant-labs/reliant/sdk/go/gen/reliant/v1;reliantv1
+      - Mreliant/v1/chat.proto=github.com/reliant-labs/reliant/sdk/go/gen/reliant/v1;reliantv1
+      - Mreliant/v1/run.proto=github.com/reliant-labs/reliant/sdk/go/gen/reliant/v1;reliantv1
+      - Mreliant/v1/trigger.proto=github.com/reliant-labs/reliant/sdk/go/gen/reliant/v1;reliantv1
+      - Mreliant/v1/approval.proto=github.com/reliant-labs/reliant/sdk/go/gen/reliant/v1;reliantv1
+      - Mreliant/v1/question.proto=github.com/reliant-labs/reliant/sdk/go/gen/reliant/v1;reliantv1
+      - Mreliant/v1/inbox.proto=github.com/reliant-labs/reliant/sdk/go/gen/reliant/v1;reliantv1
+      - Mreliant/v1/tools_daemon.proto=github.com/reliant-labs/reliant/sdk/go/gen/reliant/v1;reliantv1
+    types:
+      - reliant.v1.RunService
+      - reliant.v1.TriggerService.GetTrigger
+      - reliant.v1.TriggerService.ListTriggers
+      - reliant.v1.TriggerService.FireTrigger
+      - reliant.v1.TriggerService.ListTriggerEvents
+      - reliant.v1.TriggerService.GetLaunchEvent
+      - reliant.v1.ChatService.GetChatUpdates
+      - reliant.v1.ChatService.GetWorkflowExecutions
+      - reliant.v1.ChatService.GetContentBlockBodies
+      - reliant.v1.QuestionService.ListPendingQuestions
+      - reliant.v1.QuestionService.ResolveQuestion
+      - reliant.v1.ApprovalService.ListApprovalsByChat
+      - reliant.v1.ApprovalService.Approve
+      - reliant.v1.ApprovalService.Deny
+      - reliant.v1.ApprovalService.BatchApprove
+      - reliant.v1.ApprovalService.BatchDeny
+      - reliant.v1.InboxService.ListInbox
+      - reliant.v1.InboxService.DismissInboxItem
+      - reliant.v1.InboxService.RestoreInboxItem

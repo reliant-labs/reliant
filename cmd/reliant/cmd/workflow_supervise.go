@@ -3,7 +3,9 @@ package cmd
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -14,37 +16,31 @@ import (
 	"connectrpc.com/connect"
 	"github.com/spf13/cobra"
 
-	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
-	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/askuser"
 	"github.com/reliant-labs/reliant/internal/execfollow"
-	"github.com/reliant-labs/reliant/internal/workflow/model"
+	"github.com/reliant-labs/reliant/sdk/go/reliant"
 )
 
-// superviseClients bundles the Connect clients the supervision verbs use,
-// all authenticated by the resolved context credential (PAT or JWT). Every
-// verb here talks to the server exclusively over these RPCs — no DB access.
+// superviseClients is the SDK client the supervision verbs use, authenticated
+// by the resolved credential (PAT or JWT) over the CLI's own transport. Every
+// verb here talks to the server exclusively over its RPCs: no DB access.
 type superviseClients struct {
-	chat     reliantv1connect.ChatServiceClient
-	question reliantv1connect.QuestionServiceClient
-	approval reliantv1connect.ApprovalServiceClient
-	conn     *connection
+	sdk  *reliant.Client
+	conn *connection
 }
 
-// newSuperviseClients resolves the context connection and constructs the
-// Connect clients, mirroring how `workflow run` / `follow` build theirs.
+// newSuperviseClients resolves the connection and builds the SDK client on it,
+// the way `workflow follow` does.
 func newSuperviseClients(cmd *cobra.Command) (*superviseClients, error) {
 	conn, err := resolveConnection(cmd)
 	if err != nil {
 		return nil, err
 	}
-	httpClient := conn.httpClient()
-	return &superviseClients{
-		chat:     reliantv1connect.NewChatServiceClient(httpClient, conn.ServerURL),
-		question: reliantv1connect.NewQuestionServiceClient(httpClient, conn.ServerURL),
-		approval: reliantv1connect.NewApprovalServiceClient(httpClient, conn.ServerURL),
-		conn:     conn,
-	}, nil
+	client, err := conn.sdkClient()
+	if err != nil {
+		return nil, err
+	}
+	return &superviseClients{sdk: client, conn: conn}, nil
 }
 
 // rpcError renders a Connect error as a customer-readable message. The most
@@ -55,6 +51,7 @@ func (c *superviseClients) rpcError(err error, what string) error {
 	if err == nil {
 		return nil
 	}
+	err = sdkCause(err)
 	switch connect.CodeOf(err) {
 	case connect.CodeNotFound:
 		return fmt.Errorf("%s: not found on %s — check the execution id, or %s may not have access",
@@ -153,29 +150,29 @@ func runWorkflowWatch(cmd *cobra.Command, executionID string, flags *followFlags
 		return err
 	}
 
-	httpClient := conn.httpClient()
-
-	fmt.Fprintf(cmd.ErrOrStderr(), "Watching execution %s (Ctrl-C to stop)\n", executionID)
-
-	engine := &execfollow.Engine{
-		Source:      newChatUpdateSource(httpClient, conn.ServerURL, executionID),
-		ExecutionID: executionID,
-		Out:         cmd.OutOrStdout(),
-		Log:         cmd.ErrOrStderr(),
-		Renderer:    execfollow.RenderText,
-		Hooks:       hooks,
-		Interval:    flags.interval,
-		Timeout:     flags.timeout,
-		Tail:        flags.tail,
-		ExitOnGate:  flags.exitOnGate,
-	}
-
-	code, err := engine.Run(cmd.Context())
+	client, err := conn.sdkClient()
 	if err != nil {
 		return err
 	}
-	if code != execfollow.ExitSuccess {
-		os.Exit(code)
+
+	fmt.Fprintf(cmd.ErrOrStderr(), "Watching execution %s (Ctrl-C to stop)\n", executionID)
+
+	res, err := followExecution(cmd, client, executionID, followSettings{
+		opts: reliant.FollowOptions{
+			Interval:   flags.interval,
+			Timeout:    flags.timeout,
+			Tail:       flags.tail,
+			StopOnGate: flags.exitOnGate,
+		},
+		out:    cmd.OutOrStdout(),
+		render: execfollow.RenderText,
+		hooks:  hooks,
+	})
+	if err != nil {
+		return err
+	}
+	if res.ExitCode != execfollow.ExitSuccess {
+		os.Exit(res.ExitCode)
 	}
 	return nil
 }
@@ -252,30 +249,30 @@ func runWorkflowWaitForGate(cmd *cobra.Command, executionID string, jsonOut bool
 	if err != nil {
 		return err
 	}
-	httpClient := conn.httpClient()
-
-	fmt.Fprintf(cmd.ErrOrStderr(), "Waiting for the next gate on execution %s (Ctrl-C to stop)\n", executionID)
-
-	engine := &execfollow.Engine{
-		Source:      newChatUpdateSource(httpClient, conn.ServerURL, executionID),
-		ExecutionID: executionID,
-		Out:         io.Discard, // stay quiet until a gate opens; the gate is printed below
-		Log:         cmd.ErrOrStderr(),
-		Interval:    interval,
-		Timeout:     timeout,
-		Tail:        tail,
-		ExitOnGate:  true,
-	}
-
-	code, err := engine.Run(cmd.Context())
+	client, err := conn.sdkClient()
 	if err != nil {
 		return err
 	}
-	if werr := writeWaitForGateResult(cmd.OutOrStdout(), executionID, code, engine.OpenGates(), engine.TerminalStatus(), engine.TerminalOutcome(), jsonOut); werr != nil {
+
+	fmt.Fprintf(cmd.ErrOrStderr(), "Waiting for the next gate on execution %s (Ctrl-C to stop)\n", executionID)
+
+	res, err := followExecution(cmd, client, executionID, followSettings{
+		opts: reliant.FollowOptions{
+			Interval:   interval,
+			Timeout:    timeout,
+			Tail:       tail,
+			StopOnGate: true,
+		},
+		out: io.Discard, // stay quiet until a gate opens; the gate is printed below
+	})
+	if err != nil {
+		return err
+	}
+	if werr := writeWaitForGateResult(cmd.OutOrStdout(), executionID, res.ExitCode, res.OpenGates, res.Status, res.Outcome, jsonOut); werr != nil {
 		return werr
 	}
-	if code != execfollow.ExitSuccess {
-		os.Exit(code)
+	if res.ExitCode != execfollow.ExitSuccess {
+		os.Exit(res.ExitCode)
 	}
 	return nil
 }
@@ -495,71 +492,32 @@ func runWorkflowStatus(cmd *cobra.Command, executionID string, jsonOut bool) err
 	if err != nil {
 		return err
 	}
-	ctx := cmd.Context()
 
-	// FULL: summarizeSteps counts every step, and BASIC withholds the internal
-	// ones (SaveMessage / CallLLM / ...) that make up nearly all of them.
-	execResp, err := clients.chat.GetWorkflowExecutions(ctx, connect.NewRequest(&reliantv1.GetWorkflowExecutionsRequest{
-		ChatId: executionID,
-		View:   reliantv1.WorkflowExecutionView_WORKFLOW_EXECUTION_VIEW_FULL,
-	}))
+	// The SDK reads the full step history (BASIC withholds the internal steps
+	// that make up nearly all of them), attributes steps to their node thread,
+	// and counts the open gates; the report below is its snapshot, unchanged.
+	st, err := clients.sdk.Runs.StatusSession(cmd.Context(), executionID)
 	if err != nil {
-		return clients.rpcError(err, "fetching workflow executions")
-	}
-	root := execResp.Msg.GetRootWorkflow()
-	if root == nil {
-		if all := execResp.Msg.GetAllRootWorkflows(); len(all) > 0 {
-			root = all[0]
+		var re *reliant.Error
+		if errors.As(err, &re) && errors.Is(err, reliant.ErrNotFound) && re.Code == connect.CodeUnknown {
+			return fmt.Errorf("no workflow execution found for %s", executionID)
 		}
-	}
-	if root == nil {
-		return fmt.Errorf("no workflow execution found for %s", executionID)
+		return clients.rpcError(err, "fetching workflow executions")
 	}
 
 	report := statusReport{
-		ExecutionID: executionID,
-		Workflow:    root.GetWorkflowName(),
-		Status:      chatWorkflowStatusString(root),
-		Outcome:     root.GetOutcome(),
-		Started:     root.GetCreatedAt(),
-		Completed:   root.GetCompletedAt(),
+		ExecutionID:   executionID,
+		Workflow:      st.Workflow,
+		Status:        st.Status,
+		Outcome:       st.Outcome,
+		Started:       st.Started,
+		Completed:     st.Completed,
+		OpenQuestions: st.OpenQuestions,
+		OpenApprovals: st.OpenApprovals,
+		Steps:         toStatusStepGroups(st.Steps),
 	}
-
-	// Open questions: one per gated thread, each of which may bundle several
-	// sub-questions; count the sub-questions. Each question's thread id is what
-	// lets the node tree below mark the threads that are actually gated instead
-	// of leaving every sibling reading RUNNING.
-	gateByThread := map[string]string{}
-	if q, err := clients.question.ListPendingQuestions(ctx, connect.NewRequest(&reliantv1.ListPendingQuestionsRequest{
-		ChatId: &executionID,
-	})); err == nil {
-		for _, qi := range q.Msg.GetQuestions() {
-			open := 1
-			if md, ok := askuser.ParseMetadata(qi.GetMetadata()); ok && len(md.Questions) > 1 {
-				open = len(md.Questions)
-			}
-			report.OpenQuestions += open
-			if qi.GetThreadId() != "" {
-				// Oldest first, so a thread's newest question wins.
-				gateByThread[qi.GetThreadId()] = orDash(qi.GetStepId())
-			}
-		}
-	}
-
-	for _, child := range root.GetChildren() {
-		report.Nodes = append(report.Nodes, buildStatusNode(child, gateByThread))
-	}
-	report.Steps = summarizeSteps(root)
-
-	// Open approvals: pending approvals for the chat.
-	if a, err := clients.approval.ListApprovalsByChat(ctx, connect.NewRequest(&reliantv1.ListApprovalsByChatRequest{
-		ChatId: executionID,
-	})); err == nil {
-		for _, ap := range a.Msg.GetApprovals() {
-			if ap.GetStatus() == reliantv1.ApprovalStatus_APPROVAL_STATUS_PENDING {
-				report.OpenApprovals++
-			}
-		}
+	for _, n := range st.Nodes {
+		report.Nodes = append(report.Nodes, toStatusNode(n))
 	}
 
 	if jsonOut {
@@ -575,201 +533,30 @@ func runWorkflowStatus(cmd *cobra.Command, executionID string, jsonOut bool) err
 	return nil
 }
 
-// buildStatusNode converts a WorkflowExecution subtree into a statusNode.
-//
-// gateByThread maps a thread id to the step that raised its open question, so a
-// gated thread is marked as gated and its siblings are not. The stored status
-// alone cannot express this: a thread parked on a signal stays RUNNING, so
-// without the thread-scoped gate every node in a fanned-out run reads RUNNING
-// whether it is working or waiting on a human.
-func buildStatusNode(wf *reliantv1.WorkflowExecution, gateByThread map[string]string) statusNode {
-	node := statusNode{
-		NodeID:    wf.GetSpawnedByNodeId(),
-		Record:    wf.GetWorkflowName(),
-		Thread:    wf.GetThread(),
-		Status:    chatWorkflowStatusString(wf),
-		Gate:      gateByThread[wf.GetThread()],
-		Started:   wf.GetCreatedAt(),
-		Completed: wf.GetCompletedAt(),
+func toStatusNode(n reliant.StatusNode) statusNode {
+	out := statusNode{
+		NodeID: n.NodeID, Record: n.Record, Thread: n.Thread, Status: n.Status, Gate: n.Gate,
+		Started: n.Started, Completed: n.Completed, DurationMs: n.DurationMs, Iteration: n.Iteration,
 	}
-	if node.NodeID == "" {
-		node.NodeID = wf.GetWorkflowName()
-	}
-	if wf.Iteration != nil {
-		it := wf.GetIteration()
-		node.Iteration = &it
-	}
-	node.DurationMs = durationMs(wf.GetCreatedAt(), wf.GetCompletedAt())
-	for _, child := range wf.GetChildren() {
-		node.Children = append(node.Children, buildStatusNode(child, gateByThread))
-	}
-	return node
-}
-
-// summarizeSteps groups step executions by the node thread that recorded them,
-// and within a thread by step id, reporting run count and the most recent
-// result.
-//
-// Two things the flat version could not say, and this one must:
-//
-//   - WHICH phase a row belongs to. Steps are already scoped by workflow_id
-//     and the tree already says which node spawned each child workflow, so the
-//     attribution is in the response — it was being discarded, not missing.
-//   - That a `workflow`-type node ran at all. Such a node executes as a child
-//     workflow and writes NO step_executions row of its own, so the phase whose
-//     reviewer actually ran showed nothing while the phase that skipped its
-//     reviewer showed a row. One row is synthesized per child workflow, in the
-//     parent's group, from the child's own execution record.
-func summarizeSteps(root *reliantv1.WorkflowExecution) []statusStepGroup {
-	type agg struct {
-		activity string
-		runs     int
-		failed   int
-		result   string
-		exit     *int32
-		lastMs   int64
-		lastAt   string
-	}
-	type group struct {
-		record string
-		byStep map[string]*agg
-		order  []string
-	}
-
-	groups := map[string]*group{}
-	var groupOrder []string
-
-	groupFor := func(node, record string) *group {
-		g := groups[node]
-		if g == nil {
-			g = &group{record: record, byStep: map[string]*agg{}}
-			groups[node] = g
-			groupOrder = append(groupOrder, node)
-		}
-		return g
-	}
-
-	// record folds one execution of one step into its group. createdAt orders
-	// repeats so the reported result is the most recent one.
-	record := func(g *group, stepID, activity, createdAt string, ms int64, result string, exit *int32) {
-		a := g.byStep[stepID]
-		if a == nil {
-			a = &agg{}
-			g.byStep[stepID] = a
-			g.order = append(g.order, stepID)
-		}
-		a.runs++
-		// Counted across every execution, not just the surviving one: a loop
-		// that ran this step five times and failed four of them must not report
-		// as a single "ok".
-		if result == "FAIL" {
-			a.failed++
-		}
-		if createdAt >= a.lastAt {
-			a.lastAt = createdAt
-			a.activity = activity
-			a.lastMs = ms
-			a.result = result
-			a.exit = exit
-		}
-	}
-
-	var walk func(wf *reliantv1.WorkflowExecution, node string)
-	walk = func(wf *reliantv1.WorkflowExecution, node string) {
-		g := groupFor(node, wf.GetWorkflowName())
-
-		for _, s := range wf.GetSteps() {
-			var exit *int32
-			if s.ExitCode != nil {
-				ec := s.GetExitCode()
-				exit = &ec
-			}
-			record(g, s.GetStepId(), s.GetActivityName(), s.GetCreatedAt(), s.GetDurationMs(), stepResult(s), exit)
-		}
-
-		for _, c := range wf.GetChildren() {
-			childNode := c.GetSpawnedByNodeId()
-			if childNode == "" {
-				childNode = c.GetWorkflowName()
-			}
-			record(g, childNode, c.GetWorkflowName(), c.GetCreatedAt(),
-				durationMs(c.GetCreatedAt(), c.GetCompletedAt()), childWorkflowResult(c), nil)
-			walk(c, childNodePath(node, childNode))
-		}
-	}
-	walk(root, "")
-
-	out := make([]statusStepGroup, 0, len(groupOrder))
-	for _, node := range groupOrder {
-		g := groups[node]
-		if len(g.order) == 0 {
-			continue
-		}
-		steps := make([]statusStep, 0, len(g.order))
-		for _, id := range g.order {
-			a := g.byStep[id]
-			steps = append(steps, statusStep{
-				StepID:   id,
-				Activity: a.activity,
-				Runs:     a.runs,
-				Failed:   a.failed,
-				Result:   a.result,
-				ExitCode: a.exit,
-				LastMs:   a.lastMs,
-			})
-		}
-		out = append(out, statusStepGroup{Node: node, Record: g.record, Steps: steps})
+	for _, c := range n.Children {
+		out.Children = append(out.Children, toStatusNode(c))
 	}
 	return out
 }
 
-// childNodePath joins a parent node path with a child node id. The root graph
-// has the empty path, so its immediate children are named by node id alone.
-func childNodePath(parent, child string) string {
-	if parent == "" {
-		return child
+func toStatusStepGroups(groups []reliant.StatusStepGroup) []statusStepGroup {
+	var out []statusStepGroup
+	for _, g := range groups {
+		sg := statusStepGroup{Node: g.Node, Record: g.Record, Steps: make([]statusStep, 0, len(g.Steps))}
+		for _, st := range g.Steps {
+			sg.Steps = append(sg.Steps, statusStep{
+				StepID: st.StepID, Activity: st.Activity, Runs: st.Runs, Failed: st.Failed,
+				Result: st.Result, ExitCode: st.ExitCode, LastMs: st.LastMs,
+			})
+		}
+		out = append(out, sg)
 	}
-	return parent + "/" + child
-}
-
-// stepResult is what one recorded step execution claims.
-//
-// SKIP is its own word. A skipped step now records a NULL verdict rather than
-// success=true, but "-" would report it the same as a row that simply has no
-// verdict — and the distinction that cost the time is precisely "did this
-// check run". The activity name is the emitter's stamp for it; output_json,
-// which carries the `skipped` field itself, is deliberately not sent over this
-// RPC because it can be megabytes per run.
-func stepResult(s *reliantv1.StepExecution) string {
-	if s.GetActivityName() == model.ActivitySkippedStep {
-		return "SKIP"
-	}
-	if s.Success == nil {
-		return "-"
-	}
-	if s.GetSuccess() {
-		return "ok"
-	}
-	return "FAIL"
-}
-
-// childWorkflowResult is what a synthesized row for a workflow-type node
-// claims. A child workflow has a lifecycle AND a verdict, exactly like the run
-// as a whole, and the two are not the same fact: a child that finished without
-// declaring an outcome reports its lifecycle word, never "ok".
-func childWorkflowResult(c *reliantv1.WorkflowExecution) string {
-	switch c.GetOutcome() {
-	case execfollow.OutcomeFailure:
-		return "FAIL"
-	case execfollow.OutcomeSuccess:
-		return "ok"
-	}
-	status := chatWorkflowStatusString(c)
-	switch status {
-	case "failed", "cancelled", "expired":
-		return "FAIL"
-	}
-	return status
+	return out
 }
 
 func printStatusReport(w io.Writer, r statusReport) {
@@ -930,23 +717,23 @@ func runWorkflowQuestions(cmd *cobra.Command, executionID string, jsonOut bool) 
 		return err
 	}
 
-	resp, err := clients.question.ListPendingQuestions(cmd.Context(), connect.NewRequest(&reliantv1.ListPendingQuestionsRequest{
-		ChatId: &executionID,
-	}))
+	pending, err := pendingQuestions(cmd.Context(), clients, executionID)
 	if err != nil {
 		return clients.rpcError(err, "fetching pending questions")
 	}
 
 	report := questionsReport{ExecutionID: executionID, Questions: []pendingQuestionView{}}
-	for _, qi := range resp.Msg.GetQuestions() {
+	for _, g := range pending {
 		view := pendingQuestionView{
-			QuestionID:   qi.GetQuestionId(),
-			ThreadID:     qi.GetThreadId(),
-			StepID:       qi.GetStepId(),
-			Stuck:        execfollow.IsStuckStep(qi.GetStepId()),
+			QuestionID:   g.ID,
+			ThreadID:     g.ThreadID,
+			StepID:       g.StepID,
+			Stuck:        g.Stuck,
 			SubQuestions: []subQuestionValue{},
 		}
-		if md, ok := askuser.ParseMetadata(qi.GetMetadata()); ok {
+		// The gate's own prompts carry labels only; the metadata also has each
+		// option's description, which this view prints.
+		if md, ok := askuser.ParseMetadata(g.Metadata); ok {
 			for _, q := range md.Questions {
 				sv := subQuestionValue{Question: q.Question, AllowMultiple: q.AllowMultiple}
 				for _, o := range q.Options {
@@ -974,6 +761,22 @@ func runWorkflowQuestions(cmd *cobra.Command, executionID string, jsonOut bool) 
 		printPendingQuestion(out, view)
 	}
 	return nil
+}
+
+// pendingQuestions lists the question gates open anywhere in the session, one
+// per gated thread (approvals are not questions and are left out).
+func pendingQuestions(ctx context.Context, clients *superviseClients, executionID string) ([]reliant.Gate, error) {
+	gates, err := clients.sdk.Gates.PendingInSession(ctx, executionID)
+	if err != nil {
+		return nil, err
+	}
+	var out []reliant.Gate
+	for _, g := range gates {
+		if g.Kind == reliant.GateQuestion {
+			out = append(out, g)
+		}
+	}
+	return out, nil
 }
 
 func printPendingQuestion(out io.Writer, view pendingQuestionView) {
@@ -1067,20 +870,18 @@ func runWorkflowAnswer(cmd *cobra.Command, executionID, questionID string, selec
 	}
 	ctx := cmd.Context()
 
-	resp, err := clients.question.ListPendingQuestions(ctx, connect.NewRequest(&reliantv1.ListPendingQuestionsRequest{
-		ChatId: &executionID,
-	}))
+	pending, err := pendingQuestions(ctx, clients, executionID)
 	if err != nil {
 		return clients.rpcError(err, "fetching pending questions")
 	}
-	qi, err := pickPendingQuestion(executionID, resp.Msg.GetQuestions(), questionID)
+	qi, err := pickPendingQuestion(executionID, pending, questionID)
 	if err != nil {
 		return err
 	}
 
-	md, ok := askuser.ParseMetadata(qi.GetMetadata())
+	md, ok := askuser.ParseMetadata(qi.Metadata)
 	if !ok {
-		return fmt.Errorf("pending question %s has no structured ask_user prompts — cannot build an answer automatically", qi.GetQuestionId())
+		return fmt.Errorf("pending question %s has no structured ask_user prompts — cannot build an answer automatically", qi.ID)
 	}
 
 	// Default to interactive when the caller supplied no selections/text.
@@ -1098,24 +899,14 @@ func runWorkflowAnswer(cmd *cobra.Command, executionID, questionID string, selec
 		return err
 	}
 
-	responseData, err := askuser.BuildResponseData(answers)
-	if err != nil {
-		return err
-	}
-
-	res, err := clients.question.ResolveQuestion(ctx, connect.NewRequest(&reliantv1.ResolveQuestionRequest{
-		QuestionId:   qi.GetQuestionId(),
-		Action:       "reply",
-		ResponseData: &responseData,
-	}))
-	if err != nil {
+	if err := clients.sdk.Gates.Answer(ctx, qi.ID, answers); err != nil {
+		if errors.Is(err, reliant.ErrNotApplied) {
+			return fmt.Errorf("server did not confirm the answer (ResolveQuestion returned success=false)")
+		}
 		return clients.rpcError(err, "resolving question")
 	}
-	if !res.Msg.GetSuccess() {
-		return fmt.Errorf("server did not confirm the answer (ResolveQuestion returned success=false)")
-	}
 
-	fmt.Fprintf(cmd.OutOrStdout(), "Answered question %s\n", qi.GetQuestionId())
+	fmt.Fprintf(cmd.OutOrStdout(), "Answered question %s\n", qi.ID)
 	for _, a := range answers {
 		if len(a.Selected) > 0 {
 			fmt.Fprintf(cmd.OutOrStdout(), "  %s -> %s\n", truncate(a.Question, 48), strings.Join(a.Selected, ", "))
@@ -1278,11 +1069,11 @@ preserving the ability to resume.`,
 			if err != nil {
 				return err
 			}
-			resp, err := clients.chat.TerminateChat(cmd.Context(), connect.NewRequest(&reliantv1.TerminateChatRequest{ChatId: args[0]}))
+			res, err := clients.sdk.Runs.CancelWithResult(cmd.Context(), args[0])
 			if err != nil {
-				return clients.rpcError(err, "terminating workflow")
+				return mutationError(clients, err, "terminating workflow")
 			}
-			return reportMutation(cmd, resp.Msg.GetSuccess(), resp.Msg.GetMessage(), "Terminated workflow "+args[0])
+			return reportMutation(cmd, true, res.Message, "Terminated workflow "+args[0])
 		},
 	}
 	return cmd
@@ -1302,11 +1093,11 @@ and drops the checkpoint.`,
 			if err != nil {
 				return err
 			}
-			resp, err := clients.chat.PauseChat(cmd.Context(), connect.NewRequest(&reliantv1.PauseChatRequest{ChatId: args[0]}))
+			res, err := clients.sdk.Runs.PauseWithResult(cmd.Context(), args[0])
 			if err != nil {
-				return clients.rpcError(err, "pausing workflow")
+				return mutationError(clients, err, "pausing workflow")
 			}
-			return reportMutation(cmd, resp.Msg.GetSuccess(), resp.Msg.GetMessage(), "Paused workflow "+args[0])
+			return reportMutation(cmd, true, res.Message, "Paused workflow "+args[0])
 		},
 	}
 	return cmd
@@ -1325,18 +1116,40 @@ was lost, the server reports that a new message is needed to recover.`,
 			if err != nil {
 				return err
 			}
-			resp, err := clients.chat.ResumeChat(cmd.Context(), connect.NewRequest(&reliantv1.ResumeChatRequest{ChatId: args[0]}))
+			res, err := clients.sdk.Runs.ResumeWithResult(cmd.Context(), args[0])
 			if err != nil {
 				return clients.rpcError(err, "resuming workflow")
 			}
-			if resp.Msg.GetNeedsRecovery() {
-				fmt.Fprintf(cmd.OutOrStdout(), "Workflow %s needs recovery — send a new message to continue (the Temporal workflow was lost)\n", args[0])
+			if res.Declined {
+				// The server answered and did not resume the run (for a lost
+				// session it says to send a new message). That is reported,
+				// not a failure: exit 0, as it always was.
+				if res.Message != "" {
+					fmt.Fprintln(cmd.OutOrStdout(), res.Message)
+				} else {
+					fmt.Fprintf(cmd.OutOrStdout(), "Workflow %s was not resumed\n", args[0])
+				}
 				return nil
 			}
-			return reportMutation(cmd, resp.Msg.GetSuccess(), resp.Msg.GetMessage(), "Resumed workflow "+args[0])
+			return reportMutation(cmd, true, res.Message, "Resumed workflow "+args[0])
 		},
 	}
 	return cmd
+}
+
+// mutationError words a failed terminate/pause: a call the server declined
+// (success=false) is its own message, as it always was; anything else is the
+// RPC failure.
+func mutationError(clients *superviseClients, err error, what string) error {
+	var re *reliant.Error
+	if errors.As(err, &re) && errors.Is(err, reliant.ErrNotApplied) {
+		// The SDK fills in this sentence when the server gave no message.
+		if re.Message == "" || re.Message == "the server did not apply the request" {
+			return fmt.Errorf("server reported failure")
+		}
+		return fmt.Errorf("%s", re.Message)
+	}
+	return clients.rpcError(err, what)
 }
 
 func reportMutation(cmd *cobra.Command, success bool, serverMsg, okMsg string) error {
@@ -1374,24 +1187,6 @@ func truncate(s string, n int) string {
 	return s[:n-1] + "…"
 }
 
-// durationMs computes elapsed milliseconds between two RFC3339 timestamps,
-// returning 0 when either is missing or unparseable.
-func durationMs(start, end string) int64 {
-	if start == "" || end == "" {
-		return 0
-	}
-	s, err1 := time.Parse(time.RFC3339, start)
-	e, err2 := time.Parse(time.RFC3339, end)
-	if err1 != nil || err2 != nil {
-		return 0
-	}
-	d := e.Sub(s).Milliseconds()
-	if d < 0 {
-		return 0
-	}
-	return d
-}
-
 func humanDuration(ms int64) string {
 	d := time.Duration(ms) * time.Millisecond
 	if d < time.Minute {
@@ -1404,26 +1199,26 @@ func humanDuration(ms int64) string {
 // question it is that one; with several (spawned agents each parked on their
 // own) the caller must name it with --question, because answering whichever
 // is newest would leave the others' threads blocked.
-func pickPendingQuestion(executionID string, pending []*reliantv1.QuestionInfo, questionID string) (*reliantv1.QuestionInfo, error) {
+func pickPendingQuestion(executionID string, pending []reliant.Gate, questionID string) (reliant.Gate, error) {
 	if len(pending) == 0 {
-		return nil, fmt.Errorf("no pending question to answer on execution %s", executionID)
+		return reliant.Gate{}, fmt.Errorf("no pending question to answer on execution %s", executionID)
 	}
 	ids := make([]string, 0, len(pending))
-	for _, qi := range pending {
-		if questionID != "" && qi.GetQuestionId() == questionID {
-			return qi, nil
+	for _, g := range pending {
+		if questionID != "" && g.ID == questionID {
+			return g, nil
 		}
-		id := qi.GetQuestionId()
-		if qi.GetThreadId() != "" {
-			id += " (thread " + qi.GetThreadId() + ")"
+		id := g.ID
+		if g.ThreadID != "" {
+			id += " (thread " + g.ThreadID + ")"
 		}
 		ids = append(ids, id)
 	}
 	if questionID != "" {
-		return nil, fmt.Errorf("question %s is not pending (pending: %s)", questionID, strings.Join(ids, ", "))
+		return reliant.Gate{}, fmt.Errorf("question %s is not pending (pending: %s)", questionID, strings.Join(ids, ", "))
 	}
 	if len(pending) > 1 {
-		return nil, fmt.Errorf("%d questions are pending on execution %s; choose one with --question: %s", len(pending), executionID, strings.Join(ids, ", "))
+		return reliant.Gate{}, fmt.Errorf("%d questions are pending on execution %s; choose one with --question: %s", len(pending), executionID, strings.Join(ids, ", "))
 	}
 	return pending[0], nil
 }

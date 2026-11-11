@@ -230,7 +230,40 @@ func Extensions() []cel.EnvOption {
 		ext.TwoVarComprehensions(),
 		celJSONDecodeFunction(),
 	}
+	opts = append(opts, celMathIntOverloads()...)
 	return append(opts, celTrimFunctions()...)
+}
+
+// maxExactDoubleInt is 2^53, the largest magnitude below which every integer
+// has an exact float64.
+const maxExactDoubleInt = types.Int(1 << 53)
+
+// celMathIntOverloads gives math.ceil, math.floor, math.round and math.trunc
+// an int overload beside ext.Math's double one. A whole number crossing a node
+// boundary arrives as an int (node outputs are normalized so `n + 1` stays
+// integer arithmetic), so a compute output of 1500.0 reaches the next node as
+// 1500 and `math.round(nodes.x.total)` failed with "no such overload:
+// math.round(int)". Rounding a whole number changes nothing; the result is
+// the double the double overload would return, so both forms read the same.
+// A double holds every integer only up to 2^53, so an int beyond that is an
+// error rather than a silently different number.
+func celMathIntOverloads() []cel.EnvOption {
+	asDouble := cel.UnaryBinding(func(v ref.Val) ref.Val {
+		i, ok := v.(types.Int)
+		if !ok {
+			return types.NoSuchOverloadErr()
+		}
+		if i > maxExactDoubleInt || i < -maxExactDoubleInt {
+			return types.NewErr("math: %d is beyond ±2^53 and has no exact double; use the int itself", int64(i))
+		}
+		return types.Double(float64(i))
+	})
+	var opts []cel.EnvOption
+	for _, name := range []string{"ceil", "floor", "round", "trunc"} {
+		opts = append(opts, cel.Function("math."+name,
+			cel.Overload("math_"+name+"_int", []*cel.Type{cel.IntType}, cel.DoubleType, asDouble)))
+	}
+	return opts
 }
 
 // ProgramOptions are applied to every program built from a workflow

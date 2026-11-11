@@ -66,6 +66,9 @@ import { hostedVerdictOf, type ForgeHostedWorkload, type HostedDomain, type Host
  *
  *   persistent  the platform runs its workloads (Reliant cloud).
  *   preview     the same, with an expiry (one per pull request).
+ *   self_managed  the workloads run on the customer's own cluster, which forge
+ *               applies to; the control plane records its promotions (its
+ *               release ledger) but runs nothing. control-plane's own prod.
  *   local       the workloads run on a developer machine via `forge env up`;
  *               the control plane is its SECRET STORE only, and never deploys,
  *               promotes or rolls it back. Immutable once created.
@@ -73,7 +76,7 @@ import { hostedVerdictOf, type ForgeHostedWorkload, type HostedDomain, type Host
  *               `persistent` — that would offer cloud language (deployments,
  *               promotions) for an environment that may have neither.
  */
-export type CloudEnvKind = "persistent" | "preview" | "local" | "unknown";
+export type CloudEnvKind = "persistent" | "preview" | "self_managed" | "local" | "unknown";
 
 export interface CloudEnv {
   id: string;
@@ -193,6 +196,8 @@ function kindOf(kind: DeployEnvironmentKind): CloudEnvKind {
       return "persistent";
     case DeployEnvironmentKind.PREVIEW:
       return "preview";
+    case DeployEnvironmentKind.SELF_MANAGED:
+      return "self_managed";
     case DeployEnvironmentKind.LOCAL:
       return "local";
     default:

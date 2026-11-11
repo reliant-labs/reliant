@@ -129,6 +129,20 @@ func (s *gatewaySession) backlog() int {
 // runSender is the single goroutine that drains sendCh and writes to the
 // bidi stream. This serialises writes (required — stream.Send is not
 // thread-safe) without blocking producers on I/O.
+//
+// A Send that fails never leaves the session half-alive. Before, runSender
+// just returned: the stream stayed registered and its read half kept going,
+// but nothing drained sendCh, so every message after it — command responses,
+// terminal output, heartbeats — queued into nothing until the liveness check
+// noticed the unacknowledged heartbeat ~95s later. Every terminal and tool on
+// the machine was dead for that long (prod, 2026-11-05 16:01:00-16:02:35: one
+// message with invalid UTF-8 in a string field). Now:
+//
+//   - a message that failed because a string field holds invalid UTF-8
+//     (proto3 rejects it at marshal time, before anything is written) is
+//     repaired and sent again;
+//   - any other failure, or a repaired message that still fails, retires the
+//     stream at once, so the daemon redials instead of waiting out liveness.
 func (s *gatewaySession) runSender(stream messageSender) {
 	defer close(s.sendDone)
 	for {
@@ -137,8 +151,16 @@ func (s *gatewaySession) runSender(stream messageSender) {
 			if msg == nil {
 				return
 			}
-			if err := stream.Send(msg); err != nil {
-				logging.Warn(logPrefix+" runSender: stream.Send failed", "error", err)
+			err := stream.Send(msg)
+			if err != nil && repairUTF8(msg.ProtoReflect()) {
+				logging.Error(logPrefix+" runSender: a message carried invalid UTF-8; sending it repaired",
+					"message", fmt.Sprintf("%T", msg.GetMessage()), "error", err)
+				err = stream.Send(msg)
+			}
+			if err != nil {
+				logging.Warn(logPrefix+" runSender: stream.Send failed; ending the session to reconnect", "error", err)
+				s.end() // producers stop queueing into a queue nobody drains
+				s.retireNow()
 				return
 			}
 		case <-s.done:
@@ -320,16 +342,20 @@ func (d *daemonClient) sendToolResult(origin *gatewaySession, requestID string, 
 		"request_id", requestID)
 }
 
-// sendHeldResults sends s every held result pick selects, oldest first.
-func (d *daemonClient) sendHeldResults(s *gatewaySession, pick func(*heldResult) bool) {
+// sendHeldResults sends s every held result pick selects, oldest first, and
+// reports how many it sent.
+func (d *daemonClient) sendHeldResults(s *gatewaySession, pick func(*heldResult) bool) int {
+	sent := 0
 	for _, h := range d.results.matching(pick) {
 		if err := s.send(h.msg); err != nil {
-			return
+			return sent
 		}
+		sent++
 		d.results.markSent(h.requestID, s)
 		logging.Info(logPrefix+" Resent a held tool result", "request_id", h.requestID,
 			"held_for", time.Since(h.heldAt).Round(time.Millisecond))
 	}
+	return sent
 }
 
 // handleToolResultAck forgets an acknowledged result. Idempotent: an ack for a
@@ -353,10 +379,16 @@ func (d *daemonClient) handleToolStatus(payload []byte) ([]byte, error) {
 		return nil, fmt.Errorf("%s: request_id is required", toolexec.ToolStatusCommand)
 	}
 	state := d.results.state(req.RequestID)
-	if state == toolexec.ToolRequestCompleted {
-		d.sendHeldResults(d.session.Load(), func(h *heldResult) bool { return h.requestID == req.RequestID })
+	resent := false
+	switch state {
+	case toolexec.ToolRequestCompleted:
+		resent = d.sendHeldResults(d.session.Load(), func(h *heldResult) bool { return h.requestID == req.RequestID }) > 0
+	case toolexec.ToolRequestDelivered:
+		// A run step's result a gateway took for a worker that is gone:
+		// sent again for the retry reattaching to it (resultRetainTTL).
+		resent = d.resendRetainedResult(d.session.Load(), req.RequestID)
 	}
-	return json.Marshal(toolexec.ToolStatusResponse{State: state})
+	return json.Marshal(toolexec.ToolStatusResponse{State: state, Resent: resent})
 }
 
 // Result outbox bounds, in memory and on disk alike. A worker waits for a result at most its request's
@@ -376,6 +408,9 @@ type heldResult struct {
 	sentOn    *gatewaySession // the stream it last went out on; nil if none took it
 	heldAt    time.Time
 	size      int
+	// retain keeps the result for resultRetainTTL after it is acknowledged
+	// (markRetain): a run step's, for a retry that reattaches to it.
+	retain bool
 }
 
 // resultOutbox tracks every tool call from the moment its request arrives
@@ -388,12 +423,34 @@ type resultOutbox struct {
 	delivered map[string]time.Time
 	heldBytes int
 
+	// retainOnAck marks running calls whose result is kept after its
+	// acknowledgement; retained holds those results (result_retain.go).
+	retainOnAck   map[string]struct{}
+	retained      map[string]*heldResult
+	retainedBytes int
+
+	// seen holds a tombstone for every run step's request id this daemon
+	// began, with when it may be forgotten: what keeps a request id from
+	// running twice after its result is gone (result_once.go).
+	seen        map[string]time.Time
+	seenSweptAt time.Time
+
 	// store mirrors running calls and held results to disk so they outlive
 	// the process (result_outbox_store.go). Nil keeps the outbox in memory.
 	store *outboxStore
 	// ttl and budget override resultHoldTTL and resultHoldBudget when set.
 	ttl    time.Duration
 	budget int
+	// clock is the outbox's time; nil is time.Now. Tests fix it.
+	clock func() time.Time
+}
+
+// now is the outbox's current time.
+func (o *resultOutbox) now() time.Time {
+	if o.clock != nil {
+		return o.clock()
+	}
+	return time.Now()
 }
 
 func (o *resultOutbox) holdTTL() time.Duration {
@@ -416,7 +473,8 @@ func (o *resultOutbox) holdBudget() int {
 // outbox is shared, at construction.
 func (o *resultOutbox) restore(store *outboxStore) outboxLoadReport {
 	o.store = store
-	held, report := store.load(time.Now(), o.holdTTL(), o.holdBudget())
+	now := o.now()
+	held, retained, report := store.load(now, o.holdTTL(), o.holdBudget())
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	if o.held == nil {
@@ -426,6 +484,10 @@ func (o *resultOutbox) restore(store *outboxStore) outboxLoadReport {
 		o.held[h.requestID] = h
 		o.heldBytes += h.size
 	}
+	o.restoreRetainedLocked(retained, now)
+	seen, expired := store.loadSeen(now)
+	o.seen = seen
+	report.Seen, report.Expired = len(seen), report.Expired+expired
 	return report
 }
 
@@ -457,7 +519,7 @@ func (o *resultOutbox) persistRunning(requestID string) {
 // missing and then see it written — so a result a gateway could have seen
 // survives a restart.
 func (o *resultOutbox) hold(requestID string, msg *reliantv1.DaemonMessage, origin *gatewaySession) {
-	now := time.Now()
+	now := o.now()
 	persisted := o.store.putResult(requestID, msg, now) == nil
 
 	o.mu.Lock()
@@ -469,6 +531,8 @@ func (o *resultOutbox) hold(requestID string, msg *reliantv1.DaemonMessage, orig
 		o.heldBytes -= prev.size
 	}
 	h := &heldResult{requestID: requestID, msg: msg, origin: origin, heldAt: now, size: messageSize(msg)}
+	_, h.retain = o.retainOnAck[requestID]
+	delete(o.retainOnAck, requestID)
 	o.held[requestID] = h
 	o.heldBytes += h.size
 	o.expireLocked(now)
@@ -496,7 +560,7 @@ func (o *resultOutbox) markSent(requestID string, s *gatewaySession) {
 
 // ack forgets a held result and returns it, the first time only.
 func (o *resultOutbox) ack(requestID string) *heldResult {
-	now := time.Now()
+	now := o.now()
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	h, ok := o.held[requestID]
@@ -509,8 +573,13 @@ func (o *resultOutbox) ack(requestID string) *heldResult {
 		o.delivered = make(map[string]time.Time)
 	}
 	o.delivered[requestID] = now
+	if h.retain {
+		o.retainLocked(h, now)
+		o.store.retainResult(requestID, now)
+	} else {
+		o.store.removeResult(requestID)
+	}
 	o.expireLocked(now)
-	o.store.removeResult(requestID)
 	return h
 }
 
@@ -518,7 +587,12 @@ func (o *resultOutbox) ack(requestID string) *heldResult {
 func (o *resultOutbox) state(requestID string) toolexec.ToolRequestState {
 	o.mu.Lock()
 	defer o.mu.Unlock()
-	o.expireLocked(time.Now())
+	o.expireLocked(o.now())
+	return o.stateLocked(requestID)
+}
+
+// stateLocked is state without the sweep. Must hold o.mu.
+func (o *resultOutbox) stateLocked(requestID string) toolexec.ToolRequestState {
 	if _, ok := o.running[requestID]; ok {
 		return toolexec.ToolRequestRunning
 	}
@@ -528,6 +602,10 @@ func (o *resultOutbox) state(requestID string) toolexec.ToolRequestState {
 	if _, ok := o.delivered[requestID]; ok {
 		return toolexec.ToolRequestDelivered
 	}
+	if _, ok := o.seen[requestID]; ok {
+		// A run step that ran here and whose result is gone (result_once.go).
+		return toolexec.ToolRequestDelivered
+	}
 	return toolexec.ToolRequestUnknown
 }
 
@@ -535,7 +613,7 @@ func (o *resultOutbox) state(requestID string) toolexec.ToolRequestState {
 func (o *resultOutbox) matching(pick func(*heldResult) bool) []*heldResult {
 	o.mu.Lock()
 	defer o.mu.Unlock()
-	o.expireLocked(time.Now())
+	o.expireLocked(o.now())
 	var out []*heldResult
 	for _, h := range o.held {
 		if pick(h) {
@@ -584,6 +662,8 @@ func (o *resultOutbox) expireLocked(now time.Time) {
 			delete(o.delivered, id)
 		}
 	}
+	o.expireRetainedLocked(now)
+	o.expireSeenLocked(now)
 }
 
 // messageSize approximates a held result's memory: its payload strings.

@@ -9,6 +9,8 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import { createPortal } from "react-dom";
 import { cn } from "../../lib/utils";
 import { useUnmountSafeTimeout } from "../../hooks/useUnmountSafeTimeout";
+import { BELOW_FIRST, BESIDE_FIRST, placeCallout, type CalloutSide } from "./calloutPlacement";
+import { holdUserScroll, watchUserScroll } from "./userScroll";
 import type { SpotlightConfig } from "./types";
 
 // Store last known positions for smooth transitions between steps
@@ -30,6 +32,38 @@ interface OnboardingSpotlightProps {
   tooltipPadding?: number;
   /** Spotlight configuration for padding and border-radius */
   spotlightConfig?: SpotlightConfig;
+  /**
+   * Enter / → advance and ← goes back. Off while a step waits on a required
+   * action: the user is typing into the app, and Enter must reach it.
+   */
+  keyboardNav?: boolean;
+  /**
+   * Block pointer clicks outside the target (a required action is pending).
+   * Only the dimmed area blocks: the target stays clickable, the nav bar sits
+   * above, and keyboard focus and screen readers are untouched. Nothing is
+   * blocked while the target can't be found, so a missing anchor never traps
+   * the user.
+   */
+  blockOutside?: boolean;
+  /**
+   * The compact presentation (Journey.controls "callout"): the step's own
+   * controls inside the card (`footer`), the pending action's instruction
+   * (`hint`), no bottom bar to keep clear of, and the card beside the target
+   * rather than below it.
+   */
+  callout?: {
+    footer: React.ReactNode;
+    hint?: React.ReactNode;
+    /** Keep an always-open page tour out of the desktop sidebar. */
+    viewportLeft?: number;
+    /** Keep it below a fixed row above the page (the demo's screen actions), which stacks over the tour. */
+    viewportTop?: number;
+    /**
+     * False when the reader scrolled before the target turned up (userScroll.ts):
+     * the page stays where they put it, and a phone's sheet shows without the dim.
+     */
+    autoScroll?: boolean;
+  };
 }
 
 interface Position {
@@ -71,80 +105,140 @@ function detectBorderRadius(element: Element): number {
   return Math.round(nonZero.reduce((a, b) => a + b, 0) / nonZero.length);
 }
 
+/**
+ * The first element matching `selector` that is actually rendered. A page can
+ * hold the same test id twice (a desktop table and its phone layout), and a
+ * hidden copy measures 0×0 at the top-left: highlighting it draws a ring
+ * nowhere near anything. Engines without checkVisibility (jsdom) count every
+ * match as visible.
+ */
+export function findVisibleTarget(selector: string): Element | null {
+  let matches: NodeListOf<Element>;
+  try {
+    matches = document.querySelectorAll(selector);
+  } catch {
+    return null;
+  }
+  for (const el of matches) {
+    const check = (el as Element & { checkVisibility?: () => boolean }).checkVisibility;
+    if (typeof check !== "function" || check.call(el)) return el;
+  }
+  return null;
+}
+
 const DEFAULT_TOOLTIP_SIZE: ElementSize = { width: 320, height: 200 };
 const VIEWPORT_PADDING = 16;
 // Height reserved for the OnboardingNavBar at the bottom of the screen
 const NAV_BAR_CLEARANCE = 176;
+// The shortest a callout kept below a top inset shrinks to: its title and Done button.
+const MIN_CALLOUT_HEIGHT = 120;
 
-function clamp(value: number, min: number, max: number): number {
-  return Math.max(min, Math.min(value, Math.max(min, max)));
-}
-
+/** Where the card goes: beside the target, never over it (calloutPlacement.ts). */
 function calculateTooltipPosition(
   rect: TargetRect,
   position: "top" | "bottom" | "left" | "right" | "auto",
   tooltipSize: ElementSize = DEFAULT_TOOLTIP_SIZE,
-  targetGap: number = 16
-): Position & { actualPosition: "top" | "bottom" | "left" | "right" } {
-  const viewportWidth = window.innerWidth;
-  const effectiveViewportBottom = Math.max(
-    VIEWPORT_PADDING,
-    window.innerHeight - NAV_BAR_CLEARANCE
+  targetGap: number = 16,
+  bottomReserve: number = NAV_BAR_CLEARANCE,
+  order: readonly CalloutSide[] = BELOW_FIRST,
+  viewportLeft = 0,
+  viewportTop = 0
+): Position & { actualPosition: CalloutSide; maxHeight?: number } {
+  // On a window too short for the card below the top inset, the card shrinks
+  // (and scrolls) to the room the inset leaves, so it stays both below the
+  // inset and on screen. Only a window too short even for the smallest usable
+  // card gives up part of the inset.
+  const room = window.innerHeight - bottomReserve - 2 * VIEWPORT_PADDING;
+  viewportTop = Math.max(0, viewportTop);
+  // Never taller than the screen leaves it: a card that does not fit scrolls inside itself.
+  const maxHeight = Math.max(Math.min(MIN_CALLOUT_HEIGHT, window.innerHeight - 2 * VIEWPORT_PADDING), room - viewportTop);
+  const height = Math.min(tooltipSize.height, maxHeight);
+  viewportTop = Math.min(viewportTop, Math.max(0, room - height));
+  const placed = placeCallout(
+    { ...rect, left: rect.left - viewportLeft, top: rect.top - viewportTop },
+    { width: tooltipSize.width, height },
+    { width: window.innerWidth - viewportLeft, height: window.innerHeight - viewportTop },
+    { preferred: position, order, gap: targetGap, margin: VIEWPORT_PADDING, bottomReserve }
   );
-  const tooltipWidth = tooltipSize.width;
-  const tooltipHeight = tooltipSize.height;
+  return { top: placed.top + viewportTop, left: placed.left + viewportLeft, actualPosition: placed.side, maxHeight };
+}
 
-  // Auto-detect best position
-  let actualPosition: "top" | "bottom" | "left" | "right" = position === "auto" ? "bottom" : position;
-  if (position === "auto") {
-    const spaceAbove = rect.top - VIEWPORT_PADDING;
-    const spaceBelow = effectiveViewportBottom - (rect.top + rect.height);
-    const spaceRight = viewportWidth - (rect.left + rect.width) - VIEWPORT_PADDING;
-    const spaceLeft = rect.left - VIEWPORT_PADDING;
+/**
+ * Where the card goes when its target is not on the page (not rendered yet,
+ * gone after a navigation): the bottom-right corner of the page's box, on
+ * screen, never at a stale spot.
+ */
+function cornerPosition(tooltipSize: ElementSize, bottomReserve: number, viewportLeft = 0, viewportTop = 0): Position & { actualPosition: CalloutSide; maxHeight: number } {
+  const maxHeight = Math.max(MIN_CALLOUT_HEIGHT, window.innerHeight - bottomReserve - 2 * VIEWPORT_PADDING - Math.max(0, viewportTop));
+  const height = Math.min(tooltipSize.height, maxHeight);
+  const width = Math.min(tooltipSize.width, window.innerWidth - 2 * VIEWPORT_PADDING);
+  return {
+    top: Math.max(viewportTop + VIEWPORT_PADDING, window.innerHeight - bottomReserve - VIEWPORT_PADDING - height),
+    left: Math.max(viewportLeft + VIEWPORT_PADDING, window.innerWidth - VIEWPORT_PADDING - width),
+    actualPosition: "bottom",
+    maxHeight,
+  };
+}
 
-    // Prefer below, then above, then right, then left when there is enough room.
-    if (spaceBelow >= tooltipHeight + targetGap) {
-      actualPosition = "bottom";
-    } else if (spaceAbove >= tooltipHeight + targetGap) {
-      actualPosition = "top";
-    } else if (spaceRight >= tooltipWidth + targetGap) {
-      actualPosition = "right";
-    } else if (spaceLeft >= tooltipWidth + targetGap) {
-      actualPosition = "left";
-    } else if (Math.max(spaceBelow, spaceAbove) >= Math.max(spaceRight, spaceLeft)) {
-      actualPosition = spaceBelow >= spaceAbove ? "bottom" : "top";
-    } else {
-      actualPosition = spaceRight >= spaceLeft ? "right" : "left";
+/** Whether a target's box lies wholly outside the window (scrolled away). */
+function isOffscreen(rect: TargetRect): boolean {
+  return rect.top + rect.height < 0 || rect.top > window.innerHeight || rect.left + rect.width < 0 || rect.left > window.innerWidth;
+}
+
+/** Below this width a callout is a bottom sheet (tailwind `sm`). */
+export const SHEET_MAX_WIDTH = 640;
+/** The sheet's tallest, as a share of the viewport: the target keeps the rest. */
+const SHEET_MAX_VH = 45;
+
+export function isSheetViewport(): boolean {
+  return typeof window !== "undefined" && window.innerWidth < SHEET_MAX_WIDTH;
+}
+
+/** Room left above a target scrolled to the top: a page's sticky header. */
+const SHEET_TOP_GAP = 64;
+
+/** The nearest ancestor that scrolls vertically, else the document. */
+function scrollParent(el: Element): HTMLElement {
+  for (let p = el.parentElement; p && p !== document.body; p = p.parentElement) {
+    const overflowY = getComputedStyle(p).overflowY;
+    if ((overflowY === "auto" || overflowY === "scroll") && p.scrollHeight > p.clientHeight) return p;
+  }
+  return (document.scrollingElement as HTMLElement | null) ?? document.documentElement;
+}
+
+/**
+ * Scroll `target` into the part of the screen the bottom sheet leaves free,
+ * below the page's header. A target near the page's end can't scroll that
+ * far, so its scroller gets the sheet's height of room underneath while the
+ * sheet is up; the returned function takes it away.
+ */
+function scrollAboveSheet(target: Element): () => void {
+  const free = window.innerHeight * (1 - SHEET_MAX_VH / 100);
+  const inView = () => {
+    const rect = target.getBoundingClientRect();
+    return rect.top >= 8 && rect.bottom <= free;
+  };
+  const scrollTo = () => {
+    try {
+      target.scrollIntoView({ block: "start", behavior: "auto" });
+      const top = target.getBoundingClientRect().top;
+      if (top < SHEET_TOP_GAP) scrollParent(target).scrollBy({ top: top - SHEET_TOP_GAP });
+    } catch {
+      // jsdom and old engines: the sheet still shows.
     }
-  }
-
-  let top = 0;
-  let left = 0;
-
-  switch (actualPosition) {
-    case "top":
-      top = rect.top - tooltipHeight - targetGap;
-      left = rect.left + rect.width / 2 - tooltipWidth / 2;
-      break;
-    case "bottom":
-      top = rect.top + rect.height + targetGap;
-      left = rect.left + rect.width / 2 - tooltipWidth / 2;
-      break;
-    case "left":
-      top = rect.top + rect.height / 2 - tooltipHeight / 2;
-      left = rect.left - tooltipWidth - targetGap;
-      break;
-    case "right":
-      top = rect.top + rect.height / 2 - tooltipHeight / 2;
-      left = rect.left + rect.width + targetGap;
-      break;
-  }
-
-  // Clamp to viewport, reserving space at bottom for nav bar.
-  left = clamp(left, VIEWPORT_PADDING, viewportWidth - tooltipWidth - VIEWPORT_PADDING);
-  top = clamp(top, VIEWPORT_PADDING, effectiveViewportBottom - tooltipHeight - VIEWPORT_PADDING);
-
-  return { top, left, actualPosition };
+  };
+  if (inView()) return () => {};
+  scrollTo();
+  const rect = target.getBoundingClientRect();
+  if (rect.bottom <= free || rect.height > free - SHEET_TOP_GAP) return () => {};
+  const scroller = scrollParent(target);
+  const before = scroller.style.paddingBottom;
+  // dvh, like the sheet: `free` above is a share of innerHeight, the viewport a phone shows now.
+  scroller.style.paddingBottom = `calc(${getComputedStyle(scroller).paddingBottom} + ${SHEET_MAX_VH}dvh)`;
+  scrollTo();
+  return () => {
+    scroller.style.paddingBottom = before;
+  };
 }
 
 export function OnboardingSpotlight({
@@ -160,7 +254,42 @@ export function OnboardingSpotlight({
   autoSkipIfMissing = false,
   tooltipPadding = 16,
   spotlightConfig,
+  keyboardNav = true,
+  blockOutside = false,
+  callout,
 }: OnboardingSpotlightProps) {
+  const compact = !!callout;
+  // A phone: the card is a bottom sheet, and the target is scrolled into the space above it.
+  const [sheet, setSheet] = useState(() => compact && isSheetViewport());
+  useEffect(() => {
+    if (!compact) return;
+    const onResize = () => setSheet(isSheetViewport());
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, [compact]);
+  // Once the reader scrolls a phone's page, the page is never scrolled for
+  // them again, and the sheet stays while the dim and ring step aside: they
+  // track the target from the main thread, so they trail a touch scroll. A
+  // pending required action instead holds the page still (holdPage below):
+  // its click blockers follow the cutout, so nothing that tracks the target
+  // may move under a finger, and the target is always placed above the sheet.
+  const [readerScrolled, setReaderScrolled] = useState(false);
+  const holdPage = sheet && blockOutside;
+  const handsOff = !holdPage && (callout?.autoScroll === false || readerScrolled);
+  const stepAside = sheet && handsOff;
+  // Read by the placement effect below, which must not re-run (and re-scroll) when they flip.
+  const handsOffRef = useRef({ handsOff, stepAside });
+  const autoScrollRef = useRef(callout?.autoScroll !== false);
+  useEffect(() => {
+    autoScrollRef.current = callout?.autoScroll !== false;
+  }, [callout?.autoScroll]);
+  useEffect(() => {
+    handsOffRef.current = { handsOff, stepAside };
+  }, [handsOff, stepAside]);
+  useEffect(() => {
+    if (!sheet) return;
+    return watchUserScroll(() => setReaderScrolled(true));
+  }, [sheet]);
   // stepNumber/totalSteps are accepted for interface compatibility — the
   // OnboardingNavBar renders progress. onSkipAll is accepted but unused:
   // ESC no longer ends the tour; skipping happens via the nav bar button.
@@ -168,18 +297,30 @@ export function OnboardingSpotlight({
   void _totalSteps;
   void _onSkipAll;
   const [spotlightRect, setSpotlightRect] = useState<SpotlightRect | null>(null);
+  // The retries ran out, or a found target went away: the card waits in the corner, with no dim and no ring.
+  const [targetMissing, setTargetMissing] = useState(false);
   const tooltipRef = useRef<HTMLDivElement | null>(null);
+  // The overlay itself: its own re-renders are not the page changing.
+  const layerRef = useRef<HTMLDivElement | null>(null);
+  // The sheet's own content still scrolls; the page under it does not.
+  useEffect(() => {
+    if (!holdPage) return;
+    return holdUserScroll(() => tooltipRef.current);
+  }, [holdPage]);
   const [tooltipSize, setTooltipSize] = useState<ElementSize>(DEFAULT_TOOLTIP_SIZE);
   // Initialize from last position for smooth tooltip transition between steps
-  const [tooltipPos, setTooltipPos] = useState<Position & { actualPosition: string }>(() => ({
-    top: lastTooltipPosition?.top ?? window.innerHeight / 2,
-    left: lastTooltipPosition?.left ?? window.innerWidth / 2,
+  // (Kept on this screen: the last step may have been placed on a wider or taller one.)
+  const [tooltipPos, setTooltipPos] = useState<Position & { actualPosition: string; maxHeight?: number }>(() => ({
+    top: Math.max(VIEWPORT_PADDING, Math.min(lastTooltipPosition?.top ?? window.innerHeight / 2, window.innerHeight - DEFAULT_TOOLTIP_SIZE.height - VIEWPORT_PADDING)),
+    left: Math.max(VIEWPORT_PADDING, Math.min(lastTooltipPosition?.left ?? window.innerWidth / 2, window.innerWidth - DEFAULT_TOOLTIP_SIZE.width - VIEWPORT_PADDING)),
     actualPosition: "bottom",
   }));
   // Start visible so tooltip can animate from last position
   const [isVisible, setIsVisible] = useState(true);
   // Highlight fades in separately from tooltip
   const [highlightVisible, setHighlightVisible] = useState(false);
+  // A blocked click pulses the highlight, pointing at what to click instead.
+  const [nudge, setNudge] = useState(0);
   // updatePosition also runs from resize/scroll listeners, so its highlight
   // fade-in timer is not owned by any one effect: tie it to the component.
   const scheduleTimeout = useUnmountSafeTimeout();
@@ -219,10 +360,13 @@ export function OnboardingSpotlight({
   }, []);
 
   const updatePosition = useCallback(() => {
-    const target = document.querySelector(targetSelector);
+    const target = findVisibleTarget(targetSelector);
     if (!target) {
-      console.warn(`[OnboardingSpotlight] Target not found: ${targetSelector}`);
-      setSpotlightRect(null);
+      // Gone (a navigation under the step, a re-render): no ring at the old spot.
+      setSpotlightRect((current) => {
+        if (current) console.warn(`[OnboardingSpotlight] Target not found: ${targetSelector}`);
+        return null;
+      });
       setHighlightVisible(false);
       return;
     }
@@ -246,15 +390,34 @@ export function OnboardingSpotlight({
       height: rect.height,
       borderRadius,
     };
-    setSpotlightRect(newRect);
+    setSpotlightRect((current) =>
+      current &&
+      current.top === newRect.top &&
+      current.left === newRect.left &&
+      current.width === newRect.width &&
+      current.height === newRect.height &&
+      current.borderRadius === newRect.borderRadius
+        ? current
+        : newRect
+    );
     // Fade in the highlight after a brief delay
     scheduleTimeout(() => setHighlightVisible(true), 50);
   }, [targetSelector, spotlightConfig, shouldDetectBorderRadius, scheduleTimeout]);
 
+  // A target scrolled out of the window: nothing to ring or dim around, so the card waits in the corner.
+  const offscreen = !!spotlightRect && isOffscreen(spotlightRect);
   useEffect(() => {
-    if (!spotlightRect) return;
-    setTooltipPos(calculateTooltipPosition(spotlightRect, tooltipPosition, tooltipSize, tooltipPadding));
-  }, [spotlightRect, tooltipPosition, tooltipSize, tooltipPadding]);
+    const bottomReserve = compact ? 0 : NAV_BAR_CLEARANCE;
+    if (!spotlightRect || offscreen) {
+      if (targetMissing || offscreen) setTooltipPos(cornerPosition(tooltipSize, bottomReserve, callout?.viewportLeft ?? 0, callout?.viewportTop ?? 0));
+      return;
+    }
+    setTooltipPos(
+      compact
+        ? calculateTooltipPosition(spotlightRect, tooltipPosition, tooltipSize, tooltipPadding, 0, BESIDE_FIRST, callout?.viewportLeft ?? 0, callout?.viewportTop ?? 0)
+        : calculateTooltipPosition(spotlightRect, tooltipPosition, tooltipSize, tooltipPadding)
+    );
+  }, [spotlightRect, offscreen, targetMissing, tooltipPosition, tooltipSize, tooltipPadding, compact, callout?.viewportLeft, callout?.viewportTop]);
 
   useEffect(() => {
     const frame = requestAnimationFrame(measureTooltip);
@@ -263,9 +426,24 @@ export function OnboardingSpotlight({
 
   useEffect(() => {
     // Initial position update with retry logic for elements that appear after navigation
+    let unroom: (() => void) | null = null;
+    // Desktop: a step arriving at a target outside the window brings it into view, once, unless the
+    // reader already scrolled or the caller asked to leave the page alone (autoScroll: false).
+    let readerScrolledHere = false;
+    const stopWatching = sheet ? null : watchUserScroll(() => { readerScrolledHere = true; });
+    let arrived = false;
     const attemptUpdate = () => {
-      const target = document.querySelector(targetSelector);
+      const target = findVisibleTarget(targetSelector);
       if (target) {
+        if (sheet && !handsOffRef.current.handsOff) unroom = scrollAboveSheet(target);
+        if (!sheet && !arrived && autoScrollRef.current && !readerScrolledHere && isOffscreen(target.getBoundingClientRect())) {
+          try {
+            target.scrollIntoView({ block: "center", behavior: "auto" });
+          } catch {
+            // jsdom: nothing to scroll.
+          }
+        }
+        arrived = true;
         updatePosition();
         setIsVisible(true);
         return true;
@@ -296,7 +474,8 @@ export function OnboardingSpotlight({
               console.info(`[OnboardingSpotlight] Auto-skipping step due to missing target`);
               onNext();
             } else {
-              setIsVisible(true); // Show overlay so user can use keyboard to skip
+              setTargetMissing(true);
+              setIsVisible(true); // Show the card so the user can still move on
             }
           }
         }
@@ -310,22 +489,57 @@ export function OnboardingSpotlight({
       }, 300);
     }
 
-    // Reposition on scroll/resize
-    window.addEventListener("resize", updatePosition);
-    window.addEventListener("scroll", updatePosition, true);
+    // Reposition on scroll/resize. A sheet that stepped aside draws nothing
+    // that follows the target, so the reader's scroll costs it no work.
+    const reposition = () => {
+      if (handsOffRef.current.stepAside) return;
+      updatePosition();
+    };
+    window.addEventListener("resize", reposition);
+    window.addEventListener("scroll", reposition, true);
+    window.visualViewport?.addEventListener("resize", reposition);
+
+    // The page changing under the step (a navigation, a list re-rendering, a
+    // tab switch) moves or removes the target without a scroll or resize:
+    // follow it, once a frame at most, so the ring never stays at a stale
+    // spot, and re-anchors when the target comes back.
+    let frame: number | null = null;
+    const observer =
+      typeof MutationObserver === "undefined"
+        ? null
+        : new MutationObserver((records) => {
+            // The card's own content changing is not the page moving.
+            if (records.every((record) => layerRef.current?.contains(record.target))) return;
+            if (frame !== null) return;
+            frame = requestAnimationFrame(() => {
+              frame = null;
+              if (handsOffRef.current.stepAside) return;
+              const found = findVisibleTarget(targetSelector) !== null;
+              if (found && retryInterval) return; // the retry loop is still placing it
+              setTargetMissing(!found);
+              updatePosition();
+            });
+          });
+    observer?.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["class", "style", "hidden", "open"] });
 
     return () => {
       if (retryInterval) clearInterval(retryInterval);
       if (settleTimeout) clearTimeout(settleTimeout);
-      window.removeEventListener("resize", updatePosition);
-      window.removeEventListener("scroll", updatePosition, true);
+      if (frame !== null) cancelAnimationFrame(frame);
+      observer?.disconnect();
+      stopWatching?.();
+      window.removeEventListener("resize", reposition);
+      window.removeEventListener("scroll", reposition, true);
+      window.visualViewport?.removeEventListener("resize", reposition);
+      unroom?.();
     };
-  }, [updatePosition, targetSelector, autoSkipIfMissing, onNext]);
+  }, [updatePosition, targetSelector, autoSkipIfMissing, onNext, sheet]);
 
   // Handle keyboard navigation.
   // ESC intentionally does nothing — it must not end the tour. The user can
   // skip explicitly via the "Skip tour" button in OnboardingNavBar.
   useEffect(() => {
+    if (!keyboardNav) return;
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Enter" || e.key === "ArrowRight") {
         e.stopPropagation();
@@ -341,7 +555,7 @@ export function OnboardingSpotlight({
     // Use capture phase to intercept before other handlers
     document.addEventListener("keydown", handleKeyDown, true);
     return () => document.removeEventListener("keydown", handleKeyDown, true);
-  }, [onNext, onBack]);
+  }, [onNext, onBack, keyboardNav]);
 
   // Calculate the spotlight cutout dimensions (element + padding)
   // For elements at viewport edges, use exact bounds with no padding
@@ -379,13 +593,18 @@ export function OnboardingSpotlight({
 
   const spotlightContent = (
     <div
+      ref={layerRef}
       className={cn(
         "fixed inset-0 z-[100] transition-opacity duration-300 overflow-hidden pointer-events-none",
         isVisible ? "opacity-100" : "opacity-0"
       )}
     >
       {/* Semi-transparent overlay with cutout */}
-      <svg className="absolute inset-0 w-full h-full pointer-events-none">
+      <svg
+        className={cn("absolute inset-0 w-full h-full pointer-events-none transition-opacity duration-300", (stepAside || (compact && (!cutoutRect || offscreen))) && "opacity-0")}
+        data-testid="onboarding-spotlight-dim"
+        data-stepped-aside={stepAside ? "true" : undefined}
+      >
         <defs>
           <mask id="spotlight-mask">
             <rect x="0" y="0" width="100%" height="100%" fill="white" />
@@ -418,12 +637,42 @@ export function OnboardingSpotlight({
        * to app on /workflow). */}
       <div className="absolute inset-0 pointer-events-none" />
 
+      {/* Click blockers — only while a required action is pending (see
+       * blockOutside), and only around a target that was found. Four panes
+       * around the cutout, so the target itself stays clickable. */}
+      {blockOutside && cutoutRect && !offscreen && (
+        <>
+          {[
+            { top: 0, left: 0, width: "100%", height: cutoutRect.y },
+            { top: cutoutRect.y + cutoutRect.height, left: 0, width: "100%", bottom: 0 },
+            { top: cutoutRect.y, left: 0, width: cutoutRect.x, height: cutoutRect.height },
+            { top: cutoutRect.y, left: cutoutRect.x + cutoutRect.width, right: 0, height: cutoutRect.height },
+          ].map((style, i) => (
+            <div
+              key={i}
+              aria-hidden="true"
+              data-testid="onboarding-click-blocker"
+              className="absolute pointer-events-auto"
+              style={style}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setNudge((n) => n + 1);
+              }}
+            />
+          ))}
+        </>
+      )}
+
       {/* Highlight border around target - uses inset box-shadow to avoid overflow issues */}
       {cutoutRect && (
         <div
+          key={nudge}
+          data-testid="onboarding-spotlight-ring"
           className={cn(
             "absolute pointer-events-none transition-opacity duration-300",
-            highlightVisible ? "opacity-100" : "opacity-0"
+            highlightVisible && !stepAside ? "opacity-100" : "opacity-0",
+            nudge > 0 && "animate-pulse"
           )}
           style={{
             top: cutoutRect.y,
@@ -440,21 +689,30 @@ export function OnboardingSpotlight({
       {/* Tooltip content - shows and animates from last position */}
       <div
         ref={tooltipRef}
+        role="status"
+        aria-live="polite"
         className={cn(
           "absolute rounded-xl border border-border bg-popover text-popover-foreground shadow-2xl",
-          "transition-all duration-500 ease-out",
-          isVisible ? "opacity-100 scale-100" : "opacity-0 scale-95"
+          "transition-all duration-500 ease-out motion-reduce:transition-none",
+          isVisible ? "opacity-100 scale-100" : "opacity-0 scale-95",
+          compact && "pointer-events-auto"
         )}
-        style={{
-          top: tooltipPos.top,
-          left: tooltipPos.left,
-          width: "min(20rem, calc(100vw - 2rem))",
-        }}
+        data-testid="tour-callout"
+        data-side={sheet ? "sheet" : tooltipPos.actualPosition}
+        data-target-missing={targetMissing && !cutoutRect ? "true" : undefined}
+        data-target-offscreen={offscreen ? "true" : undefined}
+        style={
+          sheet
+            ? { left: 0, right: 0, bottom: 0, top: "auto", width: "100%", maxHeight: `${SHEET_MAX_VH}dvh`, overflowY: "auto", overscrollBehavior: "contain", borderBottomLeftRadius: 0, borderBottomRightRadius: 0 }
+            : { top: tooltipPos.top, left: tooltipPos.left, width: "min(20rem, calc(100vw - 2rem))", ...(tooltipPos.maxHeight === undefined ? {} : { maxHeight: tooltipPos.maxHeight, overflowY: "auto" as const }) }
+        }
       >
-        <div className="p-5">
+        <div className={sheet ? "p-4 pb-[max(1rem,env(safe-area-inset-bottom))]" : "p-5"}>
           {/* Title & Description */}
           <h3 className="text-lg font-semibold text-foreground mb-2.5 tracking-tight">{title}</h3>
           <div className="text-sm text-muted-foreground leading-relaxed">{description}</div>
+          {callout?.hint}
+          {callout?.footer}
         </div>
       </div>
     </div>

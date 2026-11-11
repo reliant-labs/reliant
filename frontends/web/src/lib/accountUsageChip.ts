@@ -5,7 +5,7 @@
  * Pure: no React, no RPCs.
  *
  * The chip is the exception, not a gauge: it is absent until the account is at
- * or above 80% in a window, or limited. Everything else about the account
+ * or above 80% in a window, serving from credits, or limited. Everything else about the account
  * lives in Settings → Providers.
  */
 
@@ -20,6 +20,8 @@ import {
 export type AccountChipState =
   /** The account is still serving, but a window is nearly spent. */
   | { kind: "usage"; percent: number; windowLabel: string }
+  /** A plan window is spent and the provider serves the account from credits. */
+  | { kind: "credits" }
   /** Limited, and a sibling account of the provider can take over. */
   | { kind: "limited_next"; next: ProviderAccount }
   /** Limited, and no sibling account can take over. */
@@ -80,6 +82,7 @@ export function accountChipState(
     const next = nextAccountOf(account, accounts, now);
     return next ? { kind: "limited_next", next } : { kind: "limited_until" };
   }
+  if (account.usingCredits) return { kind: "credits" };
   const fullest = fullestWindow(account, now);
   if (fullest && fullest.used >= USAGE_WARN_FRACTION) {
     return {
@@ -127,6 +130,13 @@ export function accountChipText(
       return {
         label: compact ? base : `${base} · ${who}`,
         full: `${account.label} has used ${base}`,
+      };
+    }
+    case "credits": {
+      const who = shortAccountLabel(account, accounts);
+      return {
+        label: compact ? "Using credits" : `Using credits · ${who}`,
+        full: `${account.label} has used up its plan's limit; requests are paid from credits`,
       };
     }
     case "limited_next": {

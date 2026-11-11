@@ -78,11 +78,18 @@ function forwardSignals(child, options = {}) {
     }
   };
 
-  for (const signal of signals) {
-    parent.on(signal, () => forward(signal));
-  }
+  const listeners = signals.map((signal) => {
+    const listener = () => forward(signal);
+    parent.on(signal, listener);
+    return [signal, listener];
+  });
+  const dispose = () => {
+    for (const [signal, listener] of listeners) parent.removeListener(signal, listener);
+  };
+  child.once('exit', dispose);
+  child.once('error', dispose);
 
-  return { forward };
+  return { forward, dispose };
 }
 
 module.exports = { forwardSignals, exitCodeFor, TERMINATION_SIGNALS };

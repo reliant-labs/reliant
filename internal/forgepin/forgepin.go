@@ -43,6 +43,13 @@ const (
 	// pin" is reused. Resolving can run the project's .tools/bin/forge to
 	// read its version, and a skills index asks once per skill.
 	resolutionTTL = time.Minute
+	// failedResolutionTTL is how long a failure to obtain the pinned forge
+	// is reused. Obtaining it can mean building it (minutes, several cores):
+	// retried every minute for every project that pins it, a machine whose
+	// builds were failing (a full disk, load past its CPUs) ran one more
+	// build per project per minute, each killed at resolveTimeout, which kept
+	// it failing (2026-11-03).
+	failedResolutionTTL = 10 * time.Minute
 	// runTimeout bounds one command of the pinned forge.
 	runTimeout = time.Minute
 )
@@ -53,6 +60,14 @@ type source struct {
 
 	resolutions sync.Map // projectRoot -> resolution
 	outputs     sync.Map // cache key -> []byte
+	failures    sync.Map // cache key -> failedOutput
+}
+
+// failedOutput is a command line set the pinned forge refused, reused for
+// failedResolutionTTL like a failed resolution.
+type failedOutput struct {
+	at  time.Time
+	err error
 }
 
 type resolution struct {
@@ -79,14 +94,18 @@ func Default() Service { return defaultService }
 // Pinned reports the forge the project at root pins when it is not the
 // embedded one (ok), or why it could not be obtained (err). command is the
 // forge command the caller will run, which the decision depends on. An answer
-// is reused for a minute while forge.yaml is unchanged — a failure too, so an
-// unobtainable pin is not rebuilt once per skill.
+// is reused for a minute while forge.yaml is unchanged, and a failure for ten,
+// so an unobtainable pin is not rebuilt once per skill or once a minute.
 func (s *source) Pinned(root, command string) (forgecli.PinnedForge, bool, error) {
 	yaml, _ := os.ReadFile(filepath.Join(root, "forge.yaml"))
 	key := root + "\x00" + command
 	if v, ok := s.resolutions.Load(key); ok {
 		r := v.(resolution)
-		if r.yaml == string(yaml) && time.Since(r.at) < resolutionTTL {
+		ttl := resolutionTTL
+		if r.err != nil {
+			ttl = failedResolutionTTL
+		}
+		if r.yaml == string(yaml) && time.Since(r.at) < ttl {
 			return r.pf, r.ok, r.err
 		}
 	}
@@ -103,10 +122,22 @@ func (s *source) Pinned(root, command string) (forgecli.PinnedForge, bool, error
 // (Fingerprint). Kept in memory, and on disk for a module version, which
 // never changes; a linked checkout's key moves with every edit, so its output
 // is kept in memory only.
+//
+// A failure is kept in memory for failedResolutionTTL. Most are permanent (a
+// pin older than the command: `unknown flag: --json`), and the daemon asks
+// for the framework guide on every config poll of every project, so an
+// uncached failure ran the pinned forge once per project every few seconds
+// for as long as the daemon lived (a loaded machine, 2026-11-05: ~16 such
+// projects, each a forge process on every poll).
 func (s *source) Output(pf forgecli.PinnedForge, dir, name string, tries ...[]string) ([]byte, error) {
 	memKey := pf.Key + "\x00" + name
 	if v, ok := s.outputs.Load(memKey); ok {
 		return v.([]byte), nil
+	}
+	if v, ok := s.failures.Load(memKey); ok {
+		if f := v.(failedOutput); time.Since(f.at) < failedResolutionTTL {
+			return nil, f.err
+		}
 	}
 	diskDir := ""
 	if strings.HasPrefix(pf.Key, "pin:") && s.CacheDir != nil {
@@ -128,8 +159,10 @@ func (s *source) Output(pf forgecli.PinnedForge, dir, name string, tries ...[]st
 		}
 	}
 	if err != nil {
+		s.failures.Store(memKey, failedOutput{at: time.Now(), err: err})
 		return nil, err
 	}
+	s.failures.Delete(memKey)
 	s.outputs.Store(memKey, out)
 	if diskDir != "" {
 		writeAtomic(diskDir, name, out)

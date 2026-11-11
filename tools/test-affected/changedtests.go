@@ -29,6 +29,11 @@ import (
 // moment to catch one is the PR that wrote it, before it reaches main and
 // starts failing somebody else's run.
 //
+// A package inside a nested Go module (sdk/go has its own go.mod) gets a third
+// column, the module's directory, and its path is relative to that module:
+// `./reliant\t^(TestA)$\tsdk/go`. The root module does not contain it, so it
+// has to be tested from its own module root.
+//
 // It selects by FUNCTION, not by file, so touching one test in a 3000-line
 // file repeats that test alone. A changed helper (a non-Test func) selects
 // nothing: the gate is for tests the diff wrote, and the full lanes still run
@@ -39,8 +44,43 @@ type lineRange struct{ from, to int }
 
 // changedPkg is one package's tests to repeat.
 type changedPkg struct {
-	Dir   string   // ./relative package directory
+	Dir   string   // ./relative package directory (relative to Module when set)
 	Tests []string // sorted, unique
+	// Module is the directory of the nested Go module holding the package,
+	// relative to the repository root; empty for the root module.
+	Module string
+}
+
+// inNestedModules rewrites each package that lives in a nested Go module to
+// be relative to that module. moduleOf returns a directory's nested module
+// ("" for the root module).
+func inNestedModules(pkgs []changedPkg, moduleOf func(dir string) string) []changedPkg {
+	for i, p := range pkgs {
+		dir := strings.TrimPrefix(p.Dir, "./")
+		mod := moduleOf(dir)
+		if mod == "" {
+			continue
+		}
+		rel := strings.TrimPrefix(strings.TrimPrefix(dir, mod), "/")
+		pkgs[i].Module = mod
+		pkgs[i].Dir = "./" + rel
+		if rel == "" {
+			pkgs[i].Dir = "."
+		}
+	}
+	return pkgs
+}
+
+// nestedModuleOf finds the nearest go.mod at or above dir, below rootDir.
+func nestedModuleOf(rootDir string) func(string) string {
+	return func(dir string) string {
+		for d := dir; d != "." && d != "/" && d != ""; d = path.Dir(d) {
+			if _, err := os.Stat(filepath.Join(rootDir, filepath.FromSlash(d), "go.mod")); err == nil {
+				return d
+			}
+		}
+		return ""
+	}
 }
 
 // runPattern is the -run regexp that selects exactly pkg's tests.
@@ -187,7 +227,11 @@ func runChangedTests(args []string, stdout io.Writer) error {
 		return err
 	}
 	for _, p := range pkgs {
-		if _, err := fmt.Fprintf(stdout, "%s\t%s\n", p.Dir, p.runPattern()); err != nil {
+		line := p.Dir + "\t" + p.runPattern()
+		if p.Module != "" {
+			line += "\t" + p.Module
+		}
+		if _, err := fmt.Fprintln(stdout, line); err != nil {
 			return err
 		}
 	}
@@ -223,5 +267,9 @@ func changedTests(ctx context.Context, rootDir, baseFlag string) ([]changedPkg, 
 		ok, err := ctxBuild.MatchFile(filepath.Join(rootDir, filepath.FromSlash(path.Dir(p))), path.Base(p))
 		return err == nil && ok
 	}
-	return selectChangedTests(touched, read, builds)
+	pkgs, err := selectChangedTests(touched, read, builds)
+	if err != nil {
+		return nil, err
+	}
+	return inNestedModules(pkgs, nestedModuleOf(rootDir)), nil
 }

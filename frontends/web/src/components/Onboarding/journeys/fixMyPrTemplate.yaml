@@ -1,0 +1,84 @@
+# The workflows journey's example (journeys-spec.md §2): imported as the
+# user's own workflow, complete and wired, so the tour can show every part of
+# it on the canvas without asking the user to build anything. An agent
+# reviews a pull request, a loop fixes it until the tests pass, a branch asks
+# before merging or reports, and a weekday schedule is declared but off.
+# `name:`, `title:` and `timezone:` are replaced at import (fixMyPr.ts).
+# cmd/reliant/cmd/onboarding_template_test.go validates it as seeded.
+name: fix-my-pr
+title: Fix my PR
+description: Review a pull request, fix it until the tests pass, and ask before merging.
+inputs:
+  pr:
+    type: string
+    default: ""
+    description: The pull request to work on, as a number or URL. Empty means the current branch's PR.
+  test_command:
+    type: string
+    default: "make test"
+    description: The command that says whether the tests pass.
+entry: [review]
+nodes:
+  - id: review
+    type: workflow
+    ref: builtin://agent
+    thread:
+      inject:
+        role: user
+        content: |
+          Review pull request {{inputs.pr}} against its base branch. List the problems you find,
+          then fix the small ones on the PR's branch.
+  - id: fix_until_green
+    type: loop
+    passthrough: [test_command]
+    while: outputs.exit_code != 0 && iter.iteration < 3
+    inline:
+      entry: [fix]
+      outputs:
+        exit_code: "{{nodes.test.exit_code}}"
+      nodes:
+        - id: fix
+          type: workflow
+          ref: builtin://agent
+          thread:
+            mode: inherit
+            inject: { role: user, content: "Make `{{inputs.test_command}}` pass. If it already passes, stop." }
+        - id: test
+          type: run
+          timeout: 30m
+          command: "{{inputs.test_command}}"
+      edges:
+        - from: fix
+          default: test
+  - id: approve_merge
+    type: approval
+    args:
+      title: Merge this pull request?
+  - id: merge
+    type: workflow
+    ref: builtin://agent
+    condition: "nodes.approve_merge.status == 'approved'"
+    thread:
+      inject: { role: user, content: "The tests pass and you approved. Merge the pull request with a squash merge." }
+  - id: report
+    type: workflow
+    ref: builtin://agent
+    thread:
+      inject: { role: user, content: "The tests still fail after 3 tries. Say what fails and why, then stop." }
+edges:
+  - from: review
+    default: fix_until_green
+  - from: fix_until_green
+    cases:
+      - to: approve_merge
+        label: tests pass
+        condition: nodes.fix_until_green.exit_code == 0
+    default: report
+  - from: approve_merge
+    default: merge
+triggers:
+  - name: weekday-mornings
+    description: Weekdays at 9:00
+    schedule:
+      cron: ["0 9 * * 1-5"]
+      timezone: UTC

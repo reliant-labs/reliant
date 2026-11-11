@@ -79,6 +79,14 @@ import (
 	"github.com/reliant-labs/reliant/internal/procledger"
 )
 
+// GoTmpBasePrefix and GoTmpPrefix name each command's own GOTMPDIR,
+// <temp dir>/reliant-gotmp-<uid>/gotmp-<daemon pid>-<n> (gotmp_linux.go), which
+// internal/diskwatch reclaims once nothing holds it.
+const (
+	GoTmpBasePrefix = "reliant-gotmp-"
+	GoTmpPrefix     = "gotmp-"
+)
+
 // BaseCommandThreads is the part of one command's thread limit that does not
 // grow with the CPU count: the shell, the go command or a node toolchain, a
 // headless browser (~200 threads with its renderers).
@@ -176,6 +184,13 @@ type Limiter struct {
 
 	mu  sync.Mutex
 	seq uint64
+	// held is the command cgroups of the trees prepared and not yet
+	// released, which the sweep of this process's empty command cgroups
+	// leaves alone: a tree's cgroup is empty from Prepare until its command
+	// starts in it, and a start into a removed cgroup fails ENOENT, which
+	// os/exec reports as "fork/exec <path>: no such file or directory"
+	// (reliant #2416). Guarded by mu.
+	held map[string]struct{}
 }
 
 // Config is the limiter's policy. The zero value detects everything.
@@ -339,6 +354,9 @@ type Tree struct {
 	footprint []string
 	// accounted is the ledger entry made at Started, until Release forgets it.
 	accounted *procledger.Process
+	// goTmp is the command's own GOTMPDIR (gotmp_linux.go); "" when it has
+	// none.
+	goTmp string
 }
 
 // Prepare readies cmd, which must not have been started, to run as a bounded
@@ -349,6 +367,7 @@ type Tree struct {
 func (l *Limiter) Prepare(cmd *exec.Cmd, owner Owner) *Tree {
 	t := &Tree{l: l, owner: owner, fd: -1}
 	setProcessGroup(cmd)
+	t.prepareGoTmp(cmd)
 	if credsandbox.IsInit(cmd) {
 		t.footprint, _ = accountedFootprint(cmd)
 	}

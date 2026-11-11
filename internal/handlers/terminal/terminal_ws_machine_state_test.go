@@ -91,9 +91,10 @@ func TestTerminalWS_MachineNotReadyIsLoggedOnceBelowErrorWithContext(t *testing.
 // Prod, 2026-10-11 (ELECTRON-CZ): one machine whose daemon was connected but
 // never answered terminal.create produced 24 "[TerminalWS] Error" events in
 // five minutes — four terminals, each retrying every ~62s. A connected daemon
-// that cannot open a shell is still an error, but it is the machine's state:
-// said once per window, with whose machine it was, not once per retry.
-func TestTerminalWS_MachineNotAnsweringIsOneErrorPerWindowWithContext(t *testing.T) {
+// that cannot open a shell is the user's machine's state (a busy or stuck
+// daemon), a WARN: said once per window, with whose machine it was, not once
+// per retry.
+func TestTerminalWS_MachineNotAnsweringIsOneWarningPerWindowWithContext(t *testing.T) {
 	logs := captureLogs(t)
 	freshTerminalMachineStateLog(t)
 	// The NATS router's shape for a live subscription that did not reply.
@@ -103,8 +104,9 @@ func TestTerminalWS_MachineNotAnsweringIsOneErrorPerWindowWithContext(t *testing
 
 	for i := 0; i < 4; i++ {
 		first := dialTerminalWSForProject(t, router, "proj-1")
-		require.Equal(t, "error", first["type"], "the browser is still told, and retries")
-		require.Nil(t, first["code"], "not a wait: the browser shows the error")
+		require.Equal(t, "error", first["type"], "the browser is still told")
+		require.Equal(t, wsErrorMachineNotAnswering, first["code"], "the browser names the machine and offers a retry")
+		require.Equal(t, "test-daemon-id", first["daemon_id"], "the browser says which machine did not answer")
 	}
 
 	require.Empty(t, logRecords(logs, "[TerminalWS] Error"), "a machine's state is not a per-retry error")
@@ -113,7 +115,7 @@ func TestTerminalWS_MachineNotAnsweringIsOneErrorPerWindowWithContext(t *testing
 	records := logRecords(logs, "[TerminalWS] Machine is connected but did not answer; the browser retries")
 	require.Len(t, records, 1, "the browser's retries are the same news")
 	record := records[0]
-	require.Equal(t, "ERROR", record["level"], "nothing the user did explains a connected daemon that cannot open a shell")
+	require.Equal(t, "WARN", record["level"], "the user's machine's state: visible, but not an issue nobody on the server side can act on")
 	require.Equal(t, "not_answering", record["machine_state"])
 	require.Equal(t, terminalTestUserID, record["user_id"])
 	require.Equal(t, "proj-1", record["project_id"])
@@ -145,4 +147,22 @@ func TestTerminalWS_RealFailureIsStillAnErrorWithContext(t *testing.T) {
 	require.Equal(t, "ERROR", records[0]["level"])
 	require.Equal(t, terminalTestUserID, records[0]["user_id"])
 	require.Equal(t, "proj-1", records[0]["project_id"])
+}
+
+// A tab naming a worktree of another project (or another user's) is refused
+// with "worktree not found", and that is the browser's stale context, not a
+// server fault: INFO, never "[TerminalWS] Error" (prod 2026-11-05: one user's
+// tab, retrying, was 64 ERROR events in an afternoon).
+func TestTerminalWS_ForeignWorkspaceIsARefusalNotAnError(t *testing.T) {
+	logs := captureLogs(t)
+	first := openTerminal(t, &machineRecordingRouter{}, routingCheckouts(), url.Values{
+		"workingDir": {"/tmp"}, "worktreeId": {"wt-theirs"}, "projectId": {"p1"},
+	})
+	require.Equal(t, "error", first["type"])
+	require.Equal(t, "worktree not found", first["data"], "the browser is still told")
+
+	require.Empty(t, logRecords(logs, "[TerminalWS] Error"))
+	records := logRecords(logs, "[TerminalWS] Refused")
+	require.Len(t, records, 1)
+	require.Equal(t, "INFO", records[0]["level"])
 }

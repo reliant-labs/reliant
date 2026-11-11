@@ -22,6 +22,7 @@ import { renderWithApi } from "../../__tests__/obsTestUtils";
 import { ReplayPlayer, type ReplayerCtor } from "../ReplayPlayer";
 import { confineReplayDocument, REPLAY_CSP } from "../replayConfinement";
 import { FakeReplayer } from "./fakeReplayer";
+import { NO_CLIENT } from "@/services/controlPlane/observability/client";
 
 vi.mock("uplot", async () => (await import("../../__tests__/obsMocks")).obsMocks.uplot());
 vi.mock("@tanstack/react-virtual", async () => (await import("../../__tests__/obsMocks")).obsMocks.virtual());
@@ -42,6 +43,12 @@ const SESSION: SessionSummary = {
   interactions: 0,
   errors: 0,
   hasReplay: true,
+  country: "",
+  region: "",
+  city: "",
+  clientAddress: "",
+  client: NO_CLIENT,
+  release: "",
 };
 
 const ATTACKER = "https://attacker.example";

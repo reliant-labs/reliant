@@ -1,6 +1,8 @@
 import type { ReactNode } from 'react'
 import { GradientBackground } from './GradientBackground'
 import { BrandMark } from './icons/BrandMark'
+import { ForgeBrand } from './ForgeShell/ForgeBrand'
+import { isForgeShell } from '@/lib/shell'
 
 /**
  * The full-screen shell every unauthenticated/identity surface renders inside:
@@ -36,10 +38,17 @@ export function AuthHeader({
 }) {
   return (
     <div className="flex flex-col items-center gap-4">
-      <div className="flex items-center gap-3">
-        <BrandMark className="h-8 w-8" />
-        <h1 className="text-3xl font-bold">Reliant</h1>
-      </div>
+      {isForgeShell() ? (
+        <h1 className="sr-only">Forge by Reliant</h1>
+      ) : null}
+      {isForgeShell() ? (
+        <ForgeBrand size="lg" />
+      ) : (
+        <div className="flex items-center gap-3">
+          <BrandMark className="h-8 w-8" />
+          <h1 className="text-3xl font-bold">Reliant</h1>
+        </div>
+      )}
       <div className="text-center space-y-1">
         <h2 className="text-xl font-semibold">{title}</h2>
         {description && (

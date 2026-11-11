@@ -100,7 +100,9 @@ type DatabaseConfig struct {
 // the tuning half of its config's DatabaseConfig. A zero field takes its
 // default.
 type Pool struct {
-	// MaxOpenConns and MaxIdleConns size the pool; 0 is 25 / 10. Dev caps
+	// MaxOpenConns and MaxIdleConns size the pool; 0 is 25 / 20 (a server
+	// always passes db_config.proto's values, whose defaults are the same
+	// 25 / 20). Dev caps
 	// them low: the dev Postgres is SHARED by N parallel stacks (one per git
 	// worktree), and reliant's api + worker pools count against the same
 	// instance's max_connections alongside control-plane's services.
@@ -124,9 +126,23 @@ type Pool struct {
 }
 
 // Pool defaults, for a zero Pool field.
+//
+// The idle default is what keepIdleWarm holds dialled, and it is sized for a
+// chat open: the snapshot fans out about ten reads at once while the page's
+// other reads (GetChat, approvals, the execution tree, ...) land beside it.
+// At 10 the open regularly found the warm set used up and dialled the rest
+// itself: prod db.connect spans on StreamChatUpdates, p50 58ms / p95 125ms,
+// 61 in 24h (2026-11-04). Behind PgBouncer these are client connections,
+// which cost the instance nothing (transaction mode: server connections are
+// capped by the pooler's max_db_connections), and six pods at 20 are well
+// inside its max_client_conn of 1000.
+//
+// db_config.proto's defaults must say the same: a server always passes its
+// config's values, so orDefault never sees a zero there. When only this
+// constant moved to 20, prod kept running the config's 10.
 const (
 	defaultMaxOpenConns = 25
-	defaultMaxIdleConns = 10
+	defaultMaxIdleConns = 20
 )
 
 func orDefault(v, def int) int {
@@ -167,8 +183,8 @@ func connectPostgres(cfg DatabaseConfig) (*sql.DB, error) {
 	//
 	// Pool settings: cfg.Pool (see Pool). Dev sets
 	// RELIANT_DB_MAX_OPEN_CONNS=8 / RELIANT_DB_MAX_IDLE_CONNS=2 (control-plane
-	// deploy/kcl/dev/main.k _reliant_host_env); prod sets neither and keeps
-	// 25/10.
+	// deploy/kcl/dev/main.k _reliant_host_config); prod sets neither and runs
+	// db_config.proto's defaults, 25/20.
 	db, err := serverkit.OpenDB(context.Background(), "pgx", cfg.URL,
 		serverkit.DBPoolTuning{
 			MaxOpenConns:    orDefault(cfg.Pool.MaxOpenConns, defaultMaxOpenConns),
@@ -242,8 +258,12 @@ func openSessionPool(url string) (*sql.DB, error) {
 	return pool, nil
 }
 
-// idleWarmInterval is how often keepIdleWarm tops the pool up.
-const idleWarmInterval = 10 * time.Second
+// idleWarmInterval is how often keepIdleWarm tops the pool up. Short: a
+// burst past MaxIdleConns closes the excess, and ConnMaxLifetime retires
+// connections dialled together at about the same moment, so the warm set can
+// empty between checks, and the next chat open pays each dial. A check that
+// finds the set full is one Stats() call.
+const idleWarmInterval = 2 * time.Second
 
 // keepIdleWarm holds the pool at n idle connections until db is closed.
 // TODO(forge pin bump): forge's serverkit now owns this as DBPoolTuning.SpareConns; set it in connectPostgres and delete keepIdleWarm/warmIdle.

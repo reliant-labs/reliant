@@ -11,7 +11,8 @@ import (
 // LoadRecentDisplayMessages walks the CW chain newest-first and stops once it
 // has `limit` messages, instead of resolving the whole transcript and slicing
 // it. That is only acceptable if the answer is the same, so these tests hold
-// it to exactly the tail of LoadDisplayMessages — ids, order, and the visual
+// it to exactly the tail of LoadDisplayMessages (its HIDDEN rows left out,
+// see transcriptOf) — ids, order, and the visual
 // thread normalization — for every limit, on a chain shaped like the one that
 // motivated the change (chat 8bb0a875: root -> branch -> 2 compactions ->
 // branch -> 2 compactions).
@@ -98,6 +99,7 @@ func assertRecentDisplayIsTailOfDisplay(t *testing.T, svc *Service, threadID str
 	if err != nil {
 		t.Fatalf("LoadDisplayMessages: %v", err)
 	}
+	full = transcriptOf(full)
 	if len(full) == 0 {
 		t.Fatal("fixture resolved no messages; it is not exercising anything")
 	}
@@ -137,6 +139,7 @@ func TestLoadRecentDisplayMessages_EqualsTailAcrossForksAndCompactions(t *testin
 	if err != nil {
 		t.Fatalf("LoadDisplayMessages: %v", err)
 	}
+	full = transcriptOf(full)
 	// Pin the fixture's shape so a change to the full resolution cannot make
 	// this test vacuous: the inherited root history must be reachable, and
 	// the post-fork writes must not.
@@ -225,9 +228,9 @@ type windowReadCounter struct {
 	fullReads    int
 }
 
-func (c *windowReadCounter) ListRecentMessagesInContextWindowBeforeSeq(ctx context.Context, contextWindowID string, beforeSeq int64, limit int) ([]*db.Message, error) {
+func (c *windowReadCounter) ListRecentTranscriptMessagesInContextWindowBeforeSeq(ctx context.Context, contextWindowID string, beforeSeq int64, limit int) ([]*db.Message, error) {
 	c.boundedReads++
-	return c.Repository.ListRecentMessagesInContextWindowBeforeSeq(ctx, contextWindowID, beforeSeq, limit)
+	return c.Repository.ListRecentTranscriptMessagesInContextWindowBeforeSeq(ctx, contextWindowID, beforeSeq, limit)
 }
 
 func (c *windowReadCounter) GetMessagesByContextWindow(ctx context.Context, contextWindowID string, maxOrdinal *int64) ([]*db.Message, error) {

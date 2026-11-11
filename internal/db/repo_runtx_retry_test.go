@@ -12,6 +12,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/reliant-labs/forge/pkg/orm"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 )
 
 // The existing retry tests (repo_retry_test.go) cover isRetryableError and the
@@ -258,7 +259,8 @@ func TestIsExpectedTxOutcome(t *testing.T) {
 		want bool
 	}{
 		{"no rows", sql.ErrNoRows, true},
-		{"wrapped no rows", fmt.Errorf("lookup: %w", sql.ErrNoRows), true},
+		{"not found", svcerr.NotFound("chat"), true},
+		{"wrapped not found", fmt.Errorf("lookup: %w", svcerr.NotFound("chat")), true},
 		{"tx outcome", declinedForTest{}, true},
 		{"wrapped tx outcome", fmt.Errorf("launch: %w", declinedForTest{}), true},
 		{"business failure", errors.New("business rule violated"), false},

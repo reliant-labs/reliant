@@ -9,7 +9,7 @@ export interface OrganizationCostsViewProps {
   orgId: string;
 }
 
-const actionClass = "rounded-md border border-border bg-surface-sunken px-3 py-1.5 text-sm text-ink hover:bg-ink/5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring disabled:opacity-50";
+const actionClass = "rounded-md border border-border-strong bg-surface-sunken px-3 py-1.5 text-sm text-ink hover:bg-ink/5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring disabled:opacity-50";
 
 /** Organization billing is deliberately independent of telemetry environment, service and range. */
 export function OrganizationCostsView({ orgId }: OrganizationCostsViewProps) {

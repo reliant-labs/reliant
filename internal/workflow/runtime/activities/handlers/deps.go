@@ -129,6 +129,7 @@ type ApprovalResolveStore interface {
 // drain, history loading and the tool-call status writer.
 type CallLLMStore interface {
 	LLMUsageRecorder
+	ResolveThreadAmbientMemoryExclusion(ctx context.Context, chatID, threadID string, requested bool) (bool, error)
 	GetChat(ctx context.Context, id string) (*db.Chat, error)
 	GetProject(ctx context.Context, id string) (*db.Project, error)
 	GetWorktree(ctx context.Context, id string) (*db.Worktree, error)
@@ -279,6 +280,12 @@ type ExecuteToolsStore interface {
 	GetToolCallResult(ctx context.Context, toolCallID string) (*db.ToolCallResult, error)
 	UpsertToolCallResult(ctx context.Context, chatID string, result *db.ToolCallResult) error
 	SetChatDaemonBlocked(ctx context.Context, chatID string, blocked bool) error
+	// CreateAttachment is persistToolMedia's: a tool result's images and PDFs
+	// reach the model as attachment rows.
+	CreateAttachment(ctx context.Context, attachment *db.Attachment) error
+	// GetAttachment is persistToolMedia's too: an attachment id a tool reports
+	// in its metadata joins the result only if the chat's user owns it.
+	GetAttachment(ctx context.Context, id string) (*db.Attachment, error)
 	EmitToolCallUpdate(ctx context.Context, chatID string, update db.ToolCallUpdate) error
 	EmitUserRefetch(ctx context.Context, userID string, refetchType db.RefetchType, opts db.RefetchOpts) error
 	// MarkQueuedAgentMessagesPreempting is preemptionStore

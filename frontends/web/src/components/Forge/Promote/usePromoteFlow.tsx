@@ -15,24 +15,31 @@
 import { useMemo, useState, type ReactNode } from "react";
 
 import { useProject } from "@/hooks/project-queries";
+import { isForgeShell } from "@/lib/shell";
 
 import { useForgeConsole } from "../Console/consoleContext";
 import type { PromoteControl, PromoteRequest } from "../Releases/ReleasesList";
 import { shortVersion } from "../Releases/releaseModel";
 import { PromoteDialog } from "./PromoteDialog";
+import { useObsReadOnly } from "../Observability/obsReadOnly";
 
 export function usePromoteFlow(): { control: PromoteControl; dialog: ReactNode } {
   const { projectId } = useForgeConsole();
   const projectName = useProject(projectId)?.name;
   const [request, setRequest] = useState<PromoteRequest | null>(null);
+  const lock = useObsReadOnly();
   const control = useMemo<PromoteControl>(
     () => ({
       onPromote: setRequest,
-      blockedReason: projectId
+      blockedReason: lock.readOnly
+        ? (lock.reason ?? "Read-only")
+        : projectId
         ? null
-        : "Promoting plans the change against this project's checkout. Open the project in Reliant, with its daemon running, to promote from here.",
+        : isForgeShell()
+          ? "Promotions are planned against a checkout of this project: run `forge env promote --to <env>` there."
+          : "Promoting plans the change against this project's checkout. Open the project in Reliant, with its daemon running, to promote from here.",
     }),
-    [projectId]
+    [projectId, lock.readOnly, lock.reason]
   );
   const dialog =
     request && projectId ? (

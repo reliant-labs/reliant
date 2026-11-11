@@ -24,6 +24,32 @@ export function fixtureGraph(empty = false, unknown = false): ServiceGraph {
     quality: unknown ? null : { ...GRAPH_QUALITY, truncated: unknown },
     window: { startMs: Date.UTC(2026, 9, 27, 11, 45), endMs: Date.UTC(2026, 9, 27, 12) } };
 }
+/**
+ * The demo's graph: shop as the forge journey's trace tells it (fixtureTrace) —
+ * the browser calls the api; the api uses Postgres, the payment provider and
+ * NATS; the worker consumes the queue and calls inventory over Connect;
+ * inventory uses Postgres. Stamped inside `window`, so it reads as current.
+ */
+export function fixtureShopGraph(window?: { startMs: number; endMs: number }): ServiceGraph {
+  const end = window?.endMs ?? Date.UTC(2026, 9, 27, 12);
+  const start = window?.startMs ?? end - 15 * 60_000;
+  const seen = { firstSeenMs: start, lastSeenMs: end };
+  const db = { kind: "database", unit: "database_operation", viewpoint: "client", rpcId: "" } as const;
+  return {
+    nodes: [graphNode("shop-web", "frontend"), graphNode("api"), graphNode("worker"), graphNode("inventory"), graphNode("postgres", "database"), graphNode("payments", "external"), graphNode("nats", "broker")],
+    edges: [
+      graphEdge("shop-web-api", "shop-web", "api", { cohort: "browser", rpcId: "orders.v1.OrdersService/CreateOrder", ...seen }),
+      graphEdge("api-postgres", "api", "postgres", { ...db, count: 240n, faults: 0n, ...seen }),
+      graphEdge("api-payments", "api", "payments", { rpcId: "payments.v1.PaymentsService/Charge", viewpoint: "client", faults: 9n, ...seen }),
+      graphEdge("api-nats", "api", "nats", { kind: "async-send", unit: "publish", viewpoint: "producer", rpcId: "", faults: 0n, ...seen }),
+      graphEdge("nats-worker", "nats", "worker", { kind: "async-consume", unit: "process", viewpoint: "consumer", rpcId: "", faults: 0n, ...seen }),
+      graphEdge("worker-inventory", "worker", "inventory", { rpcId: "inventory.v1.InventoryService/Reserve", faults: 1n, ...seen }),
+      graphEdge("inventory-postgres", "inventory", "postgres", { ...db, count: 100n, faults: 0n, ...seen }),
+    ],
+    quality: { ...GRAPH_QUALITY, aggregatedThroughMs: end },
+    window: { startMs: start, endMs: end },
+  };
+}
 const DECLARED = JSON.stringify({ schema: "forge.dev/service-catalog/v1", module: "example.com/shop",
   processes: [{ id: "orders", root: "Orders API", command: ["server", "api"], components: ["Orders"],
     serves: [{ service: "shop.v1.OrdersService", route_set: "UserRoutes", audience: "user", resolution: "declared_route_set", component: "Orders" }], clients: [], source: { path: "internal/app/roots.go", line: 4 } }],

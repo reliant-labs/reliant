@@ -26,6 +26,14 @@ describe("independent hosting consent", () => {
     await waitFor(() => expect(checkout).toHaveBeenCalledWith({ policyVersion: "policy-1", infraBudgetCents: 1234n }));
     expect(screen.getByText(/isn’t a hard limit on your bill/)).toBeInTheDocument();
   });
+  it("starts a new agreement at the $50 default budget, which consent submits unchanged", async () => {
+    const checkout = vi.fn();
+    render(<UsageBillingCard {...base} onCheckout={checkout} />);
+    expect(screen.getByLabelText(/Monthly app hosting admission budget/)).toHaveValue("50.00");
+    fireEvent.click(screen.getByRole("checkbox"));
+    fireEvent.click(screen.getByRole("button", { name: /Authorize and continue/ }));
+    await waitFor(() => expect(checkout).toHaveBeenCalledWith({ policyVersion: "policy-1", infraBudgetCents: 5000n }));
+  });
   it("states the price list and the minimum in plain words, never a base-fee claim", () => {
     render(<UsageBillingCard {...base} rates={["Hosted CPU: $0.07/vCPU-hr"]} minimumLine="A $5 minimum applies in any month with hosting usage." />);
     expect(screen.getByTestId("hosting-rates")).toHaveTextContent("Hosted CPU: $0.07/vCPU-hr");

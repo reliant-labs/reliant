@@ -352,6 +352,13 @@ func daemonToCore(row *Daemon) *core.Daemon {
 // the user's default when daemonID is "". It reports false, writing nothing,
 // when daemonID is not one of the user's machines.
 //
+// daemons.is_default is what every reader reads, in every release. The schema
+// keeps it durable (20261109201518_restore_default_daemon): a trigger
+// remembers each change of the column in user_default_daemons, and restores
+// it when the registry recreates the remembered machine's row under the same
+// id. A clear while that row is gone matches no daemons row, so no trigger
+// sees it: clearing deletes the remembered default here.
+//
 // It must run in a transaction: the user's rows are locked first, so two
 // concurrent sets for one user serialize instead of colliding on
 // daemons_one_default_per_user. updated_at is left alone — it orders the
@@ -363,6 +370,11 @@ func SetDefaultDaemon(ctx context.Context, db orm.Context, userID, daemonID stri
 	}
 	if daemonID != "" && !slices.Contains(ids, daemonID) {
 		return false, nil
+	}
+	if daemonID == "" {
+		if _, err := db.Bun().NewRaw(`DELETE FROM user_default_daemons WHERE user_id = ?`, userID).Exec(ctx); err != nil {
+			return false, fmt.Errorf("forgetting default daemon of user %s: %w", userID, err)
+		}
 	}
 	if _, err := db.Bun().NewRaw(
 		`UPDATE daemons SET is_default = false WHERE user_id = ? AND is_default AND id <> ?`, userID, daemonID,

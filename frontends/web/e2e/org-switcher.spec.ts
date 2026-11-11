@@ -5,8 +5,8 @@ import { PHONE } from './mobileMocks';
 
 // The org switcher, against a mocked backend (appsMocks.ts): a person in two
 // orgs lists them, marks the default, switches, and every control-plane call
-// the Apps page makes then names the new org; a person in one org sees no
-// switcher at all; the phone has the same choice on its Account screen; and the
+// the Apps page makes then names the new org; a person in one org sees it
+// named, with "Create organization"; the phone has the same choice on its Account screen; and the
 // CLI-login approve page makes the org a credential will act in an explicit
 // choice. Screenshots land in e2e/screenshots/org-switcher/.
 
@@ -83,12 +83,13 @@ test.describe('org switcher (desktop)', () => {
     await expect(page.getByTestId('org-switcher-name')).toHaveText('Side Project');
   });
 
-  test('a person in one org sees no switcher chrome', async ({ page }) => {
+  test('a person in one org sees their org and a way to create another', async ({ page }) => {
     await mockAppsBackend(page);
     await page.goto('/apps');
     await expect(page.getByTestId('app-row-storefront')).toBeVisible(LOADED);
-    await expect(page.getByTestId('org-switcher')).toHaveCount(0);
-    await page.screenshot({ path: `${SHOTS}/desktop-single-org-no-chrome.png` });
+    await page.getByTestId('org-switcher').first().click();
+    await expect(page.getByTestId('org-create')).toBeVisible();
+    await page.screenshot({ path: `${SHOTS}/desktop-single-org.png` });
   });
 
   test('leaving the selected org falls back to the default on the next read', async ({ page }) => {
@@ -109,7 +110,7 @@ test.describe('org switcher (desktop)', () => {
     membership = [ACME];
     await page.reload();
     await expect(page.getByTestId('app-row-storefront')).toBeVisible(LOADED);
-    await expect(page.getByTestId('org-switcher')).toHaveCount(0);
+    await expect(page.getByTestId('org-switcher-name').first()).toHaveText('Acme');
   });
 });
 

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -37,6 +38,118 @@ func TestRetirementTreeRejectsProtectedDescendants(t *testing.T) {
 		})
 	}
 }
+
+// A never-listed name inside a package an install put in node_modules, and
+// recorded there, is that package's content (packages ship tests/data, .env
+// fixtures, *.db samples), both when the whole checkout is inspected and when
+// node_modules alone is. The same names anywhere else still hold — including
+// in a package.json-bearing directory no install recorded.
+func TestRetirementTreeInstalledPackageContent(t *testing.T) {
+	pkgs := map[string]string{
+		"npm":        "node_modules/pkg",
+		"scoped":     "node_modules/@scope/lib",
+		"pnpm":       "node_modules/.pnpm/@protobufjs+utf8@1.1.2/node_modules/@protobufjs/utf8",
+		"pnpm-peers": "node_modules/.pnpm/react-dom@18.2.0_react@18.2.0/node_modules/react-dom",
+		"nested":     "node_modules/outer/node_modules/inner",
+	}
+	for name, pkg := range pkgs {
+		t.Run(name, func(t *testing.T) {
+			root := retirementFixture(t)
+			switch name {
+			case "pnpm":
+				recordInstall(t, filepath.Join(root, "node_modules"), []string{"@protobufjs/utf8@1.1.2"})
+			case "pnpm-peers":
+				recordInstall(t, filepath.Join(root, "node_modules"), []string{"react-dom@18.2.0(react@18.2.0)", "react@18.2.0"})
+			default:
+				recordInstall(t, filepath.Join(root, "node_modules"), nil, pkg, "node_modules/outer")
+			}
+			write(t, filepath.Join(root, pkg, "package.json"), `{"name":"x"}`)
+			for _, rel := range []string{"tests/data/fixture.bin", "test/.env", "samples/demo.sqlite", "lib/secrets/index.js"} {
+				write(t, filepath.Join(root, pkg, rel), "package content")
+			}
+			if name == "nested" {
+				write(t, filepath.Join(root, "node_modules/outer/package.json"), `{"name":"outer"}`)
+			}
+			for _, inspect := range []struct {
+				what string
+				path string
+				fn   func(context.Context, string) (*retirementTree, error)
+			}{{"checkout", root, inspectRetirementTree}, {"node_modules", filepath.Join(root, "node_modules"), inspectRegenerableTree}} {
+				tree, err := inspect.fn(context.Background(), inspect.path)
+				if err != nil {
+					t.Fatalf("%s: installed package content held the tree: %v", inspect.what, err)
+				}
+				if err := tree.validate(context.Background()); err != nil {
+					t.Fatalf("%s: validate: %v", inspect.what, err)
+				}
+				tree.close()
+			}
+		})
+	}
+	// Each hold case: the protected file, and how node_modules is recorded.
+	for _, hold := range []struct {
+		rel  string
+		pnpm []string
+		npm  []string
+	}{
+		{"node_modules/data/only-copy.csv", nil, []string{"node_modules/lib"}},                // node_modules' own data/
+		{"node_modules/pkg/data/only-copy.csv", nil, []string{"node_modules/pkg"}},            // pkg has no package.json
+		{"node_modules/@scope/data/only-copy.csv", nil, []string{"node_modules/@scope/data"}}, // a scope directory is no package
+		{"node_modules/.cache/secrets/token", []string{}, []string{"node_modules/.cache"}},    // a tool cache, not a package
+		{"node_modules/pkg/package.json/data/x.csv", nil, []string{"node_modules/pkg"}},       // a directory is no manifest
+		// A package.json proves nothing: a hand-kept package no install
+		// recorded holds, whether node_modules has a record or none.
+		{"node_modules/mine/data/only-copy.csv", nil, []string{"node_modules/lib"}},
+		{"node_modules/mine/.env", nil, nil},
+		// pnpm's store shape without pnpm's record, or a store entry that is
+		// not the package its id names.
+		{"node_modules/.pnpm/mine@1.0.0/node_modules/mine/data/only-copy.csv", nil, []string{"node_modules/lib"}},
+		{"node_modules/.pnpm/other@1.0.0/node_modules/mine/data/only-copy.csv", []string{"other@1.0.0", "mine@1.0.0"}, nil},
+		// Both pnpm markers present, but the lockfile does not name the
+		// package, or names it at another version.
+		{"node_modules/.pnpm/mine@1.0.0/node_modules/mine/data/only-copy.csv", []string{"lib@1.0.0"}, nil},
+		{"node_modules/.pnpm/mine@1.0.0/node_modules/mine/.env", []string{}, nil},
+		{"node_modules/.pnpm/mine@1.0.0/node_modules/mine/data/only-copy.csv", []string{"mine@2.0.0", "mine@1.0.0-beta"}, nil},
+		// The lockfile names the package and version, but not the exact
+		// id the store directory is named after: a suffix it does not
+		// name, another peer set, or a malformed peer suffix.
+		{"node_modules/.pnpm/mine@1.0.0_evil/node_modules/mine/data/only-copy.csv", []string{"mine@1.0.0"}, nil},
+		{"node_modules/.pnpm/mine@1.0.0_react@18.2.0/node_modules/mine/data/only-copy.csv", []string{"mine@1.0.0", "mine@1.0.0(react@17.0.0)"}, nil},
+		{"node_modules/.pnpm/mine@1.0.0_react@18.2.0/node_modules/mine/data/only-copy.csv", []string{"mine@1.0.0(react@18.2.0", "mine@1.0.0(react@18.2.0)x"}, nil},
+		{"node_modules/.pnpm/mine@1.0.0/node_modules/mine/data/only-copy.csv", []string{"mine@1.0.0_evil"}, nil},
+	} {
+		t.Run("holds/"+hold.rel, func(t *testing.T) {
+			root := retirementFixture(t)
+			if hold.npm != nil || hold.pnpm != nil {
+				recordInstall(t, filepath.Join(root, "node_modules"), hold.pnpm, hold.npm...)
+			}
+			write(t, filepath.Join(root, "node_modules/lib/package.json"), `{"name":"lib"}`)
+			for _, dir := range []string{"node_modules/mine", "node_modules/.pnpm/mine@1.0.0/node_modules/mine", "node_modules/.pnpm/other@1.0.0/node_modules/mine", "node_modules/.pnpm/mine@1.0.0_evil/node_modules/mine", "node_modules/.pnpm/mine@1.0.0_react@18.2.0/node_modules/mine"} {
+				if strings.HasPrefix(hold.rel, dir+"/") {
+					write(t, filepath.Join(root, dir, "package.json"), `{"name":"mine"}`)
+				}
+			}
+			p := filepath.Join(root, hold.rel)
+			write(t, p, "preserved")
+			for _, inspect := range []struct {
+				path string
+				fn   func(context.Context, string) (*retirementTree, error)
+			}{{root, inspectRetirementTree}, {filepath.Join(root, "node_modules"), inspectRegenerableTree}} {
+				tree, err := inspect.fn(context.Background(), inspect.path)
+				if tree != nil {
+					tree.close()
+				}
+				if err == nil {
+					t.Fatalf("%s: protected descendant authorized", inspect.path)
+				}
+			}
+			if b, err := os.ReadFile(p); err != nil || string(b) != "preserved" {
+				t.Fatalf("protected content touched: %q %v", b, err)
+			}
+		})
+	}
+}
+
 func TestRetirementTreeMutationAndContainment(t *testing.T) {
 	for _, kind := range []string{"new-protected", "new-file", "file-replaced", "ancestor-symlink", "root-symlink", "cancel"} {
 		t.Run(kind, func(t *testing.T) {
@@ -149,6 +262,56 @@ func TestRetirementTreePartialFailureKeepsGitPointer(t *testing.T) {
 	}
 }
 
+// A lease's Check is point-in-time. Each entry's deletion boundary re-checks
+// it against the inventory, so a change that lands after the check but before
+// that boundary stops deletion: only the inventoried entry, unchanged, is
+// unlinked, and a directory with anything new in it cannot be removed. Here
+// the "outside process" writes inside the tree after the check has passed and
+// before the first boundary; whatever it wrote, and the recovery pointer,
+// survive. The boundary check and its unlink are separate syscalls, so this is
+// not a fence for a write between the two: that window is bounded by the
+// full process check before every unlink, on a tree only its fresh quarantine
+// name reaches (see daemonruntime's managedRecoveryUse).
+func TestRetirementTreeChangeBeforeTheDeletionBoundaryStopsDeletion(t *testing.T) {
+	for name, enter := range map[string]func(root string){
+		"new file":      func(root string) { write(t, filepath.Join(root, "src", "late.go"), "written after the check") },
+		"modified file": func(root string) { write(t, filepath.Join(root, "src", "main.go"), "rewritten after the check") },
+	} {
+		t.Run(name, func(t *testing.T) {
+			root := retirementFixture(t)
+			tree, err := inspectRetirementTree(context.Background(), root)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer tree.close()
+			entered := false
+			err = tree.remove(context.Background(), func() error {
+				if !entered {
+					entered = true
+					enter(root) // after this check authorized the next unlink
+				}
+				return nil
+			})
+			if !entered {
+				t.Fatal("check never ran")
+			}
+			if err == nil {
+				t.Fatal("tree used after the final check was removed")
+			}
+			if !exists(filepath.Join(root, ".git")) {
+				t.Fatal("recovery pointer removed")
+			}
+			if name == "modified file" {
+				if b, err := os.ReadFile(filepath.Join(root, "src", "main.go")); err != nil || string(b) != "rewritten after the check" {
+					t.Fatalf("rewritten file lost: %q %v", b, err)
+				}
+			} else if !exists(filepath.Join(root, "src", "late.go")) {
+				t.Fatal("file written after the check was removed")
+			}
+		})
+	}
+}
+
 // Every node_modules holds symlinks (.bin, pnpm's whole layout) and pnpm
 // hard-links its store into it. Refusing either held every worktree that had
 // run an install, which were the worktrees that filled the disk. Removing a
@@ -208,5 +371,34 @@ func TestRegenerableTreeRemovesTheDirectoryAndHoldsLikeRetirement(t *testing.T) 
 				t.Fatal("held content authorized")
 			}
 		})
+	}
+}
+
+// pnpmStoreDir names a lockfile key's virtual-store directory as pnpm does,
+// and refuses keys that are not a package id with a well-formed peer suffix
+// or whose directory pnpm hashes.
+func TestPnpmStoreDir(t *testing.T) {
+	for _, c := range []struct{ key, name, dir string }{
+		{"mine@1.0.0", "mine", "mine@1.0.0"},
+		{"/mine@1.0.0", "mine", "mine@1.0.0"},
+		{"@scope/lib@1.0.0", "@scope/lib", "@scope+lib@1.0.0"},
+		{"react-dom@18.2.0(react@18.2.0)", "react-dom", "react-dom@18.2.0_react@18.2.0"},
+		{"a@1.0.0(@types/react@18.0.0)(react@18.2.0)", "a", "a@1.0.0_@types+react@18.0.0_react@18.2.0"},
+		{"a@1.0.0(b@2.0.0(c@3.0.0))(c@3.0.0)", "a", "a@1.0.0_b@2.0.0_c@3.0.0__c@3.0.0"},
+		{"mine@1.0.0_evil", "mine", "mine@1.0.0_evil"},
+	} {
+		name, dir, ok := pnpmStoreDir(c.key)
+		if !ok || name != c.name || dir != c.dir {
+			t.Errorf("pnpmStoreDir(%q) = %q, %q, %v; want %q, %q", c.key, name, dir, ok, c.name, c.dir)
+		}
+	}
+	for _, key := range []string{
+		"", "mine", "@scope/lib", "mine@", "/mine/1.0.0", "file:../mine",
+		"mine@1.0.0(react@18.2.0", "mine@1.0.0(react@18.2.0)x", "mine@1.0.0()", "mine@1.0.0)(",
+		"Mine@1.0.0", "mine@1.0.0(" + strings.Repeat("p", 120) + "@1.0.0)",
+	} {
+		if name, dir, ok := pnpmStoreDir(key); ok {
+			t.Errorf("pnpmStoreDir(%q) = %q, %q; want not ok", key, name, dir)
+		}
 	}
 }

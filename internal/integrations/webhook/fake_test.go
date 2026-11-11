@@ -71,7 +71,12 @@ type acceptedEvent struct {
 	Event     triggers.InboundEvent
 }
 
-func (f *fakeIntake) Accept(_ context.Context, trigger *core.Trigger, ev triggers.InboundEvent, _ triggers.AcceptOptions) (*triggers.AcceptResult, error) {
+func (f *fakeIntake) Accept(ctx context.Context, trigger *core.Trigger, ev triggers.InboundEvent, _ triggers.AcceptOptions) (*triggers.AcceptResult, error) {
+	// Like the real intake's database calls, a cancelled context records
+	// nothing.
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.seen == nil {

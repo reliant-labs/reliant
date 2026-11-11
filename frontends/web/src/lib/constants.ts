@@ -7,6 +7,7 @@
 
 import { loadConfig } from "./config_gen";
 import { isPackagedRendererOrigin } from "./protocol";
+import { isForgeShell } from "./shell";
 
 // ============================================================================
 // Environment Detection
@@ -107,6 +108,14 @@ const isLocalOrigin = (origin: string): boolean => {
  * it is trustworthy for this runtime, then the hosted default.
  */
 export const getAppURL = (): string => {
+  // The forge shell is served from the SAME bundle and config.js as Reliant,
+  // so APP_URL names Reliant's origin there. Its OAuth and magic-link
+  // redirects must come back to the forge host, where its per-origin session
+  // lives (lib/shell.ts), never to app.*.
+  if (typeof window !== "undefined" && isForgeShell() && window.location.origin !== "null") {
+    return window.location.origin;
+  }
+
   const configured = loadConfig().APP_URL;
   if (configured.length > 0) {
     return configured.replace(/\/$/, "");
@@ -126,9 +135,9 @@ export const getAppURL = (): string => {
 };
 
 /**
- * URL for the admin-server (control-plane) API.
+ * URL for the platform-api (control-plane) API.
  *
- * Points at admin-server, which owns endpoints like /api/proxy-session that
+ * Points at platform-api, which owns endpoints like /api/proxy-session that
  * mint workspace-proxy session tokens.
  *
  * Lookup order: window.RELIANT_CONFIG (Electron-injected) first, then the

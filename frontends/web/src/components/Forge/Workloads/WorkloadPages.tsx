@@ -34,6 +34,7 @@ import { promoterOf } from "../Releases/releaseModel";
 import { OverviewHome, type HostedByEnv, type OverviewHrefs, type OverviewRollback, type OverviewSearch } from "./OverviewHome";
 import { WorkloadDetail, type HostedObservation, type WorkloadActions, type WorkloadDetailSearch, type WorkloadRollback } from "./WorkloadDetail";
 import type { StripEnv } from "./workloadModel";
+import { useObsReadOnly } from "../Observability/obsReadOnly";
 
 /** The roster's recorded, deployed environments as the Overview's strip needs them: prod first, previews last. */
 function useStripEnvs(): { envs: StripEnv[]; loading: boolean } {
@@ -136,22 +137,26 @@ function useRollback(envs: readonly { id: string; name: string; release: string;
   return { rollback, dialog };
 }
 
-/** Each hosted environment's GetStatus observation, by environment name then workload name. */
+/**
+ * Each deployed environment's GetStatus observation, by environment name then
+ * workload name. Every kind is asked, self-managed included: its services run
+ * on the customer's cluster, but the sites the platform serves for it are
+ * deployments GetStatus reports, and the Frontends panel links them.
+ */
 function useHostedByEnv(envs: StripEnv[]): { hosted: HostedByEnv; loading: boolean } {
-  const hostedEnvs = useMemo(() => envs.filter((candidate) => candidate.placed), [envs]);
-  const statuses = useCloudEnvStatuses(hostedEnvs.map((candidate) => candidate.id));
-  const key = hostedEnvs.map((candidate) => `${candidate.id}:${statuses.get(candidate.id)?.data ? "1" : "0"}`).join(",");
-  const loading = hostedEnvs.some((candidate) => statuses.get(candidate.id)?.isLoading);
+  const statuses = useCloudEnvStatuses(envs.map((candidate) => candidate.id));
+  const key = envs.map((candidate) => `${candidate.id}:${statuses.get(candidate.id)?.data ? "1" : "0"}`).join(",");
+  const loading = envs.some((candidate) => statuses.get(candidate.id)?.isLoading);
   const hosted = useMemo(() => {
     const out = new Map<string, Map<string, ForgeHostedWorkload>>();
-    for (const candidate of hostedEnvs) {
+    for (const candidate of envs) {
       const workloads = statuses.get(candidate.id)?.data?.workloads ?? [];
       out.set(candidate.name, new Map(workloads.filter((w) => w.name).map((w) => [w.name!, w])));
     }
     return out;
     // `statuses` is a fresh Map per render; `key` changes when any status lands.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hostedEnvs, key]);
+  }, [envs, key]);
   return { hosted, loading };
 }
 
@@ -229,15 +234,16 @@ export function WorkloadPage() {
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: ["observability"] }),
   });
   const runState = useSetWorkloadRunState();
+  const lock = useObsReadOnly();
   const placed = !!live && isPlacedKind(live.kind);
   const status = useCloudEnvStatus(placed ? live!.id : null);
   const actions = useMemo<WorkloadActions>(
     () => ({
       onRestart: () => restart.mutateAsync(live!.id),
       onSetRunState: (deploymentId, state) => runState.mutateAsync({ deploymentId, state }),
-      unavailableReason: live ? actionsUnavailableReason(live.kind, envName) : null,
+      unavailableReason: lock.readOnly ? (lock.reason ?? "Read-only") : live ? actionsUnavailableReason(live.kind, envName) : null,
     }),
-    [restart, runState, live, envName]
+    [restart, runState, live, envName, lock.readOnly, lock.reason]
   );
   // Whether the render declares this workload, for an unplaced env only: the
   // declared shape is fetched for this one environment.

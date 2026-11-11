@@ -47,6 +47,13 @@ export interface ElectronAPI {
   restartBackend: () => Promise<{ success: boolean; error?: string }>;
   showErrorDialog: (title: string, content: string) => Promise<void>;
   selectDirectory: () => Promise<string | null>;
+  // The registry id of the daemon this desktop app runs (its `daemon-id`
+  // file), read fresh for the current account/server, or null while it has
+  // none. Optional: a desktop build that does not
+  // expose it leaves the renderer unable to tell which machine is this
+  // computer, and lib/localMachine.ts then never offers the native folder
+  // dialog for a machine (it could be another computer's folder).
+  getLocalDaemonId?: () => Promise<string | null>;
   openProjectDirectory: (path: string) => Promise<{ success: boolean; error?: string }>;
   openTerminal: (path: string) => Promise<{ success: boolean; error?: string }>;
   openExternal: (url: string) => Promise<void>;
@@ -56,11 +63,6 @@ export interface ElectronAPI {
   getNotificationMuteStatus: () => Promise<{ muted: boolean; mutedUntil: number | null; preset: 'unmuted' | 'one_hour' | 'until_tomorrow' | 'custom' }>;
   setTrayStatus: (status: { agentStatus: 'idle' | 'running' | 'error'; activeWorkflows: number; hasChats: boolean; canCreateChat: boolean; currentProjectName: string | null; currentWorktreeName: string | null; currentWorktreeId: string; activeChatId: string | null; activeChatTitle: string | null; recentChats: Array<{ id: string; title: string; activity: string; needsRecovery: boolean }>; workspaces: Array<{ id: string; name: string; isMain: boolean }>; workflows: Array<{ name: string; source: 'builtin' | 'user' | 'project' }>; lastActivityAt: string | null }) => Promise<{ success: boolean; error?: string }>;
   onNotification: (callback: (data: NotificationData) => void) => void;
-
-  // Mock driver configuration
-  getMockDriverConfig: () => Promise<any>;
-  setMockDriverConfig: (config: any) => Promise<void>;
-  browseMockFile: () => Promise<string | null>;
 
   // Window management
   getWindowContext: () => Promise<{ worktreeId?: string; projectId?: string; projectName?: string } | null>;
@@ -80,10 +82,25 @@ export interface ElectronAPI {
   toggleFullscreen: () => Promise<{ success: boolean; isFullScreen?: boolean; error?: string }>;
 
   // Auto-updater
-  checkForUpdates: () => Promise<{ success?: boolean; error?: string; updateInfo?: UpdateStatus }>;
+  /**
+   * `status` is the updater's state once the check answers ("available",
+   * "not-available", or a download already in flight or done, which a check
+   * does not interrupt).
+   */
+  checkForUpdates: () => Promise<{
+    success?: boolean;
+    error?: string;
+    updateAvailable?: boolean;
+    updateInfo?: { version?: string; releaseNotes?: unknown } | null;
+    status?: UpdateStatus | null;
+  }>;
   downloadUpdate: () => Promise<{ success?: boolean; error?: string }>;
   installUpdate: () => Promise<{ success?: boolean; error?: string }>;
   onUpdateStatus: (callback: (status: UpdateStatus) => void) => () => void;
+  /** The updater's current state, null before any check has answered. */
+  getUpdateStatus?: () => Promise<UpdateStatus | null>;
+  /** The app menu's "Check for Updates…" asks this window to show the update dialog. */
+  onUpdateReveal?: (callback: (status: UpdateStatus | null) => void) => () => void;
 
   // Event listeners
   onWorktreeContextChanged: (callback: (data: { worktreeId?: string; projectId?: string }) => void) => () => void;

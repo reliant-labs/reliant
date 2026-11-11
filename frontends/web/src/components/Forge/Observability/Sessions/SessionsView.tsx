@@ -33,10 +33,14 @@ import { formatAgo, formatCount, formatDuration } from "../format";
 import { ServiceSelect } from "../LogsView";
 import type { ObsNavigate } from "../obsSearch";
 import { ObsAsOf, ObsError, ObsLoadingRows, ObsNoData } from "../ObsStates";
+import { Place } from "../Place";
 import type { ReplayerCtor } from "./ReplayPlayer";
 import { SessionDetail } from "./SessionDetail";
-import { isReplayKnownUnplayable, noReplayReason, rumScopeOf, sessionTitle } from "./sessionModel";
-import { SessionsNotConfigured } from "./SessionStates";
+import { isReplayKnownUnplayable, rumScopeOf, sessionTitle } from "./sessionModel";
+import { SessionsNotConfigured, SessionsReplayOff } from "./SessionStates";
+import { ClientName, DeviceSummary } from "../Client";
+import { ClientFilters, hasClientFilters, NO_CLIENT_FILTERS, type ClientFilterValues } from "../ClientFilters";
+import { CONTROL_FIELD, SEGMENTED, segmentTone } from "../../controlStyles";
 
 export interface SessionsViewProps {
   scope: ObsScope;
@@ -46,8 +50,9 @@ export interface SessionsViewProps {
   /** Entry path contains (the URL's `q`). */
   text: string;
   hasError: boolean;
-  hasReplay: boolean;
   user: string;
+  /** Only sessions of this client and frontend build (the URL's `browser`, `os`, `fe`). */
+  client?: ClientFilterValues;
   /** The page-token trail (the URL's `cursor`). */
   cursor: readonly string[];
   /** The session open in detail. */
@@ -61,6 +66,8 @@ export interface SessionsViewProps {
 
 /** What a filter change also resets: the page (its token belongs to the old filters). */
 const FIRST_PAGE = { cursor: undefined } as const;
+const NO_FILTER_VALUES: ClientFilterValues = {};
+const SESSION_CLIENT_FIELDS = ["browser", "os", "fe"] as const;
 
 export function SessionsView(props: SessionsViewProps) {
   const { scope, service, sessionId, navigate } = props;
@@ -81,20 +88,38 @@ export function SessionsView(props: SessionsViewProps) {
   return <SessionList {...props} rumScope={rumScope} service={service} />;
 }
 
-function SessionList({ scope, rumScope, subject, range, service, text, hasError, hasReplay, user, cursor, navigate }: SessionsViewProps & { rumScope: RumScope }) {
+function SessionList({ scope, rumScope, subject, range, service, text, hasError, user, client = NO_FILTER_VALUES, cursor, navigate }: SessionsViewProps & { rumScope: RumScope }) {
   const pageToken = cursor.length ? cursor[cursor.length - 1] : undefined;
+  const { browser, os, fe } = client;
   const filters: SessionFilters = useMemo(
-    () => ({ range, hasError, hasReplay, userId: user, pathContains: text, service, pageToken }),
-    [range, hasError, hasReplay, user, text, service, pageToken]
+    () => ({
+      range,
+      hasError,
+     
+      userId: user,
+      pathContains: text,
+      service,
+      pageToken,
+      browser: browser || undefined,
+      os: os || undefined,
+      frontendVersion: fe || undefined,
+    }),
+    [range, hasError, user, text, service, pageToken, browser, os, fe]
   );
   const sessions = useSessions(rumScope, filters);
   const rows = sessions.data?.sessions ?? [];
-  const filtered = hasError || hasReplay || !!user || !!text || !!service;
+  const filtered = hasError || !!user || !!text || !!service || hasClientFilters(client);
   const page = cursor.length + 1;
 
   return (
     <div className="space-y-3" data-testid="obs-sessions">
-      <SessionToolbar scope={scope} range={range} service={service} text={text} hasError={hasError} hasReplay={hasReplay} user={user} navigate={navigate} />
+      <SessionToolbar scope={scope} range={range} service={service} text={text} hasError={hasError} user={user} navigate={navigate} />
+      <ClientFilters
+        id="obs-sessions-client"
+        fields={SESSION_CLIENT_FIELDS}
+        values={client}
+        onApply={(next) => navigate({ ...next, ...FIRST_PAGE }, { replace: true })}
+      />
       {sessions.data && <ObsAsOf updatedAt={sessions.dataUpdatedAt} />}
       {sessions.isLoading ? (
         <Card padding="none">
@@ -106,6 +131,8 @@ function SessionList({ scope, rumScope, subject, range, service, text, hasError,
         ) : (
           <ObsError error={sessions.error} subject={subject} onRetry={() => void sessions.refetch()} retrying={sessions.isFetching} />
         )
+      ) : rows.length === 0 && page === 1 && !filtered ? (
+        <SessionsReplayOff range={range} onWiden={() => navigate({ range: "7d", ...FIRST_PAGE })} />
       ) : rows.length === 0 && page === 1 ? (
         <ObsNoData
           what="browser sessions"
@@ -113,7 +140,7 @@ function SessionList({ scope, rumScope, subject, range, service, text, hasError,
           filtered={filtered}
           topic="sessions"
           onWiden={() => navigate({ range: "7d", ...FIRST_PAGE })}
-          onClearFilters={() => navigate({ errors: undefined, replay: undefined, user: undefined, q: undefined, service: undefined, ...FIRST_PAGE })}
+          onClearFilters={() => navigate({ errors: undefined, user: undefined, q: undefined, service: undefined, ...NO_CLIENT_FILTERS, ...FIRST_PAGE })}
         />
       ) : (
         <Card padding="none" data-testid="obs-sessions-list" aria-busy={sessions.isFetching || undefined}>
@@ -150,7 +177,7 @@ function SessionList({ scope, rumScope, subject, range, service, text, hasError,
 }
 
 const INPUT =
-  "h-8 w-full rounded-md border border-border bg-surface-sunken px-2.5 text-sm text-ink placeholder:text-ink-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+  `${CONTROL_FIELD} h-8 w-full px-2.5 text-sm`;
 
 function SessionToolbar({
   scope,
@@ -158,7 +185,6 @@ function SessionToolbar({
   service,
   text,
   hasError,
-  hasReplay,
   user,
   navigate,
 }: {
@@ -167,7 +193,6 @@ function SessionToolbar({
   service: string | undefined;
   text: string;
   hasError: boolean;
-  hasReplay: boolean;
   user: string;
   navigate: ObsNavigate;
 }) {
@@ -182,7 +207,7 @@ function SessionToolbar({
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap items-center gap-2">
-        <div role="group" aria-label="Only sessions" className="inline-flex rounded-lg border border-border bg-surface-sunken p-0.5">
+        <div role="group" aria-label="Only sessions" className={SEGMENTED}>
           <button
             type="button"
             aria-pressed={hasError}
@@ -192,15 +217,6 @@ function SessionToolbar({
           >
             With errors
           </button>
-          <button
-            type="button"
-            aria-pressed={hasReplay}
-            onClick={() => navigate({ replay: hasReplay ? undefined : true, ...FIRST_PAGE }, { replace: true })}
-            className={chip(hasReplay)}
-            data-testid="obs-sessions-with-replay"
-          >
-            With replay
-          </button>
         </div>
         <ServiceSelect scope={scope} range={range} value={service} onChange={(next) => navigate({ service: next, ...FIRST_PAGE }, { replace: true })} id="obs-sessions-service" />
       </div>
@@ -209,7 +225,7 @@ function SessionToolbar({
           <label htmlFor="obs-sessions-path" className="sr-only">
             Entry path contains
           </label>
-          <Search className="pointer-events-none absolute left-2.5 top-2 h-4 w-4 text-ink-muted" aria-hidden="true" />
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink-muted" aria-hidden="true" />
           <input
             id="obs-sessions-path"
             type="search"
@@ -245,7 +261,7 @@ function SessionToolbar({
 function chip(active: boolean) {
   return cn(
     "rounded-md px-2.5 py-1 text-xs transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-    active ? "bg-surface font-medium text-ink shadow-sm" : "text-ink-muted hover:text-ink"
+    segmentTone(active)
   );
 }
 
@@ -284,9 +300,34 @@ function SessionTable({ sessions, onOpen }: { sessions: SessionSummary[]; onOpen
       ),
     },
     {
+      key: "location",
+      header: "Location",
+      className: "max-w-[12rem]",
+      render: (_, { session: s }) => <Place geo={s} className="text-xs text-ink-muted" testId={`obs-session-place-${s.sessionId}`} />,
+    },
+    {
+      key: "device",
+      header: "Device",
+      className: "max-w-[10rem]",
+      render: (_, { session: s }) => <DeviceSummary client={s.client} className="text-xs" testId={`obs-session-device-${s.sessionId}`} />,
+    },
+    {
+      key: "client",
+      header: "Client",
+      className: "max-w-[10rem]",
+      render: (_, { session: s }) => <ClientName client={s.client} className="text-xs" testId={`obs-session-client-${s.sessionId}`} />,
+    },
+    {
+      key: "version",
+      header: "App version",
+      className: "max-w-[10rem]",
+      render: (_, { session: s }) => <AppVersion session={s} />,
+    },
+    {
       key: "entry",
       header: "Entry",
-      className: "max-w-[16rem] truncate",
+      // 12rem: the table fits a 1440px laptop beside the nav without a sideways scrollbar.
+      className: "max-w-[12rem] truncate",
       render: (_, { session: s }) => (
         <span className="font-mono text-xs" title={s.entryPath}>
           {s.entryPath || "/"}
@@ -324,12 +365,44 @@ function SessionTable({ sessions, onOpen }: { sessions: SessionSummary[]; onOpen
   );
 }
 
+/**
+ * The version the session ran: the forge release its frontend shipped in
+ * (which names every service of that bundle), with the frontend's build id —
+ * what its source maps are keyed by — beneath; the build id alone when no
+ * release carries it. In the desktop app, the app's own version when it differs.
+ */
+function AppVersion({ session: s }: { session: SessionSummary }) {
+  const desktop = s.client.desktopVersion && s.client.desktopVersion !== s.serviceVersion ? s.client.desktopVersion : "";
+  if (!s.release && !s.serviceVersion && !desktop) return <span className="text-xs text-ink-muted">—</span>;
+  return (
+    <span className="flex min-w-0 flex-col leading-tight" data-testid={`obs-session-version-${s.sessionId}`}>
+      {s.release ? (
+        <span className="truncate font-mono text-xs text-ink" title={`Release ${s.release}: the bundle this frontend build shipped in`} data-testid="obs-session-release">
+          {s.release}
+        </span>
+      ) : (
+        s.serviceVersion && (
+          <span className="truncate font-mono text-xs text-ink" title={`Frontend build ${s.serviceVersion} (no release carries it)`}>
+            {s.serviceVersion}
+          </span>
+        )
+      )}
+      {s.release && s.serviceVersion && (
+        <span className="truncate font-mono text-2xs text-ink-muted" title="The frontend's build id, which its source maps are keyed by">
+          build {s.serviceVersion}
+        </span>
+      )}
+      {desktop && <span className="truncate text-2xs text-ink-muted">desktop {desktop}</span>}
+    </span>
+  );
+}
+
 /** Whether the row offers a replay worth opening: recorded, and not found unplayable. */
 function replayPlayable(session: SessionSummary): boolean {
   return session.hasReplay && !isReplayKnownUnplayable(session.sessionId);
 }
 
-/** The row's replay mark: a replay, a replay this tab found unplayable, or none and why. */
+/** The row's replay mark: a replay, or a replay this tab found unplayable. */
 function ReplayMark({ session }: { session: SessionSummary }) {
   if (session.hasReplay && !isReplayKnownUnplayable(session.sessionId)) {
     return <Tag title="This session's replay was recorded">replay</Tag>;
@@ -341,9 +414,5 @@ function ReplayMark({ session }: { session: SessionSummary }) {
       </span>
     );
   }
-  return (
-    <span title={noReplayReason(session)} data-testid={`obs-session-no-replay-${session.sessionId}`}>
-      no replay
-    </span>
-  );
+  return null;
 }

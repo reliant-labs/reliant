@@ -8,6 +8,7 @@ import (
 	"time"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/rctx"
@@ -55,6 +56,10 @@ type StartRunRequest struct {
 	// ParentChatID is the chat whose agent is starting this run. It is
 	// recorded on the launch event, and the fork-bomb guard walks it.
 	ParentChatID string
+	// OrgID is the calling chat's org: a run an agent starts spends the
+	// same org's money, so it may start only in a project of that org (or
+	// one with none). Empty when the calling chat has no org.
+	OrgID string
 	// DedupeKey makes the launch idempotent: the same key never launches
 	// twice, so a retried tool call attaches to the run it already started.
 	DedupeKey string
@@ -90,7 +95,19 @@ type RunResumeResult struct {
 // RunMessenger delivers a message to a run that is already going. It must
 // never start a run: a run that is not live reports Delivered=false.
 type RunMessenger interface {
-	DeliverToRun(ctx context.Context, userID, chatID, message string) (RunDelivery, error)
+	// thread names the run's thread the message is for (its id, or the node
+	// of an agent running in it); "" lets the run choose its one running
+	// agent, and refuses, listing them, when several run in parallel.
+	DeliverToRun(ctx context.Context, userID, chatID, thread, message string, from RunSender) (RunDelivery, error)
+}
+
+// RunSender names the run a delivered message comes from, so the target
+// stores and shows it as that run's message rather than as its user's.
+type RunSender struct {
+	// ThreadID is the sending run's main thread.
+	ThreadID string
+	// Subject is the sender's one-line summary of the message, "" for none.
+	Subject string
 }
 
 // RunDelivery is what a delivery did. It never claims more than happened: a
@@ -103,6 +120,10 @@ type RunDelivery struct {
 	// is the queued mailbox row the thread's next turn delivers, not yet a
 	// row of its history.
 	MessageID string
+	// NotDeliveredReason says why a live run did not take the message
+	// (errreason.RunNoListeningAgent: no agent is running in it). "" when it
+	// was delivered, or the run was not live.
+	NotDeliveredReason string
 }
 
 // Limits on agents starting agents. An agent that can start a run that can
@@ -203,7 +224,7 @@ func resolveOwnedRun(rctx *rctx.ToolContext, repo runCallerStore, caller *runCal
 		resp := NewTextErrorResponse("Could not look up the run: " + err.Error())
 		return nil, &resp
 	}
-	if chat == nil || chat.UserID != caller.userID {
+	if !authz.CanWriteChat(rctx.Context, caller.userID, chat) {
 		return notFound()
 	}
 	return chat, nil

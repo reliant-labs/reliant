@@ -43,12 +43,15 @@ import { formatAgo, formatCount, formatWhen } from "../format";
 import { ServiceSelect } from "../LogsView";
 import { issueStatusParam, type ObsNavigate } from "../obsSearch";
 import { ObsAsOf, ObsError, ObsLoadingRows, ObsNoData } from "../ObsStates";
+import { UserIdFilter } from "../UserIdFilter";
 import { IssueDetail } from "./IssueDetail";
 import { IssuesNotConfigured } from "./IssueStates";
 import { StatusBadge, Trend } from "./IssueBits";
 import { affectedNoun, issueAskSubject, PLATFORM_LABEL, SORT_LABEL, STATUS_LABEL } from "./issueModel";
 import { linkChatToIssue } from "./linkIssueChat";
 import { assigneeFilterOf, assigneeFilterWaitsForMe, assigneeParam, serverAssignee } from "./issueTimelineModel";
+import { ClientFilters, hasClientFilters, NO_CLIENT_FILTERS, type ClientFilterValues } from "../ClientFilters";
+import { CONTROL_FIELD, SEGMENTED, segmentTone } from "../../controlStyles";
 
 export interface ErrorsViewProps {
   scope: ObsScope;
@@ -63,10 +66,17 @@ export interface ErrorsViewProps {
   sort: IssueSort;
   /** `me` or a user id; absent: anyone's. */
   assignee: string | undefined;
+  /** Only the issues a user id hit in the window (the URL's `user`). Empty: everyone's. */
+  user?: string;
+  /** Only the issues with an event of this browser, OS or build (the URL's `browser`, `os`, `build`). */
+  client?: ClientFilterValues;
   /** The issue open in detail. */
   issueId: string | undefined;
   navigate: ObsNavigate;
 }
+
+const NO_FILTER_VALUES: ClientFilterValues = {};
+const ERROR_CLIENT_FIELDS = ["browser", "os", "build"] as const;
 
 export function ErrorsView(props: ErrorsViewProps) {
   if (props.issueId) {
@@ -88,7 +98,8 @@ export function issueScopeOf(scope: ObsScope): IssueScope {
   return { orgId: scope.orgId, projectId: scope.projectId, envIds: scope.envIds };
 }
 
-function IssueList({ scope, subject, range, text, service, statuses, platform, sort, assignee, navigate }: ErrorsViewProps) {
+function IssueList({ scope, subject, range, text, service, statuses, platform, sort, assignee, user = "", client = NO_FILTER_VALUES, navigate }: ErrorsViewProps) {
+  const { browser, os, build } = client;
   const issueScope = useMemo(() => issueScopeOf(scope), [scope]);
   const me = useCurrentIssueUser();
   const assigneeFilter = useMemo(() => assigneeFilterOf(assignee), [assignee]);
@@ -97,16 +108,34 @@ function IssueList({ scope, subject, range, text, service, statuses, platform, s
   const meUnknown = assigneeFilter.kind === "me" && !me.isLoading && !me.data?.id;
   const serverUser = serverAssignee(assigneeFilter, me.data?.id);
   const filters: IssueFilters = useMemo(
-    () => ({ range, statuses, platform, service, assignee: serverUser, sort, text }),
-    [range, statuses, platform, service, serverUser, sort, text]
+    () => ({
+      range,
+      statuses,
+      platform,
+      service,
+      assignee: serverUser,
+      userId: user || undefined,
+      browser: browser || undefined,
+      os: os || undefined,
+      serviceVersion: build || undefined,
+      sort,
+      text,
+    }),
+    [range, statuses, platform, service, serverUser, user, browser, os, build, sort, text]
   );
   const issues = useIssues(waitingForMe || meUnknown ? null : issueScope, filters);
   const rows = useMemo(() => issues.data?.pages.flatMap((page) => page.issues) ?? [], [issues.data]);
-  const filtered = statuses.length > 0 || !!platform || !!service || !!text || assigneeFilter.kind !== "anyone";
+  const filtered = statuses.length > 0 || !!platform || !!service || !!text || !!user || hasClientFilters(client) || assigneeFilter.kind !== "anyone";
 
   return (
     <div className="space-y-3" data-testid="obs-errors">
-      <IssueToolbar scope={scope} range={range} text={text} service={service} statuses={statuses} platform={platform} sort={sort} assignee={assignee} navigate={navigate} />
+      <IssueToolbar scope={scope} range={range} text={text} service={service} statuses={statuses} platform={platform} sort={sort} assignee={assignee} user={user} navigate={navigate} />
+      <ClientFilters
+        id="obs-errors-client"
+        fields={ERROR_CLIENT_FIELDS}
+        values={client}
+        onApply={(next) => navigate(next, { replace: true })}
+      />
       {issues.data && <ObsAsOf updatedAt={issues.dataUpdatedAt} />}
       {meUnknown ? (
         <p className="rounded-lg border border-dashed border-border bg-surface-sunken px-4 py-5 text-sm text-ink-muted" data-testid="obs-errors-mine-unknown">
@@ -132,7 +161,9 @@ function IssueList({ scope, subject, range, text, service, statuses, platform, s
           filtered={filtered}
           topic="errors"
           onWiden={() => navigate({ range: "7d" })}
-          onClearFilters={() => navigate({ istatus: undefined, platform: undefined, service: undefined, assignee: undefined, q: undefined })}
+          onClearFilters={() =>
+            navigate({ istatus: undefined, platform: undefined, service: undefined, assignee: undefined, user: undefined, q: undefined, ...NO_CLIENT_FILTERS })
+          }
         />
       ) : (
         <IssueTable
@@ -147,7 +178,7 @@ function IssueList({ scope, subject, range, text, service, statuses, platform, s
   );
 }
 
-const SELECT = "h-8 rounded-md border border-border bg-surface-sunken px-2 text-sm text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+const SELECT = `${CONTROL_FIELD} h-8 px-2 text-sm`;
 
 function IssueToolbar({
   scope,
@@ -158,6 +189,7 @@ function IssueToolbar({
   platform,
   sort,
   assignee,
+  user,
   navigate,
 }: {
   scope: ObsScope;
@@ -168,6 +200,7 @@ function IssueToolbar({
   platform: IssuePlatform | undefined;
   sort: IssueSort;
   assignee: string | undefined;
+  user: string;
   navigate: ObsNavigate;
 }) {
   const members = useOrgMembers(scope.orgId);
@@ -189,7 +222,7 @@ function IssueToolbar({
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap items-center gap-2">
-        <div role="group" aria-label="Status" className="inline-flex flex-wrap rounded-lg border border-border bg-surface-sunken p-0.5" data-testid="obs-errors-status">
+        <div role="group" aria-label="Status" className={cn(SEGMENTED, "flex-wrap")} data-testid="obs-errors-status">
           <button
             type="button"
             aria-pressed={statuses.length === 0}
@@ -267,23 +300,26 @@ function IssueToolbar({
           ))}
         </select>
       </div>
-      <form role="search" onSubmit={submit} className="max-w-xl">
+      <div className="flex max-w-2xl flex-wrap items-center gap-2">
+      <form role="search" onSubmit={submit} className="min-w-[14rem] flex-1">
         <label htmlFor="obs-errors-query" className="sr-only">
           Title or culprit contains
         </label>
         <div className="relative">
-          <Search className="pointer-events-none absolute left-2.5 top-2 h-4 w-4 text-ink-muted" aria-hidden="true" />
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink-muted" aria-hidden="true" />
           <input
             id="obs-errors-query"
             type="search"
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
             placeholder="Title or culprit contains, e.g. TypeError or checkout.tsx"
-            className="h-8 w-full rounded-md border border-border bg-surface-sunken pl-8 pr-3 text-sm text-ink placeholder:text-ink-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className={`${CONTROL_FIELD} h-8 w-full pl-8 pr-3 text-sm`}
             data-testid="obs-errors-query"
           />
         </div>
       </form>
+      <UserIdFilter id="obs-errors-user" value={user} onChange={(next) => navigate({ user: next }, { replace: true })} />
+      </div>
     </div>
   );
 }
@@ -291,7 +327,7 @@ function IssueToolbar({
 function chip(active: boolean) {
   return cn(
     "rounded-md px-2.5 py-1 text-xs transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-    active ? "bg-surface font-medium text-ink shadow-sm" : "text-ink-muted hover:text-ink"
+    segmentTone(active)
   );
 }
 

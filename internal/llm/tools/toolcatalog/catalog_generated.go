@@ -826,6 +826,8 @@ var generatedToolParams = map[string]ToolParams{
 	"send_to_run": {
 		Bindable: map[string]struct{}{
 			"message": {},
+			"subject": {},
+			"thread":  {},
 		},
 		Unbindable: map[string]string{
 			"run_id": "identifies one run, which is chosen per call and cannot be known in advance",
@@ -878,17 +880,18 @@ var generatedToolParams = map[string]ToolParams{
 	},
 	"shell": {
 		Bindable: map[string]struct{}{
-			"command":           {},
-			"credentials":       {},
-			"description":       {},
-			"env":               {},
-			"heavy":             {},
-			"keep_alive":        {},
-			"max_output":        {},
-			"repo":              {},
-			"run_in_background": {},
-			"tail_lines":        {},
-			"timeout":           {},
+			"command":            {},
+			"credentials":        {},
+			"description":        {},
+			"env":                {},
+			"heavy":              {},
+			"keep_alive":         {},
+			"max_output":         {},
+			"repo":               {},
+			"run_in_background":  {},
+			"tail_lines":         {},
+			"timeout":            {},
+			"writable_checkouts": {},
 		},
 		Unbindable: map[string]string{},
 	},
@@ -1031,6 +1034,7 @@ var generatedToolParams = map[string]ToolParams{
 	},
 	"spawn_status": {
 		Bindable: map[string]struct{}{
+			"status":          {},
 			"timeout_seconds": {},
 			"wait":            {},
 		},

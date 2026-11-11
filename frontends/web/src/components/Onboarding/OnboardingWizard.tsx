@@ -1,349 +1,54 @@
 /**
- * Onboarding Wizard
+ * Onboarding Wizard (Reliant shell)
  *
- * Main orchestrator component that manages the onboarding flow.
- * Renders the appropriate step component based on current state.
+ * Reliant's onboarding layer: the journeys (JourneyTour, the shell-neutral
+ * engine UI) behind Reliant's gates, the version-bump re-offer, and after
+ * them the checklist. The forge shell mounts JourneyTour directly instead.
  *
- * The wizard is fully URL-decoupled: the active step lives in the URL as
- * `?tour=<step-id>`. The wizard derives `currentStepId` and `isWizardActive`
- * via `useTourNavigation()`. Steps that need to spotlight an element on a
- * specific page check `pathname` and either render the spotlight (right page)
- * or a small "Open <page> to continue" modal (wrong page). The user owns the
- * URL; the wizard reacts. There are no useEffects that push routes.
+ * The tour is URL-driven: `?tour=` (tourParam.ts) says what is open. The
+ * user owns the URL; the wizard reacts. The one effect that navigates is the
+ * version-bump re-offer below, which runs at most once per page load.
  *
- * 3-phase flow:
- * 1. Tour active (`?tour=<step>` present): Show guided spotlight tour steps.
- *    The last step's nav button reads "Finish" — there is no closing modal;
- *    finishing lands the user on their project's chat.
- * 2. Tour completed + checklist not dismissed: Show floating OnboardingChecklist
- * 3. Tour completed + checklist dismissed: Render nothing
+ * Phases:
+ * 1. `?tour=…` open: JourneyTour (the picker, or a journey step).
+ * 2. No tour, checklist not dismissed: the floating OnboardingChecklist.
+ * 3. Otherwise nothing.
  */
 
-import { useEffect, useRef } from "react";
+import { useEffect } from "react";
 import { useLocation } from "@tanstack/react-router";
-import { Workflow } from "lucide-react";
 import { isClaimPath } from "../../lib/claimLink";
+import { isAcceptInvitePath } from "../../lib/inviteLink";
+import { trackEvent } from "../../lib/analytics";
 import { useAuthStore } from "../../store/authStore";
 import { useOnboardingChecklistStore } from "../../store/onboardingChecklistStore";
 import { useTourStore } from "../../store/tourStore";
-import { useWorkspaceStateStore } from "../../store/workspaceStateStore";
-import { trackEvent } from "../../lib/analytics";
 import { useSurface } from "../../lib/surfaceContext";
 import { isPhoneViewport } from "../../lib/mobileRedirect";
-
-import {
-  ONBOARDING_STEPS,
-  getActiveTourSteps,
-  getNextStepId,
-  getPreviousStepId,
-  getStepById,
-} from "./constants";
-import { OnboardingSpotlight } from "./OnboardingSpotlight";
-import { OnboardingMultiSpotlight } from "./OnboardingMultiSpotlight";
-import { OnboardingModal } from "./OnboardingModal";
-import { OnboardingNavBar } from "./OnboardingNavBar";
-import { OnboardingChecklist } from "./OnboardingChecklist";
-import type { OnboardingStepId, StepProps } from "./types";
-import { useTourNavigation, STEP_EXPECTED_PATH } from "./useTourNavigation";
 import { isWorkflowSurfacePath } from "../../lib/workflowsArea";
 
-// ─── Page-redirect modal ─────────────────────────────────────────────────────
-// Rendered when a spotlight step's expected page is not the current page.
-// Keeps the user in control of navigation — single button takes them to the
-// right place, Skip/Back still available via the OnboardingNavBar.
+import { OnboardingChecklist } from "./OnboardingChecklist";
+import { JourneyTour } from "./JourneyTour";
+import { JOURNEYS, firstStepId, isJourneyAvailable } from "./journeys/registry";
+import "./journeys/catalog";
+import { journeyToReshow } from "./journeys/reshow";
+import { useTourNavigation } from "./useTourNavigation";
 
-interface OpenPageModalProps extends StepProps {
-  title: string;
-  message: string;
-  actionLabel: string;
-  onOpen: () => void;
+// ─── Version-bump re-offer ───────────────────────────────────────────────────
+// Once per page load at most: a journey whose version moved past one the user
+// completed is opened again, and "shown" is recorded at the new version
+// first, so it is never offered twice (never loops), even if they close the
+// tab mid-tour.
+let reshowChecked = false;
+
+/** Test-only. */
+export function __resetJourneyReshow(): void {
+  reshowChecked = false;
 }
-
-function OpenPageModal({
-  title,
-  message,
-  actionLabel,
-  onOpen,
-  stepNumber,
-  totalSteps,
-}: OpenPageModalProps) {
-  return (
-    <OnboardingModal
-      isOpen={true}
-      title={title}
-      stepNumber={stepNumber}
-      totalSteps={totalSteps}
-      hideNavigation
-      hideProgressBar
-    >
-      <div className="space-y-5">
-        <p className="text-sm text-muted-foreground text-center">{message}</p>
-        <div className="flex justify-center">
-          <button
-            type="button"
-            onClick={onOpen}
-            className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-medium bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
-          >
-            {actionLabel}
-          </button>
-        </div>
-      </div>
-    </OnboardingModal>
-  );
-}
-
-// ─── Spotlight Step Wrappers ─────────────────────────────────────────────────
-
-function ChatAndSidebarsStep(props: StepProps) {
-  const step = getStepById("chat-and-sidebars")!;
-
-  // Expand left sidebar so user can see it
-  useEffect(() => {
-    useWorkspaceStateStore.getState().setLeftSidebarExpandedGlobal(true);
-  }, []);
-
-  return (
-    <OnboardingMultiSpotlight
-      targets={step.targets || []}
-      stepNumber={props.stepNumber}
-      totalSteps={props.totalSteps}
-      onNext={props.onComplete}
-      onBack={props.onBack}
-      onSkipAll={props.onSkipAll}
-    />
-  );
-}
-
-function WorkflowControlsStep(props: StepProps) {
-  const step = getStepById("workflow-controls")!;
-  return (
-    <OnboardingSpotlight
-      targetSelector={step.targetSelector!}
-      title={step.title}
-      description={
-        <div className="space-y-2">
-          <p>{step.description}</p>
-          <p className="text-xs text-muted-foreground/80">
-            Set a param's visibility in the workflow builder, or with{" "}
-            <code className="font-mono">ui: toolbar</code> /{" "}
-            <code className="font-mono">ui: hidden</code> in its YAML.
-          </p>
-        </div>
-      }
-      stepNumber={props.stepNumber}
-      totalSteps={props.totalSteps}
-      onNext={props.onComplete}
-      onBack={props.onBack}
-      onSkipAll={props.onSkipAll}
-      tooltipPosition="top"
-      spotlightConfig={step.spotlightConfig}
-    />
-  );
-}
-
-function WorkspacesStep(props: StepProps) {
-  const step = getStepById("workspaces")!;
-  return (
-    <OnboardingSpotlight
-      targetSelector={step.targetSelector!}
-      title={step.title}
-      description={
-        <div className="space-y-2">
-          <p>{step.description}</p>
-          <p className="text-xs text-muted-foreground/80">
-            Use the dropdown to switch workspaces, or create a new one to start an isolated feature branch.
-          </p>
-        </div>
-      }
-      stepNumber={props.stepNumber}
-      totalSteps={props.totalSteps}
-      onNext={props.onComplete}
-      onBack={props.onBack}
-      onSkipAll={props.onSkipAll}
-      spotlightConfig={step.spotlightConfig}
-    />
-  );
-}
-
-function DeploymentsStep(props: StepProps) {
-  const step = getStepById("deployments")!;
-
-  // The target is a left-sidebar nav entry.
-  useEffect(() => {
-    useWorkspaceStateStore.getState().setLeftSidebarExpandedGlobal(true);
-  }, []);
-
-  return (
-    <OnboardingSpotlight
-      targetSelector={step.targetSelector!}
-      title={step.title}
-      description={step.description}
-      stepNumber={props.stepNumber}
-      totalSteps={props.totalSteps}
-      onNext={props.onComplete}
-      onBack={props.onBack}
-      onSkipAll={props.onSkipAll}
-      spotlightConfig={step.spotlightConfig}
-    />
-  );
-}
-
-function WorkflowIntroStep(props: StepProps) {
-  const step = getStepById("workflow-intro")!;
-
-  useEffect(() => {
-    useWorkspaceStateStore.getState().setLeftSidebarExpandedGlobal(true);
-  }, []);
-
-  return (
-    <OnboardingSpotlight
-      targetSelector={step.targetSelector!}
-      title={step.title}
-      description={
-        <div className="space-y-2">
-          <p>{step.description}</p>
-          <div className="flex items-start gap-2 p-2 rounded bg-primary/5 border border-primary/10">
-            <Workflow className="w-4 h-4 text-primary-ink flex-shrink-0 mt-0.5" />
-            <p className="text-xs text-muted-foreground">
-              Workflows are defined in YAML and run multi-agent pipelines with loops, branches, parallelization, and human-in-the-loop approvals.
-            </p>
-          </div>
-        </div>
-      }
-      stepNumber={props.stepNumber}
-      totalSteps={props.totalSteps}
-      onNext={props.onComplete}
-      onBack={props.onBack}
-      onSkipAll={props.onSkipAll}
-      spotlightConfig={step.spotlightConfig}
-    />
-  );
-}
-
-function WorkflowHubStep(props: StepProps) {
-  const step = getStepById("workflow-hub")!;
-  const { pathname } = useLocation();
-  const { goToStep } = useTourNavigation();
-  const expected = STEP_EXPECTED_PATH("workflow-hub")!;
-
-  // Wrong page → render a modal asking the user to open Workflows. We never
-  // push routes from an effect — the user clicks the button.
-  if (!pathname.startsWith(expected)) {
-    return (
-      <OpenPageModal
-        {...props}
-        title={step.title}
-        message="Open Workflows to continue this step."
-        actionLabel="Open Workflows"
-        onOpen={() => goToStep("workflow-hub")}
-      />
-    );
-  }
-
-  return (
-    <OnboardingSpotlight
-      targetSelector={step.targetSelector!}
-      title={step.title}
-      description={
-        <div className="space-y-2">
-          <p>{step.description}</p>
-          <div className="text-xs text-muted-foreground/80 space-y-1">
-            <p className="flex items-center gap-1.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-primary flex-shrink-0" />
-              <strong>Library</strong> — Built-in and project workflows, ready to run
-            </p>
-            <p className="flex items-center gap-1.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-primary flex-shrink-0" />
-              <strong>Runs</strong> — Every run, live or finished, across projects
-            </p>
-            <p className="flex items-center gap-1.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-primary flex-shrink-0" />
-              <strong>Automations</strong> — Workflows that run on a schedule
-            </p>
-          </div>
-        </div>
-      }
-      stepNumber={props.stepNumber}
-      totalSteps={props.totalSteps}
-      onNext={props.onComplete}
-      onBack={props.onBack}
-      onSkipAll={props.onSkipAll}
-      tooltipPosition="bottom"
-      spotlightConfig={step.spotlightConfig}
-    />
-  );
-}
-
-function WorkflowBuilderStep(props: StepProps) {
-  const step = getStepById("workflow-builder")!;
-  const { pathname } = useLocation();
-  const { goToStep } = useTourNavigation();
-  const expected = STEP_EXPECTED_PATH("workflow-builder")!;
-
-  // The builder needs `/workflow/<name>`; the hub alone doesn't satisfy this.
-  if (!pathname.startsWith(expected)) {
-    return (
-      <OpenPageModal
-        {...props}
-        title={step.title}
-        message="Open the workflow builder to continue this step."
-        actionLabel="Open Workflow Builder"
-        onOpen={() => goToStep("workflow-builder")}
-      />
-    );
-  }
-
-  // One step for both ways of building. The AI assistant panel isn't mounted
-  // on the built-in workflow the tour opens (WorkflowBuilder hides it for
-  // builtins), so it is named here rather than spotlit.
-  return (
-    <OnboardingSpotlight
-      targetSelector={step.targetSelector!}
-      title={step.title}
-      description={
-        <div className="space-y-2">
-          <p>{step.description}</p>
-          <p className="text-xs text-muted-foreground/80">
-            Prefer text? Every workflow is YAML underneath — open it from the
-            YAML button in the header.
-          </p>
-        </div>
-      }
-      stepNumber={props.stepNumber}
-      totalSteps={props.totalSteps}
-      onNext={props.onComplete}
-      onBack={props.onBack}
-      onSkipAll={props.onSkipAll}
-      tooltipPosition="top"
-      tooltipPadding={80}
-      spotlightConfig={step.spotlightConfig}
-    />
-  );
-}
-
-// ─── Step Component Map ──────────────────────────────────────────────────────
-
-const STEP_COMPONENTS: Record<OnboardingStepId, React.ComponentType<StepProps>> = {
-  "chat-and-sidebars": ChatAndSidebarsStep,
-  "workflow-controls": WorkflowControlsStep,
-  "workspaces": WorkspacesStep,
-  "deployments": DeploymentsStep,
-  "workflow-intro": WorkflowIntroStep,
-  "workflow-hub": WorkflowHubStep,
-  "workflow-builder": WorkflowBuilderStep,
-};
-
-// ─── Main Wizard Component ───────────────────────────────────────────────────
 
 export function OnboardingWizard() {
   const surface = useSurface();
-  const {
-    currentStepId,
-    isWizardActive,
-    completeAndAdvance,
-    goBack,
-    skipAll,
-  } = useTourNavigation();
+  const nav = useTourNavigation();
 
   const tourInitialized = useTourStore((state) => state.isInitialized);
   const loadTourState = useTourStore((state) => state.loadState);
@@ -364,26 +69,24 @@ export function OnboardingWizard() {
   const isWorkflowMode = isWorkflowSurfacePath(location.pathname);
   // The dedicated /onboarding route IS the onboarding experience — showing
   // the post-onboarding "Setup Guide" floating panel on top of it is a
-  // bad-UX dupe of the same information. Phase 2 (the checklist) is for
-  // AFTER /onboarding exits to the main chat; while the user is on
-  // /onboarding itself we suppress the floater entirely.
-  // /claim owns the screen for the same reason: someone is mid-way through
-  // taking over a site, and the guide would sit over the one decision on it.
+  // bad-UX dupe of the same information. /claim owns the screen for the same
+  // reason: someone is mid-way through taking over a site; /accept-invite,
+  // mid-way through joining an org.
   const isOnboardingRoute =
-    location.pathname.startsWith("/onboarding") || isClaimPath(location.pathname);
+    location.pathname.startsWith("/onboarding") ||
+    isClaimPath(location.pathname) ||
+    isAcceptInvitePath(location.pathname);
 
   // Onboarding is per-USER state, so none of it may render to a signed-out
-  // visitor. Route alone is not that gate: the sign-in screen is reachable
-  // at more than one path, and a forced sign-out (see the 401 handler in
-  // api/transport.ts) drops the user there without unmounting this wizard —
-  // which is how the Setup Guide ended up painted over the login screen.
+  // visitor (a forced sign-out drops the user on the sign-in screen without
+  // unmounting this wizard).
   const user = useAuthStore((state) => state.user);
 
-  // NOTE: the wizard used to defer itself while NewChatView's blocking
-  // "What are you building?" dialog could be on screen, which meant waiting
-  // on the chat-list query before the tour could start — a visible lag for
-  // exactly the brand-new user the tour is for. That dialog is gone, so
-  // there is nothing left to defer for.
+  // The tour spotlights desktop chrome by DOM selector; the mobile surface
+  // has none of it (mobile users still get the setup flow at /onboarding).
+  // A phone on a desktop-surface route gets JourneyTour's "open this on a
+  // computer" card instead.
+  const isDesktopSurface = surface === "desktop";
 
   // Load state on mount. Pure data fetch — no navigation.
   useEffect(() => {
@@ -395,30 +98,6 @@ export function OnboardingWizard() {
     }
   }, [tourInitialized, checklistInitialized, loadTourState, loadChecklistState]);
 
-  // tour_started fires once when the wizard becomes active. tourStartRef holds
-  // the wall-clock start so tour_completed / tour_step_skipped can report a
-  // full-tour duration. stepStartRef tracks the current step's view time so
-  // tour_step_completed / tour_step_skipped can report per-step duration.
-  const tourStartRef = useRef<number | null>(null);
-  const stepStartRef = useRef<number | null>(null);
-  useEffect(() => {
-    if (isWizardActive && currentStepId) {
-      tourStartRef.current = Date.now();
-      stepStartRef.current = Date.now();
-      trackEvent("tour_started", { totalSteps: getActiveTourSteps().length });
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isWizardActive]);
-
-  // tour_step_viewed fires on every step transition (including the first).
-  // stepStartRef resets so subsequent step_completed / step_skipped events get
-  // a fresh per-step duration.
-  useEffect(() => {
-    if (!isWizardActive || !currentStepId) return;
-    stepStartRef.current = Date.now();
-    trackEvent("tour_step_viewed", { stepId: currentStepId });
-  }, [isWizardActive, currentStepId]);
-
   // Set up checklist detection after checklist state is ready
   useEffect(() => {
     if (!checklistInitialized) return;
@@ -427,15 +106,30 @@ export function OnboardingWizard() {
     return unsub;
   }, [checklistInitialized, detectCompletedItems, subscribeToStoreChanges]);
 
-  // The guided tour spotlights desktop chrome by DOM selector
-  // (`[data-onboarding='left-sidebar']`, `'right-sidebar'`,
-  // `'workflow-canvas'`). None of that exists on the mobile surface, so every
-  // step would fall back to its "Open <page> to continue" prompt pointing at
-  // pages mobile does not have. The tour stays a desktop feature; mobile users
-  // still get the *setup* flow at /onboarding, which is a different system.
-  // A phone on a desktop-surface route (the Apps console, which has no /m/*
-  // twin) is the same case: the floating checklist would sit over the page.
-  if (surface !== "desktop" || isPhoneViewport()) return null;
+  const tourOpen = nav.tour != null;
+  const { goToStep } = nav;
+  useEffect(() => {
+    if (reshowChecked || !tourInitialized || !user || !isDesktopSurface || isPhoneViewport()) return;
+    if (isOnboardingRoute || tourOpen) return;
+    reshowChecked = true;
+    const journey = journeyToReshow(
+      useTourStore.getState(),
+      (id) => (JOURNEYS[id].reshowAfterVersionBump ?? true) && isJourneyAvailable(id),
+    );
+    const first = journey ? firstStepId(journey) : null;
+    if (!journey || !first) return;
+    void useTourStore.getState().markJourneyShown(journey);
+    trackEvent("journey_offered", { journey, version: JOURNEYS[journey].version, reason: "version_bump" });
+    goToStep(journey, first);
+  }, [tourInitialized, user, isDesktopSurface, isOnboardingRoute, tourOpen, goToStep]);
+
+  // The mobile surface shows a tour only as its journey's own phone presentation (Journey.phone).
+  // It needs the tour state alone: the checklist never shows there, so its
+  // store loading (or failing to) must not hide an open phone tour.
+  if (!isDesktopSurface) {
+    const phoneTour = nav.tour?.kind === "step" && !!JOURNEYS[nav.tour.journey].phone;
+    return phoneTour && user && tourInitialized ? <JourneyTour /> : null;
+  }
 
   // Signed out — neither the tour nor the checklist belongs on screen.
   if (!user) return null;
@@ -443,108 +137,13 @@ export function OnboardingWizard() {
   // Not ready yet
   if (!isInitialized) return null;
 
-  // Phase 1: Guided tour is active
-  if (isWizardActive && currentStepId) {
-    const currentStep = getStepById(currentStepId);
-    if (!currentStep) return null;
+  // Phase 1: a tour is open
+  if (tourOpen) return <JourneyTour />;
 
-    // Count and order against the steps this user's tour actually contains
-    // (see getActiveTourSteps). A step that went unavailable while open — the
-    // forge UI switched off in another tab — isn't in that list; show it at
-    // the position it would have held so the counter never reads "0 / n".
-    const activeSteps = getActiveTourSteps();
-    const totalSteps = activeSteps.length;
-    const activeIndex = activeSteps.findIndex((s) => s.id === currentStepId);
-    const staticIndex = ONBOARDING_STEPS.findIndex((s) => s.id === currentStepId);
-    const activeStepsBefore = activeSteps.filter(
-      (s) => ONBOARDING_STEPS.findIndex((t) => t.id === s.id) < staticIndex,
-    ).length;
-    const stepIndex = activeIndex === -1
-      ? Math.min(activeStepsBefore, totalSteps - 1)
-      : activeIndex;
-    const StepComponent = STEP_COMPONENTS[currentStepId];
-    if (!StepComponent) return null;
-
-    const isLastStep = getNextStepId(currentStepId) === null;
-
-    const handleComplete = async () => {
-      const stepDuration = stepStartRef.current
-        ? Date.now() - stepStartRef.current
-        : 0;
-      trackEvent("tour_step_completed", {
-        stepId: currentStepId,
-        stepName: currentStep.title,
-        stepsCompleted: stepIndex + 1,
-        totalSteps,
-        duration_ms: stepDuration,
-      });
-      if (isLastStep) {
-        if (tourStartRef.current) {
-          trackEvent("tour_completed", {
-            totalSteps,
-            duration_ms: Date.now() - tourStartRef.current,
-          });
-          tourStartRef.current = null;
-        }
-        // Funnel marker. The closing "Ready to go" modal used to emit this on
-        // mount; Finish on the last spotlight is now the moment the tour is
-        // done, and the funnel-stall alert counts on this event existing.
-        trackEvent("onboarding_completed", { totalSteps });
-      }
-      await completeAndAdvance();
-    };
-
-    const handleSkipAll = async () => {
-      const stepDuration = stepStartRef.current
-        ? Date.now() - stepStartRef.current
-        : 0;
-      const tourDuration = tourStartRef.current
-        ? Date.now() - tourStartRef.current
-        : 0;
-      trackEvent("tour_step_skipped", {
-        stepId: currentStepId,
-        stepName: currentStep.title,
-        stepsCompleted: stepIndex,
-        totalSteps,
-        duration_ms: stepDuration,
-        tour_duration_ms: tourDuration,
-      });
-      tourStartRef.current = null;
-      await skipAll();
-    };
-
-    const handleBack = getPreviousStepId(currentStepId) ? goBack : undefined;
-
-    // The last step's button finishes the tour — completeAndAdvance marks it
-    // complete and lands the user on their project's chat.
-    const nextLabel = isLastStep ? "Finish" : "Next";
-
-    return (
-      <>
-        <StepComponent
-          onComplete={handleComplete}
-          onSkipAll={handleSkipAll}
-          onBack={handleBack}
-          stepNumber={stepIndex + 1}
-          totalSteps={totalSteps}
-        />
-        <OnboardingNavBar
-          stepNumber={stepIndex + 1}
-          totalSteps={totalSteps}
-          stepTitle={currentStep.title}
-          onNext={handleComplete}
-          onBack={handleBack}
-          onSkipAll={handleSkipAll}
-          nextLabel={nextLabel}
-          showSkipAll={!isLastStep}
-        />
-      </>
-    );
-  }
+  // The floating checklist would sit over a phone-sized page.
+  if (isPhoneViewport()) return null;
 
   // Phase 2: Show checklist after setup if not dismissed (only on main chat page).
-  // isOnboardingRoute gate: the /onboarding route is the onboarding UX itself —
-  // surfacing the post-onboarding floater on top of it is a misleading dupe.
   // allRequiredComplete gate: a guide with nothing left to do is clutter, so it
   // retires itself rather than sitting at full progress forever.
   if (

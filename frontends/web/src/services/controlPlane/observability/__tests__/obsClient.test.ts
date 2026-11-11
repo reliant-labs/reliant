@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it, vi } from "vitest";
 
 import { IssuesService } from "@/gen/controlplane/services/issues/v1/issues_pb";
@@ -5,6 +6,7 @@ import { ObservabilityService } from "@/gen/controlplane/services/observability/
 import { RumService } from "@/gen/controlplane/services/rum/v1/rum_pb";
 
 import { runAsPoll } from "../quotaStore";
+import { ReadScheduler, resetObsReadScheduler, runAsBackground } from "../readScheduler";
 
 const calls: { request: unknown; options: unknown }[] = [];
 const fake = {
@@ -27,6 +29,17 @@ describe("obsClient", () => {
     await client.queryPanel({ id: "person again" });
 
     expect(calls.map((c) => (c.options as { headers?: Record<string, string> } | undefined)?.headers?.["Forge-Poll"])).toEqual([undefined, "1", undefined]);
+  });
+
+  it("queues a poll or a prefetch as background, and a person's read as visible", async () => {
+    const run = vi.spyOn(ReadScheduler.prototype, "run");
+    resetObsReadScheduler();
+    const client = obsClient({} as never) as unknown as { queryPanel: (r: unknown) => Promise<unknown> };
+    await client.queryPanel({ id: "person" });
+    runAsPoll(() => void client.queryPanel({ id: "poll" }));
+    runAsBackground(() => void client.queryPanel({ id: "prefetch" }));
+    expect(run.mock.calls.map((call) => call[2])).toEqual(["visible", "background", "background"]);
+    run.mockRestore();
   });
 
   it("keeps the headers a caller passes", async () => {

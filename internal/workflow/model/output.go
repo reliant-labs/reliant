@@ -80,6 +80,7 @@ func SkippedRunOutputMap() map[string]interface{} {
 		"stdout":           "",
 		"stderr":           "",
 		"log_file":         "",
+		"truncated":        false,
 	}
 }
 

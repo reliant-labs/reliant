@@ -19,7 +19,7 @@ is true — a daemon that postdates the account — and it calls
 `CompleteOnboarding` and navigates to `/`. Creating a daemon DURING onboarding
 satisfies that condition, so any change that provisions a daemon mid-flow can
 trip the heal and end onboarding rather than advance it. Verified in
-`admin-server.log`: `daemon created name=onboarding-daemon` at 17:24:40.809,
+platform-api's dev log (`admin-server.log`, its file name until the deploy rename ships): `daemon created name=onboarding-daemon` at 17:24:40.809,
 `onboarding completed` 39ms later, with no step in between.
 
 When debugging this flow, read `../control-plane/.forge/logs/dev/admin-server.log`

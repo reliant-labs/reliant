@@ -13,6 +13,8 @@
  *   Observability ›               Errors · Logs · Traces · Metrics · Dashboards · Alerts
  *                                 Sessions / Profiles when data is available (or unknown)
  *                                 (up to three starred dashboards nested under Dashboards)
+ *   Data                          the scoped environment's databases, read-only
+ *   Storage                       the scoped environment's buckets, read-only
  *   Configure
  *     Environments ›              one entry per long-lived environment, previews as one
  *     Secrets · Domains
@@ -29,17 +31,20 @@
  *
  * Every row is the same style (forge-ui SidebarLayout, the Cloudflare
  * pattern); a parent navigates to its own overview and expands its children
- * inline, and the group holding the current page stays open.
+ * inline, and the group holding the current page stays open. Observability
+ * is the exception: it is expanded on every page, and its chevron collapses
+ * it — a choice remembered per user (obsNavOpen.ts).
  */
 
 import type { ReactNode } from "react";
-import { Activity, Gauge, Globe, Home, KeyRound, Layers, Tag as TagIcon } from "lucide-react";
+import { Activity, Database, Gauge, Globe, HardDrive, Home, KeyRound, Layers, Tag as TagIcon } from "lucide-react";
 
 import SidebarLayout, { type SidebarNavItem, type SidebarUserInfo } from "@/components/forge-ui/sidebar_layout";
 import Link from "@/components/forge-ui/link";
 
 import type { DashboardPageKind } from "../Observability/Dashboards/dashboardModel";
 import { shortVersion } from "../Releases/releaseModel";
+import { useConsoleNavExtras } from "./consoleNavExtras";
 import { EnvScopeControl } from "./EnvScopeControl";
 import type { ScopeOption } from "./envScope";
 import {
@@ -70,8 +75,20 @@ export interface ConsoleNavInput {
   starred?: ConsoleNavDashboard[];
   /** The open dashboard's title, for the breadcrumb (its key until the index answers). */
   dashboardTitle?: string;
-  /** Omitted/unknown keeps useful views visible; false means a definite empty read. */
-  optionalViews?: { sessions: boolean; profiles: boolean };
+  /** Omitted/unknown keeps useful views visible; false means a definite empty read. Sessions is always listed. */
+  optionalViews?: { profiles: boolean };
+  /**
+   * Whether Observability is expanded — the reader's remembered choice
+   * (obsNavOpen.ts). Omitted, it starts expanded and toggles for the visit.
+   */
+  obsOpen?: boolean;
+  onObsOpenChange?: (open: boolean) => void;
+  /**
+   * Where a row (and a crumb) links. Default: the page's console path,
+   * carrying the scope. The forge demo (Forge/Demo) keeps every link on its
+   * own route.
+   */
+  linkTo?: (target: ConsolePage) => string;
 }
 
 export interface ConsoleNavDashboard {
@@ -86,11 +103,11 @@ export const NAV_STARRED_MAX = 3;
 const icon = (Icon: typeof Home) => <Icon className="h-4 w-4" aria-hidden="true" />;
 
 /** The nav rows for `page` — pure, so the IA is testable without rendering. */
-export function buildConsoleNav({ project, page, env, envs, alertsFiring = 0, starred = [], optionalViews }: ConsoleNavInput): {
+export function buildConsoleNav({ project, page, env, envs, alertsFiring = 0, starred = [], optionalViews, obsOpen, onObsOpenChange, linkTo }: ConsoleNavInput): {
   items: SidebarNavItem[];
   footer: SidebarNavItem[];
 } {
-  const href = (target: ConsolePage) => withSearch(consolePath(project, target), { env });
+  const href = linkTo ?? ((target: ConsolePage) => withSearch(consolePath(project, target), { env }));
   const is = (kind: ConsolePage["kind"]) => page.kind === kind;
   const row = (label: string, target: ConsolePage, rowIcon: ReactNode, extra: Partial<SidebarNavItem> = {}): SidebarNavItem => ({
     label,
@@ -112,8 +129,12 @@ export function buildConsoleNav({ project, page, env, envs, alertsFiring = 0, st
       row("Releases", { kind: "releases" }, icon(TagIcon), { active: is("releases") || is("release") }),
       row("Observability", { kind: "obs-view", view: OBS_NAV_VIEWS[0] }, icon(Gauge), {
         active: false,
+        // Its views are the console's most-visited pages: listed on every page, until the reader collapses them.
+        defaultExpanded: true,
+        open: obsOpen,
+        onOpenChange: onObsOpenChange,
         children: OBS_NAV_VIEWS.filter((view) =>
-          (view !== "sessions" && view !== "profiles") || optionalViews?.[view] !== false || (page.kind === "obs-view" && page.view === view)
+          view !== "profiles" || optionalViews?.[view] !== false || (page.kind === "obs-view" && page.view === view)
         ).map((view) => {
           const nested = view === "dashboards" ? starred.slice(0, NAV_STARRED_MAX) : [];
           const openStar = (candidate: ConsoleNavDashboard) =>
@@ -140,6 +161,8 @@ export function buildConsoleNav({ project, page, env, envs, alertsFiring = 0, st
           };
         }),
       }),
+      row("Data", { kind: "data" }, icon(Database)),
+      row("Storage", { kind: "storage" }, icon(HardDrive)),
       row("Environments", { kind: "environments" }, icon(Layers), {
         section: "Configure",
         children: [
@@ -169,14 +192,20 @@ export function buildConsoleNav({ project, page, env, envs, alertsFiring = 0, st
 }
 
 /** The breadcrumb trail for `page`, after the project. The last crumb is the page itself. */
-export function consoleCrumbs(project: string, page: ConsolePage, env: string, dashboardTitle?: string): { label: string; href?: string }[] {
-  const href = (target: ConsolePage) => withSearch(consolePath(project, target), { env });
+export function consoleCrumbs(
+  project: string,
+  page: ConsolePage,
+  env: string,
+  dashboardTitle?: string,
+  linkTo?: (target: ConsolePage) => string
+): { label: string; href?: string }[] {
+  const href = linkTo ?? ((target: ConsolePage) => withSearch(consolePath(project, target), { env }));
   switch (page.kind) {
     case "overview":
       return [{ label: "Overview" }];
     case "workload":
       // The workload's environment is pinned by its path: the trail leads back to the Overview scoped to it.
-      return [{ label: "Overview", href: withSearch(consolePath(project, { kind: "overview" }), { env: page.env }) }, { label: page.name }];
+      return [{ label: "Overview", href: linkTo ? linkTo({ kind: "overview" }) : withSearch(consolePath(project, { kind: "overview" }), { env: page.env }) }, { label: page.name }];
     case "releases":
       return [{ label: "Releases" }];
     case "release":
@@ -189,6 +218,10 @@ export function consoleCrumbs(project: string, page: ConsolePage, env: string, d
         { label: "Dashboards", href: href({ kind: "obs-view", view: "dashboards" }) },
         { label: dashboardTitle || page.key },
       ];
+    case "storage":
+      return [{ label: "Storage" }];
+    case "data":
+      return [{ label: "Data" }];
     case "environments":
       return [{ label: "Environments" }];
     case "environment":
@@ -238,16 +271,31 @@ export function ConsoleShell({
   children,
   ...nav
 }: ConsoleShellProps) {
-  const { items, footer } = buildConsoleNav(nav);
-  const crumbs = consoleCrumbs(nav.project, nav.page, nav.env, nav.dashboardTitle);
+  const { lead, drawerAppendix, envOrder } = useConsoleNavExtras();
+  const rank = (name: string) => (envOrder?.includes(name) ? envOrder.indexOf(name) : (envOrder?.length ?? 0));
+  const long = envOrder ? [...scope.long].sort((a, b) => rank(a.name) - rank(b.name)) : scope.long;
+  const built = buildConsoleNav(nav);
+  // A host's lead row (the demo's "How it was built") is the current page when active, not the console page under it.
+  const items = lead
+    ? [
+        { label: lead.label, href: lead.href, icon: lead.icon, active: lead.active },
+        ...(lead.active ? built.items.map((item) => ({ ...item, active: false })) : built.items),
+      ]
+    : built.items;
+  const footer = built.footer;
+  const crumbs = lead?.active ? [{ label: lead.label }] : consoleCrumbs(nav.project, nav.page, nav.env, nav.dashboardTitle, nav.linkTo);
 
   return (
     /*
      * `forge-ui` is REQUIRED, not cosmetic: inside it forge's `accent` token
      * resolves to reliant's primary action colour; outside it, to reliant's
-     * muted hover tint (src/index.css).
+     * muted hover tint (src/index.css). `forge-console` raises the control
+     * edge to 3:1 so filters and toggles read as controls beside the charts
+     * (controlStyles.ts).
      */
-    <div className="forge-ui h-dvh w-full" data-testid="forge-shell">
+    // data-tour: the forge journey spotlights the nav (`[data-tour='forge-console'] aside`, SidebarLayout's one
+    // <aside>; its id comes from useId since forge 0a3a89d5, so the tour cannot name it).
+    <div className="forge-ui forge-console h-dvh w-full" data-testid="forge-shell" data-tour="forge-console">
       <SidebarLayout
         navLabel={nav.project}
         brand={brand}
@@ -258,17 +306,18 @@ export function ConsoleShell({
         collapsed={collapsed}
         onToggle={onToggleCollapsed}
         contentLayout={contentLayout}
+        navAppendix={drawerAppendix ? <div className="md:hidden">{drawerAppendix}</div> : undefined}
         headerContent={
           <>
             <nav aria-label="Breadcrumb" className="flex min-w-0 flex-1 items-center gap-1.5 text-sm text-ink-muted">
               <Link
-                href={withSearch(consolePath(nav.project, { kind: "overview" }), { env: nav.env })}
+                href={nav.linkTo ? nav.linkTo({ kind: "overview" }) : withSearch(consolePath(nav.project, { kind: "overview" }), { env: nav.env })}
                 className="truncate hover:text-ink"
               >
                 {nav.project}
               </Link>
               {crumbs.map((crumb, index) => (
-                <span key={`${crumb.label}:${index}`} className="flex min-w-0 items-center gap-1.5">
+                <span key={`${crumb.label}:${index}`} className="flex min-w-0 items-center gap-1.5 max-sm:hidden max-sm:last:inline-flex">
                   <span aria-hidden="true" className="text-ink-subtle">
                     ›
                   </span>
@@ -287,7 +336,7 @@ export function ConsoleShell({
             {orgSwitcher}
             <EnvScopeControl
               value={nav.env}
-              long={scope.long}
+              long={long}
               previews={scope.previews}
               onChange={onEnvChange}
               pinnedEnv={pinnedEnvOf(nav.page)}

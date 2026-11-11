@@ -9,6 +9,7 @@
 package reliantv1
 
 import (
+	v1 "github.com/reliant-labs/reliant/sdk/go/gen/reliant/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
@@ -602,7 +603,11 @@ type StreamChatUpdatesRequest struct {
 	SinceSeq int64 `protobuf:"varint,2,opt,name=since_seq,json=sinceSeq,proto3" json:"since_seq,omitempty"`
 	// The project the client's user stream (StreamUserUpdates) is scoped to,
 	// or unset when it streams every project. See ChatUserUpdates.
-	ProjectId     *string `protobuf:"bytes,3,opt,name=project_id,json=projectId,proto3,oneof" json:"project_id,omitempty"`
+	ProjectId *string `protobuf:"bytes,3,opt,name=project_id,json=projectId,proto3,oneof" json:"project_id,omitempty"`
+	// How finished tool calls' bodies are sent in the snapshot and in replayed
+	// updates. Live updates are always sent in full. Unset is
+	// TOOL_BODY_MODE_FULL.
+	ToolBodies    *v1.ToolBodyMode `protobuf:"varint,4,opt,name=tool_bodies,json=toolBodies,proto3,enum=reliant.v1.ToolBodyMode,oneof" json:"tool_bodies,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -656,6 +661,13 @@ func (x *StreamChatUpdatesRequest) GetProjectId() string {
 		return *x.ProjectId
 	}
 	return ""
+}
+
+func (x *StreamChatUpdatesRequest) GetToolBodies() v1.ToolBodyMode {
+	if x != nil && x.ToolBodies != nil {
+		return *x.ToolBodies
+	}
+	return v1.ToolBodyMode(0)
 }
 
 // ChatStreamEvent is one frame of a chat's detail stream.
@@ -844,7 +856,7 @@ func (x *ChatUserUpdates) GetUpdates() []*UserUpdateData {
 // ChatSyncSnapshot provides the initial sync with pre-assembled messages.
 type ChatSyncSnapshot struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
-	Messages       []*Message             `protobuf:"bytes,1,rep,name=messages,proto3" json:"messages,omitempty"`                                    // Assembled messages with content blocks
+	Messages       []*v1.Message          `protobuf:"bytes,1,rep,name=messages,proto3" json:"messages,omitempty"`                                    // Assembled messages with content blocks
 	OtherUpdates   []*ChatUpdateData      `protobuf:"bytes,2,rep,name=other_updates,json=otherUpdates,proto3" json:"other_updates,omitempty"`        // Non-message updates (approvals, threads, etc.)
 	LatestSequence int64                  `protobuf:"varint,3,opt,name=latest_sequence,json=latestSequence,proto3" json:"latest_sequence,omitempty"` // Latest sequence number for tracking
 	Total          int32                  `protobuf:"varint,4,opt,name=total,proto3" json:"total,omitempty"`                                         // Total message count
@@ -889,7 +901,7 @@ func (*ChatSyncSnapshot) Descriptor() ([]byte, []int) {
 	return file_reliant_v1_streaming_proto_rawDescGZIP(), []int{3}
 }
 
-func (x *ChatSyncSnapshot) GetMessages() []*Message {
+func (x *ChatSyncSnapshot) GetMessages() []*v1.Message {
 	if x != nil {
 		return x.Messages
 	}
@@ -1865,13 +1877,16 @@ var File_reliant_v1_streaming_proto protoreflect.FileDescriptor
 const file_reliant_v1_streaming_proto_rawDesc = "" +
 	"\n" +
 	"\x1areliant/v1/streaming.proto\x12\n" +
-	"reliant.v1\x1a\x15reliant/v1/chat.proto\"\x83\x01\n" +
+	"reliant.v1\x1a\x15reliant/v1/chat.proto\"\xd3\x01\n" +
 	"\x18StreamChatUpdatesRequest\x12\x17\n" +
 	"\achat_id\x18\x01 \x01(\tR\x06chatId\x12\x1b\n" +
 	"\tsince_seq\x18\x02 \x01(\x03R\bsinceSeq\x12\"\n" +
 	"\n" +
-	"project_id\x18\x03 \x01(\tH\x00R\tprojectId\x88\x01\x01B\r\n" +
-	"\v_project_id\"\xc1\x02\n" +
+	"project_id\x18\x03 \x01(\tH\x00R\tprojectId\x88\x01\x01\x12>\n" +
+	"\vtool_bodies\x18\x04 \x01(\x0e2\x18.reliant.v1.ToolBodyModeH\x01R\n" +
+	"toolBodies\x88\x01\x01B\r\n" +
+	"\v_project_idB\x0e\n" +
+	"\f_tool_bodies\"\xc1\x02\n" +
 	"\x0fChatStreamEvent\x12:\n" +
 	"\bsnapshot\x18\x01 \x01(\v2\x1c.reliant.v1.ChatSyncSnapshotH\x00R\bsnapshot\x127\n" +
 	"\aupdates\x18\x02 \x01(\v2\x1b.reliant.v1.ChatUpdateBatchH\x00R\aupdates\x127\n" +
@@ -2139,42 +2154,44 @@ var file_reliant_v1_streaming_proto_goTypes = []any{
 	nil,                              // 23: reliant.v1.NodeExecutionState.MetadataEntry
 	nil,                              // 24: reliant.v1.WorkflowExecutionState.ParamsEntry
 	nil,                              // 25: reliant.v1.WorkflowExecutionState.OutputsEntry
-	(*Message)(nil),                  // 26: reliant.v1.Message
+	(v1.ToolBodyMode)(0),             // 26: reliant.v1.ToolBodyMode
+	(*v1.Message)(nil),               // 27: reliant.v1.Message
 }
 var file_reliant_v1_streaming_proto_depIdxs = []int32{
-	11, // 0: reliant.v1.ChatStreamEvent.snapshot:type_name -> reliant.v1.ChatSyncSnapshot
-	12, // 1: reliant.v1.ChatStreamEvent.updates:type_name -> reliant.v1.ChatUpdateBatch
-	16, // 2: reliant.v1.ChatStreamEvent.caught_up:type_name -> reliant.v1.ChatCaughtUp
-	20, // 3: reliant.v1.ChatStreamEvent.heartbeat:type_name -> reliant.v1.Heartbeat
-	10, // 4: reliant.v1.ChatStreamEvent.user_updates:type_name -> reliant.v1.ChatUserUpdates
-	19, // 5: reliant.v1.ChatUserUpdates.updates:type_name -> reliant.v1.UserUpdateData
-	26, // 6: reliant.v1.ChatSyncSnapshot.messages:type_name -> reliant.v1.Message
-	13, // 7: reliant.v1.ChatSyncSnapshot.other_updates:type_name -> reliant.v1.ChatUpdateData
-	22, // 8: reliant.v1.ChatSyncSnapshot.active_workflows:type_name -> reliant.v1.WorkflowExecutionState
-	13, // 9: reliant.v1.ChatUpdateBatch.updates:type_name -> reliant.v1.ChatUpdateData
-	0,  // 10: reliant.v1.ChatUpdateData.update_type:type_name -> reliant.v1.ChatUpdateType
-	17, // 11: reliant.v1.UserStreamEvent.sync:type_name -> reliant.v1.UserSyncInfo
-	18, // 12: reliant.v1.UserStreamEvent.updates:type_name -> reliant.v1.UserUpdateBatch
-	20, // 13: reliant.v1.UserStreamEvent.heartbeat:type_name -> reliant.v1.Heartbeat
-	19, // 14: reliant.v1.UserUpdateBatch.updates:type_name -> reliant.v1.UserUpdateData
-	1,  // 15: reliant.v1.UserUpdateData.update_type:type_name -> reliant.v1.UserUpdateType
-	2,  // 16: reliant.v1.UserUpdateData.entity_type:type_name -> reliant.v1.EntityType
-	5,  // 17: reliant.v1.NodeExecutionState.status:type_name -> reliant.v1.NodeExecutionStatus
-	23, // 18: reliant.v1.NodeExecutionState.metadata:type_name -> reliant.v1.NodeExecutionState.MetadataEntry
-	6,  // 19: reliant.v1.WorkflowExecutionState.status:type_name -> reliant.v1.WorkflowExecutionStatus
-	21, // 20: reliant.v1.WorkflowExecutionState.nodes:type_name -> reliant.v1.NodeExecutionState
-	22, // 21: reliant.v1.WorkflowExecutionState.children:type_name -> reliant.v1.WorkflowExecutionState
-	24, // 22: reliant.v1.WorkflowExecutionState.params:type_name -> reliant.v1.WorkflowExecutionState.ParamsEntry
-	25, // 23: reliant.v1.WorkflowExecutionState.outputs:type_name -> reliant.v1.WorkflowExecutionState.OutputsEntry
-	14, // 24: reliant.v1.StreamingService.StreamUserUpdates:input_type -> reliant.v1.StreamUserUpdatesRequest
-	8,  // 25: reliant.v1.StreamingService.StreamChatUpdates:input_type -> reliant.v1.StreamChatUpdatesRequest
-	15, // 26: reliant.v1.StreamingService.StreamUserUpdates:output_type -> reliant.v1.UserStreamEvent
-	9,  // 27: reliant.v1.StreamingService.StreamChatUpdates:output_type -> reliant.v1.ChatStreamEvent
-	26, // [26:28] is the sub-list for method output_type
-	24, // [24:26] is the sub-list for method input_type
-	24, // [24:24] is the sub-list for extension type_name
-	24, // [24:24] is the sub-list for extension extendee
-	0,  // [0:24] is the sub-list for field type_name
+	26, // 0: reliant.v1.StreamChatUpdatesRequest.tool_bodies:type_name -> reliant.v1.ToolBodyMode
+	11, // 1: reliant.v1.ChatStreamEvent.snapshot:type_name -> reliant.v1.ChatSyncSnapshot
+	12, // 2: reliant.v1.ChatStreamEvent.updates:type_name -> reliant.v1.ChatUpdateBatch
+	16, // 3: reliant.v1.ChatStreamEvent.caught_up:type_name -> reliant.v1.ChatCaughtUp
+	20, // 4: reliant.v1.ChatStreamEvent.heartbeat:type_name -> reliant.v1.Heartbeat
+	10, // 5: reliant.v1.ChatStreamEvent.user_updates:type_name -> reliant.v1.ChatUserUpdates
+	19, // 6: reliant.v1.ChatUserUpdates.updates:type_name -> reliant.v1.UserUpdateData
+	27, // 7: reliant.v1.ChatSyncSnapshot.messages:type_name -> reliant.v1.Message
+	13, // 8: reliant.v1.ChatSyncSnapshot.other_updates:type_name -> reliant.v1.ChatUpdateData
+	22, // 9: reliant.v1.ChatSyncSnapshot.active_workflows:type_name -> reliant.v1.WorkflowExecutionState
+	13, // 10: reliant.v1.ChatUpdateBatch.updates:type_name -> reliant.v1.ChatUpdateData
+	0,  // 11: reliant.v1.ChatUpdateData.update_type:type_name -> reliant.v1.ChatUpdateType
+	17, // 12: reliant.v1.UserStreamEvent.sync:type_name -> reliant.v1.UserSyncInfo
+	18, // 13: reliant.v1.UserStreamEvent.updates:type_name -> reliant.v1.UserUpdateBatch
+	20, // 14: reliant.v1.UserStreamEvent.heartbeat:type_name -> reliant.v1.Heartbeat
+	19, // 15: reliant.v1.UserUpdateBatch.updates:type_name -> reliant.v1.UserUpdateData
+	1,  // 16: reliant.v1.UserUpdateData.update_type:type_name -> reliant.v1.UserUpdateType
+	2,  // 17: reliant.v1.UserUpdateData.entity_type:type_name -> reliant.v1.EntityType
+	5,  // 18: reliant.v1.NodeExecutionState.status:type_name -> reliant.v1.NodeExecutionStatus
+	23, // 19: reliant.v1.NodeExecutionState.metadata:type_name -> reliant.v1.NodeExecutionState.MetadataEntry
+	6,  // 20: reliant.v1.WorkflowExecutionState.status:type_name -> reliant.v1.WorkflowExecutionStatus
+	21, // 21: reliant.v1.WorkflowExecutionState.nodes:type_name -> reliant.v1.NodeExecutionState
+	22, // 22: reliant.v1.WorkflowExecutionState.children:type_name -> reliant.v1.WorkflowExecutionState
+	24, // 23: reliant.v1.WorkflowExecutionState.params:type_name -> reliant.v1.WorkflowExecutionState.ParamsEntry
+	25, // 24: reliant.v1.WorkflowExecutionState.outputs:type_name -> reliant.v1.WorkflowExecutionState.OutputsEntry
+	14, // 25: reliant.v1.StreamingService.StreamUserUpdates:input_type -> reliant.v1.StreamUserUpdatesRequest
+	8,  // 26: reliant.v1.StreamingService.StreamChatUpdates:input_type -> reliant.v1.StreamChatUpdatesRequest
+	15, // 27: reliant.v1.StreamingService.StreamUserUpdates:output_type -> reliant.v1.UserStreamEvent
+	9,  // 28: reliant.v1.StreamingService.StreamChatUpdates:output_type -> reliant.v1.ChatStreamEvent
+	27, // [27:29] is the sub-list for method output_type
+	25, // [25:27] is the sub-list for method input_type
+	25, // [25:25] is the sub-list for extension type_name
+	25, // [25:25] is the sub-list for extension extendee
+	0,  // [0:25] is the sub-list for field type_name
 }
 
 func init() { file_reliant_v1_streaming_proto_init() }
@@ -2182,7 +2199,6 @@ func file_reliant_v1_streaming_proto_init() {
 	if File_reliant_v1_streaming_proto != nil {
 		return
 	}
-	file_reliant_v1_chat_proto_init()
 	file_reliant_v1_streaming_proto_msgTypes[0].OneofWrappers = []any{}
 	file_reliant_v1_streaming_proto_msgTypes[1].OneofWrappers = []any{
 		(*ChatStreamEvent_Snapshot)(nil),

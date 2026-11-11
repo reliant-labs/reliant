@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import * as gitApi from "../../../api/git";
 import { isDaemonConnectingError } from "../../../lib/daemon-errors";
 import { logger } from "../../../lib/logger";
 import { matchesRefetchScope, subscribeToRefetch } from "../../../store/refetchStore";
@@ -203,46 +202,6 @@ export function useRepoChanges({
     void loadRef.current(true);
   }, [worktreeId, projectId, repoId]);
 
-  return { data, loading, loadError, waitingOnDaemon, refreshing, reload, refresh, retry };
-}
-
-/**
- * Whether this worktree branch already has a PR, and whether the GitHub CLI
- * is available to create one. Re-checks when `refreshKey` changes (after a
- * PR is created). Same stale-response guard as useRepoChanges.
- */
-export function useExistingPR(worktreeId: string | undefined, repoId: string | undefined, enabled: boolean, refreshKey: number) {
-  const [existingPR, setExistingPR] = useState<gitApi.ExistingPRResponse | null>(null);
-  const [ghCliMissing, setGhCliMissing] = useState(false);
-  const requestIdRef = useRef(0);
-
-  useEffect(() => {
-    const requestId = ++requestIdRef.current;
-    setExistingPR(null);
-    setGhCliMissing(false);
-    if (!worktreeId || !enabled) return;
-
-    const isCurrent = () => requestIdRef.current === requestId;
-    gitApi
-      .getExistingPR(worktreeId, repoId)
-      .then((prInfo) => {
-        if (!isCurrent()) return;
-        setExistingPR(prInfo);
-        if (prInfo.exists) {
-          logger.info("Found existing PR for worktree", { url: prInfo.url, state: prInfo.state, repoId });
-        }
-      })
-      .catch((err: unknown) => {
-        if (!isCurrent()) return;
-        const message = err instanceof Error ? err.message : String(err);
-        if (message.includes("GitHub CLI (gh) is not installed")) {
-          setGhCliMissing(true);
-          logger.info("GitHub CLI not installed - PR features disabled");
-        } else {
-          logger.debug("Could not check for existing PR", err);
-        }
-      });
-  }, [worktreeId, repoId, enabled, refreshKey]);
-
-  return { existingPR, ghCliMissing };
+  const currentScope = scopeKeyOf({ worktreeId, projectId, repoId });
+  return { data: scopeKeyRef.current === currentScope ? data : null, loading, loadError, waitingOnDaemon, refreshing, reload, refresh, retry };
 }

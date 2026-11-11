@@ -1,0 +1,1 @@
+{"declined":"frontends/web has its own eslint.config.js, which ESLint loads first; a second flat config would be dead and misleading"}

@@ -3,8 +3,10 @@ package automationcred
 
 import (
 	"context"
-	"database/sql"
+	"errors"
 	"testing"
+
+	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -18,7 +20,7 @@ func (m memKeys) GetAutomationToken(_ context.Context, user, daemonID string) (s
 	if v, ok := m[user+"|"+daemonID]; ok {
 		return v, nil
 	}
-	return "", sql.ErrNoRows
+	return "", svcerr.NotFound("api key")
 }
 
 func TestBearerForOrder(t *testing.T) {
@@ -38,8 +40,10 @@ func TestBearerForOrder(t *testing.T) {
 	got, _ = r.BearerFor(trigger, user, "d1")
 	assert.Equal(t, "rlat_d1", got)
 
-	// Another daemon's token is never used.
-	got, _ = r.BearerFor(trigger, user, "d2")
+	// Another daemon's token is never used, and its classified miss is no
+	// error: it is simply no bearer.
+	got, err = r.BearerFor(trigger, user, "d2")
+	require.NoError(t, err)
 	assert.Empty(t, got)
 
 	// No daemon id: never the stored token.
@@ -49,5 +53,21 @@ func TestBearerForOrder(t *testing.T) {
 	// A context that is not trigger-launched (attended run, start_run) never
 	// falls back.
 	got, _ = r.BearerFor(context.Background(), user, "d1")
+	assert.Empty(t, got)
+}
+
+type failingKeys struct{ err error }
+
+func (f failingKeys) GetAutomationToken(context.Context, string, string) (string, error) {
+	return "", f.err
+}
+
+// A lookup failure that is not a miss is propagated, never read as "no
+// credential", and grants no bearer.
+func TestBearerForPropagatesLookupError(t *testing.T) {
+	boom := errors.New("store unavailable")
+	r := New(Deps{Keys: failingKeys{err: boom}})
+	got, err := r.BearerFor(Allow(context.Background()), "u-err", "d1")
+	require.ErrorIs(t, err, boom)
 	assert.Empty(t, got)
 }

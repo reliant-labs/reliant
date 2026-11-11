@@ -9,21 +9,8 @@ import { renderWithQuery as render } from "../../../test/renderWithQuery";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
-  getProviders: vi.fn(),
   refetchModels: vi.fn(),
-  updateProvider: vi.fn(),
-  validateProviderAPIKey: vi.fn(),
   provisionManagedKey: vi.fn(),
-}));
-
-vi.mock("../../../api/client", () => ({
-  api: {
-    settings: {
-      getProviders: mocks.getProviders,
-      updateProvider: mocks.updateProvider,
-      validateProviderAPIKey: mocks.validateProviderAPIKey,
-    },
-  },
 }));
 
 vi.mock("../../../store/globalDataStore", () => ({
@@ -79,10 +66,11 @@ beforeEach(() => {
 describe("MobileAISettingsScreen", () => {
   it("always shows the desktop-only browser sign-in notice", async () => {
     render(<MobileAISettingsScreen onBack={vi.fn()} />);
-    const notice = await screen.findByText(/claude, chatgpt and google sign-in needs/i);
+    const notice = await screen.findByText(/run this on your computer, then sign in there/i);
     expect(notice).toBeInTheDocument();
     // Not gated on live availability — Copilot is named as the on-device path.
-    expect(notice.textContent).toMatch(/github copilot/i);
+    const help = screen.getByText("More help").closest("details")!;
+    expect(help.textContent).toMatch(/github copilot/i);
   });
 
   it("offers Add provider", async () => {

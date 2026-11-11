@@ -17,6 +17,9 @@
 import { useMemo, useState } from "react";
 import { Info, Plus } from "lucide-react";
 import Button from "@/components/forge-ui/button";
+import { CommandBlock } from "@/components/CommandBlock";
+import { SetupHelp } from "@/components/SetupHelp";
+import { authServeCommand } from "@/lib/cli-commands";
 import { usePreferences, useProviderStatuses, useUpdatePreferences } from "../../hooks/settings-queries";
 import { ProvidersSection } from "../Settings/providers/ProvidersSection";
 import { MobileModelPreferences } from "./MobileModelPreferences";
@@ -40,11 +43,14 @@ export function MobileAIProvidersPanel() {
           never called just to decide whether to SHOW this text. */}
       <div className="mx-4 mb-4 flex items-start gap-2 rounded-lg border border-warning/30 bg-warning/10 p-3 text-xs text-warning-ink">
         <Info className="mt-0.5 h-4 w-4 shrink-0" />
-        <p>
-          Claude, ChatGPT and Google sign-in needs <code>reliant auth serve</code> running on a computer — a phone
-          can&apos;t start it. Connect those from desktop, or use GitHub Copilot, which signs in entirely on this
-          device.
-        </p>
+        <div className="min-w-0 flex-1 space-y-2">
+          <p>Claude, ChatGPT or Google? Run this on your computer, then sign in there.</p>
+          <CommandBlock command={authServeCommand()} label="sign-in helper command" />
+          <SetupHelp>
+            <p>A phone cannot run the sign-in helper. Copy the command to your computer and keep its terminal open. GitHub Copilot can sign in directly on this phone.</p>
+            <p>Need the CLI? Open Reliant on your computer; the desktop installer includes it.</p>
+          </SetupHelp>
+        </div>
       </div>
 
       <div className="px-4">

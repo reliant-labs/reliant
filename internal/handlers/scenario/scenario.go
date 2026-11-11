@@ -3,13 +3,14 @@ package scenario
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/reliant-labs/reliant/internal/authz"
+	"github.com/reliant-labs/reliant/internal/ptr"
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
@@ -31,8 +32,8 @@ import (
 
 // projectScenariosReader reads the synced project scenarios column of a
 // project's config record, and nothing else from it
-// (db.Repo.GetProjectScenariosJSON). It returns sql.ErrNoRows, unwrapped, when
-// the project has no record.
+// (db.Repo.GetProjectScenariosJSON). It returns svcerr.NotFound when the
+// project has no record.
 type projectScenariosReader interface {
 	GetProjectScenariosJSON(ctx context.Context, projectID string) (*string, error)
 }
@@ -41,7 +42,7 @@ type projectScenariosReader interface {
 var _ projectScenariosReader = (*db.Repo)(nil)
 
 // storedProjectScenarios returns the project's synced scenarios. A project
-// with no config record returns sql.ErrNoRows, unwrapped.
+// with no config record returns svcerr.NotFound.
 //
 // It reads the one column the scenario RPCs need. The whole config record
 // carries every skill body and repo memory the daemon indexed — 18 MB in
@@ -216,23 +217,23 @@ func (s *Service) CreateScenario(
 		now := time.Now().UTC()
 		dbScenario := &db.WorkflowScenario{
 			ID:              uuid.New().String(),
-			WorkflowDraftID: sql.NullString{String: *workflowDraftID, Valid: true},
+			WorkflowDraftID: ptr.Of(*workflowDraftID),
 			UserID:          userID,
 			Name:            req.Msg.Scenario.Name,
-			Description:     sql.NullString{String: req.Msg.Scenario.Description, Valid: req.Msg.Scenario.Description != ""},
+			Description:     ptr.StringIfNotEmpty(req.Msg.Scenario.Description),
 			Events:          string(scenarioYAML),
 			CreatedAt:       now,
 			UpdatedAt:       now,
 		}
 
 		if result != nil {
-			dbScenario.LastRunAt = sql.NullTime{Time: now, Valid: true}
-			dbScenario.LastRunStatus = sql.NullString{String: string(result.Status), Valid: true}
+			dbScenario.LastRunAt = ptr.Of(now)
+			dbScenario.LastRunStatus = ptr.Of(string(result.Status))
 			resultJSON, err := result.ToJSON()
 			if err != nil {
 				return nil, svcerr.WrapOr(err, svcerr.Internal("failed to marshal result"))
 			}
-			dbScenario.LastRunResult = sql.NullString{String: resultJSON, Valid: true}
+			dbScenario.LastRunResult = ptr.Of(resultJSON)
 		}
 
 		if err := s.deps.Repo.CreateWorkflowScenario(ctx, dbScenario); err != nil {
@@ -308,7 +309,7 @@ func (s *Service) RunScenario(
 
 			// Load the scenario from stored config
 			allScenarios, err := storedProjectScenarios(ctx, s.deps.Repo, project.ID)
-			if errors.Is(err, sql.ErrNoRows) {
+			if svcerr.IsNotFound(err) {
 				return nil, svcerr.WithMessage(svcerr.ErrNotFound, fmt.Sprintf("project config not found: %s", project.ID))
 			}
 			if err != nil {
@@ -359,13 +360,13 @@ func (s *Service) RunScenario(
 			}
 			// Scenarios are user-owned rows; a foreign one is NotFound (no
 			// cross-tenant existence oracle), matching DeleteScenario's check.
-			if dbScenario == nil || dbScenario.UserID != userID {
+			if dbScenario == nil || !authz.CanAccessPersonal(userID, dbScenario.UserID) {
 				return nil, svcerr.WithMessage(svcerr.ErrNotFound, fmt.Sprintf("scenario not found: %s", req.Msg.ScenarioId))
 			}
 
 			// Get the workflow
-			if dbScenario.WorkflowDraftID.Valid {
-				draft, err := s.deps.Repo.GetWorkflowDraft(ctx, dbScenario.WorkflowDraftID.String)
+			if dbScenario.WorkflowDraftID != nil {
+				draft, err := s.deps.Repo.GetWorkflowDraft(ctx, *dbScenario.WorkflowDraftID)
 				if err != nil {
 					return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get workflow"))
 				}
@@ -437,7 +438,7 @@ func (s *Service) DeleteScenario(
 	if scenario == nil {
 		return nil, svcerr.NotFound("scenario")
 	}
-	if scenario.UserID != userID {
+	if !authz.CanAccessPersonal(userID, scenario.UserID) {
 		return nil, svcerr.PermissionDenied("not authorized to delete this scenario")
 	}
 
@@ -587,7 +588,7 @@ func (s *Service) ExportScenario(
 
 		// Load from stored config
 		allScenarios, err := storedProjectScenarios(ctx, s.deps.Repo, project.ID)
-		if errors.Is(err, sql.ErrNoRows) {
+		if svcerr.IsNotFound(err) {
 			return nil, svcerr.NotFound("project config")
 		}
 		if err != nil {
@@ -619,7 +620,7 @@ func (s *Service) ExportScenario(
 	}
 	// Scenarios are user-owned rows; a foreign one is NotFound (no
 	// cross-tenant existence oracle), matching DeleteScenario's check.
-	if dbScenario == nil || dbScenario.UserID != userID {
+	if dbScenario == nil || !authz.CanAccessPersonal(userID, dbScenario.UserID) {
 		return nil, svcerr.WithMessage(svcerr.ErrNotFound, fmt.Sprintf("scenario not found: %s", req.Msg.ScenarioId))
 	}
 
@@ -661,15 +662,9 @@ func scenarioToProto(s *db.WorkflowScenario) (*reliantv1.Scenario, error) {
 		UpdatedAt: s.UpdatedAt.Format(time.RFC3339),
 	}
 
-	if s.WorkflowDraftID.Valid {
-		proto.WorkflowDraftId = s.WorkflowDraftID.String
-	}
-	if s.Description.Valid {
-		proto.Description = s.Description.String
-	}
-	if s.LastRunStatus.Valid {
-		proto.LastRunStatus = s.LastRunStatus.String
-	}
+	proto.WorkflowDraftId = ptr.From(s.WorkflowDraftID)
+	proto.Description = ptr.From(s.Description)
+	proto.LastRunStatus = ptr.From(s.LastRunStatus)
 
 	// Parse the full scenario YAML and convert to proto
 	var scenario wfscenario.Scenario
@@ -686,9 +681,9 @@ func scenarioToProto(s *db.WorkflowScenario) (*reliantv1.Scenario, error) {
 	}
 
 	// Parse last run result from JSON
-	if s.LastRunResult.Valid {
+	if s.LastRunResult != nil {
 		var result reliantv1.ScenarioResult
-		if err := json.Unmarshal([]byte(s.LastRunResult.String), &result); err != nil {
+		if err := json.Unmarshal([]byte(*s.LastRunResult), &result); err != nil {
 			return nil, fmt.Errorf("failed to unmarshal last run result: %w", err)
 		}
 		proto.LastRunResult = &result
@@ -845,7 +840,7 @@ func discoverProjectScenariosFromDB(repo Repository, ctx context.Context, projec
 	}
 
 	allScenarios, err := storedProjectScenarios(ctx, repo, projectID)
-	if errors.Is(err, sql.ErrNoRows) {
+	if svcerr.IsNotFound(err) {
 		return nil, nil // No config record, no stored scenarios
 	}
 	if err != nil {

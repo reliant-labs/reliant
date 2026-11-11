@@ -1,0 +1,27 @@
+version: "v1.13.0"
+date: "2026-11-09"
+title: "1 new feature, 4 fixes and 3 other changes"
+summary: "Every pull request merged since v1.12.0, grouped by its conventional-commit type."
+sections:
+  - title: "Added"
+    items:
+      - title: "web: read-only storage browser in the Apps console"
+        description: "[#2364](https://github.com/reliant-labs/reliant/pull/2364)"
+  - title: "Changed"
+    items:
+      - title: "pin: forge@0a3a89d5 (accessible drawer and modal adoption)"
+        description: "[#2468](https://github.com/reliant-labs/reliant/pull/2468)"
+      - title: "web: drop the unused better-sqlite3 dev dependency and admit Node 26"
+        description: "[#2506](https://github.com/reliant-labs/reliant/pull/2506)"
+      - title: "forge: hosting is generally available; deploy any language and third-party images"
+        description: "[#2507](https://github.com/reliant-labs/reliant/pull/2507)"
+  - title: "Fixed"
+    items:
+      - title: "workflow: run node honors work_dir and templates writable_checkouts"
+        description: "[#2503](https://github.com/reliant-labs/reliant/pull/2503)"
+      - title: "machines: let a cleared default machine forget its remembered choice (1/2)"
+        description: "[#2502](https://github.com/reliant-labs/reliant/pull/2502)"
+      - title: "cli: reliant github tries the next account when one has no GitHub connection"
+        description: "[#2508](https://github.com/reliant-labs/reliant/pull/2508)"
+      - title: "web: sheets opened by a tap Safari never focused restore focus to it again"
+        description: "[#2509](https://github.com/reliant-labs/reliant/pull/2509)"

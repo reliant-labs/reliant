@@ -117,16 +117,20 @@ export async function finalizeOnboardingSideEffects(): Promise<void> {
  * Returns navigate options rather than navigating, so the tour hook can drive
  * the router it is actually mounted under while non-React callers use the
  * global one. Both share this single definition of the destination.
+ *
+ * `tour: undefined` is explicit, not just "no search": the root route retains
+ * `?tour=` across navigations that don't name it (routes.tsx), so the exit
+ * has to say it is clearing it.
  */
 export function chatRouteAfterTour(
   projectId: string | undefined,
 ):
-  | { to: "/project/$projectId"; params: { projectId: string }; search: Record<string, never> }
-  | { to: "/"; search: Record<string, never> } {
+  | { to: "/project/$projectId"; params: { projectId: string }; search: { tour: undefined } }
+  | { to: "/"; search: { tour: undefined } } {
   if (projectId) {
-    return { to: "/project/$projectId", params: { projectId }, search: {} };
+    return { to: "/project/$projectId", params: { projectId }, search: { tour: undefined } };
   }
-  return { to: "/", search: {} };
+  return { to: "/", search: { tour: undefined } };
 }
 
 /** Navigate to {@link chatRouteAfterTour} using the app's global router. */

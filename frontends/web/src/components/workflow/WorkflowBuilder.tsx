@@ -48,6 +48,7 @@ import { TriggerPayloadPanel } from "./config/TriggerPayloadPanel";
 import { nodesEdgesToWorkflow } from "../../lib/nodes-edges-to-workflow";
 import { structurallyEqual } from "../../lib/structuralEqual";
 import { useFitViewWithPanels } from "./hooks/useFitViewWithPanels";
+import { useTourCanvas } from "./hooks/useTourCanvas";
 import { useWorkflowKeyboardShortcuts } from "./hooks/useWorkflowKeyboardShortcuts";
 import { useStepPaletteShortcutLabel, useWorkflowBuilderShortcuts } from "./hooks/useWorkflowBuilderShortcuts";
 import {
@@ -55,6 +56,7 @@ import {
   type InlineEditContext,
 } from "./hooks/useInlineEditStack";
 import { useLoadWorkflow } from "./hooks/useLoadWorkflow";
+import { useAssistantPanelDefault } from "./hooks/useAssistantPanelDefault";
 import { toast } from "sonner";
 import { FloatingWorkflowSidebar } from "./FloatingWorkflowSidebar";
 import { FloatingToolbar, type InteractionMode } from "./FloatingToolbar";
@@ -65,15 +67,10 @@ import {
   Copy,
   Info,
   Code,
-  TestTube2,
-  Play,
-  Settings2,
   Lock,
   ExternalLink,
-  CheckCircle2,
-  PencilRuler,
 } from "lucide-react";
-import Tooltip from "../forge-ui/tooltip";
+import { BuilderHeaderActions } from "./BuilderHeaderActions";
 import { splitFindings, type DraftStatus } from "./workflowDraftStatus";
 import { WorkflowInfoPopover } from "./WorkflowInfoPopover";
 import { WorkflowStatusChip } from "./WorkflowStatusChip";
@@ -118,12 +115,13 @@ import { toolCallsDefaultForEdge } from "./executeToolsDefaults";
 import { CanvasInsertProvider, useCanvasInsertion } from "./canvas/CanvasInsertContext";
 import { NodeOutputAddButtons } from "./canvas/NodeOutputAddButtons";
 import { SelectionActions } from "./canvas/SelectionActions";
-import { buildFlowEdge, readableStepId, withNodeAriaLabels } from "./canvas/insertPlacement";
+import { buildFlowEdge, readableStepId, stepTypeOfNode, withNodeAriaLabels } from "./canvas/insertPlacement";
+import { tourEvents } from "../Onboarding/tourEvents";
 import { getNodeDisplayName } from "../../lib/node-metadata";
 import { DeclaredTriggerPanel } from "./config/DeclaredTriggerPanel";
 import { useTriggers } from "../../hooks/trigger-queries";
 import { declaredRailLines } from "../../lib/triggerRail";
-import { describeDeclaredSource, findingsForTrigger, type DeclaredTrigger } from "../../lib/declaredTriggers";
+import { describeDeclaredSource, findingsForTrigger, sourceCase, type DeclaredTrigger } from "../../lib/declaredTriggers";
 import { describeSchedule } from "../../lib/cronText";
 import { useAddTrigger, type PersonalTriggerDraft } from "./hooks/useAddTrigger";
 import { ConnectIntegrationDialog, type ConnectIntegrationTarget } from "./connections/ConnectIntegrationDialog";
@@ -299,7 +297,7 @@ function WorkflowBuilderInner({
   // `{}` is create (prefilled with this workflow), `{ trigger }` is edit.
 
   // Chat panel state (controlled) - used for dynamic fit view padding
-  const [chatPanelOpen, setChatPanelOpen] = useState(true);
+  const [chatPanelOpen, setChatPanelOpen] = useState(false);
   const [chatPanelSize, setChatPanelSize] = useState<PanelSize>("normal");
 
   // Track if initial fit view has been applied (to prevent flash of default viewport)
@@ -460,6 +458,13 @@ function WorkflowBuilderInner({
     [onEdgesChange, selectedEdgeId],
   );
 
+  useAssistantPanelDefault({
+    workflow: initialWorkflow,
+    workflowKey: draftId ?? initialWorkflow?.name,
+    isBuiltin: isBuiltinWorkflow,
+    openPanel: () => setChatPanelOpen(true),
+  });
+
   // Initial workflow load (effect-shaped, extracted to ./hooks/useLoadWorkflow).
   // Same behavior as before: load on mount, or when initialWorkflow.name
   // changes. Hides canvas, swaps nodes/edges, resets metadata, runs the
@@ -503,6 +508,11 @@ function WorkflowBuilderInner({
       return () => clearTimeout(timer);
     }
   }, [nodes.length, isViewReady, fitViewWithPanels]);
+
+  // The onboarding tour pans to the steps it explains, and "Try it yourself"
+  // lends the user one edge to draw (canvas/tourCanvas.ts).
+  useTourCanvas({ wrapperRef: reactFlowWrapper, isViewReady, setEdges, hasModifications, setHasModifications });
+
   const buildWorkflow = useCallback(
     (): Workflow =>
       nodesEdgesToWorkflow(nodes, edges, {
@@ -769,6 +779,7 @@ function WorkflowBuilderInner({
       const newEdge = buildFlowEdge(sourceNode, targetId, sourceHandle);
 
       setEdges((eds) => [...eds, newEdge]);
+      tourEvents.emit("workflow:edgeConnected", { sourceId, targetId, sourceHandle });
 
       // Wiring Run LLM Tool Calls after a Call LLM fills in which calls it
       // runs — the one value that step nearly always takes.
@@ -810,6 +821,7 @@ function WorkflowBuilderInner({
       return;
     }
     setSelectedNodeId(node.id);
+    tourEvents.emit("workflow:nodeSelected", { nodeId: node.id, type: stepTypeOfNode(node) });
   }, []);
 
   // "Take me to this problem": select its step, open its panel, and ask the
@@ -1726,6 +1738,7 @@ function WorkflowBuilderInner({
       const index = (workflow.triggers ?? []).length;
       setHasModifications(true);
       setWorkflow((w) => ({ ...w, triggers: [...(w.triggers ?? []), trigger] }));
+      tourEvents.emit("workflow:triggerDeclared", { name: trigger.name ?? "", source: sourceCase(trigger) ?? "" });
       if (catalogRef) setDeclaredCatalogRefs((prev) => ({ ...prev, [trigger.name ?? ""]: catalogRef }));
       setPaletteOpen(false);
       handleEditDeclared(index);
@@ -2053,96 +2066,42 @@ function WorkflowBuilderInner({
             ) : (
               // Normal mode - show standard workflow buttons
               <>
-                <button
-                  onClick={() => setShowYamlEditor(true)}
-                  className={headerButtonClass}
-                >
-                  <Code className="w-4 h-4" />
-                  YAML
-                </button>
-                {onSaveForTestRun && !isBuiltinWorkflow && (
-                  <button
-                    onClick={() => setShowTestRunPanel((open) => !open)}
-                    className={headerButtonClass}
-                    aria-pressed={showTestRunPanel}
-                  >
-                    <Play className="w-4 h-4" />
-                    Run
-                  </button>
-                )}
-                <button
-                  onClick={() => setShowScenarioPanel(true)}
-                  className={headerButtonClass}
-                >
-                  <TestTube2 className="w-4 h-4" />
-                  Tests
-                </button>
-                <button
-                  onClick={() => {
+                <BuilderHeaderActions
+                  showRun={!!onSaveForTestRun && !isBuiltinWorkflow}
+                  runOpen={showTestRunPanel}
+                  onToggleRun={() => setShowTestRunPanel((open) => !open)}
+                  onOpenInputs={() => {
                     setSelectedNodeId(null);
                     setSelectedEdgeId(null);
                     setShowSettingsEditor(true);
                     setChatPanelOpen(false);
                   }}
-                  className={headerButtonClass}
-                >
-                  <Settings2 className="w-4 h-4" />
-                  Inputs
-                </button>
-                <button
-                  onClick={handleUseAsTemplate}
-                  className={headerButtonClass}
-                >
-                  <Copy className="w-4 h-4" />
-                  Duplicate
-                </button>
-                {onSetStatus && draftStatus === "complete" && (
-                  <Tooltip content="Take it out of service, to make edits that may not work along the way. It won't run until you publish it again.">
-                    <button
-                      onClick={() => void handleSetStatus("draft")}
-                      disabled={isChangingStatus || isSaving}
-                      className={headerButtonClass}
-                      data-testid="workflow-unpublish"
-                    >
-                      <PencilRuler className="w-4 h-4" />
-                      Unpublish
-                    </button>
-                  </Tooltip>
-                )}
-                <button
-                  onClick={() => void handleSave()}
-                  disabled={!hasModifications || isSaving}
-                  className={
-                    draftStatus === "draft" ? secondaryHeaderButtonClass : primaryHeaderButtonClass
+                  onOpenYaml={() => setShowYamlEditor(true)}
+                  onOpenTests={() => setShowScenarioPanel(true)}
+                  onDuplicate={handleUseAsTemplate}
+                  onUnpublish={
+                    onSetStatus && draftStatus === "complete" ? () => void handleSetStatus("draft") : undefined
                   }
-                  data-testid="workflow-save"
-                >
-                  {isSaving ? "Saving…" : "Save"}
-                </button>
-                {onSetStatus && draftStatus === "draft" && (
-                  <Tooltip
-                    content={
-                      publishReasons.length > 0
-                        ? `Can't publish yet: ${publishReasons.join(" ")}`
-                        : hasModifications
-                          ? "Save your changes and make this workflow runnable"
-                          : "Make this workflow runnable: by chat, Run, and its triggers"
-                    }
-                  >
-                    {/* The wrapper keeps the tooltip working while the button is disabled. */}
-                    <span className="inline-flex">
-                      <button
-                        onClick={handlePublish}
-                        disabled={publishReasons.length > 0}
-                        className={primaryHeaderButtonClass}
-                        data-testid="workflow-publish"
-                      >
-                        <CheckCircle2 className="w-4 h-4" />
-                        Publish
-                      </button>
-                    </span>
-                  </Tooltip>
-                )}
+                  unpublishDisabled={isChangingStatus || isSaving}
+                  onSave={() => void handleSave()}
+                  saveDisabled={!hasModifications || isSaving}
+                  saving={isSaving}
+                  saveIsPrimary={draftStatus !== "draft"}
+                  publish={
+                    onSetStatus && draftStatus === "draft"
+                      ? {
+                          onPublish: handlePublish,
+                          reasons: publishReasons,
+                          hasModifications,
+                        }
+                      : undefined
+                  }
+                  classes={{
+                    button: headerButtonClass,
+                    secondary: secondaryHeaderButtonClass,
+                    primary: primaryHeaderButtonClass,
+                  }}
+                />
               </>
             )}
           </div>

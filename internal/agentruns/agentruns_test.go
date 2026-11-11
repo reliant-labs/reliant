@@ -18,6 +18,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/errreason"
 	"github.com/reliant-labs/reliant/internal/launch"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/threads"
@@ -134,7 +135,7 @@ func TestAdapterWithoutDependenciesFailsInsteadOfPanicking(t *testing.T) {
 	_, err = runs.ResumeRun(ctx, "u", "c")
 	assert.Error(t, err)
 	assert.Error(t, runs.CancelRun(ctx, "u", "c"))
-	_, err = runs.DeliverToRun(ctx, "u", "c", "m")
+	_, err = runs.DeliverToRun(ctx, "u", "c", "", "m", tools.RunSender{})
 	assert.Error(t, err)
 }
 
@@ -147,7 +148,11 @@ type fakeRunAPI struct {
 	resume   *reliantv1.ResumeRunResponse
 	signal   *reliantv1.SignalRunResponse
 	signaled *reliantv1.SignalRunRequest
-	err      error
+	// signalHeader, when set, is the NotDeliveredHeader SignalRun answers with.
+	signalHeader string
+	// originSeen is the message origin SignalRun was called under.
+	originSeen db.MessageOrigin
+	err        error
 }
 
 func (f *fakeRunAPI) record(ctx context.Context, call string) {
@@ -175,7 +180,12 @@ func (f *fakeRunAPI) CancelRun(ctx context.Context, r *connect.Request[reliantv1
 func (f *fakeRunAPI) SignalRun(ctx context.Context, r *connect.Request[reliantv1.SignalRunRequest]) (*connect.Response[reliantv1.SignalRunResponse], error) {
 	f.record(ctx, "signal:"+r.Msg.RunId)
 	f.signaled = r.Msg
-	return connect.NewResponse(f.signal), f.err
+	f.originSeen, _ = db.MessageOriginFrom(ctx)
+	resp := connect.NewResponse(f.signal)
+	if f.signalHeader != "" {
+		resp.Header().Set(errreason.NotDeliveredHeader, f.signalHeader)
+	}
+	return resp, f.err
 }
 
 func TestLifecycleCallsRunServiceAsTheOwner(t *testing.T) {
@@ -216,18 +226,36 @@ func TestLifecycleSurfacesServiceErrors(t *testing.T) {
 
 func TestDeliverToRunUsesSignalRunSemantics(t *testing.T) {
 	api := &fakeRunAPI{signal: &reliantv1.SignalRunResponse{Delivered: true, MessageIds: []string{"m-1"}}}
-	delivery, err := New(nil, api).DeliverToRun(context.Background(), "owner", "chat-x", "hello")
+	delivery, err := New(nil, api).DeliverToRun(context.Background(), "owner", "chat-x", "", "hello",
+		tools.RunSender{ThreadID: "sender-run", Subject: "status"})
 	require.NoError(t, err)
 	assert.Equal(t, tools.RunDelivery{Delivered: true, MessageID: "m-1"}, delivery)
 	assert.Equal(t, "owner", api.userSeen)
+	assert.Equal(t, db.MessageOrigin{
+		ThreadID: "sender-run",
+		Kind:     core.AgentMessageKindRunMessage,
+		Subject:  "status",
+	}, api.originSeen, "SignalRun saves the message as the sending run's, not the owner's")
 	require.Len(t, api.signaled.Messages, 1)
 	assert.Equal(t, reliantv1.MessageRole_MESSAGE_ROLE_USER, api.signaled.Messages[0].Role)
 	assert.Equal(t, "hello", api.signaled.Messages[0].Content)
 
 	api.signal = &reliantv1.SignalRunResponse{Delivered: false}
-	delivery, err = New(nil, api).DeliverToRun(context.Background(), "owner", "chat-x", "hello")
+	delivery, err = New(nil, api).DeliverToRun(context.Background(), "owner", "chat-x", "", "hello", tools.RunSender{ThreadID: "sender-run"})
 	require.NoError(t, err)
 	assert.False(t, delivery.Delivered, "SignalRun reports a non-live run as delivered=false, never an error")
+	assert.Empty(t, delivery.NotDeliveredReason, "a run that was not live carries no reason")
+}
+
+// The target thread reaches SignalRun, and a live run with no agent running
+// reports why it took nothing (errreason.NotDeliveredHeader).
+func TestDeliverToRunCarriesTheTargetAndTheNotDeliveredReason(t *testing.T) {
+	api := &fakeRunAPI{signal: &reliantv1.SignalRunResponse{Delivered: false}, signalHeader: errreason.RunNoListeningAgent}
+	delivery, err := New(nil, api).DeliverToRun(context.Background(), "owner", "chat-x", "implement", "hello", tools.RunSender{ThreadID: "sender-run"})
+	require.NoError(t, err)
+	assert.Equal(t, "implement", api.signaled.Thread)
+	assert.False(t, delivery.Delivered)
+	assert.Equal(t, errreason.RunNoListeningAgent, delivery.NotDeliveredReason)
 }
 
 // --- integration: through the real launcher and the real database ---
@@ -327,4 +355,15 @@ func TestStartRunThroughTheRealLauncherRecordsLineageAndIsIdempotent(t *testing.
 	live, err := repo.CountLiveLaunchedRuns(ctx, owner, core.TriggerEventKindAgentStartRun)
 	require.NoError(t, err)
 	assert.Equal(t, 1, live)
+}
+
+// An agent-started run launches in its calling chat's org, so it spends that
+// org's money and cannot land in another org's project.
+func TestStartRun_CarriesTheCallersOrgIntoTheLaunch(t *testing.T) {
+	launcher := &fakeLauncher{res: &launch.Result{Chat: &db.Chat{ID: "new-chat"}, RunID: "run-1"}}
+	_, err := New(launcher, nil).StartRun(context.Background(), tools.StartRunRequest{
+		OwnerUserID: "owner", ProjectID: "proj", Workflow: "builtin://agent", Message: "go", OrgID: "acme",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "acme", launcher.spec.OrgID)
 }

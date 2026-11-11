@@ -7,6 +7,7 @@ import { isDev } from '../lib/constants';
 import { reportErrorToTelemetry } from '../lib/telemetry';
 import { recordClientError } from '../lib/clientDiagnostics';
 import { StaleBuildError } from '../lib/lazyRoute';
+import { importFailureDetails, redactImportUrls } from '../lib/lazyImportEvidence';
 import { cn } from '../lib/utils';
 
 interface Props {
@@ -45,14 +46,18 @@ function formatDiagnosticReport(params: {
   lines.push('Reliant - Error Report');
   if (errorId) lines.push(`Error ID: ${errorId}`);
   if (occurredAt) lines.push(`Occurred At: ${occurredAt}`);
-  lines.push(`URL: ${typeof window !== 'undefined' ? window.location.href : ''}`);
+  lines.push(`URL: ${typeof window !== 'undefined' ? redactImportUrls(window.location.href) : ''}`);
   lines.push(`User Agent: ${typeof navigator !== 'undefined' ? navigator.userAgent : ''}`);
   lines.push('');
   lines.push('Message:');
-  lines.push(`${err.name}: ${err.message}`);
+  lines.push(`${err.name}: ${redactImportUrls(err.message)}`);
   lines.push('');
   lines.push('Stack:');
-  lines.push(err.stack ?? '(no stack)');
+  lines.push(redactImportUrls(err.stack ?? '(no stack)'));
+  if (err instanceof StaleBuildError) {
+    lines.push('', 'Original import failure (URLs have credentials, query and fragments removed):');
+    lines.push(importFailureDetails(err.cause, typeof performance !== 'undefined' && typeof performance.getEntriesByType === 'function' ? performance.getEntriesByType('resource') : []));
+  }
 
   if (componentStack) {
     lines.push('');
@@ -165,7 +170,7 @@ export function ErrorFallbackUI(props: {
                 ) : null}
               </div>
               <div className="mt-2 font-mono text-xs text-destructive-ink break-words">
-                {err.name}: {err.message}
+                {err.name}: {redactImportUrls(err.message)}
               </div>
             </div>
 
@@ -219,9 +224,9 @@ export function RouteErrorFallback({ error }: { error: unknown }) {
       error={error}
       onReload={() => window.location.reload()}
       {...(staleBuild && {
-        title: 'Reliant was updated',
+        title: 'This screen could not load',
         description:
-          'This screen belongs to a newer version of Reliant than the one running in this tab. Reload to continue.',
+          'A required file could not be loaded after retrying. Check your connection or try again; technical details include the original import error.',
       })}
     />
   );

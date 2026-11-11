@@ -24,7 +24,8 @@ import (
 // chats createApprovalTestData creates. Approve/Deny/Batch* now verify chat
 // ownership, so a bare context is Unauthenticated by design.
 func approvalTestCtx() context.Context {
-	return context.WithValue(context.Background(), auth.UserIDContextKey, "test-user")
+	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, "test-user")
+	return auth.WithCredential(ctx, auth.CredentialSession)
 }
 
 type mockTemporalSignalClient struct {

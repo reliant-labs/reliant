@@ -282,6 +282,19 @@ message ToolResponse {
   string error_message = 6; // Error message if success=false
   string error_code = 7; // Error code for categorization
   bool backgrounded = 8; // Whether tool was converted to background execution
+  // Images and documents the tool handed the model (an MCP screenshot, a
+  // rendered page). Without them a daemon-placed tool's media reached the
+  // model as its text caption only. Empty from a daemon that predates the
+  // field; a server that predates it ignores them.
+  repeated ToolResponseMedia media = 9;
+}
+
+// ToolResponseMedia is one binary part of a tool result.
+message ToolResponseMedia {
+  string mime_type = 1;
+  bytes data = 2;
+  // The file the part was read from, when there is one (display only).
+  string path = 3;
 }
 
 // DaemonHeartbeat is sent periodically to keep connection alive.
@@ -353,6 +366,63 @@ message DiskReport {
   // because both are the machine's resources and both feed its storage inbox
   // item; unset for daemons that cannot count processes (macOS, Windows).
   ProcessReport processes = 5;
+  // The worktrees the daemon's machine-wide reclaim proposes for removal and
+  // will not remove without the person's approval (worktreereclaim: they hold
+  // uncommitted, unpushed or reflog-only work and have been idle about five
+  // days). Unset when the reclaim is off, has not run, or proposes nothing.
+  // It feeds the machine's worktree-reclaim inbox item.
+  WorktreeReclaimProposals worktree_reclaim = 6;
+}
+
+// WorktreeReclaimProposals is a machine's pending reclaim proposals, from the
+// daemon's last pass.
+message WorktreeReclaimProposals {
+  // The reclaim's mode on the machine: "dry-run" or "on". In dry-run an
+  // approval is recorded and acted on once the machine is switched on.
+  string mode = 1;
+  // When the pass that found them finished (unix ms).
+  int64 pass_finished_at_ms = 2;
+  // At most 50, oldest proposal first; total says how many there are.
+  repeated WorktreeReclaimProposal proposals = 3;
+  int32 total = 4;
+}
+
+// WorktreeReclaimProposal is one worktree the reclaim asks to remove. A
+// decision about it binds to fingerprint: the worktree changing (a commit, an
+// edit, a new file) makes it a new proposal with a new fingerprint.
+message WorktreeReclaimProposal {
+  // The worktree's capture key: its Reliant workspace id, or p-<hash> of its
+  // path for a worktree made outside Reliant.
+  string key = 1;
+  string fingerprint = 2;
+  string path = 3;
+  // The repository's main checkout.
+  string repo = 4;
+  string branch = 5;
+  // Why it is not removed on its own: "dirty", "unpushed" or
+  // "unreachable_history".
+  string reason = 6;
+  // The daemon's one-line description of the unsaved work.
+  string detail = 7;
+  // `git status --short` and the commits on no remote, shortened.
+  string work_summary = 8;
+  int32 unpushed_commits = 9;
+  // How long nothing in it has changed (seconds), and when it last did.
+  int64 idle_seconds = 10;
+  int64 last_activity_ms = 11;
+  int64 size_bytes = 12;
+  // "reliant" for a Reliant workspace's checkout, "unregistered" otherwise.
+  string owner = 13;
+  // The Reliant workspace id, when it is one.
+  string row_id = 14;
+  // When this exact state (fingerprint) was first proposed (unix ms).
+  int64 proposed_at_ms = 15;
+  // A reviewing agent's short assessment of this state, and when it wrote it.
+  string note = 16;
+  int64 note_at_ms = 17;
+  // A decision already recorded for this state: "approve" (the daemon
+  // reclaims it on its next pass) or "decline". Empty while undecided.
+  string decision = 18;
 }
 
 // ProcessReport is how close a machine is to its process limit, and whose

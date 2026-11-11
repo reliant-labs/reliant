@@ -22,7 +22,7 @@ require.cache[require.resolve('electron')] = {
   id: require.resolve('electron'),
   filename: require.resolve('electron'),
   loaded: true,
-  exports: { app: { isPackaged: true } },
+  exports: { app: { isPackaged: true, getVersion: () => '1.8.16' } },
 };
 
 // The packaged branch of getPreloadPath() also reads process.resourcesPath,
@@ -84,4 +84,11 @@ test('the renderer keeps node out and context isolation on', () => {
   assert.strictEqual(prefs.nodeIntegration, false, 'nodeIntegration must stay off');
   assert.strictEqual(prefs.contextIsolation, true, 'contextIsolation must stay on');
   assert.strictEqual(prefs.enableRemoteModule, false, 'enableRemoteModule must stay off');
+});
+
+test('the renderer is handed the app version, and only that, for the preload to expose', () => {
+  // The sandboxed preload cannot call app.getVersion(); it reads this one flag
+  // from process.argv (preload.js, desktopVersions).
+  const prefs = windowConfig.getWebPreferences();
+  assert.deepStrictEqual(prefs.additionalArguments, [windowConfig.DESKTOP_VERSION_ARG + '1.8.16']);
 });

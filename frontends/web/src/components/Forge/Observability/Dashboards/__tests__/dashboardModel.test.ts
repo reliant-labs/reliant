@@ -16,8 +16,13 @@ import type { Dashboard, Panel } from "@/services/controlPlane/observability/typ
 
 import {
   alertBands,
+  builtinPageRef,
   compareTarget,
   filterIndex,
+  galleryTemplates,
+  isOrganizationViewKey,
+  isStandardBuiltin,
+  isStandardBuiltinRef,
   movePanel,
   newPanelId,
   ownerOf,
@@ -222,8 +227,64 @@ describe("the spec as JSON", () => {
     expect(panelFromJson(null)).toMatchObject({ id: "", kind: "", series: [] });
   });
 
-  it("writes plain JSON with undefined keys dropped", () => {
-    const json = dashboardToJson({ id: "d", title: "D", description: undefined, filters: [], panels: [{ id: "p", title: "P", kind: "line", signal: "traces", series: [], unit: undefined }] });
-    expect(json).toEqual({ id: "d", title: "D", filters: [], panels: [{ id: "p", title: "P", kind: "line", signal: "traces", series: [] }] });
+  it("writes forge's canonical JSON: undefined and empty values dropped, as forge's omitempty fields drop them", () => {
+    const json = dashboardToJson({ id: "d", title: "D", description: undefined, filters: [], panels: [{ id: "p", title: "P", kind: "line", signal: "traces", series: [], unit: undefined, ratio: false }] });
+    expect(json).toEqual({ id: "d", title: "D", panels: [{ id: "p", title: "P", kind: "line", signal: "traces" }] });
+  });
+
+  it("never sends a text panel the series and signal the console fills in on reading, which forge refuses on it", () => {
+    const text = panelFromJson({ id: "about", title: "About", kind: "text", markdown: "Hello" });
+    expect(text).toMatchObject({ series: [], signal: "" });
+    expect(dashboardToJson({ id: "d", title: "D", filters: [], panels: [text] }).panels).toEqual([{ id: "about", title: "About", kind: "text", markdown: "Hello" }]);
+  });
+
+  it("keeps a list's items where they are, empty ones included", () => {
+    const funnel = { id: "f", title: "F", kind: "funnel", signal: "traces", series: [], funnel: { steps: ["a", "", "c"] } };
+    expect(dashboardToJson({ id: "d", title: "D", filters: [], panels: [funnel] }).panels).toEqual([{ id: "f", title: "F", kind: "funnel", signal: "traces", funnel: { steps: ["a", "", "c"] } }]);
+  });
+});
+
+describe("built-ins", () => {
+  const summary = (over: Partial<DashboardSummary>): DashboardSummary => ({
+    ref: { kind: "builtin", projectId: "shop", key: "overview" },
+    source: "builtin",
+    title: "Project overview",
+    description: "",
+    readOnly: true,
+    starred: false,
+    lastViewedAtMs: null,
+    panelCount: 12,
+    previewPanels: [],
+    release: null,
+    workspace: null,
+    category: "standard",
+    ...over,
+  });
+
+  it("tells an organization view's key from a standard dashboard's", () => {
+    expect(isOrganizationViewKey("org-costs")).toBe(true);
+    expect(isOrganizationViewKey("org-llm")).toBe(true);
+    expect(isOrganizationViewKey("overview")).toBe(false);
+    expect(builtinPageRef("org-billing", "shop")).toEqual({ kind: "builtin", projectId: "", key: "org-billing" });
+    expect(builtinPageRef("usage", "shop")).toEqual({ kind: "builtin", projectId: "shop", key: "usage" });
+    expect(isStandardBuiltinRef({ kind: "builtin", projectId: "shop", key: "releases" })).toBe(true);
+    expect(isStandardBuiltinRef({ kind: "builtin", projectId: "", key: "org-costs" })).toBe(false);
+    expect(isStandardBuiltinRef({ kind: "release", projectId: "shop", key: "overview" })).toBe(false);
+  });
+
+  it("knows a standard built-in by its category, never a typed view", () => {
+    expect(isStandardBuiltin(summary({}))).toBe(true);
+    expect(isStandardBuiltin(summary({ category: "billing", viewKind: "organization-costs", ref: { kind: "builtin", projectId: "", key: "org-costs" } }))).toBe(false);
+    expect(isStandardBuiltin(summary({ viewKind: "llm-usage", category: "billing", ref: { kind: "builtin", projectId: "", key: "org-llm" } }))).toBe(false);
+    expect(isStandardBuiltin(summary({ source: "generated", ref: { kind: "release", projectId: "shop", key: "overview" } }))).toBe(false);
+  });
+
+  it("drops a template a built-in already stands for from the gallery", () => {
+    const template = (key: string, category = "generated") =>
+      summary({ ref: { kind: "template", projectId: "", key }, source: "template", category });
+    const gallery = [template("service-red"), template("selfmon-nats", "platform"), template("workloads")];
+    const index = [summary({ ref: { kind: "builtin", projectId: "shop", key: "service-red" } }), summary({ ref: { kind: "release", projectId: "shop", key: "workloads" }, source: "generated", category: "" })];
+    expect(galleryTemplates(gallery, index).map((t) => t.ref.key)).toEqual(["selfmon-nats", "workloads"]);
+    expect(galleryTemplates(gallery, []).map((t) => t.ref.key)).toEqual(["service-red", "selfmon-nats", "workloads"]);
   });
 });

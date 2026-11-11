@@ -40,6 +40,7 @@ import {
 import { FILTER_OP_LABELS, formatFilterToken, type FilterToken, type FilterTokenOp } from "./obsFilters";
 import { formatCount } from "./format";
 import type { ObsEnvironment } from "./obsPlace";
+import { CONTROL_FIELD } from "../controlStyles";
 
 export interface ObsScopeBarProps {
   scope: ObsScope;
@@ -72,6 +73,8 @@ export interface ObsScopeBarProps {
    * receivers are not telemetry rows). The environment picker stays. Default true.
    */
   filterable?: boolean;
+  /** Ends the row, right-aligned: the view's time range and Refresh. */
+  trailing?: ReactNode;
 }
 
 /**
@@ -82,11 +85,12 @@ export interface ObsScopeBarProps {
  * alone is 30px.
  */
 const CONTROL =
-  "inline-flex h-8 min-h-[32px] touch:h-11 items-center gap-1.5 rounded-md border border-border bg-surface-sunken px-2 text-xs text-ink transition-colors hover:bg-ink/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+  `${CONTROL_FIELD} inline-flex h-8 min-h-[32px] touch:h-11 items-center gap-1.5 px-2 text-xs hover:bg-ink/5`;
 
-const CHIP = "inline-flex h-8 min-h-[32px] touch:h-11 items-center gap-1 rounded-md border border-border bg-surface pl-2 text-xs";
+/** A set filter or group-by: the filter-bar standard's active state (forge-ui/filter_bar), so what narrows the view reads at a glance. */
+const CHIP = "inline-flex h-8 min-h-[32px] touch:h-11 items-center gap-1 rounded-md border border-primary/50 bg-primary/10 pl-2 text-xs text-primary-ink";
 const CHIP_REMOVE =
-  "inline-flex h-full w-7 touch:w-11 items-center justify-center rounded-r-md text-ink-muted hover:bg-ink/5 hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+  "inline-flex h-full w-7 touch:w-11 items-center justify-center rounded-r-md text-primary-ink hover:bg-primary/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
 export function ObsScopeBar(props: ObsScopeBarProps) {
   const { filters, onFiltersChange, groupBy, onGroupByChange } = props;
@@ -123,12 +127,12 @@ export function ObsScopeBar(props: ObsScopeBarProps) {
           className={CHIP}
           data-testid="obs-filter-chip"
         >
-          <span className="text-ink-muted">{attributeLabel(filter.key)}</span>{" "}
-          <span className="text-ink-muted">{FILTER_OP_LABELS[filter.op]}</span>
+          <span className="opacity-80">{attributeLabel(filter.key)}</span>{" "}
+          <span className="opacity-80">{FILTER_OP_LABELS[filter.op]}</span>
           {filter.op !== "exists" && (
             <>
               {" "}
-              <span className="max-w-[16rem] truncate font-mono text-ink" title={filter.value}>
+              <span className="max-w-[16rem] truncate font-mono font-medium" title={filter.value}>
                 {filter.value}
               </span>
             </>
@@ -156,7 +160,7 @@ export function ObsScopeBar(props: ObsScopeBarProps) {
           </span>
           {groupBy.map((key) => (
             <span key={key} className={CHIP} data-testid="obs-group-chip">
-              <span className="text-ink">{attributeLabel(key)}</span>
+              <span className="font-medium">{attributeLabel(key)}</span>
               <button
                 type="button"
                 onClick={() => onGroupByChange(groupBy.filter((k) => k !== key))}
@@ -171,6 +175,7 @@ export function ObsScopeBar(props: ObsScopeBarProps) {
           {groupBy.length < MAX_GROUP_BY && <AddGroupBy used={groupBy} onAdd={(key) => onGroupByChange([...groupBy, key])} />}
         </div>
       )}
+      {props.trailing && <div className={cn("flex items-center gap-2", !props.groupable && "sm:ml-auto")}>{props.trailing}</div>}
     </div>
   );
 }
@@ -432,7 +437,7 @@ function AddFilter({ scope, range, onAdd }: { scope: ObsScope; range: RangePrese
       open={open}
       onOpenChange={onOpenChange}
       testId="obs-add-filter"
-      triggerClassName={cn(CONTROL, "border-dashed text-ink-muted")}
+      triggerClassName={cn(CONTROL, "bg-surface font-medium")}
       trigger={
         <>
           <Plus className="h-3.5 w-3.5" aria-hidden="true" />
@@ -455,7 +460,7 @@ function AddFilter({ scope, range, onAdd }: { scope: ObsScope; range: RangePrese
               if (event.key === "Enter" && isAttributeKeyShaped(typed)) setKey(typed);
             }}
             placeholder="Filter by… (service, version, route)"
-            className="h-8 w-full rounded-md border border-border bg-surface-sunken px-2 text-sm text-ink placeholder:text-ink-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className={`${CONTROL_FIELD} h-8 w-full px-2 text-sm`}
             data-testid="obs-filter-key-input"
           />
           <KeyList query={keyQuery} onPick={setKey} />
@@ -532,7 +537,7 @@ function ValueStep({
           id={opId}
           value={op}
           onChange={(event) => onOpChange(event.target.value as FilterTokenOp)}
-          className="h-8 rounded-md border border-border bg-surface-sunken px-1.5 text-sm text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className={`${CONTROL_FIELD} h-8 px-1.5 text-sm`}
           data-testid="obs-filter-op"
         >
           {(Object.keys(FILTER_OP_LABELS) as FilterTokenOp[]).map((candidate) => (
@@ -552,7 +557,7 @@ function ValueStep({
               value={value}
               onChange={(event) => onValueChange(event.target.value)}
               placeholder={attributeKey === ENV_KEY ? "prod" : "value"}
-              className="h-8 min-w-0 flex-1 rounded-md border border-border bg-surface-sunken px-2 font-mono text-sm text-ink placeholder:text-ink-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className={`${CONTROL_FIELD} h-8 min-w-0 flex-1 px-2 font-mono text-sm`}
               data-testid="obs-filter-value-input"
             />
           </>
@@ -620,7 +625,7 @@ function AddGroupBy({ used, onAdd }: { used: string[]; onAdd: (key: string) => v
       open={open}
       onOpenChange={onOpenChange}
       testId="obs-add-group-by"
-      triggerClassName={cn(CONTROL, "border-dashed text-ink-muted")}
+      triggerClassName={cn(CONTROL, "bg-surface")}
       trigger={
         <>
           <Plus className="h-3.5 w-3.5" aria-hidden="true" />
@@ -641,7 +646,7 @@ function AddGroupBy({ used, onAdd }: { used: string[]; onAdd: (key: string) => v
           if (event.key === "Enter" && isAttributeKeyShaped(typed) && !used.includes(typed)) pick(typed);
         }}
         placeholder="Group by…"
-        className="mb-1 h-8 w-full rounded-md border border-border bg-surface-sunken px-2 text-sm text-ink placeholder:text-ink-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className={`${CONTROL_FIELD} mb-1 h-8 w-full px-2 text-sm`}
         data-testid="obs-group-by-input"
       />
       <KeyList query={query} used={used} onPick={pick} suggestions={GROUP_BY_SUGGESTIONS} />

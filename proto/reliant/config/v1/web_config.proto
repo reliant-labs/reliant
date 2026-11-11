@@ -73,6 +73,50 @@ message ReliantWebConfig {
     description: "This app's own public origin: the base of every URL that leaves the process and comes back (the OAuth redirectTo). Unset: the document origin in a browser; in the desktop app, whose origin no system browser can reach, the hosted default."
   }];
 
+  string forge_app_host = 23 [(forge.v1.config) = {
+    env_var: "FORGE_APP_HOST"
+    default_value: "forge.reliantlabs.io"
+    description: "Hostname that serves the forge-branded shell (ForgeShell) from this same bundle. A document loaded on this host mounts the forge console, claim, sites, usage and settings pages with forge branding; every other host mounts Reliant. Also where Reliant's \"Open Forge console\" link points."
+  }];
+
+  // ── The public forge demo (the forge-demo bundle, demo.html) ───────────
+  // Deprecated: the host on which THIS bundle mounts the demo shell. The
+  // demo is its own build and env now (deploy/kcl/demo), the supported path;
+  // this bundle still honours the key (lib/shell.ts) so a deployment that
+  // points the host at reliant-web keeps its demo. Removed only in a future
+  // major.
+  string demo_app_host = 24 [deprecated = true, (forge.v1.config) = {
+    env_var: "DEMO_APP_HOST"
+    default_value: "demo.reliantlabs.io"
+    description: "Deprecated: hostname on which this bundle still mounts the public forge demo (the demo shell), read-only on sample data. The supported demo is its own build and env (deploy/kcl/demo, the forge-demo frontend); this key keeps working until a future major."
+  }];
+
+  string demo_telemetry = 25 [(forge.v1.config) = {
+    env_var: "DEMO_TELEMETRY"
+    default_value: "replay"
+    description: "What the demo host records about its anonymous visitors, under service reliant-forge-demo. \"replay\": page and tour analytics and masked session replay. \"analytics\": page and tour analytics only. \"off\": nothing. A browser that sends Do Not Track or Global Privacy Control is never recorded."
+    allowed_values: ["replay", "analytics", "off"]
+  }];
+
+  string demo_tour = 26 [(forge.v1.config) = {
+    env_var: "DEMO_TOUR"
+    default_value: "short"
+    description: "The forge tour on the demo host. \"short\": at most ten steps (no profile or on-call step; the cross-service, graph and agent steps instead). \"full\": every forge step."
+    allowed_values: ["short", "full"]
+  }];
+
+  string demo_data_source = 27 [(forge.v1.config) = {
+    env_var: "DEMO_DATA_SOURCE"
+    default_value: "fixtures"
+    description: "Where the demo host's console reads come from. \"fixtures\": built-in sample data, no network. \"remote\": the demo-data gateway at DEMO_DATA_URL (read RPCs only), falling back to the sample data on any failure."
+    allowed_values: ["fixtures", "remote"]
+  }];
+
+  string demo_data_url = 28 [(forge.v1.config) = {
+    env_var: "DEMO_DATA_URL"
+    description: "Base URL of the demo-data gateway the demo host reads from when DEMO_DATA_SOURCE is \"remote\": a public, read-only Connect endpoint serving the observability read RPCs (research/2026-11-05-console-health/demo-plan.md, Phase 2 contract). Unset: the sample data."
+  }];
+
   string disable_tls = 5 [(forge.v1.config) = {
     env_var: "DISABLE_TLS"
     description: "\"true\": build loopback and WebSocket URLs with http/ws instead of https/wss (a plain-http local stack). The desktop app takes this from its main process instead."

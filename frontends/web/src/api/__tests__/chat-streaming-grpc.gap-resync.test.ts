@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ChatUpdateType } from "../streaming-grpc";
 import { ChatStreamingService } from "../chat-streaming-grpc";

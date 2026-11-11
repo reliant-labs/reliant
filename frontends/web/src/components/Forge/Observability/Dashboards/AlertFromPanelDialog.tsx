@@ -35,6 +35,7 @@ import {
   type DeclaredRules,
 } from "./alertSnippet";
 import { BUTTON_PRIMARY, BUTTON_SECONDARY, BUTTON_SMALL } from "./parts";
+import { CONTROL_FIELD, SEGMENTED, segmentTone } from "../../controlStyles";
 
 export interface AlertFromPanelDialogProps {
   panel: Panel;
@@ -49,7 +50,7 @@ export interface AlertFromPanelDialogProps {
 }
 
 const INPUT =
-  "h-8 w-full min-w-0 rounded-md border border-border bg-surface px-2.5 text-sm text-ink placeholder:text-ink-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-ring aria-[invalid=true]:border-danger-ink";
+  `${CONTROL_FIELD} h-8 w-full min-w-0 px-2.5 text-sm aria-[invalid=true]:border-danger-ink`;
 
 /** What an environment's recorded shape says about the rules it already declares. */
 export function declaredRulesOf(env: ObsEnvironment | undefined): DeclaredRules {
@@ -301,7 +302,7 @@ function AlertFromPanelBody({ panel, dashboardTitle, environments, env, services
               <p className="text-xs text-ink-muted">
                 {showRuleOnly ? "Add to the rules list in" : "Paste into"} <code className="font-mono text-ink">{result.path}</code>
               </p>
-              <div role="group" aria-label="Snippet form" className="inline-flex items-center rounded-md border border-border bg-surface p-0.5">
+              <div role="group" aria-label="Snippet form" className={SEGMENTED}>
                 {[
                   { value: true, label: "With context" },
                   { value: false, label: "Rule only" },
@@ -316,7 +317,7 @@ function AlertFromPanelBody({ panel, dashboardTitle, environments, env, services
                     }}
                     className={cn(
                       "h-6 rounded px-2 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                      !showRuleOnly === option.value ? "bg-ink/8 font-medium text-ink" : "text-ink-muted hover:text-ink"
+                      segmentTone(!showRuleOnly === option.value)
                     )}
                   >
                     {option.label}

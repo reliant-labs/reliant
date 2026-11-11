@@ -7,7 +7,7 @@
 
 import type { GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
 import { fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
-import type { Message as Message$1 } from "./chat_pb";
+import type { Message as Message$1, ToolBodyMode } from "./chat_pb";
 import { file_reliant_v1_chat } from "./chat_pb";
 import type { Message } from "@bufbuild/protobuf";
 
@@ -15,7 +15,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file reliant/v1/message.proto.
  */
 export const file_reliant_v1_message: GenFile = /*@__PURE__*/
-  fileDesc("ChhyZWxpYW50L3YxL21lc3NhZ2UucHJvdG8SCnJlbGlhbnQudjEiJwoRR2V0TWVzc2FnZVJlcXVlc3QSEgoKbWVzc2FnZV9pZBgBIAEoCSI6ChJHZXRNZXNzYWdlUmVzcG9uc2USJAoHbWVzc2FnZRgBIAEoCzITLnJlbGlhbnQudjEuTWVzc2FnZTJfCg5NZXNzYWdlU2VydmljZRJNCgpHZXRNZXNzYWdlEh0ucmVsaWFudC52MS5HZXRNZXNzYWdlUmVxdWVzdBoeLnJlbGlhbnQudjEuR2V0TWVzc2FnZVJlc3BvbnNlIgBCOlo4Z2l0aHViLmNvbS9yZWxpYW50LWxhYnMvcmVsaWFudC9nZW4vcmVsaWFudC92MTtyZWxpYW50djFiBnByb3RvMw", [file_reliant_v1_chat]);
+  fileDesc("ChhyZWxpYW50L3YxL21lc3NhZ2UucHJvdG8SCnJlbGlhbnQudjEiawoRR2V0TWVzc2FnZVJlcXVlc3QSEgoKbWVzc2FnZV9pZBgBIAEoCRIyCgt0b29sX2JvZGllcxgCIAEoDjIYLnJlbGlhbnQudjEuVG9vbEJvZHlNb2RlSACIAQFCDgoMX3Rvb2xfYm9kaWVzIjoKEkdldE1lc3NhZ2VSZXNwb25zZRIkCgdtZXNzYWdlGAEgASgLMhMucmVsaWFudC52MS5NZXNzYWdlMl8KDk1lc3NhZ2VTZXJ2aWNlEk0KCkdldE1lc3NhZ2USHS5yZWxpYW50LnYxLkdldE1lc3NhZ2VSZXF1ZXN0Gh4ucmVsaWFudC52MS5HZXRNZXNzYWdlUmVzcG9uc2UiAEI6WjhnaXRodWIuY29tL3JlbGlhbnQtbGFicy9yZWxpYW50L2dlbi9yZWxpYW50L3YxO3JlbGlhbnR2MWIGcHJvdG8z", [file_reliant_v1_chat]);
 
 /**
  * GetMessageRequest requests a single message by ID
@@ -27,6 +27,14 @@ export type GetMessageRequest = Message<"reliant.v1.GetMessageRequest"> & {
    * @generated from field: string message_id = 1;
    */
   messageId: string;
+
+  /**
+   * How finished tool calls' bodies are sent. Unset is
+   * TOOL_BODY_MODE_FULL: inputs whole, results previewed.
+   *
+   * @generated from field: optional reliant.v1.ToolBodyMode tool_bodies = 2;
+   */
+  toolBodies?: ToolBodyMode | undefined;
 };
 
 /**

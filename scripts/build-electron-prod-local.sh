@@ -32,9 +32,9 @@
 # Running this file directly is rejected below rather than silently building
 # against whatever the calling shell had — in a dev shell that is localhost.
 #
-# Secrets (the Sentry DSN) are NOT baked in: they come from GitHub
-# Actions secrets in CI and are simply absent here. Telemetry is inert in a
-# local build, which is what you want anyway.
+# Secrets are NOT baked in: they come from GitHub Actions secrets in CI and
+# are simply absent here. Telemetry is inert in a local build, which is what
+# you want anyway.
 #
 # ── Why the app is re-signed at the end ────────────────────────────────
 #

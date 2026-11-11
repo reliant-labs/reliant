@@ -28,6 +28,27 @@ export const DANGER_PALETTE = ["--destructive", "--chart-danger-alt"] as const;
 /** "Other" (a folded tail): neutral, so it never reads as one more series. */
 export const OTHER_TOKEN = "--muted-foreground";
 
+/**
+ * forge's palette keys (dashspec ChartColor) as tokens: a dashboard names a
+ * colour by key, never by value, so the tokens keep their contrast in every
+ * scheme. The hues follow the palette's own order, so "blue" is the colour a
+ * first series gets anyway; `danger` is the error colour.
+ */
+export const PALETTE_KEY_TOKENS: Readonly<Record<string, string>> = {
+  blue: "--chart-1",
+  violet: "--chart-2",
+  cyan: "--chart-3",
+  amber: "--chart-4",
+  fuchsia: "--chart-5",
+  slate: "--chart-6",
+  danger: DANGER_PALETTE[0],
+};
+
+/** The token a palette key names; undefined for none, or for a key a newer forge added (the caller deals its own). */
+export function paletteToken(key: string | undefined): string | undefined {
+  return key && Object.hasOwn(PALETTE_KEY_TOKENS, key) ? PALETTE_KEY_TOKENS[key] : undefined;
+}
+
 /** The token for the n-th thing (0-based), cycling past the palette's end. */
 export function chartToken(index: number): ChartPaletteToken {
   const n = CHART_PALETTE.length;

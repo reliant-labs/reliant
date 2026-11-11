@@ -1,0 +1,14 @@
+Reliant Go SDK
+Copyright (c) 2025-2026 Reliant Labs, Inc.
+
+This module (github.com/reliant-labs/reliant/sdk/go) is licensed under the
+Apache License, Version 2.0 (see LICENSE). The rest of the repository that
+contains it is licensed under the Business Source License 1.1 (see the LICENSE
+file at the repository root); that license does not apply to this directory,
+and this one does not apply to the rest.
+
+The files under gen/ are generated from the repository's .proto files by buf
+(see buf.gen.yaml and proto/public-api.txt at the repository root). The
+copyright holder of those protos and of this module is the same, and the
+generated code is distributed under the Apache License, Version 2.0 with the
+rest of this module, whatever its header line says.

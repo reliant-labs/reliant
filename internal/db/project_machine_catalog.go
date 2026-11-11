@@ -2,15 +2,14 @@ package db
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"sort"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/orm"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/store"
 )
@@ -67,6 +66,12 @@ func (r *Repo) SyncProjectConfigSnapshot(ctx context.Context, record *ProjectCon
 	err = r.RunTx(ctx, orm.ReadCommitted.WithMaxAttempts(orm.DefaultTxMaxAttempts), func(txCtx context.Context) error {
 		stored = false
 		if err := store.LockProjectCatalog(txCtx, r.ORM(), record.ProjectID); err != nil {
+			return err
+		}
+		// A snapshot of a detached pair is dropped here, under the lock the
+		// detach holds: one the caller resolved before a detach committed
+		// must not recreate the machine's catalog afterwards.
+		if detached, err := store.ProjectDaemonDetached(txCtx, r.ORM(), record.ProjectID, record.DaemonID); err != nil || detached {
 			return err
 		}
 		prevRow, err := store.GetProjectMachineCatalog(txCtx, r.ORM(), record.ProjectID, record.DaemonID)
@@ -137,7 +142,7 @@ func (r *Repo) SyncProjectConfigSnapshot(ctx context.Context, record *ProjectCon
 
 		recordPushedAt, err := store.GetProjectConfigPushedAt(txCtx, r.ORM(), record.ProjectID)
 		hasRecord := err == nil
-		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		if err != nil && !svcerr.IsNotFound(err) {
 			return err
 		}
 		if hasRecord && !force && !record.PushedAt.After(recordPushedAt) {
@@ -278,14 +283,14 @@ func (r *Repo) projectMachineCatalogs(ctx context.Context, projectID string) ([]
 }
 
 // GetProjectMachineCatalogPushedAt is when daemonID last pushed its catalog
-// of a project, or sql.ErrNoRows, unwrapped, when it never has.
+// of a project, or svcerr.NotFound when it never has.
 func (r *Repo) GetProjectMachineCatalogPushedAt(ctx context.Context, projectID, daemonID string) (time.Time, error) {
 	row, err := r.machineCatalogRow(ctx, projectID, daemonID)
 	if err != nil {
 		return time.Time{}, err
 	}
 	if row == nil {
-		return time.Time{}, sql.ErrNoRows
+		return time.Time{}, svcerr.NotFound("project machine catalog")
 	}
 	return row.PushedAt, nil
 }

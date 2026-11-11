@@ -10,7 +10,7 @@ import { keepsLastResult } from "@/services/controlPlane/observability/quota";
  */
 
 import { useMemo, useState, type ReactNode } from "react";
-import { ArrowLeft, SearchX, VideoOff } from "lucide-react";
+import { ArrowLeft, SearchX, Waypoints } from "lucide-react";
 
 import Button from "@/components/forge-ui/button";
 import Card from "@/components/forge-ui/card";
@@ -18,16 +18,19 @@ import Mono from "@/components/forge-ui/mono";
 import Status from "@/components/forge-ui/status";
 import { useSession, useSessionTimeline } from "@/hooks/observability-session-queries";
 import { rumErrorKind } from "@/services/controlPlane/observability/errors";
+import { presetCovering } from "@/services/controlPlane/observability/window";
 import type { RumScope, SessionSummary } from "@/services/controlPlane/observability/rumTypes";
 
 import { formatAgo, formatCount, formatDuration, formatWhen } from "../format";
 import type { ObsNavigate } from "../obsSearch";
 import { ObsAsOf, ObsError, ObsLoadingRows } from "../ObsStates";
+import { Place } from "../Place";
 import { AskReliantMenu } from "../AskReliant/AskReliant";
 import { ReplayPlayer, type ReplayerCtor } from "./ReplayPlayer";
 import { SessionTimeline } from "./SessionTimeline";
-import { isLive, LEAVE_SESSIONS, noReplayReason, sessionTitle } from "./sessionModel";
+import { isLive, LEAVE_SESSIONS, sessionTitle } from "./sessionModel";
 import { SessionNote, SessionsNotConfigured } from "./SessionStates";
+import { ClientSummary } from "../Client";
 
 export interface SessionDetailProps {
   scope: RumScope;
@@ -113,6 +116,25 @@ function SessionBody({
 
   const openIssue = (issueId: string) => navigate({ ...LEAVE_SESSIONS, view: "errors", issue: issueId, istatus: undefined, platform: undefined, isort: undefined, assignee: undefined });
   const openTrace = (traceId: string, spanId?: string) => navigate({ ...LEAVE_SESSIONS, view: "traces", trace: traceId, span: spanId });
+  // Every trace of the session — the browser's own spans and the backend work
+  // its requests caused (they carry its id as session.id) — over the window it ran in.
+  // Every other narrowing is dropped: a service or a client/build filter kept
+  // from the sessions list (its frontend's) would exclude the backend traces
+  // this promises.
+  const openTraces = () =>
+    navigate({
+      ...LEAVE_SESSIONS,
+      view: "traces",
+      trace: undefined,
+      span: undefined,
+      service: undefined,
+      minDuration: undefined,
+      lat: undefined,
+      groupBy: undefined,
+      f: undefined,
+      rsession: session.sessionId,
+      range: presetCovering(Math.max(0, now - session.startedMs) + 60_000),
+    });
 
   return (
     <div className="space-y-4" data-testid="session-detail" data-state="ready" data-session={session.sessionId}>
@@ -129,6 +151,9 @@ function SessionBody({
             <Status tone="neutral" label="no errors" />
           )}
           {live && <Status tone="neutral" pulse label="active now" />}
+          <Button variant="ghost" size="sm" onClick={openTraces} leftIcon={<Waypoints className="h-3.5 w-3.5" />} data-testid="session-traces">
+            Traces
+          </Button>
           {session.errors > 0 && (
             <span className="ml-auto" data-testid="session-ask">
               <AskReliantMenu subject={{ kind: "session", sessionId: session.sessionId, env: session.envName || null }} appearance="button" label="Ask Reliant" />
@@ -137,10 +162,21 @@ function SessionBody({
         </div>
         <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-muted">
           {session.userId ? <span className="text-ink">{session.userId}</span> : <span>anonymous user</span>}
+          <Place geo={session} testId="session-place" />
+          <ClientSummary client={session.client} testId="session-client" />
           <span>
             entered on <span className="font-mono text-ink">{session.entryPath || "/"}</span>
           </span>
-          {session.serviceVersion && <span className="font-mono">{session.serviceVersion}</span>}
+          {session.release && (
+            <span className="font-mono text-ink" title="The release this frontend build shipped in" data-testid="session-release">
+              {session.release}
+            </span>
+          )}
+          {session.serviceVersion && (
+            <span className="font-mono" title="The frontend's build id, which its source maps are keyed by">
+              {session.release ? `build ${session.serviceVersion}` : session.serviceVersion}
+            </span>
+          )}
           {session.envName && <span>in {session.envName}</span>}
           {session.startedMs > 0 && <span title={formatWhen(session.startedMs, now)}>started {formatAgo(session.startedMs, now)}</span>}
           <span>{formatDuration(Math.max(0, session.endedMs - session.startedMs))}</span>
@@ -153,8 +189,8 @@ function SessionBody({
         </p>
       </header>
 
-      {/* No replay: the timeline is the page, at full width, and the missing
-          recording is one line, not a panel. */}
+      {/* No replay (a session reached by id from a trace or an error): the
+          timeline is the page, at full width. */}
       <div className={session.hasReplay ? "grid gap-4 xl:grid-cols-[minmax(0,3fr)_minmax(20rem,2fr)]" : "space-y-2"}>
         {session.hasReplay ? (
           <Card padding="md" data-testid="session-replay">
@@ -170,14 +206,7 @@ function SessionBody({
               loadReplayer={loadReplayer}
             />
           </Card>
-        ) : (
-          <p role="status" data-testid="session-no-replay" className="flex items-start gap-1.5 text-xs text-ink-muted">
-            <VideoOff className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-            <span>
-              <span className="text-ink">No replay was recorded for this session.</span> {noReplayReason(session)}
-            </span>
-          </p>
-        )}
+        ) : null}
         <Card padding="md" data-testid="session-timeline-card">
           <h4 className="mb-2 text-sm font-medium text-ink">Timeline</h4>
           {timeline.isLoading ? (

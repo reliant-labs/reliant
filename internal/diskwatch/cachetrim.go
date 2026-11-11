@@ -90,7 +90,9 @@ type CacheTrimConfig struct {
 	// of every extracted file, and it grows slowly.
 	GoModInterval time.Duration
 	// GoWorkDirAge is the age past which a go-build* directory in TMPDIR (a
-	// killed build's work dir) is removed; negative disables it.
+	// killed build's work dir) is removed where its death cannot be proven
+	// (no /proc: gowork.go); negative disables that. Where it can be, a
+	// directory is removed once proven dead, whatever its age.
 	GoWorkDirAge time.Duration
 	// UrgentFactor scales every budget for TrimCaches(urgent=true), the
 	// disk-pressure guard's call: the caches are trimmed to UrgentFactor of
@@ -195,6 +197,10 @@ type cacheTrimState struct {
 	// uid overrides os.Getuid as the owner a go-build work dir must have
 	// (tests: a foreign owner).
 	uid func() int
+	// procs and birth replace the /proc scan and a directory's birth time
+	// (tests).
+	procs func() (procSnapshot, error)
+	birth func(string) time.Time
 }
 
 // ConfigureCacheTrim sets the trim's budgets. Zero fields take defaults.
@@ -214,7 +220,7 @@ func (w *Watcher) cacheTrimConfig() CacheTrimConfig {
 }
 
 // TrimCaches is the entrypoint for a caller that needs disk space now — the
-// disk-pressure guard at 90%. It waits for any storage pass already running
+// disk-pressure guard (diskguard, from 80%). It waits for any storage pass already running
 // (the schedule's, a user's clean-up), then trims the native caches and runs
 // forge's reaper once, whatever the schedule's mode. urgent trims each native
 // cache to UrgentFactor of its budget, measures the module cache whatever its
@@ -280,17 +286,46 @@ func (w *Watcher) trimNativeCaches(ctx context.Context, urgent, measureMod bool,
 			logCacheTrim(trigger, *r)
 		}
 	}
+	if r := w.goWorkDirPass(ctx, cfg, urgent, trigger, p); r != nil {
+		out = append(out, *r)
+	}
+	return out
+}
+
+// goWorkDirTick runs the go_work_dirs pass alone, between full passes, on the
+// Go-cache pass's cadence (reaperTick). The caller holds the storage
+// single-flight.
+func (w *Watcher) goWorkDirTick(ctx context.Context, trigger string) {
+	defer func() {
+		if r := recover(); r != nil {
+			logging.WarnContext(ctx, "[diskwatch] Go work dir pass panicked", "trigger", trigger, "panic", fmt.Sprint(r))
+		}
+	}()
+	if w.systemEnv && testing.Testing() {
+		return
+	}
+	cfg := w.cacheTrimConfig()
+	ctx, cancel := context.WithTimeout(ctx, cfg.PassBudget)
+	defer cancel()
+	w.goWorkDirPass(ctx, cfg, trigger == "pressure", trigger, w.newPacer(cfg.RatePerSec))
+}
+
+// goWorkDirPass runs the go_work_dirs pass (gowork.go), logs it and records it
+// in the trim audit log.
+func (w *Watcher) goWorkDirPass(ctx context.Context, cfg CacheTrimConfig, urgent bool, trigger string, p *pacer) *CacheTrimResult {
+	if ctx.Err() != nil || p.stopped != nil {
+		return nil
+	}
 	age := cfg.GoWorkDirAge
 	if urgent && (age < 0 || age > 2*time.Hour) {
 		age = 2 * time.Hour
 	}
-	if age > 0 && ctx.Err() == nil && p.stopped == nil {
-		if r := w.trimGoWorkDirs(ctx, age, p); r != nil {
-			out = append(out, *r)
-			logCacheTrim(trigger, *r)
-		}
+	r, audit := w.trimGoWorkDirs(ctx, age, p)
+	w.auditGoWorkDirs(ctx, trigger, audit)
+	if r != nil {
+		logCacheTrim(trigger, *r)
 	}
-	return out
+	return r
 }
 
 func logCacheTrim(trigger string, r CacheTrimResult) {
@@ -821,65 +856,7 @@ func (w *Watcher) trimGoMod(ctx context.Context, root string, cfg CacheTrimConfi
 	return res
 }
 
-// ---- go-build work dirs --------------------------------------------------
-
-// trimGoWorkDirs removes go-build* directories in TMPDIR (and GOTMPDIR)
-// whose directory and direct children are all older than age: the work dirs
-// of builds that were killed before they could remove their own. Only this
-// user's: /tmp is shared.
-func (w *Watcher) trimGoWorkDirs(ctx context.Context, age time.Duration, p *pacer) *CacheTrimResult {
-	var dirs []string
-	for _, k := range []string{"GOTMPDIR", "TMPDIR"} {
-		if v := strings.TrimSpace(w.env.Getenv(k)); v != "" && filepath.IsAbs(v) {
-			dirs = append(dirs, filepath.Clean(v))
-		}
-	}
-	if len(dirs) == 0 && w.env.GOOS != "windows" {
-		dirs = append(dirs, "/tmp")
-	}
-	cutoff := w.now().Add(-age)
-	uid := w.currentUID()
-	res := &CacheTrimResult{Kind: "go_work_dirs"}
-	seen := map[string]bool{}
-	for _, dir := range dirs {
-		if seen[dir] {
-			continue
-		}
-		seen[dir] = true
-		res.Path = strings.TrimPrefix(res.Path+", "+dir, ", ")
-		entries, err := os.ReadDir(dir)
-		if err != nil {
-			continue
-		}
-		for _, e := range entries {
-			if ctx.Err() != nil || p.stopped != nil {
-				break
-			}
-			if !e.IsDir() || !strings.HasPrefix(e.Name(), "go-build") {
-				continue
-			}
-			path := filepath.Join(dir, e.Name())
-			// Another user's go-build dir in a shared /tmp is theirs to
-			// remove, and anything they control is a way to redirect ours.
-			if info, err := os.Lstat(path); uid < 0 || err != nil || ownerUID(info) != uid {
-				continue
-			}
-			if !olderThan(path, cutoff) {
-				continue
-			}
-			n, err := p.removeTree(ctx, path, uid)
-			res.Freed += n
-			if err == nil {
-				res.Removed++
-			}
-		}
-	}
-	res.Size = res.Freed
-	if res.Removed == 0 && res.Freed == 0 {
-		return nil
-	}
-	return res
-}
+// ---- go-build work dirs (gowork.go) -----------------------------------
 
 // currentUID is the uid this process's own go-build work dirs belong to; -1
 // where uids do not exist (Windows), which removes none.

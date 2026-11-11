@@ -200,15 +200,24 @@ func (o *OpenaiClient) ConvertMessages(prompts []string, messages []message.Mess
 			}
 
 		case message.Tool:
+			// OpenAI doesn't support images in tool messages, so they follow
+			// as ONE user message after the last tool message of the turn. A
+			// user message between two tool messages ends the run of results
+			// answering the assistant's tool_calls, and the API rejects the
+			// request: this used to emit one after each result.
+			var contentParts []openai.ChatCompletionContentPartUnionParam
 			for _, result := range msg.ToolResults() {
 				openaiMessages = append(openaiMessages,
 					openai.ToolMessage(result.Content, result.ToolCallID),
 				)
 				if len(result.BinaryParts) > 0 {
-					// OpenAI doesn't support images in tool messages — inject as follow-up user message
-					var contentParts []openai.ChatCompletionContentPartUnionParam
+					if len(contentParts) == 0 {
+						contentParts = append(contentParts, openai.ChatCompletionContentPartUnionParam{
+							OfText: &openai.ChatCompletionContentPartTextParam{Text: "Tool result attachments:"},
+						})
+					}
 					contentParts = append(contentParts, openai.ChatCompletionContentPartUnionParam{
-						OfText: &openai.ChatCompletionContentPartTextParam{Text: "Tool result attachments:"},
+						OfText: &openai.ChatCompletionContentPartTextParam{Text: fmt.Sprintf("From tool call %s:", result.ToolCallID)},
 					})
 					for _, bp := range result.BinaryParts {
 						if isImageMimeType(bp.MIMEType) {
@@ -231,8 +240,10 @@ func (o *OpenaiClient) ConvertMessages(prompts []string, messages []message.Mess
 							contentParts = append(contentParts, filePart)
 						}
 					}
-					openaiMessages = append(openaiMessages, openai.UserMessage(contentParts))
 				}
+			}
+			if len(contentParts) > 0 {
+				openaiMessages = append(openaiMessages, openai.UserMessage(contentParts))
 			}
 		}
 	}
@@ -746,20 +757,7 @@ func (o *OpenaiClient) convertMessagesToResponsesInput(prompts []string, message
 
 		case message.Tool:
 			for _, result := range msg.ToolResults() {
-				// Built as a struct rather than via
-				// ResponseInputItemParamOfFunctionCallOutput: openai-go v3.55
-				// narrowed that helper to take only the output, so it cannot
-				// set CallID. CallID is what pairs this output with the
-				// function_call item above, and the API rejects an output that
-				// references no call.
-				items = append(items, responses.ResponseInputItemUnionParam{
-					OfFunctionCallOutput: &responses.ResponseInputItemFunctionCallOutputParam{
-						CallID: param.NewOpt(result.ToolCallID),
-						Output: responses.ResponseInputItemFunctionCallOutputOutputUnionParam{
-							OfString: param.NewOpt(result.Content),
-						},
-					},
-				})
+				items = append(items, responseswire.FunctionCallOutputItem(result))
 			}
 		}
 	}
@@ -1101,7 +1099,10 @@ func (o *OpenaiClient) streamResponses(ctx context.Context, prompts []string, me
 		}
 
 		if err := stream.Err(); err != nil {
-			logging.ErrorContext(ctx, "[OpenAI Responses] Stream error", "error", err)
+			// WARN, not ERROR: one attempt's failure is not the call's. call_llm
+			// retries and fails over, and a call that fails for good reaches the
+			// user as the run's error. Matches the Anthropic and Codex drivers.
+			logging.WarnContext(ctx, "[OpenAI Responses] Stream error", "error", err)
 			eventChan <- llm.DriverEvent{Type: llm.EventError, Error: err}
 			return
 		}

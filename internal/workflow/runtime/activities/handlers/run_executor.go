@@ -16,15 +16,27 @@ import (
 // RunExecutor defines the interface for executing shell commands.
 // This abstraction allows for mocking in tests.
 type RunExecutor interface {
-	// ExecuteCommand runs a command and returns stdout, stderr, exit code, and whether it was interrupted.
-	// It should execute the command in the specified working directory with the given timeout.
+	// ExecuteCommand runs a command in the specified working directory with
+	// the given timeout and returns what it printed and how it ended.
 	ExecuteCommand(
 		ctx context.Context,
 		command string,
 		workingDir string,
 		timeoutMs int,
 		env map[string]string,
-	) (stdout, stderr string, exitCode int, interrupted bool, err error)
+	) (CommandResult, error)
+}
+
+// CommandResult is one command's verdict.
+type CommandResult struct {
+	Stdout      string
+	Stderr      string
+	ExitCode    int
+	Interrupted bool
+	// Truncated reports that the machine cut stdout or stderr to its output
+	// cap (head+tail, with a marker in the middle): what is here is not the
+	// whole output, and text a workflow parses (json.decode) may not decode.
+	Truncated bool
 }
 
 // RunExecutorContext provides the IDs needed to build a ToolRequest for remote execution.
@@ -49,6 +61,8 @@ type RunExecutorContext struct {
 	// Credentials is the run node's `credentials` setting ("none" strips
 	// GitHub, git, ssh and cloud credentials from the command's environment).
 	Credentials string
+	// WritableCheckouts is the run node's `writable_checkouts`.
+	WritableCheckouts []string
 
 	// project is the chat's project, for resolveRunCheckout.
 	project *db.Project
@@ -78,6 +92,47 @@ type shellInput struct {
 	Command     string `json:"command"`
 	Timeout     int    `json:"timeout,omitempty"` // timeout in milliseconds
 	Credentials string `json:"credentials,omitempty"`
+	// WritableCheckouts: a shell tool older than the field ignores it.
+	WritableCheckouts []string `json:"writable_checkouts,omitempty"`
+}
+
+// RunReattacher is a RunExecutor that can wait for a command an earlier
+// attempt of the same run step sent under requestID (runStepRequestID),
+// without sending it again. RemoteRunExecutor is one.
+type RunReattacher interface {
+	// ReattachCommand returns the verdict of the command sent as requestID.
+	// attached is false when there is no such command to wait for — the
+	// machine does not know it, no longer holds its result, or cannot be
+	// asked — and then nothing ran and nothing was waited for.
+	ReattachCommand(ctx context.Context, requestID string, timeoutMs int) (result CommandResult, attached bool, err error)
+}
+
+// toolReattacher is the ToolExecutor half of RunReattacher:
+// toolexec.RemoteExecutor.
+type toolReattacher interface {
+	ReattachTool(ctx context.Context, req *toolexec.ToolRequest) (*toolexec.ToolResult, bool, error)
+}
+
+// The worker's executor reattaches; a wrapper that hid ReattachTool would
+// quietly turn every reattach back into a refusal.
+var (
+	_ RunReattacher  = (*RemoteRunExecutor)(nil)
+	_ toolReattacher = (*toolexec.RemoteExecutor)(nil)
+)
+
+// runRequestIDKey carries the transport id of a run step's command on ctx,
+// from ExecuteRunStep to RemoteRunExecutor.ExecuteCommand. On ctx rather than
+// the executor so only the step's own command carries it: the log-file write
+// that follows is another command, with a fresh id of its own.
+type runRequestIDKey struct{}
+
+func withRunRequestID(ctx context.Context, requestID string) context.Context {
+	return context.WithValue(ctx, runRequestIDKey{}, requestID)
+}
+
+func runRequestIDFrom(ctx context.Context) string {
+	id, _ := ctx.Value(runRequestIDKey{}).(string)
+	return id
 }
 
 // ExecuteCommand routes a shell command through the daemon's shell tool.
@@ -87,16 +142,60 @@ func (e *RemoteRunExecutor) ExecuteCommand(
 	workingDir string,
 	timeoutMs int,
 	env map[string]string,
-) (stdout, stderr string, exitCode int, interrupted bool, err error) {
+) (CommandResult, error) {
+	req, err := e.toolRequest(command, workingDir, timeoutMs, env)
+	if err != nil {
+		return CommandResult{ExitCode: -1}, err
+	}
+	req.RequestID = runRequestIDFrom(ctx)
+
+	// Execute through the daemon
+	result, err := e.executor.ExecuteTool(ctx, req)
+	if err != nil {
+		return CommandResult{ExitCode: -1}, fmt.Errorf("tool execution failed: %w", err)
+	}
+	return commandResult(command, result)
+}
+
+// ReattachCommand implements RunReattacher over a ToolExecutor that can
+// reattach (toolexec.RemoteExecutor.ReattachTool). The verdict is mapped as
+// ExecuteCommand maps one.
+func (e *RemoteRunExecutor) ReattachCommand(ctx context.Context, requestID string, timeoutMs int) (CommandResult, bool, error) {
+	reattacher, ok := e.executor.(toolReattacher)
+	if !ok || requestID == "" {
+		return CommandResult{}, false, nil
+	}
+	// Only the ids and the selector address the call; the input is never
+	// sent. RunStep keeps the result's content whole, as it was for the
+	// attempt that sent it.
+	req, err := e.toolRequest("", "", timeoutMs, nil)
+	if err != nil {
+		return CommandResult{}, false, nil
+	}
+	req.RequestID = requestID
+	result, attached, err := reattacher.ReattachTool(ctx, req)
+	if err != nil {
+		return CommandResult{ExitCode: -1}, attached, fmt.Errorf("tool execution failed: %w", err)
+	}
+	if !attached {
+		return CommandResult{}, false, nil
+	}
+	res, err := commandResult("", result)
+	return res, true, err
+}
+
+// toolRequest is the shell tool request that runs command.
+func (e *RemoteRunExecutor) toolRequest(command, workingDir string, timeoutMs int, env map[string]string) (*toolexec.ToolRequest, error) {
 	// Build shell tool input
 	input := shellInput{
-		Command:     command,
-		Timeout:     timeoutMs,
-		Credentials: e.execCtx.Credentials,
+		Command:           command,
+		Timeout:           timeoutMs,
+		Credentials:       e.execCtx.Credentials,
+		WritableCheckouts: e.execCtx.WritableCheckouts,
 	}
 	inputJSON, err := json.Marshal(input)
 	if err != nil {
-		return "", "", -1, false, fmt.Errorf("failed to marshal shell tool input: %w", err)
+		return nil, fmt.Errorf("failed to marshal shell tool input: %w", err)
 	}
 
 	// Determine effective working directory
@@ -129,16 +228,15 @@ func (e *RemoteRunExecutor) ExecuteCommand(
 		// model's 10-minute foreground cap. Set here and nowhere else.
 		RunStep: true,
 	}
+	return req, nil
+}
 
-	// Execute through the daemon
-	result, err := e.executor.ExecuteTool(ctx, req)
-	if err != nil {
-		return "", "", -1, false, fmt.Errorf("tool execution failed: %w", err)
-	}
-
+// commandResult maps the shell tool's result for command back to the
+// RunExecutor contract.
+func commandResult(command string, result *toolexec.ToolResult) (CommandResult, error) {
 	// Map tool result back to RunExecutor contract
 	if result == nil {
-		return "", "", -1, false, fmt.Errorf("nil result from tool executor")
+		return CommandResult{ExitCode: -1}, fmt.Errorf("nil result from tool executor")
 	}
 
 	if result.IsError {
@@ -149,7 +247,7 @@ func (e *RemoteRunExecutor) ExecuteCommand(
 		// worse, at the previous iteration's). Surface it as an error so the
 		// activity's retry policy — not the workflow's attempt budget — owns it.
 		if toolexec.IsTransportErrorCode(result.ErrorCode) {
-			return "", "", -1, false, &toolexec.TransportError{
+			return CommandResult{ExitCode: -1}, &toolexec.TransportError{
 				Code:          result.ErrorCode,
 				Command:       command,
 				Detail:        result.Content,
@@ -159,7 +257,7 @@ func (e *RemoteRunExecutor) ExecuteCommand(
 		}
 		// The tool itself reported an error (bad input, tool not found, …):
 		// that IS a verdict about this command.
-		return "", result.Content, 1, false, nil
+		return CommandResult{Stderr: result.Content, ExitCode: 1}, nil
 	}
 
 	// The shell tool returns structured JSON: {"stdout": "...", "stderr": "...", "exit_code": 0}
@@ -170,10 +268,29 @@ func (e *RemoteRunExecutor) ExecuteCommand(
 	}
 	if err := json.Unmarshal([]byte(result.Content), &shellOutput); err != nil {
 		// Fallback: treat content as plain text stdout (e.g. legacy format)
-		return result.Content, "", 0, false, nil
+		return CommandResult{Stdout: result.Content, Truncated: shellOutputTruncated(result.Metadata)}, nil
 	}
 
-	return shellOutput.Stdout, shellOutput.Stderr, shellOutput.ExitCode, false, nil
+	return CommandResult{
+		Stdout:    shellOutput.Stdout,
+		Stderr:    shellOutput.Stderr,
+		ExitCode:  shellOutput.ExitCode,
+		Truncated: shellOutputTruncated(result.Metadata),
+	}, nil
+}
+
+// shellOutputTruncated reads the shell tool's own report that it cut the
+// command's output (ShellResponseMetadata.Truncated). Every daemon release
+// sends it, so a run step is told about a cut even on a machine whose shell
+// tool still applies the model's 16 KB cap to run steps.
+func shellOutputTruncated(metadata string) bool {
+	if metadata == "" {
+		return false
+	}
+	var m struct {
+		Truncated bool `json:"truncated"`
+	}
+	return json.Unmarshal([]byte(metadata), &m) == nil && m.Truncated
 }
 
 // resolveRunExecutorContext loads the IDs needed for remote execution from the DB.

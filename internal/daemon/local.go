@@ -20,6 +20,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/daemonpolicy"
 	"github.com/reliant-labs/reliant/internal/diskwatch"
 	"github.com/reliant-labs/reliant/internal/fileutil"
+	"github.com/reliant-labs/reliant/internal/ghshim"
 	"github.com/reliant-labs/reliant/internal/heavyjob"
 	"github.com/reliant-labs/reliant/internal/llm/tools/shell"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -817,6 +818,8 @@ func (c *LocalClient) RunCommand(ctx context.Context, req *RunCommandRequest) (*
 			cmd.Env = append(cmd.Env, k+"="+v)
 		}
 	}
+	// A chat's command finds the gh shim first on PATH (internal/ghshim).
+	cmd.Env = ghshim.Default().Env(cmd.Env)
 
 	// A heavy command runs under the slot wrapper, waiting for one of the
 	// machine's heavy slots first; its timeout counts the wait. On a nearly
@@ -828,9 +831,11 @@ func (c *LocalClient) RunCommand(ctx context.Context, req *RunCommandRequest) (*
 	}
 	// credentials: none runs where the daemon's credential files are absent; see
 	// credsandbox. Outside the heavy-slot rewrite above.
-	if refusal := credsandbox.Wrap(cmd, credentials); refusal != "" {
+	if refusal := credsandbox.Wrap(cmd, credentials, req.SandboxWritable()); refusal != "" {
 		return &CommandResult{ExitCode: credsandbox.RefusedExitCode, Stderr: refusal, Combined: refusal}, nil
 	}
+	// A return before Start must not keep the sandbox's descriptors open.
+	defer credsandbox.Release(cmd)
 
 	var stdoutBuf, stderrBuf bytes.Buffer
 	// Output stamps activity, so if the command is detached into the
@@ -872,6 +877,8 @@ func (c *LocalClient) RunCommand(ctx context.Context, req *RunCommandRequest) (*
 
 	start := time.Now()
 	err = cmd.Start()
+	// The child holds its own copies of the sandbox's descriptors now.
+	credsandbox.Release(cmd)
 	if err != nil {
 		tree.Started(0)
 	}
@@ -967,6 +974,7 @@ func (c *LocalClient) StartBackground(ctx context.Context, req *RunCommandReques
 		WorkingDir:  req.WorkingDir,
 		Env:         req.Env,
 		Credentials: credentials,
+		Writable:    req.SandboxWritable(),
 		HeavyGate:   c.heavy,
 		Heavy:       req.Heavy,
 		AgentID:     req.ChatID,
@@ -1144,4 +1152,13 @@ func shellPortsToDaemon(ports []shell.PortInfo) []PortInfo {
 		}
 	}
 	return out
+}
+
+// SandboxWritable is what the request declares a credentials-none command
+// writes, for credsandbox.Wrap.
+func (r *RunCommandRequest) SandboxWritable() credsandbox.Writable {
+	return credsandbox.Writable{
+		Paths:        r.WritableCheckouts,
+		HandOffsOnly: r.WritableCheckoutsScope == WritableScopeBoundShell,
+	}
 }

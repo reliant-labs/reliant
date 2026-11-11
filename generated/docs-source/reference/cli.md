@@ -43,6 +43,13 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant db vault rewrap`](#reliant-db-vault-rewrap) | Re-wrap every data key under the keyring's primary KEK |
 | [`reliant db vault verify`](#reliant-db-vault-verify) | Prove every data key is wrapped under the primary KEK and opens |
 | [`reliant forge`](#reliant-forge) | Build, run and ship static sites, SPAs, web/mobile apps and APIs, LLM-first |
+| [`reliant forge agent`](#reliant-forge-agent) | For coding agents: skills, the MCP server, and filing a forge bug |
+| [`reliant forge agent mcp`](#reliant-forge-agent-mcp) | Run forge as an MCP server on stdio, so any agent harness can drive it |
+| [`reliant forge agent report-bug`](#reliant-forge-agent-report-bug) | Report a defect in forge itself to the Reliant engineering team |
+| [`reliant forge agent skill`](#reliant-forge-agent-skill) | Manage Forge skills — conventions and playbooks for LLM agents |
+| [`reliant forge agent skill list`](#reliant-forge-agent-skill-list) | List available skills (forge-shipped, project, and user-global) |
+| [`reliant forge agent skill load`](#reliant-forge-agent-skill-load) | Print a skill's content to stdout (resolves user > project > forge) |
+| [`reliant forge agent skill search`](#reliant-forge-agent-skill-search) | Search skills across all scopes by keyword (path/name=3, desc/body=1) |
 | [`reliant forge api`](#reliant-forge-api) | Inspect and exercise Connect RPC endpoints over plain HTTP+JSON |
 | [`reliant forge api curl`](#reliant-forge-api-curl) | Print a copy-pasteable curl command for a Connect RPC method |
 | [`reliant forge build`](#reliant-forge-build) | Compile the project's binaries and frontends locally (never publishes) |
@@ -58,6 +65,19 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant forge ci verify-test-run`](#reliant-forge-ci-verify-test-run) | Verify a `go test -json` run actually ran its tests (reads output; runs nothing) |
 | [`reliant forge ci vuln-scan`](#reliant-forge-ci-vuln-scan) | Run vulnerability scanners based on forge.yaml config |
 | [`reliant forge cloud`](#reliant-forge-cloud) | Talk to the hosted control plane an environment declares |
+| [`reliant forge cloud cluster`](#reliant-forge-cloud-cluster) | Connect a cluster you operate to the control plane, as a deploy target |
+| [`reliant forge cloud cluster connect`](#reliant-forge-cloud-cluster-connect) | Register a Kubernetes cluster the control plane may deploy into, as one env's binding |
+| [`reliant forge cloud cluster disconnect`](#reliant-forge-cloud-cluster-disconnect) | Deregister a connected cluster and remove every grant forge created in it |
+| [`reliant forge cloud cluster list`](#reliant-forge-cloud-cluster-list) | List the clusters connected to the control plane, with their state and env bindings |
+| [`reliant forge cloud cluster show`](#reliant-forge-cloud-cluster-show) | Show one connected cluster |
+| [`reliant forge cloud domain`](#reliant-forge-cloud-domain) | Manage custom domains and what they serve |
+| [`reliant forge cloud domain add`](#reliant-forge-cloud-domain-add) | Claim a hostname and print the DNS records to publish |
+| [`reliant forge cloud domain bind`](#reliant-forge-cloud-domain-bind) | Point a domain at one environment's workload or frontend |
+| [`reliant forge cloud domain ls`](#reliant-forge-cloud-domain-ls) | List your organization's domains and what they serve |
+| [`reliant forge cloud domain rm`](#reliant-forge-cloud-domain-rm) | Remove a domain and stop serving it |
+| [`reliant forge cloud domain show`](#reliant-forge-cloud-domain-show) | Show one domain's state, binding and required DNS |
+| [`reliant forge cloud domain unbind`](#reliant-forge-cloud-domain-unbind) | Stop a domain serving, and keep the domain |
+| [`reliant forge cloud domain verify`](#reliant-forge-cloud-domain-verify) | Check a domain's DNS now, instead of waiting for the poller |
 | [`reliant forge cloud identity`](#reliant-forge-cloud-identity) | Inspect managed identity and administer its users |
 | [`reliant forge cloud identity delete`](#reliant-forge-cloud-identity-delete) | Delete a user's account (org admin; asks first) |
 | [`reliant forge cloud identity export`](#reliant-forge-cloud-identity-export) | Export the identity's users now and print a short-lived download URL (identity:manage) |
@@ -69,6 +89,11 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant forge cloud identity status`](#reliant-forge-cloud-identity-status) | Show managed-identity state, issuer and delivery metadata |
 | [`reliant forge cloud identity unlock`](#reliant-forge-cloud-identity-unlock) | Let a locked user sign in again (org admin) |
 | [`reliant forge cloud identity users`](#reliant-forge-cloud-identity-users) | List one page of users and declared roles (no credentials) |
+| [`reliant forge cloud login`](#reliant-forge-cloud-login) | Authenticate to the control plane(s) this project declares |
+| [`reliant forge cloud logout`](#reliant-forge-cloud-logout) | Forget the stored credential for this project's control plane(s) |
+| [`reliant forge cloud registry`](#reliant-forge-cloud-registry) | Log in to and read refs from the registries an env's workloads declare |
+| [`reliant forge cloud registry login`](#reliant-forge-cloud-registry-login) | docker login to every registry the env's workloads declare |
+| [`reliant forge cloud registry ref`](#reliant-forge-cloud-registry-ref) | Print the digest-pinned refs `forge env build <env> --push` pushed |
 | [`reliant forge cloud status`](#reliant-forge-cloud-status) | Show the endpoint and credential source for an environment |
 | [`reliant forge cloud token`](#reliant-forge-cloud-token) | Mint, list and revoke ORG automation tokens (the CI deploy credential) |
 | [`reliant forge cloud token create`](#reliant-forge-cloud-token-create) | Mint an org automation token; its secret is printed ONCE |
@@ -125,6 +150,34 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant forge debug step-in`](#reliant-forge-debug-step-in) | Step into the current function call |
 | [`reliant forge debug step-out`](#reliant-forge-debug-step-out) | Step out of the current function |
 | [`reliant forge debug stop`](#reliant-forge-debug-stop) | Stop the debug session (detaches from attached processes; kills only what forge launched) |
+| [`reliant forge dev`](#reliant-forge-dev) | The local inner loop: the k3d dev cluster, a debugger, and curl for an rpc |
+| [`reliant forge dev cluster`](#reliant-forge-dev-cluster) | Manage the local k3d cluster and inspect dev state |
+| [`reliant forge dev cluster down`](#reliant-forge-dev-cluster-down) | Delete the k3d cluster |
+| [`reliant forge dev cluster info`](#reliant-forge-dev-cluster-info) | Print static dev-loop config (cluster name, expected context, declared ports) |
+| [`reliant forge dev cluster instances`](#reliant-forge-dev-cluster-instances) | List every forge dev namespace on every reachable cluster |
+| [`reliant forge dev cluster logs`](#reliant-forge-dev-cluster-logs) | Stream kubectl logs for one or all services in the dev namespace |
+| [`reliant forge dev cluster recover-chart-lock`](#reliant-forge-dev-cluster-recover-chart-lock) | Explicitly recover an inspected chart lock after terminating its writer |
+| [`reliant forge dev cluster reload`](#reliant-forge-dev-cluster-reload) | Re-render deploy/kcl/dev + kubectl apply + wait rollout |
+| [`reliant forge dev cluster reset`](#reliant-forge-dev-cluster-reset) | Delete then recreate the cluster |
+| [`reliant forge dev cluster status`](#reliant-forge-dev-cluster-status) | Print dynamic dev-loop state (cluster up/down, pods, ingress URLs) |
+| [`reliant forge dev cluster up`](#reliant-forge-dev-cluster-up) | Create the k3d cluster from deploy/k3d.yaml |
+| [`reliant forge dev cluster urls`](#reliant-forge-dev-cluster-urls) | Print the ingress URL table for the dev env |
+| [`reliant forge dev curl`](#reliant-forge-dev-curl) | Print a copy-pasteable curl command for a Connect RPC method |
+| [`reliant forge dev debug`](#reliant-forge-dev-debug) | Debug a running service with Delve |
+| [`reliant forge dev debug args`](#reliant-forge-dev-debug-args) | Show function arguments in the current scope |
+| [`reliant forge dev debug break`](#reliant-forge-dev-debug-break) | Set a breakpoint |
+| [`reliant forge dev debug breakpoints`](#reliant-forge-dev-debug-breakpoints) | List all breakpoints |
+| [`reliant forge dev debug clear`](#reliant-forge-dev-debug-clear) | Clear a breakpoint by ID |
+| [`reliant forge dev debug continue`](#reliant-forge-dev-debug-continue) | Resume execution until the next breakpoint |
+| [`reliant forge dev debug eval`](#reliant-forge-dev-debug-eval) | Evaluate an expression in the current scope |
+| [`reliant forge dev debug goroutines`](#reliant-forge-dev-debug-goroutines) | List goroutines |
+| [`reliant forge dev debug locals`](#reliant-forge-dev-debug-locals) | Show local variables in the current scope |
+| [`reliant forge dev debug stack`](#reliant-forge-dev-debug-stack) | Show the current call stack |
+| [`reliant forge dev debug start`](#reliant-forge-dev-debug-start) | Start a debug session for a service |
+| [`reliant forge dev debug step`](#reliant-forge-dev-debug-step) | Step over the current line |
+| [`reliant forge dev debug step-in`](#reliant-forge-dev-debug-step-in) | Step into the current function call |
+| [`reliant forge dev debug step-out`](#reliant-forge-dev-debug-step-out) | Step out of the current function |
+| [`reliant forge dev debug stop`](#reliant-forge-dev-debug-stop) | Stop the debug session (detaches from attached processes; kills only what forge launched) |
 | [`reliant forge doctor`](#reliant-forge-doctor) | Check that the PROJECT is well-formed (deployability, payload caps, tooling, cluster capability) |
 | [`reliant forge doctor parity`](#reliant-forge-doctor-parity) | Diff a service's host-mode vs cluster-mode env+config |
 | [`reliant forge domain`](#reliant-forge-domain) | Manage custom domains and what they serve |
@@ -149,6 +202,9 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant forge env diff`](#reliant-forge-env-diff) | Render this checkout and diff each environment against what is deployed |
 | [`reliant forge env down`](#reliant-forge-env-down) | Stop Forge host processes for an environment (or --all: across projects) |
 | [`reliant forge env exec`](#reliant-forge-env-exec) | Run a local command with a workload's resolved configuration |
+| [`reliant forge env kcl`](#reliant-forge-env-kcl) | Evaluate this project's KCL directly |
+| [`reliant forge env kcl eval`](#reliant-forge-env-kcl-eval) | Evaluate a KCL file or package directory and print a selected field |
+| [`reliant forge env kcl imports`](#reliant-forge-env-kcl-imports) | Show where each forge project this project's KCL imports resolves to |
 | [`reliant forge env list`](#reliant-forge-env-list) | List the environments declared in deploy/kcl/ |
 | [`reliant forge env new`](#reliant-forge-env-new) | Scaffold a new deploy environment from an existing one |
 | [`reliant forge env options`](#reliant-forge-env-options) | List the render options an environment's KCL declares |
@@ -156,9 +212,20 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant forge env releases`](#reliant-forge-env-releases) | What was released to an environment, when, and what changed |
 | [`reliant forge env releases at`](#reliant-forge-env-releases-at) | Which release was live at a moment, and the releases either side |
 | [`reliant forge env releases backfill-migrations`](#reliant-forge-env-releases-backfill-migrations) | Record, from git, the migrations of releases cut before forge recorded them |
+| [`reliant forge env releases interrupted`](#reliant-forge-env-releases-interrupted) | Whether a cut of <version> pushed its images, was never recorded, and can be resumed from here |
 | [`reliant forge env releases list`](#reliant-forge-env-releases-list) | The release timeline of an environment, newest first |
 | [`reliant forge env releases show`](#reliant-forge-env-releases-show) | One release in full: commits and PRs, what changed, migrations, gates, health |
 | [`reliant forge env render`](#reliant-forge-env-render) | Print the Kubernetes objects deploy/kcl/<env>/ renders, with the cluster each lands on |
+| [`reliant forge env secret`](#reliant-forge-env-secret) | Manage an environment's secret store (local file or hosted control plane) |
+| [`reliant forge env secret access`](#reliant-forge-env-secret-access) | Show who may use a hosted secret |
+| [`reliant forge env secret allow`](#reliant-forge-env-secret-allow) | Allow a workflow to use a hosted secret |
+| [`reliant forge env secret deny`](#reliant-forge-env-secret-deny) | Revoke a workflow's use of a hosted secret |
+| [`reliant forge env secret ensure`](#reliant-forge-env-secret-ensure) | Create the FileSecrets store and report missing values |
+| [`reliant forge env secret import`](#reliant-forge-env-secret-import) | Copy existing values into the env's secret store, create-only |
+| [`reliant forge env secret list`](#reliant-forge-env-secret-list) | List declared secrets and whether each has a value |
+| [`reliant forge env secret migrate`](#reliant-forge-env-secret-migrate) | Convert a legacy .env secrets file into the YAML store |
+| [`reliant forge env secret set`](#reliant-forge-env-secret-set) | Add or replace one secret value (read from stdin) |
+| [`reliant forge env secret unset`](#reliant-forge-env-secret-unset) | Remove one secret from the store |
 | [`reliant forge env secrets`](#reliant-forge-env-secrets) | Project the env's secret_provider into the cluster |
 | [`reliant forge env secrets adopt`](#reliant-forge-env-secrets-adopt) | Hand a verified, store-backed Secret to ESO (strip the stale last-applied annotation) |
 | [`reliant forge env secrets sync`](#reliant-forge-env-secrets-sync) | Render + apply the k8s Secrets for an env's dotenv secret_provider (local clusters only) |
@@ -193,8 +260,34 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant forge ledger show`](#reliant-forge-ledger-show) | Print this machine's ledger records — promotions, applies and local sessions |
 | [`reliant forge ledger where`](#reliant-forge-ledger-where) | Print which backend holds an environment's ledger, and the declaration that chose it |
 | [`reliant forge lint`](#reliant-forge-lint) | Run linters on the project (report-only: writes nothing unless --fix) |
+| [`reliant forge lint fix`](#reliant-forge-lint-fix) | Rewrite your code to what a lint asks for (codemods, run on request) |
+| [`reliant forge lint fix composition-graph`](#reliant-forge-lint-fix-composition-graph) | Move a project off Infra / NewComponents / ServeSpec onto the composition graph |
+| [`reliant forge lint fix config-proto-package`](#reliant-forge-lint-fix-config-proto-package) | Move the config protos to proto/<project>/config/v1, package <project>.config.v1 (no shared config.v1 since v1.0.0) |
+| [`reliant forge lint fix connect-errors`](#reliant-forge-lint-fix-connect-errors) | Rewrite fixed-message connect.NewError calls to pkg/svcerr, wire-identically, and list the rest |
+| [`reliant forge lint fix harness-mocks`](#reliant-forge-lint-fix-harness-mocks) | Rename the harness's Stub<Field> doubles to the forge mocks that replace them (one double per interface since v1.0.0) |
+| [`reliant forge lint fix narrow-deps`](#reliant-forge-lint-fix-narrow-deps) | Declare the interfaces a component's Deps actually use, and retype its fields to them |
+| [`reliant forge lint fix operatorkit`](#reliant-forge-lint-fix-operatorkit) | Rename lifecyclekit.Run / Controller / Options to operatorkit (moved in v0.1.46) |
+| [`reliant forge lint fix tx-isolation`](#reliant-forge-lint-fix-tx-isolation) | Spell out every pkg/orm transaction's isolation level and attempt budget (no default since v1.0.0) |
 | [`reliant forge login`](#reliant-forge-login) | Authenticate to the control plane(s) this project declares |
 | [`reliant forge logout`](#reliant-forge-logout) | Forget the stored credential for this project's control plane(s) |
+| [`reliant forge machine`](#reliant-forge-machine) | This machine's housekeeping: heavy-job slots, storage, and forge's pinned tools |
+| [`reliant forge machine slot`](#reliant-forge-machine-slot) | Queue heavy work behind host-wide slots: at most N heavy jobs at once on this machine |
+| [`reliant forge machine slot run`](#reliant-forge-machine-slot-run) | Run a command holding a host slot, waiting while every slot is held |
+| [`reliant forge machine slot status`](#reliant-forge-machine-slot-status) | Show a slot class's capacity, why, who holds its slots and who waits |
+| [`reliant forge machine storage`](#reliant-forge-machine-storage) | Inspect and bound local caches; preserve persistent application data |
+| [`reliant forge machine storage check`](#reliant-forge-machine-storage-check) | Refuse a build below the physical host free-space reserve |
+| [`reliant forge machine storage configure-nodes`](#reliant-forge-machine-storage-configure-nodes) | Preview kubelet GC migration for existing registered nodes; --apply restarts them |
+| [`reliant forge machine storage daemon`](#reliant-forge-machine-storage-daemon) | Run maintenance periodically, reloading policy for every pass |
+| [`reliant forge machine storage gc`](#reliant-forge-machine-storage-gc) | Preview cleanup; --apply deletes only eligible cache and registry versions |
+| [`reliant forge machine storage gocache`](#reliant-forge-machine-storage-gocache) | Trim the Go build caches now (preview unless --apply); the bounded pass to run every few minutes |
+| [`reliant forge machine storage install`](#reliant-forge-machine-storage-install) | Install daily maintenance (launchd, systemd timer, or Windows Task Scheduler) using a stable copy of this executable |
+| [`reliant forge machine storage policy`](#reliant-forge-machine-storage-policy) | Print the effective storage policy |
+| [`reliant forge machine storage register`](#reliant-forge-machine-storage-register) | Register local cluster contexts, declared repositories or release pins |
+| [`reliant forge machine storage status`](#reliant-forge-machine-storage-status) | Report physical host capacity, Docker usage and node cleanup settings |
+| [`reliant forge machine storage worktrees`](#reliant-forge-machine-storage-worktrees) | Preview idle, clean, pushed worktrees of a repo; --apply removes them |
+| [`reliant forge machine tools`](#reliant-forge-machine-tools) | Manage developer tooling forge depends on (proto plugins, linters, etc.) |
+| [`reliant forge machine tools install`](#reliant-forge-machine-tools-install) | Install codegen tools (protoc-gen-go, protoc-gen-connect-go, goimports), or the named tools (golangci-lint, buf) |
+| [`reliant forge machine tools pins`](#reliant-forge-machine-tools-pins) | Print the tool versions this forge pins (golangci-lint, buf, …), for CI to read |
 | [`reliant forge mcp`](#reliant-forge-mcp) | Run forge as an MCP server on stdio, so any agent harness can drive it |
 | [`reliant forge obs`](#reliant-forge-obs) | Ask what happened: logs, traces, endpoints, metrics, SQL, profiles and alerts |
 | [`reliant forge obs alerts`](#reliant-forge-obs-alerts) | Alert rules declared for an environment |
@@ -239,6 +332,8 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant forge project delete`](#reliant-forge-project-delete) | Delete (retire) a service from the project — the inverse of `forge scaffold service` |
 | [`reliant forge project delete service`](#reliant-forge-project-delete-service) | Retire a service (inverse of `forge scaffold service`) |
 | [`reliant forge project disown`](#reliant-forge-project-disown) | Permanently transfer a forge-generated file to user ownership (one-way), or decline a scaffold (--absent) |
+| [`reliant forge project doctor`](#reliant-forge-project-doctor) | Check that the PROJECT is well-formed (deployability, payload caps, tooling, cluster capability) |
+| [`reliant forge project doctor parity`](#reliant-forge-project-doctor-parity) | Diff a service's host-mode vs cluster-mode env+config |
 | [`reliant forge project features`](#reliant-forge-project-features) | Print the resolved feature graph (on/off, why, dependencies) |
 | [`reliant forge project frontends`](#reliant-forge-project-frontends) | Print the directories of this project's in-repo frontends, one per line (what task and the CI gate loop over) |
 | [`reliant forge project graph`](#reliant-forge-project-graph) | Emit a JSON dependency graph of the project's declared resources |
@@ -254,6 +349,7 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant forge project rescaffold`](#reliant-forge-project-rescaffold) | Re-create scaffold-once files you deleted, as forge would scaffold them today |
 | [`reliant forge project scaffolded`](#reliant-forge-project-scaffolded) | List the scaffold-once files forge has written, and which are absent |
 | [`reliant forge project shapes`](#reliant-forge-project-shapes) | List every API shape — RPCs, messages, enums, tables, handlers, hooks — with file:line |
+| [`reliant forge project start`](#reliant-forge-project-start) | Print the greenfield brief: empty directory to authored protos, in one call |
 | [`reliant forge project upgrade`](#reliant-forge-project-upgrade) | Move the project to a newer forge and apply every mechanical fix for the range |
 | [`reliant forge project upgrade apply`](#reliant-forge-project-upgrade-apply) | Record a migration as applied (writes .forge/migrations.json) |
 | [`reliant forge project upgrade list`](#reliant-forge-project-upgrade-list) | List pending forge migrations for this project |
@@ -261,7 +357,20 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant forge registry login`](#reliant-forge-registry-login) | docker login to every registry the env's workloads declare |
 | [`reliant forge registry ref`](#reliant-forge-registry-ref) | Print the digest-pinned refs `forge env build <env> --push` pushed |
 | [`reliant forge release`](#reliant-forge-release) | Inspect and verify release ledgers |
+| [`reliant forge release at`](#reliant-forge-release-at) | Which release was live at a moment, and the releases either side |
+| [`reliant forge release backfill-migrations`](#reliant-forge-release-backfill-migrations) | Record, from git, the migrations of releases cut before forge recorded them |
 | [`reliant forge release bundle`](#reliant-forge-release-bundle) | Pull an environment's recorded bundle for a release, and optionally diff it against the live clusters |
+| [`reliant forge release gate`](#reliant-forge-release-gate) | Record and read check evidence against a promotion |
+| [`reliant forge release gate list`](#reliant-forge-release-gate-list) | Read every check result attached to a promotion |
+| [`reliant forge release gate record`](#reliant-forge-release-gate-record) | Record one check's result against a promotion |
+| [`reliant forge release interrupted`](#reliant-forge-release-interrupted) | Whether a cut of <version> pushed its images, was never recorded, and can be resumed from here |
+| [`reliant forge release ledger`](#reliant-forge-release-ledger) | Move and inspect deploy ledgers |
+| [`reliant forge release ledger export`](#reliant-forge-release-ledger-export) | Write the selected ledger to a directory, to VERIFY an import |
+| [`reliant forge release ledger import`](#reliant-forge-release-ledger-import) | Import a ledger from a checkout's committed history, or from another ledger directory |
+| [`reliant forge release ledger show`](#reliant-forge-release-ledger-show) | Print this machine's ledger records — promotions, applies and local sessions |
+| [`reliant forge release ledger where`](#reliant-forge-release-ledger-where) | Print which backend holds an environment's ledger, and the declaration that chose it |
+| [`reliant forge release list`](#reliant-forge-release-list) | The release timeline of an environment, newest first |
+| [`reliant forge release show`](#reliant-forge-release-show) | One release in full: commits and PRs, what changed, migrations, gates, health |
 | [`reliant forge release verify`](#reliant-forge-release-verify) | Prove every artifact a release names actually exists and matches |
 | [`reliant forge release where`](#reliant-forge-release-where) | Show which environments are currently bound to a release |
 | [`reliant forge report-bug`](#reliant-forge-report-bug) | Report a defect in forge itself to the Reliant engineering team |
@@ -312,6 +421,13 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant forge tools`](#reliant-forge-tools) | Manage developer tooling forge depends on (proto plugins, linters, etc.) |
 | [`reliant forge tools install`](#reliant-forge-tools-install) | Install codegen tools (protoc-gen-go, protoc-gen-connect-go, goimports), or the named tools (golangci-lint, buf) |
 | [`reliant forge tools pins`](#reliant-forge-tools-pins) | Print the tool versions this forge pins (golangci-lint, buf, …), for CI to read |
+| [`reliant forge ui`](#reliant-forge-ui) | Frontend tooling: the component library and frontend source maps |
+| [`reliant forge ui component`](#reliant-forge-ui-component) | Manage UI components from the component library |
+| [`reliant forge ui component install`](#reliant-forge-ui-component-install) | Install components into your project |
+| [`reliant forge ui component list`](#reliant-forge-ui-component-list) | List all available components |
+| [`reliant forge ui component search`](#reliant-forge-ui-component-search) | Search components by keyword |
+| [`reliant forge ui sourcemaps`](#reliant-forge-ui-sourcemaps) | File a frontend's source maps so its browser errors can be symbolicated |
+| [`reliant forge ui sourcemaps push`](#reliant-forge-ui-sourcemaps-push) | File the source maps of a built directory forge did not build |
 | [`reliant forge version`](#reliant-forge-version) | Print the forge version and build identity |
 | [`reliant github`](#reliant-github) | Act on GitHub as the Reliant bot (reviews, labels, merges) or as yourself |
 | [`reliant github gh`](#reliant-github-gh) | Run gh as the Reliant bot for one repository (--as app, the default) or as yourself |
@@ -362,6 +478,16 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant workflow validate-tree`](#reliant-workflow-validate-tree) | Validate a workflow tree with preset-aware cross-workflow checks |
 | [`reliant workflow wait-for-gate`](#reliant-workflow-wait-for-gate) | Block until the workflow needs you — the next open question/approval |
 | [`reliant workflow watch`](#reliant-workflow-watch) | Watch a workflow execution and print meaningful boundaries as they happen |
+| [`reliant worktree`](#reliant-worktree) | Inspect and restore the worktrees the daemon reclaims |
+| [`reliant worktree reclaim`](#reliant-worktree-reclaim) | The daemon's last reclaim report, and decisions about proposed worktrees |
+| [`reliant worktree reclaim approve`](#reliant-worktree-reclaim-approve) | Approve reclaiming proposed worktrees |
+| [`reliant worktree reclaim decline`](#reliant-worktree-reclaim-decline) | Decline reclaiming proposed worktrees |
+| [`reliant worktree reclaim note`](#reliant-worktree-reclaim-note) | Attach a reviewing note to proposed worktrees |
+| [`reliant worktree reclaim proposals`](#reliant-worktree-reclaim-proposals) | Print the pending proposals as JSON |
+| [`reliant worktree reclaim report`](#reliant-worktree-reclaim-report) | Show the daemon's last reclaim report |
+| [`reliant worktree reclaim scan`](#reliant-worktree-reclaim-scan) | Run a dry-run pass now and write its report |
+| [`reliant worktree reclaimed`](#reliant-worktree-reclaimed) | List the captures of reclaimed worktrees |
+| [`reliant worktree restore`](#reliant-worktree-restore) | Recreate a reclaimed worktree from its capture |
 
 ## Global Flags
 
@@ -552,7 +678,8 @@ API tokens authenticate automation against the Reliant API without a browser
 login. 'reliant auth login' already stores one for this CLI; 'create' mints an
 additional, separately named token to hand to a script or CI (RELIANT_TOKEN).
 
-Creating a token is a consented browser login: a token never mints a token.
+Creating a token is a consented login (browser or device code): a token never
+mints a token.
 Listing and revoking use the resolved credential (RELIANT_TOKEN or your login).
 
 ```
@@ -574,11 +701,23 @@ reliant auth token
 Create a new API token
 
 Mints an API token (reliant:api, 90 days) named reliant-cli@<name> through a
-browser login you approve, and prints it once. It is NOT stored: this CLI
-keeps using its own login. Hand the printed token to automation as
-RELIANT_TOKEN.
+login you approve, and prints it once. It is NOT stored: this CLI keeps using
+its own login. Hand the printed token to automation as RELIANT_TOKEN.
 
 Re-running with the same --name replaces that token.
+
+You approve it the way you approve 'reliant auth login': in a browser that
+calls back to a loopback port of THIS machine, or with a device code (RFC 8628)
+you approve on any device. The browser is the default, except where its
+callback cannot reach your browser: a Reliant cloud machine, an ssh session, a
+Linux host with no display, or a Reliant agent's shell. There the device code
+is used. --device or --browser chooses explicitly.
+
+--scope narrows the token to part of the API instead of all of it. Repeat it, or
+give a comma-separated list. Without it the token is reliant:api, the whole
+API. A narrow token reaches only the rpcs its scopes cover and gets
+PermissionDenied (scope_missing) on the rest. Valid scopes:
+reliant:api, runs:read, runs:start, runs:control, triggers:fire, triggers:manage, inbox:read, inbox:manage, approvals:decide, questions:answer.
 
 ```
 reliant auth token create [flags]
@@ -588,7 +727,10 @@ reliant auth token create [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
+| `--browser` | `bool` | - | Approve in a browser that calls back to this machine (the default on a desktop) |
+| `--device` | `bool` | - | Approve with a device code on any device (the default where a browser cannot reach this machine) |
 | `--name` | `string` | - | Label for the token, e.g. ci-deploy (required) |
+| `--scope` | `stringSlice` | `[]` | Narrow the token to a scope; repeatable or comma-separated, e.g. --scope runs:read --scope triggers:fire (default reliant:api) |
 
 ---
 
@@ -1055,6 +1197,7 @@ reliant forge
 
 | Command | Description |
 |---------|-------------|
+| [`agent`](#reliant-forge-agent) | For coding agents: skills, the MCP server, and filing a forge bug |
 | [`api`](#reliant-forge-api) | Inspect and exercise Connect RPC endpoints over plain HTTP+JSON |
 | [`build`](#reliant-forge-build) | Compile the project's binaries and frontends locally (never publishes) |
 | [`ci`](#reliant-forge-ci) | CI helper commands — verify, scan, and validate in CI pipelines |
@@ -1063,6 +1206,7 @@ reliant forge
 | [`component`](#reliant-forge-component) | Manage UI components from the component library |
 | [`db`](#reliant-forge-db) | Database and migration commands |
 | [`debug`](#reliant-forge-debug) | Debug a running service with Delve |
+| [`dev`](#reliant-forge-dev) | The local inner loop: the k3d dev cluster, a debugger, and curl for an rpc |
 | [`doctor`](#reliant-forge-doctor) | Check that the PROJECT is well-formed (deployability, payload caps, tooling, cluster capability) |
 | [`domain`](#reliant-forge-domain) | Manage custom domains and what they serve |
 | [`env`](#reliant-forge-env) | Manage deploy environments: bring stacks up/down, deploy releases, and inspect |
@@ -1075,6 +1219,7 @@ reliant forge
 | [`lint`](#reliant-forge-lint) | Run linters on the project (report-only: writes nothing unless --fix) |
 | [`login`](#reliant-forge-login) | Authenticate to the control plane(s) this project declares |
 | [`logout`](#reliant-forge-logout) | Forget the stored credential for this project's control plane(s) |
+| [`machine`](#reliant-forge-machine) | This machine's housekeeping: heavy-job slots, storage, and forge's pinned tools |
 | [`mcp`](#reliant-forge-mcp) | Run forge as an MCP server on stdio, so any agent harness can drive it |
 | [`obs`](#reliant-forge-obs) | Ask what happened: logs, traces, endpoints, metrics, SQL, profiles and alerts |
 | [`package`](#reliant-forge-package) | Manage internal packages |
@@ -1089,6 +1234,7 @@ reliant forge
 | [`start`](#reliant-forge-start) | Print the greenfield brief: empty directory to authored protos, in one call |
 | [`storage`](#reliant-forge-storage) | Inspect and bound local caches; preserve persistent application data |
 | [`tools`](#reliant-forge-tools) | Manage developer tooling forge depends on (proto plugins, linters, etc.) |
+| [`ui`](#reliant-forge-ui) | Frontend tooling: the component library and frontend source maps |
 | [`version`](#reliant-forge-version) | Print the forge version and build identity |
 
 **Flags:**
@@ -1096,6 +1242,218 @@ reliant forge
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
 | `--project-dir`, `-C` | `string` | - | resolve the project from this directory instead of the current one |
+
+---
+
+### reliant forge agent
+
+For coding agents: skills, the MCP server, and filing a forge bug
+
+```
+reliant forge agent
+```
+
+**Subcommands:**
+
+| Command | Description |
+|---------|-------------|
+| [`mcp`](#reliant-forge-agent-mcp) | Run forge as an MCP server on stdio, so any agent harness can drive it |
+| [`report-bug`](#reliant-forge-agent-report-bug) | Report a defect in forge itself to the Reliant engineering team |
+| [`skill`](#reliant-forge-agent-skill) | Manage Forge skills — conventions and playbooks for LLM agents |
+
+---
+
+#### reliant forge agent mcp
+
+Run forge as an MCP server on stdio, so any agent harness can drive it
+
+Run forge as a Model Context Protocol server on stdio.
+
+Any MCP-capable harness (Claude Code, Codex, Cursor, ...) can then call forge's
+introspection, skill and lint/generate verbs as tools, with no memory file in
+the project telling it how. The server says what forge is, and tells the model to
+load the 'forge' skill first.
+
+Tools (each but explain_error takes an optional "dir": the project to act on;
+default is the directory the server was started in, or -C):
+
+  read-only   capabilities   every verb, lint analyzer and marker
+              annotations    the entity-authoring vocabulary
+              libraries      forge/pkg and web-runtime APIs
+              audit          what THIS project currently is
+              shapes         where every rpc/message/table/handler is, with file:line
+              skill_list     the skill catalog
+              skill_search   find a skill by keyword
+              skill_load     print one skill
+              deploy_status  the claimable deploy of an env: URL, claim link, state
+              explain_error  a forge failure's meaning and the exact next command
+  mutating    lint           forge lint --quiet [--scope PATH...]
+              generate       forge generate [--dry-run | --check]
+              deploy_claimable
+                             forge env deploy <env> --claimable: a live URL plus a
+                             claim link, no account; adopts a Vite/Next.js app with
+                             no forge.yaml in place first. Streams progress
+                             (notifications/progress) and stops on cancel
+
+Each tool runs the same command in-process; it does not shell out to a forge
+binary, and it does not hand a project pinned to another forge over to that
+forge (it reports the skew instead).
+
+Register it. With no install, the command is "npx -y @reliantlabs/forge mcp"
+(the npm shim downloads the matching forge binary on first run):
+
+  Claude Code   claude mcp add forge -- npx -y @reliantlabs/forge mcp
+                claude mcp add forge -- forge mcp
+  Codex         codex mcp add forge -- forge mcp
+  Cursor        {"mcpServers": {"forge": {"command": "forge", "args": ["mcp"]}}}
+                in .cursor/mcp.json
+
+docs/mcp.md has the config files in full.
+
+```
+reliant forge agent mcp
+```
+
+---
+
+#### reliant forge agent report-bug
+
+Report a defect in forge itself to the Reliant engineering team
+
+Report a defect in forge itself to the Reliant engineering team. One call files it; there is nothing to follow up.
+
+Use it when forge misbehaves, not the user's code: a forge command fails, hangs or generates something wrong, or a forge lint, skill or doc is wrong.
+
+Do not use it for bugs in the user's own application, for test or build failures in their code, or for your own mistakes.
+
+File each defect once: a repeat of the same title within 30 minutes returns the first report's id and sends nothing. Put what you observed in evidence — exact commands, error text, file paths — never credentials or the user's file contents. Then carry on with your task, and still tell the user when the defect blocks them.
+
+What is sent: the report's fields, redacted of credential shapes and home
+directories; forge's version, OS and architecture; the command line with
+secrets removed; the project's pinned forge_version; the agent harness
+forge detected; and a random install id used only for rate limiting. Never
+file contents or environment values. --dry-run prints the exact payload
+without sending it. forge sends nothing unless someone runs this command.
+
+When you are logged in (forge login), the report carries your user id so
+the team can follow up; --anonymous leaves it off.
+
+Exit status is non-zero when the report could not be filed.
+
+```
+reliant forge agent report-bug --severity <level> --title <line> [--summary ...] [--expected ...] [--actual ...] [--evidence ...] [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--actual` | `string` | - | what happened instead, with the exact error text |
+| `--anonymous` | `bool` | - | do not attach your forge login, even when you are logged in |
+| `--dry-run` | `bool` | - | print exactly what would be sent, and send nothing |
+| `--evidence` | `string` | - | how to reproduce it: commands run, their output, file paths |
+| `--expected` | `string` | - | what should have happened |
+| `--json` | `bool` | - | read the report from stdin as a JSON object with the fields severity, title, summary, expected, actual, evidence |
+| `--output`, `-o` | `string` | `text` | text or json |
+| `--severity` | `string` | - | critical (data loss, or nothing can proceed), high (it blocks your task), medium (there is a workaround) or low (cosmetic) |
+| `--summary` | `string` | - | what happened, in a few sentences |
+| `--title` | `string` | - | one line naming the defect; ids and numbers go in --evidence |
+
+---
+
+#### reliant forge agent skill
+
+Manage Forge skills — conventions and playbooks for LLM agents
+
+```
+reliant forge agent skill [flags]
+```
+
+**Subcommands:**
+
+| Command | Description |
+|---------|-------------|
+| [`list`](#reliant-forge-agent-skill-list) | List available skills (forge-shipped, project, and user-global) |
+| [`load`](#reliant-forge-agent-skill-load) | Print a skill's content to stdout (resolves user > project > forge) |
+| [`search`](#reliant-forge-agent-skill-search) | Search skills across all scopes by keyword (path/name=3, desc/body=1) |
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+
+---
+
+#### reliant forge agent skill list
+
+List available skills (forge-shipped, project, and user-global)
+
+List available skills (forge-shipped, project, and user-global).
+
+The default view is GROUPED and fits on one screen: the start-here skills
+first, then one row per skill group with its sub-skills collapsed into a
+'+N' count. Every collapsed sub-skill is still loadable by its exact path
+('forge skill load db/seeding'). Pass --all for the exhaustive flat table, or a
+group name ('forge skill list observability') for that group's parent and every
+sub-skill, each with its full path and description.
+
+'forge skill search <keyword>' is usually faster than reading either view —
+it scores paths, descriptions and BODIES, so it finds skills whose title
+never mentions your term.
+
+One-time migration playbooks (relevance: migration — the skills under
+migrations/) are hidden by default; they only matter while crossing a
+specific forge version transition. Pass --include-migrations to list
+them, or use 'forge project upgrade list' to see the migrations that actually
+apply to this project's pinned forge_version.
+
+```
+reliant forge agent skill list [group] [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--all` | `bool` | - | Print the exhaustive flat table (every sub-skill, full descriptions) instead of the grouped view |
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--include-migrations` | `bool` | - | Include one-time migration skills (relevance: migration) in the listing |
+| `--json` | `bool` | - | Output JSON instead of a tab-separated table |
+| `--with-bodies` | `bool` | - | With --json: carry each skill's body, exactly as skill load prints it (one call for a whole catalog) |
+
+---
+
+#### reliant forge agent skill load
+
+Print a skill's content to stdout (resolves user > project > forge)
+
+```
+reliant forge agent skill load <name> [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+
+---
+
+#### reliant forge agent skill search
+
+Search skills across all scopes by keyword (path/name=3, desc/body=1)
+
+```
+reliant forge agent skill search <query> [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--json` | `bool` | - | Output JSON instead of a tab-separated table |
 
 ---
 
@@ -1229,6 +1587,7 @@ reliant forge build [environment] [flags]
 | `--output`, `-o` | `string` | `bin` | Output directory for binaries |
 | `--parallel` | `bool` | `true` | Build services in parallel |
 | `--plan` | `bool` | - | Resolve the exact build set this invocation would build (same KCL discovery, same --target narrowing) and PREFLIGHT every step without running it: each go-build package exists and is a main package, each Dockerfile and frontend build script exists, each ShellBuild cwd exists, and with --release the ledger would cover everything the env declares. Builds, pushes, generates and writes nothing; exits non-zero on anything the real build would fail on. Pass it the release cut's exact arguments to gate a PR on the cut. |
+| `--rebuild` | `bool` | - | Run every ShellBuild's command, even one whose declared inputs are unchanged since its last successful build and whose image is still in the registry |
 | `--tag` | `string` | - | Override the image tag of every image this build writes (default: the tag a workload's image pins, else the env's image_tag, else git describe --tags --always --dirty). Refused when it differs from the tag a selected workload's image pins — the deploy pulls the pin. Recorded in .forge/state so forge env deploy uses the same value. |
 | `--target`, `-t` | `string` | `all` | Build target (all | external | a specific service/frontend name). `external` builds only the KCL services declaring build_cmd; requires the environment argument. |
 | `--target-arch` | `string` | - | Override target GOARCH for cross-compilation (default: forge.yaml deploy.target_arch, then amd64 for docker builds) |
@@ -1690,7 +2049,12 @@ reliant forge cloud [flags]
 
 | Command | Description |
 |---------|-------------|
+| [`cluster`](#reliant-forge-cloud-cluster) | Connect a cluster you operate to the control plane, as a deploy target |
+| [`domain`](#reliant-forge-cloud-domain) | Manage custom domains and what they serve |
 | [`identity`](#reliant-forge-cloud-identity) | Inspect managed identity and administer its users |
+| [`login`](#reliant-forge-cloud-login) | Authenticate to the control plane(s) this project declares |
+| [`logout`](#reliant-forge-cloud-logout) | Forget the stored credential for this project's control plane(s) |
+| [`registry`](#reliant-forge-cloud-registry) | Log in to and read refs from the registries an env's workloads declare |
 | [`status`](#reliant-forge-cloud-status) | Show the endpoint and credential source for an environment |
 | [`token`](#reliant-forge-cloud-token) | Mint, list and revoke ORG automation tokens (the CI deploy credential) |
 
@@ -1699,6 +2063,519 @@ reliant forge cloud [flags]
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
 | `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+
+---
+
+#### reliant forge cloud cluster
+
+Connect a cluster you operate to the control plane, as a deploy target
+
+```
+reliant forge cloud cluster
+```
+
+**Subcommands:**
+
+| Command | Description |
+|---------|-------------|
+| [`connect`](#reliant-forge-cloud-cluster-connect) | Register a Kubernetes cluster the control plane may deploy into, as one env's binding |
+| [`disconnect`](#reliant-forge-cloud-cluster-disconnect) | Deregister a connected cluster and remove every grant forge created in it |
+| [`list`](#reliant-forge-cloud-cluster-list) | List the clusters connected to the control plane, with their state and env bindings |
+| [`show`](#reliant-forge-cloud-cluster-show) | Show one connected cluster |
+
+---
+
+#### reliant forge cloud cluster connect
+
+Register a Kubernetes cluster the control plane may deploy into, as one env's binding
+
+Register a cluster you operate, by address, and grant ONE env's binding exactly
+what the control plane applies there.
+
+  forge cluster connect prod-us --context gke_acme_us-central1_prod --env prod
+  forge cluster connect prod-us --context ... --env prod --apply-scope namespace:acme-prod,acme-jobs
+  forge cluster connect hub --context ... --env prod --apply-scope cluster
+  forge cluster connect prod-us --context ... --env prod --address https://203.0.113.10:6443 --ca-file ca.pem
+  forge cluster connect prod-us --context ... --env prod --dry-run
+  forge cluster disconnect prod-us --env prod --context ...
+
+HOW IT AUTHENTICATES — one way, on any Kubernetes cluster. Your own kube context
+(--context) bootstraps a dedicated ServiceAccount for this binding and applies
+its least-privilege RBAC; forge reads that ServiceAccount's token and uploads it,
+write-only, to the control plane. The control plane authenticates to your cluster
+as that ServiceAccount and nothing else: no cloud identity of ours is trusted in
+your project, and there is no IAM grant for you to run. The token is bounded by
+the RBAC below and revoked by disconnect (which deletes the ServiceAccount).
+Rotation is a re-run of connect.
+
+A BINDING is one env on one cluster, with its OWN ServiceAccount. Nothing is
+shared across bindings. The only objects connect writes in your cluster are the
+grant itself, that ServiceAccount and its token Secret.
+
+ADDRESS — the API server the control plane dials, from its own pods:
+
+  default        the context's cluster.server and CA. On a GKE context, the
+                 cluster's PUBLIC endpoint and CA from GKE (gcloud describe).
+  --address      an https://host[:port] override, port 443 or 6443. Use it when
+                 the control plane reaches the cluster at another address than
+                 your kubeconfig does.
+  --ca-file      a PEM bundle for the API server's certificate, over the CA
+                 forge would otherwise read.
+
+A GKE DNS endpoint (*.gke.goog) is refused: it authenticates Google identities,
+and a ServiceAccount token cannot pass it. Private, VPC, link-local and metadata
+addresses are refused by the control plane unless your organization is exempt.
+
+APPLY SCOPE — YOU choose where the identity may write; the env's render
+chooses what, and only for what the CONTROL PLANE applies:
+
+  namespace:<ns>[,<ns>…]   a Role and RoleBinding in each named namespace. The
+                           DEFAULT, over every namespace the render targets.
+                           Refused if the render carries cluster-scoped kinds.
+  cluster                  a ClusterRole and ClusterRoleBinding over every
+                           namespace, and forge says so every time.
+
+Either way the rules are derived from the render: one rule per resource the
+control plane applies, nothing else. Delivery units that 'forge env deploy'
+applies itself (bundle.applier = "forge", or units left out of
+bundle.hub_converges) contribute nothing: an env where forge applies everything
+gets NO apply rules, and connect says so. escalate and bind are never granted
+without resourceNames: where the render carries Roles or ClusterRoles they are
+pinned to those exact names, and impersonate is never granted. A release that
+adds a kind is Forbidden by your cluster's own access check until you re-run
+connect — review it first with --dry-run, which prints the exact RBAC diff
+against what is on the cluster.
+
+Re-running connect UPDATES the cluster of that name and prunes grants the new
+plan no longer names. --env names which control plane to talk to AND whose
+binding this is; the render is read from the project in the current directory.
+
+DRY RUN — contacts no control plane and changes nothing. It renders the env,
+reads the binding's live RBAC through --context (read-only) — or from a capture
+with --live-from <file> (kubectl get clusterrole,clusterrolebinding,role,
+rolebinding -A -l <selector> -o yaml, selector printed by --dry-run) — and
+prints the diff and the permissions this run would newly grant.
+
+SECRET DELIVERY — opt-in, off unless named. A Secret the control plane supplies
+and renews (forge.ControlPlaneSecret) needs write access to exactly that
+Secret and no other. Name each one:
+
+  forge cluster connect prod-us --context ... --env prod \
+    --delivery-secret control-plane-prod/reliant-otel-auth
+
+forge then applies, per namespace, a Role limited by resourceNames to get,
+update, patch and delete on the named Secrets, plus create — which RBAC cannot
+limit by name, so a ValidatingAdmissionPolicy admits only the named
+namespace/name pairs, only as type Opaque, for the delivery identities only.
+--delivery-subject (user:<name> or serviceaccount:<ns>/<name>) binds a second,
+dedicated delivery identity alongside the binding's identity.
+
+SECRET-STORE ISSUER — connect also tells the control plane which service-account
+issuer the cluster's pods are signed by, so the secret store can verify the
+projected token an External Secrets Operator logs in with, against the cluster's
+OWN keys (no stored credential, no call back into the cluster). forge reads the
+issuer and key set from the API server through --context:
+
+  --issuer auto      (default) discover on GKE, upload elsewhere; if the issuer
+                     cannot be read or the control plane refuses it, the cluster
+                     still connects for deploys and forge says what is missing
+  --issuer discover  the store fetches <issuer>/.well-known/openid-configuration
+                     itself; the issuer must be reachable from the internet
+  --issuer upload    forge sends /openid/v1/jwks: for a cluster the store cannot
+                     reach (private, k3d). PUBLIC keys only; a set holding a
+                     private or symmetric key is never sent. A snapshot: re-run
+                     connect after a signing-key rotation to refresh it
+  --issuer skip      leave the registration as it is
+  --issuer withdraw  remove it; the store stops trusting the cluster
+
+The binding's grant gains 'get' on /openid/v1/jwks. The store's id for the
+cluster (its auth mount is jwt-<id>) is assigned by the control plane, is global
+across organizations, and is printed and kept in
+.forge/state/cluster-issuer-<name>.json; use it as the connected cluster name.
+
+```
+reliant forge cloud cluster connect <name> [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--address` | `string` | - | https://host[:port] the control plane dials, port 443 or 6443 (default: the context's server; on GKE the cluster's public endpoint) |
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--apply-scope` | `string` | - | Where the binding's identity may write: namespace:<ns>[,<ns>…] (default: the namespaces the env renders) or cluster (cluster-admin equivalent) |
+| `--ca-file` | `string` | - | PEM file for the API server's certificate authority (default: read from the context, or GKE) |
+| `--context` | `string` | - | kubectl context addressing the cluster (required) |
+| `--delivery-secret` | `stringArray` | `[]` | <namespace>/<name> of a Secret the control plane may write and renew (repeatable) |
+| `--delivery-subject` | `string` | - | Also bind the delivery grant to this dedicated identity: user:<name> or serviceaccount:<namespace>/<name> |
+| `--dry-run` | `bool` | - | Print the RBAC diff against the cluster and what would be sent; contact no control plane and change nothing |
+| `--env` | `string` | - | Environment whose binding this is, and whose control plane to talk to (required) |
+| `--issuer` | `string` | `auto` | Register the cluster's service-account issuer with the secret store: auto, discover, upload, skip or withdraw |
+| `--live-from` | `string` | - | With --dry-run: diff against this kubectl capture instead of reading the cluster |
+| `--token` | `string` | - | Credential to use, ahead of the env var and the credentials file |
+
+---
+
+#### reliant forge cloud cluster disconnect
+
+Deregister a connected cluster and remove every grant forge created in it
+
+Deregister the connected cluster of this exact name.
+
+Two halves, and the order matters: the control plane revokes the cluster's
+credential first, then forge deletes the grant it created in the cluster — the
+Roles, ClusterRoles and bindings of every binding of this cluster, each
+binding's token ServiceAccount and Secret, and the delivery policy. They are
+found by label, so nothing else in the cluster is touched. A credential revoked
+server-side is already powerless, so a failure to reach the cluster afterwards
+leaves litter rather than a live credential.
+
+REFUSED while any live environment targets the cluster — that check is the
+control plane's, and it is why this is not a local delete.
+
+  forge cluster disconnect prod-us --env prod --context gke_acme_us-central1_prod
+
+--context is optional and names where to clean up. Without it, forge
+deregisters the cluster and prints the commands to delete the grant by hand.
+
+```
+reliant forge cloud cluster disconnect <name> [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--context` | `string` | - | kubectl context to delete forge's objects through |
+| `--env` | `string` | - | Environment whose control plane to talk to (required) |
+| `--token` | `string` | - | Credential to use, ahead of the env var and the credentials file |
+
+---
+
+#### reliant forge cloud cluster list
+
+List the clusters connected to the control plane, with their state and env bindings
+
+List every cluster the organization has connected, as the control plane sees it:
+name, id, state, auth, registered address and CA fingerprint, the secret-store
+issuer registration, the environments bound to it, and created/updated times.
+
+  forge cluster list --env prod
+  forge cluster list --env prod --json
+
+State is the control plane's own: CONNECTED (it holds usable connection
+material), WAITING (it holds nothing to try with) or STALE (the token's expiry
+has passed). Use it to verify a 'forge cluster connect'.
+
+--json prints one document, schema forge.cluster.list/v1. A member the control plane did not
+report is null. No token or certificate is ever printed.
+
+--env names which control plane to talk to (required).
+
+```
+reliant forge cloud cluster list [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--env` | `string` | - | Environment whose control plane to talk to (required) |
+| `--json` | `bool` | - | Print one machine-readable document |
+| `--token` | `string` | - | Credential to use, ahead of the env var and the credentials file |
+
+---
+
+#### reliant forge cloud cluster show
+
+Show one connected cluster
+
+Show one connected cluster by exact name: the same fields as 'forge cluster list',
+read through the control plane's GetCluster.
+
+  forge cluster show prod-us --env prod
+  forge cluster show prod-us --env prod --json
+
+--json prints one document, schema forge.cluster.show/v1. No token or certificate is ever printed.
+
+```
+reliant forge cloud cluster show <name> [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--env` | `string` | - | Environment whose control plane to talk to (required) |
+| `--json` | `bool` | - | Print one machine-readable document |
+| `--token` | `string` | - | Credential to use, ahead of the env var and the credentials file |
+
+---
+
+#### reliant forge cloud domain
+
+Manage custom domains and what they serve
+
+Manage custom hostnames as control-plane resources.
+
+A DOMAIN is claimed once for your organization and is not tied to an
+environment. A BINDING points it at one environment and one target inside
+it. Adding a domain tells you the DNS to publish; once it verifies, the
+platform issues its certificate and serves it.
+
+  forge domain add hounders.club --env prod              # claim it, print the DNS
+  forge domain ls --env prod
+  forge domain show hounders.club --env prod
+  forge domain verify hounders.club --env prod           # check DNS now
+  forge domain bind hounders.club --env prod --target web
+  forge domain bind www.hounders.club --env prod --redirect-to hounders.club
+  forge domain unbind hounders.club --env prod
+  forge domain rm hounders.club --env prod
+
+Domains are NOT declared in KCL. A hostname you bring needs an action at
+your registrar, ownership verification and a certificate — asynchronous and
+human-gated, none of which a deploy converges — and it binds to ONE
+environment while an env file renders to many. A hosted spec that carries a
+`domains` field is refused at render. (forge.OnCluster keeps
+`Port.domains`: there you own the ingress.)
+
+--env names WHICH CONTROL PLANE to talk to, from that env's
+forge.ControlPlane declaration — a domain itself has no environment. Your
+organization comes from the credential and is never sent, so there is
+nothing to widen. The credential is --token, then the declared env var, then
+the credentials file entry for that endpoint (`forge login`), then the
+credential helper $FORGE_CREDENTIAL_HELPER (a host application's session —
+Reliant sets it, so a user signed in to Reliant needs no `forge login`).
+
+```
+reliant forge cloud domain [flags]
+```
+
+**Subcommands:**
+
+| Command | Description |
+|---------|-------------|
+| [`add`](#reliant-forge-cloud-domain-add) | Claim a hostname and print the DNS records to publish |
+| [`bind`](#reliant-forge-cloud-domain-bind) | Point a domain at one environment's workload or frontend |
+| [`ls`](#reliant-forge-cloud-domain-ls) | List your organization's domains and what they serve |
+| [`rm`](#reliant-forge-cloud-domain-rm) | Remove a domain and stop serving it |
+| [`show`](#reliant-forge-cloud-domain-show) | Show one domain's state, binding and required DNS |
+| [`unbind`](#reliant-forge-cloud-domain-unbind) | Stop a domain serving, and keep the domain |
+| [`verify`](#reliant-forge-cloud-domain-verify) | Check a domain's DNS now, instead of waiting for the poller |
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+
+---
+
+#### reliant forge cloud domain add
+
+Claim a hostname and print the DNS records to publish
+
+Claim a hostname for your organization and print the DNS to publish.
+
+The domain starts in pending_dns: those records ARE the next step, and
+nothing converges until they resolve. An apex and its www are two names —
+add both, and bind one as a redirect to the other.
+
+Claiming does not lock the name. Any number of organizations may add the
+same hostname and sit in pending_dns; the first to PROVE ownership takes it,
+and the others move to conflict. Locking at creation would let anyone who
+merely types a domain deny it to its real owner.
+
+```
+reliant forge cloud domain add <hostname> [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--env` | `string` | - | Environment whose control plane to talk to (required; deploy/kcl/<env>/) |
+| `--json` | `bool` | - | Emit the created domain as JSON |
+| `--token` | `string` | - | Credential to use, ahead of the env var and the credentials file |
+
+---
+
+#### reliant forge cloud domain bind
+
+Point a domain at one environment's workload or frontend
+
+Point a domain at a target in --env, replacing any binding it has.
+
+  forge domain bind hounders.club     --env prod --target web
+  forge domain bind www.hounders.club --env prod --redirect-to hounders.club
+
+--target names the WORKLOAD OR FRONTEND as your config names it, not a
+deployment id: a deployment id is re-minted when a workload is replaced,
+which is exactly when a binding must survive. It also lets you bind a domain
+before its target has ever been deployed, which is the natural order for a
+first launch.
+
+--redirect-to answers with a permanent redirect to another hostname,
+preserving the path and query, instead of proxying: a 301 for GET and HEAD,
+a 308 for anything else. The apex/www pair is the case for it; point the www
+name at the same records as its apex.
+
+--hsts-include-subdomains adds includeSubDomains to the hostname's
+Strict-Transport-Security, so a browser that has seen it uses HTTPS for every
+name under it. Off by default, and leave it off until every subdomain serves
+HTTPS: a browser remembers the header for a year. A rebind without the flag
+turns it off.
+
+BINDABLE IN ANY STATE, SERVES ONLY WHEN LIVE. Bind before DNS has propagated
+and it starts serving by itself once verification and the certificate
+complete.
+
+```
+reliant forge cloud domain bind <hostname> [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--env` | `string` | - | Environment whose control plane to talk to (required; deploy/kcl/<env>/) |
+| `--hsts-include-subdomains` | `bool` | - | Add includeSubDomains to the hostname's HSTS (every subdomain must serve HTTPS) |
+| `--redirect-to` | `string` | - | Redirect permanently to this hostname instead of serving a target |
+| `--target` | `string` | - | Workload or frontend name in --env to serve |
+| `--token` | `string` | - | Credential to use, ahead of the env var and the credentials file |
+
+---
+
+#### reliant forge cloud domain ls
+
+List your organization's domains and what they serve
+
+List every domain your organization holds, with its state and binding.
+
+Every domain, not just this env's: a domain is org-scoped and has no
+environment. The SERVING column names the environment each one serves, so
+scoping by eye is possible without a second call.
+
+PATH is where the domain's DNS sends its traffic, as the control plane
+resolves it: edge (the CDN in front of hosted static sites), ingress (the
+regional ingress, no CDN) or elsewhere (not pointed at the platform). A
+static-site domain moves to the edge when you set the records
+`forge domain show` prints.
+
+```
+reliant forge cloud domain ls [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--env` | `string` | - | Environment whose control plane to talk to (required; deploy/kcl/<env>/) |
+| `--json` | `bool` | - | Emit the raw response as JSON |
+| `--token` | `string` | - | Credential to use, ahead of the env var and the credentials file |
+
+---
+
+#### reliant forge cloud domain rm
+
+Remove a domain and stop serving it
+
+Remove a domain, its binding, and stop serving it.
+
+This FREES THE HOSTNAME for another organization to claim, which is the only
+self-service escape from a conflict: the org holding it lets go.
+
+To stop serving a domain but KEEP it — and keep its verification, so
+re-binding later costs no DNS work and no new certificate — use
+`forge domain unbind` instead.
+
+```
+reliant forge cloud domain rm <hostname> [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--env` | `string` | - | Environment whose control plane to talk to (required; deploy/kcl/<env>/) |
+| `--token` | `string` | - | Credential to use, ahead of the env var and the credentials file |
+
+---
+
+#### reliant forge cloud domain show
+
+Show one domain's state, binding and required DNS
+
+```
+reliant forge cloud domain show <hostname> [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--env` | `string` | - | Environment whose control plane to talk to (required; deploy/kcl/<env>/) |
+| `--json` | `bool` | - | Emit the domain as JSON |
+| `--token` | `string` | - | Credential to use, ahead of the env var and the credentials file |
+
+---
+
+#### reliant forge cloud domain unbind
+
+Stop a domain serving, and keep the domain
+
+Stop the domain serving, and KEEP the domain.
+
+Its verification survives, so re-binding later costs no DNS work and no new
+certificate. To give the hostname up entirely, use `forge domain rm`.
+
+```
+reliant forge cloud domain unbind <hostname> [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--env` | `string` | - | Environment whose control plane to talk to (required; deploy/kcl/<env>/) |
+| `--token` | `string` | - | Credential to use, ahead of the env var and the credentials file |
+
+---
+
+#### reliant forge cloud domain verify
+
+Check a domain's DNS now, instead of waiting for the poller
+
+Check DNS right now and print the resulting state.
+
+A NUDGE, NOT THE MECHANISM. The control plane polls regardless, so this
+changes only latency — it exists because someone who has just saved a record
+wants an answer in a second rather than an hour.
+
+Not yet verified is not a failure: DNS takes time to propagate, and the
+records stay printed so you can confirm what you published.
+
+```
+reliant forge cloud domain verify <hostname> [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--env` | `string` | - | Environment whose control plane to talk to (required; deploy/kcl/<env>/) |
+| `--json` | `bool` | - | Emit the domain as JSON |
+| `--token` | `string` | - | Credential to use, ahead of the env var and the credentials file |
 
 ---
 
@@ -1722,8 +2599,9 @@ a flag. The environment must already exist in this project.
 
 Inviting creates the account (or grants roles to an existing one) and, for an
 account with no credential yet, issues a one-time password-set code; reset
-issues one for any account. The code is emailed only where the environment
-declares smtp in KCL ('status' shows "Mail:"). Without smtp the control plane
+issues one for any account. The code is emailed where the instance can send
+mail ('status' shows "Mail:"): the environment declares smtp in KCL, or the
+control plane's platform delivery is on. Without mail the control plane
 refuses both rather than send nothing: pass --return-code to have the code
 handed back, and deliver it yourself through a channel you control. The code is
 a credential. There is no password option, seed account or implicit recipient.
@@ -1993,6 +2871,214 @@ reliant forge cloud identity users <env> [flags]
 | `--page-token` | `string` | - | Continuation from the preceding response |
 | `--query` | `string` | - | Case-insensitive email substring (max 200 characters) |
 | `--token` | `string` | - | Credential to use, ahead of the env var, stored login and session helper |
+
+---
+
+#### reliant forge cloud login
+
+Authenticate to the control plane(s) this project declares
+
+Obtain a credential for a hosted control plane and store it in the shared
+credentials file (~/.config/forge/credentials.json, 0600), keyed by the endpoint.
+
+Login is about WHO you are, not WHERE you deploy, so it takes no environment.
+With no flag it logs into EVERY distinct control plane this project's envs
+declare in KCL:
+
+    control_plane = forge.ControlPlane {}    # Reliant cloud (https://admin.reliantapi.com)
+    control_plane = forge.ControlPlane {     # any other control plane
+        endpoint = "http://127.0.0.1:8090"
+    }
+
+(two envs declaring the same endpoint share one login). When nothing declares
+one — outside a project, or before any env does — it logs into Reliant cloud.
+--endpoint names one directly. There is no "current" server: every forge
+command finds its credential by the endpoint its own env declares, so which
+env a command acts on is always the env it names — never a login's side
+effect.
+
+INTERACTIVE (a human): the OAuth authorization-code flow with PKCE. forge
+opens your browser at <endpoint>/oauth/authorize, you sign in and approve,
+and the browser returns a one-time code to a temporary listener on a
+loopback port (chosen by the OS, so two logins can run at once). forge
+redeems it at <endpoint>/oauth/token for an access token (rlat_…, 90 days).
+
+NON-INTERACTIVE (CI): pass --token (with --endpoint when the project declares
+more than one control plane), or set the environment variable the environment
+declares (FORGE_CONTROL_PLANE_TOKEN by default) and skip login entirely. A
+pipeline has no browser, which is what org tokens are for.
+
+SIGNED IN TO RELIANT? You do not need this command. `reliant forge …` and every
+shell a Reliant agent runs set $FORGE_CREDENTIAL_HELPER, and forge asks that
+helper for a short-lived token minted from your Reliant session for exactly the
+control plane an env declares. forge login is for standalone forge (no Reliant)
+and for overriding the session with a different identity.
+
+CREDENTIAL PRECEDENCE, when any forge command talks to the control plane:
+
+    1. --token           explicit, beats everything
+    2. $<token_env>      the env var the environment declares — CI
+    3. the credentials file entry for that env's endpoint — what this command stores
+    4. $FORGE_CREDENTIAL_HELPER — a host application's session (Reliant's);
+       also used when the stored login (3) has expired
+
+```
+reliant forge cloud login [--endpoint URL] [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--endpoint` | `string` | - | Log into this control plane URL only, instead of every one the project declares (default when none is declared: Reliant cloud) |
+| `--no-verify` | `bool` | - | With --token: store it without checking it against the endpoint |
+| `--token` | `string` | - | Store this token instead of running the browser flow |
+
+---
+
+#### reliant forge cloud logout
+
+Forget the stored credential for this project's control plane(s)
+
+```
+reliant forge cloud logout [--endpoint URL] [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--endpoint` | `string` | - | Forget this control plane URL only, instead of every one the project declares |
+
+---
+
+#### reliant forge cloud registry
+
+Log in to and read refs from the registries an env's workloads declare
+
+Work with the image registries an environment's workloads DECLARE — each
+workload's `image` in deploy/kcl/workloads.k carries its own registry, and no
+environment declares one.
+
+The registry is never passed to forge: these commands read it from the workload
+declarations, exactly as `forge env build <env> --push` and `forge env deploy <env>` do.
+An env whose workloads name two registries is handled by both commands without
+forge needing a concept for it.
+
+```
+reliant forge cloud registry [flags]
+```
+
+**Subcommands:**
+
+| Command | Description |
+|---------|-------------|
+| [`login`](#reliant-forge-cloud-registry-login) | docker login to every registry the env's workloads declare |
+| [`ref`](#reliant-forge-cloud-registry-ref) | Print the digest-pinned refs `forge env build <env> --push` pushed |
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+
+---
+
+#### reliant forge cloud registry login
+
+docker login to every registry the env's workloads declare
+
+Log docker in to each registry host named by the images the env's workloads
+declare, so that `forge env build <env> --push` and any signing / SBOM / scanning step
+that follows can reach them.
+
+The registry HOSTS come from the workload declarations and nowhere else — there
+is no host argument and no flag that takes one. An env whose workloads push to
+two registries logs in to both, in one command.
+
+THE PLATFORM REGISTRY NEEDS NO CREDENTIAL FROM YOU. For the host named by an
+env's forge.ControlPlane registry_host (Reliant's registry by default),
+forge presents the SAME control-plane credential it reaches the control plane
+with — `--token`, then the env's declared token_env, then what `forge login`
+stored, then the credential helper $FORGE_CREDENTIAL_HELPER (a host application's
+session — Reliant sets it). One token, so there is nothing to mint and nothing
+to rotate:
+
+  forge registry login prod
+
+`forge env build <env> --push` and `forge env deploy <env>` do this for
+themselves before their first push, so a hosted pipeline usually needs no login
+step at all.
+
+FOR ANYBODY ELSE'S REGISTRY the credential is the only thing you pass, and it is
+not a registry pointer:
+
+  echo "$GITHUB_TOKEN" | forge registry login prod --username "$GITHUB_ACTOR" --password-stdin
+
+or name the environment variable holding it, the way forge.ControlPlane names
+its token_env — so a CI config states a variable NAME (non-sensitive, belongs in
+git) rather than piping a secret through a shell:
+
+  forge registry login prod --username "$GITHUB_ACTOR" --password-env GITHUB_TOKEN
+
+One credential is used for every foreign host. That is correct for the
+overwhelmingly common case (one org, one registry, one token) and honest about
+the rest: for two foreign registries needing two credentials, run the command
+twice, or log the second one in with plain `docker login` — forge holds no
+credential store and inventing one here would be a secrets manager, not a build
+tool.
+
+An env that pushes to the platform registry AND a foreign one logs in to both in
+one run: ours from the control-plane credential, theirs from the flags.
+
+A k3d-local registry (localhost / *.localhost) takes no credentials, so it is
+skipped.
+
+```
+reliant forge cloud registry login <environment> [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--password-env` | `string` | - | Name of the environment variable holding a foreign registry's credential (the forge.ControlPlane token_env convention: the NAME is in git, the VALUE never is) |
+| `--password-stdin` | `bool` | - | Read a foreign registry's credential from stdin (a credential never belongs on the command line) |
+| `--token` | `string` | - | Control-plane credential to present to the PLATFORM registry, overriding the env's token_env and the stored 'forge login' (one-off / debugging) |
+| `--username`, `-u` | `string` | - | Registry user the credential belongs to, for a registry that is NOT the platform's (e.g. $GITHUB_ACTOR, _json_key, oauth2accesstoken, AWS) |
+
+---
+
+#### reliant forge cloud registry ref
+
+Print the digest-pinned refs `forge env build <env> --push` pushed
+
+Print `<image>@<digest>` for each image the last `forge env build <env> --push`
+pushed — the immutable references a signing, SBOM, provenance or vulnerability
+scan step should act on. They are read from .forge/state/ (what the build
+recorded), so each ref names the registry its own workload declared.
+
+By default every built image is printed, one per line, prefixed with the
+workload that declared it. --image narrows to one.
+
+--github-output also appends ref=, image= and digest= to the file GitHub
+Actions names in $GITHUB_OUTPUT. With several images it writes the <workload>_
+prefixed form as well, so a later step can address a specific one.
+
+```
+reliant forge cloud registry ref <environment> [--image <name>] [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--github-output` | `bool` | - | Also append ref=, image= and digest= to $GITHUB_OUTPUT |
+| `--image` | `string` | - | Print only this image (default: every image the build pushed) |
 
 ---
 
@@ -2732,7 +3818,8 @@ Install components into your project
 Install one or more components from the library into your project's
 src/components/ui/ directory — or the directory the frontend's package.json
 names in "forge": {"components_dir": "..."}. If --dir is not specified, the
-command auto-detects the nearest frontend directory. A component whose file
+command uses the frontend you are inside, or the project's only web frontend;
+with several, it lists the --dir value for each. A component whose file
 name differs only in case from one already there (button.tsx beside
 Button.tsx) is refused: on macOS and Windows that is one file.
 
@@ -2820,7 +3907,7 @@ When something is wedged:
 
   Seeded rows are rejected by their own schema
     'forge db seed apply' names the constraint it could not place, and why.
-    Load the db/seeding skill for the constraint shapes forge can seed.
+    Load the db/seeding/constraints skill for the constraint shapes forge can seed.
 
 Project files (db/migrations, db/seeds/vocab.yaml, db/seeds/custom/) are read
 from the project root: the one -C names, or the one the current directory is
@@ -3198,7 +4285,7 @@ reliant forge db migration rebase [file...] [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
-| `--all-pending` | `bool` | - | Re-version every migration added on this branch (above the default branch's merge-base) |
+| `--all-pending` | `bool` | - | Re-version every migration added on this branch (every file the default branch does not have) |
 | `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 | `--dir` | `string` | - | Migrations directory (default: forge.yaml database.migrations_dir, else db/migrations; a relative path resolves against the project root, not the CWD) |
 
@@ -3927,6 +5014,721 @@ reliant forge debug stop [flags]
 
 ---
 
+### reliant forge dev
+
+The local inner loop: the k3d dev cluster, a debugger, and curl for an rpc
+
+```
+reliant forge dev
+```
+
+**Subcommands:**
+
+| Command | Description |
+|---------|-------------|
+| [`cluster`](#reliant-forge-dev-cluster) | Manage the local k3d cluster and inspect dev state |
+| [`curl`](#reliant-forge-dev-curl) | Print a copy-pasteable curl command for a Connect RPC method |
+| [`debug`](#reliant-forge-dev-debug) | Debug a running service with Delve |
+
+---
+
+#### reliant forge dev cluster
+
+Manage the local k3d cluster and inspect dev state
+
+Manage the local k3d development cluster and inspect dev-loop state: k3d
+cluster lifecycle, ingress URLs, status and logs. The cluster config is read
+from deploy/k3d.yaml (override via --config). A cluster you operate, connected
+to the control plane as a deploy target, is 'cloud cluster'.
+
+```
+reliant forge dev cluster
+```
+
+**Subcommands:**
+
+| Command | Description |
+|---------|-------------|
+| [`down`](#reliant-forge-dev-cluster-down) | Delete the k3d cluster |
+| [`info`](#reliant-forge-dev-cluster-info) | Print static dev-loop config (cluster name, expected context, declared ports) |
+| [`instances`](#reliant-forge-dev-cluster-instances) | List every forge dev namespace on every reachable cluster |
+| [`logs`](#reliant-forge-dev-cluster-logs) | Stream kubectl logs for one or all services in the dev namespace |
+| [`recover-chart-lock`](#reliant-forge-dev-cluster-recover-chart-lock) | Explicitly recover an inspected chart lock after terminating its writer |
+| [`reload`](#reliant-forge-dev-cluster-reload) | Re-render deploy/kcl/dev + kubectl apply + wait rollout |
+| [`reset`](#reliant-forge-dev-cluster-reset) | Delete then recreate the cluster |
+| [`status`](#reliant-forge-dev-cluster-status) | Print dynamic dev-loop state (cluster up/down, pods, ingress URLs) |
+| [`up`](#reliant-forge-dev-cluster-up) | Create the k3d cluster from deploy/k3d.yaml |
+| [`urls`](#reliant-forge-dev-cluster-urls) | Print the ingress URL table for the dev env |
+
+---
+
+#### reliant forge dev cluster down
+
+Delete the k3d cluster
+
+Delete the k3d cluster named by --config's metadata.name, and FIRST every
+cluster nested on its docker network (declared with `owner`, so it has no
+config file of its own and cannot outlive its owner's network).
+
+Given an environment, delete every k3d cluster its KCL declares instead —
+including secondaries declared with `owner` and no config file, which
+--config cannot name. Secondaries are deleted before their owner: k3d cannot
+remove a docker network a secondary is still attached to.
+
+This deletes whole clusters, and with them every namespace on them — including
+other environments' and other worktrees' stacks sharing the cluster.
+
+```
+reliant forge dev cluster down [environment] [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--config` | `string` | `deploy/k3d.yaml` | k3d config file (ignored when an environment is given) |
+
+---
+
+#### reliant forge dev cluster info
+
+Print static dev-loop config (cluster name, expected context, declared ports)
+
+Print the static dev-loop config declared in forge.yaml + deploy/k3d.yaml.
+
+Static means "what the project says it expects" — cluster name, expected
+kubectl context, registry URL, declared service/frontend ports. It does
+NOT contact the cluster or check pod state.
+
+For dynamic state (is the cluster up? are pods running? what are the
+live ingress URLs?) use `forge cluster status`.
+
+```
+reliant forge dev cluster info [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--config` | `string` | `deploy/k3d.yaml` | k3d config file |
+
+---
+
+#### reliant forge dev cluster instances
+
+List every forge dev namespace on every reachable cluster
+
+List every forge-managed dev namespace on the host.
+
+Inspects each k3d cluster's kubeconfig context and reports the
+namespaces labelled app.kubernetes.io/managed-by=forge. Useful for the
+multi-worktree workflow: many worktrees, each with its own namespace,
+all sharing one cluster (or one per worktree).
+
+Examples:
+  forge cluster instances
+  forge cluster instances --json
+
+```
+reliant forge dev cluster instances [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--json` | `bool` | - | Emit machine-readable JSON |
+
+---
+
+#### reliant forge dev cluster logs
+
+Stream kubectl logs for one or all services in the dev namespace
+
+Stream kubectl logs.
+
+Without --service, streams logs from every pod managed by forge in the
+dev namespace (the same label forge uses to discover deployments).
+With --service, scopes to one service deployment.
+
+Examples:
+  forge cluster logs                       # tail every forge-managed pod
+  forge cluster logs --service api         # tail one service
+  forge cluster logs --service api --tail 200
+  forge cluster logs --no-follow           # one-shot, no streaming
+
+```
+reliant forge dev cluster logs [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--config` | `string` | `deploy/k3d.yaml` | k3d config file |
+| `--follow` | `bool` | `true` | Stream new logs (kubectl logs -f) |
+| `--service` | `string` | - | Scope to one service deployment |
+| `--tail` | `int` | `100` | Lines of recent log file to display (-1 = all) |
+
+---
+
+#### reliant forge dev cluster recover-chart-lock
+
+Explicitly recover an inspected chart lock after terminating its writer
+
+A chart lock never expires. Before recovery, terminate/fence the holder's
+forge process AND its kubectl children on every host; ensure outstanding API
+writes have completed or their credentials have been revoked. A suspended writer
+must never resume after recovery. Do not recover a merely slow writer.
+
+Inspect the ConfigMap named in the deploy error in kube-system. This command
+requires its owner, chart, UID, resourceVersion and literal terminated:<holder>
+confirmation. It conditionally deletes ONLY that lock, never the inventory.
+There is no --force, timeout-based takeover, or automatic unlock on failure.
+
+```
+reliant forge dev cluster recover-chart-lock [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--chart` | `string` | - | Inspected chart name |
+| `--confirm-terminated` | `string` | - | Explicit terminated:<holder> attestation after fencing the old writer |
+| `--context` | `string` | - | Explicit kubectl context |
+| `--owner` | `string` | - | Inspected forge project.env owner |
+| `--resource-version` | `string` | - | Inspected lock metadata.resourceVersion |
+| `--uid` | `string` | - | Inspected lock metadata.uid |
+
+---
+
+#### reliant forge dev cluster reload
+
+Re-render deploy/kcl/dev + kubectl apply + wait rollout
+
+Re-render the dev KCL manifests, apply, and wait for rollout.
+
+This is the inner loop during local development: after editing code or
+KCL, run this to push the change into the cluster without rebuilding the
+docker image (the same code path forge env deploy dev uses, but skips the
+cluster bootstrap).
+
+Examples:
+  forge cluster reload
+  forge cluster reload --image-tag dev-2026-06-01
+  forge cluster reload --dry-run
+
+```
+reliant forge dev cluster reload [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--config` | `string` | `deploy/k3d.yaml` | k3d config file |
+| `--dry-run` | `bool` | - | Print manifests without applying |
+| `--image-tag` | `string` | - | Image tag (default: git short SHA) |
+| `--namespace` | `string` | - | Override namespace from environment config |
+
+---
+
+#### reliant forge dev cluster reset
+
+Delete then recreate the cluster
+
+```
+reliant forge dev cluster reset [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--config` | `string` | `deploy/k3d.yaml` | k3d config file |
+| `--wait` | `bool` | `true` | Wait until cluster nodes are ready after recreate |
+
+---
+
+#### reliant forge dev cluster status
+
+Print dynamic dev-loop state (cluster up/down, pods, ingress URLs)
+
+Print the dynamic state of the local dev environment.
+
+Dynamic means "what's actually happening right now" — does the k3d
+cluster exist, what's the current kubectl context, what pods are in
+the dev namespace, what ingress URLs are exposed by the dev env's
+KCL gateways, what sibling dev namespaces exist on this cluster.
+
+For static config (declared cluster name, expected context, declared
+service/frontend ports) run `forge cluster info`.
+
+Examples:
+  forge cluster status
+  forge cluster status --json    # machine-readable for scripts/dashboards
+
+```
+reliant forge dev cluster status [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--config` | `string` | `deploy/k3d.yaml` | k3d config file |
+| `--json` | `bool` | - | Emit machine-readable JSON |
+
+---
+
+#### reliant forge dev cluster up
+
+Create the k3d cluster from deploy/k3d.yaml
+
+Create the k3d cluster from deploy/k3d.yaml.
+
+If the cluster already exists, this is a no-op success. With --wait,
+blocks until the cluster's nodes report ready.
+
+Given an environment, the clusters come from that environment's KCL instead
+of a k3d config file: every forge.Cluster the env's bundle declares is ensured exactly
+as `forge env up <env>` ensures it — the declared pod/Service CIDRs, API port,
+owner network and registry-inherit included, none of which a k3d YAML carries.
+Use it whenever the env declares its clusters: a cluster created from the bare
+config file lacks those fields, and the env's own deploy then refuses it.
+
+Examples:
+  forge cluster up
+  forge cluster up --wait
+  forge cluster up --config deploy/k3d.custom.yaml
+  forge cluster up dev-k8s --wait
+
+```
+reliant forge dev cluster up [environment] [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--config` | `string` | `deploy/k3d.yaml` | k3d config file (ignored when an environment is given) |
+| `--wait` | `bool` | - | Wait until cluster nodes are ready |
+
+---
+
+#### reliant forge dev cluster urls
+
+Print the ingress URL table for the dev env
+
+Print the ingress URL table for the dev env.
+
+Reads deploy/kcl/dev/ via the same KCL render the deploy pipeline
+uses, then prints one URL per HTTPRoute/GRPCRoute grouped by gateway
+and listener.
+
+When features.ingress is disabled this prints a short notice and
+exits 0. When the dev env has no gateways declared yet it prints a
+pointer to deploy/kcl/dev/ingress.k.
+
+Examples:
+  forge cluster urls
+  forge cluster urls --json    # machine-readable for scripts/dashboards
+
+```
+reliant forge dev cluster urls [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--json` | `bool` | - | Emit machine-readable JSON |
+
+---
+
+#### reliant forge dev curl
+
+Print a copy-pasteable curl command for a Connect RPC method
+
+Print a curl invocation that exercises a Connect RPC endpoint over
+plain HTTP+JSON. The URL is derived from the proto package + service + method
+name; the request body is a zero-value skeleton populated from the method's
+input message fields.
+
+Arguments:
+  <service.method>   Fully-qualified service and method, e.g. "users.v1.UserService.GetUser".
+                     Short form is also accepted: "UserService.GetUser" matches the unique
+                     service of that name across all proto packages.
+
+Examples:
+  forge api curl users.v1.UserService.GetUser
+  forge api curl UserService.GetUser --port 9090
+  forge api curl users.v1.UserService.CreateUser --body '{"name":"alice"}'
+
+The command never executes — it only prints. Pipe to `sh` if you want to run it,
+or paste into a debugger / Postman / HTTPie session.
+
+```
+reliant forge dev curl <service.method> [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--auth-token` | `string` | - | Bearer token to inline (default: a $TOKEN placeholder on RPCs that require auth) |
+| `--body` | `string` | - | Request body JSON (default: zero-value skeleton from proto fields) |
+| `--host` | `string` | `localhost` | Host name to embed in the URL |
+| `--port` | `int` | `0` | Port the app listens on (default 8080; set per-env in deploy/kcl) |
+
+---
+
+#### reliant forge dev debug
+
+Debug a running service with Delve
+
+Debug Go services with Delve.
+
+Session state is persisted to .forge/debug-session.json so subsequent
+commands (break, continue, eval, ...) reconnect to the same debugger.
+
+Examples:
+  forge debug start api-gateway
+  forge debug break handler.go:42
+  forge debug continue
+  forge debug eval "req.UserID"
+  forge debug stop
+
+```
+reliant forge dev debug [flags]
+```
+
+**Subcommands:**
+
+| Command | Description |
+|---------|-------------|
+| [`args`](#reliant-forge-dev-debug-args) | Show function arguments in the current scope |
+| [`break`](#reliant-forge-dev-debug-break) | Set a breakpoint |
+| [`breakpoints`](#reliant-forge-dev-debug-breakpoints) | List all breakpoints |
+| [`clear`](#reliant-forge-dev-debug-clear) | Clear a breakpoint by ID |
+| [`continue`](#reliant-forge-dev-debug-continue) | Resume execution until the next breakpoint |
+| [`eval`](#reliant-forge-dev-debug-eval) | Evaluate an expression in the current scope |
+| [`goroutines`](#reliant-forge-dev-debug-goroutines) | List goroutines |
+| [`locals`](#reliant-forge-dev-debug-locals) | Show local variables in the current scope |
+| [`stack`](#reliant-forge-dev-debug-stack) | Show the current call stack |
+| [`start`](#reliant-forge-dev-debug-start) | Start a debug session for a service |
+| [`step`](#reliant-forge-dev-debug-step) | Step over the current line |
+| [`step-in`](#reliant-forge-dev-debug-step-in) | Step into the current function call |
+| [`step-out`](#reliant-forge-dev-debug-step-out) | Step out of the current function |
+| [`stop`](#reliant-forge-dev-debug-stop) | Stop the debug session (detaches from attached processes; kills only what forge launched) |
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+
+---
+
+#### reliant forge dev debug args
+
+Show function arguments in the current scope
+
+```
+reliant forge dev debug args [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--json` | `bool` | - | Output as JSON |
+
+---
+
+#### reliant forge dev debug break
+
+Set a breakpoint
+
+Set a breakpoint at a file:line location or on a function by name.
+
+The positional argument is auto-detected: a "file.go:42" spec sets a
+source-line breakpoint, while anything else (e.g. "main.handleRequest",
+"runtime.gopark", "(*Server).Serve") is resolved as a function breakpoint
+via Delve's location parser. The --func flag forces function resolution.
+
+Examples:
+  forge debug break handler.go:42
+  forge debug break main.handleRequest
+  forge debug break runtime.gopark
+  forge debug break '(*Server).Serve'
+  forge debug break --func main.handleRequest
+  forge debug break handler.go:42 --cond "id > 5"
+
+```
+reliant forge dev debug break <file:line | function> [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--cond` | `string` | - | Conditional expression for the breakpoint |
+| `--func` | `string` | - | Set breakpoint on a function by name |
+| `--json` | `bool` | - | Output as JSON |
+
+---
+
+#### reliant forge dev debug breakpoints
+
+List all breakpoints
+
+```
+reliant forge dev debug breakpoints [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--json` | `bool` | - | Output as JSON |
+
+---
+
+#### reliant forge dev debug clear
+
+Clear a breakpoint by ID
+
+```
+reliant forge dev debug clear <id> [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--json` | `bool` | - | Output as JSON |
+
+---
+
+#### reliant forge dev debug continue
+
+Resume execution until the next breakpoint
+
+```
+reliant forge dev debug continue [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--json` | `bool` | - | Output as JSON |
+
+---
+
+#### reliant forge dev debug eval
+
+Evaluate an expression in the current scope
+
+Evaluate a Go expression in the debugger's current scope.
+
+Examples:
+  forge debug eval "req.UserID"
+  forge debug eval "len(items)"
+
+```
+reliant forge dev debug eval <expression> [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--json` | `bool` | - | Output as JSON |
+
+---
+
+#### reliant forge dev debug goroutines
+
+List goroutines
+
+```
+reliant forge dev debug goroutines [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--json` | `bool` | - | Output as JSON |
+
+---
+
+#### reliant forge dev debug locals
+
+Show local variables in the current scope
+
+```
+reliant forge dev debug locals [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--json` | `bool` | - | Output as JSON |
+
+---
+
+#### reliant forge dev debug stack
+
+Show the current call stack
+
+```
+reliant forge dev debug stack [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--depth` | `int` | `50` | Maximum stack depth |
+| `--json` | `bool` | - | Output as JSON |
+
+---
+
+#### reliant forge dev debug start
+
+Start a debug session for a service
+
+Start a debug session for a Go service.
+
+The binary is built with debug flags (-gcflags=all=-N -l) and launched under Delve.
+
+If the argument contains "/" or ".", it is treated as a direct path.
+Otherwise it is looked up by name in forge.yaml.
+
+Examples:
+  forge debug start api-gateway
+  forge debug start --attach 12345
+  forge debug start --port 2345 api-gateway
+  forge debug start ./cmd/server
+
+```
+reliant forge dev debug start <service> [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--attach` | `int` | `0` | Attach to an existing process by PID |
+| `--docker` | `bool` | - | Start debug session in Docker container |
+| `--json` | `bool` | - | Output as JSON |
+| `--port` | `int` | `0` | Debugger listen port (0 = auto) |
+
+---
+
+#### reliant forge dev debug step
+
+Step over the current line
+
+```
+reliant forge dev debug step [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--json` | `bool` | - | Output as JSON |
+
+---
+
+#### reliant forge dev debug step-in
+
+Step into the current function call
+
+```
+reliant forge dev debug step-in [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--json` | `bool` | - | Output as JSON |
+
+---
+
+#### reliant forge dev debug step-out
+
+Step out of the current function
+
+```
+reliant forge dev debug step-out [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--json` | `bool` | - | Output as JSON |
+
+---
+
+#### reliant forge dev debug stop
+
+Stop the debug session (detaches from attached processes; kills only what forge launched)
+
+Stop the debug session.
+
+For sessions forge launched (forge debug start <service> / --docker), stop
+kills the debugged process and reaps the dlv server.
+
+For an ATTACH session (forge debug --attach <pid>), stop DETACHES the
+debugger and leaves the target process running. forge never kills a process
+it did not launch.
+
+```
+reliant forge dev debug stop [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+
+---
+
 ### reliant forge doctor
 
 Check that the PROJECT is well-formed (deployability, payload caps, tooling, cluster capability)
@@ -4124,8 +5926,16 @@ which is exactly when a binding must survive. It also lets you bind a domain
 before its target has ever been deployed, which is the natural order for a
 first launch.
 
---redirect-to serves a 308 to another hostname instead of proxying. The
-apex/www pair is the case for it.
+--redirect-to answers with a permanent redirect to another hostname,
+preserving the path and query, instead of proxying: a 301 for GET and HEAD,
+a 308 for anything else. The apex/www pair is the case for it; point the www
+name at the same records as its apex.
+
+--hsts-include-subdomains adds includeSubDomains to the hostname's
+Strict-Transport-Security, so a browser that has seen it uses HTTPS for every
+name under it. Off by default, and leave it off until every subdomain serves
+HTTPS: a browser remembers the header for a year. A rebind without the flag
+turns it off.
 
 BINDABLE IN ANY STATE, SERVES ONLY WHEN LIVE. Bind before DNS has propagated
 and it starts serving by itself once verification and the certificate
@@ -4141,7 +5951,8 @@ reliant forge domain bind <hostname> [flags]
 |------|------|---------|-------------|
 | `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 | `--env` | `string` | - | Environment whose control plane to talk to (required; deploy/kcl/<env>/) |
-| `--redirect-to` | `string` | - | Serve a 308 to this hostname instead of a target |
+| `--hsts-include-subdomains` | `bool` | - | Add includeSubDomains to the hostname's HSTS (every subdomain must serve HTTPS) |
+| `--redirect-to` | `string` | - | Redirect permanently to this hostname instead of serving a target |
 | `--target` | `string` | - | Workload or frontend name in --env to serve |
 | `--token` | `string` | - | Credential to use, ahead of the env var and the credentials file |
 
@@ -4295,12 +6106,14 @@ reliant forge env [flags]
 | [`diff`](#reliant-forge-env-diff) | Render this checkout and diff each environment against what is deployed |
 | [`down`](#reliant-forge-env-down) | Stop Forge host processes for an environment (or --all: across projects) |
 | [`exec`](#reliant-forge-env-exec) | Run a local command with a workload's resolved configuration |
+| [`kcl`](#reliant-forge-env-kcl) | Evaluate this project's KCL directly |
 | [`list`](#reliant-forge-env-list) | List the environments declared in deploy/kcl/ |
 | [`new`](#reliant-forge-env-new) | Scaffold a new deploy environment from an existing one |
 | [`options`](#reliant-forge-env-options) | List the render options an environment's KCL declares |
 | [`ps`](#reliant-forge-env-ps) | List every forge stack running on this machine, across all projects |
 | [`releases`](#reliant-forge-env-releases) | What was released to an environment, when, and what changed |
 | [`render`](#reliant-forge-env-render) | Print the Kubernetes objects deploy/kcl/<env>/ renders, with the cluster each lands on |
+| [`secret`](#reliant-forge-env-secret) | Manage an environment's secret store (local file or hosted control plane) |
 | [`secrets`](#reliant-forge-env-secrets) | Project the env's secret_provider into the cluster |
 | [`shape`](#reliant-forge-env-shape) | Print what an environment DECLARES — kind, workloads, secrets, domains, and one hash per object |
 | [`smoke`](#reliant-forge-env-smoke) | Probe every declared ingress route after deploy (TLS + routing + CORS) |
@@ -4386,6 +6199,7 @@ reliant forge env build <environment> [flags]
 | `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 | `--base-promotion` | `string` | - | Compose from this exact desired promotion (or resolve current once before builds) |
 | `--bundle-envs` | `string` | - | Write a bundle for each of these envs (comma-separated) from this one build, instead of only for the env argument. A release is env-agnostic and a bundle is not, so this is how one cut produces the manifests for every env it will ship to — each pinned to the same release and the same source. Each env is rendered; each bundle is pushed beside its images for a control-plane env, or written to this machine's ledger otherwise. |
+| `--config-check` | `string` | `auto` | Before a push, boot every workload of the project image with this env's config in the binary's config-check mode (no network) and refuse the push if one would not start: auto (gates from v1.0.16, warns below that pin), gate, warn, off |
 | `--debug` | `bool` | - | Build with debug symbols for Delve |
 | `--docker` | `bool` | - | Build Docker images for all services (implied by --push and --release) |
 | `--gate-json` | `string` | - | Also write this build's result to `FILE` as a gate document, for `forge gate record` or `forge env deploy --gate`. A FILE, not a stdout mode: the build log and the exit code are unchanged. |
@@ -4398,6 +6212,7 @@ reliant forge env build <environment> [flags]
 | `--parallel` | `bool` | `true` | Build services in parallel |
 | `--plan` | `bool` | - | Resolve the exact build set this invocation would build (same KCL discovery, same --target narrowing) and PREFLIGHT every step without running it: each go-build package exists and is a main package, each Dockerfile and frontend build script exists, each ShellBuild cwd exists, and with --release the ledger would cover everything the env declares. Builds, pushes, generates and writes nothing; exits non-zero on anything the real build would fail on. Pass it the release's exact arguments to gate a PR on the cut. |
 | `--push` | `bool` | - | Push docker images after build (implies --docker), each to the reference its own workload declares (its image field in deploy/kcl/workloads.k). Takes no value and carries no registry |
+| `--rebuild` | `bool` | - | Run every ShellBuild's command, even one whose declared inputs are unchanged since its last successful build and whose image is still in the registry |
 | `--release` | `string` | - | Record an immutable release with this version label (e.g. v1.4.0). IMPLIES --push. The release's artifact SET (project images plus per-env external build_cmd images) is discovered from deploy/kcl/<env>/main.k; the built images stay env-agnostic, so promote the release to every env with 'forge env deploy <env> <version>'. Captures each artifact's digest into a release ledger, which every later deploy pins. |
 | `--run-id` | `string` | - | CI run this write belongs to (default: detected from the CI environment, e.g. github:<repo>/<run>/<attempt>) |
 | `--run-url` | `string` | - | Link to the CI run, for a human reading the ledger (default: detected from the CI environment) |
@@ -4471,11 +6286,28 @@ a NEW environment and does NOT reattach it.
 KEPT EITHER WAY: the project's release images in the registry. They belong to
 the project, not the environment, and other environments promote them.
 
+An env no longer declared under deploy/kcl/ (its directory was removed but the
+hosted env lives on) is looked up by name on the control plane this project is
+bound to (.forge/hosted-projects.json), or on the one --endpoint names, which
+must be one of those bindings or Reliant cloud:
+
+  forge env delete prod-web --endpoint https://admin.reliantapi.com
+
+--id names the environment by the control plane's id instead (the Reliant UI
+shows it), for an undeclared env whose name is ambiguous or unknown. It is
+looked up the same way, on a control plane this project has used; a name given
+beside it must match. `forge env list --orphaned` lists the hosted envs this
+project no longer declares.
+
+Before asking for confirmation it shows what will be deleted: the env's id,
+project, control plane, deployments and bound custom domains. The control
+plane refuses to delete an env while a custom domain is bound to it.
+
 Only hosted environments: for a local stack use `forge env down`, which never
 deletes anything on a control plane and which this command never uses.
 
 ```
-reliant forge env delete <environment> [flags]
+reliant forge env delete <environment> | --id <environment-id> [flags]
 ```
 
 **Flags:**
@@ -4483,6 +6315,8 @@ reliant forge env delete <environment> [flags]
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
 | `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--endpoint` | `string` | - | Control plane holding an env that is no longer declared under deploy/kcl/: one this project is bound to (.forge/hosted-projects.json) or Reliant cloud; https, or http to localhost only (default: the one this project is bound to) |
+| `--id` | `string` | - | Delete the hosted environment with this control-plane id (an env no longer declared under deploy/kcl/); a name given beside it must match |
 | `--keep-data` | `bool` | - | Keep the environment's managed databases (retained, still billed as storage) instead of destroying them |
 | `--token` | `string` | - | Credential to use, ahead of the env var and the credentials file |
 | `--yes` | `bool` | - | Confirm the deletion without the typed-name prompt (required when non-interactive) |
@@ -5199,6 +7033,7 @@ reliant forge env down [environment] [flags]
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
 | `--all` | `bool` | - | Stop every forge stack running on this machine, across all projects (the only way to reach a stack whose project directory is gone) |
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 
 ---
 
@@ -5242,9 +7077,150 @@ reliant forge env exec <env> [--workload <name>] -- <command> [args...] [flags]
 
 ---
 
+#### reliant forge env kcl
+
+Evaluate this project's KCL directly
+
+Work with this project's KCL files directly.
+
+A forge project's KCL resolves `import forge` from the forge binary, not from a
+kcl.mod dependency or a copy on disk, so a plain `kcl run` on a project file
+CANNOT evaluate it. That is by design: the binary is the module version. These
+subcommands are how anything outside forge reads a value out of project KCL.
+
+```
+reliant forge env kcl [flags]
+```
+
+**Subcommands:**
+
+| Command | Description |
+|---------|-------------|
+| [`eval`](#reliant-forge-env-kcl-eval) | Evaluate a KCL file or package directory and print a selected field |
+| [`imports`](#reliant-forge-env-kcl-imports) | Show where each forge project this project's KCL imports resolves to |
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+
+---
+
+#### reliant forge env kcl eval
+
+Evaluate a KCL file or package directory and print a selected field
+
+Evaluate a .k file or every .k file in a package directory and print a field.
+
+Evaluation runs in an isolated child rooted at the requested project. The
+caller's working directory is never changed, including when forge is embedded.
+
+This is THE way a script or a test reads a value from project KCL. A plain
+`kcl run` cannot do it: since the forge KCL module is supplied by the forge
+binary, `import forge` resolves only inside a forge evaluation. Nothing needs
+`kcl` on PATH, and nothing needs to know where forge keeps its module.
+
+Relative imports (`import lib.foo`) resolve from the source's own kcl.mod
+package root; relative file.read paths resolve from the project root. It does not matter which directory
+you run this from: the answer is the same from the project root and from a
+subdirectory.
+
+-S takes a dotted path, kcl-style. A numeric segment indexes a list
+(`pools.0.name`). Repeat -S to get an object keyed by selector. Unlike
+`kcl run -S`, a selected LIST comes back as one list rather than as one YAML
+document per element, and a path that does not exist is an ERROR naming what
+the document does have — not an empty result that a caller reads as a value.
+
+--format json prints the document the way `kcl run --format json` does: keys in the
+order the KCL declares them (never alphabetised), numbers as KCL wrote them,
+four-space indent. A committed JSON file generated by kcl can be compared
+byte for byte. --format yaml keeps the same order.
+
+--format raw prints a scalar's own text: no quotes, no trailing newline. It is
+what makes `$(...)` capture the value exactly, replacing the
+`| tr -d "\n'\""` pipelines that a YAML scalar's conditional quoting forces
+(and that silently corrupt a value legitimately containing a quote). It
+refuses a list or an object rather than printing JSON a caller would
+interpolate without noticing.
+
+-D binds a top-level `option()`, as it does for any KCL evaluation.
+
+The evaluation is READ-ONLY as far as forge is concerned: no port block is
+claimed, no port store is written, no cluster is contacted, and no image is
+built. It is not guaranteed PURE, for the same reason `env render` is not:
+KCL evaluates `file.write` itself, so a file that generates a file writes it.
+
+To evaluate an ENVIRONMENT into its Kubernetes objects, use
+`cli forge env render <env>` instead.
+
+Examples:
+  cli forge kcl eval deploy/kcl/lib/kata_pool.k -S sbd.image_family --format raw
+  cli forge kcl eval deploy/kcl/lib/kata_pool.k -S sbd.disk_size_gb --format raw
+  cli forge kcl eval deploy/kcl/lib/daemon_placement.k -S daemon_placement | jq -r '.prod.context'
+  cli forge kcl eval deploy/kcl/lib/platform_local.k -S cloudnative_pg.name -S cloudnative_pg.namespace
+  cli forge kcl eval deploy/kcl/lib/kata_pool.k                       # the whole document
+
+```
+reliant forge env kcl eval <file-or-directory> [-S <path>]... [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--format` | `string` | `json` | Output format: [json yaml raw] (raw prints a scalar's own text, unquoted and with no trailing newline) |
+| `--option`, `-D` | `stringArray` | `[]` | Bind a top-level KCL option, key=value (repeatable) |
+| `--select`, `-S` | `stringArray` | `[]` | Print only this dotted field path (repeatable; repeated paths yield an object keyed by path) |
+
+---
+
+#### reliant forge env kcl imports
+
+Show where each forge project this project's KCL imports resolves to
+
+List the forge projects deploy/kcl/kcl.mod imports under [forge_projects],
+and where each one resolves.
+
+An imported project's KCL is read at the version this project's go.mod pins
+its Go module to — a go.work use or a directory replace reads that directory
+(a sibling checkout), otherwise the module cache at the required version,
+verified against go.sum. There is no separate KCL pin. Resolution refuses an
+imported project that pins a different forge than this one (version skew).
+
+--json prints the resolution as a JSON array: name, module, version (empty
+for a directory), via (the declaration that decided it), module_dir, dir (the
+KCL package root) and forge_pin.
+
+Examples:
+  cli forge kcl imports
+  cli forge kcl imports --json | jq -r '.[].dir'
+
+```
+reliant forge env kcl imports [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--json` | `bool` | - | Print the resolution as JSON |
+
+---
+
 #### reliant forge env list
 
 List the environments declared in deploy/kcl/
+
+List the environments declared in deploy/kcl/: one directory per env, each
+carrying a main.k. Reads nothing but the checkout.
+
+--orphaned asks the control plane instead: it lists the hosted envs of this
+project that deploy/kcl/ no longer declares (an env outlives its directory),
+on each control plane this project is bound to (.forge/hosted-projects.json),
+or on the one --endpoint names. Each is deletable with `forge env delete <env>`.
 
 ```
 reliant forge env list [flags]
@@ -5255,6 +7231,9 @@ reliant forge env list [flags]
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
 | `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--endpoint` | `string` | - | With --orphaned: the control plane to ask, one this project is bound to or Reliant cloud (default: every one it is bound to) |
+| `--orphaned` | `bool` | - | List the hosted envs on the control plane that deploy/kcl/ no longer declares |
+| `--token` | `string` | - | With --orphaned: credential to use, ahead of the env var and the credentials file |
 
 ---
 
@@ -5406,6 +7385,9 @@ and obs:read).
   backfill-migrations <env>
                          record, from git, the migrations of releases cut
                          before forge recorded them
+  interrupted <env> <version>
+                         whether a cut pushed its images, was never
+                         recorded, and can be resumed from this checkout
 
 Every reading verb takes --json for one machine-readable document (--fields projects it).
 
@@ -5419,6 +7401,7 @@ reliant forge env releases [flags]
 |---------|-------------|
 | [`at`](#reliant-forge-env-releases-at) | Which release was live at a moment, and the releases either side |
 | [`backfill-migrations`](#reliant-forge-env-releases-backfill-migrations) | Record, from git, the migrations of releases cut before forge recorded them |
+| [`interrupted`](#reliant-forge-env-releases-interrupted) | Whether a cut of <version> pushed its images, was never recorded, and can be resumed from here |
 | [`list`](#reliant-forge-env-releases-list) | The release timeline of an environment, newest first |
 | [`show`](#reliant-forge-env-releases-show) | One release in full: commits and PRs, what changed, migrations, gates, health |
 
@@ -5636,6 +7619,36 @@ reliant forge env releases backfill-migrations <env> [flags]
 | `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 | `--dry-run` | `bool` | - | Print each manifest that would be recorded; record nothing |
 | `--since` | `string` | - | Oldest release to backfill (a version); default every release in the ledger |
+
+---
+
+#### reliant forge env releases interrupted
+
+Whether a cut of <version> pushed its images, was never recorded, and can be resumed from here
+
+A `forge env build <env> --release <version>` writes a cut journal to the registry after
+its last push and before its ledger record. If the cut is interrupted between the two,
+the version's image tags exist (and are immutable) while the ledger has no release.
+Re-running the same cut from the same clean commit, with the same forge, resumes it:
+it records the release over the images already pushed and rebuilds nothing.
+
+This answers, without building or writing anything, whether such a journal exists
+and whether this checkout can resume it: the commit and tree, the forge version,
+and that every recorded tag still names its recorded digest.
+
+Exit 0 a journal exists and this checkout resumes it, 1 no journal or not resumable
+(the document says which), 2 the registry or the env could not be read.
+
+```
+reliant forge env releases interrupted <env> <version> [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--json` | `bool` | - | Print one JSON document |
 
 ---
 
@@ -5907,6 +7920,360 @@ reliant forge env render <environment> [flags]
 | `--no-write-check` | `bool` | - | Skip the before/after scan that detects files the render wrote |
 | `--tag` | `string` | - | Image tag to render with (default: the same source forge env deploy reads — .forge/state/build-<env>.json, then git describe) |
 | `--target` | `stringArray` | `[]` | Print only the named application's objects (the app.kubernetes.io/name group forge env deploy --target selects; repeatable) |
+
+---
+
+#### reliant forge env secret
+
+Manage an environment's secret store (local file or hosted control plane)
+
+Manage the secret store an environment's secret_provider declares:
+
+  forge.FileSecrets    the gitignored YAML store (a local env) — a flat map of
+                       env-var NAME to value.
+  forge.HostedSecrets  the env's control plane (control_plane). set / unset /
+                       list go through its API. A hosted env's values are
+                       never read back by these commands; a LOCAL env's
+                       (control_plane with no hosted tier) are pulled into
+                       memory by `forge env up` and nothing else.
+
+A name that a store-backed ExternalSecret (forge.StoreSource) reads or
+generates lives in that ExternalSecret's STORE instead, whatever the env's
+secret_provider is, and set / list / import act on it there:
+
+  forge.HostedStore             the hosted control plane's store — written
+                                through its write-only API.
+  forge.OpenBaoStore            the env's own OpenBao (Bundle.openbao). set
+                                signs in as the forge-rendered
+                                forge-secret-writer service account with a
+                                ten-minute token minted from YOUR kube context,
+                                so it needs cluster access and nothing else.
+  forge.GCPSecretManagerStore   Google Secret Manager, with your Application
+                                Default Credentials.
+
+  forge secret allow / deny / access
+                        a HOSTED secret's access list: which Reliant workflows
+                        may use it ({{ secrets.NAME }} in an http/request
+                        header). Hosted envs only.
+
+  forge secret import   copy values that already exist into a store, create-only
+                        (the first step of moving a Secret onto ESO)
+
+Verifying and handing a Secret to ESO are 'forge env secrets verify' and
+'forge env secrets adopt'.
+
+Every command names its environment with a REQUIRED --env flag. There is no
+default and no positional form: the env is the one thing a secret command
+must never guess.
+
+A secret is declared ONCE in KCL as a reference (EnvVar.secret_ref); its
+value lives here and never enters git or KCL render output. A value only
+reaches a service that DECLARES it, so putting something here that no
+service references does nothing — config belongs in deploy/kcl/<env>/config.k.
+
+  forge secret set   --env dev STRIPE_SECRET_KEY   # value on stdin; add, or replace (= rotate)
+  forge secret unset --env dev STRIPE_SECRET_KEY
+  forge secret list  --env dev                     # names + presence, never values
+  forge secret allow --env prod --workflow trader-bot --project <id> TRADER_KEY   # hosted: let a workflow use it
+  forge secret deny  --env prod --workflow trader-bot --project <id> TRADER_KEY
+  forge secret access --env prod [TRADER_KEY]      # hosted: who may use it
+  forge secret ensure --env dev                    # FileSecrets: create the file + report missing
+  forge secret migrate --env dev                   # FileSecrets: convert a legacy .env file
+
+```
+reliant forge env secret [flags]
+```
+
+**Subcommands:**
+
+| Command | Description |
+|---------|-------------|
+| [`access`](#reliant-forge-env-secret-access) | Show who may use a hosted secret |
+| [`allow`](#reliant-forge-env-secret-allow) | Allow a workflow to use a hosted secret |
+| [`deny`](#reliant-forge-env-secret-deny) | Revoke a workflow's use of a hosted secret |
+| [`ensure`](#reliant-forge-env-secret-ensure) | Create the FileSecrets store and report missing values |
+| [`import`](#reliant-forge-env-secret-import) | Copy existing values into the env's secret store, create-only |
+| [`list`](#reliant-forge-env-secret-list) | List declared secrets and whether each has a value |
+| [`migrate`](#reliant-forge-env-secret-migrate) | Convert a legacy .env secrets file into the YAML store |
+| [`set`](#reliant-forge-env-secret-set) | Add or replace one secret value (read from stdin) |
+| [`unset`](#reliant-forge-env-secret-unset) | Remove one secret from the store |
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+
+---
+
+#### reliant forge env secret access
+
+Show who may use a hosted secret
+
+Show the access list of one hosted secret, or of every secret in the env
+when NAME is omitted. Metadata only; values are never printed.
+
+  forge secret access --env staging TRADER_KEY
+  forge secret access --env staging --json
+
+```
+reliant forge env secret access --env <environment> [NAME] [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--env` | `string` | - | Environment whose secret store to act on (required; deploy/kcl/<env>/) |
+| `--json` | `bool` | - | Emit machine-readable JSON |
+
+---
+
+#### reliant forge env secret allow
+
+Allow a workflow to use a hosted secret
+
+Add a workflow to a hosted secret's access list. A Reliant workflow that
+references the secret ({{ secrets.NAME }} in an http/request header) runs only
+if its (project, workflow name) is on the list; any run or trigger of that
+workflow may then use it. Idempotent.
+
+The list is the whole policy: it names no destination, path or step.
+Only org owners and admins may edit it, and a protected environment asks for
+step-up; the control plane's refusal is printed as it is sent.
+
+  forge secret allow --env staging --workflow trader-bot --project <id> TRADER_KEY
+
+--project is the Reliant project id that owns the workflow (find it with
+`reliant project list`). Hosted secrets only: a FileSecrets store has no access
+lists.
+
+```
+reliant forge env secret allow --env <environment> --workflow <name> --project <id> <NAME> [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--env` | `string` | - | Environment whose secret store to act on (required; deploy/kcl/<env>/) |
+| `--project` | `string` | - | Reliant project id that owns the workflow (required; run 'reliant project list') |
+| `--workflow` | `string` | - | Workflow name (required) |
+
+---
+
+#### reliant forge env secret deny
+
+Revoke a workflow's use of a hosted secret
+
+Remove a workflow from a hosted secret's access list. Its runs lose the
+secret at their next use. Idempotent; the same authorization as 'allow'.
+
+  forge secret deny --env staging --workflow trader-bot --project <id> TRADER_KEY
+
+```
+reliant forge env secret deny --env <environment> --workflow <name> --project <id> <NAME> [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--env` | `string` | - | Environment whose secret store to act on (required; deploy/kcl/<env>/) |
+| `--project` | `string` | - | Reliant project id that owns the workflow (required; run 'reliant project list') |
+| `--workflow` | `string` | - | Workflow name (required) |
+
+---
+
+#### reliant forge env secret ensure
+
+Create the FileSecrets store and report missing values
+
+Create the environment's FileSecrets store (0600) if absent and list every
+declared secret that has no value yet.
+
+Secrets the provider declares in FileSecrets.generate (pure random key
+material: an encryption key, a session secret) are minted when absent, never
+overwritten, and reported by name only. Rotating one is a manual
+'forge secret set'. Hosted and external providers never generate.
+
+Exits non-zero when a declared secret is missing a value, so it works as a
+setup gate in a task/Makefile before 'forge env up'.
+
+```
+reliant forge env secret ensure --env <environment> [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--env` | `string` | - | Environment whose secret store to act on (required; deploy/kcl/<env>/) |
+
+---
+
+#### reliant forge env secret import
+
+Copy existing values into the env's secret store, create-only
+
+Copy values that already exist into a store-backed ExternalSecret's store.
+This is the first step of migrating a Secret onto ESO: the store must hold the
+bytes the cluster holds today before ESO takes the Secret over.
+
+Create-only. A name the store already holds is reported and left untouched, so
+re-running an import is always safe and can never overwrite a value that was
+rotated since. Rotating is 'forge secret set'.
+
+From a cluster Secret, using your own kube context:
+
+  forge secret import --env prod --from control-plane-prod/control-plane-secrets \
+      --map github_app_private_key=GITHUB_APP_PRIVATE_KEY
+
+From stdin or a file, one name:
+
+  forge secret import --env prod GITHUB_WEBHOOK_SECRET --from-file ./secret.txt
+
+--to-bootstrap writes a BootstrapSecret's Google Secret Manager container (the
+OpenBao seal key and Postgres password, which cannot live in the store they
+bootstrap). NAME is the container's secret id; --project is the Google project
+that holds it (default: Bundle.bootstrap_source's):
+
+  forge secret import --env prod --to-bootstrap --project acme-prod \
+      --from control-plane-prod/control-plane-openbao-unseal --map static-key=openbao-unseal-prod
+
+The destination store comes from the ExternalSecret that reads each name
+(--store picks one when two do). Google Secret Manager uses your Application
+Default Credentials. No value is ever printed, and none is taken as an
+argument. --dry-run reads the source and reports what would be created; for a Google\nSecret Manager destination it also checks (metadata only) which names already\nhold a value and would be left alone.
+
+```
+reliant forge env secret import --env <environment> (--from <namespace>/<secret> --map key=NAME[,key=NAME...] | <NAME>) [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--dry-run` | `bool` | - | Read the source and report what would be created or left alone; write nothing |
+| `--env` | `string` | - | Environment whose secret store to act on (required; deploy/kcl/<env>/) |
+| `--from` | `string` | - | Cluster Secret to read, as <namespace>/<secret> (uses your kube context) |
+| `--from-file` | `string` | - | Read the single NAME's value from a file instead of stdin |
+| `--kube-context` | `string` | - | Kube context to use (default: the env's declared cluster) |
+| `--map` | `stringSlice` | `[]` | key=NAME: the Secret key to read and the store name it fills (repeatable, or comma-separated) |
+| `--project` | `string` | - | With --to-bootstrap: the Google project holding the container (default: Bundle.bootstrap_source's) |
+| `--store` | `string` | - | Store kind to act on when two stores declare a name (hosted, openbao, gcpsm) |
+| `--to-bootstrap` | `bool` | - | Write a BootstrapSecret's Google Secret Manager container instead of the store |
+
+---
+
+#### reliant forge env secret list
+
+List declared secrets and whether each has a value
+
+List every secret the environment's KCL declares, and whether the store
+holds a value for it. Values are NEVER printed.
+
+Works for every secret_provider:
+
+  file      presence read from the YAML store; inert (undeclared) keys listed.
+  hosted    names and current versions from the control plane's store.
+  external  the declarations only — presence is "unknown": forge cannot see
+            a Secret provisioned out of band.
+  rendered  the declared Secrets' keys, and whether each resolves from its
+            declared source.
+  none      the declarations only; nothing can supply a value.
+
+--json emits the same facts as a machine-readable document, and holds the
+same promise: the report has no field capable of carrying a value.
+
+```
+reliant forge env secret list --env <environment> [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--env` | `string` | - | Environment whose secret store to act on (required; deploy/kcl/<env>/) |
+| `--json` | `bool` | - | Emit machine-readable JSON (names/presence/versions/declaring workloads/inert keys — never values) |
+
+---
+
+#### reliant forge env secret migrate
+
+Convert a legacy .env secrets file into the YAML store
+
+Convert a legacy dotenv into the FileSecrets YAML store, then delete the
+original. Run with --dry-run first to see exactly which keys move.
+
+```
+reliant forge env secret migrate --env <environment> [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--dry-run` | `bool` | - | Show what would move without writing anything |
+| `--env` | `string` | - | Environment whose secret store to act on (required; deploy/kcl/<env>/) |
+
+---
+
+#### reliant forge env secret set
+
+Add or replace one secret value (read from stdin)
+
+Set a single secret in the environment's secret store. Setting a key that
+already has a value REPLACES it — for a hosted store that is a new version,
+which is how a secret is rotated (there is no separate rotate command).
+
+The VALUE is read from stdin, never from argv — an argv value would land
+in shell history and in the process table. Pipe it, or type it and press
+Ctrl-D:
+
+  printf '%s' "$TOKEN" | forge secret set --env dev STRIPE_SECRET_KEY
+  forge secret set --env dev TLS_KEY --from-file ./key.pem
+
+A trailing newline is trimmed. Multi-line values (a PEM key, a JSON blob)
+round-trip unchanged.
+
+```
+reliant forge env secret set --env <environment> <KEY> [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--env` | `string` | - | Environment whose secret store to act on (required; deploy/kcl/<env>/) |
+| `--from-file` | `string` | - | Read the value from a file instead of stdin |
+| `--kube-context` | `string` | - | Kube context to use (default: the env's declared cluster) |
+| `--store` | `string` | - | Store kind to act on when two stores declare a name (hosted, openbao, gcpsm) |
+
+---
+
+#### reliant forge env secret unset
+
+Remove one secret from the store
+
+```
+reliant forge env secret unset --env <environment> <KEY> [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--env` | `string` | - | Environment whose secret store to act on (required; deploy/kcl/<env>/) |
 
 ---
 
@@ -6438,11 +8805,17 @@ Lifecycle (what happens after host services + frontends start):
     prints the summary (URLs + per-service log paths), and RETURNS,
     leaving the processes running — the same end-state as --background.
     This is what keeps `forge env up <env>` from hanging an agent.
-  * --watch forces the hold-and-teardown lifecycle even without a TTY
-    (for a human piping the output through a tool).
+  * --watch holds the foreground even without a TTY. It is THE way for an
+    agent or a daemon to run the stack under a process it tracks: start
+    `forge env up <env> --watch` as a background process of the
+    harness (never nohup or &), and stop it with a signal.
   * --background always detaches and returns immediately, regardless of
-    the TTY. If both --watch and --background are passed, --background
-    wins (detach + return).
+    the TTY. --watch and --background cannot be combined.
+
+A holding run (a TTY, or --watch) owns its children from the moment the
+first one starts: SIGINT, SIGTERM or SIGHUP — even one that arrives while
+the stack is still starting — and a failed readiness or cluster gate stop
+them, so nothing it started outlives it.
 
 Either way the long-running children are tracked under
 ~/.cache/forge/up/<project-id>/; stop a detached / non-TTY stack with
@@ -6476,7 +8849,7 @@ Examples:
   forge env up dev
   forge env up dev --no-build
   forge env up dev --target admin-server -D host_runner=go-run
-  forge env up dev --watch        # hold + Ctrl-C teardown even when piped
+  forge env up dev --watch        # hold + teardown on a signal, even without a TTY (agents)
   forge env up dev --background
   forge env up dev -- --host 0.0.0.0   # forward flags to the dev servers
   forge env down dev
@@ -6524,6 +8897,21 @@ LOCAL SESSIONS (what this reports about itself)
   platform or on a cluster has no local presence to describe, and forge says
   which when it declines.
 
+TELEMETRY (where this stack's traces, metrics and logs are stored)
+
+  observability.dev_telemetry decides: "local" stores them in the local
+  ClickStack; "auto" (the default) sends them to your org's hosted store when
+  the env declares a control_plane and you are signed in to Reliant, and falls
+  back to local, saying why, when anything on the way fails; "hosted" fails
+  instead of falling back. --telemetry and FORGE_DEV_TELEMETRY override it,
+  and "local" from any of them wins.
+
+  A hosted stack is keyed by its session (above), which is then reported
+  before the services start. Its tokens live in .forge/obs/; a telemetry
+  keeper, one of the stack's tracked processes in either lifecycle, keeps the
+  session live and renews them until `forge env down`. No local
+  collector starts, so the stack needs no Docker for telemetry. `forge env status <env>` says where telemetry goes.
+
 ```
 reliant forge env up <environment> [-- <dev-server flags>] [flags]
 ```
@@ -6533,7 +8921,7 @@ reliant forge env up <environment> [-- <dev-server flags>] [flags]
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
 | `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
-| `--background` | `bool` | - | Detach long-running phases and return immediately (stop with 'forge env down <env>'). Beats --watch and the TTY default. |
+| `--background` | `bool` | - | Detach long-running phases and return immediately (stop with 'forge env down <env>'). Cannot be combined with --watch. |
 | `--host-ready-timeout` | `duration` | `2m0s` | Maximum wait for host services to bind their ports, including compilation; exited runners fail immediately |
 | `--no-build` | `bool` | - | Skip the build phase (use already-built images / binaries) |
 | `--no-deploy` | `bool` | - | Skip the cluster apply phase (host services and frontends still launch) |
@@ -6541,8 +8929,10 @@ reliant forge env up <environment> [-- <dev-server flags>] [flags]
 | `--no-install` | `bool` | - | Skip the pre-dev-serve frontend dependency install. By default 'forge env up' installs a frontend's deps when node_modules is missing or older than its lockfile/manifest. |
 | `--no-seed` | `bool` | - | Skip the first-boot dev auto-seed. By default 'forge env up' seeds a dev database once when it is reachable and all seedable tables are empty. |
 | `--option`, `-D` | `stringArray` | `[]` | Set a render option the env's KCL declares, as name=value (repeatable). Relayed to KCL verbatim — forge does not interpret the value. List an env's options with 'forge env options <env>'. |
+| `--rebuild` | `bool` | - | Run every ShellBuild's command, even one whose declared inputs are unchanged since its last successful build and whose image is still in the registry |
 | `--target` | `stringArray` | `[]` | Scope the whole run — build, deploy, host and frontend phases — to specific services/operators/frontends by name (repeatable). Targeting only host/frontend apps builds no images. An unknown name is an error listing the env's app names. Default: everything. |
-| `--watch` | `bool` | - | Force the hold-and-teardown lifecycle (block until Ctrl-C, then cascade-stop) even without a TTY. Default without --watch/--background: hold when stdin is a TTY, otherwise return after start (non-TTY agent/CI path). |
+| `--telemetry` | `string` | - | Where this stack's telemetry is stored: auto (hosted when the env declares a control_plane and you are signed in to Reliant, else local), hosted (fail instead of falling back) or local (the local ClickStack). Overrides FORGE_DEV_TELEMETRY and observability.dev_telemetry; local anywhere wins. |
+| `--watch` | `bool` | - | Hold the foreground and tear the stack down on SIGINT/SIGTERM/SIGHUP even without a TTY: the way an agent or daemon runs env up as a tracked background process. Default without --watch/--background: hold when stdin is a TTY, otherwise return after start (non-TTY agent/CI path). |
 
 ---
 
@@ -7214,6 +9604,10 @@ Skipping:
   environment that steers them — prints one line saying so and stops, in
   about a second instead of minutes. Any change runs every step. --no-cache
   (or FORGE_GENERATE_NO_CACHE=1) always runs every step.
+  Inside a run that does run, go mod tidy is skipped for a module whose
+  go.mod, go.sum and imports are what its last tidy left, and the validate
+  build for a tree whose Go build inputs are ones it last passed on
+  (.forge/generate-memo.json; --no-cache runs both).
 
 Examples:
   forge generate            # Generate all code
@@ -7782,6 +10176,12 @@ audits, suggest-* helpers); run 'forge lint --help-dev' to list them.
 reliant forge lint [paths...] [flags]
 ```
 
+**Subcommands:**
+
+| Command | Description |
+|---------|-------------|
+| [`fix`](#reliant-forge-lint-fix) | Rewrite your code to what a lint asks for (codemods, run on request) |
+
 **Flags:**
 
 | Flag | Type | Default | Description |
@@ -7826,6 +10226,389 @@ reliant forge lint [paths...] [flags]
 | `--time-bucketing` | `bool` | - | Flag a two-argument date_trunc over a TIMESTAMPTZ column — postgres truncates it in the SESSION timezone, which the driver sets from the client host, so every bucketed total is attributed to the wrong day by an amount that changes with the deploy host. Pin the zone: date_trunc('day', col, 'UTC') (warnings only) |
 | `--tracing` | `bool` | - | Report where a request's trace is cut: a log call made with a context in scope but not passed it (no trace_id), an *http.Client or database pool opened without forge's traced constructors, a contract package constructed without its generated decorator. With --fix, rewrites every log call to its ...Context form and every undecorated contract construction to NewInstrumented; forge.yaml lint.tracing.log_wrappers adds the project's own logging helpers |
 | `--vendored-protos` | `bool` | - | Fail when a vendored proto (proto/forge/v1/forge.proto) differs from the copy embedded in this forge binary — forge's upgrade path does not track these copies, so drift is otherwise invisible |
+
+---
+
+#### reliant forge lint fix
+
+Rewrite your code to what a lint asks for (codemods, run on request)
+
+Codemods that rewrite the project's own code to what a forge lint rule asks for. Each runs only when you name it, and edits files that are yours: review the diff.
+
+```
+reliant forge lint fix [flags]
+```
+
+**Subcommands:**
+
+| Command | Description |
+|---------|-------------|
+| [`composition-graph`](#reliant-forge-lint-fix-composition-graph) | Move a project off Infra / NewComponents / ServeSpec onto the composition graph |
+| [`config-proto-package`](#reliant-forge-lint-fix-config-proto-package) | Move the config protos to proto/<project>/config/v1, package <project>.config.v1 (no shared config.v1 since v1.0.0) |
+| [`connect-errors`](#reliant-forge-lint-fix-connect-errors) | Rewrite fixed-message connect.NewError calls to pkg/svcerr, wire-identically, and list the rest |
+| [`harness-mocks`](#reliant-forge-lint-fix-harness-mocks) | Rename the harness's Stub<Field> doubles to the forge mocks that replace them (one double per interface since v1.0.0) |
+| [`narrow-deps`](#reliant-forge-lint-fix-narrow-deps) | Declare the interfaces a component's Deps actually use, and retype its fields to them |
+| [`operatorkit`](#reliant-forge-lint-fix-operatorkit) | Rename lifecyclekit.Run / Controller / Options to operatorkit (moved in v0.1.46) |
+| [`tx-isolation`](#reliant-forge-lint-fix-tx-isolation) | Spell out every pkg/orm transaction's isolation level and attempt budget (no default since v1.0.0) |
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+
+---
+
+#### reliant forge lint fix composition-graph
+
+Move a project off Infra / NewComponents / ServeSpec onto the composition graph
+
+Convert the legacy composition to the composition graph.
+
+A project scaffolded before the graph composes with an owned Infra struct and
+OpenInfra (internal/app/providers.go), a Components bag built by NewComponents
+(compose.go), lifecycle.go, ServeSpec (cmd/<bin>/cmd/serve.go) and one
+subcommand per service, worker and operator. forge still generates for it
+exactly as before. This codemod converts the composition forge scaffolded:
+
+  - providers.go, compose.go and serve.go are re-scaffolded for the graph on
+    the next `forge generate` (compose.go keeps every Deps value you set,
+    translated: infra.Log → g.Log, infra.DB → g.DB().DB, c.Tasks → g.Tasks());
+  - lifecycle.go, server.go and the per-component subcommands are retired,
+    and root.go / main.go stop naming them;
+  - the e2e harness runs `server`, the one root a project has until it
+    declares more.
+
+The default root, `server`, reaches every service, worker and operator,
+which is what `<bin> server` ran. Anything the codemod cannot map without
+deciding for you — an Infra field of your own, a ServeSpec knob, a command
+that calls Serve, code that names Infra or Components — is listed with its
+file:line and the edit that clears it, and then NOTHING is written. Clear
+them (the migrations/v1.0.0 skill walks through each) and run it again.
+
+It replaces files you own, so it runs only on a committed tree
+(--allow-dirty overrides); review with git diff, undo with git checkout.
+
+The rest of the v1.0.0 story is the migration skill: `forge skill load migrations/v1.0.0`.
+
+```
+reliant forge lint fix composition-graph [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-dirty` | `bool` | - | Run over uncommitted changes |
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--dry-run` | `bool` | - | List what would be rewritten; change nothing |
+
+---
+
+#### reliant forge lint fix config-proto-package
+
+Move the config protos to proto/<project>/config/v1, package <project>.config.v1 (no shared config.v1 since v1.0.0)
+
+Move the project's config protos off the proto package every forge project shared.
+
+Every forge project declared package config.v1 at proto/config/v1/config.proto,
+so two projects' generated config packages could not be linked into one binary:
+protobuf registers each file by path and each message by full name, process-wide,
+and Go's runtime panics at init on the second ("file config/v1/config.proto is
+already registered"). forge v1.0.0 derives both from the project's name
+(forge.yaml name: "control-plane" is control_plane):
+
+  proto/config/v1/<file>.proto        → proto/<project>/config/v1/<file>.proto
+  package config.v1;                  → package <project>.config.v1;
+  go_package "<mod>/gen/config/v1;…"  → "<mod>/gen/<project>/config/v1;configv1"
+
+and rewrites what points at them:
+
+  import "config/v1/<file>.proto"     in every other proto under proto/
+  config.v1.<Message> references      in every proto (fully qualified type names)
+  "<mod>/gen/config/v1" Go imports    in the project's own Go files
+  "config.v1", "config.v1.Msg"        Go string literals that are exactly the old
+                                      package or a name in it (a registry filter
+                                      such as RangeFilesByPackage("config.v1", …)
+                                      silently matches nothing once it moves)
+  proto/config/v1, gen/config/v1      as paths in the project's own protos, Go,
+                                      TS/JS, KCL, YAML, shell and Make files
+                                      (TS imports of the generated _pb modules too)
+  proto/config                        the config tree as a whole path, the same
+                                      files (a buf.yaml lint/breaking ignore)
+
+Generated and forge-owned files (gen/, *_gen.go, a forge:hash marker) are not
+touched: forge generate rewrites them.
+
+and deletes the stale generated output under gen/config/v1 (and each frontend's
+src/gen/config/v1) that the next forge generate would otherwise leave beside
+the new package.
+
+Nothing a config DECLARES changes: fields, annotations, env var names, flags
+and the generated KCL schemas are the same, and the Go package keeps its name
+(configv1). Run forge generate afterwards to regenerate pkg/config, gen/ and
+the descriptor. Remaining mentions of the old layout (docs, a Go string that only contains config.v1, an import of another
+project's gen/config/v1) are listed
+for you with file:line; nothing else is decided for you.
+
+The rest of the v1.0.0 story is the migration skill: `forge skill load migrations/v1.0.0`.
+
+```
+reliant forge lint fix config-proto-package [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-dirty` | `bool` | - | Run over uncommitted changes |
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--dry-run` | `bool` | - | List what would be rewritten; change nothing |
+
+---
+
+#### reliant forge lint fix connect-errors
+
+Rewrite fixed-message connect.NewError calls to pkg/svcerr, wire-identically, and list the rest
+
+Move hand-built Connect errors onto pkg/svcerr where that changes nothing a client reads.
+
+connect.NewError(code, err) publishes err.Error() to the caller, and svcerr's
+redaction cannot help: a *connect.Error passes svcerr.Interceptor as built. This
+rewrites every connect.NewError whose client-visible code AND message an svcerr
+spelling reproduces exactly:
+
+  connect.NewError(connect.CodeNotFound, errors.New("chat not found"))  → svcerr.NotFound("chat")
+  connect.NewError(connect.CodeNotFound, errors.New("no such chat"))    → svcerr.WithMessage(svcerr.ErrNotFound, "no such chat")
+  connect.NewError(connect.CodeInvalidArgument, errors.New("id is required"))
+                                                                        → svcerr.InvalidArgument("id is required")
+  connect.NewError(connect.CodeAlreadyExists, fmt.Errorf("name %q is taken", n))
+                                                                        → svcerr.AlreadyExists(fmt.Sprintf("name %q is taken", n))
+
+A bare svcerr kind is written only in a handler package, where the expression is
+an error and nothing reads a *connect.Error in process (connect.CodeOf, errors.As
+into one, an As-style helper such as testify's require.ErrorAs handed a
+**connect.Error) in the package, its tests, the code of a package importing it,
+or the code of a package calling it through an interface one of its types
+implements. A read of a Connect client's error (off the wire) is not one.
+Elsewhere (interceptors, clients, a *connect.Error-typed result, a package such a
+reader can see) the same value is kept a *connect.Error with svcerr.ToConnect(…),
+and the report names every reader and how it reaches the package, on every run;
+once they read svcerr.Code, a re-run drops the wrappers.
+In the test files of every package that got a bare kind, and of every package
+importing one, connect.CodeOf(x) becomes svcerr.Code(x) — the code the
+interceptor sends, which a handler test calling a *Service method directly needs
+once the handler returns a bare kind.
+
+It never changes a code or a message. A site it cannot rewrite exactly is listed
+with the reason, file and line, and is the worklist for the change that does
+change what clients read:
+
+  wraps an error value     connect.NewError(code, err), fmt.Errorf("…: %w", err), an error-typed
+                           or .Error() argument: publishes err.Error(). svcerr.WrapOr(err,
+                           svcerr.<Kind>("<summary>")) redacts it and passes a classified err
+                           through — which changes the code or text, so review it.
+  nil error                the message is ""; every svcerr kind has text
+  computed message         errors.New(msg) / a format with no literal text could be "", which no
+                           svcerr constructor reproduces
+  computed code            the code is not a connect.Code constant
+
+Generated files, vendor/ and testdata/ are left alone, as is every
+connect.NewError in a test (a fixture). Re-running it changes nothing.
+--dry-run prints each rewrite as file:line: old → new, and the worklist; after a
+real run every file:line is the rewritten file's.
+
+--scope <path> (repeatable) rewrites, and reports on, only files under the paths
+named, for one lane of a shared checkout; readers anywhere in the module still
+keep a package wrapped. A test outside the scope that would have switched to
+svcerr.Code is listed, not rewritten.
+
+The rest of the v1.0.0 story is the migration skill: `forge skill load migrations/v1.0.0`.
+
+```
+reliant forge lint fix connect-errors [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-dirty` | `bool` | - | Run over uncommitted changes |
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--dry-run` | `bool` | - | List what would be rewritten; change nothing |
+| `--scope` | `stringSlice` | `[]` | Rewrite only files under `PATH` (repeatable or comma-separated, project-relative), as forge lint --scope lints one slice of a shared checkout. What decides a rewrite is still read from the whole project; only the writes, and the report, are bounded |
+
+---
+
+#### reliant forge lint fix harness-mocks
+
+Rename the harness's Stub<Field> doubles to the forge mocks that replace them (one double per interface since v1.0.0)
+
+Point your handler tests at the forge mock the test harness now installs.
+
+forge v1.0.0 stops synthesizing a Stub<Field> in helpers_gen_test.go for a Deps
+field whose interface forge already mocks in a mock_gen.go — the declaring
+package's (contract.go or a forge:deps deps.go), or the handler's own. The
+harness installs that mock instead:
+
+  Deps.Pause runs.PauseController   StubPause → runs.MockPauseController
+  Deps.Narrow Narrow (deps.go)      StubNarrow → MockNarrow
+  Deps.Estimates db.EstimateStore   StubEstimates → MockEstimateStore
+                                    (the handler's Deps-discovered mock)
+
+Both doubles have the same fields (<Method>Func, an embedded
+contractkit.Recorder), so this renames the type in every test file of the
+handler, qualifying it the way the file already reaches the package, and adds
+the declaring package's import where a file lacks it. A test struct that embeds
+a stub has its embedded field renamed with it (StubPause: → MockPauseController:,
+w.StubPause → w.MockPauseController). Stub<Field> stays for
+an interface no mock_gen.go has (a third-party or standard-library one).
+
+One behaviour moves with the name: an unset method returns
+contractkit.MockNotSet ("MockPauseController.PauseFunc not set") instead of
+testkit.StubNotConfigured ("StubPause.PauseFunc not set: forge test stub not
+configured ..."). Both are a non-nil error from every error-returning method;
+a test that asserts on the old text is listed for you, not rewritten.
+
+The rest of the v1.0.0 story is the migration skill: `forge skill load migrations/v1.0.0`.
+
+```
+reliant forge lint fix harness-mocks [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--dry-run` | `bool` | - | List what would be rewritten; change nothing |
+| `--scope` | `stringSlice` | `[]` | Rewrite only files under `PATH` (repeatable or comma-separated, project-relative), as forge lint --scope lints one slice of a shared checkout. What decides a rewrite is still read from the whole project; only the writes, and the report, are bounded |
+
+---
+
+#### reliant forge lint fix narrow-deps
+
+Declare the interfaces a component's Deps actually use, and retype its fields to them
+
+Narrow a component's Deps to what it uses (composition graph, least knowledge).
+
+For every Deps field typed as an interface DECLARED IN ANOTHER PACKAGE that has
+methods the package never calls through it (forgeconv-deps-surface), write an
+interface holding exactly the methods it calls, in the package itself — its
+contract.go, or deps.go — and retype the field to it. The composition is
+untouched: the value internal/app/compose.go hands the field still satisfies
+the narrower interface, structurally. Its mock is written beside it
+(mock_gen.go), and `forge generate` keeps it in step.
+
+A field the package passes on as an interface — a parameter, a struct field —
+needs that interface's methods too: the new interface embeds it, so every call
+that passes the value on still type-checks. A field whose value also leaves as
+`any`, a concrete type or a return value is left alone (what it needs is
+not all visible here), as is one it never uses (delete it) and an interface
+the package already declares (edit that one).
+
+The generated code is goimports-clean for the project (stdlib, third-party,
+then the module — or the local-prefixes of its golangci config). A narrowed
+interface still wider than the project's interfacebloat limit (read from its
+golangci config; golangci's default is 10) is reported, with the remedy. When
+the project's config runs interfacebloat, the type is also written with a
+reasoned //nolint:interfacebloat rather than split into embedded roles to fit:
+the lint counts an embedded interface as one entry, so a split would pass the
+count with the dependency exactly as wide. The interface is what the package
+calls; to shrink it, split the package.
+
+```
+reliant forge lint fix narrow-deps <package-dir> [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+
+---
+
+#### reliant forge lint fix operatorkit
+
+Rename lifecyclekit.Run / Controller / Options to operatorkit (moved in v0.1.46)
+
+Rename the operator bridge lifecyclekit no longer re-exports.
+
+forge v0.1.46 moved Run, Controller and Options out of
+github.com/reliant-labs/forge/pkg/lifecyclekit and into
+github.com/reliant-labs/forge/pkg/appkit/operatorkit, so that a binary
+importing lifecyclekit for Supervise, WrapWorker or Singleton never links
+controller-runtime. The signatures are identical.
+
+This rewrites every reference in the project's own Go files (generated files,
+vendor/ and testdata/ are left alone), adds the operatorkit import, and drops
+the lifecyclekit import from a file that no longer uses it. It is a rename
+and nothing else, so `forge project upgrade` runs it on its own when the
+project's baseline predates v0.1.46. Re-running it changes nothing.
+
+The rest of the v0.1.46 story is the migration skill: `forge skill load migrations/v0.1.46`.
+
+```
+reliant forge lint fix operatorkit [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--dry-run` | `bool` | - | List what would be rewritten; change nothing |
+| `--scope` | `stringSlice` | `[]` | Rewrite only files under `PATH` (repeatable or comma-separated, project-relative), as forge lint --scope lints one slice of a shared checkout. What decides a rewrite is still read from the whole project; only the writes, and the report, are bounded |
+
+---
+
+#### reliant forge lint fix tx-isolation
+
+Spell out every pkg/orm transaction's isolation level and attempt budget (no default since v1.0.0)
+
+Make every pkg/orm transaction name its isolation, exactly as it ran before.
+
+forge v1.0.0 removed the default isolation level. RunTx, RunTransaction and
+BeginDetached now take a policy that names the level and carries the attempt
+budget (orm.Serializable, orm.ReadCommitted, orm.RepeatableRead, refined with
+WithMaxAttempts / WithReadOnly into an orm.TxOptions); an unset level is
+rejected with orm.ErrInvalidTxOptions. RunTxWithOptions,
+RunTransactionWithOptions, Client.BeginTx and orm.IsolationDefault are gone,
+and orm.IsolationSerializable / IsolationReadCommitted / IsolationRepeatableRead
+are orm.Serializable / ReadCommitted / RepeatableRead.
+
+This rewrites every call on a pkg/orm handle to the explicit form that keeps
+what it did:
+
+  RunTx(ctx, fn)                      → RunTx(ctx, orm.Serializable, fn)          serializable, 7 attempts
+  tx.RunTx(ctx, fn) on an *orm.Tx     → tx.Join(ctx, fn)                          a join: its own level
+  RunTxWithOptions(ctx, opts, fn)     → RunTx(ctx, <opts spelled out>, fn)
+  BeginDetached(ctx, orm.TxOptions{}) → BeginDetached(ctx, orm.Serializable.WithMaxAttempts(1))
+  RunTransaction(ctx, fn)             → RunTransaction(ctx, orm.ReadCommitted, fn) read committed, 1 attempt
+  RunTransactionWithOptions(ctx, nil, fn), BeginTx(ctx, nil)
+                                      → … orm.ReadCommitted (BeginTx → BeginDetached)
+
+and every orm.TxOptions literal that left the level or the attempt budget to a
+default. It never picks a different level: it prints each site, and choosing
+READ COMMITTED for a SERIALIZABLE transaction that takes a lock is yours
+(forgeconv-tx-lock-under-serializable lists them). A shape it cannot decide —
+options computed at run time — is listed with the edit to make. Generated
+files, vendor/ and testdata/ are left alone. Re-running it changes nothing.
+
+The rest of the v1.0.0 story is the migration skill: `forge skill load migrations/v1.0.0`.
+
+```
+reliant forge lint fix tx-isolation [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--dry-run` | `bool` | - | List what would be rewritten; change nothing |
+| `--scope` | `stringSlice` | `[]` | Rewrite only files under `PATH` (repeatable or comma-separated, project-relative), as forge lint --scope lints one slice of a shared checkout. What decides a rewrite is still read from the whole project; only the writes, and the report, are bounded |
 
 ---
 
@@ -7909,6 +10692,415 @@ reliant forge logout [--endpoint URL] [flags]
 
 ---
 
+### reliant forge machine
+
+This machine's housekeeping: heavy-job slots, storage, and forge's pinned tools
+
+```
+reliant forge machine
+```
+
+**Subcommands:**
+
+| Command | Description |
+|---------|-------------|
+| [`slot`](#reliant-forge-machine-slot) | Queue heavy work behind host-wide slots: at most N heavy jobs at once on this machine |
+| [`storage`](#reliant-forge-machine-storage) | Inspect and bound local caches; preserve persistent application data |
+| [`tools`](#reliant-forge-machine-tools) | Manage developer tooling forge depends on (proto plugins, linters, etc.) |
+
+---
+
+#### reliant forge machine slot
+
+Queue heavy work behind host-wide slots: at most N heavy jobs at once on this machine
+
+A host-wide counting semaphore for heavy work (builds, test lanes, codegen, full lints).
+
+On a shared machine, past a handful of concurrent heavy jobs every job slows down — measured,
+`go build ./...` went from ~45s to ~130s beside 8 others — so queueing them finishes sooner
+than running them all at once. A slot is an OS file lock: a crashed holder releases it.
+
+Slots per class default to min(CPUs / 2, memory GiB / 8), read from the cgroup limit when
+there is one, at least 1. FORGE_HEAVY_SLOTS=<n> overrides it; FORGE_HEAVY_SLOTS=off turns
+the limit off. FORGE_SLOTS_DIR relocates the slot files (default: the user cache dir).
+
+`forge generate`, `forge lint` and the heavy checks of `forge ci gate` take a slot on
+their own. Anything running inside a slot passes it to its children (FORGE_SLOT_HELD),
+so a nested heavy command never waits on its own parent.
+
+```
+reliant forge machine slot
+```
+
+**Subcommands:**
+
+| Command | Description |
+|---------|-------------|
+| [`run`](#reliant-forge-machine-slot-run) | Run a command holding a host slot, waiting while every slot is held |
+| [`status`](#reliant-forge-machine-slot-status) | Show a slot class's capacity, why, who holds its slots and who waits |
+
+---
+
+#### reliant forge machine slot run
+
+Run a command holding a host slot, waiting while every slot is held
+
+Runs <command> once a slot of --class is free, holding the slot until the command
+exits, and exits with the command's status. While it waits it prints who holds the
+slots, and repeats that every 30s. Ctrl-C while waiting gives up (exit 130).
+
+Already inside a slot of the class — a parent ran under `forge slot run`, or a gate
+check — it runs the command at once: a child never queues behind its own parent.
+
+```
+reliant forge machine slot run [--class heavy] -- <command> [args...] [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--class` | `string` | `heavy` | Slot class |
+| `--slots` | `int` | `0` | Slots in the class (default: FORGE_<CLASS>_SLOTS, else derived from the machine) |
+
+---
+
+#### reliant forge machine slot status
+
+Show a slot class's capacity, why, who holds its slots and who waits
+
+```
+reliant forge machine slot status [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--class` | `string` | `heavy` | Slot class |
+| `--json` | `bool` | - | Print the status as JSON |
+
+---
+
+#### reliant forge machine storage
+
+Inspect and bound local caches; preserve persistent application data
+
+```
+reliant forge machine storage
+```
+
+**Subcommands:**
+
+| Command | Description |
+|---------|-------------|
+| [`check`](#reliant-forge-machine-storage-check) | Refuse a build below the physical host free-space reserve |
+| [`configure-nodes`](#reliant-forge-machine-storage-configure-nodes) | Preview kubelet GC migration for existing registered nodes; --apply restarts them |
+| [`daemon`](#reliant-forge-machine-storage-daemon) | Run maintenance periodically, reloading policy for every pass |
+| [`gc`](#reliant-forge-machine-storage-gc) | Preview cleanup; --apply deletes only eligible cache and registry versions |
+| [`gocache`](#reliant-forge-machine-storage-gocache) | Trim the Go build caches now (preview unless --apply); the bounded pass to run every few minutes |
+| [`install`](#reliant-forge-machine-storage-install) | Install daily maintenance (launchd, systemd timer, or Windows Task Scheduler) using a stable copy of this executable |
+| [`policy`](#reliant-forge-machine-storage-policy) | Print the effective storage policy |
+| [`register`](#reliant-forge-machine-storage-register) | Register local cluster contexts, declared repositories or release pins |
+| [`status`](#reliant-forge-machine-storage-status) | Report physical host capacity, Docker usage and node cleanup settings |
+| [`worktrees`](#reliant-forge-machine-storage-worktrees) | Preview idle, clean, pushed worktrees of a repo; --apply removes them |
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--policy` | `string` | - | machine storage policy (default: user config directory/forge/storage.json) |
+
+---
+
+#### reliant forge machine storage check
+
+Refuse a build below the physical host free-space reserve
+
+```
+reliant forge machine storage check [path...]
+```
+
+---
+
+#### reliant forge machine storage configure-nodes
+
+Preview kubelet GC migration for existing registered nodes; --apply restarts them
+
+```
+reliant forge machine storage configure-nodes [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--apply` | `bool` | - | install configuration and restart local k3d nodes sequentially |
+
+---
+
+#### reliant forge machine storage daemon
+
+Run maintenance periodically, reloading policy for every pass
+
+```
+reliant forge machine storage daemon [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--interval` | `duration` | `24h0m0s` | time between maintenance passes |
+
+---
+
+#### reliant forge machine storage gc
+
+Preview cleanup; --apply deletes only eligible cache and registry versions
+
+```
+reliant forge machine storage gc [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--apply` | `bool` | - | execute the cleanup plan |
+| `--dry-run` | `bool` | - | preview only (the default) |
+
+---
+
+#### reliant forge machine storage gocache
+
+Trim the Go build caches now (preview unless --apply); the bounded pass to run every few minutes
+
+Trim the shared Go build cache and the golangci-lint cache — the Go-cache
+layer of every other pass, alone, with the whole budget to itself. The module
+cache is left to Go.
+
+Entries used in the last 2h are never removed (a running build may be using
+them); past that, the cache is trimmed to go_cache_gib. Under agent load more
+than that budget can be written inside 2h, and entries cross the floor at tens
+of GiB an hour: run this every few minutes so they leave as they cross it,
+rather than piling up until an hourly pass.
+
+With --apply the outcome, including each cache's estimated size, the part
+inside the floor and whether the walk covered every shard, is recorded in
+last-gocache-gc.json beside the policy.
+
+```
+reliant forge machine storage gocache [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--apply` | `bool` | - | remove what the preview lists |
+| `--budget` | `duration` | `10m0s` | wall time for the pass; what it does not reach is resumed by the next one |
+| `--dry-run` | `bool` | - | preview only (the default) |
+
+---
+
+#### reliant forge machine storage install
+
+Install daily maintenance (launchd, systemd timer, or Windows Task Scheduler) using a stable copy of this executable
+
+```
+reliant forge machine storage install
+```
+
+---
+
+#### reliant forge machine storage policy
+
+Print the effective storage policy
+
+```
+reliant forge machine storage policy
+```
+
+---
+
+#### reliant forge machine storage register
+
+Register local cluster contexts, declared repositories or release pins
+
+```
+reliant forge machine storage register [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--builder` | `stringSlice` | `[]` | local Docker builders whose cache to maintain |
+| `--context` | `stringSlice` | `[]` | local k3d contexts that can use these images |
+| `--ledger` | `string` | `.forge/releases` | local release ledger directory to import before enabling cleanup |
+| `--pin` | `stringSlice` | `[]` | image references that must remain available |
+| `--repository` | `stringSlice` | `[]` | declared local image repositories, including registry host |
+
+---
+
+#### reliant forge machine storage status
+
+Report physical host capacity, Docker usage and node cleanup settings
+
+```
+reliant forge machine storage status
+```
+
+---
+
+#### reliant forge machine storage worktrees
+
+Preview idle, clean, pushed worktrees of a repo; --apply removes them
+
+```
+reliant forge machine storage worktrees [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--apply` | `bool` | - | remove removable worktrees without forcing or deleting branches |
+| `--base` | `string` | - | integration branch for the pushed test (default: origin/HEAD, else origin/main) |
+| `--idle` | `duration` | `24h0m0s` | minimum time since any activity in the worktree (at least 24h) |
+| `--repo` | `string` | `.` | repository whose worktrees to inspect |
+
+---
+
+#### reliant forge machine tools
+
+Manage developer tooling forge depends on (proto plugins, linters, etc.)
+
+Manage developer tooling that forge expects on PATH but does not ship.
+
+Subcommands:
+  install   Install the codegen tools forge runs (protoc-gen-go,
+            protoc-gen-connect-go, goimports) via 'go install', at the
+            versions this project's go.mod resolves, and check that every
+            frontend declares its TypeScript plugin. Name a tool to install
+            just it — including the lint tools 'forge lint' gates with
+            (golangci-lint, buf), at forge's pins.
+  pins      Print the tool versions this forge pins, for CI to read.
+
+Forge scaffolds buf.gen.yaml with 'local:' plugins by default so that
+'forge generate' works without any BSR (buf.build) authentication.
+Those local plugins must be on PATH; this command installs them.
+
+```
+reliant forge machine tools [flags]
+```
+
+**Subcommands:**
+
+| Command | Description |
+|---------|-------------|
+| [`install`](#reliant-forge-machine-tools-install) | Install codegen tools (protoc-gen-go, protoc-gen-connect-go, goimports), or the named tools (golangci-lint, buf) |
+| [`pins`](#reliant-forge-machine-tools-pins) | Print the tool versions this forge pins (golangci-lint, buf, …), for CI to read |
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+
+---
+
+#### reliant forge machine tools install
+
+Install codegen tools (protoc-gen-go, protoc-gen-connect-go, goimports), or the named tools (golangci-lint, buf)
+
+Install the codegen tools forge needs on PATH for the default
+local:-plugin buf.gen.yaml workflow, plus goimports, which formats every Go
+file forge generates. Name tools to install just those, including the lint
+tools 'forge lint' gates with: golangci-lint and buf.
+
+Each codegen tool is installed at the version this project's go.mod resolves
+for it (google.golang.org/protobuf, connectrpc.com/connect,
+golang.org/x/tools) — the version the committed generated code was produced
+with — falling back to @latest when go.mod does not contain the module.
+--version overrides that for every codegen tool.
+
+The lint tools install at forge's pins ('forge tools pins'), never at
+--version. golangci-lint is built with the Go toolchain this module compiles
+with: one built with an older Go cannot analyze it. 'forge lint' builds that
+same golangci-lint into its own cache when PATH has none, so installing it
+only saves that one-time build — a CI job needs no install step for it.
+
+By default, tools already present on PATH are skipped — golangci-lint only
+when it is forge's pin built with a new-enough Go. Use --force to re-install
+them.
+
+The TypeScript plugin, @bufbuild/protoc-gen-es, is not installed here. It
+is an ordinary devDependency of each frontend, so the frontend's own
+'npm ci' installs it at the version its lockfile pins. With no tool named,
+this command checks that every frontend whose buf.gen.yaml runs it declares
+it, and fails with the edit to make when one does not. It never runs npm and
+never writes a frontend's package.json or package-lock.json — with or
+without --force.
+
+Examples:
+  forge tools install
+  forge tools install --version v1.34.2
+  forge tools install --force
+  forge tools install golangci-lint
+  forge tools install golangci-lint buf
+
+```
+reliant forge machine tools install [tool...] [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--force` | `bool` | - | Reinstall the Go tools even when already on PATH (never touches a frontend's npm dependencies) |
+| `--version` | `string` | - | Version passed to 'go install' for every codegen tool (e.g. latest, v1.34.2); default: the version go.mod resolves, else latest. The lint tools always install at forge's pins |
+
+---
+
+#### reliant forge machine tools pins
+
+Print the tool versions this forge pins (golangci-lint, buf, …), for CI to read
+
+Print the tool versions this forge pins: the golangci-lint and buf that
+'forge lint' gates with, and the other tools forge installs or renders into
+scaffolded CI.
+
+With a tool name, print only its version — the form a CI step reads:
+
+  GOLANGCI_LINT_VERSION="$(forge tools pins golangci-lint)"
+
+The versions are this forge binary's, so a workflow that runs the forge its
+go.mod pins reads the matching tool pins with no second place to bump. The one
+the project can move is buf: inside a project whose go.mod requires
+github.com/bufbuild/buf (`go get -tool github.com/bufbuild/buf/cmd/buf@vX`),
+buf is that version, the one `forge generate` and `forge ci gate` run.
+
+Examples:
+  forge tools pins
+  forge tools pins golangci-lint
+  forge tools pins --json
+
+```
+reliant forge machine tools pins [tool] [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--json` | `bool` | - | Print a JSON object of tool → version |
+
+---
+
 ### reliant forge mcp
 
 Run forge as an MCP server on stdio, so any agent harness can drive it
@@ -7920,8 +11112,8 @@ introspection, skill and lint/generate verbs as tools, with no memory file in
 the project telling it how. The server says what forge is, and tells the model to
 load the 'forge' skill first.
 
-Tools (each takes an optional "dir": the project to act on; default is the
-directory the server was started in, or -C):
+Tools (each but explain_error takes an optional "dir": the project to act on;
+default is the directory the server was started in, or -C):
 
   read-only   capabilities   every verb, lint analyzer and marker
               annotations    the entity-authoring vocabulary
@@ -7931,16 +11123,25 @@ directory the server was started in, or -C):
               skill_list     the skill catalog
               skill_search   find a skill by keyword
               skill_load     print one skill
+              deploy_status  the claimable deploy of an env: URL, claim link, state
+              explain_error  a forge failure's meaning and the exact next command
   mutating    lint           forge lint --quiet [--scope PATH...]
               generate       forge generate [--dry-run | --check]
+              deploy_claimable
+                             forge env deploy <env> --claimable: a live URL plus a
+                             claim link, no account; adopts a Vite/Next.js app with
+                             no forge.yaml in place first. Streams progress
+                             (notifications/progress) and stops on cancel
 
 Each tool runs the same command in-process; it does not shell out to a forge
 binary, and it does not hand a project pinned to another forge over to that
 forge (it reports the skew instead).
 
-Register it:
+Register it. With no install, the command is "npx -y @reliantlabs/forge mcp"
+(the npm shim downloads the matching forge binary on first run):
 
-  Claude Code   claude mcp add forge -- forge mcp
+  Claude Code   claude mcp add forge -- npx -y @reliantlabs/forge mcp
+                claude mcp add forge -- forge mcp
   Codex         codex mcp add forge -- forge mcp
   Cursor        {"mcpServers": {"forge": {"command": "forge", "args": ["mcp"]}}}
                 in .cursor/mcp.json
@@ -8178,6 +11379,7 @@ The document says where each effective threshold came from: release_shape,
 default or request.
 
 JSON schema forge.obs.check/v1. --fields takes dotted paths of:
+  early_pass
   findings
   findings.code
   findings.message
@@ -8244,6 +11446,7 @@ reliant forge obs check [env] [flags]
 | `--allow-inconclusive` | `bool` | - | exit 0 on INCONCLUSIVE instead of 2 |
 | `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 | `--backend` | `string` | - | local | cloud (default: from the env's declaration) |
+| `--early-pass` | `duration` | `0s` | with --wait: PASS before the after window finishes, once at least this much of it is observed with the new version serving all traffic, enough requests, and nothing found (no finding of any policy, issue, alert or restart); 0 waits for the whole window |
 | `--explain` | `bool` | - | local env only: print the compiled statements instead of running them |
 | `--fail-on` | `string` | - | comma-separated finding codes that fail the release (default: the env's release_health.fail_on): error_rate, latency, new_issue, regressed_issue, alert_firing, workload_restarts |
 | `--fields` | `string` | - | with --json: keep only these comma-separated dotted fields (the head is always kept) |
@@ -8455,6 +11658,10 @@ JSON schema forge.obs.dashboards_audit/v1. --fields takes dotted paths of:
   scope.env
   scope.env_id
   scope.from
+  scope.instance
+  scope.instance.id
+  scope.instance.label
+  scope.instance.user
   scope.services
   scope.to
   suggested
@@ -8570,6 +11777,10 @@ JSON schema forge.obs.endpoints/v1. --fields takes dotted paths of:
   scope.backend
   scope.env
   scope.from
+  scope.instance
+  scope.instance.id
+  scope.instance.label
+  scope.instance.user
   scope.services
   scope.to
   sort
@@ -8589,12 +11800,14 @@ reliant forge obs endpoints [env] [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
+| `--all-instances` | `bool` | - | read every dev instance of the env, not only this checkout's |
 | `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 | `--backend` | `string` | - | local | cloud (default: from the env's declaration) |
 | `--explain` | `bool` | - | print the compiled SQL and its parameters instead of running it (a starting point for obs query --sql) |
 | `--fields` | `string` | - | with --json: keep only these comma-separated dotted fields (the head is always kept) |
 | `--filter` | `stringArray` | `[]` | attribute predicate key=value or key!=value (repeatable): an allowlisted key, or any attribute as span.attr.<k> (traces), log.attr.<k> (logs) or resource.attr.<k> |
 | `--from` | `string` | - | range start, RFC 3339 |
+| `--instance` | `string` | - | read this dev `instance` of a hosted-dev env: its id (scope.instance.id, the control plane's) or its label (alice/fix-login, or the branch alone) as forge env up recorded it on this machine (default: this checkout's) |
 | `--json` | `bool` | - | print one JSON document on stdout (see the schema below; progress goes to stderr) |
 | `--print-sql` | `bool` | - | alias of --explain |
 | `--service` | `stringArray` | `[]` | only this service.name (repeatable) |
@@ -8602,6 +11815,7 @@ reliant forge obs endpoints [env] [flags]
 | `--sort` | `string` | `requests` | requests | p95 | errors | rate |
 | `--to` | `string` | - | range end, RFC 3339 (default now) |
 | `--top` | `int` | `10` | most endpoints to return |
+| `--user` | `string` | - | read every dev instance of one `user` (the reliant.instance.user the gateway stamps; the control plane resolves an email) |
 
 ---
 
@@ -8710,6 +11924,10 @@ JSON schema forge.obs.issue/v1. --fields takes dotted paths of:
   scope.env
   scope.env_id
   scope.from
+  scope.instance
+  scope.instance.id
+  scope.instance.label
+  scope.instance.user
   scope.services
   scope.to
   statements
@@ -8786,6 +12004,7 @@ reliant forge obs issue <id> [env] [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
+| `--all-instances` | `bool` | - | read every dev instance of the env, not only this checkout's |
 | `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 | `--backend` | `string` | - | local | cloud (default: from the env's declaration) |
 | `--events` | `int` | `5` | newest events to include (0 = none) |
@@ -8793,12 +12012,14 @@ reliant forge obs issue <id> [env] [flags]
 | `--fields` | `string` | - | with --json: keep only these comma-separated dotted fields (the head is always kept) |
 | `--filter` | `stringArray` | `[]` | attribute predicate key=value or key!=value (repeatable): an allowlisted key, or any attribute as span.attr.<k> (traces), log.attr.<k> (logs) or resource.attr.<k> |
 | `--from` | `string` | - | range start, RFC 3339 |
+| `--instance` | `string` | - | read this dev `instance` of a hosted-dev env: its id (scope.instance.id, the control plane's) or its label (alice/fix-login, or the branch alone) as forge env up recorded it on this machine (default: this checkout's) |
 | `--json` | `bool` | - | print one JSON document on stdout (see the schema below; progress goes to stderr) |
 | `--print-sql` | `bool` | - | alias of --explain |
 | `--service` | `stringArray` | `[]` | only this service.name (repeatable) |
 | `--since` | `duration` | `72h0m0s` | how far back to read (ignored with --from) |
 | `--timeline-limit` | `int` | `10` | newest timeline entries (comments, status changes, assignment, linked chats) to include, oldest first (0 = none; at most 100) |
 | `--to` | `string` | - | range end, RFC 3339 (default now) |
+| `--user` | `string` | - | read every dev instance of one `user` (the reliant.instance.user the gateway stamps; the control plane resolves an email) |
 
 ---
 
@@ -8907,6 +12128,10 @@ JSON schema forge.obs.issue/v1. --fields takes dotted paths of:
   scope.env
   scope.env_id
   scope.from
+  scope.instance
+  scope.instance.id
+  scope.instance.label
+  scope.instance.user
   scope.services
   scope.to
   statements
@@ -9075,6 +12300,10 @@ JSON schema forge.obs.issue/v1. --fields takes dotted paths of:
   scope.env
   scope.env_id
   scope.from
+  scope.instance
+  scope.instance.id
+  scope.instance.label
+  scope.instance.user
   scope.services
   scope.to
   statements
@@ -9239,6 +12468,10 @@ JSON schema forge.obs.issue/v1. --fields takes dotted paths of:
   scope.env
   scope.env_id
   scope.from
+  scope.instance
+  scope.instance.id
+  scope.instance.label
+  scope.instance.user
   scope.services
   scope.to
   statements
@@ -9404,6 +12637,10 @@ JSON schema forge.obs.issue/v1. --fields takes dotted paths of:
   scope.env
   scope.env_id
   scope.from
+  scope.instance
+  scope.instance.id
+  scope.instance.label
+  scope.instance.user
   scope.services
   scope.to
   statements
@@ -9569,6 +12806,10 @@ JSON schema forge.obs.issue/v1. --fields takes dotted paths of:
   scope.env
   scope.env_id
   scope.from
+  scope.instance
+  scope.instance.id
+  scope.instance.label
+  scope.instance.user
   scope.services
   scope.to
   statements
@@ -9716,6 +12957,10 @@ JSON schema forge.obs.issues/v1. --fields takes dotted paths of:
   scope.env
   scope.env_id
   scope.from
+  scope.instance
+  scope.instance.id
+  scope.instance.label
+  scope.instance.user
   scope.services
   scope.to
   sort
@@ -9735,6 +12980,7 @@ reliant forge obs issues [env] [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
+| `--all-instances` | `bool` | - | read every dev instance of the env, not only this checkout's |
 | `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 | `--assignee` | `string` | - | only issues assigned to this user id, me (credential's acting user), or none (unassigned) |
 | `--backend` | `string` | - | local | cloud (default: from the env's declaration) |
@@ -9744,6 +12990,7 @@ reliant forge obs issues [env] [flags]
 | `--filter` | `stringArray` | `[]` | attribute predicate key=value or key!=value (repeatable): an allowlisted key, or any attribute as span.attr.<k> (traces), log.attr.<k> (logs) or resource.attr.<k> |
 | `--from` | `string` | - | range start, RFC 3339 |
 | `--incident-window` | `duration` | `10m0s` | issues of one cause first seen within this long of each other are one incident (max 1h0m0s) |
+| `--instance` | `string` | - | read this dev `instance` of a hosted-dev env: its id (scope.instance.id, the control plane's) or its label (alice/fix-login, or the branch alone) as forge env up recorded it on this machine (default: this checkout's) |
 | `--json` | `bool` | - | print one JSON document on stdout (see the schema below; progress goes to stderr) |
 | `--limit` | `int` | `25` | most items to return |
 | `--page-token` | `string` | - | resume from a next_page_token |
@@ -9757,6 +13004,7 @@ reliant forge obs issues [env] [flags]
 | `--source` | `string` | - | list the issues of this issue source (issue.source) instead of errors, e.g. llm_bug_report |
 | `--status` | `stringArray` | `[]` | only issues in this state: new, unresolved, resolved, regressed, ignored (repeatable; default the open ones) |
 | `--to` | `string` | - | range end, RFC 3339 (default now) |
+| `--user` | `string` | - | read every dev instance of one `user` (the reliant.instance.user the gateway stamps; the control plane resolves an email) |
 
 ---
 
@@ -9795,6 +13043,10 @@ JSON schema forge.obs.logs/v1. --fields takes dotted paths of:
   scope.backend
   scope.env
   scope.from
+  scope.instance
+  scope.instance.id
+  scope.instance.label
+  scope.instance.user
   scope.services
   scope.to
   statements
@@ -9813,6 +13065,7 @@ reliant forge obs logs [env] [query] [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
+| `--all-instances` | `bool` | - | read every dev instance of the env, not only this checkout's |
 | `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 | `--backend` | `string` | - | local | cloud (default: from the env's declaration) |
 | `--explain` | `bool` | - | print the compiled SQL and its parameters instead of running it (a starting point for obs query --sql) |
@@ -9820,6 +13073,7 @@ reliant forge obs logs [env] [query] [flags]
 | `--filter` | `stringArray` | `[]` | attribute predicate key=value or key!=value (repeatable): an allowlisted key, or any attribute as span.attr.<k> (traces), log.attr.<k> (logs) or resource.attr.<k> |
 | `--follow` | `bool` | - | keep polling for new logs (NDJSON with --json); stop with ^C |
 | `--from` | `string` | - | range start, RFC 3339 |
+| `--instance` | `string` | - | read this dev `instance` of a hosted-dev env: its id (scope.instance.id, the control plane's) or its label (alice/fix-login, or the branch alone) as forge env up recorded it on this machine (default: this checkout's) |
 | `--interval` | `duration` | `2s` | with --follow, how often to poll |
 | `--json` | `bool` | - | print one JSON document on stdout (see the schema below; progress goes to stderr) |
 | `--limit` | `int` | `100` | most items to return |
@@ -9831,6 +13085,7 @@ reliant forge obs logs [env] [query] [flags]
 | `--since` | `duration` | `15m0s` | how far back to read (ignored with --from) |
 | `--to` | `string` | - | range end, RFC 3339 (default now) |
 | `--trace` | `string` | - | only the logs of this trace id |
+| `--user` | `string` | - | read every dev instance of one `user` (the reliant.instance.user the gateway stamps; the control plane resolves an email) |
 
 ---
 
@@ -9952,6 +13207,10 @@ JSON schema forge.obs.metric/v1. --fields takes dotted paths of:
   scope.backend
   scope.env
   scope.from
+  scope.instance
+  scope.instance.id
+  scope.instance.label
+  scope.instance.user
   scope.services
   scope.to
   statements
@@ -9971,18 +13230,21 @@ reliant forge obs metrics describe [env] <metric> [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
+| `--all-instances` | `bool` | - | read every dev instance of the env, not only this checkout's |
 | `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 | `--backend` | `string` | - | local | cloud (default: from the env's declaration) |
 | `--explain` | `bool` | - | print the compiled SQL and its parameters instead of running it (a starting point for obs query --sql) |
 | `--fields` | `string` | - | with --json: keep only these comma-separated dotted fields (the head is always kept) |
 | `--filter` | `stringArray` | `[]` | attribute predicate key=value or key!=value (repeatable): an allowlisted key, or any attribute as span.attr.<k> (traces), log.attr.<k> (logs) or resource.attr.<k> |
 | `--from` | `string` | - | range start, RFC 3339 |
+| `--instance` | `string` | - | read this dev `instance` of a hosted-dev env: its id (scope.instance.id, the control plane's) or its label (alice/fix-login, or the branch alone) as forge env up recorded it on this machine (default: this checkout's) |
 | `--json` | `bool` | - | print one JSON document on stdout (see the schema below; progress goes to stderr) |
 | `--limit` | `int` | `200` | most items to return |
 | `--print-sql` | `bool` | - | alias of --explain |
 | `--service` | `stringArray` | `[]` | only this service.name (repeatable) |
 | `--since` | `duration` | `1h0m0s` | how far back to read (ignored with --from) |
 | `--to` | `string` | - | range end, RFC 3339 (default now) |
+| `--user` | `string` | - | read every dev instance of one `user` (the reliant.instance.user the gateway stamps; the control plane resolves an email) |
 
 ---
 
@@ -10024,6 +13286,10 @@ JSON schema forge.obs.metric_exemplars/v1. --fields takes dotted paths of:
   scope.backend
   scope.env
   scope.from
+  scope.instance
+  scope.instance.id
+  scope.instance.label
+  scope.instance.user
   scope.services
   scope.to
   statements
@@ -10045,6 +13311,7 @@ reliant forge obs metrics exemplars [env] <metric> [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
+| `--all-instances` | `bool` | - | read every dev instance of the env, not only this checkout's |
 | `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 | `--around` | `duration` | `2m0s` | with --at: how far either side of it |
 | `--at` | `string` | - | the moment to read exemplars around, RFC 3339 (the bucket a chart point is) |
@@ -10054,6 +13321,7 @@ reliant forge obs metrics exemplars [env] <metric> [flags]
 | `--filter` | `stringArray` | `[]` | attribute predicate key=value or key!=value (repeatable): an allowlisted key, or any attribute as span.attr.<k> (traces), log.attr.<k> (logs) or resource.attr.<k> |
 | `--from` | `string` | - | range start, RFC 3339 |
 | `--group` | `stringArray` | `[]` | narrow to one series group: a --group-by KEY=VALUE (repeatable, one per key) |
+| `--instance` | `string` | - | read this dev `instance` of a hosted-dev env: its id (scope.instance.id, the control plane's) or its label (alice/fix-login, or the branch alone) as forge env up recorded it on this machine (default: this checkout's) |
 | `--json` | `bool` | - | print one JSON document on stdout (see the schema below; progress goes to stderr) |
 | `--limit` | `int` | `20` | most items to return |
 | `--min-value` | `float64` | `0` | only exemplars at or above this value |
@@ -10061,6 +13329,7 @@ reliant forge obs metrics exemplars [env] <metric> [flags]
 | `--service` | `stringArray` | `[]` | only this service.name (repeatable) |
 | `--since` | `duration` | `1h0m0s` | how far back to read (ignored with --from) |
 | `--to` | `string` | - | range end, RFC 3339 (default now) |
+| `--user` | `string` | - | read every dev instance of one `user` (the reliant.instance.user the gateway stamps; the control plane resolves an email) |
 | `--where` | `stringArray` | `[]` | narrow to series matching key=value or key!=value (repeatable) |
 
 ---
@@ -10103,6 +13372,10 @@ JSON schema forge.obs.metrics_list/v1. --fields takes dotted paths of:
   scope.backend
   scope.env
   scope.from
+  scope.instance
+  scope.instance.id
+  scope.instance.label
+  scope.instance.user
   scope.services
   scope.to
   statements
@@ -10121,6 +13394,7 @@ reliant forge obs metrics list [env] [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
+| `--all-instances` | `bool` | - | read every dev instance of the env, not only this checkout's |
 | `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 | `--backend` | `string` | - | local | cloud (default: from the env's declaration) |
 | `--contains` | `string` | - | only metrics whose name contains this (case-insensitive) |
@@ -10128,12 +13402,14 @@ reliant forge obs metrics list [env] [flags]
 | `--fields` | `string` | - | with --json: keep only these comma-separated dotted fields (the head is always kept) |
 | `--filter` | `stringArray` | `[]` | attribute predicate key=value or key!=value (repeatable): an allowlisted key, or any attribute as span.attr.<k> (traces), log.attr.<k> (logs) or resource.attr.<k> |
 | `--from` | `string` | - | range start, RFC 3339 |
+| `--instance` | `string` | - | read this dev `instance` of a hosted-dev env: its id (scope.instance.id, the control plane's) or its label (alice/fix-login, or the branch alone) as forge env up recorded it on this machine (default: this checkout's) |
 | `--json` | `bool` | - | print one JSON document on stdout (see the schema below; progress goes to stderr) |
 | `--limit` | `int` | `200` | most items to return |
 | `--print-sql` | `bool` | - | alias of --explain |
 | `--service` | `stringArray` | `[]` | only this service.name (repeatable) |
 | `--since` | `duration` | `1h0m0s` | how far back to read (ignored with --from) |
 | `--to` | `string` | - | range end, RFC 3339 (default now) |
+| `--user` | `string` | - | read every dev instance of one `user` (the reliant.instance.user the gateway stamps; the control plane resolves an email) |
 
 ---
 
@@ -10204,6 +13480,10 @@ JSON schema forge.obs.metrics_query/v2. --fields takes dotted paths of:
   scope.backend
   scope.env
   scope.from
+  scope.instance
+  scope.instance.id
+  scope.instance.label
+  scope.instance.user
   scope.services
   scope.to
   series
@@ -10235,6 +13515,7 @@ reliant forge obs metrics query [env] <metric> [flags]
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
 | `--agg` | `string` | - | aggregation of series A: rate, increase, sum, avg, min, max, last, count, quantile (p50, p95 and p99 are the quantiles 0.5, 0.95 and 0.99) (default: by the metric's kind) |
+| `--all-instances` | `bool` | - | read every dev instance of the env, not only this checkout's |
 | `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 | `--backend` | `string` | - | local | cloud (default: from the env's declaration) |
 | `--compare` | `string` | - | also read the range shifted back by this duration, or prev-release |
@@ -10244,6 +13525,7 @@ reliant forge obs metrics query [env] <metric> [flags]
 | `--formula` | `string` | - | plot an expression of the series, e.g. 'B / A * 100' |
 | `--from` | `string` | - | range start, RFC 3339 |
 | `--group-by` | `stringArray` | `[]` | split by this attribute key (repeatable, at most 3) |
+| `--instance` | `string` | - | read this dev `instance` of a hosted-dev env: its id (scope.instance.id, the control plane's) or its label (alice/fix-login, or the branch alone) as forge env up recorded it on this machine (default: this checkout's) |
 | `--json` | `bool` | - | print one JSON document on stdout (see the schema below; progress goes to stderr) |
 | `--kind` | `string` | - | line (default), number, table or bar |
 | `--limit` | `int` | `50` | most series to return per panel series |
@@ -10256,6 +13538,7 @@ reliant forge obs metrics query [env] <metric> [flags]
 | `--step` | `duration` | `0s` | bucket width (default: about 120 points per series, never below the export interval) |
 | `--to` | `string` | - | range end, RFC 3339 (default now) |
 | `--top` | `int` | `0` | a table or bar keeps the top N groups |
+| `--user` | `string` | - | read every dev instance of one `user` (the reliant.instance.user the gateway stamps; the control plane resolves an email) |
 | `--where` | `stringArray` | `[]` | narrow one series NAME:key=value or NAME:key!=value (repeatable) |
 
 ---
@@ -10267,8 +13550,8 @@ Export an aggregated continuous profile as pprof, speedscope or collapsed stacks
 Export the continuous profile the local ClickStack collected, for a service
 over a time range or for one trace.
 
-Apps push a 10s CPU profile plus heap and goroutine snapshots about once a
-minute (pkg/observe, on by default whenever an OTLP endpoint is set). They land
+Apps push a 5s CPU profile every 5 minutes and a live-heap snapshot every 2
+hours (pkg/observe, on by default whenever an OTLP endpoint is set). They land
 in ClickHouse; HyperDX cannot draw flamegraphs, so this exports them:
 
   forge obs profile --service api --since 30m -o api.pb.gz
@@ -10282,7 +13565,11 @@ in ClickHouse; HyperDX cannot draw flamegraphs, so this exports them:
 
 Sample types: cpu (nanoseconds) and inuse_space / inuse_objects (live heap) by
 default; alloc_space / alloc_objects and goroutine only from a workload whose
-profiling block turns them on (see forge skill load observability/profiles). Raw samples (and so --trace) are kept 24h; the
+profiling block turns them on (see forge skill load observability/profiles).
+CPU and the other accumulated types are summed over the range. The live heap
+and the goroutines are gauges: each instance's newest snapshot in the range,
+or, when the range holds none, the newest before it, so a range shorter than
+the heap interval still shows the heap as last measured. Raw samples (so --trace and the heap) are kept 24h; the
 per-minute aggregate behind --since is kept 30 days. --sql prints the query so
 you can run it yourself against the ClickStack ClickHouse.
 
@@ -10363,6 +13650,10 @@ JSON schema forge.obs.query/v1. --fields takes dotted paths of:
   scope.backend
   scope.env
   scope.from
+  scope.instance
+  scope.instance.id
+  scope.instance.label
+  scope.instance.user
   scope.services
   scope.to
   statements
@@ -10381,12 +13672,14 @@ reliant forge obs query [env] [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
+| `--all-instances` | `bool` | - | read every dev instance of the env, not only this checkout's |
 | `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 | `--backend` | `string` | - | local | cloud (default: from the env's declaration) |
 | `--explain` | `bool` | - | print the compiled SQL and its parameters instead of running it (a starting point for obs query --sql) |
 | `--fields` | `string` | - | with --json: keep only these comma-separated dotted fields (the head is always kept) |
 | `--filter` | `stringArray` | `[]` | attribute predicate key=value or key!=value (repeatable): an allowlisted key, or any attribute as span.attr.<k> (traces), log.attr.<k> (logs) or resource.attr.<k> |
 | `--from` | `string` | - | range start, RFC 3339 |
+| `--instance` | `string` | - | read this dev `instance` of a hosted-dev env: its id (scope.instance.id, the control plane's) or its label (alice/fix-login, or the branch alone) as forge env up recorded it on this machine (default: this checkout's) |
 | `--json` | `bool` | - | print one JSON document on stdout (see the schema below; progress goes to stderr) |
 | `--limit` | `int` | `200` | most items to return |
 | `--panel` | `string` | - | a dashboard panel JSON file |
@@ -10398,6 +13691,7 @@ reliant forge obs query [env] [flags]
 | `--sql-file` | `string` | - | read the statement from this file (- for stdin) |
 | `--step` | `duration` | `0s` | the {step} parameter / a panel's bucket width (default: about 120 points) |
 | `--to` | `string` | - | range end, RFC 3339 (default now) |
+| `--user` | `string` | - | read every dev instance of one `user` (the reliant.instance.user the gateway stamps; the control plane resolves an email) |
 
 ---
 
@@ -10431,6 +13725,10 @@ JSON schema forge.obs.session/v1. --fields takes dotted paths of:
   scope.env
   scope.env_id
   scope.from
+  scope.instance
+  scope.instance.id
+  scope.instance.label
+  scope.instance.user
   scope.services
   scope.to
   session
@@ -10481,12 +13779,14 @@ reliant forge obs session <id> [env] [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
+| `--all-instances` | `bool` | - | read every dev instance of the env, not only this checkout's |
 | `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 | `--backend` | `string` | - | local | cloud (default: from the env's declaration) |
 | `--explain` | `bool` | - | print the compiled SQL and its parameters instead of running it (a starting point for obs query --sql) |
 | `--fields` | `string` | - | with --json: keep only these comma-separated dotted fields (the head is always kept) |
 | `--filter` | `stringArray` | `[]` | attribute predicate key=value or key!=value (repeatable): an allowlisted key, or any attribute as span.attr.<k> (traces), log.attr.<k> (logs) or resource.attr.<k> |
 | `--from` | `string` | - | range start, RFC 3339 |
+| `--instance` | `string` | - | read this dev `instance` of a hosted-dev env: its id (scope.instance.id, the control plane's) or its label (alice/fix-login, or the branch alone) as forge env up recorded it on this machine (default: this checkout's) |
 | `--json` | `bool` | - | print one JSON document on stdout (see the schema below; progress goes to stderr) |
 | `--limit` | `int` | `200` | most items to return |
 | `--page-token` | `string` | - | resume the timeline from a next_page_token |
@@ -10494,6 +13794,7 @@ reliant forge obs session <id> [env] [flags]
 | `--service` | `stringArray` | `[]` | only this service.name (repeatable) |
 | `--since` | `duration` | `720h0m0s` | how far back to read (ignored with --from) |
 | `--to` | `string` | - | range end, RFC 3339 (default now) |
+| `--user` | `string` | - | read every dev instance of one `user` (the reliant.instance.user the gateway stamps; the control plane resolves an email) |
 
 ---
 
@@ -10522,6 +13823,10 @@ JSON schema forge.obs.sessions/v1. --fields takes dotted paths of:
   scope.env
   scope.env_id
   scope.from
+  scope.instance
+  scope.instance.id
+  scope.instance.label
+  scope.instance.user
   scope.services
   scope.to
   sessions
@@ -10553,6 +13858,7 @@ reliant forge obs sessions [env] [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
+| `--all-instances` | `bool` | - | read every dev instance of the env, not only this checkout's |
 | `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 | `--backend` | `string` | - | local | cloud (default: from the env's declaration) |
 | `--explain` | `bool` | - | print the compiled SQL and its parameters instead of running it (a starting point for obs query --sql) |
@@ -10561,6 +13867,8 @@ reliant forge obs sessions [env] [flags]
 | `--from` | `string` | - | range start, RFC 3339 |
 | `--has-error` | `bool` | - | only sessions with at least one browser error |
 | `--has-replay` | `bool` | - | only sessions with a recorded replay |
+| `--instance` | `string` | - | read this dev `instance` of a hosted-dev env: its id (scope.instance.id, the control plane's) or its label (alice/fix-login, or the branch alone) as forge env up recorded it on this machine (default: this checkout's) |
+| `--instance-user` | `string` | - | read every dev instance of one `user` (the reliant.instance.user the gateway stamps; the control plane resolves an email) |
 | `--json` | `bool` | - | print one JSON document on stdout (see the schema below; progress goes to stderr) |
 | `--limit` | `int` | `25` | most items to return |
 | `--page-token` | `string` | - | resume from a next_page_token |
@@ -10653,6 +13961,10 @@ JSON schema forge.obs.status/v1. --fields takes dotted paths of:
   scope.env
   scope.env_id
   scope.from
+  scope.instance
+  scope.instance.id
+  scope.instance.label
+  scope.instance.user
   scope.services
   scope.to
   services
@@ -10693,15 +14005,18 @@ reliant forge obs status [env] [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
+| `--all-instances` | `bool` | - | read every dev instance of the env, not only this checkout's |
 | `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 | `--backend` | `string` | - | local | cloud (default: from the env's declaration) |
 | `--fields` | `string` | - | with --json: keep only these comma-separated dotted fields (the head is always kept) |
 | `--from` | `string` | - | range start, RFC 3339 |
+| `--instance` | `string` | - | read this dev `instance` of a hosted-dev env: its id (scope.instance.id, the control plane's) or its label (alice/fix-login, or the branch alone) as forge env up recorded it on this machine (default: this checkout's) |
 | `--json` | `bool` | - | print one JSON document on stdout (see the schema below; progress goes to stderr) |
 | `--limit` | `int` | `10` | most items to return |
 | `--service` | `stringArray` | `[]` | only this service.name (repeatable) |
 | `--since` | `duration` | `1h0m0s` | how far back to read (ignored with --from) |
 | `--to` | `string` | - | range end, RFC 3339 (default now) |
+| `--user` | `string` | - | read every dev instance of one `user` (the reliant.instance.user the gateway stamps; the control plane resolves an email) |
 
 ---
 
@@ -10755,6 +14070,10 @@ JSON schema forge.obs.trace/v1. --fields takes dotted paths of:
   scope.backend
   scope.env
   scope.from
+  scope.instance
+  scope.instance.id
+  scope.instance.label
+  scope.instance.user
   scope.to
   spans_shown
   spans_total
@@ -10799,6 +14118,7 @@ reliant forge obs trace <trace-id> [env] [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
+| `--all-instances` | `bool` | - | read every dev instance of the env, not only this checkout's |
 | `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 | `--backend` | `string` | - | local | cloud (default: from the env's declaration) |
 | `--explain` | `bool` | - | print the compiled SQL and its parameters instead of running it (a starting point for obs query --sql) |
@@ -10806,12 +14126,14 @@ reliant forge obs trace <trace-id> [env] [flags]
 | `--filter` | `stringArray` | `[]` | attribute predicate key=value or key!=value (repeatable): an allowlisted key, or any attribute as span.attr.<k> (traces), log.attr.<k> (logs) or resource.attr.<k> |
 | `--from` | `string` | - | range start, RFC 3339 |
 | `--full` | `bool` | - | lift the depth, span and collapse caps |
+| `--instance` | `string` | - | read this dev `instance` of a hosted-dev env: its id (scope.instance.id, the control plane's) or its label (alice/fix-login, or the branch alone) as forge env up recorded it on this machine (default: this checkout's) |
 | `--json` | `bool` | - | print one JSON document on stdout (see the schema below; progress goes to stderr) |
 | `--logs` | `int` | `20` | most correlated log lines to include (0 = none) |
 | `--print-sql` | `bool` | - | alias of --explain |
 | `--service` | `stringArray` | `[]` | only this service.name (repeatable) |
 | `--since` | `duration` | `72h0m0s` | how far back to read (ignored with --from) |
 | `--to` | `string` | - | range end, RFC 3339 (default now) |
+| `--user` | `string` | - | read every dev instance of one `user` (the reliant.instance.user the gateway stamps; the control plane resolves an email) |
 
 ---
 
@@ -10836,6 +14158,10 @@ JSON schema forge.obs.traces/v1. --fields takes dotted paths of:
   scope.backend
   scope.env
   scope.from
+  scope.instance
+  scope.instance.id
+  scope.instance.label
+  scope.instance.user
   scope.services
   scope.to
   sorted_from
@@ -10871,6 +14197,7 @@ reliant forge obs traces [env] [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
+| `--all-instances` | `bool` | - | read every dev instance of the env, not only this checkout's |
 | `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 | `--backend` | `string` | - | local | cloud (default: from the env's declaration) |
 | `--errors` | `bool` | - | only traces with an error span |
@@ -10878,6 +14205,7 @@ reliant forge obs traces [env] [flags]
 | `--fields` | `string` | - | with --json: keep only these comma-separated dotted fields (the head is always kept) |
 | `--filter` | `stringArray` | `[]` | attribute predicate key=value or key!=value (repeatable): an allowlisted key, or any attribute as span.attr.<k> (traces), log.attr.<k> (logs) or resource.attr.<k> |
 | `--from` | `string` | - | range start, RFC 3339 |
+| `--instance` | `string` | - | read this dev `instance` of a hosted-dev env: its id (scope.instance.id, the control plane's) or its label (alice/fix-login, or the branch alone) as forge env up recorded it on this machine (default: this checkout's) |
 | `--json` | `bool` | - | print one JSON document on stdout (see the schema below; progress goes to stderr) |
 | `--limit` | `int` | `50` | most items to return |
 | `--min-duration` | `duration` | `0s` | only traces at least this long, e.g. 500ms |
@@ -10888,6 +14216,7 @@ reliant forge obs traces [env] [flags]
 | `--since` | `duration` | `1h0m0s` | how far back to read (ignored with --from) |
 | `--slow` | `bool` | - | slowest first |
 | `--to` | `string` | - | range end, RFC 3339 (default now) |
+| `--user` | `string` | - | read every dev instance of one `user` (the reliant.instance.user the gateway stamps; the control plane resolves an email) |
 
 ---
 
@@ -10930,6 +14259,10 @@ JSON schema forge.obs.workloads/v1. --fields takes dotted paths of:
   scope.env
   scope.env_id
   scope.from
+  scope.instance
+  scope.instance.id
+  scope.instance.label
+  scope.instance.user
   scope.services
   scope.to
   suggested
@@ -10969,15 +14302,18 @@ reliant forge obs workloads [env] [flags]
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
 | `--all` | `bool` | - | list every workload, healthy ones too |
+| `--all-instances` | `bool` | - | read every dev instance of the env, not only this checkout's |
 | `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 | `--backend` | `string` | - | local | cloud (default: from the env's declaration) |
 | `--fields` | `string` | - | with --json: keep only these comma-separated dotted fields (the head is always kept) |
 | `--from` | `string` | - | range start, RFC 3339 |
+| `--instance` | `string` | - | read this dev `instance` of a hosted-dev env: its id (scope.instance.id, the control plane's) or its label (alice/fix-login, or the branch alone) as forge env up recorded it on this machine (default: this checkout's) |
 | `--jobs` | `string` | `failed` | which Job runs to list: failed | all | none |
 | `--json` | `bool` | - | print one JSON document on stdout (see the schema below; progress goes to stderr) |
 | `--service` | `stringArray` | `[]` | only this service.name (repeatable) |
 | `--since` | `duration` | `24h0m0s` | how far back to read (ignored with --from) |
 | `--to` | `string` | - | range end, RFC 3339 (default now) |
+| `--user` | `string` | - | read every dev instance of one `user` (the reliant.instance.user the gateway stamps; the control plane resolves an email) |
 
 ---
 
@@ -11081,6 +14417,7 @@ reliant forge project [flags]
 | [`checkouts`](#reliant-forge-project-checkouts) | List origin/main plus every git worktree — the Preview picker's source |
 | [`delete`](#reliant-forge-project-delete) | Delete (retire) a service from the project — the inverse of `forge scaffold service` |
 | [`disown`](#reliant-forge-project-disown) | Permanently transfer a forge-generated file to user ownership (one-way), or decline a scaffold (--absent) |
+| [`doctor`](#reliant-forge-project-doctor) | Check that the PROJECT is well-formed (deployability, payload caps, tooling, cluster capability) |
 | [`features`](#reliant-forge-project-features) | Print the resolved feature graph (on/off, why, dependencies) |
 | [`frontends`](#reliant-forge-project-frontends) | Print the directories of this project's in-repo frontends, one per line (what task and the CI gate loop over) |
 | [`graph`](#reliant-forge-project-graph) | Emit a JSON dependency graph of the project's declared resources |
@@ -11093,6 +14430,7 @@ reliant forge project [flags]
 | [`rescaffold`](#reliant-forge-project-rescaffold) | Re-create scaffold-once files you deleted, as forge would scaffold them today |
 | [`scaffolded`](#reliant-forge-project-scaffolded) | List the scaffold-once files forge has written, and which are absent |
 | [`shapes`](#reliant-forge-project-shapes) | List every API shape — RPCs, messages, enums, tables, handlers, hooks — with file:line |
+| [`start`](#reliant-forge-project-start) | Print the greenfield brief: empty directory to authored protos, in one call |
 | [`upgrade`](#reliant-forge-project-upgrade) | Move the project to a newer forge and apply every mechanical fix for the range |
 
 **Flags:**
@@ -11123,8 +14461,10 @@ Use --kind to limit the dump to one annotation level, and --json for a
 machine-readable dump that tools can query instead of re-deriving the spec.
 --kind column is the forge:* markers declared as a postgres catalog COMMENT
 in a migration rather than a proto/Go comment (forge:immutable on a column,
-forge:ref on a foreign-key constraint); --kind table is the same mechanism one
-level up, on the table itself (forge:append-only). --kind go is the wiring/observability
+forge:ref on a foreign-key constraint). Postgres keeps ONE comment per object,
+so several markers share it, space-separated, in any order:
+COMMENT ON COLUMN t.tenant_id IS 'forge:owner forge:immutable'. --kind table is
+the same mechanism one level up, on the table itself (forge:append-only). --kind go is the wiring/observability
 /contract vocabulary forge reads out of .go files (forge:optional-dep,
 forge:constructor, forge:no-observe, forge:exclude-contract, ...) — the
 markers you meet in scaffolded code.
@@ -11392,6 +14732,99 @@ reliant forge project disown <path>... --reason <text> [flags]
 | `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 | `--dry-run` | `bool` | - | Print what would change without writing .forge/disowned.json |
 | `--reason` | `string` | - | WHY forge's generated code couldn't express what you needed (required; recorded in .forge/disowned.json, or .forge/scaffolded/ with --absent) |
+
+---
+
+#### reliant forge project doctor
+
+Check that the PROJECT is well-formed (deployability, payload caps, tooling, cluster capability)
+
+Check that this project is healthy and well-formed.
+
+Everything doctor checks is answerable from the project's own artefacts,
+across every declared environment, with nothing running:
+
+  * deployability of the rendered manifests — probes, resource requests
+    and limits, credentials sourced from Secrets, ServiceAccounts bound to
+    pods, a way to apply pending migrations,
+  * Connect payload caps,
+  * disowned generated files and dead forge.yaml keys,
+  * the host tools forge shells out to (and their minimum versions),
+  * cluster CAPABILITY: does the cluster carry the GatewayClass /
+    ClusterIssuer this project's manifests require.
+
+Doctor takes no --env, because it never asks about one.
+
+For "is the stack for environment X up and reachable" — the app's
+/healthz, pprof, the compose infra, the telemetry backends, Delve — use:
+
+  forge env status <env>                 # host services + frontends + runtime checks
+  forge env status <env> --signal traces # one signal only
+
+That command resolves the ports the stack actually bound (rather than
+guessing a default), and reports the holder pid, whether the process is
+forge-owned, whether its build is stale against HEAD, and whether two
+processes are serving one service.
+
+Examples:
+  forge doctor                  # Check the project
+  forge doctor --json           # Machine-readable output
+  forge doctor --verbose        # Show evidence for passing checks
+  forge doctor --signal deploy  # Deployability gate only (the CI arm)
+
+```
+reliant forge project doctor [flags]
+```
+
+**Subcommands:**
+
+| Command | Description |
+|---------|-------------|
+| [`parity`](#reliant-forge-project-doctor-parity) | Diff a service's host-mode vs cluster-mode env+config |
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--json` | `bool` | - | Output results as JSON |
+| `--signal` | `string` | - | Run only the deployability gate (deploy). Environment-runtime signals live on 'forge env status <env> --signal'. |
+| `--timeout` | `duration` | `30s` | Overall timeout for all checks |
+| `--verbose`, `-v` | `bool` | - | Show evidence for all checks (not just failures) |
+
+---
+
+#### reliant forge project doctor parity
+
+Diff a service's host-mode vs cluster-mode env+config
+
+Compare what env vars and config a named service WOULD see in host-mode
+(forge run <svc>) vs cluster-mode (forge env deploy <env>) projection.
+
+Surfaces "local wasn't representative of prod" divergences statically
+without running anything — no docker, no kubectl, no Secret reads.
+
+Exits 1 when bug-class divergences exist (value mismatch, missing key
+without a secret-channel explanation). Exits 0 when the only
+divergences are secret-channel (host secrets_file ↔ cluster secret_ref —
+expected by design).
+
+Examples:
+  forge doctor parity tasks                # default --env=dev
+  forge doctor parity tasks --env=staging
+  forge doctor parity tasks --json         # machine-readable output
+
+```
+reliant forge project doctor parity <service> [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--env` | `string` | `dev` | Environment to compare (dev, staging, prod) |
+| `--json` | `bool` | - | Emit a machine-readable JSON document to stdout |
 
 ---
 
@@ -12018,6 +15451,39 @@ reliant forge project shapes [flags]
 
 ---
 
+#### reliant forge project start
+
+Print the greenfield brief: empty directory to authored protos, in one call
+
+Print the greenfield brief.
+
+Everything needed to go from an empty directory to authored protos, and
+nothing else: the end-to-end sequence, the 'project new' flags that matter,
+how an entity is marked and what scaffold births from it, the rule that
+forge injects CRUD rpcs ONLY, the proto->column vocabulary, and the FK
+diamond declaration.
+
+This command PRINTS. It creates nothing and changes nothing.
+
+Depth is named rather than inlined — 'forge skill load <name>' prints the
+copy this binary ships. Three sibling dumps cover the rest of the surface:
+
+  forge project capabilities  every verb, analyzer and marker
+  forge project annotations   the full entity-authoring spec
+  forge skill list            the skill catalog
+
+```
+reliant forge project start [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+
+---
+
 #### reliant forge project upgrade
 
 Move the project to a newer forge and apply every mechanical fix for the range
@@ -12336,7 +15802,14 @@ reliant forge release [flags]
 
 | Command | Description |
 |---------|-------------|
+| [`at`](#reliant-forge-release-at) | Which release was live at a moment, and the releases either side |
+| [`backfill-migrations`](#reliant-forge-release-backfill-migrations) | Record, from git, the migrations of releases cut before forge recorded them |
 | [`bundle`](#reliant-forge-release-bundle) | Pull an environment's recorded bundle for a release, and optionally diff it against the live clusters |
+| [`gate`](#reliant-forge-release-gate) | Record and read check evidence against a promotion |
+| [`interrupted`](#reliant-forge-release-interrupted) | Whether a cut of <version> pushed its images, was never recorded, and can be resumed from here |
+| [`ledger`](#reliant-forge-release-ledger) | Move and inspect deploy ledgers |
+| [`list`](#reliant-forge-release-list) | The release timeline of an environment, newest first |
+| [`show`](#reliant-forge-release-show) | One release in full: commits and PRs, what changed, migrations, gates, health |
 | [`verify`](#reliant-forge-release-verify) | Prove every artifact a release names actually exists and matches |
 | [`where`](#reliant-forge-release-where) | Show which environments are currently bound to a release |
 
@@ -12345,6 +15818,215 @@ reliant forge release [flags]
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
 | `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+
+---
+
+#### reliant forge release at
+
+Which release was live at a moment, and the releases either side
+
+Answer "which release was live then": the promotion in force at a timestamp, the
+one before it and the one after. A timestamp is RFC 3339 or a date; a duration
+means that long ago ("90m", "2d"); "now" is now. A 16- or 32-digit hex string is
+a trace id: its first span's start time is used (control-plane environments only).
+
+A promotion made exactly at the time is the live one. A time before the first
+promotion on record says so (before_history) rather than naming a release, and a
+history the source did not fully read says that instead (history_incomplete).
+unsettled means the release's rollout had not finished at that moment, so the
+environment may still have been serving the one before it.
+
+Exit 0 the question was answered (including "nothing was live yet"), 2 it could
+not be asked.
+
+JSON schema forge.env.releases.at/v1. --fields takes dotted paths of:
+  at
+  backend
+  before_history
+  env
+  history_incomplete
+  ledger
+  live
+  live.actor
+  live.at
+  live.bundle_id
+  live.commit_range
+  live.commit_range.from_commit
+  live.commit_range.from_release
+  live.commit_range.reverts
+  live.commit_range.to_commit
+  live.commit_range.to_release
+  live.commit_range.total
+  live.commit_range.truncated
+  live.direction
+  live.env
+  live.from_env
+  live.gate_verdict
+  live.gates
+  live.gates.name
+  live.gates.phase
+  live.gates.status
+  live.gates.summary
+  live.gates.url
+  live.health
+  live.health.detail
+  live.health.verdict
+  live.kind
+  live.live
+  live.note
+  live.previous_bundle_id
+  live.previous_version
+  live.promotion_id
+  live.rollout
+  live.rollout.cluster
+  live.rollout.duration_s
+  live.rollout.finished_at
+  live.rollout.reason
+  live.rollout.status
+  live.run_url
+  live.superseded_in_flight
+  live.targets
+  live.version
+  live.via
+  next
+  next.actor
+  next.at
+  next.bundle_id
+  next.commit_range
+  next.commit_range.from_commit
+  next.commit_range.from_release
+  next.commit_range.reverts
+  next.commit_range.to_commit
+  next.commit_range.to_release
+  next.commit_range.total
+  next.commit_range.truncated
+  next.direction
+  next.env
+  next.from_env
+  next.gate_verdict
+  next.gates
+  next.gates.name
+  next.gates.phase
+  next.gates.status
+  next.gates.summary
+  next.gates.url
+  next.health
+  next.health.detail
+  next.health.verdict
+  next.kind
+  next.live
+  next.note
+  next.previous_bundle_id
+  next.previous_version
+  next.promotion_id
+  next.rollout
+  next.rollout.cluster
+  next.rollout.duration_s
+  next.rollout.finished_at
+  next.rollout.reason
+  next.rollout.status
+  next.run_url
+  next.superseded_in_flight
+  next.targets
+  next.version
+  next.via
+  previous
+  previous.actor
+  previous.at
+  previous.bundle_id
+  previous.commit_range
+  previous.commit_range.from_commit
+  previous.commit_range.from_release
+  previous.commit_range.reverts
+  previous.commit_range.to_commit
+  previous.commit_range.to_release
+  previous.commit_range.total
+  previous.commit_range.truncated
+  previous.direction
+  previous.env
+  previous.from_env
+  previous.gate_verdict
+  previous.gates
+  previous.gates.name
+  previous.gates.phase
+  previous.gates.status
+  previous.gates.summary
+  previous.gates.url
+  previous.health
+  previous.health.detail
+  previous.health.verdict
+  previous.kind
+  previous.live
+  previous.note
+  previous.previous_bundle_id
+  previous.previous_version
+  previous.promotion_id
+  previous.rollout
+  previous.rollout.cluster
+  previous.rollout.duration_s
+  previous.rollout.finished_at
+  previous.rollout.reason
+  previous.rollout.status
+  previous.run_url
+  previous.superseded_in_flight
+  previous.targets
+  previous.version
+  previous.via
+  query
+  resolved_from
+  suggested
+  unsettled
+  warnings
+Always kept: schema, ok, exit_code, error, truncated, omitted, next_page_token.
+
+
+```
+reliant forge release at <env> <timestamp|trace-id> [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--fields` | `string` | - | with --json: keep only these comma-separated dotted fields (the head is always kept) |
+| `--json` | `bool` | - | print one JSON document on stdout (see the schema below; progress goes to stderr) |
+
+---
+
+#### reliant forge release backfill-migrations
+
+Record, from git, the migrations of releases cut before forge recorded them
+
+Give each release in <env>'s ledger that records no migration manifest the one
+its cut would have recorded, reconstructed from git:
+
+  the project's migrations   git ls-tree at the release's own commit
+  a sibling checkout's       git ls-tree at the commit the project's go.mod
+                             pinned it to at the release's commit
+
+`forge env build --release` and `forge env deploy` refuse a release carrying a migration
+the env's schema has already passed, judged against the manifests of the
+releases the env applied; a release with none is history the check cannot see.
+
+Releases are read newest first; --since <version> stops after that release.
+A release that already records a manifest is skipped, never rewritten. The
+commits must be in this checkout and its siblings (git fetch first).
+
+Exit 0 done (or nothing to do), 1 a release could not be reconstructed or
+recorded (the others still are), 2 the ledger could not be read.
+
+```
+reliant forge release backfill-migrations <env> [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--dry-run` | `bool` | - | Print each manifest that would be recorded; record nothing |
+| `--since` | `string` | - | Oldest release to backfill (a version); default every release in the ledger |
 
 ---
 
@@ -12388,6 +16070,600 @@ reliant forge release bundle <environment> <version|sha256:digest> [flags]
 | `--dir` | `string` | - | Where to unpack it (default .forge/bundles/<env>/<version or digest>) |
 | `--json` | `bool` | - | Emit the result as JSON |
 | `--live-diff` | `bool` | - | Also diff every cluster's manifests against that live cluster (client-side kubectl diff; writes nothing; does not show fields the bundle stops setting) |
+
+---
+
+#### reliant forge release gate
+
+Record and read check evidence against a promotion
+
+Attach check results to a promotion, and read them back.
+
+A gate is one check's result — lint, test, smoke, rollout, a manual
+sign-off — recorded against the promotion it is evidence about. Gates are
+EVIDENCE, NOT ENFORCEMENT: forge records what it is told and who told it,
+and refuses nothing on a gate's status. What a recorded gate proves is
+that this credential claimed this result at this time.
+
+Two attachment points, because they answer different questions:
+
+  forge env deploy … --gate lint.json     what had passed BEFORE the
+                                          environment moved (frozen into
+                                          the promotion entry)
+  forge gate record prod --from wait.json what was learned AFTER (appended
+                                          to an append-only child record)
+
+"Was this known before the button was pressed?" is the first question
+asked about a bad release, and merging the two would lose it.
+
+Recording needs deploy:write, which is deliberately weaker than promote:
+a CI test job should be able to report its result without being able to
+move production.
+
+```
+reliant forge release gate [flags]
+```
+
+**Subcommands:**
+
+| Command | Description |
+|---------|-------------|
+| [`list`](#reliant-forge-release-gate-list) | Read every check result attached to a promotion |
+| [`record`](#reliant-forge-release-gate-record) | Record one check's result against a promotion |
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+
+---
+
+#### reliant forge release gate list
+
+Read every check result attached to a promotion
+
+Print the evidence trail of a promotion.
+
+Promote-time gates come first — what had already passed when the
+environment was bound — then the gates recorded afterwards, oldest first.
+That order carries the distinction a reader of a bad release needs first:
+what was known BEFORE the environment moved, versus what was learned after.
+
+Defaults to the environment's current promotion.
+
+```
+reliant forge release gate list <environment> [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--json` | `bool` | - | Emit one JSON document instead of the table |
+| `--promotion` | `string` | - | Promotion to read (default: the environment's current promotion) |
+
+---
+
+#### reliant forge release gate record
+
+Record one check's result against a promotion
+
+Append one check result to a promotion.
+
+The gate comes from a document, or is stated inline:
+
+  forge gate record prod --from wait.json
+  forge gate record prod --from smoke.json
+  forge gate record prod --name qa-signoff --status passed --summary "checked by sean"
+
+--from reads a gate-shaped JSON document (what --gate-json writes) OR any
+forge --json document, deriving the check's name, verdict and summary from
+it. So every forge verb that can judge something is recordable with no glue
+script:
+
+  forge env status prod --wait --json  > wait.json   && forge gate record prod --from wait.json
+  forge env smoke prod --json > smoke.json  && forge gate record prod --from smoke.json
+  forge lint --gate-json lint.json          && forge gate record prod --from lint.json
+
+By default the gate attaches to the environment's CURRENT promotion. Name a
+specific one with --promotion, or assert which release you believe is current
+with --release: if the environment has moved on, that exits 3 rather than
+recording evidence against the wrong promotion.
+
+APPEND-ONLY AND IDEMPOTENT. A re-run appends a new row; a repeat of the same
+(promotion, check, run id) returns the existing one. The run id includes the
+CI attempt number, so a re-run of one step records afresh rather than
+colliding with the first attempt.
+
+RECORDING A FAILED GATE EXITS 0 — the recording succeeded. The check's own
+step already failed the job.
+
+```
+reliant forge release gate record <environment> [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--from` | `string` | - | Read the gate from a JSON document: a gate document (--gate-json output), or any forge --json document |
+| `--json` | `bool` | - | Emit one JSON document instead of the table |
+| `--name` | `string` | - | Check name: lint, test, smoke, rollout, qa-signoff. Required unless --from names it |
+| `--no-run` | `bool` | - | Record no run, even inside CI |
+| `--promotion` | `string` | - | Promotion to attach the gate to (default: the environment's current promotion) |
+| `--release` | `string` | - | Assert the environment's current promotion is this release; exits 3 if it has moved on |
+| `--run-id` | `string` | - | CI run this write belongs to (default: detected from the CI environment, e.g. github:<repo>/<run>/<attempt>) |
+| `--run-url` | `string` | - | Link to the CI run, for a human reading the ledger (default: detected from the CI environment) |
+| `--status` | `string` | - | Verdict: passed | failed | skipped | error. Required unless --from carries one |
+| `--summary` | `string` | - | One line: "412 passed, 0 failed, 3 skipped" |
+| `--url` | `string` | - | Where the full report lives (a CI run, an artifact) |
+
+---
+
+#### reliant forge release interrupted
+
+Whether a cut of <version> pushed its images, was never recorded, and can be resumed from here
+
+A `forge env build <env> --release <version>` writes a cut journal to the registry after
+its last push and before its ledger record. If the cut is interrupted between the two,
+the version's image tags exist (and are immutable) while the ledger has no release.
+Re-running the same cut from the same clean commit, with the same forge, resumes it:
+it records the release over the images already pushed and rebuilds nothing.
+
+This answers, without building or writing anything, whether such a journal exists
+and whether this checkout can resume it: the commit and tree, the forge version,
+and that every recorded tag still names its recorded digest.
+
+Exit 0 a journal exists and this checkout resumes it, 1 no journal or not resumable
+(the document says which), 2 the registry or the env could not be read.
+
+```
+reliant forge release interrupted <env> <version> [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--json` | `bool` | - | Print one JSON document |
+
+---
+
+#### reliant forge release ledger
+
+Move and inspect deploy ledgers
+
+Work with an entire deploy ledger — the releases a project has cut and the
+promotions that bound its environments.
+
+An environment's ledger is chosen by its DECLARATION, in one place and with no
+flag: an env whose KCL declares `forge.ControlPlane` records on that control
+plane; every other env records in this machine's ledger under
+$FORGE_LEDGER_HOME (default ~/.forge/ledger), keyed by project so every
+worktree shares one history.
+
+FORGE_LEDGER=machine overrides that for every env and every forge process that
+inherits it: nothing is read from or written to a declared control plane. Use
+it for hermetic tests and scripts. $FORGE_LEDGER_HOME only relocates the
+machine ledger; it never keeps a declared env off its control plane.
+`ledger where <env>` says which ledger an env uses, and why.
+
+`import` is how history reaches whichever store an env selected. forge once
+kept promotions in `.forge/promotions/<env>.jsonl` inside the checkout; those
+files are no longer read, and a command refuses while the checkout holds
+records the selected ledger has never imported.
+
+```
+reliant forge release ledger [flags]
+```
+
+**Subcommands:**
+
+| Command | Description |
+|---------|-------------|
+| [`export`](#reliant-forge-release-ledger-export) | Write the selected ledger to a directory, to VERIFY an import |
+| [`import`](#reliant-forge-release-ledger-import) | Import a ledger from a checkout's committed history, or from another ledger directory |
+| [`show`](#reliant-forge-release-ledger-show) | Print this machine's ledger records — promotions, applies and local sessions |
+| [`where`](#reliant-forge-release-ledger-where) | Print which backend holds an environment's ledger, and the declaration that chose it |
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+
+---
+
+#### reliant forge release ledger export
+
+Write the selected ledger to a directory, to VERIFY an import
+
+Write a ledger out in file-ledger format, so an import can be checked against
+the files it came from.
+
+THIS IS A VERIFICATION AID, NOT A BACKUP. It exists for one sequence:
+
+  cli forge ledger import --from-git --rev origin/main --apply
+  cli forge ledger export --dir /tmp/verify
+  diff -r /tmp/verify/promotions .forge/promotions
+
+If those agree, the import lost nothing — which is what you need to know
+before the committed ledger is deleted from the repository.
+
+It is NOT a way to keep a second copy of deploy history. A copy nothing writes
+to is stale as soon as the next promotion lands, and a stale ledger that looks
+authoritative is the failure the ledger was moved out of the checkout to end.
+There is no git export in either direction, and no default directory — a
+default is a thing people start to rely on.
+
+The output is the ledger's own canonical JSON, so a diff is meaningful rather
+than a re-rendering. Four differences against a retired git ledger are
+expected and are printed with every run.
+
+Examples:
+  cli forge ledger export --dir /tmp/verify
+  cli forge ledger export --dir /tmp/verify --env prod   # the ledger prod selected
+
+```
+reliant forge release ledger export --dir <directory> [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--dir` | `string` | - | The directory to write to (required; use a throwaway path) |
+| `--env` | `string` | - | Export the ledger this environment selected (default: this machine's ledger for the project) |
+
+---
+
+#### reliant forge release ledger import
+
+Import a ledger from a checkout's committed history, or from another ledger directory
+
+Read a ledger from somewhere else and record it in the one each environment
+selected. A DRY RUN unless you pass `--apply`.
+
+TWO SOURCES:
+
+  --from-git [--rev <ref>]        the retired in-checkout ledger
+                                 (.forge/releases/*.json and
+                                 .forge/promotions/<env>.jsonl) as COMMITTED at
+                                 a rev. Default rev: origin/main.
+  --from-file-ledger <dir>       a machine ledger directory, for an env whose
+                                 KCL newly declares a control plane.
+
+IT READS A REV, NEVER THE WORKING TREE. The retired ledger was committed, so
+the repository is the authority. A `.forge/promotions` deleted but not
+committed still has its history, and a half-written local edit is not history
+at all.
+
+HISTORY IS NEVER RE-JUDGED. Every record is admitted exactly as written,
+including the uncomfortable parts — a release cut from a dirty tree is imported
+saying so. Promotion ids and timestamps are preserved verbatim: the id is how a
+re-run recognises what it already recorded, and the timestamp is the order an
+environment actually moved in.
+
+IDEMPOTENT. Running `--apply` twice records once. A run interrupted half-way
+is re-run, not repaired.
+
+IT REFUSES AN ENVIRONMENT THAT ALREADY HOLDS PROMOTIONS OF ITS OWN. An
+append-only log's current binding is its last line, so interleaving imported
+history with promotions made since would leave the environment reading whatever
+sorted last. The remedy is to import first.
+
+WHERE IT WRITES is each environment's selected ledger: an env whose KCL declares
+`forge.ControlPlane` imports INTO THAT CONTROL PLANE. The plan labels every
+target as hosted or machine, and --apply names a hosted target again on the
+line before it writes. To keep an import on this machine — a test, a script, a
+scratch copy of a real env — set FORGE_LEDGER=machine. Setting only
+$FORGE_LEDGER_HOME does not: it relocates the machine ledger, and a declared
+env still imports into its control plane.
+
+Examples:
+  cli forge ledger import --from-git                        # dry run against origin/main
+  cli forge ledger import --from-git --rev origin/main --apply
+  cli forge ledger import --from-file-ledger ~/.forge/ledger/myproj-ab12cd34 --apply
+  FORGE_LEDGER=machine FORGE_LEDGER_HOME=$(mktemp -d) cli forge ledger import --from-git --rev HEAD --apply
+
+```
+reliant forge release ledger import [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--apply` | `bool` | - | Record the import. Without it, print the plan and change nothing |
+| `--from-file-ledger` | `string` | - | Read a machine ledger directory ($FORGE_LEDGER_HOME/<project-id>/) instead |
+| `--from-git` | `bool` | - | Read the retired in-checkout ledger (.forge/releases, .forge/promotions) as committed at --rev |
+| `--rev` | `string` | `origin/main` | The git rev to read the checkout's ledger at (--from-git only) |
+
+---
+
+#### reliant forge release ledger show
+
+Print this machine's ledger records — promotions, applies and local sessions
+
+Read the records in this machine's ledger: each environment's promotions and
+applies, and the local stacks running here.
+
+WHY THIS EXISTS. An environment that declares `forge.ControlPlane` has hosted
+rows, and a UI reads them directly. An environment with no control plane does
+not: its history and its running stacks exist only in one machine's ledger
+under $FORGE_LEDGER_HOME. So this is how that half becomes visible — the
+reliant daemon runs it and the UI renders the result.
+
+It is therefore a DAEMON-DEPENDENT view, and the only one. A surface showing
+it must distinguish "no sessions" from "cannot see sessions": they are
+different facts, and collapsing them tells a user their dev stack is down when
+really their daemon is.
+
+Local sessions are PRESENCE ONLY. A session is an observation — never a
+promotion, never a deploy target — and nothing reads it for policy or billing.
+
+Examples:
+  cli forge ledger show                  # every environment
+  cli forge ledger show dev --json       # one environment, for the daemon
+
+```
+reliant forge release ledger show [environment] [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--json` | `bool` | - | Print the records as JSON (the form the reliant daemon's hook returns) |
+
+---
+
+#### reliant forge release ledger where
+
+Print which backend holds an environment's ledger, and the declaration that chose it
+
+Say where an environment's promotions and releases are recorded, and why.
+
+Selection is DECLARATIVE and has no flag: an environment whose KCL declares
+`forge.ControlPlane` records on that control plane — whatever its kind,
+including local — and every other environment records in this machine's
+ledger under $FORGE_LEDGER_HOME (default ~/.forge/ledger), keyed by project so
+that every worktree of a project shares one history.
+
+ONE OVERRIDE: FORGE_LEDGER=machine sends every environment to this machine's
+ledger, whatever it declares, and nothing is read from or written to the
+declared control plane. It is for hermetic tests and scripts that render or
+import a real environment. $FORGE_LEDGER_HOME alone does NOT do this: it says
+WHERE the machine ledger is, not WHETHER an environment uses it. A script can
+assert its run stays local with `ledger where <env> --json` (backend
+"machine", override "FORGE_LEDGER=machine").
+
+This renders the environment and reports the declaration it FOUND. It does not
+infer the answer from which store happens to hold records: a project that has
+moved an environment to a control plane still has its old machine-ledger files
+on disk, and "where are the records" is a different question from "where do
+records go".
+
+Examples:
+  cli forge ledger where prod
+  cli forge ledger where dev --json
+
+```
+reliant forge release ledger where <environment> [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--json` | `bool` | - | Print {env, backend, location, because, declaration, override, project} as JSON |
+
+---
+
+#### reliant forge release list
+
+The release timeline of an environment, newest first
+
+List an environment's timeline: promotions (BEHIND marks a rollback), failed and
+timed-out deploys, with version, time, who/via, commit range, rollout duration,
+gate verdicts and a health verdict when one exists.
+
+--since bounds the window (default 7d): a duration (7d, 36h) or a time
+(RFC 3339 or a date). --limit caps the rows; a truncated list says so.
+
+Exit 0 the timeline was read (an empty one is a read), 2 it could not be.
+
+JSON schema forge.env.releases.list/v1. --fields takes dotted paths of:
+  backend
+  entries
+  entries.actor
+  entries.at
+  entries.bundle_id
+  entries.commit_range
+  entries.commit_range.from_commit
+  entries.commit_range.from_release
+  entries.commit_range.reverts
+  entries.commit_range.to_commit
+  entries.commit_range.to_release
+  entries.commit_range.total
+  entries.commit_range.truncated
+  entries.direction
+  entries.env
+  entries.from_env
+  entries.gate_verdict
+  entries.gates
+  entries.gates.name
+  entries.gates.phase
+  entries.gates.status
+  entries.gates.summary
+  entries.gates.url
+  entries.health
+  entries.health.detail
+  entries.health.verdict
+  entries.kind
+  entries.live
+  entries.note
+  entries.previous_bundle_id
+  entries.previous_version
+  entries.promotion_id
+  entries.rollout
+  entries.rollout.cluster
+  entries.rollout.duration_s
+  entries.rollout.finished_at
+  entries.rollout.reason
+  entries.rollout.status
+  entries.run_url
+  entries.superseded_in_flight
+  entries.targets
+  entries.version
+  entries.via
+  env
+  ledger
+  since
+  suggested
+  warnings
+Always kept: schema, ok, exit_code, error, truncated, omitted, next_page_token.
+
+
+```
+reliant forge release list <env> [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--fields` | `string` | - | with --json: keep only these comma-separated dotted fields (the head is always kept) |
+| `--json` | `bool` | - | print one JSON document on stdout (see the schema below; progress goes to stderr) |
+| `--limit` | `int` | `20` | most items to return |
+| `--since` | `string` | - | window start: a duration ago (7d, 36h) or a time (default 7d) |
+
+---
+
+#### reliant forge release show
+
+One release in full: commits and PRs, what changed, migrations, gates, health
+
+Show one promotion of an environment. The reference is a promotion id, or a
+release version (the newest promotion of it).
+
+  commits      git log of the recorded commit range (PR numbers from squash
+               subjects "(#123)"); a BEHIND move lists what it takes away.
+               Needs the commits in this checkout: otherwise commits_note says so.
+  changes      artifacts whose digest moved, and rendered objects added, modified
+               or removed in THIS environment, against the release it replaced
+               (control plane: DeployService.CompareReleases; local: the two
+               recorded bundles).
+  migrations   migration files the range touched (db/migrations).
+  gates        the checks recorded before and after the environment moved.
+
+Exit 0 shown, 1 no such release in this environment, 2 the ledger could not be read.
+
+JSON schema forge.env.releases.show/v1. --fields takes dotted paths of:
+  backend
+  changes
+  changes.artifacts
+  changes.artifacts.change
+  changes.artifacts.from
+  changes.artifacts.name
+  changes.artifacts.to
+  changes.objects
+  changes.objects.change
+  changes.objects.object
+  changes.objects.summary
+  changes.objects.workload
+  changes.summaries_missing
+  changes.unchanged_artifacts
+  changes.unchanged_objects
+  changes_note
+  commits
+  commits.author
+  commits.pr
+  commits.sha
+  commits.subject
+  commits.time
+  commits_note
+  entry
+  entry.actor
+  entry.at
+  entry.bundle_id
+  entry.commit_range
+  entry.commit_range.from_commit
+  entry.commit_range.from_release
+  entry.commit_range.reverts
+  entry.commit_range.to_commit
+  entry.commit_range.to_release
+  entry.commit_range.total
+  entry.commit_range.truncated
+  entry.direction
+  entry.env
+  entry.from_env
+  entry.gate_verdict
+  entry.gates
+  entry.gates.name
+  entry.gates.phase
+  entry.gates.status
+  entry.gates.summary
+  entry.gates.url
+  entry.health
+  entry.health.detail
+  entry.health.verdict
+  entry.kind
+  entry.live
+  entry.note
+  entry.previous_bundle_id
+  entry.previous_version
+  entry.promotion_id
+  entry.rollout
+  entry.rollout.cluster
+  entry.rollout.duration_s
+  entry.rollout.finished_at
+  entry.rollout.reason
+  entry.rollout.status
+  entry.run_url
+  entry.superseded_in_flight
+  entry.targets
+  entry.version
+  entry.via
+  env
+  failed_deploys
+  failed_deploys.at
+  failed_deploys.rollout
+  failed_deploys.rollout.cluster
+  failed_deploys.rollout.duration_s
+  failed_deploys.rollout.reason
+  failed_deploys.rollout.status
+  ledger
+  migrations
+  migrations.path
+  migrations.status
+  pull_requests
+  suggested
+  warnings
+Always kept: schema, ok, exit_code, error, truncated, omitted, next_page_token.
+
+
+```
+reliant forge release show <env> <version|promotion-id> [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--fields` | `string` | - | with --json: keep only these comma-separated dotted fields (the head is always kept) |
+| `--json` | `bool` | - | print one JSON document on stdout (see the schema below; progress goes to stderr) |
+| `--limit` | `int` | `50` | most items to return |
 
 ---
 
@@ -12574,6 +16850,12 @@ then run it:
            pb-through handler stub for every new custom RPC (a method on
            the handler *Service returning Unimplemented) and the CRUD
            wiring for every entity-backed one.
+
+Before phase 1, in --dry-run too, a CRUD-named rpc (Create/Get/List/
+Update/Delete<X>) whose <X> message has no table, and none this run
+births, is refused by name, with the fixes: write its migration, name the
+table with forge:entity-name, or put `// forge:custom` above the rpc.
+Phase 2 would refuse it anyway, minutes later.
 
 With a NOUN it scaffolds exactly that one thing, no marker required:
 
@@ -14147,6 +18429,185 @@ reliant forge tools pins [tool] [flags]
 
 ---
 
+### reliant forge ui
+
+Frontend tooling: the component library and frontend source maps
+
+```
+reliant forge ui
+```
+
+**Subcommands:**
+
+| Command | Description |
+|---------|-------------|
+| [`component`](#reliant-forge-ui-component) | Manage UI components from the component library |
+| [`sourcemaps`](#reliant-forge-ui-sourcemaps) | File a frontend's source maps so its browser errors can be symbolicated |
+
+---
+
+#### reliant forge ui component
+
+Manage UI components from the component library
+
+List, search, and install UI components from Forge's built-in component library.
+
+```
+reliant forge ui component [flags]
+```
+
+**Subcommands:**
+
+| Command | Description |
+|---------|-------------|
+| [`install`](#reliant-forge-ui-component-install) | Install components into your project |
+| [`list`](#reliant-forge-ui-component-list) | List all available components |
+| [`search`](#reliant-forge-ui-component-search) | Search components by keyword |
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+
+---
+
+#### reliant forge ui component install
+
+Install components into your project
+
+Install one or more components from the library into your project's
+src/components/ui/ directory — or the directory the frontend's package.json
+names in "forge": {"components_dir": "..."}. If --dir is not specified, the
+command uses the frontend you are inside, or the project's only web frontend;
+with several, it lists the --dir value for each. A component whose file
+name differs only in case from one already there (button.tsx beside
+Button.tsx) is refused: on macOS and Windows that is one file.
+
+```
+reliant forge ui component install <component-names...> [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--dir`, `-d` | `string` | - | target directory (default: auto-detect nearest frontend) |
+
+---
+
+#### reliant forge ui component list
+
+List all available components
+
+```
+reliant forge ui component list [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--category`, `-c` | `string` | - | filter by category (layouts, charts, diagrams, deck, ui) |
+
+---
+
+#### reliant forge ui component search
+
+Search components by keyword
+
+```
+reliant forge ui component search <query> [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+
+---
+
+#### reliant forge ui sourcemaps
+
+File a frontend's source maps so its browser errors can be symbolicated
+
+```
+reliant forge ui sourcemaps [flags]
+```
+
+**Subcommands:**
+
+| Command | Description |
+|---------|-------------|
+| [`push`](#reliant-forge-ui-sourcemaps-push) | File the source maps of a built directory forge did not build |
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+
+---
+
+#### reliant forge ui sourcemaps push
+
+File the source maps of a built directory forge did not build
+
+Extract the source maps from <dist> and file them for a frontend whose build
+forge did not run (the Electron renderer, built by CI). Everything forge does for
+a frontend it builds itself, it does here: the maps are moved out of a COPY of
+<dist> (it is not modified), each bundle's sourceMappingURL trailer is dropped
+from that copy, a manifest.json is written, and the result is pushed. The
+bundle you ship is yours to strip; this command does not touch it.
+
+WHERE THEY GO is decided by --env, as for every command that talks to a control
+plane. When the env's observability is hosted, the maps are pushed to the
+platform registry:
+
+  <registry>/<org>/<project>/<frontend>-sourcemaps:<build id>
+
+and otherwise they are kept in .forge/sourcemaps/<env>/<frontend>/<build id>/
+and nothing is uploaded. The artifact format is documented in
+internal/deploytarget/sourcemaps_oci.go.
+
+THE BUILD ID must be the version the bundle reports to telemetry
+(service.version): pass the same value the build baked into the bundle. Maps
+filed under any other id are never looked up.
+
+--base-path is where <dist> is mounted in the served site. A file's path in the
+manifest is its URL path with the origin removed, so a renderer served from
+/app has /app/ in front of every path.
+
+The credential is the env's control-plane token (its token_env), the same one
+`forge env build --push` uses. Exit code is non-zero if nothing was
+extracted: a build that was meant to emit maps and did not is a failure here,
+not a no-op.
+
+Examples:
+  forge frontend sourcemaps push web/dist --frontend desktop --build-id 3f9c0e1a2b4d --env prod
+  forge frontend sourcemaps push web/dist --frontend desktop --build-id "$VERSION" --env prod --dry-run
+
+```
+reliant forge ui sourcemaps push <dist> [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--base-path` | `string` | - | Where <dist> is mounted in the served site (default: the root) |
+| `--build-id` | `string` | - | The build id the bundle reports as service.version (required) |
+| `--dry-run` | `bool` | - | Extract and report; push and keep nothing |
+| `--env` | `string` | - | The env whose control plane and observability decide where the maps go (required) |
+| `--frontend` | `string` | - | The frontend the maps belong to (required) |
+| `--project` | `string` | - | The forge project the frontend belongs to (default: forge.yaml's name) |
+
+---
+
 ### reliant forge version
 
 Print the forge version and build identity
@@ -15584,6 +20045,267 @@ reliant workflow watch <execution-id> [flags]
 | `--interval` | `duration` | `2s` | Poll interval |
 | `--tail` | `bool` | - | Skip historical events and follow from now |
 | `--timeout` | `duration` | `0s` | Stop following after this long (exit code 2); 0 means no timeout |
+
+---
+
+## reliant worktree
+
+Inspect and restore the worktrees the daemon reclaims
+
+The daemon reclaims the disk of linked git worktrees nobody is using, on
+every machine it runs on: worktrees Reliant made and ones agents made with
+`git worktree add` alike. Before it deletes one it commits everything
+git can see of it (HEAD, the staged index, unstaged edits, untracked files,
+commits only its reflog reached) into a local ref of the repository,
+refs/reliant/reclaimed/<key>/<time>, and checks that ref against the files
+immediately before deleting them.
+
+A clean worktree whose HEAD is on a remote is reclaimed after a day idle.
+One with work only it holds is never reclaimed: after about five days idle
+it is proposed in the report, for a person to free by hand.
+
+RELIANT_WORKTREE_RECLAIM sets the mode: off, dry-run (report only) or on.
+
+```
+reliant worktree
+```
+
+**Subcommands:**
+
+| Command | Description |
+|---------|-------------|
+| [`reclaim`](#reliant-worktree-reclaim) | The daemon's last reclaim report, and decisions about proposed worktrees |
+| [`reclaimed`](#reliant-worktree-reclaimed) | List the captures of reclaimed worktrees |
+| [`restore`](#reliant-worktree-restore) | Recreate a reclaimed worktree from its capture |
+
+---
+
+### reliant worktree reclaim
+
+The daemon's last reclaim report, and decisions about proposed worktrees
+
+```
+reliant worktree reclaim
+```
+
+**Subcommands:**
+
+| Command | Description |
+|---------|-------------|
+| [`approve`](#reliant-worktree-reclaim-approve) | Approve reclaiming proposed worktrees |
+| [`decline`](#reliant-worktree-reclaim-decline) | Decline reclaiming proposed worktrees |
+| [`note`](#reliant-worktree-reclaim-note) | Attach a reviewing note to proposed worktrees |
+| [`proposals`](#reliant-worktree-reclaim-proposals) | Print the pending proposals as JSON |
+| [`report`](#reliant-worktree-reclaim-report) | Show the daemon's last reclaim report |
+| [`scan`](#reliant-worktree-reclaim-scan) | Run a dry-run pass now and write its report |
+
+---
+
+#### reliant worktree reclaim approve
+
+Approve reclaiming proposed worktrees
+
+Record a person's decision about worktrees the last report proposes
+(class needs_approval), by key. The decision binds to the worktree's
+fingerprint in that report: one that changes after it (a commit, an edit, a
+new file) is proposed again.
+
+Approve here refuses: nothing a command on this machine can check shows that
+an approval came from a person rather than an agent running as the same user.
+Approve a proposed worktree in the machine's Inbox item instead: the server
+delivers that approval to the daemon, which removes the worktree after
+saving it to a local ref. Or free one yourself, after checking its work, with
+`git worktree remove`. Decline records that a proposed worktree is to be
+kept; an agent's shell is refused that too.
+
+```
+reliant worktree reclaim approve <key>... [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--state-dir` | `string` | - | the reclaim state directory (default ~/.reliant/reclaim) |
+
+---
+
+#### reliant worktree reclaim decline
+
+Decline reclaiming proposed worktrees
+
+Record a person's decision about worktrees the last report proposes
+(class needs_approval), by key. The decision binds to the worktree's
+fingerprint in that report: one that changes after it (a commit, an edit, a
+new file) is proposed again.
+
+Approve here refuses: nothing a command on this machine can check shows that
+an approval came from a person rather than an agent running as the same user.
+Approve a proposed worktree in the machine's Inbox item instead: the server
+delivers that approval to the daemon, which removes the worktree after
+saving it to a local ref. Or free one yourself, after checking its work, with
+`git worktree remove`. Decline records that a proposed worktree is to be
+kept; an agent's shell is refused that too.
+
+```
+reliant worktree reclaim decline <key>... [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--state-dir` | `string` | - | the reclaim state directory (default ~/.reliant/reclaim) |
+
+---
+
+#### reliant worktree reclaim note
+
+Attach a reviewing note to proposed worktrees
+
+Attach a short assessment to a proposal: what the unsaved work looks like,
+how recently it was touched, whether it looks abandoned. The person sees it on
+the machine's Inbox item next to approve and decline. A note binds to the
+proposal's fingerprint (--fingerprint, from `proposals`), so a note about a
+state that has since changed is refused. It decides nothing.
+
+--from <file> (or - for stdin) records many at once: a JSON list of
+{"key", "fingerprint", "text"}.
+
+```
+reliant worktree reclaim note [<key> <text>] [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--fingerprint` | `string` | - | the proposal's fingerprint the note is about |
+| `--from` | `string` | - | read notes from this JSON file (- for stdin) |
+| `--state-dir` | `string` | - | the reclaim state directory (default ~/.reliant/reclaim) |
+
+---
+
+#### reliant worktree reclaim proposals
+
+Print the pending proposals as JSON
+
+Print the worktrees the last pass proposes for removal and that are not yet
+reclaimed, as JSON: each one's key, fingerprint, path, branch, what its unsaved
+work is, how long it has been idle, any reviewing agent's note and any decision
+already recorded. This is what the machine's Inbox item lists.
+
+```
+reliant worktree reclaim proposals [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--state-dir` | `string` | - | the reclaim state directory (default ~/.reliant/reclaim) |
+
+---
+
+#### reliant worktree reclaim report
+
+Show the daemon's last reclaim report
+
+Show the last pass's report: every linked worktree found, its class
+(auto_safe, needs_approval, held), what was done with it and why, and its
+size. --class needs_approval lists the worktrees awaiting a decision, with
+the key and fingerprint `approve` and `decline` take.
+
+```
+reliant worktree reclaim report [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--class` | `string` | - | only entries of this class: auto_safe, needs_approval or held |
+| `--json` | `bool` | - | print the report as JSON |
+| `--state-dir` | `string` | - | the reclaim state directory (default ~/.reliant/reclaim) |
+
+---
+
+#### reliant worktree reclaim scan
+
+Run a dry-run pass now and write its report
+
+Run one dry-run pass in this process: discover every linked worktree,
+classify it, and write the report and journal the daemon's passes write. It
+captures nothing and deletes nothing.
+
+```
+reliant worktree reclaim scan [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--json` | `bool` | - | print the report as JSON |
+| `--roots` | `string` | - | directories to walk, comma-separated path[:depth] (default: the daemon's) |
+| `--state-dir` | `string` | - | the reclaim state directory (default ~/.reliant/reclaim) |
+
+---
+
+### reliant worktree reclaimed
+
+List the captures of reclaimed worktrees
+
+List every capture (refs/reliant/reclaimed/...) in the repositories the
+reclaim journal names, or in --repo, newest first. A capture is kept until it
+is restored or deleted by hand; none expires.
+
+```
+reliant worktree reclaimed [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--json` | `bool` | - | print the list as JSON |
+| `--repo` | `string` | - | list this repository's captures (a checkout or git dir) |
+| `--state-dir` | `string` | - | the reclaim state directory (default ~/.reliant/reclaim) |
+
+---
+
+### reliant worktree restore
+
+Recreate a reclaimed worktree from its capture
+
+Recreate a reclaimed worktree as a new linked worktree: HEAD at the
+captured commit, the files on disk as they were (untracked files untracked
+again), and the index as it was staged. Commits only the old worktree's
+reflog reached stay reachable from the capture ref, which is kept.
+
+Name the capture by its ref (with --repo, unless the journal or a tombstone
+names its repository), or by the path the worktree had. It is restored at
+that path unless --to names another; the path must not exist. The branch is
+reattached when that changes no file, otherwise the worktree is left on a
+detached HEAD and the output says why.
+
+Plain git does the same:
+  git -C <repo> worktree add --detach --no-checkout <dir> <ref>^1
+  git -C <dir> read-tree --reset -u <ref>^{tree}
+  git -C <dir> read-tree <ref>^2^{tree}
+
+```
+reliant worktree restore <capture-ref | reclaimed path> [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--branch` | `string` | - | put the restored worktree on this branch (default: the one it was on) |
+| `--repo` | `string` | - | the capture's repository (a checkout or git dir) |
+| `--state-dir` | `string` | - | the reclaim state directory (default ~/.reliant/reclaim) |
+| `--to` | `string` | - | restore into this directory instead of the original path |
 
 ---
 

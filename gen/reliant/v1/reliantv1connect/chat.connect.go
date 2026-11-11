@@ -10,7 +10,7 @@ import (
 	connect "connectrpc.com/connect"
 	context "context"
 	errors "errors"
-	v1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	v1 "github.com/reliant-labs/reliant/sdk/go/gen/reliant/v1"
 	http "net/http"
 	strings "strings"
 )
@@ -76,6 +76,9 @@ const (
 	// ChatServiceGetToolResultProcedure is the fully-qualified name of the ChatService's GetToolResult
 	// RPC.
 	ChatServiceGetToolResultProcedure = "/reliant.v1.ChatService/GetToolResult"
+	// ChatServiceGetContentBlockBodiesProcedure is the fully-qualified name of the ChatService's
+	// GetContentBlockBodies RPC.
+	ChatServiceGetContentBlockBodiesProcedure = "/reliant.v1.ChatService/GetContentBlockBodies"
 	// ChatServiceUpdateChatStateProcedure is the fully-qualified name of the ChatService's
 	// UpdateChatState RPC.
 	ChatServiceUpdateChatStateProcedure = "/reliant.v1.ChatService/UpdateChatState"
@@ -128,6 +131,9 @@ const (
 	// ChatServiceSetChatDaemonProcedure is the fully-qualified name of the ChatService's SetChatDaemon
 	// RPC.
 	ChatServiceSetChatDaemonProcedure = "/reliant.v1.ChatService/SetChatDaemon"
+	// ChatServiceMoveChatToProjectProcedure is the fully-qualified name of the ChatService's
+	// MoveChatToProject RPC.
+	ChatServiceMoveChatToProjectProcedure = "/reliant.v1.ChatService/MoveChatToProject"
 )
 
 // ChatServiceClient is a client for the reliant.v1.ChatService service.
@@ -226,6 +232,13 @@ type ChatServiceClient interface {
 	// read paths send a truncated preview of a large result (ContentBlock.
 	// truncated); this is how the client gets the rest, on demand.
 	GetToolResult(context.Context, *connect.Request[v1.GetToolResultRequest]) (*connect.Response[v1.GetToolResultResponse], error)
+	// GetContentBlockBodies returns the bodies of content blocks that a
+	// transcript read sent elided (ContentBlock.body_elided), by block id. A
+	// block resolves when it belongs to chat_id, or to history a branch of it
+	// inherits (the same rule as GetToolResult). Any other id comes back in
+	// not_found, so the response never says whether an id exists elsewhere.
+	// forge:custom — owner-checked batch read of block bodies, branch inheritance resolved
+	GetContentBlockBodies(context.Context, *connect.Request[v1.GetContentBlockBodiesRequest]) (*connect.Response[v1.GetContentBlockBodiesResponse], error)
 	// UpdateChatState changes chat state (idle/archived)
 	UpdateChatState(context.Context, *connect.Request[v1.UpdateChatStateRequest]) (*connect.Response[v1.UpdateChatStateResponse], error)
 	// TerminateChat forcefully terminates the running workflow for a chat
@@ -278,6 +291,19 @@ type ChatServiceClient interface {
 	// no_machine in the same write; the next turn is offered the full tool set.
 	// The reverse never happens: clearing the daemon leaves no_machine false.
 	SetChatDaemon(context.Context, *connect.Request[v1.SetChatDaemonRequest]) (*connect.Response[v1.SetChatDaemonResponse], error)
+	// MoveChatToProject moves an idle chat to another of the caller's projects.
+	// The chat keeps its history; its next turn runs in the new project's main
+	// checkout, on a machine that has the project (daemon_id when given, else the
+	// chat's machine when it has the project, else the project's default
+	// machine). A hidden note on the chat's root thread tells the model where it
+	// moved from and to, since earlier messages name the old checkout's paths.
+	//
+	// Refused (FAILED_PRECONDITION) while the chat has a run in progress, is
+	// waiting for an answer, is paused or has a message queued for its machine,
+	// and for an archived chat. A chat in a branch workspace is refused unless
+	// leave_workspace is set: the workspace belongs to the old project and stays
+	// there. Moving a chat to the project it is already in returns it unchanged.
+	MoveChatToProject(context.Context, *connect.Request[v1.MoveChatToProjectRequest]) (*connect.Response[v1.MoveChatToProjectResponse], error)
 }
 
 // NewChatServiceClient constructs a client for the reliant.v1.ChatService service. By default, it
@@ -391,6 +417,12 @@ func NewChatServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			httpClient,
 			baseURL+ChatServiceGetToolResultProcedure,
 			connect.WithSchema(chatServiceMethods.ByName("GetToolResult")),
+			connect.WithClientOptions(opts...),
+		),
+		getContentBlockBodies: connect.NewClient[v1.GetContentBlockBodiesRequest, v1.GetContentBlockBodiesResponse](
+			httpClient,
+			baseURL+ChatServiceGetContentBlockBodiesProcedure,
+			connect.WithSchema(chatServiceMethods.ByName("GetContentBlockBodies")),
 			connect.WithClientOptions(opts...),
 		),
 		updateChatState: connect.NewClient[v1.UpdateChatStateRequest, v1.UpdateChatStateResponse](
@@ -507,6 +539,12 @@ func NewChatServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			connect.WithSchema(chatServiceMethods.ByName("SetChatDaemon")),
 			connect.WithClientOptions(opts...),
 		),
+		moveChatToProject: connect.NewClient[v1.MoveChatToProjectRequest, v1.MoveChatToProjectResponse](
+			httpClient,
+			baseURL+ChatServiceMoveChatToProjectProcedure,
+			connect.WithSchema(chatServiceMethods.ByName("MoveChatToProject")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -529,6 +567,7 @@ type chatServiceClient struct {
 	interruptThread           *connect.Client[v1.InterruptThreadRequest, v1.InterruptThreadResponse]
 	listMessages              *connect.Client[v1.ListMessagesRequest, v1.ListMessagesResponse]
 	getToolResult             *connect.Client[v1.GetToolResultRequest, v1.GetToolResultResponse]
+	getContentBlockBodies     *connect.Client[v1.GetContentBlockBodiesRequest, v1.GetContentBlockBodiesResponse]
 	updateChatState           *connect.Client[v1.UpdateChatStateRequest, v1.UpdateChatStateResponse]
 	terminateChat             *connect.Client[v1.TerminateChatRequest, v1.TerminateChatResponse]
 	pauseChat                 *connect.Client[v1.PauseChatRequest, v1.PauseChatResponse]
@@ -548,6 +587,7 @@ type chatServiceClient struct {
 	getWorkflowNodeExecutions *connect.Client[v1.GetWorkflowNodeExecutionsRequest, v1.GetWorkflowNodeExecutionsResponse]
 	getThreadWorkflowInputs   *connect.Client[v1.GetThreadWorkflowInputsRequest, v1.GetThreadWorkflowInputsResponse]
 	setChatDaemon             *connect.Client[v1.SetChatDaemonRequest, v1.SetChatDaemonResponse]
+	moveChatToProject         *connect.Client[v1.MoveChatToProjectRequest, v1.MoveChatToProjectResponse]
 }
 
 // StartChat calls reliant.v1.ChatService.StartChat.
@@ -633,6 +673,11 @@ func (c *chatServiceClient) ListMessages(ctx context.Context, req *connect.Reque
 // GetToolResult calls reliant.v1.ChatService.GetToolResult.
 func (c *chatServiceClient) GetToolResult(ctx context.Context, req *connect.Request[v1.GetToolResultRequest]) (*connect.Response[v1.GetToolResultResponse], error) {
 	return c.getToolResult.CallUnary(ctx, req)
+}
+
+// GetContentBlockBodies calls reliant.v1.ChatService.GetContentBlockBodies.
+func (c *chatServiceClient) GetContentBlockBodies(ctx context.Context, req *connect.Request[v1.GetContentBlockBodiesRequest]) (*connect.Response[v1.GetContentBlockBodiesResponse], error) {
+	return c.getContentBlockBodies.CallUnary(ctx, req)
 }
 
 // UpdateChatState calls reliant.v1.ChatService.UpdateChatState.
@@ -728,6 +773,11 @@ func (c *chatServiceClient) GetThreadWorkflowInputs(ctx context.Context, req *co
 // SetChatDaemon calls reliant.v1.ChatService.SetChatDaemon.
 func (c *chatServiceClient) SetChatDaemon(ctx context.Context, req *connect.Request[v1.SetChatDaemonRequest]) (*connect.Response[v1.SetChatDaemonResponse], error) {
 	return c.setChatDaemon.CallUnary(ctx, req)
+}
+
+// MoveChatToProject calls reliant.v1.ChatService.MoveChatToProject.
+func (c *chatServiceClient) MoveChatToProject(ctx context.Context, req *connect.Request[v1.MoveChatToProjectRequest]) (*connect.Response[v1.MoveChatToProjectResponse], error) {
+	return c.moveChatToProject.CallUnary(ctx, req)
 }
 
 // ChatServiceHandler is an implementation of the reliant.v1.ChatService service.
@@ -826,6 +876,13 @@ type ChatServiceHandler interface {
 	// read paths send a truncated preview of a large result (ContentBlock.
 	// truncated); this is how the client gets the rest, on demand.
 	GetToolResult(context.Context, *connect.Request[v1.GetToolResultRequest]) (*connect.Response[v1.GetToolResultResponse], error)
+	// GetContentBlockBodies returns the bodies of content blocks that a
+	// transcript read sent elided (ContentBlock.body_elided), by block id. A
+	// block resolves when it belongs to chat_id, or to history a branch of it
+	// inherits (the same rule as GetToolResult). Any other id comes back in
+	// not_found, so the response never says whether an id exists elsewhere.
+	// forge:custom — owner-checked batch read of block bodies, branch inheritance resolved
+	GetContentBlockBodies(context.Context, *connect.Request[v1.GetContentBlockBodiesRequest]) (*connect.Response[v1.GetContentBlockBodiesResponse], error)
 	// UpdateChatState changes chat state (idle/archived)
 	UpdateChatState(context.Context, *connect.Request[v1.UpdateChatStateRequest]) (*connect.Response[v1.UpdateChatStateResponse], error)
 	// TerminateChat forcefully terminates the running workflow for a chat
@@ -878,6 +935,19 @@ type ChatServiceHandler interface {
 	// no_machine in the same write; the next turn is offered the full tool set.
 	// The reverse never happens: clearing the daemon leaves no_machine false.
 	SetChatDaemon(context.Context, *connect.Request[v1.SetChatDaemonRequest]) (*connect.Response[v1.SetChatDaemonResponse], error)
+	// MoveChatToProject moves an idle chat to another of the caller's projects.
+	// The chat keeps its history; its next turn runs in the new project's main
+	// checkout, on a machine that has the project (daemon_id when given, else the
+	// chat's machine when it has the project, else the project's default
+	// machine). A hidden note on the chat's root thread tells the model where it
+	// moved from and to, since earlier messages name the old checkout's paths.
+	//
+	// Refused (FAILED_PRECONDITION) while the chat has a run in progress, is
+	// waiting for an answer, is paused or has a message queued for its machine,
+	// and for an archived chat. A chat in a branch workspace is refused unless
+	// leave_workspace is set: the workspace belongs to the old project and stays
+	// there. Moving a chat to the project it is already in returns it unchanged.
+	MoveChatToProject(context.Context, *connect.Request[v1.MoveChatToProjectRequest]) (*connect.Response[v1.MoveChatToProjectResponse], error)
 }
 
 // NewChatServiceHandler builds an HTTP handler from the service implementation. It returns the path
@@ -987,6 +1057,12 @@ func NewChatServiceHandler(svc ChatServiceHandler, opts ...connect.HandlerOption
 		ChatServiceGetToolResultProcedure,
 		svc.GetToolResult,
 		connect.WithSchema(chatServiceMethods.ByName("GetToolResult")),
+		connect.WithHandlerOptions(opts...),
+	)
+	chatServiceGetContentBlockBodiesHandler := connect.NewUnaryHandler(
+		ChatServiceGetContentBlockBodiesProcedure,
+		svc.GetContentBlockBodies,
+		connect.WithSchema(chatServiceMethods.ByName("GetContentBlockBodies")),
 		connect.WithHandlerOptions(opts...),
 	)
 	chatServiceUpdateChatStateHandler := connect.NewUnaryHandler(
@@ -1103,6 +1179,12 @@ func NewChatServiceHandler(svc ChatServiceHandler, opts ...connect.HandlerOption
 		connect.WithSchema(chatServiceMethods.ByName("SetChatDaemon")),
 		connect.WithHandlerOptions(opts...),
 	)
+	chatServiceMoveChatToProjectHandler := connect.NewUnaryHandler(
+		ChatServiceMoveChatToProjectProcedure,
+		svc.MoveChatToProject,
+		connect.WithSchema(chatServiceMethods.ByName("MoveChatToProject")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/reliant.v1.ChatService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case ChatServiceStartChatProcedure:
@@ -1139,6 +1221,8 @@ func NewChatServiceHandler(svc ChatServiceHandler, opts ...connect.HandlerOption
 			chatServiceListMessagesHandler.ServeHTTP(w, r)
 		case ChatServiceGetToolResultProcedure:
 			chatServiceGetToolResultHandler.ServeHTTP(w, r)
+		case ChatServiceGetContentBlockBodiesProcedure:
+			chatServiceGetContentBlockBodiesHandler.ServeHTTP(w, r)
 		case ChatServiceUpdateChatStateProcedure:
 			chatServiceUpdateChatStateHandler.ServeHTTP(w, r)
 		case ChatServiceTerminateChatProcedure:
@@ -1177,6 +1261,8 @@ func NewChatServiceHandler(svc ChatServiceHandler, opts ...connect.HandlerOption
 			chatServiceGetThreadWorkflowInputsHandler.ServeHTTP(w, r)
 		case ChatServiceSetChatDaemonProcedure:
 			chatServiceSetChatDaemonHandler.ServeHTTP(w, r)
+		case ChatServiceMoveChatToProjectProcedure:
+			chatServiceMoveChatToProjectHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -1254,6 +1340,10 @@ func (UnimplementedChatServiceHandler) GetToolResult(context.Context, *connect.R
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ChatService.GetToolResult is not implemented"))
 }
 
+func (UnimplementedChatServiceHandler) GetContentBlockBodies(context.Context, *connect.Request[v1.GetContentBlockBodiesRequest]) (*connect.Response[v1.GetContentBlockBodiesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ChatService.GetContentBlockBodies is not implemented"))
+}
+
 func (UnimplementedChatServiceHandler) UpdateChatState(context.Context, *connect.Request[v1.UpdateChatStateRequest]) (*connect.Response[v1.UpdateChatStateResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ChatService.UpdateChatState is not implemented"))
 }
@@ -1328,4 +1418,8 @@ func (UnimplementedChatServiceHandler) GetThreadWorkflowInputs(context.Context, 
 
 func (UnimplementedChatServiceHandler) SetChatDaemon(context.Context, *connect.Request[v1.SetChatDaemonRequest]) (*connect.Response[v1.SetChatDaemonResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ChatService.SetChatDaemon is not implemented"))
+}
+
+func (UnimplementedChatServiceHandler) MoveChatToProject(context.Context, *connect.Request[v1.MoveChatToProjectRequest]) (*connect.Response[v1.MoveChatToProjectResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ChatService.MoveChatToProject is not implemented"))
 }

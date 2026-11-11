@@ -260,7 +260,7 @@ describe("when the allowance runs out", () => {
     expect(r.calls).toHaveLength(attempts);
   });
 
-  it("retains main's process-health UI and error-log links with an as-of badge during the pause", async () => {
+  it("retains the Services list's request figures and error-log links with an as-of badge during the pause", async () => {
     const r = rig();
     render(
       <ReleasesApiProvider api={createReleasesFixtureApi()}>
@@ -273,16 +273,18 @@ describe("when the allowance runs out", () => {
       { wrapper: r.wrapper }
     );
     await flush();
-    const table = screen.getByTestId("observability-services");
-    expect(within(table).getByRole("heading", { name: "Process health" })).toBeInTheDocument();
-    expect(within(table).getByRole("columnheader", { name: "Memory" })).toBeInTheDocument();
-    const rows = within(table).getAllByTestId(/^observability-service-/);
+    // The Overview's one Services list carries what the Processes table did (it has no Processes table now).
+    expect(screen.queryByTestId("observability-services")).not.toBeInTheDocument();
+    const table = screen.getByTestId("overview-services");
+    expect(within(table).getByRole("heading", { name: /^Services/ })).toBeInTheDocument();
+    const rows = within(table).getAllByTestId(/^overview-service-/);
+    expect(rows.length).toBeGreaterThan(0);
     expect(within(table).queryByTestId("obs-as-of")).not.toBeInTheDocument();
 
     r.mode.value = "quota";
     await advance(POLL);
     await flush();
-    expect(within(table).getAllByTestId(/^observability-service-/)).toEqual(rows);
+    expect(within(table).getAllByTestId(/^overview-service-/)).toEqual(rows);
     const errorLogs = new URL(within(table).getByTitle("Error logs from api").getAttribute("href")!, "https://app.example.test");
     expect(errorLogs.pathname).toBe(`/forge/p/${WORKLOADS_PROJECT}/observability/logs`);
     expect(Object.fromEntries(errorLogs.searchParams)).toMatchObject({ env: "prod", range: "1h", service: "api", severity: "error,fatal" });

@@ -1,19 +1,31 @@
 #!/bin/bash
 
 # PHASE 1 of a release: propose the version bump. Creates NO tag.
-# Usage: ./scripts/release.sh [patch|minor|major|prerelease]
+# Usage: ./scripts/release.sh [auto|patch|minor|major|prerelease] [--owner-override]
+#
+# The version is real semver at major 1 (owner, 2026-11-05). `auto`, the default,
+# computes it with scripts/semver-next.sh from the PR titles merged since the last
+# final tag: any `feat` is a minor, anything else a patch, and a breaking change
+# (`feat!:`, a `BREAKING CHANGE:` footer) is refused, naming the PR: within v1,
+# deprecate and keep the old path. A breaking change an earlier release candidate
+# (rc/ tag) already carried does not refuse again. An explicit patch/minor/major
+# that is not the computed bump, or any release over a refusal, is the owner's
+# alone: --owner-override.
 #
 # This script will:
 # 1. Validate and regenerate the changelog
 # 2. Update the version in electron/package.json (+ lockfile)
 # 3. Open a PR against main
 #
-# Then, once that PR has MERGED:
-#
-#   ./scripts/release-tag.sh        # phase 2 — tags the merged commit on main
-#
-# Phase 2 is what creates the tag and triggers `Release Electron App` and
-# `Build & Push Image`.
+# Then, once that PR has MERGED, phase 2 tags it. That is control-plane's
+# rc-train, not a person: it names each release candidate after the version
+# electron/package.json declares on main, and when it promotes a candidate it
+# runs `./scripts/release-tag.sh <v> --commit <rc sha> --rc`, which creates the
+# tag and triggers `Release Electron App` and `Build & Push Image`. Until this
+# PR merges, every candidate carries the version already released, so the
+# train publishes NO desktop release (the tag is "burned"); the PR carries
+# `release:asap` so its merge cuts a candidate at once. `./scripts/release-tag.sh`
+# by hand is the hotfix path only (dev-docs/merge-and-release-gates.md).
 #
 # ── WHY THE TAG MOVED OUT OF THIS SCRIPT ────────────────────────────────────
 #
@@ -49,20 +61,27 @@ RED='\033[0;31m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-# Default to prerelease if no argument provided
-RELEASE_TYPE=${1:-prerelease}
+RELEASE_TYPE=auto
+OWNER_OVERRIDE=false
+for arg in "$@"; do
+    case "$arg" in
+        --owner-override) OWNER_OVERRIDE=true ;;
+        *) RELEASE_TYPE="$arg" ;;
+    esac
+done
 
 # Validate release type
 case $RELEASE_TYPE in
-    patch|minor|major|prerelease)
+    auto|patch|minor|major|prerelease)
         ;;
     *)
         echo -e "${RED}Error: Invalid release type '$RELEASE_TYPE'${NC}"
-        echo "Usage: $0 [patch|minor|major|prerelease]"
+        echo "Usage: $0 [auto|patch|minor|major|prerelease] [--owner-override]"
+        echo "  auto (default): the bump the PR titles since the last tag compute (feat → minor, else patch)"
         echo "  patch: 0.2.3-rc1 → 0.2.3 (stable release from RC)"
         echo "  minor: 0.2.3 → 0.3.0 (new features)"
         echo "  major: 0.2.3 → 1.0.0 (breaking changes)"
-        echo "  prerelease: 0.2.3 → 0.2.4-rc1 (first RC) or 0.2.4-rc1 → 0.2.4-rc2 (next RC)"
+        echo "  prerelease: the first RC of the computed version (0.2.3 → 0.3.0-rc1 after a feat) or the next RC of it (0.3.0-rc1 → 0.3.0-rc2)"
         exit 1
         ;;
 esac
@@ -90,10 +109,34 @@ fi
 CURRENT_VERSION=$(node -p "require('./electron/package.json').version")
 echo -e "${YELLOW}Current version: $CURRENT_VERSION${NC}"
 
+# The computed version: origin's tags, origin/main's PR titles.
+git fetch origin main --tags --quiet
+# for-each-ref, not a tag command: this script must never touch tags (TestReleaseScriptDoesNotTag).
+SINCE_RC=$(git for-each-ref --sort=-v:refname --count=1 --format='%(refname:lstrip=2)' 'refs/tags/rc/v*')
+COMPUTE_ERR=$(mktemp)
+COMPUTED=$(bash scripts/semver-next.sh --head origin/main ${SINCE_RC:+--breaking-since "refs/tags/$SINCE_RC"} 2>"$COMPUTE_ERR") || COMPUTED=""
+# A release candidate is a published release too: the refusal applies to it alike.
+if [[ -z "$COMPUTED" && "$OWNER_OVERRIDE" != "true" ]]; then
+    echo -e "${RED}Error: cannot compute the release version:${NC}"
+    cat "$COMPUTE_ERR"
+    echo -e "${YELLOW}  Only the owner releases over this: $0 <patch|minor|major> --owner-override${NC}"
+    exit 1
+fi
+
 # Handle rc version increment specially
 if [[ $RELEASE_TYPE == "prerelease" ]]; then
+    # The RC's core version is the computed one: the next RC when the current
+    # version is already an RC of it, else the first RC of the computed version (a
+    # feature landed since the last RC makes it a minor; a stable current version
+    # equal to the computed one is a release still pending, not a reason to bump
+    # again). Only an owner override with no computed version falls back to the
+    # next patch below.
+    CORE=${CURRENT_VERSION%%-*}
+    if [[ -n "$COMPUTED" && ( "$CORE" != "${COMPUTED#v}" || "$CURRENT_VERSION" == "$CORE" ) ]]; then
+        NEW_VERSION="${COMPUTED#v}-rc1"
+        echo -e "${YELLOW}📦 Creating first RC of the computed version: $CURRENT_VERSION → $NEW_VERSION${NC}"
     # Support both -rc.N and -rcN formats
-    if [[ $CURRENT_VERSION =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)-rc\.?([0-9]+)$ ]]; then
+    elif [[ $CURRENT_VERSION =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)-rc\.?([0-9]+)$ ]]; then
         # Already an RC version, increment RC number
         MAJOR=${BASH_REMATCH[1]}
         MINOR=${BASH_REMATCH[2]}
@@ -120,13 +163,21 @@ if [[ $RELEASE_TYPE == "prerelease" ]]; then
     node -e "const pkg = require('./package.json'); pkg.version = '$NEW_VERSION'; require('fs').writeFileSync('./package.json', JSON.stringify(pkg, null, 2) + '\n');"
     cd ..
 else
-    # Use npm version for other cases
-    echo -e "${YELLOW}📦 Creating release: $CURRENT_VERSION → ${RELEASE_TYPE}${NC}"
+    # npm version takes a bump name or an exact version; `auto` is the computed one.
+    BUMP="$RELEASE_TYPE"
+    [[ "$BUMP" != "auto" ]] || BUMP="${COMPUTED#v}"
+    echo -e "${YELLOW}📦 Creating release: $CURRENT_VERSION → ${BUMP}${NC}"
     cd electron
-    NEW_VERSION=$(npm version $RELEASE_TYPE --no-git-tag-version)
+    NEW_VERSION=$(npm version "$BUMP" --no-git-tag-version --allow-same-version)
     cd ..
     # npm version returns with 'v' prefix, strip it
     NEW_VERSION=${NEW_VERSION#v}
+    if [[ "v$NEW_VERSION" != "$COMPUTED" && "$OWNER_OVERRIDE" != "true" ]]; then
+        git checkout -- electron/package.json electron/package-lock.json 2>/dev/null || true
+        echo -e "${RED}Error: $RELEASE_TYPE makes v$NEW_VERSION, but the PR titles since the last tag compute ${COMPUTED}${NC}"
+        echo -e "${YELLOW}  Omit the type to propose ${COMPUTED}; only the owner proposes another (--owner-override).${NC}"
+        exit 1
+    fi
 fi
 
 echo -e "${GREEN}✅ New version: $NEW_VERSION${NC}"
@@ -219,16 +270,21 @@ git push origin HEAD
 echo -e "${YELLOW}📋 Creating pull request...${NC}"
 PR_BODY="Version bump for v$NEW_VERSION.
 
-**This PR does not create the tag.** After it merges, run:
+**Why it matters.** control-plane's rc-train names every reliant release
+candidate after the version \`electron/package.json\` declares on \`main\`. While
+\`main\` still declares a version that is already tagged, each candidate it
+promotes finds that tag taken (\"burned\") and publishes **no desktop app**: the
+backend and web ship, the desktop app does not. Merging this PR is what lets the
+next promoted candidate ship v$NEW_VERSION to desktop users.
 
-\`\`\`
-./scripts/release-tag.sh
-\`\`\`
-
-That tags the *merged* commit on \`main\` and triggers \`Release Electron App\`
-and \`Build & Push Image\`. Tagging this branch instead would strand the tag off
-the trunk once the PR is squash-merged — which is how v1.7.8 through v1.7.12
-ended up unreachable from \`main\`."
+**This PR does not create the tag, and nobody runs anything after it merges.**
+The rc-train cuts a candidate from \`main\`, gates it, and on promotion runs
+\`./scripts/release-tag.sh v$NEW_VERSION --commit <rc sha> --rc\`, which tags the
+candidate and triggers \`Release Electron App\` and \`Build & Push Image\`. Label
+this PR \`release:asap\` so its merge cuts that candidate at once instead of on
+the 2h cadence. Tagging this branch by hand would strand the tag off the trunk
+once the PR is squash-merged, which is how v1.7.8 through v1.7.12 ended up
+unreachable from \`main\`."
 
 if command -v gh >/dev/null 2>&1; then
     gh pr create --title "chore: release v$NEW_VERSION" --body "$PR_BODY" --base main --head "$VERSION_BRANCH"
@@ -253,8 +309,8 @@ fi
 echo ""
 echo -e "${YELLOW}⚠️  NO TAG WAS CREATED, AND NOTHING IS BUILDING YET.${NC}"
 echo -e "${YELLOW}   Next steps:${NC}"
-echo -e "${BLUE}     1. Review and merge the PR above${NC}"
-echo -e "${BLUE}     2. ./scripts/release-tag.sh${NC}"
+echo -e "${BLUE}     1. Label the PR above release:asap; review merges it${NC}"
+echo -e "${BLUE}     2. control-plane's rc-train cuts, gates and promotes a candidate,${NC}"
+echo -e "${BLUE}        and tags v$NEW_VERSION on it (release-tag.sh --rc). Nothing to run by hand.${NC}"
 echo ""
-echo -e "${BLUE}   Step 2 tags the merged commit on main and starts the builds.${NC}"
-echo -e "${BLUE}   Preview it any time with: ./scripts/release-tag.sh --dry-run${NC}"
+echo -e "${BLUE}   A hotfix that cannot wait for the train: ./scripts/release-tag.sh (preview with --dry-run).${NC}"

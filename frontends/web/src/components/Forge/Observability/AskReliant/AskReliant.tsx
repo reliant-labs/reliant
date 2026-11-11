@@ -22,21 +22,30 @@
  * first moment the chat exists — so a surface can record "chat started from
  * this issue". It fires from the new-chat screen, after this component has
  * unmounted, so it must not close over component state.
+ *
+ * Where there is no chat to start (the forge shell, a demo on fixture data:
+ * AskAgentModeProvider mode="handoff"), every surface's action is one "Ask an
+ * agent" button instead, which opens the handoff sheet (AskAgentSheet) and
+ * touches neither the daemon nor a project.
  */
 
 import { useCallback, useContext, useId, useRef, useState, type ReactNode } from "react";
 import { useRouter } from "@tanstack/react-router";
-import { ChevronDown, Loader2, MessageSquarePlus, MessageSquareText, Rocket, Wrench } from "lucide-react";
+import { Bot, ChevronDown, Loader2, MessageSquarePlus, MessageSquareText, Rocket, Wrench } from "lucide-react";
 
 import Modal from "@/components/forge-ui/modal";
 import Button from "@/components/forge-ui/button";
 import DropdownMenu from "@/components/forge-ui/dropdown_menu";
+import { tourEvents } from "@/components/Onboarding/tourEvents";
 import { fetchProjects } from "@/hooks/project-queries";
+import { trackEvent } from "@/lib/analytics";
 import { toast } from "@/lib/toast-manager";
 import { useProjectStore, type Project } from "@/store/projectStore";
 
 import { ForgeConsoleContext } from "../../Console/consoleContext";
 import { BUTTON_PRIMARY, BUTTON_SECONDARY, BUTTON_SMALL, ICON_BUTTON } from "../Dashboards/parts";
+import { AskAgentSheet } from "./AskAgentSheet";
+import { useAskAgentMode } from "./askAgentMode";
 import { useObsAskContext } from "./askReliantContext";
 import { askWorkspaceName, buildAskReliantPrompt, type AskEnv, type AskIntent, type AskSubject } from "./askReliantPrompt";
 import { resolveAskProject, type AskProjectResolution } from "./askReliantProject";
@@ -51,6 +60,10 @@ export interface AskReliantOptions {
 }
 
 type Choosing = Extract<AskProjectResolution, { kind: "choose" }> & { subject: AskSubject; onChatCreated?: (chatId: string) => void; intent?: AskIntent };
+
+/** The handoff mode's one label, on every surface. */
+const ASK_AGENT_LABEL = "Ask an agent";
+const ASK_AGENT_HINT = "Hand this to your own agent: a prompt with the ids and the forge commands to fetch the rest.";
 
 const nonce = () => Math.random().toString(36).slice(2, 6);
 
@@ -68,9 +81,12 @@ export function useAskReliant(options: AskReliantOptions = {}) {
   const consoleContext = useContext(ForgeConsoleContext);
   const obs = useObsAskContext();
   const router = useRouter({ warn: false });
+  const { mode, cli, demo } = useAskAgentMode();
   // What is starting: an intent, "ask" for none, or null.
   const [starting, setStarting] = useState<AskIntent | "ask" | null>(null);
   const [choosing, setChoosing] = useState<Choosing | null>(null);
+  // Handoff mode: the subject whose sheet is open.
+  const [handoff, setHandoff] = useState<{ subject: AskSubject; intent?: AskIntent } | null>(null);
   const latest = useRef({ options, consoleContext, obs });
   latest.current = { options, consoleContext, obs };
 
@@ -106,6 +122,13 @@ export function useAskReliant(options: AskReliantOptions = {}) {
 
   const ask = useCallback(
     async (subject: AskSubject, onChatCreated?: (chatId: string) => void, intent?: AskIntent): Promise<boolean> => {
+      tourEvents.emit("askAgent:opened", { subjectKind: subject.kind, mode });
+      trackEvent("ask_agent_opened", { subject_kind: subject.kind, mode, surface: cli === "forge" ? "forge" : "reliant", demo });
+      if (mode === "handoff") {
+        // No daemon, no project: the sheet hands the prompt to the reader's own agent.
+        setHandoff({ subject, intent });
+        return true;
+      }
       const { options: opts, consoleContext: console, obs: ctx } = latest.current;
       const projects = await fetchProjects().catch(() => []);
       const { currentProject } = useProjectStore.getState();
@@ -119,11 +142,19 @@ export function useAskReliant(options: AskReliantOptions = {}) {
       setChoosing({ ...resolution, subject, onChatCreated, intent });
       return false;
     },
-    [run]
+    [run, mode, cli, demo]
   );
 
   const busy = starting !== null;
-  const dialog: ReactNode = choosing ? (
+  const dialog: ReactNode = handoff ? (
+    <AskAgentSheet
+      subject={handoff.subject}
+      intent={handoff.intent}
+      forgeProject={options.forgeProject ?? consoleContext?.forgeProject ?? obs.forgeProject}
+      envChoices={options.envChoices ?? (obs.environments.length ? obs.environments.map((env) => env.name) : consoleContext?.roster?.envs.map((env) => env.name))}
+      onClose={() => setHandoff(null)}
+    />
+  ) : choosing ? (
     <ProjectChoice
       choosing={choosing}
       busy={busy}
@@ -135,7 +166,7 @@ export function useAskReliant(options: AskReliantOptions = {}) {
     />
   ) : null;
 
-  return { ask, busy, starting, dialog };
+  return { ask, busy, starting, dialog, mode };
 }
 
 const INVESTIGATE_HINT = "Open a new chat on its own workspace with this written up for you to review. Nothing is sent until you send it.";
@@ -158,10 +189,16 @@ export function AskReliantActions({
   /** A chat already started from this subject: its label and how to open it. */
   linkedChat?: { label: string; open: () => void };
 }) {
-  const { ask, starting, dialog } = useAskReliant({ forgeProject, envChoices, onChatCreated });
+  const { ask, starting, dialog, mode } = useAskReliant({ forgeProject, envChoices, onChatCreated });
   return (
     <span className="inline-flex flex-wrap items-center gap-2" data-testid="ask-reliant-actions">
-      {linkedChat ? (
+      {mode === "handoff" ? (
+        // One button: the sheet has the Investigate / Fix toggle. A chat linked
+        // to this subject lives in Reliant, so there is nothing to open here.
+        <Button variant="outline" size="sm" leftIcon={<Bot className="h-3.5 w-3.5" />} onClick={() => void ask(subject, undefined, "investigate")} title={ASK_AGENT_HINT} data-testid="ask-agent">
+          {ASK_AGENT_LABEL}
+        </Button>
+      ) : linkedChat ? (
         <>
           <Button variant="outline" size="sm" leftIcon={<MessageSquareText className="h-3.5 w-3.5" />} onClick={linkedChat.open} title={`Open ${linkedChat.label}, started from this`} data-testid="ask-reliant-open-chat">
             Open chat
@@ -214,7 +251,25 @@ export function AskReliantMenu({
   label = "Ask Reliant",
   testId = "ask-reliant-menu",
 }: AskReliantOptions & { subject: AskSubject; appearance?: "icon" | "button"; label?: string; testId?: string }) {
-  const { ask, busy, dialog } = useAskReliant({ forgeProject, envChoices, onChatCreated });
+  const { ask, busy, dialog, mode } = useAskReliant({ forgeProject, envChoices, onChatCreated });
+  if (mode === "handoff") {
+    return (
+      <>
+        <button
+          type="button"
+          onClick={() => void ask(subject, undefined, "investigate")}
+          aria-label={appearance === "icon" ? ASK_AGENT_LABEL : undefined}
+          title={ASK_AGENT_HINT}
+          className={appearance === "icon" ? ICON_BUTTON : BUTTON_SMALL}
+          data-testid="ask-agent"
+        >
+          <Bot className="h-3.5 w-3.5" aria-hidden="true" />
+          {appearance === "button" && ASK_AGENT_LABEL}
+        </button>
+        {dialog}
+      </>
+    );
+  }
   return (
     <>
       <DropdownMenu
@@ -270,18 +325,20 @@ export function AskReliantButton({
   disabled?: boolean;
   title?: string;
 }) {
-  const { ask, busy, dialog } = useAskReliant({ forgeProject, envChoices, onChatCreated });
-  const label = "Ask Reliant";
-  const hint = title ?? "Open a new chat on its own workspace with this written up for you to review. Nothing is sent until you send it.";
+  const { ask, busy, dialog, mode } = useAskReliant({ forgeProject, envChoices, onChatCreated });
+  const handoff = mode === "handoff";
+  const label = handoff ? ASK_AGENT_LABEL : "Ask Reliant";
+  const hint = handoff ? ASK_AGENT_HINT : (title ?? "Open a new chat on its own workspace with this written up for you to review. Nothing is sent until you send it.");
+  const testId = handoff ? "ask-agent" : "ask-reliant";
   return (
     <>
       {appearance === "small" ? (
-        <button type="button" className={BUTTON_SMALL} onClick={() => void ask(subject)} disabled={disabled || busy} title={hint} data-testid="ask-reliant">
+        <button type="button" className={BUTTON_SMALL} onClick={() => void ask(subject)} disabled={disabled || busy} title={hint} data-testid={testId}>
           <MessageSquarePlus className="h-3 w-3" aria-hidden="true" />
           {label}
         </button>
       ) : (
-        <Button variant="outline" size="sm" leftIcon={<MessageSquarePlus className="h-3.5 w-3.5" />} onClick={() => void ask(subject)} disabled={disabled} loading={busy} title={hint} data-testid="ask-reliant">
+        <Button variant="outline" size="sm" leftIcon={<MessageSquarePlus className="h-3.5 w-3.5" />} onClick={() => void ask(subject)} disabled={disabled} loading={busy} title={hint} data-testid={testId}>
           {label}
         </Button>
       )}

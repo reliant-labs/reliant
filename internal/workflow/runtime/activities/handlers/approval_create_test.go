@@ -132,6 +132,16 @@ func TestApprovalCreateActivity_EmitsApprovalUpdate(t *testing.T) {
 	).Scan(&count)
 	require.NoError(t, err)
 	assert.Equal(t, 1, count, "Expected exactly 1 approval chat_update to be emitted")
+
+	// The update names the workflow that raised the approval, so a client
+	// replaying the feed attributes it to its run after it resolves.
+	var data string
+	err = h.DB().QueryRowContext(ctx,
+		`SELECT data FROM chat_updates WHERE chat_id = $1 AND update_type = $2`,
+		chatID, int32(db.UpdateTypeApproval),
+	).Scan(&data)
+	require.NoError(t, err)
+	assert.Contains(t, data, `"workflow_id":"default-test-workflow-id"`)
 }
 
 // TestApprovalCreateActivity_Idempotency verifies that calling ApprovalCreate with a

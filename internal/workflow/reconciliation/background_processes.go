@@ -3,12 +3,11 @@ package reconciliation
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"time"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/reliant-labs/reliant/internal/daemon"
 	"github.com/reliant-labs/reliant/internal/daemonactivity"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -150,7 +149,7 @@ func (r *Reconciler) reconcileBackgroundedProcesses(ctx context.Context, stats *
 // settleOwnedProcesses closes the calls whose process ran on daemonID.
 func (r *Reconciler) settleOwnedProcesses(ctx context.Context, stats *passStats, daemons BackgroundProcessDaemons, userID, daemonID string, calls []*db.BackgroundedProcessCall) int {
 	row, err := r.repo.GetDaemon(ctx, daemonID)
-	if errors.Is(err, sql.ErrNoRows) {
+	if svcerr.IsNotFound(err) {
 		// The daemon was deleted, and its processes with it.
 		closed := 0
 		for _, call := range calls {
@@ -335,6 +334,11 @@ func outcomeOfProcess(info *daemon.ProcessStatusInfo) (status core.ToolCallStatu
 		// A kill is something someone did to the process, not an error it
 		// produced: the same reading CancelToolCall gives a user's stop.
 		return core.ToolCallStatusCancelled, "background process was killed", true
+	case "stale":
+		// A record the daemon restored after a restart that lost the process
+		// (shell/background_journal.go): the same fate as an id it has no
+		// record of at all.
+		return core.ToolCallStatusCancelled, processGoneMessage, true
 	default:
 		return core.ToolCallStatusFailed, fmt.Sprintf("background process ended (%s)", info.Status), true
 	}

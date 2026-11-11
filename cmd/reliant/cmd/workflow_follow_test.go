@@ -60,7 +60,7 @@ func (f *fakeChatService) GetWorkflowExecutions(_ context.Context, _ *connect.Re
 		StopReason:   f.rootReason,
 	}
 	return connect.NewResponse(&reliantv1.GetWorkflowExecutionsResponse{
-		RootWorkflow: root,
+		AllRootWorkflows: []*reliantv1.WorkflowExecution{root},
 	}), nil
 }
 

@@ -111,3 +111,43 @@ func TestListWorktreesByIDs_ReturnsArchivedAndSkipsUnknown(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, none)
 }
+
+// daemon_id narrows the list to the workspaces one machine owns, and pages:
+// a guard over one machine's workspaces must not stop at the first page of
+// the project's.
+func TestListWorktrees_DaemonIDNarrowsToThatMachineAndPages(t *testing.T) {
+	testkit.Slow(t, "a DB-backed test with many round trips to pgtest's Postgres")
+	t.Parallel()
+
+	repo, cleanup := setupTestDB(t)
+	defer cleanup()
+	ctx := context.Background()
+	project, err := repo.GetProject(ctx, "test-project")
+	require.NoError(t, err)
+	base := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+	here, elsewhere := "d-here", "d-elsewhere"
+	seed := func(id, daemonID string, lastActive time.Time) {
+		require.NoError(t, repo.CreateWorktree(ctx, &Worktree{
+			ID: id, Name: id, Path: "/ws/" + id, Branch: "b-" + id, BaseBranch: "main",
+			ProjectID: project.ID, Status: 1, DaemonID: &daemonID,
+			CreatedAt: lastActive, UpdatedAt: lastActive, LastActive: lastActive,
+		}))
+	}
+	// 120 newer workspaces on another machine sort ahead of the one on here.
+	for i := 0; i < 120; i++ {
+		seed(fmt.Sprintf("other-%03d", i), elsewhere, base.Add(time.Duration(i+10)*time.Minute))
+	}
+	seed("mine-0", here, base)
+	seed("mine-1", here, base.Add(time.Minute))
+	pid := project.ID
+
+	firstPage, err := repo.ListWorktrees(ctx, WorktreeFilters{ProjectID: &pid})
+	require.NoError(t, err)
+	assert.NotContains(t, worktreeIDs(firstPage), "mine-0", "the unfiltered first page misses it")
+
+	page1, err := repo.ListWorktrees(ctx, WorktreeFilters{ProjectID: &pid, DaemonID: &here, Limit: 1})
+	require.NoError(t, err)
+	page2, err := repo.ListWorktrees(ctx, WorktreeFilters{ProjectID: &pid, DaemonID: &here, Limit: 1, Offset: 1})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"mine-1", "mine-0"}, append(worktreeIDs(page1), worktreeIDs(page2)...))
+}

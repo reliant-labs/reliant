@@ -139,23 +139,100 @@ Telemetry goes to **our own telemetry store**: ClickStack (ClickHouse with OpenT
 | Toggle | Sent to | What's included |
 | --- | --- | --- |
 | **Analytics and Usage Data** | Our own telemetry store | Product-usage events such as message sent, model call completed (provider, model, token counts, latency, and whether it succeeded), project opened and page visited, tied to your account ID. Events from the app also carry its session ID. Events record what you did, not what you wrote: a "message sent" event records the message's length, not its text, and a "model call completed" event records counts, never the prompt or the reply. A "page visited" event records which screen you opened (for example, the settings page), not what is on it. |
-| **Crash and Error Reporting** | Our own telemetry store | Crash and error reports: the error type, stack trace, app version and identifiers such as chat and run IDs. You're identified by an internal user ID, not your email or name. Error messages are cut to one short line with known credential formats redacted, and that short line can still contain a fragment of text. Request bodies and console output aren't sent. Stack traces from the desktop app's background process have your home folder and install location removed. In the web app and desktop window, this also covers page-load and request timings (without query strings). Masked session replay records the web app and the desktop app's window: all of a new user's first five sessions (or first 15 minutes), then a 10% sample. All text and everything you type is masked. The desktop background process does not record session replays. |
+| **Crash and Error Reporting** | Our own telemetry store | Crash and error reports: the error type, stack trace, app version and identifiers such as chat and run IDs. You're identified by an internal user ID, not your email or name. Reports from the web and desktop apps also carry your approximate location (see [Approximate location](#approximate-location)) and which device, browser and app version you used (see [Device and app version](#device-and-app-version)). Error messages are cut to one short line with known credential formats redacted, and that short line can still contain a fragment of text. Request bodies and console output aren't sent. Stack traces from the desktop app's background process have your home folder and install location removed. In the web app and desktop window, this also covers page-load and request timings (without query strings). Masked session replay records the web app and the desktop app's window: all of a new user's first five sessions (or first 15 minutes), then a 10% sample. All text and everything you type is masked. The desktop background process does not record session replays. |
 
 Crash reports contain error details and stack traces; we don't create or upload memory dumps.
 
-**Crash and Error Reporting**, not the analytics switch, controls whether browser telemetry starts. Turning it off mid-session stops it.
+### Approximate location
+
+When the web or desktop app sends telemetry, our ingest derives an **approximate location** (country, region and city) from the IP address the request came from, and stores that location with your session, its error reports and its request timings. The lookup uses a copy of the [DB-IP IP to City Lite](https://db-ip.com/db/download/ip-to-city-lite) database that runs inside our own servers (licensed CC BY 4.0), so your address is never sent to a third party for the lookup. **The IP address itself is then discarded: it isn't forwarded to our telemetry store and isn't stored with your telemetry.** The location is only as accurate as IP geolocation (a VPN or a mobile network can place you elsewhere), and we use it to diagnose problems, such as an error that only affects one region, never to decide what you can access.
+
+Telemetry also links each session to the requests it made: the app sends its session ID with its requests to our servers, which record it, and your internal user ID, on their side of the request. That is how a request's trace links back to the session that made it.
+
+### Device and app version
+
+Telemetry from the web and desktop apps also records **which device and app** it came from, so we can tie a problem to a browser, an operating system or a release:
+
+- **From the request's User-Agent header**, which every browser sends with every request: your browser and its version (or, in the desktop app, the Electron and Chromium versions it runs on), your operating system and its version, and whether the device is a desktop, phone or tablet. Our ingest reads these from the header itself (with the browser's standard client hints where it sends them), using the open-source [ua-parser](https://github.com/ua-parser) rules running inside our own servers; the raw User-Agent header is stored too, cut at 512 characters; in the desktop app it names the app's version, and on some phones it names the device model. This is the same information any website's server logs receive.
+- **From the app itself:** the app's version (the web app's build, and the desktop app's version), the size of the app window and of your screen in pixels, and the browser's low-entropy client hints (its brand names, platform and whether it is a mobile browser).
+
+We don't read device identifiers, installed fonts or plugins, or any other fingerprinting signal, and we don't use any of this to identify you, to track you across sites or to decide what you can access. It is stored with the telemetry it belongs to and kept as long as that telemetry is.
+
+Location, device and app version, and these links are all part of crash and error reporting: turning **Crash and Error Reporting** off stops them with the rest of it. Location and device data is kept as long as the telemetry it belongs to: 14 days with a session, 30 days with crash and error data.
+
+**Crash and Error Reporting**, not the analytics switch, controls whether browser telemetry starts. Turning it off mid-session stops it: once the change is saved, the app reloads and starts again without telemetry.
 
 For deployment administrators, the renderer runtime configuration's `OTEL_ENDPOINT` decides whether browser telemetry is sent at all (empty or `off`: none), and `OTEL_REPLAY` controls the ClickStack replay recorder. These configuration changes take effect on the next app initialization.
 
 Turning off analytics also stops the analytics events our servers record about your account. The switches don't cover:
 
-- **Server logs.** They record identifiers (such as user, chat and run IDs, and sometimes your email address), counts, durations, status codes and IP addresses, not the content of your prompts, chats, tool inputs or outputs, or files. File paths can appear in error logs for file operations. Server logs are kept for up to 30 days, depending on severity (3, 14 or 30 days), and metrics for 30 days.
+- **Server logs.** They record identifiers (such as user, chat and run IDs, and sometimes your email address), counts, durations, status codes and IP addresses, not the content of your prompts, chats, tool inputs or outputs, or files. (Server logs are separate from browser telemetry, whose IP address is discarded as described in [Approximate location](#approximate-location).) File paths can appear in error logs for file operations. Server logs are kept for up to 30 days, depending on severity (3, 14 or 30 days), and metrics for 30 days.
 - **Server-side error reports**, which go to our own telemetry store with the same shortening and credential redaction.
 - **Billing usage records:** the model, token count and cost of each request, which we need to bill you. These cover Reliant AI. Usage on your own keys and logins is covered by [Model usage records](#model-usage-records).
 - **Model usage records:** the counts described under [Model usage records](#model-usage-records).
 - **Update checks:** the desktop app checks `downloads.reliantlabs.io` for updates, which sends your IP address and app version. Updates download only after you agree.
 
 This docs site is hosted by Mintlify, which may collect usage analytics about it under [its privacy policy](https://www.mintlify.com/legal/privacy). Our marketing site, reliantlabs.io, has its own cookie choices under **Your privacy choices** in its footer; they don't apply to this docs site.
+
+### Visitors to apps you host with us
+
+This section is for people who deploy an app with Reliant (Forge), and for anyone who wants to know what a hosted app collects about its visitors. It is about the visitors to *your* app, not about your own use of Reliant, and the switches in Settings → Privacy don't control it.
+
+Apps you host with us send usage data about their visitors to our telemetry store, so that your app's dashboards can show how many people visit, which pages they view, where they came from and who signs up. We handle this data on your behalf: **you are the controller of your app's visitor data, and we are your processor.** That means you decide why it is collected, you give your visitors any notice the law requires, and you answer their requests. We help on request, and a data processing agreement is available from support@reliantlabs.io. This page lists what is collected so that you can describe it in your own privacy notice.
+
+**Cookieless by default.** By default an app counts its visitors without cookies, without anything stored on the visitor's device and without a fingerprinting script. For visitors who aren't signed in there is no persistent identifier, because the daily code described below changes every day.
+
+#### The daily visitor code
+
+Our servers, not the visitor's browser, work out the code, at the same place where they look up approximate location (see [Approximate location](#approximate-location)). They combine a random value that is different for every app and every day, the visitor's IP address (for IPv6, only its first 64 bits) and the browser's User-Agent, run them through a one-way hash (SHA-256) and keep a shortened result. In practice:
+
+- **The IP address is dropped.** It is used for this calculation and isn't stored with the visitor's usage data. (Server logs are separate; see [above](#device-and-app-version).)
+- **The random value is deleted every day.** We make a new one each day for each app and keep it only in memory, never in a database, on a disk or in a backup. It is deleted shortly after its day ends (about ten minutes past midnight UTC, and never held for more than 48 hours). After that, nobody, including us, can recompute that day's codes.
+- **A new code every day, and a different code for every app.** We can't tell that Monday's visitor is Tuesday's, or that one person visited two apps.
+- **Bots get no code.** We don't compute one for traffic recognised as a bot, or when the address or User-Agent is missing.
+
+The count is approximate. One person on two devices or browsers counts as two visitors, and so does a person whose network changes during the day. Several people on the same network with the same browser can count as one.
+
+#### What an app's usage data includes by default
+
+| What | What it includes |
+| --- | --- |
+| Daily visitor code | The code above. It changes every day, and bots get none |
+| Pages and sources | The page (route) viewed, the website that linked to it, the campaign (UTM) parameters in the link, and which advertising network a link came from (not an advertising click's own identifier) |
+| Approximate location, browser and device | Country and region, the browser and operating system names, and desktop, phone or tablet. No city, and no versions, in usage data |
+| Sign-up, sign-in and sign-out | That the event happened, how (for example password, social sign-in, magic link or passkey), and your app's opaque user ID: the identifier your sign-in system uses for the person, never their email address or name |
+| Events your app records | Events Forge records for some actions automatically, such as a record being created, plus any your own code adds. Tied to the user ID when the person is signed in |
+
+#### Analytics modes
+
+Each app has an analytics mode. The visitor's browser runs at the lowest of the mode, the consent your app has recorded, and the browser's privacy signals.
+
+| Mode | What it does |
+| --- | --- |
+| `off` | No product events from the browser |
+| `aggregate` | Strictly anonymous: the daily visitor code and the location, browser and device details only. No user ID, and no linking of a visit to a person |
+| `identified` (the default) | Nothing is stored on the visitor's device. Signed-in users' events carry their opaque user ID, and a visit can be linked to a sign-up on the same day (below) |
+| `full` | Only after your app records the visitor's consent: a persistent visitor ID and a session cookie are stored in the browser, a visitor can be recognised across days, and session replay can be switched on |
+
+#### Linking a sign-up to its visit
+
+Our servers also add the daily code to the requests they forward to your app's backend. When someone signs up, the sign-up event can carry that day's code, so you can see which source produced it without any code of your own. The link is made only within the same UTC day, and only when the code matches exactly one user that day: if several users share a code, as on a shared office network, none is linked. It is never made across days unless the visitor has consented to `full` mode. Once a visit is linked to a user, that day's visit data is personal data about that user.
+
+#### Global Privacy Control and Do Not Track
+
+If a visitor's browser sends Global Privacy Control or Do Not Track, the visitor is still counted, as part of the totals, but is never identified or linked. Browser events carry no user ID, and the browser sends no sign-up, sign-in or sign-out events. Our servers stamp no daily code on requests to your backend, so server-side events aren't linked to that visitor's browsing. Nothing is stored on the device. Events your app's server records for a signed-in user's own action, such as a sign-in, are still recorded, but without a daily code.
+
+#### Who can see it, and how long it is kept
+
+Usage data is stored in our own telemetry store, in a database set aside for your organization. It is visible to you and, like the rest of our telemetry, to the Reliant staff who operate the service. We use it to show it to you and to run the service, not to advertise to your visitors, and we don't combine it across customers' apps. It is kept for up to 90 days by default, or for the shorter period your app is set to.
+
+#### Our own sites
+
+reliantlabs.io and demo.reliantlabs.io are apps hosted on our own platform, so the same counting applies to them, and for these two sites we are the controller. Their cookie choices are described in the [Privacy Policy](https://reliantlabs.io/privacy#website-cookies).
+
+#### Other tools in your app
+
+This section covers what Reliant's hosting collects. Anything else your app adds, such as a third-party analytics script, an advertising tag or your own cookies, is yours, and whether you need a consent banner depends on where your visitors are and on everything your app does. We don't give legal advice on that.
 
 ## Deleting your data
 
@@ -197,6 +274,8 @@ Go to **Settings → Account → Delete account**, or email support@reliantlabs.
 | Model usage records, per call | 90 days |
 | Model usage daily totals | Until you delete your account |
 | Analytics events | Up to 90 days |
+| Usage data about the visitors to a hosted app, including the daily visitor code | Up to 90 days by default, or the shorter period the app is set to |
+| A day's random value for the daily visitor code | Held in memory only and deleted shortly after its day ends (never more than 48 hours). Never written to disk or to a backup |
 | Crash and error data in our telemetry store | 30 days |
 | Session replays (web app and desktop window) in our telemetry store | 14 days |
 | Crash and error data and session replays sent to Sentry (web app and desktop window) before we moved error reporting off it | According to Sentry's retention settings for our account |
@@ -209,11 +288,11 @@ The [Privacy Policy](https://reliantlabs.io/privacy#retention) has the complete 
 These commands remove Reliant's files from your computer: your local config, the desktop app's data and sign-in state, and daemon credentials. They **don't** delete anything on our servers; delete your chats and account for that. Your project files (`reliant.md`, `.reliant/` in your repos) aren't touched.
 
 <Warning>
-`~/.reliant/` also contains the git worktrees Reliant creates (`~/.reliant/worktrees/`). Commit or push any work in them before deleting it.
+`~/.reliant/` also contains the workspaces Reliant creates (`~/.reliant/worktrees/`). Commit or push any work in them before deleting it.
 </Warning>
 
 ```bash
-# Local config, including worktrees (all platforms)
+# Local config, including workspaces (all platforms)
 rm -rf ~/.reliant/
 
 # macOS: desktop app data, daemon credentials, logs

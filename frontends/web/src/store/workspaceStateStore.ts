@@ -103,6 +103,13 @@ interface WorkspaceStateStore {
    * open chat runs in (projectStore.currentProject).
    */
   projectFilterId: string | null;
+  /**
+   * The sidebar's machine filter: the machine ids (and maybe NO_MACHINE) whose
+   * chats it lists, or null for "All machines". Read it through
+   * lib/sidebarMachineFilter effectiveMachineFilter, which drops machines the
+   * user no longer has.
+   */
+  machineFilterIds: string[] | null;
   /** Global left sidebar (chat sidebar) expanded state - same across all workspaces */
   leftSidebarExpanded: boolean;
 
@@ -112,6 +119,7 @@ interface WorkspaceStateStore {
   // === Global Actions ===
   setLastProject: (projectId: string | null) => void;
   setProjectFilterId: (projectId: string | null) => void;
+  setMachineFilterIds: (machineIds: readonly string[] | null) => void;
   setLeftSidebarExpandedGlobal: (expanded: boolean) => void;
 
   // === Project-level Actions ===
@@ -292,10 +300,11 @@ export function createDefaultWorktreeState(): WorktreeState {
       fileBrowser: true,
     },
     rightSidebarTab: "files",
-    // Open by default — the terminal is a primary surface, and users who never
-    // found the toggle never discovered it existed. Toggling it off persists,
-    // so this only decides what a fresh workspace looks like.
-    terminalOpen: true,
+    // Closed by default: a first screen with the chat, the file browser and a
+    // terminal is too busy for someone who has not asked for any of them. The
+    // header toggle (tooltip + shortcut) opens it, and an explicit choice
+    // persists, so this only decides what a fresh workspace looks like.
+    terminalOpen: false,
     scrollPositions: {},
     showTasksPanel: {},
     showRecentChanges: {},
@@ -424,6 +433,7 @@ export const useWorkspaceStateStore = create<WorkspaceStateStore>()(
       version: CURRENT_VERSION,
       lastProjectId: null,
       projectFilterId: null,
+      machineFilterIds: null,
       leftSidebarExpanded: true,
       projects: {},
 
@@ -435,6 +445,10 @@ export const useWorkspaceStateStore = create<WorkspaceStateStore>()(
 
       setProjectFilterId: (projectId) => {
         set({ projectFilterId: projectId });
+      },
+
+      setMachineFilterIds: (machineIds) => {
+        set({ machineFilterIds: machineIds ? [...machineIds] : null });
       },
 
       setLeftSidebarExpandedGlobal: (expanded) => {
@@ -970,6 +984,7 @@ export const useWorkspaceStateStore = create<WorkspaceStateStore>()(
           version: CURRENT_VERSION,
           lastProjectId: null,
           projectFilterId: null,
+          machineFilterIds: null,
           projects: {},
         });
       },
@@ -981,6 +996,7 @@ export const useWorkspaceStateStore = create<WorkspaceStateStore>()(
         version: state.version,
         lastProjectId: state.lastProjectId,
         projectFilterId: state.projectFilterId,
+        machineFilterIds: state.machineFilterIds,
         leftSidebarExpanded: state.leftSidebarExpanded,
         projects: state.projects,
       }),
@@ -1099,29 +1115,6 @@ export const useWorkspaceStateStore = create<WorkspaceStateStore>()(
             }
           }
           logger.info("[WorkspaceState] Migrated to v6: Added workflowLayoutDirection field");
-        }
-
-        // Migration v6 -> v7: terminalOpen now defaults to true. Existing
-        // worktrees have an explicit `false` persisted from the old default,
-        // which would shadow the new one forever, so flip it once. This does
-        // discard a deliberate "I closed the terminal" for anyone who had it
-        // closed; the toggle is one click and persists from here on.
-        if (version < 7) {
-          const state = persistedState as Partial<WorkspaceStateStore>;
-          if (state.projects) {
-            for (const projectId of Object.keys(state.projects)) {
-              const project = state.projects[projectId];
-              if (project?.worktrees) {
-                for (const worktreeKey of Object.keys(project.worktrees)) {
-                  const worktree = project.worktrees[worktreeKey] as Partial<WorktreeState>;
-                  if (worktree) {
-                    worktree.terminalOpen = true;
-                  }
-                }
-              }
-            }
-          }
-          logger.info("[WorkspaceState] Migrated to v7: terminalOpen defaults to open");
         }
 
         return persistedState as WorkspaceStateStore;

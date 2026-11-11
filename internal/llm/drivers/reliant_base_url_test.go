@@ -15,7 +15,7 @@ func TestResolveReliantBaseURL_DefaultWhenUnset(t *testing.T) {
 	assert.Equal(t, reliantNeutralBaseURL, ResolveReliantBaseURL(reliantLLMKey))
 }
 
-// The fallback must be a LOCAL admin-server, never a hosted hostname: a hosted
+// The fallback must be a LOCAL platform-api, never a hosted hostname: a hosted
 // default would point a misconfigured server workload at production, and the old
 // https://api.reliant.dev/v1 did not resolve at all.
 func TestResolveReliantBaseURL_FallbackIsNeutralNotHosted(t *testing.T) {

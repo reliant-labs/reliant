@@ -34,6 +34,13 @@ vi.mock("../../../../store/threadActivityStore", () => ({
 
 // Spawn threads collapse into their tool call in "preview" mode; render them
 // inline so the assertion can see the thread's messages directly.
+// Classification is visible only where spawn threads render inline: the
+// detailed thread with the inline spawn display. The simplified thread (the
+// default) always previews spawns instead.
+vi.mock("../useChatThreadMode", () => ({
+  useChatThreadMode: () => ({ mode: "detailed", preference: "detailed" }),
+}));
+
 vi.mock("../../../Settings/SpawnDisplaySettings", () => ({
   getSpawnDisplayMode: () => "inline",
 }));

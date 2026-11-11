@@ -332,6 +332,25 @@ tasks:
     cmds:
       - go test -short -timeout 5m {{if .CLI_ARGS}}{{.CLI_ARGS}}{{else}}./...{{end}}
 
+  test:sdk:
+    # The Go SDK (sdk/go) is its own module: the root `./...` stops at its
+    # go.mod, so `task test` and `task test:short` never see it. This is its lane
+    # (the merge gate runs it -short when a change touches sdk/go). GOWORK=off: it
+    # is judged against its own go.mod, as a consumer who imports it would build it.
+    desc: "Go SDK module tests (sdk/go): -short, no workspace. Scope it: task test:sdk -- ./reliant/follow/..."
+    dir: sdk/go
+    cmds:
+      - env GOWORK=off go test -short -timeout 5m {{if .CLI_ARGS}}{{.CLI_ARGS}}{{else}}./...{{end}}
+
+  test:sdk:full:
+    # The SDK module without -short, as `task test` (the release gate) runs it:
+    # adds the slow tests, e.g. the scratch consumer module that builds against
+    # the SDK as an external dependency (sdk/go/consumer_test.go).
+    desc: "Go SDK module tests (sdk/go), the full tier: no -short, no workspace"
+    dir: sdk/go
+    cmds:
+      - env GOWORK=off go test {{.GOTESTRACE}} -count=1 -timeout 10m {{if .CLI_ARGS}}{{.CLI_ARGS}}{{else}}./...{{end}}
+
   test:
     # Everything after `--` REPLACES the default `./...`, so it takes both
     # flags and package patterns:
@@ -351,6 +370,8 @@ tasks:
     desc: Run Go unit tests (-race -count=1) and the web and electron tests (excludes integration + e2e)
     cmds:
       - '{{.SLOT}} go test {{.GOTESTRACE}} -count=1 -timeout 300s {{if .CLI_ARGS}}{{.CLI_ARGS}}{{else}}./...{{end}}'
+      - task: test:sdk:full
+        if: '[ -z "{{.CLI_ARGS}}" ]'
       - task: test:web
         if: '[ -z "{{.CLI_ARGS}}" ]'
       - task: test:electron
@@ -483,6 +504,16 @@ tasks:
     cmds:
       - ./scripts/merge-gate.sh {{.CLI_ARGS}}
 
+  ci:golangci:
+    # golangci-lint on the Go packages the diff from --base changed, findings on
+    # changed files only, root .golangci.yml. The merge queue runs it as its own
+    # job beside `CI result`, which fails unless it passed (owner, 2026-11-08);
+    # the release gate's unscoped forge lint still runs the whole module.
+    # `-- --plan` prints the packages without linting.
+    desc: "golangci-lint on the packages changed since `-- --base <rev>` (findings in changed files), the merge queue's lint"
+    cmds:
+      - ./scripts/golangci-changed.sh {{.CLI_ARGS}}
+
   release:gate:
     # The SLOW tier: everything ci:merge leaves out (unscoped lint, the full
     # -race suite with every slow test, integration, e2e, generate and docs
@@ -523,16 +554,20 @@ tasks:
     # Cheap repo guards no gate runs: no committed binaries in BASE..HEAD (the
     # pre-commit hook is opt-in, and --no-verify skips it), the committed
     # electron/release.config.json values are shippable, the unit tests of the
-    # scripts the release and health workflows run, and the pre-commit hook's
-    # staged-file formatter.
+    # scripts the release and health workflows run, and of the pre-commit
+    # hook's staged-file formatter and binary guard.
     desc: "No committed binaries since BASE (default origin/main), shippable release config, .github/scripts and hook tests"
     vars:
       BASE: '{{.BASE | default "origin/main"}}'
+    env:
+      # forge-demo-env.test.mjs evaluates deploy/kcl/demo with the pinned forge.
+      FORGE_CMD: '{{.FORGE}}'
     cmds:
-      - .githooks/check-binary-files-ci.sh {{.BASE}} HEAD
+      - .githooks/check-binary-files.sh --range {{.BASE}} HEAD
       - node .github/scripts/sync-release-config.mjs --check
       - node --test .github/scripts/*.test.mjs
       - ./scripts/test-fmt-staged.sh
+      - ./scripts/test-binary-files.sh
 
   test:flake:
     desc: "Run each Go test this change adds or edits three times (-short -count=3); -- --base <rev>"
@@ -559,6 +594,7 @@ tasks:
           BROWSERS: chromium webkit
           PROJECTS: --project=chromium --project=responsive-chromium-touch --project=responsive-webkit-phone --project=responsive-webkit-tablet
           PLAYWRIGHT_DEPS: '{{.PLAYWRIGHT_DEPS}}'
+          PLAYWRIGHT_DEPS_CACHE: '{{.PLAYWRIGHT_DEPS_CACHE}}'
 
   # The two halves CI runs as parallel jobs (ci.yml `playwright` matrix). The
   # split follows the install cost: WebKit's system packages (GStreamer, GTK 4,
@@ -573,6 +609,7 @@ tasks:
           BROWSERS: chromium
           PROJECTS: --project=chromium
           PLAYWRIGHT_DEPS: '{{.PLAYWRIGHT_DEPS}}'
+          PLAYWRIGHT_DEPS_CACHE: '{{.PLAYWRIGHT_DEPS_CACHE}}'
 
   test:web:e2e:responsive:
     desc: Run the touch Chromium and WebKit phone/tablet Playwright projects against the built renderer
@@ -582,6 +619,7 @@ tasks:
           BROWSERS: chromium webkit
           PROJECTS: --project=responsive-chromium-touch --project=responsive-webkit-phone --project=responsive-webkit-tablet
           PLAYWRIGHT_DEPS: '{{.PLAYWRIGHT_DEPS}}'
+          PLAYWRIGHT_DEPS_CACHE: '{{.PLAYWRIGHT_DEPS_CACHE}}'
 
   web:e2e:run:
     # Playwright against the built renderer, no Go backend, one worker (the
@@ -589,7 +627,9 @@ tasks:
     # public KCL-sourced renderer config committed in
     # electron/release.config.json; `vite preview` serves it as config.js.
     # PLAYWRIGHT_DEPS=--with-deps also installs the browser's system
-    # packages (CI does; it needs sudo).
+    # packages (needs sudo). PLAYWRIGHT_DEPS_CACHE=<dir> installs them through
+    # scripts/playwright-os-deps.sh instead, from a .deb cache it fills on a
+    # miss: CI does, so a slow Ubuntu mirror cannot eat the job's budget.
     internal: true
     requires:
       vars: [BROWSERS, PROJECTS]
@@ -602,6 +642,7 @@ tasks:
         printf 'window.__FORGE_CONFIG__ = %s;\n' "$(jq -e '.renderer' electron/release.config.json)" > "$doc"
         cd frontends/web
         npm run build:alpha
+        {{if .PLAYWRIGHT_DEPS_CACHE}}../../scripts/playwright-os-deps.sh '{{.PLAYWRIGHT_DEPS_CACHE}}' {{.BROWSERS}}{{end}}
         npx playwright install {{.BROWSERS}} {{.PLAYWRIGHT_DEPS}}
         CI=true FORGE_RUNTIME_CONFIG_FILE="$doc" npm run test:e2e -- {{.PROJECTS}} {{.CLI_ARGS}}
 
@@ -670,9 +711,15 @@ tasks:
   # ── Lint and format ───────────────────────────────────────────────────
 
   lint:
-    desc: Run the pinned forge lint (golangci-lint, buf lint, the contract/convention/migration-safety lanes)
+    desc: Run pinned forge lint and the app-owned typed vet rules
     cmds:
       - '{{.FORGE}} lint'
+      - task: lint:models
+
+  lint:models:
+    desc: Run standard vet plus the typed model-serialization rule (optional package arguments)
+    cmds:
+      - bash scripts/vet.sh {{.CLI_ARGS}}
 
   lint:web:
     desc: Lint the web app
@@ -963,6 +1010,16 @@ tasks:
     desc: Self-test of scripts/flake-report.sh (a retried pass is a suspected flake; a data race never is) against a throwaway module
     cmds:
       - ./scripts/test-flake-report.sh
+
+  lint:scope:test:
+    desc: Self-test of scripts/lint-scope.sh (the merge gate's forge lint scope drops nested Go modules, keeps root-module directories) against throwaway repos
+    cmds:
+      - ./scripts/test-lint-scope.sh
+
+  pin:check:report:test:
+    desc: Self-test of scripts/forge-pin-report.sh (forge-pin-check.yml's verdicts and its forge-pin:red / forge-pin:broken issue transitions) against a fake gh
+    cmds:
+      - ./scripts/test-forge-pin-report.sh
 
   release:lock:test:
     desc: Self-test of scripts/release-lock.sh (one release of the repo at a time, heartbeat, stale replacement, re-check of main) against a bare remote

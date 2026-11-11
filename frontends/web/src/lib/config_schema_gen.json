@@ -52,6 +52,31 @@
       ]
     },
     {
+      "name": "DEMO_APP_HOST",
+      "type": "string",
+      "source": "config"
+    },
+    {
+      "name": "DEMO_DATA_SOURCE",
+      "type": "string",
+      "source": "config"
+    },
+    {
+      "name": "DEMO_DATA_URL",
+      "type": "string",
+      "source": "config"
+    },
+    {
+      "name": "DEMO_TELEMETRY",
+      "type": "string",
+      "source": "config"
+    },
+    {
+      "name": "DEMO_TOUR",
+      "type": "string",
+      "source": "config"
+    },
+    {
       "name": "DISABLE_TLS",
       "type": "string",
       "source": "config"
@@ -65,6 +90,11 @@
       "name": "ENVIRONMENT",
       "type": "string",
       "source": "runtime"
+    },
+    {
+      "name": "FORGE_APP_HOST",
+      "type": "string",
+      "source": "config"
     },
     {
       "name": "GATEWAY_URL",

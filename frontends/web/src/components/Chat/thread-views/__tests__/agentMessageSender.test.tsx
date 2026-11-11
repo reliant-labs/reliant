@@ -7,9 +7,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { AgentMessageKind } from "../../../../gen/reliant/v1/chat_pb";
-import { ContentBlockType, MessageRole, StreamingState } from "../../../../types/chat";
+import { ContentBlockType, DisplayStyle, MessageRole, StreamingState } from "../../../../types/chat";
 import type { Message } from "../../../../types/chat";
-import { isAgentMessage } from "../../AgentMessageCard";
+import { isAgentMessage, isRunMessage } from "../../AgentMessageCard";
 import { InterleavedTimeline } from "../InterleavedTimeline";
 
 class ResizeObserverStub {
@@ -30,6 +30,11 @@ vi.mock("../../ChatMessage", () => ({
       {message.id}
     </div>
   ),
+}));
+
+const openRun = vi.fn();
+vi.mock("../../../runs/useOpenRun", () => ({
+  useOpenRun: () => openRun,
 }));
 
 vi.mock("../../MarkdownRenderer", () => ({
@@ -82,6 +87,27 @@ const fromAgent = (index: number, body = `message ${index}`, subject = ""): Mess
       title: "Reviewer",
       kind: AgentMessageKind.MESSAGE,
       subject,
+    },
+  });
+
+// The owner's repro (chat 2ee014da, 2026-11-05 15:39Z): pr-fix's hand-off,
+// delivered by send_to_run and written to the author in the second person.
+const fromRun = (index: number): Message =>
+  message(index, MessageRole.USER, {
+    contentBlocks: [
+      {
+        id: `m${index}-text`,
+        index: 0,
+        type: ContentBlockType.TEXT,
+        content: "[pr-fix] Your PR reliant-labs/control-plane#2017 is stuck: pr-review asked for changes.\n\nYou hold the PR's fix lease.",
+      },
+    ],
+    sender: {
+      $typeName: "reliant.v1.MessageSender",
+      threadId: "chat-pr-fix",
+      title: "pr-fix control-plane#2017",
+      kind: AgentMessageKind.RUN_MESSAGE,
+      subject: "",
     },
   });
 
@@ -184,5 +210,51 @@ describe("a sender-tagged USER message in the timeline", () => {
     expect(container.querySelectorAll('[data-pinned="true"]')).toHaveLength(0);
     expect(screen.queryByTestId("user-or-assistant-m2")).toBeNull();
     expect(screen.getAllByTestId("agent-message-card")).toHaveLength(1);
+  });
+});
+
+describe("a message from another run (send_to_run)", () => {
+  it("renders collapsed as the run's, never as a user bubble", () => {
+    render(<InterleavedTimeline messages={[message(0, MessageRole.USER), fromRun(1)]} chatId="chat-1" isStreaming={false} />);
+
+    expect(isRunMessage(fromRun(1))).toBe(true);
+    expect(screen.queryByTestId("user-or-assistant-m1")).toBeNull();
+    const card = screen.getByTestId("agent-message-card");
+    expect(card.getAttribute("data-sender")).toBe("run");
+    expect(card.textContent).toContain("from run");
+    expect(card.textContent).toContain("pr-fix control-plane#2017");
+    expect(screen.getByTestId("agent-message-subject").textContent).toContain("[pr-fix] Your PR");
+    expect(screen.queryByText(/You hold the PR's fix lease/)).toBeNull();
+  });
+
+  it("opens the sending run, not a thread of this chat", () => {
+    const onSelectThread = vi.fn();
+    render(<InterleavedTimeline messages={[fromRun(1)]} chatId="chat-1" isStreaming={false} onSelectThread={onSelectThread} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "pr-fix control-plane#2017" }));
+
+    expect(openRun).toHaveBeenCalledWith("chat-pr-fix");
+    expect(onSelectThread).not.toHaveBeenCalled();
+  });
+});
+
+describe("an async ask_user answer", () => {
+  it("is LLM-only: saved HIDDEN, it never renders as a user message", () => {
+    const answer = message(1, MessageRole.USER, {
+      displayStyle: DisplayStyle.HIDDEN,
+      contentBlocks: [
+        {
+          id: "m1-text",
+          index: 0,
+          type: ContentBlockType.TEXT,
+          content: "Answer to the question you asked without waiting (ask_user, question_id: q-1):\n\nA: Add RUN_MESSAGE",
+        },
+      ],
+    });
+    render(<InterleavedTimeline messages={[message(0, MessageRole.USER), answer]} chatId="chat-1" isStreaming={false} />);
+
+    expect(screen.getByTestId("user-or-assistant-m0")).toBeTruthy();
+    expect(screen.queryByTestId("user-or-assistant-m1")).toBeNull();
+    expect(screen.queryByText(/Answer to the question you asked/)).toBeNull();
   });
 });

@@ -3,8 +3,6 @@ package tools_daemon
 
 import (
 	"context"
-	"database/sql"
-	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -199,7 +197,7 @@ type daemonConnection struct {
 
 	// terminalSubs tracks subscribers for terminal output, keyed by sessionID.
 	terminalSubsMu sync.Mutex
-	terminalSubs   map[string][]chan *toolexec.TerminalOutputEvent
+	terminalSubs   map[string][]*toolexec.TerminalOutputQueue
 
 	// pendingToolRequests tracks in-flight synchronous tool requests awaiting responses.
 	// Key is request_id, value is a channel that receives the response.
@@ -637,7 +635,7 @@ func isNotFoundErr(err error) bool {
 	if err == nil {
 		return false
 	}
-	if errors.Is(err, sql.ErrNoRows) {
+	if svcerr.IsNotFound(err) {
 		return true
 	}
 	errText := strings.ToLower(err.Error())

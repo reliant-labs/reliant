@@ -2,14 +2,14 @@
 package threads
 
 import (
-	"database/sql"
-	"errors"
 	"fmt"
+
+	"github.com/reliant-labs/forge/pkg/svcerr"
 )
 
 // lookupFailed wraps the error of a by-key read that the caller needs to
 // succeed. It says the row is missing ("not found", "does not exist") only
-// when it genuinely is — sql.ErrNoRows, which every store miss carries — and
+// when it genuinely is — svcerr.NotFound, which every store miss carries — and
 // otherwise says the read failed.
 //
 // The wording is load-bearing, not cosmetic. The activity layer treats "not
@@ -21,7 +21,7 @@ import (
 // failed three agent runs for good (reliant#2100). A database that did not
 // answer said nothing about the row.
 func lookupFailed(err error, missing, failed string) error {
-	if errors.Is(err, sql.ErrNoRows) {
+	if svcerr.IsNotFound(err) {
 		return fmt.Errorf("%s: %w", missing, err)
 	}
 	return fmt.Errorf("%s: %w", failed, err)

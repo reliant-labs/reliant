@@ -36,12 +36,16 @@ func (c *checker) checkGraph(g graph, slotBound bool) {
 			}
 			cmd := model.CelStringRaw(model.GetRunArgs(n).GetCommand())
 			c.checkUndeclaredTools(path, cmd)
+			if model.TargetsApprovalDecision(cmd) {
+				c.addApprovalDecider(path)
+			}
 			if !g.onFailure && !trivialCommand(cmd) && !c.reads.reads(id, "exit_code") {
 				c.add(RuleRunExitCodeUnread, path, "nothing reads this node's exit_code, so a failed command routes like a successful one",
 					fmt.Sprintf("branch on nodes.%s.exit_code (an edge case, or a condition downstream)", id))
 			}
 			c.checkFetch(path, n, cmd)
 		case model.NodeTypeAction:
+			c.checkApprovalDecider(path, n)
 			if !g.onFailure && !c.reads.reads(id, "is_error") {
 				c.add(RuleActionErrorUnread, path, "nothing reads this node's is_error, so a failed call routes like a successful one",
 					fmt.Sprintf("branch on nodes.%s.is_error, or allow it with the reason the failure does not matter", id))
@@ -269,6 +273,40 @@ func (c *checker) checkFetch(path string, n *reliantv1.Node, cmd string) {
 	}
 }
 
+// checkApprovalDecider: an http/request@1 step aimed at ApprovalService's
+// approve or deny rpcs. The credential it carries is opaque here, so the
+// target is the signal; any Reliant token that permits approvals:decide
+// (reliant:api included) can decide.
+func (c *checker) checkApprovalDecider(path string, n *reliantv1.Node) {
+	a := n.GetAction()
+	if a == nil || strings.TrimSpace(model.CelStringRaw(a.GetUses())) != "http/request@1" {
+		return
+	}
+	if model.TargetsApprovalDecision(model.ActionURL(a)) {
+		c.addApprovalDecider(path)
+	}
+}
+
+// addApprovalDecider reports a step that decides approvals. Once the workflow
+// declares permissions: [approvals:decide] the steps are covered and the
+// declaration itself is reported once (checkApprovalPermission).
+func (c *checker) addApprovalDecider(path string) {
+	if model.DeclaresPermission(c.wf, model.PermissionApprovalsDecide) {
+		return
+	}
+	c.add(RuleApprovalDecider, path, "this step calls Reliant's ApprovalService to approve or deny, so the workflow can decide approvals, including its own run's, with the token it holds",
+		"declare it with permissions: [approvals:decide] (hosted credentials that can decide approvals are refused without it), or remove the step; allow this finding with the reason if it is intended")
+}
+
+// checkApprovalPermission: the declaration is the grant of that power, so it
+// is a finding in itself, allowed at the permissions: key with the reason.
+func (c *checker) checkApprovalPermission() {
+	if model.DeclaresPermission(c.wf, model.PermissionApprovalsDecide) {
+		c.add(RuleApprovalDecider, "", "the workflow declares permissions: [approvals:decide]: it can approve or deny requests, including the ones its own run raises",
+			"allow it with the reason on the permissions: key if this is intended")
+	}
+}
+
 func joinContinuations(s string) string { return strings.ReplaceAll(s, "\\\n", " ") }
 
 // externalTools are executables a machine image may or may not carry. A
@@ -332,9 +370,11 @@ func insideQuotes(prefix string) bool {
 
 func (c *checker) checkWorkflow() {
 	wf := c.wf
-	if len(wf.GetTriggers()) > 0 && wf.GetOnFailure() == nil {
-		c.add(RuleNoFailurePath, "", "the workflow is started by triggers and has no on_failure, so an unattended run that fails reports to nobody",
-			"add on_failure: with a step that tells someone (a comment, a message, an issue)")
+	// finally runs on a failure too (run.status == 'failed'), so either
+	// handler is a failure path.
+	if len(wf.GetTriggers()) > 0 && wf.GetOnFailure() == nil && wf.GetFinally() == nil {
+		c.add(RuleNoFailurePath, "", "the workflow is started by triggers and has no on_failure or finally, so an unattended run that fails reports to nobody",
+			"add on_failure: (or finally:, which also runs on a cancel) with a step that tells someone (a comment, a message, an issue)")
 	}
 	if wf.GetAutomationOnly() && len(wf.GetTriggers()) == 0 {
 		c.add(RuleAutomationUntriggered, "", "automation_only: true and no triggers: no chat can start this workflow and nothing else will",
@@ -438,7 +478,7 @@ func (c *checker) checkSecrets() {
 		}
 	}
 	rest := proto.Clone(c.wf).(*reliantv1.Workflow)
-	rest.Nodes, rest.OnFailure = nil, nil
+	rest.Nodes, rest.OnFailure, rest.Finally = nil, nil, nil
 	scan("", stringsOf(rest))
 }
 

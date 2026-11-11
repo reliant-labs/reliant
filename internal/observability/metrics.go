@@ -92,6 +92,29 @@ var (
 	)
 )
 
+// ─── Terminal output ────────────────────────────────────────────────────────
+//
+// A terminal's output stream is lossless or it ends: a hop whose consumer
+// stays full past its bound ends the session with an error the browser shows,
+// instead of dropping bytes (which corrupts escape sequences and TUIs).
+
+var (
+	// TerminalOutputOverflowTotal counts terminal sessions ended because a
+	// hop's output consumer fell behind, by stage: gateway (the gateway's
+	// subscriber queue toward NATS), api (the api-server's queue toward the
+	// websocket), nats (the api-server's NATS subscription itself dropped
+	// messages as a slow consumer).
+	TerminalOutputOverflowTotal = newCounterVec(
+		prometheus.CounterOpts{
+			Namespace: "reliant",
+			Subsystem: "terminal",
+			Name:      "output_overflow_total",
+			Help:      "Terminal sessions ended because an output consumer fell behind, by stage (gateway, api, nats).",
+		},
+		[]string{"stage"},
+	)
+)
+
 // ─── HTTP Metrics ───────────────────────────────────────────────────────────
 
 var (
@@ -499,6 +522,8 @@ func initMetrics() {
 		DaemonReconnectLatencySeconds,
 		DaemonConnectWorkDeferredTotal,
 		DaemonCommandsHeldTotal,
+		// Terminal output
+		TerminalOutputOverflowTotal,
 		// DB
 		DBQueryDuration,
 		DBErrorsTotal,

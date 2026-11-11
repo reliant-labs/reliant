@@ -8,6 +8,8 @@ decision, not correcting a mistake.
 
 The authoritative version of this document, covering all three repos, is
 **`control-plane/docs/pinning.md`**. This file is the reliant-side summary.
+It covers the shape of a pin. Bumping to a newer forge (which one, the upgrade
+steps, the log) is `dev-docs/forge-upgrade.md`.
 
 ## The commands
 

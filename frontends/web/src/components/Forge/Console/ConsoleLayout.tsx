@@ -35,9 +35,8 @@ import { useAlerts, useObservabilityOrg } from "@/hooks/observability-queries";
 import { useTitleBarChrome } from "@/hooks/useTitleBarChrome";
 import { getParentRouteNavigateOptions } from "@/lib/routeParent";
 import { isQueued, queuedOnLabel } from "@/services/forge/live";
-import { useAuthStore } from "@/store/authStore";
-import { useProjectStore, type Project } from "@/store/projectStore";
-import { useProjects } from "@/hooks/project-queries";
+import { isForgeShell } from "@/lib/shell";
+import { ForgeMark } from "@/components/ForgeShell/ForgeBrand";
 
 import { ForgeCloseButton } from "../ForgeHeader";
 import { ObsQuotaBanner } from "../Observability/ObsStates";
@@ -45,25 +44,13 @@ import { ConsoleProjectSwitcher, ProjectMonogram } from "./ConsoleProjectSwitche
 import { OrgSwitcher } from "@/components/Orgs/OrgSwitcher";
 import { ConsoleShell, type ConsoleNavEnv } from "./ConsoleShell";
 import { ForgeConsoleContext, type ForgeConsole } from "./consoleContext";
+import { useConsoleReliantProject, useConsoleUser } from "./consoleHost";
 import { useOptionalViews } from "./useOptionalViews";
+import { useObsNavOpen } from "./obsNavOpen";
 import { ENV_ALL, rememberedEnv, rememberEnv, resolveEnvScope, scopeOptions } from "./envScope";
 import { APPS_PATH, consolePageOf, consolePath, pinnedEnvOf, withSearch, type ConsolePage } from "./paths";
 
 const RAIL_KEY = "forge.console.rail";
-
-/**
- * The Reliant project that declares `forgeProject`: the current one when it
- * does (two checkouts of one repo both declare it), else the first that does.
- */
-export function projectDeclaring(
-  forgeProject: string,
-  projects: readonly Project[],
-  current: Project | null
-): Project | null {
-  const declares = (project: Project) => (project.forge_project_name ?? "").trim() === forgeProject;
-  if (current && declares(current)) return current;
-  return projects.find(declares) ?? null;
-}
 
 /** Where switching to the forge app `app` lands: the same page there. */
 export function switchTarget(app: string, page: ConsolePage): string {
@@ -91,19 +78,9 @@ export function ConsoleLayout() {
   const page = useMemo<ConsolePage>(() => consolePageOf(pathname)?.page ?? { kind: "overview" }, [pathname]);
   const pinnedEnv = pinnedEnvOf(page);
 
-  // ── 1. The Reliant project. ──
-  // `listed` once the project list has answered (or failed): until then a
-  // forge name matches nothing only because nothing is loaded yet.
-  const { projects, isLoading: listing } = useProjects();
-  const listed = projects.length > 0 || !listing;
-  const currentProject = useProjectStore((state) => state.currentProject);
-  const selectProject = useProjectStore((state) => state.selectProject);
-
-  const match = listed ? projectDeclaring(forgeProject, projects, currentProject) : null;
-  useEffect(() => {
-    if (match && match.id !== currentProject?.id) void selectProject(match);
-  }, [match, currentProject?.id, selectProject]);
-  const projectId = match?.id ?? null;
+  // ── 1. The Reliant project (consoleHost.ts). ──
+  const forgeShell = isForgeShell();
+  const { listed, projectId } = useConsoleReliantProject(forgeProject);
 
   const roster = useForgeRoster(listed ? projectId : null, forgeProject);
 
@@ -196,17 +173,9 @@ export function ConsoleLayout() {
     });
   }, []);
 
-  const authUser = useAuthStore((state) => state.user);
-  const user = authUser
-    ? {
-        name:
-          (authUser.user_metadata?.full_name as string | undefined) ??
-          (authUser.user_metadata?.name as string | undefined) ??
-          authUser.email?.split("@")[0] ??
-          "You",
-        email: authUser.email ?? undefined,
-      }
-    : undefined;
+  const [obsOpen, setObsOpen] = useObsNavOpen();
+
+  const user = useConsoleUser();
 
   const { trafficLightPadding, dragRegionStyle } = useTitleBarChrome({ collapsedPadding: "0px" });
   const onClose = useCallback(() => void navigate(getParentRouteNavigateOptions(pathname)), [navigate, pathname]);
@@ -233,6 +202,8 @@ export function ConsoleLayout() {
       starred={starred}
       dashboardTitle={dashboardTitle}
       optionalViews={optionalViews}
+      obsOpen={obsOpen}
+      onObsOpenChange={setObsOpen}
       scope={scope}
       platformWide={platformWide}
       onEnvChange={setEnv}
@@ -241,7 +212,15 @@ export function ConsoleLayout() {
       onToggleCollapsed={toggleCollapsed}
       brand={
         <div className="flex min-w-0 items-center gap-1" style={{ paddingLeft: trafficLightPadding, ...dragRegionStyle }}>
-          <ForgeCloseButton onClose={onClose} />
+          {/* The forge shell has no app to close back to: its mark leads
+              home (the Apps list), and Reliant is a link in its own chrome. */}
+          {forgeShell ? (
+            <a href={APPS_PATH} aria-label="Forge by Reliant: all apps" className="rounded-md p-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" data-testid="forge-shell-home">
+              <ForgeMark className="h-6 w-6" />
+            </a>
+          ) : (
+            <ForgeCloseButton onClose={onClose} />
+          )}
           <ConsoleProjectSwitcher
             forgeProject={forgeProject}
             onSelect={(app) => void navigate({ href: switchTarget(app, page) })}

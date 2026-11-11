@@ -101,6 +101,10 @@ enum AgentMessageKind {
   // Text the HUMAN user sent into a running thread (SendAgentMessage), as
   // opposed to AGENT_MESSAGE_KIND_MESSAGE, which is agent-to-agent.
   AGENT_MESSAGE_KIND_HUMAN_MESSAGE = 5;
+  // Text another top-level run sent into this one (send_to_run), as opposed
+  // to AGENT_MESSAGE_KIND_MESSAGE, which is between a parent and its own
+  // sub-agent. The sender thread is that run's main thread, in another chat.
+  AGENT_MESSAGE_KIND_RUN_MESSAGE = 6;
 }
 
 // ContentBlockType identifies the kind of content in a message block
@@ -351,6 +355,14 @@ service ChatService {
   // read paths send a truncated preview of a large result (ContentBlock.
   // truncated); this is how the client gets the rest, on demand.
   rpc GetToolResult(GetToolResultRequest) returns (GetToolResultResponse) {}
+
+  // GetContentBlockBodies returns the bodies of content blocks that a
+  // transcript read sent elided (ContentBlock.body_elided), by block id. A
+  // block resolves when it belongs to chat_id, or to history a branch of it
+  // inherits (the same rule as GetToolResult). Any other id comes back in
+  // not_found, so the response never says whether an id exists elsewhere.
+  // forge:custom — owner-checked batch read of block bodies, branch inheritance resolved
+  rpc GetContentBlockBodies(GetContentBlockBodiesRequest) returns (GetContentBlockBodiesResponse) {}
   
   // UpdateChatState changes chat state (idle/archived)
   rpc UpdateChatState(UpdateChatStateRequest) returns (UpdateChatStateResponse) {
@@ -530,6 +542,32 @@ service ChatService {
       }
     };
   }
+
+  // MoveChatToProject moves an idle chat to another of the caller's projects.
+  // The chat keeps its history; its next turn runs in the new project's main
+  // checkout, on a machine that has the project (daemon_id when given, else the
+  // chat's machine when it has the project, else the project's default
+  // machine). A hidden note on the chat's root thread tells the model where it
+  // moved from and to, since earlier messages name the old checkout's paths.
+  //
+  // Refused (FAILED_PRECONDITION) while the chat has a run in progress, is
+  // waiting for an answer, is paused or has a message queued for its machine,
+  // and for an archived chat. A chat in a branch workspace is refused unless
+  // leave_workspace is set: the workspace belongs to the old project and stays
+  // there. Moving a chat to the project it is already in returns it unchanged.
+  rpc MoveChatToProject(MoveChatToProjectRequest) returns (MoveChatToProjectResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "move"
+        target: {
+          kind: "chat"
+          id: "chat_id"
+          label: "response.chat.title"
+        }
+        detail: ["project_id"]
+      }
+    };
+  }
 }
 
 // Chat represents a conversation
@@ -602,6 +640,10 @@ message Chat {
   // rewritten). The chat list (ListChats, SearchChats, the Archived tab) holds
   // USER chats plus runs the user adopted; every other origin lives in Runs.
   ChatOrigin origin = 43;
+  // The organization the chat belongs to, fixed at creation; its LLM usage
+  // bills this org. Unset for a chat created before orgs or where no org
+  // could be resolved: such a chat belongs to its creator's default org.
+  optional string org_id = 44;
 }
 
 // ChatOrigin is who started a chat. It is the chat list's policy key: a USER
@@ -753,6 +795,29 @@ message ContentBlock {
   optional bool truncated = 14;
   // Byte length of the full content, set when truncated is.
   optional int64 original_size = 15;
+  // The body of this block was left out of a read that asked for
+  // TOOL_BODY_MODE_STUB. tool_call: input holds a skeleton (the same JSON
+  // object, every key kept, long strings cut) that is enough to label the
+  // call but not to render it. tool_result: content holds a stub preview,
+  // and truncated/original_size are set as for any preview. thinking:
+  // content is empty. GetContentBlockBodies returns the body by block id.
+  optional bool body_elided = 16;
+  // Byte length of the stored body (input for tool_call, content
+  // otherwise). Set when body_elided is.
+  optional int64 body_size = 17;
+}
+
+// ToolBodyMode is how a transcript read sends the bodies of finished tool
+// calls.
+enum ToolBodyMode {
+  // Today's behaviour: inputs whole, results previewed at 8 KiB. Every
+  // client that does not set the field gets this, forever (v1).
+  TOOL_BODY_MODE_UNSPECIFIED = 0;
+  // The same, said explicitly.
+  TOOL_BODY_MODE_FULL = 1;
+  // Finished calls' bodies are left out (ContentBlock.body_elided); the
+  // client reads them with GetContentBlockBodies when it shows them.
+  TOOL_BODY_MODE_STUB = 2;
 }
 
 // Attachment represents a file attachment
@@ -838,6 +903,15 @@ message StartChatRequest {
   // makes no promise: every call starts a new chat. A value that is not a UUID
   // is refused with INVALID_ARGUMENT.
   optional string client_message_id = 21;
+
+  // The organization to act in (control-plane organizations.id); the web
+  // fills it with the active org. It must be one the caller is a live member
+  // of (PERMISSION_DENIED otherwise), and a machine credential may name only
+  // its own org. Unset is the caller's default org. A new chat in a project
+  // that belongs to an org belongs to that org: naming another is
+  // FAILED_PRECONDITION. Ignored when chat_id names an existing chat, whose
+  // org never changes.
+  optional string org_id = 23;
 }
 
 // StartChatResponse returns the started chat and the ids of its root run.
@@ -921,6 +995,11 @@ message ListChatsRequest {
   // pages runs in.
   reserved 3;
   reserved "sidebar_only";
+  // List only this organization's chats. It must be one the caller is a
+  // live member of (PERMISSION_DENIED otherwise). Chats created before orgs
+  // list under the caller's default org. Unset lists every chat the caller
+  // owns, in any org, as before this field existed.
+  optional string org_id = 4;
 }
 
 // ListChatsResponse returns the list of chats
@@ -1170,6 +1249,10 @@ message ListMessagesRequest {
   // rendered "Starting..." over a child thread that already had hundreds of
   // messages -- indistinguishable from a spawn that truly hadn't started.
   optional string thread_id = 4;
+
+  // How finished tool calls' bodies are sent. Unset is
+  // TOOL_BODY_MODE_FULL: inputs whole, results previewed.
+  optional ToolBodyMode tool_bodies = 5;
 }
 
 // ListMessagesResponse returns messages with content blocks
@@ -1179,6 +1262,19 @@ message ListMessagesResponse {
   int32 count = 3;
   bool has_more = 4;
   int64 oldest_seq = 5;
+  // On a scroll-back page (before_seq set, no thread_id): the errors raised in
+  // the stretch of history this page loads, each at its place in the
+  // timeline. The chat snapshot carries only the errors of its own window.
+  repeated ChatErrorUpdate errors = 6;
+}
+
+// ChatErrorUpdate is one error's newest ERROR chat update: the payload the
+// chat stream carries as a ChatUpdateData of type ERROR, delivered outside it.
+message ChatErrorUpdate {
+  string entity_id = 1;
+  int64 sequence_number = 2;
+  string data_json = 3;
+  string created_at = 4;
 }
 
 // GetToolResultRequest names a tool call in a chat the caller owns. A
@@ -1195,6 +1291,37 @@ message GetToolResultResponse {
   string content = 2;
   bool is_error = 3;
   int64 size = 4;                      // Byte length of content
+}
+
+// GetContentBlockBodiesRequest names content blocks of a chat the caller
+// owns, by block id.
+message GetContentBlockBodiesRequest {
+  string chat_id = 1 [(buf.validate.field).required = true];
+  // At most 100 ids; more is INVALID_ARGUMENT.
+  repeated string block_ids = 2;
+  // Results whole rather than as the 8 KiB display preview: for copy and
+  // export. Unset returns what an expanded row shows.
+  optional bool full = 3;
+}
+
+// ContentBlockBody is one block's body, as a FULL read would have sent it
+// (or, with full, as stored).
+message ContentBlockBody {
+  string block_id = 1;
+  optional string input = 2;          // tool_call: the stored input, whole
+  optional string content = 3;        // tool_result: display preview (or whole when full); thinking: whole
+  optional bool truncated = 4;        // as ContentBlock.truncated
+  optional int64 original_size = 5;   // as ContentBlock.original_size
+}
+
+// GetContentBlockBodiesResponse returns every requested id in exactly one of
+// its three lists.
+message GetContentBlockBodiesResponse {
+  repeated ContentBlockBody bodies = 1;
+  // Not a block this chat displays: unknown, another chat's, or hidden.
+  repeated string not_found = 2;
+  // Left out to keep the response under its byte budget: ask again.
+  repeated string deferred = 3;
 }
 
 // UpdateChatStateRequest changes chat state
@@ -1408,6 +1535,9 @@ message ChatUpdate {
 message GetChatUpdatesRequest {
   string chat_id = 1;
   int64 since_seq = 2;                 // Sequence number to fetch updates after
+  // How finished tool calls' bodies are sent in message updates. Unset is
+  // TOOL_BODY_MODE_FULL.
+  optional ToolBodyMode tool_bodies = 3;
 }
 
 // GetChatUpdatesResponse returns the updates
@@ -1573,9 +1703,12 @@ message GetWorkflowExecutionsRequest {
 
 // GetWorkflowExecutionsResponse returns the execution tree
 message GetWorkflowExecutionsResponse {
-  // The most recent/active root workflow (for backwards compat)
-  optional WorkflowExecution root_workflow = 1;
-  // All root workflows for this chat, sorted by created_at descending (newest first)
+  // root_workflow was all_root_workflows[0] a second time: the newest root's
+  // whole tree sent twice on every chat open.
+  reserved 1;
+  reserved "root_workflow";
+  // All root workflows for this chat, sorted by created_at descending (newest
+  // first). The latest run is the first.
   repeated WorkflowExecution all_root_workflows = 2;
 }
 
@@ -1617,5 +1750,24 @@ message SetChatDaemonRequest {
 
 // SetChatDaemonResponse confirms the daemon was set.
 message SetChatDaemonResponse {
+  Chat chat = 1;
+}
+
+// MoveChatToProjectRequest names the chat and the project to move it to.
+message MoveChatToProjectRequest {
+  string chat_id = 1;
+  // The project to move the chat to. It must be the caller's.
+  string project_id = 2;
+  // The machine the chat runs on in the new project. It must be the caller's
+  // and have the project installed. Unset: the chat's current machine when it
+  // has the project, else the project's default machine.
+  optional string daemon_id = 3;
+  // Required for a chat in a branch workspace: the workspace stays with the
+  // old project, and the chat continues in the new project's main checkout.
+  bool leave_workspace = 4;
+}
+
+// MoveChatToProjectResponse is the moved chat.
+message MoveChatToProjectResponse {
   Chat chat = 1;
 }

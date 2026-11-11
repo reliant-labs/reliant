@@ -1,199 +1,368 @@
 /**
  * Tour Navigation Hook
  *
- * Single source of truth for "what step is the tour on" and "how do I move
- * between steps". The active step lives in the URL as `?tour=<step-id>`; this
- * hook reads/writes that param via tanstack-router. There are no useEffects
- * here — every transition is the direct, synchronous result of a user action.
+ * Single source of truth for "which journey and step is the tour on" and "how
+ * do I move between steps". The active step lives in the URL as
+ * `?tour=<journey>:<step>` (grammar: tourParam.ts); this hook reads/writes
+ * that param via tanstack-router. Every transition is the direct result of a
+ * user action (a click, or a step's `advanceOn`) — no effect here pushes a
+ * route.
  *
- * Step components import this hook (not `useTourStore`) for navigation.
- * `useTourStore` is now strictly the persistence/achievement layer.
+ * `?tour=` survives navigations that don't mention it (the root route
+ * retains it, routes.tsx), so a journey can span pages the user moves
+ * between; every exit below clears it explicitly with `tour: undefined`.
+ *
+ * Journey analytics fire here, because only here is it known how a step was
+ * completed (journeyAnalytics.ts). `useTourStore` is the persistence layer.
+ *
+ * Shell-neutral: nothing here needs Reliant's daemon or chat unless a
+ * journey ends without its own `finish` target in the Reliant shell.
  */
 
 import { useCallback } from "react";
-import { useNavigate, useSearch } from "@tanstack/react-router";
-import {
-  ONBOARDING_STEP_IDS,
-  getNextStepId,
-  getPreviousStepId,
-} from "./constants";
-import type { OnboardingStepId } from "./types";
-import { WORKFLOWS_LIBRARY_PATH } from "../../lib/workflowsArea";
+import { useNavigate, useRouter, useSearch } from "@tanstack/react-router";
 import { useTourStore } from "../../store/tourStore";
-import { useChatStore } from "../../store/chatStore";
-import { useProjectStore } from "../../store/projectStore";
-import { chatRouteAfterTour } from "../OnboardingFlow/useOnboardingComplete";
+import { dropLandingJourney } from "../../lib/landingAttribution";
+import { trackEvent } from "../../lib/analytics";
+import {
+  activeJourneySteps,
+  firstStepId,
+  getJourney,
+  getJourneyStep,
+  nextStepId,
+  previousStepId,
+  resolveTour,
+  type ResolvedTour,
+} from "./journeys/registry";
+import {
+  formatTourParam,
+  parseTourParam,
+  pickerParam,
+  type JourneyId,
+  type JourneySource,
+} from "./tourParam";
+import { getReliantTourHooks, getTourShell } from "./tourShell";
+import {
+  trackJourneyCompleted,
+  trackJourneySelected,
+  trackJourneySkipped,
+  trackJourneyStepCompleted,
+} from "./journeyAnalytics";
+import type { JourneyRoute, JourneyStep, RouteTarget, StepCompletionVia } from "./types";
 
-// Whitelist of valid step IDs. The route schemas reject unknown values via
-// Zod, but routes without a schema (or tests using a memory router) can let
-// arbitrary `?tour=...` strings through — coerce those to null so the wizard
-// never tries to render a non-existent step.
-const VALID_STEP_IDS = new Set<string>(ONBOARDING_STEP_IDS);
-
+/** Reliant's API-key prompt after a tour (journeys/catalog.ts installs it; no other shell has one). */
 async function promptApiKeyIfNeededAfterTour(): Promise<void> {
-  const { useApiKeySetupStore } = await import("../../store/apiKeySetupStore");
-  if (useApiKeySetupStore.getState().hasApiKey === true) return;
-  useApiKeySetupStore.setState({ hasChecked: false });
-  await useApiKeySetupStore.getState().ensureApiKeyOrShowModal();
+  if (getTourShell() !== "reliant") return;
+  await getReliantTourHooks()?.afterTour();
 }
 
-// ─── Per-step expected pathname ─────────────────────────────────────────────
-// Tells callers (and the step components) where each step's spotlight lives:
-//
-//   "/workflows/library" → the Library (the old hub's home since the
-//                  Workflows area merged; WORKFLOW_UI.md §1.3).
-//   "/workflow/" → workflow-builder routes — pathname must start with
-//                  '/workflow/' (the trailing slash distinguishes hub).
-//   null         → step has no path constraint; render wherever the user is.
-//
-// Returned as a path prefix; the wizard's step components check
-// `pathname.startsWith(STEP_EXPECTED_PATH(id))`.
+/** Whether `pathname` is on a step's page. */
+export function isOnRoute(route: JourneyRoute | undefined, pathname: string): boolean {
+  return !route || pathname.startsWith(route.path);
+}
 
-export function STEP_EXPECTED_PATH(stepId: OnboardingStepId): string | null {
-  switch (stepId) {
-    case "workflow-hub":
-      return WORKFLOWS_LIBRARY_PATH;
-    case "workflow-builder":
-      return "/workflow/";
-    default:
-      return null;
+/** Where a route sends the user, given the journey's context; null when it can't be built yet. */
+export function routeTarget(route: JourneyRoute, journey: JourneyId): RouteTarget | null {
+  if (!route.open) return { to: route.path };
+  if (typeof route.open !== "function") return route.open;
+  try {
+    return route.open(useTourStore.getState().contexts?.[journey] ?? {});
+  } catch {
+    return null;
   }
+}
+
+function runHook(hook: (() => void) | undefined): void {
+  try {
+    hook?.();
+  } catch {
+    // A content hook must never wedge the tour.
+  }
+}
+
+type Search = Record<string, unknown>;
+
+export interface StepRef {
+  journey: JourneyId;
+  stepId: string;
 }
 
 // ─── Hook ───────────────────────────────────────────────────────────────────
 
 export interface TourNavigation {
-  currentStepId: OnboardingStepId | null;
+  /** What `?tour=` resolves to; null when no tour is open. */
+  tour: ResolvedTour | null;
+  /** A journey step is open. */
   isWizardActive: boolean;
-  goToStep: (stepId: OnboardingStepId) => void;
+  isPickerOpen: boolean;
+  currentJourney: JourneyId | null;
+  currentStepId: string | null;
+  /** Open a step, going to its page (route) first when it has one. */
+  goToStep: (journey: JourneyId, stepId: string) => void;
+  /** Go to the open step's page (the "Open <page>" card's button). */
+  openStepPage: (journey: JourneyId, route: JourneyRoute) => void;
+  /** Start a journey at its first step (or `atStep`) and record the choice. */
+  startJourney: (
+    journey: JourneyId,
+    source: JourneySource,
+    extra?: Record<string, string>,
+    atStep?: string,
+  ) => void;
+  /** Open the journey picker. */
+  openPicker: (source?: "menu") => void;
+  /** Close the picker without choosing. */
+  dismissPicker: () => Promise<void>;
+  /** Strip `?tour=`, staying on the page. */
   exitTour: () => void;
-  completeAndAdvance: () => Promise<void>;
+  /**
+   * Complete the step and move on. `from` pins the step being completed: an
+   * `advanceOn` that fires after the user already moved is ignored rather
+   * than skipping the step they are now on. On the last step, "action" only
+   * completes it; the user still clicks Finish.
+   */
+  advance: (via: Exclude<StepCompletionVia, "skip">, from?: StepRef) => Promise<void>;
+  /** "Skip step": the step's own `skip.run` first (if any), then move on. */
+  skipStep: () => Promise<void>;
   goBack: () => void;
+  /** "End tour": record it skipped and where it ended (for Resume). */
   skipAll: () => Promise<void>;
+  /** Finish the journey; with `then`, start that journey instead of landing. */
+  finish: (then?: JourneyId) => Promise<void>;
 }
 
 export function useTourNavigation(): TourNavigation {
   const navigate = useNavigate();
+  const router = useRouter();
   // Reading via { strict: false } so the hook works at the root (which has no
-  // search schema). Wizard is mounted globally — we can't constrain `from`.
-  const search = useSearch({ strict: false }) as { tour?: string };
-  const rawTour = search.tour;
-  const currentStepId: OnboardingStepId | null =
-    rawTour && VALID_STEP_IDS.has(rawTour) ? (rawTour as OnboardingStepId) : null;
-  const isWizardActive = currentStepId !== null;
+  // search schema). The wizard is mounted globally — we can't constrain `from`.
+  const search = useSearch({ strict: false }) as { tour?: unknown };
+  const tour = resolveTour(parseTourParam(search.tour));
+  const step = tour?.kind === "step" ? tour : null;
+  const currentJourney = step?.journey ?? null;
+  const currentStepId = step?.stepId ?? null;
 
-  const goToStep = useCallback(
-    (stepId: OnboardingStepId) => {
-      const expected = STEP_EXPECTED_PATH(stepId);
-      if (stepId === "workflow-hub") {
-        // workflow-hub specifically needs the Library (not the builder).
-        void navigate({
-          to: WORKFLOWS_LIBRARY_PATH,
-          search: (prev: Record<string, unknown>) => ({ ...prev, tour: stepId }),
-        });
-        return;
-      }
-      if (expected === "/workflow/") {
-        void navigate({
-          to: "/workflow/$workflowName",
-          params: { workflowName: "builtin://get-it-right" },
-          search: (prev: Record<string, unknown>) => ({
-            ...prev,
-            drill: "attempt",
-            tour: stepId,
-          }),
-        });
-        return;
-      }
-      // Path-agnostic step: just update the search param on whatever route
-      // the user is on. tanstack-router preserves the current path when no
-      // `to` is supplied. With `to` omitted the router can't resolve which
-      // route's search schema applies, so it types the reducer's return as
-      // `never`; the runtime contract (merge `tour` into the current
-      // search) is route-agnostic, so we cast the reducer to satisfy the
-      // over-narrowed signature without changing behavior.
+  // With `to` omitted the router can't resolve which route's search schema
+  // applies, so it types the reducer's return as `never`; the runtime
+  // contract (merge into the current search) is route-agnostic.
+  const setTourParam = useCallback(
+    (value: string | undefined) => {
       void navigate({
-        search: ((prev: Record<string, unknown>) => ({ ...prev, tour: stepId })) as never,
+        search: ((prev: Search) => ({ ...prev, tour: value })) as never,
       });
     },
     [navigate],
   );
 
-  // Ending the tour (finish OR skip) must LAND the user somewhere they can
-  // chat, in ONE navigation. exitTour only strips `?tour=`, preserving the
-  // pathname, so a tour whose last steps live on /workflow/... left the user
-  // stranded there. Stripping the param first and then loading the
-  // destination behind a dynamic import was two hops with a chunk load
-  // between them: the tour vanished, the user sat on the workflow builder
-  // until the import settled, and a click in that gap was overridden by the
-  // late jump. The destination's `search: {}` already drops `?tour=`, so the
-  // single navigation both ends the tour and lands the user.
-  const goToChatAfterTour = useCallback(async () => {
-    // Clear the active chat so the user lands on a fresh new-chat view.
-    useChatStore.getState().clearCurrentChat();
-    const projectId = useProjectStore.getState().currentProject?.id;
-    await navigate(chatRouteAfterTour(projectId) as never);
-  }, [navigate]);
+  const navigateTo = useCallback(
+    (target: RouteTarget, tourValue: string | undefined) => {
+      const path = target.to.replace(/\$([A-Za-z0-9_]+)/g, (_, name: string) =>
+        encodeURIComponent(target.params?.[name] ?? ""),
+      );
+      const here = router.history.location.pathname === path;
+      void navigate({
+        to: target.to,
+        params: target.params,
+        // Already on the page: merge, so params the page keeps (a project,
+        // an open trace) survive. Elsewhere: the target's own search.
+        search: ((prev: Search) =>
+          here ? { ...prev, ...target.search, tour: tourValue } : { ...target.search, tour: tourValue }) as never,
+      } as never);
+    },
+    [navigate, router],
+  );
 
-  const exitTour = useCallback(() => {
-    // See goToStep: `to` is omitted so the router over-narrows the reducer
-    // return to `never`; the route-agnostic "strip the tour param" contract
-    // is unchanged, so cast to satisfy the signature.
-    void navigate({
-      search: ((prev: Record<string, unknown>) => {
-        const { tour: _tour, ...rest } = prev;
-        return rest;
-      }) as never,
-    });
-  }, [navigate]);
+  const goToStep = useCallback(
+    (journey: JourneyId, stepId: string) => {
+      const tourValue = formatTourParam(journey, stepId);
+      const route = getJourneyStep(journey, stepId)?.route;
+      const onPage = isOnRoute(route, router.history.location.pathname);
+      // A step whose route names an explicit target goes there (its search
+      // too, e.g. `view=traces`); a bare path only when we're off it.
+      const target = route && (route.open || !onPage) ? routeTarget(route, journey) : null;
+      if (target) navigateTo(target, tourValue);
+      else setTourParam(tourValue);
+    },
+    [router, navigateTo, setTourParam],
+  );
 
-  const completeAndAdvance = useCallback(async () => {
-    if (!currentStepId) return;
-    await useTourStore.getState().completeStep(currentStepId);
-    const nextId = getNextStepId(currentStepId);
-    if (nextId) {
-      goToStep(nextId);
-    } else {
-      // Last step — tour finished. Land on the chat, then prompt for an API
-      // key if we still don't have one.
-      await useTourStore.getState().markTourCompleted();
-      await goToChatAfterTour();
+  const openStepPage = useCallback(
+    (journey: JourneyId, route: JourneyRoute) => {
+      const target = routeTarget(route, journey);
+      if (target) navigateTo(target, (router.latestLocation.search as Search).tour as string | undefined);
+    },
+    [navigateTo, router],
+  );
+
+  // The step the URL is on right now — read fresh from the router, not from
+  // this render, because advanceOn fires from listeners that outlive it.
+  const liveStep = useCallback((): (StepRef & { step: JourneyStep }) | null => {
+    const live = resolveTour(parseTourParam((router.latestLocation.search as Search).tour));
+    return live?.kind === "step" ? { journey: live.journey, stepId: live.stepId, step: live.step } : null;
+  }, [router]);
+
+  /**
+   * Leave the tour at the end of a journey. A journey's `finish` target for
+   * this shell wins; Reliant's default is the chat, in ONE navigation (the
+   * destination clears `tour`, so the tour never vanishes while the user
+   * still sits on the last step's page); elsewhere, strip `?tour=`.
+   */
+  const land = useCallback(
+    async (journey: JourneyId) => {
+      const shell = getTourShell();
+      const target = getJourney(journey).finish?.(shell);
+      if (target) {
+        await navigate({ to: target.to, params: target.params, search: { ...target.search, tour: undefined } } as never);
+      } else if (shell === "reliant" && getReliantTourHooks()) {
+        await getReliantTourHooks()!.landOnChat(navigate as (options: never) => Promise<void>);
+      } else {
+        setTourParam(undefined);
+      }
       void promptApiKeyIfNeededAfterTour();
+    },
+    [navigate, setTourParam],
+  );
+
+  const exitTour = useCallback(() => setTourParam(undefined), [setTourParam]);
+
+  const startJourney = useCallback(
+    (journey: JourneyId, source: JourneySource, extra?: Record<string, string>, atStep?: string) => {
+      const first = atStep && getJourneyStep(journey, atStep) ? atStep : firstStepId(journey);
+      if (!first) return;
+      trackJourneySelected(journey, source, extra);
+      dropLandingJourney();
+      const store = useTourStore.getState();
+      void store.setLastJourney(journey);
+      void store.setResumeStep(null);
+      goToStep(journey, first);
+    },
+    [goToStep],
+  );
+
+  const openPicker = useCallback(
+    (source?: "menu") => setTourParam(pickerParam(source)),
+    [setTourParam],
+  );
+
+  const dismissPicker = useCallback(async () => {
+    const fromOnboarding = tour?.kind === "picker" && tour.source === "onboarding";
+    trackJourneySkipped("none", "picker");
+    dropLandingJourney();
+    exitTour();
+    await useTourStore.getState().markTourCompleted();
+    if (fromOnboarding) void promptApiKeyIfNeededAfterTour();
+  }, [tour, exitTour]);
+
+  const finish = useCallback(
+    async (then?: JourneyId) => {
+      const live = liveStep();
+      if (!live) return;
+      const { journey, stepId, step: current } = live;
+      runHook(current.onComplete);
+      trackJourneyStepCompleted(journey, stepId, "next");
+      trackJourneyCompleted(journey);
+      // The funnel marker the stall alert counts on; `journey` splits it.
+      trackEvent("onboarding_completed", {
+        journey,
+        totalSteps: activeJourneySteps(journey).length,
+      });
+      const store = useTourStore.getState();
+      await store.completeStep(formatTourParam(journey, stepId));
+      void store.setResumeStep(null);
+      if (then) {
+        void store.markTourCompleted(journey, "completed");
+        startJourney(then, "picker", { from_journey: journey });
+        return;
+      }
+      await store.markTourCompleted(journey, "completed");
+      await land(journey);
+    },
+    [liveStep, startJourney, land],
+  );
+
+  const advance = useCallback(
+    async (via: Exclude<StepCompletionVia, "skip">, from?: StepRef) => {
+      const live = liveStep();
+      if (!live) return;
+      if (from && (from.journey !== live.journey || from.stepId !== live.stepId)) return;
+      const next = nextStepId(live.journey, live.stepId);
+      if (!next) {
+        if (via === "next") await finish();
+        return;
+      }
+      runHook(live.step.onComplete);
+      trackJourneyStepCompleted(live.journey, live.stepId, via, live.step.signal);
+      await useTourStore.getState().completeStep(formatTourParam(live.journey, live.stepId));
+      goToStep(live.journey, next);
+    },
+    [liveStep, finish, goToStep],
+  );
+
+  const skipStep = useCallback(async () => {
+    const live = liveStep();
+    if (!live) return;
+    const { journey, stepId, step: current } = live;
+    if (current.skip?.run) {
+      const store = useTourStore.getState();
+      try {
+        await current.skip.run({
+          context: store.contexts?.[journey] ?? {},
+          setContext: (patch) => useTourStore.getState().setJourneyContext(journey, patch),
+        });
+      } catch {
+        // The step reports its own failure (a toast) and the user stays put.
+        return;
+      }
     }
-  }, [currentStepId, goToStep, goToChatAfterTour]);
+    const next = nextStepId(journey, stepId);
+    if (!next) {
+      await finish();
+      return;
+    }
+    runHook(current.onComplete);
+    trackJourneyStepCompleted(journey, stepId, "skip");
+    await useTourStore.getState().skipStep(formatTourParam(journey, stepId));
+    goToStep(journey, next);
+  }, [liveStep, finish, goToStep]);
 
   const goBack = useCallback(() => {
-    if (!currentStepId) return;
-    const prevId = getPreviousStepId(currentStepId);
-    if (prevId) {
-      goToStep(prevId);
-    } else {
-      // First step — Back = exit.
-      exitTour();
-    }
-  }, [currentStepId, goToStep, exitTour]);
+    const live = liveStep();
+    if (!live) return;
+    const prev = previousStepId(live.journey, live.stepId);
+    if (prev) goToStep(live.journey, prev);
+    else exitTour();
+  }, [liveStep, goToStep, exitTour]);
 
   const skipAll = useCallback(async () => {
+    const live = liveStep();
+    if (!live) return;
+    trackJourneySkipped(live.journey, live.stepId);
     const store = useTourStore.getState();
-    // Mark every remaining (not-completed, not-skipped) step as skipped in
-    // memory, then persist ONCE via markTourCompleted. Awaiting skipStep per
-    // step re-saved the entire tour state on every iteration (~N×3 sequential
-    // RPCs), which made "Skip tour" take ~10s.
-    store.markRemainingSkipped();
-    await store.markTourCompleted();
-    // Skipping ends the tour just as finishing does, and would leave the user
-    // on whatever page the abandoned step had them on — same landing.
-    await goToChatAfterTour();
-    void promptApiKeyIfNeededAfterTour();
-  }, [goToChatAfterTour]);
+    void store.setResumeStep(formatTourParam(live.journey, live.stepId));
+    // Mark every remaining step skipped in memory, then persist ONCE via
+    // markTourCompleted: a save per step made "Skip tour" take ~10s.
+    store.markRemainingSkipped(
+      activeJourneySteps(live.journey).map((s) => formatTourParam(live.journey, s.id)),
+    );
+    await store.markTourCompleted(live.journey, "skipped");
+    await land(live.journey);
+  }, [liveStep, land]);
 
   return {
+    tour,
+    isWizardActive: step !== null,
+    isPickerOpen: tour?.kind === "picker",
+    currentJourney,
     currentStepId,
-    isWizardActive,
     goToStep,
+    openStepPage,
+    startJourney,
+    openPicker,
+    dismissPicker,
     exitTour,
-    completeAndAdvance,
+    advance,
+    skipStep,
     goBack,
     skipAll,
+    finish,
   };
 }

@@ -122,7 +122,9 @@ func (h *HooksReceiver) serve(w http.ResponseWriter, r *http.Request) {
 		"content_type": r.Header.Get("Content-Type"),
 		"received_at":  now.Format(time.RFC3339),
 	}
-	res, err := h.opts.Intake.Accept(ctx, trigger, triggers.InboundEvent{
+	recCtx, cancel := recordingContext(ctx)
+	defer cancel()
+	res, err := h.opts.Intake.Accept(recCtx, trigger, triggers.InboundEvent{
 		Kind:       core.TriggerEventKindWebhook,
 		DedupeKey:  trigger.ID + ":" + deliveryKey(r.Header, body, now),
 		OccurredAt: now,

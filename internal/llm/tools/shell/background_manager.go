@@ -25,6 +25,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/daemonpolicy"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/diskwatch"
+	"github.com/reliant-labs/reliant/internal/ghshim"
 	"github.com/reliant-labs/reliant/internal/heavyjob"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/osutil"
@@ -82,7 +83,7 @@ type OutputSubscription struct {
 type BackgroundProcess struct {
 	ID         string     `json:"id"`
 	Command    string     `json:"command"`
-	Status     string     `json:"status"` // running, completed, failed, killed, killed_externally
+	Status     string     `json:"status"` // running, completed, failed, killed, killed_externally, stale
 	StartTime  time.Time  `json:"start_time"`
 	EndTime    *time.Time `json:"end_time,omitempty"`
 	ExitCode   *int       `json:"exit_code,omitempty"`
@@ -197,7 +198,29 @@ type BackgroundManager struct {
 	idleReap atomic.Int64
 	// reapKick wakes the reaper early: a workspace archived needs no wait.
 	reapKick chan struct{}
+
+	// portScan serializes the OS port scans of the listing getters
+	// (refreshPortsGated).
+	portScan portScanGate
 }
+
+// portScanGate is the state of refreshPortsGated: mu is held while a scan
+// runs, and lastAll is when the last scan of EVERY process finished (touched
+// only with mu held). scan is the OS scan it runs, refreshPortsBatch when nil;
+// a per-manager field so a test can count scans without a package global.
+type portScanGate struct {
+	mu      sync.Mutex
+	lastAll time.Time
+	scan    func([]*BackgroundProcess)
+}
+
+// portScanFreshness is how long a scan of every process answers for the next
+// listing. The process monitor scans every 2s, and every exec.bg_list (the
+// web's process list, polled) scanned again on top of it, so a busy machine
+// ran several `ps -A` + `lsof` pairs at once: on 2026-11-05 a machine at load
+// 100 answered exec.bg_list in 2.9s p50 and timed out (5s) 240 times in a day.
+// A port list a second old is as good as a new one for showing a dev server.
+const portScanFreshness = time.Second
 
 var (
 	bgManager     *BackgroundManager
@@ -343,40 +366,6 @@ func (m *BackgroundManager) emitEvent(event ProcessEvent) {
 	}
 }
 
-// EmitPortChangeEvent emits a port_changed event for a process.
-// This is called by ProcessMonitor when it detects port changes.
-func (m *BackgroundManager) EmitPortChangeEvent(processID string, ports []PortInfo) {
-	m.mu.RLock()
-	process, exists := m.processes[processID]
-	m.mu.RUnlock()
-
-	if !exists {
-		return
-	}
-
-	// Update the process's port information
-	process.outputMu.Lock()
-	process.Ports = ports
-	process.outputMu.Unlock()
-
-	logging.Debug("Process port change detected",
-		"id", processID,
-		"ports", len(ports))
-
-	m.emitEvent(ProcessEvent{
-		Type:       "port_changed",
-		ProcessID:  processID,
-		ChatID:     process.ChatID,
-		SessionID:  process.SessionID,
-		WorktreeID: process.WorktreeID,
-		Command:    process.Command,
-		WorkingDir: process.WorkingDir,
-		Status:     process.Status,
-		StartTime:  process.StartTime,
-		Ports:      ports,
-	})
-}
-
 // StartProcessOptions contains options for starting a background process
 type StartProcessOptions struct {
 	Command    string
@@ -395,6 +384,9 @@ type StartProcessOptions struct {
 	// Credentials is daemonpolicy.CredentialsNone to start the process with no
 	// GitHub, git, ssh or cloud credentials.
 	Credentials string
+	// Writable is what a credentials-none process declared it writes
+	// (daemon.RunCommandRequest.SandboxWritable).
+	Writable credsandbox.Writable
 	// Argv, when set, runs the command with no shell (see
 	// daemon.RunCommandRequest.Argv). Command is used for display only.
 	Argv []string
@@ -412,18 +404,6 @@ type StartProcessOptions struct {
 	// ThreadID and KeepAlive: see BackgroundProcess.
 	ThreadID  string
 	KeepAlive bool
-}
-
-// StartProcessWithEnv starts a new background process with custom environment variables
-// Deprecated: Use StartProcess instead which accepts StartProcessOptions
-func (m *BackgroundManager) StartProcessWithEnv(ctx context.Context, command string, workingDir string, sessionID string, chatID string, env map[string]string) (*BackgroundProcess, error) {
-	return m.StartProcess(ctx, StartProcessOptions{
-		Command:    command,
-		WorkingDir: workingDir,
-		SessionID:  sessionID,
-		ChatID:     chatID,
-		Env:        env,
-	})
 }
 
 // StartProcess starts a new background process with the given options
@@ -466,6 +446,8 @@ func (m *BackgroundManager) StartProcess(ctx context.Context, opts StartProcessO
 		env[key] = value
 	}
 	cmd.Env = daemonpolicy.ChildEnv(ctx, env, opts.Credentials)
+	// A chat's command finds the gh shim first on PATH (internal/ghshim).
+	cmd.Env = ghshim.Default().Env(cmd.Env)
 	if _, err := opts.HeavyGate.Prepare(cmd, heavyjob.Job{Command: opts.Command, Argv: opts.Argv, Declared: opts.Heavy, Background: true}); err != nil {
 		// Refused (a nearly full disk): it never starts, and says why.
 		cancel()
@@ -474,10 +456,12 @@ func (m *BackgroundManager) StartProcess(ctx context.Context, opts StartProcessO
 	// credentials: none runs where the daemon's credential files are absent; see
 	// credsandbox. Outside the heavy-slot rewrite above, so the slot wrapper
 	// runs inside it.
-	if refusal := credsandbox.Wrap(cmd, opts.Credentials); refusal != "" {
+	if refusal := credsandbox.Wrap(cmd, opts.Credentials, opts.Writable); refusal != "" {
 		cancel()
 		return nil, errors.New(refusal)
 	}
+	// A return before Start must not keep the sandbox's descriptors open.
+	defer credsandbox.Release(cmd)
 
 	// Create buffers for output
 	stdout := &bytes.Buffer{}
@@ -528,8 +512,11 @@ func (m *BackgroundManager) StartProcess(ctx context.Context, opts StartProcessO
 	// Start: everything above may still rewrite what cmd execs.
 	process.tree = proctree.Default().Prepare(cmd, proctree.Owner{ChatID: cmp.Or(opts.AgentID, opts.ChatID), Command: opts.Command})
 
-	// Start the command
-	if err := cmd.Start(); err != nil {
+	// Start the command. The child holds its own copies of the sandbox's
+	// descriptors once Start returns.
+	err := cmd.Start()
+	credsandbox.Release(cmd)
+	if err != nil {
 		process.tree.Started(0)
 		cancel()
 		return nil, fmt.Errorf("failed to start command: %w", err)
@@ -914,6 +901,37 @@ func (p *BackgroundProcess) refreshPorts() {
 	p.outputMu.Unlock()
 }
 
+// refreshPortsGated is refreshPortsBatch for the listing getters, so they
+// never run two OS scans at once and never repeat a fresh one:
+//
+//   - a scan already running answers for this caller too: it returns at once
+//     and the caller reads the ports the processes already hold (at most one
+//     scan old). A list never queues behind someone else's scan;
+//   - a scan of every process (all) that finished within portScanFreshness
+//     answers for the next listing of every process, and only for it: a
+//     subset listing (by session, chat or worktree) may hold processes the
+//     earlier listing never saw, so it always scans its own processes;
+//   - otherwise it scans. A subset's scan says nothing about the rest, so it
+//     never counts as fresh for a listing of every process.
+func (m *BackgroundManager) refreshPortsGated(processes []*BackgroundProcess, all bool) {
+	g := &m.portScan
+	if !g.mu.TryLock() {
+		return
+	}
+	defer g.mu.Unlock()
+	if all && !g.lastAll.IsZero() && m.now().Sub(g.lastAll) < portScanFreshness {
+		return
+	}
+	scan := g.scan
+	if scan == nil {
+		scan = refreshPortsBatch
+	}
+	scan(processes)
+	if all {
+		g.lastAll = m.now()
+	}
+}
+
 // refreshPortsBatch refreshes the port list of many processes using a fixed
 // number of subprocesses, rather than one OS scan per process.
 //
@@ -990,8 +1008,9 @@ func (m *BackgroundManager) GetProcessesBySession(sessionID string) []*Backgroun
 	// Update port information for running processes. Done outside the map
 	// lock: refreshPortsBatch takes each process's own outputMu, which is what
 	// actually guards Status/Ports/cmd. Batched because the OS scan is the
-	// expensive part and it does not need to be repeated per process.
-	refreshPortsBatch(processes)
+	// expensive part and it does not need to be repeated per process; gated
+	// (refreshPortsGated) so callers never run two scans at once.
+	m.refreshPortsGated(processes, false)
 
 	return processes
 }
@@ -1010,8 +1029,9 @@ func (m *BackgroundManager) GetProcessesByChat(chatID string) []*BackgroundProce
 	// Update port information for running processes. Done outside the map
 	// lock: refreshPortsBatch takes each process's own outputMu, which is what
 	// actually guards Status/Ports/cmd. Batched because the OS scan is the
-	// expensive part and it does not need to be repeated per process.
-	refreshPortsBatch(processes)
+	// expensive part and it does not need to be repeated per process; gated
+	// (refreshPortsGated) so callers never run two scans at once.
+	m.refreshPortsGated(processes, false)
 
 	return processes
 }
@@ -1030,8 +1050,9 @@ func (m *BackgroundManager) GetProcessesByWorktree(worktreeID string) []*Backgro
 	// Update port information for running processes. Done outside the map
 	// lock: refreshPortsBatch takes each process's own outputMu, which is what
 	// actually guards Status/Ports/cmd. Batched because the OS scan is the
-	// expensive part and it does not need to be repeated per process.
-	refreshPortsBatch(processes)
+	// expensive part and it does not need to be repeated per process; gated
+	// (refreshPortsGated) so callers never run two scans at once.
+	m.refreshPortsGated(processes, false)
 
 	return processes
 }
@@ -1048,8 +1069,9 @@ func (m *BackgroundManager) GetAllProcesses() []*BackgroundProcess {
 	// Update port information for running processes. Done outside the map
 	// lock: refreshPortsBatch takes each process's own outputMu, which is what
 	// actually guards Status/Ports/cmd. Batched because the OS scan is the
-	// expensive part and it does not need to be repeated per process.
-	refreshPortsBatch(processes)
+	// expensive part and it does not need to be repeated per process; gated
+	// (refreshPortsGated) so callers never run two scans at once.
+	m.refreshPortsGated(processes, true)
 
 	return processes
 }
@@ -1163,7 +1185,7 @@ func stopProcessGroup(w *groupWatch, leaderDone <-chan struct{}, onTerm func()) 
 // command's: some member recorded while the id was known to be the command's
 // must still be in the group (osutil.GroupOwned), and then everyone now in it
 // is recorded in turn, so ownership carries forward as members come and go.
-// Where the process table cannot be read (macOS) it falls back to "does the
+// Where the process table cannot be read it falls back to "does the
 // group id answer a signal".
 type groupWatch struct {
 	pgid     int
@@ -1596,50 +1618,6 @@ func (m *BackgroundManager) AdoptRunningProcess(opts AdoptRunningProcessOptions)
 	return process, nil
 }
 
-// LoadProcess loads a process record from the database into memory.
-// This is used during startup recovery to populate the in-memory map with
-// processes that are still running (validated by RecoveryService).
-// Note: This creates a "ghost" process - we don't have the actual exec.Cmd,
-// so we can only track its status and report it in lists. The process cannot
-// be killed through us - it must be killed externally or terminate on its own.
-func (m *BackgroundManager) LoadProcess(id, command, workingDir, worktreeID, sessionID, chatID, status string, startTime time.Time, pid int) {
-	process := &BackgroundProcess{
-		ID:             id,
-		Command:        command,
-		Status:         status,
-		StartTime:      startTime,
-		WorkingDir:     workingDir,
-		WorktreeID:     worktreeID,
-		SessionID:      sessionID,
-		ChatID:         chatID,
-		stdout:         &bytes.Buffer{},
-		stderr:         &bytes.Buffer{},
-		combinedOutput: make([]OutputLineWithSeq, 0),
-		outputSeq:      0,
-		done:           make(chan struct{}),
-		subscribers:    make(map[string]chan OutputLineWithSeq),
-		// Note: cmd is nil - this is a recovered process
-		// cancelFunc is nil - we can't cancel a recovered process
-	}
-
-	// Try to get current port info for the running process
-	if pid > 0 && status == "running" {
-		ports, err := getProcessPorts(pid)
-		if err == nil {
-			process.Ports = ports
-		}
-	}
-
-	m.mu.Lock()
-	m.processes[id] = process
-	m.mu.Unlock()
-
-	logging.Debug("Loaded process from database",
-		"id", id,
-		"status", status,
-		"pid", pid)
-}
-
 // CleanupOldProcesses removes completed/failed processes older than the specified duration
 func (m *BackgroundManager) CleanupOldProcesses(maxAge time.Duration) {
 	m.mu.Lock()
@@ -1807,64 +1785,6 @@ func getProcessPortsForRoots(roots []int) (map[int][]PortInfo, error) {
 	return result, nil
 }
 
-// SubscribeToOutput subscribes to real-time output from a process.
-// Returns a subscription with:
-// - Ch: channel receiving new output lines
-// - Done: channel closed when process completes
-// The caller must call UnsubscribeFromOutput when done to clean up resources.
-func (m *BackgroundManager) SubscribeToOutput(processID string) (*OutputSubscription, error) {
-	process, err := m.GetProcess(processID)
-	if err != nil {
-		return nil, err
-	}
-
-	subID := uuid.New().String()
-	// Buffer allows some slack before blocking/dropping
-	ch := make(chan OutputLineWithSeq, 100)
-
-	process.subscribersMu.Lock()
-	process.subscribers[subID] = ch
-	process.subscribersMu.Unlock()
-
-	logging.Debug("Subscribed to process output",
-		"processID", processID,
-		"subscriberID", subID)
-
-	return &OutputSubscription{
-		ProcessID:    processID,
-		SubscriberID: subID,
-		Ch:           ch,
-		Done:         process.done,
-	}, nil
-}
-
-// UnsubscribeFromOutput removes an output subscription.
-// Safe to call multiple times or with invalid subscription.
-func (m *BackgroundManager) UnsubscribeFromOutput(sub *OutputSubscription) {
-	if sub == nil {
-		return
-	}
-
-	m.mu.RLock()
-	process, exists := m.processes[sub.ProcessID]
-	m.mu.RUnlock()
-
-	if !exists {
-		return
-	}
-
-	process.subscribersMu.Lock()
-	if ch, ok := process.subscribers[sub.SubscriberID]; ok {
-		delete(process.subscribers, sub.SubscriberID)
-		close(ch)
-	}
-	process.subscribersMu.Unlock()
-
-	logging.Debug("Unsubscribed from process output",
-		"processID", sub.ProcessID,
-		"subscriberID", sub.SubscriberID)
-}
-
 // ProcessOutcome is a consistent snapshot of one process's lifecycle fields.
 type ProcessOutcome struct {
 	Status   string
@@ -1934,4 +1854,12 @@ func bufferTail(buf *bytes.Buffer) string {
 		b = b[len(b)-noSpaceScanBytes:]
 	}
 	return string(b)
+}
+
+// PortInfo contains information about a port used by a process
+type PortInfo struct {
+	Port     int    `json:"port"`
+	Protocol string `json:"protocol"` // tcp, udp
+	State    string `json:"state"`    // LISTEN, ESTABLISHED, etc.
+	Address  string `json:"address"`  // bind address
 }

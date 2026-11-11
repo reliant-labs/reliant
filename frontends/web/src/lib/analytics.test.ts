@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { resetShellForTests } from "./shell";
 import { setRuntimeConfig } from "@/test/runtimeConfig";
 
 // trackEvent reaches ClickStack as a `product.<event>` span when the build
@@ -37,7 +38,7 @@ describe("OTEL_ENDPOINT", () => {
 
     trackEvent("onboarding_completed", { provider: "github" });
 
-    expect(track).toHaveBeenCalledWith("product.onboarding_completed", { provider: "github" });
+    expect(track).toHaveBeenCalledWith("product.onboarding_completed", { surface: "reliant", provider: "github" });
   });
 
   it("sends nothing for a build that configures no endpoint", () => {
@@ -84,16 +85,40 @@ describe("ClickStack prop keys", () => {
     trackEvent("tour_step_viewed", { stepId: "welcome", stepsCompleted: 2, hasAttachments: false });
 
     expect(track).toHaveBeenCalledWith("product.tour_step_viewed", {
+      surface: "reliant",
       step_id: "welcome",
       steps_completed: 2,
       has_attachments: false,
     });
   });
 
+  it("tags every event with the shell it happened in, as a default a caller can override", () => {
+    resetShellForTests("forge");
+    try {
+      trackEvent("claim_completed", { claimPath: "upgrade" });
+      expect(track).toHaveBeenLastCalledWith("product.claim_completed", { surface: "forge", claim_path: "upgrade" });
+      trackEvent("tip_shown", { surface: "mobile" });
+      expect(track).toHaveBeenLastCalledWith("product.tip_shown", { surface: "mobile" });
+    } finally {
+      resetShellForTests();
+    }
+  });
+
+  it("tags the public demo's events surface=demo", () => {
+    resetShellForTests("demo");
+    try {
+      trackEvent("demo_tour_autostarted", { deepLink: false });
+      expect(track).toHaveBeenLastCalledWith("product.demo_tour_autostarted", { surface: "demo", deep_link: false });
+    } finally {
+      resetShellForTests();
+    }
+  });
+
   it("leaves already-conforming keys alone", () => {
     trackEvent("onboarding_flow_step_completed", { step: "compute", duration_ms: 1234 });
 
     expect(track).toHaveBeenCalledWith("product.onboarding_flow_step_completed", {
+      surface: "reliant",
       step: "compute",
       duration_ms: 1234,
     });

@@ -3,12 +3,13 @@ package mcp
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	"connectrpc.com/connect"
 	"github.com/stretchr/testify/assert"
@@ -55,7 +56,7 @@ func (r *mcpReadRepo) GetDaemon(_ context.Context, id string) (*db.Daemon, error
 func (r *mcpReadRepo) GetProjectConfigRecord(_ context.Context, projectID string) (*db.ProjectConfigRecord, error) {
 	r.recordReads.Add(1)
 	if projectID != r.project.ID {
-		return nil, sql.ErrNoRows
+		return nil, svcerr.NotFound("project config")
 	}
 	cfg := r.mcpConfigs
 	return &db.ProjectConfigRecord{ProjectID: projectID, MCPConfigs: &cfg}, nil
@@ -64,7 +65,7 @@ func (r *mcpReadRepo) GetProjectConfigRecord(_ context.Context, projectID string
 func (r *mcpReadRepo) GetProjectMCPConfigsJSON(_ context.Context, projectID string) (*string, error) {
 	r.columnReads.Add(1)
 	if projectID != r.project.ID {
-		return nil, sql.ErrNoRows
+		return nil, svcerr.NotFound("project config")
 	}
 	cfg := r.mcpConfigs
 	return &cfg, nil

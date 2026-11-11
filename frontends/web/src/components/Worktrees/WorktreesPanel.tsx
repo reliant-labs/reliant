@@ -95,7 +95,7 @@ export function WorktreesPanel({
     error: listError,
     loadMore: loadMoreWorktrees,
   } = useWorktreeList(currentProject?.id);
-  const error = listError ? listError.message || "Failed to load worktrees" : null;
+  const error = listError ? listError.message || "Failed to load workspaces" : null;
 
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showDiscoverModal, setShowDiscoverModal] = useState(false);
@@ -125,7 +125,7 @@ export function WorktreesPanel({
         <EmptyState
           icon={<FolderGit2 className="h-6 w-6" />}
           title="No project open"
-          description="Branches belong to a project. Pick a project to see the branches its chats work in."
+          description="Workspaces belong to a project. Pick a project to see the workspaces its chats work in."
         />
       </div>
     );
@@ -136,8 +136,8 @@ export function WorktreesPanel({
       <div className={cn("forge-ui", paddingClass)}>
         <EmptyState
           icon={<AlertCircle className="h-6 w-6" />}
-          title="Branches need a git repository"
-          description={`Each branched chat works in a git worktree on its own branch, so ${currentProject.name} has to be a git repository first. Initializing git doesn't change your files.`}
+          title="Workspaces need a git repository"
+          description={`Each workspace is a git worktree on its own branch, so ${currentProject.name} has to be a git repository first. Initializing git doesn't change your files.`}
           actionLabel="Initialize git"
           onAction={() => setShowInitGitModal(true)}
         />
@@ -264,7 +264,7 @@ export function WorktreesPanel({
             size="sm"
             leftIcon={<Search className="h-3.5 w-3.5" />}
             onClick={() => setShowDiscoverModal(true)}
-            title="Find git worktrees that already exist on disk and add them here"
+            title="Find git worktrees that already exist on disk and add them as workspaces"
           >
             Import existing
           </Button>
@@ -299,7 +299,7 @@ export function WorktreesPanel({
         <EmptyState
           icon={<FolderGit2 className="h-6 w-6" />}
           title="No workspaces yet"
-          description="When you branch a chat, Reliant gives it its own git worktree on a new branch, so the agent can change code without touching your main checkout. Branch a chat, or create a workspace directly."
+          description="When you branch a chat, Reliant gives it its own workspace, an isolated copy of your repo on a new git branch, so the agent can change code without touching your main checkout. Branch a chat, or create a workspace directly."
           actionLabel="New workspace"
           onAction={() => setShowCreateModal(true)}
         />

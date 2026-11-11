@@ -654,10 +654,10 @@ test('mintDaemonPAT: refuses a retired-family token and does not retry', async (
 });
 
 test('ensureDaemonPATForOrigin: mints at mintApiUrl but keys daemon.json by the --server origin', async () => {
-  // cloud-dev: --server is admin-server (which does not serve
+  // cloud-dev: --server is platform-api (which does not serve
   // reliant.v1.TokenService); the mint must go to reliant's api-server while
   // the entry stays where the Go daemon looks it up. Mutation caught: minting
-  // at `apiUrl` (404 against admin-server) or keying by mintApiUrl.
+  // at `apiUrl` (404 against platform-api) or keying by mintApiUrl.
   await withFakeHome(async () => {
     const authStorage = {
       loadStoredAuth: () => ({ access_token: 'jwt-abc', user: { id: 'user-1' } }),
@@ -741,7 +741,7 @@ test('mintDaemonPAT: missing accessToken throws synchronously', async () => {
 // ----------------------------------------------------------------------------
 //
 // `air` may be mid-restart of `reliant server api` when BackendManager fires
-// the mint preflight, so the admin-server forwarder returns 502 (or ECONNREFUSED
+// the mint preflight, so the platform-api forwarder returns 502 (or ECONNREFUSED
 // upstream) for a short window. mintDaemonPAT retries those up to
 // MINT_MAX_ATTEMPTS times. These tests cover:
 //   - terminal success after transient failures (502 → 502 → 200, mixed)

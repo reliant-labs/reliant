@@ -131,7 +131,7 @@ func TestAccessRoutingHonoursANamedConnection(t *testing.T) {
 	fresh := now.Add(-time.Minute)
 	assert.ElementsMatch(t, []string{withConn.ID, delegated.ID}, routedIDs(t, repo, "github", "100", "1", fresh))
 
-	_, err := repo.DB.ExecContext(ctx, `UPDATE connections SET status = 'needs_reauth' WHERE id = $1`, conn.ID)
+	_, err := repo.DB.DB(ctx).ExecContext(ctx, `UPDATE connections SET status = 'needs_reauth' WHERE id = $1`, conn.ID)
 	require.NoError(t, err)
 	assert.Equal(t, []string{delegated.ID}, routedIDs(t, repo, "github", "100", "1", fresh),
 		"a trigger whose own connection cannot authenticate does not route")

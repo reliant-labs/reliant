@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
+	"github.com/reliant-labs/reliant/internal/errclass"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/sdk/temporal"
@@ -25,7 +27,9 @@ func TestFailStepActivity(t *testing.T) {
 		_, err := activity.Execute(ctx, input)
 
 		require.Error(t, err)
-		assert.Equal(t, "workflow validation failed: Agent step has empty prompt", err.Error())
+		assert.Equal(t, "step cannot run as configured: Agent step has empty prompt", err.Error())
+		assert.NotContains(t, err.Error(), "validation",
+			"a run-time failure in a definition that validated is not a validation failure")
 	})
 
 	t.Run("is not retried: the same definition and inputs fail the same way", func(t *testing.T) {
@@ -34,6 +38,13 @@ func TestFailStepActivity(t *testing.T) {
 		var appErr *temporal.ApplicationError
 		require.ErrorAs(t, err, &appErr)
 		assert.True(t, appErr.NonRetryable())
+	})
+
+	t.Run("is the workflow author's to fix, not a server fault", func(t *testing.T) {
+		_, err := NewFailStepActivity().Execute(context.Background(), FailStepInput{Error: "CEL cost limit exceeded"})
+
+		assert.Equal(t, svcerr.ClassUser, errclass.Classify(err),
+			"every layer the failure passes logs it at the user-error level, not as an ERROR issue")
 	})
 
 	t.Run("activity name is V2_FailStep", func(t *testing.T) {

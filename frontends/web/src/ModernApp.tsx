@@ -46,7 +46,6 @@ import { RescanModal } from "./components/Projects/RescanModal";
 
 import { TerminalPanel } from "./components/Terminal/TerminalPanel";
 import { LoadingSpinner } from "./components/Layout/LoadingSpinner";
-import { GlobalUpdateHandler } from "./components/Settings/GlobalUpdateHandler";
 import { useChatStore } from "./store/chatStore";
 import { useActivityStore, ChatActivity, isBusyActivity } from "./store/activityStore";
 import { useChatNavigationStore } from "./store/chatNavigationStore";
@@ -244,10 +243,17 @@ function App() {
       setShowFileBrowserLocal(true);
     };
     window.addEventListener("open-file-browser", handleOpenFileBrowser);
+    // The onboarding outro collapses the panels it just explained
+    // (Onboarding/journeys/layoutActions.ts). Persisted, like a user's toggle.
+    const handleCloseFileBrowser = () => {
+      setShowFileBrowser(false);
+    };
+    window.addEventListener("close-file-browser", handleCloseFileBrowser);
     return () => {
       window.removeEventListener("open-file-browser", handleOpenFileBrowser);
+      window.removeEventListener("close-file-browser", handleCloseFileBrowser);
     };
-  }, []);
+  }, [setShowFileBrowser]);
 
   // Auto-activate viewers when files are open but no viewer is active
   useEffect(() => {
@@ -1838,9 +1844,6 @@ function App() {
         isOpen={showQuickFileOpen}
         onClose={() => setShowQuickFileOpen(false)}
       />
-
-      {/* Global Update Handler - shows update modal when updates are available */}
-      <GlobalUpdateHandler />
     </div>
   );
 

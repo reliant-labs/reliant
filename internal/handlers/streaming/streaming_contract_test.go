@@ -22,7 +22,7 @@ func TestFormatChatUpdateDataJSON_MessageUpdateWrappedUnderMessageField(t *testi
 		"attachments":[]
 	}`)
 
-	formatted := formatChatUpdateDataJSON(reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_MESSAGE, raw)
+	formatted := formatChatUpdateDataJSON(reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_MESSAGE, raw, reliantv1.ToolBodyMode_TOOL_BODY_MODE_UNSPECIFIED)
 
 	var decoded map[string]any
 	require.NoError(t, json.Unmarshal([]byte(formatted), &decoded))
@@ -42,7 +42,7 @@ func TestFormatChatUpdateDataJSON_MessageUpdateWrappedUnderMessageField(t *testi
 func TestFormatChatUpdateDataJSON_MessageUpdateAlreadyWrappedUnchanged(t *testing.T) {
 	raw := json.RawMessage(`{"message":{"id":"msg-1","role":"assistant"}}`)
 
-	formatted := formatChatUpdateDataJSON(reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_MESSAGE, raw)
+	formatted := formatChatUpdateDataJSON(reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_MESSAGE, raw, reliantv1.ToolBodyMode_TOOL_BODY_MODE_UNSPECIFIED)
 
 	require.JSONEq(t, string(raw), formatted)
 }
@@ -50,7 +50,7 @@ func TestFormatChatUpdateDataJSON_MessageUpdateAlreadyWrappedUnchanged(t *testin
 func TestFormatChatUpdateDataJSON_NonMessageUpdateUnchanged(t *testing.T) {
 	raw := json.RawMessage(`{"id":"approval-1","status":"pending"}`)
 
-	formatted := formatChatUpdateDataJSON(reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_APPROVAL, raw)
+	formatted := formatChatUpdateDataJSON(reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_APPROVAL, raw, reliantv1.ToolBodyMode_TOOL_BODY_MODE_UNSPECIFIED)
 
 	require.Equal(t, string(raw), formatted)
 }
@@ -58,7 +58,7 @@ func TestFormatChatUpdateDataJSON_NonMessageUpdateUnchanged(t *testing.T) {
 func TestFormatChatUpdateDataJSON_StreamingDeltaPayloadRemainsFlat(t *testing.T) {
 	raw := json.RawMessage(`{"id":"msg-1","delta":"hel","stream_state":"streaming"}`)
 
-	formatted := formatChatUpdateDataJSON(reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_STREAMING_DELTA, raw)
+	formatted := formatChatUpdateDataJSON(reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_STREAMING_DELTA, raw, reliantv1.ToolBodyMode_TOOL_BODY_MODE_UNSPECIFIED)
 
 	var decoded map[string]any
 	require.NoError(t, json.Unmarshal([]byte(formatted), &decoded))
@@ -70,7 +70,7 @@ func TestFormatChatUpdateDataJSON_StreamingDeltaPayloadRemainsFlat(t *testing.T)
 func TestFormatChatUpdateDataJSON_MessageUpdateDoesNotLeakTopLevelFields(t *testing.T) {
 	raw := json.RawMessage(`{"id":"msg-1","role":"assistant"}`)
 
-	formatted := formatChatUpdateDataJSON(reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_MESSAGE, raw)
+	formatted := formatChatUpdateDataJSON(reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_MESSAGE, raw, reliantv1.ToolBodyMode_TOOL_BODY_MODE_UNSPECIFIED)
 
 	var decoded map[string]any
 	require.NoError(t, json.Unmarshal([]byte(formatted), &decoded))
@@ -82,7 +82,7 @@ func TestFormatChatUpdateDataJSON_MessageUpdateDoesNotLeakTopLevelFields(t *test
 func TestFormatChatUpdateDataJSON_InvalidJSONFallsBackToRaw(t *testing.T) {
 	raw := json.RawMessage(`{"id":"msg-1"`)
 
-	formatted := formatChatUpdateDataJSON(reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_MESSAGE, raw)
+	formatted := formatChatUpdateDataJSON(reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_MESSAGE, raw, reliantv1.ToolBodyMode_TOOL_BODY_MODE_UNSPECIFIED)
 
 	require.Equal(t, string(raw), formatted)
 }
@@ -100,7 +100,7 @@ func TestFormatChatUpdateDataJSON_LiveToolResultIsPreviewed(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	formatted := formatChatUpdateDataJSON(reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_MESSAGE, raw)
+	formatted := formatChatUpdateDataJSON(reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_MESSAGE, raw, reliantv1.ToolBodyMode_TOOL_BODY_MODE_UNSPECIFIED)
 
 	var decoded map[string]any
 	require.NoError(t, json.Unmarshal([]byte(formatted), &decoded))

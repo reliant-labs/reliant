@@ -256,8 +256,7 @@ export function GitHubOAuthCallback() {
       msg?: string,
       returnTo?: string,
     ) => {
-      const safeReturnTo =
-        returnTo && returnTo.startsWith('/') && !returnTo.startsWith('//') ? returnTo : '/'
+      const safeReturnTo = isSafeReturnTo(returnTo) ? returnTo : '/'
       const url = new URL(safeReturnTo, window.location.origin)
       if (kind === 'github_connected') {
         url.searchParams.set('github_connected', 'true')

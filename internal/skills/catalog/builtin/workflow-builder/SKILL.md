@@ -480,6 +480,37 @@ on_failure:
 - **Make a failure visible.** A run that ends on a path labelled "blocked", "punted" or "no result" but finishes normally is a success to the platform: it is auto-archived and never reaches the handler. Route those paths to a terminal node with `outcome: failure`.
 - **Tell a person once.** The Autopilot pack's `builtin://autopilot-failure-note` posts one comment per pull request head commit (or issue): it searches the thread for its own marker first, posts nothing if the thread cannot be read, and writes as whoever the run acts as.
 - **Test it.** A scenario names the handler's nodes `on_failure.<node>` in `events`, `reached`, `completed` and `messages`, and asserts `expect.on_failure: {ran, node_id, node_path, error_code, attempt, error_contains, handler_failed}`.
+- **Releasing something?** on_failure never runs for a cancelled run. A lease, claim or label the run takes must be released in `finally:`, below.
+
+### However a run ends: `finally:`
+
+A workflow-level `finally:` is an inline graph, like on_failure, that runs ONCE when a run ENDS: it completed, it failed, or it was cancelled
+(`control_run cancel`, CancelRun, archiving the chat). It is where a workflow releases what it holds, so nothing stays held until a TTL runs out.
+
+```yaml
+finally:
+  sequence:
+    - id: release
+      type: run
+      condition: "nodes.?lease.sha.orValue('') != ''"
+      timeout: 3m
+      args:
+        command: "scripts/lease.sh release --sha '{{ nodes.lease.sha }}'"
+    - id: note
+      type: save_message
+      condition: "run.status != 'completed'"
+      args:
+        role: assistant
+        display_style: warning
+        content: "Ended {{ run.status }}{{ run.status == 'failed' ? ' at ' + failure.node_id : '' }}; released the lease."
+```
+
+- **It runs when** the run completes, fails (after on_failure), or is cancelled. Not when it pauses (it is coming back) or hands off to a successor run.
+- **`run.status`** is `'completed'`, `'failed'` or `'cancelled'`, and exists only inside finally. `failure.*` is declared too, every key present and empty unless `run.status == 'failed'`.
+- **On a cancel**, the run's in-flight steps are cancelled first, and a `run` node's command is stopped on its machine. Then finally runs, on its own budget, so its own commands are not cancelled. A run that does not stop within a few seconds of the cancel is hard-terminated without it.
+- **The same rules as on_failure:** guard `nodes.<main node>` reads (a cancel can stop the graph anywhere), no node id shared with the main graph, `finally` is a reserved id, no `outputs`, `inputs` or nested handlers, no `approval` or `ask_question`, a 5-minute budget, and an error in it is logged and never changes how the run ended. Make its steps idempotent: releasing a lease that is not held must succeed.
+- **A child's finally.** A workflow started by a `workflow:` node with `ref:` runs its own finally when it ends, in its own scope, before the parent's (`release.finally.<id>`).
+- **Test it.** Name its nodes `finally.<node>` in a scenario and assert `expect.finally: {ran, status, handler_failed}`.
 
 ## Important rules
 
@@ -563,12 +594,13 @@ existing workflow requires its `id` (returned by `create_workflow`, or listed by
 
 | Namespace | Description | Fields |
 |-----------|-------------|--------|
-| `failure.*` | What failed, inside a workflow's on_failure handler only (failure.node_id, failure.node_path, failure.error, failure.error_code, failure.attempt). Undeclared everywhere else | workflow-specific |
+| `failure.*` | What failed, inside a workflow's on_failure and finally handlers only (failure.node_id, failure.node_path, failure.error, failure.error_code, failure.attempt; in finally every key is empty unless run.status is 'failed'). Undeclared everywhere else | workflow-specific |
 | `inputs.*` | Workflow input values passed at invocation | workflow-specific |
 | `iter.*` | Loop iteration context (iteration count, first/last flags) | `iteration` |
 | `nodes.*` | Output from completed nodes (nodes.<id>.<field>) | workflow-specific |
 | `output.*` | Current activity output (for save_message context) | workflow-specific |
 | `outputs.*` | Loop iteration outputs for while condition evaluation | workflow-specific |
+| `run.*` | How the run ended, inside a workflow's finally handler only (run.status: 'completed', 'failed' or 'cancelled'). Undeclared everywhere else | workflow-specific |
 | `thread.*` | Current thread context (token_count, message_count) | workflow-specific |
 | `trigger.*` | The event that started this run, fixed at launch (trigger.kind, trigger.name, trigger.scheduled_for, trigger.payload.<x>, trigger.sender.{kind,id,display_name,verified}, trigger.origin.{caused_by_reliant,confidence,run_id,workflow,trigger_name,same_workflow,actor,lineage_depth}). Interactive chats have kind chat.start. A trigger's filter, inputs and prompt can also read trigger.activation.params.<input>, trigger.activation.id and trigger.activation.owner.{user_id,github_id}; nodes cannot | workflow-specific |
 | `workflow.*` | Workflow execution context (id, name, path, etc.) | `id`, `name`, `chat_id`, `run_id`, `path`, `worktree_path`, `branch`, `mode` |
@@ -796,8 +828,11 @@ Defines a complete workflow with nodes, edges, inputs, and outputs.
 | `hidden` | boolean | No | *A building block other workflows ref: true keeps it out of every picker and default listing while it stays resolvable by ref. With automation_only too, it is an automation's internal step and is listed nowhere. Unset means the workflow is listed.* |
 | `automation_only` | boolean | No | *The Chat trigger turned off: true keeps the workflow out of chat pickers and refuses a chat start of it. Its triggers start it, and so does a deliberate start by hand: Run now, `reliant workflow run`, an agent's start_run, or a builder test run. Unset means a chat can start it.* |
 | `concurrency` | WorkflowConcurrency | No | *Bounds trigger-launched runs: {max_running: N} (later firings wait, FIFO), {per_member: K} (K per machine of the trigger's pool), or both, optionally waiting: latest (only the newest waiting firing per key survives; older ones are recorded skipped, "superseded", never failed) and key (a template over `trigger` grouping the firings that replace each other). See WorkflowConcurrency below.* |
-| `on_failure` | Workflow | No | *A finally-style handler: an inline graph ({entry, nodes, edges}) that runs once when a run FAILS (an unhandled node error, an agent that never produced its required response, a node that declares outcome: failure). Never when the run completes, pauses or is cancelled. Its nodes read `failure.{node_id, node_path, error, error_code, attempt}`, `inputs`, and the `nodes` outputs the run produced (guard them with `.?`). The run still ends FAILED; an error in the handler is logged and never recursive.* |
+| `on_failure` | Workflow | No | *A finally-style handler: an inline graph ({entry, nodes, edges}) that runs once when a run FAILS (an unhandled node error, an agent that never produced its required response, a node that declares outcome: failure). Never when the run completes, pauses or is cancelled. Its nodes read `failure.{node_id, node_path, error, error_code, attempt}`, `inputs`, and the `nodes` outputs the run produced (guard them with `.?`). The run still ends FAILED; an error in the handler is logged and never recursive. To release something however the run ends, cancel included, use `finally`.* |
+| `finally` | Workflow | No | *A handler for however a run ends: an inline graph ({entry, nodes, edges}) that runs once when a run completes, fails (after on_failure) or is cancelled. Never when it pauses or hands off to a successor run. Its nodes read `run.status` ('completed' \| 'failed' \| 'cancelled'), `failure.*` (empty unless the run failed), `inputs`, and the `nodes` outputs the run produced (guard them with `.?`). It cannot change how the run ended; an error in it is logged and never recursive. Release leases, claims and labels here.* |
 | `requires` | WorkflowRequirements | No | - |
+| `secrets` | map[string]SecretDeclaration | No | - |
+| `permissions` | string[] | No | - |
 
 ## Edge
 
@@ -878,6 +913,7 @@ Expectation defines what to verify after a scenario runs.
 | `outputs` | object | No | Outputs specifies expected values for the workflow's declared outputs. |
 | `messages` | object | No | Messages asserts on the messages the run saved to the thread, keyed by |
 | `on_failure` | OnFailureExpectation | No | OnFailure asserts on the workflow's `on_failure` handler: whether it ran |
+| `finally` | FinallyExpectation | No | Finally asserts on the workflow's `finally` handler: whether it ran and |
 
 ### Targeting Nodes
 

@@ -336,3 +336,20 @@ func TestStartRun_ValidatesInputAndSurfacesLauncherFailure(t *testing.T) {
 type assertErr string
 
 func (e assertErr) Error() string { return string(e) }
+
+// The new run launches in the calling chat's org: an agent spends its own
+// chat's org's money, never another's.
+func TestStartRun_InheritsTheCallersOrg(t *testing.T) {
+	t.Parallel()
+	repo, cleanup := setupTestDB(t)
+	defer cleanup()
+	callerID := newCaller(t, repo)
+	_, err := repo.DB.SQLDB().Exec(`UPDATE chats SET org_id = 'acme' WHERE id = $1`, callerID)
+	require.NoError(t, err)
+
+	starter := &fakeRunStarter{}
+	resp := startRunCall(t, repo, starter, callerID, "toolu_org", StartRunParams{Workflow: "builtin://agent", Message: "go"})
+	require.False(t, resp.IsError, resp.Content)
+	require.Len(t, starter.calls(), 1)
+	assert.Equal(t, "acme", starter.calls()[0].OrgID)
+}

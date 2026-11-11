@@ -12,23 +12,25 @@
  */
 
 import { z } from "zod";
-import { ONBOARDING_STEP_IDS } from "./components/Onboarding/constants";
 import type { LaunchPlan } from "./components/OnboardingFlow/types";
 import { DASHBOARD_GROUPS } from "./components/Forge/Observability/Dashboards/dashboardGroups";
 import { COMPARE_MODES, REFRESH_INTERVALS } from "./components/Forge/Observability/Dashboards/dashboardModel";
 import { RELEASE_TABS, STATUS_FILTERS } from "./components/Forge/Releases/releaseModel";
 import { OVERVIEW_KIND_FILTERS, OVERVIEW_STATUS_FILTERS, WORKLOAD_TABS } from "./components/Forge/Workloads/workloadModel";
 import { ALERTS_TABS, OBS_VIEWS, type ObsSearch } from "./components/Forge/Observability/obsSearch";
+import { isBucketName, isSendableKey, MAX_TOKEN_LENGTH, type StorageSearch } from "./components/Forge/Storage/storageUrl-model";
+import { DATA_PAGE_SIZES, MAX_OFFSET, type DataSearch } from "./components/Forge/Data/dataUrl-model";
 import { HEALTH_WINDOWS } from "./services/controlPlane/observability/deliveryTypes";
 import { ISSUE_PLATFORMS, ISSUE_SORTS } from "./services/controlPlane/observability/issuesTypes";
 import { RANGE_PRESETS } from "./services/controlPlane/observability/window";
 
-// The guided tour's "active step" lives in the URL as `?tour=<step-id>` —
-// absence means the wizard is not active. Adding this to every search schema
-// the wizard may render on keeps tanstack-router's strict validation from
-// stripping the param when the user navigates between hub / builder / chat
-// while in the middle of a step.
-const tourParam = z.enum(ONBOARDING_STEP_IDS).optional();
+// The onboarding journey's active step lives in the URL as
+// `?tour=<journey>:<step>` (grammar: components/Onboarding/tourParam.ts) —
+// absence means no tour. A plain string here: the hook resolves it against
+// the journey registry and ignores what it can't, so an unknown or retired
+// value is "no tour", never a route error. The root route retains the param
+// across navigations (routes.tsx).
+const tourParam = z.string().optional().catch(undefined);
 
 export const launchPlanSchema = z
   .object({
@@ -555,6 +557,61 @@ export const forgeConsoleSecretsSearchSchema = z.object({
   secret: z.string().optional().catch(undefined),
 });
 
+/**
+ * Storage (components/Forge/Storage): the scope, and the browser's view —
+ * which bucket, which level (`prefix`), the open object and the listing page
+ * (`token`, opaque). Every view is a link someone can send ("look at this
+ * upload"). Keys are arbitrary text, so a numeric-looking one ("2026") is
+ * read back as the string it was; the bounds (1024-byte keys, the bucket
+ * name's pattern) are Storage/storageUrl-model.ts's, which reads a value that
+ * does not fit as absent rather than failing the route.
+ */
+const storageTextParam = z.union([z.string(), z.number().transform(String)]);
+export const forgeConsoleStorageSearchSchema = z.object({
+  env: envScopeParam,
+  bucket: storageTextParam.refine(isBucketName).optional().catch(undefined),
+  prefix: storageTextParam.refine(isSendableKey).optional().catch(undefined),
+  object: storageTextParam.refine((key) => key.length > 0 && isSendableKey(key)).optional().catch(undefined),
+  token: storageTextParam.refine((token) => token.length <= MAX_TOKEN_LENGTH).optional().catch(undefined),
+});
+
+/** Every StorageSearch key has a schema entry and vice versa. */
+export type _StorageSchemaCoversSearch = AssertNoDrift<Exclude<keyof StorageSearch, keyof z.output<typeof forgeConsoleStorageSearchSchema>>>;
+export type _StorageSearchCoversSchema = AssertNoDrift<Exclude<Exclude<keyof z.output<typeof forgeConsoleStorageSearchSchema>, "env">, keyof StorageSearch>>;
+/**
+ * Data (components/Forge/Data): the scope, and the browser's view — which
+ * database, which table, its filters, sort, visible columns, the first row
+ * shown (`offset`; a legacy `page` still opens) and the open row. Every
+ * view is a link someone can send ("look at this chat"). The token grammar
+ * of `f`, `sort` and `row` is Data/dataUrl-model.ts's; here only the shape is
+ * checked, and a key that does not fit is dropped rather than failing the
+ * route.
+ */
+const textListParam = z.array(z.union([z.string(), z.number().transform(String)])).optional().catch(undefined);
+
+export const forgeConsoleDataSearchSchema = z.object({
+  env: envScopeParam,
+  db: textParam,
+  table: textParam,
+  f: textListParam,
+  sort: textListParam,
+  cols: textListParam,
+  offset: z.number().int().nonnegative().max(MAX_OFFSET).optional().catch(undefined),
+  // Legacy: a page number from a link made before `offset`, read as (page-1)*size.
+  page: z.number().int().positive().optional().catch(undefined),
+  size: z
+    .number()
+    .int()
+    .refine((size) => (DATA_PAGE_SIZES as readonly number[]).includes(size))
+    .optional()
+    .catch(undefined),
+  row: textParam,
+});
+
+/** Every DataSearch key has a schema entry and vice versa. */
+export type _DataSchemaCoversSearch = AssertNoDrift<Exclude<keyof DataSearch, keyof z.output<typeof forgeConsoleDataSearchSchema>>>;
+export type _DataSearchCoversSchema = AssertNoDrift<Exclude<Exclude<keyof z.output<typeof forgeConsoleDataSearchSchema>, "env">, keyof DataSearch>>;
+
 // ── Observability URL state ────────────────────────────────────────────────
 
 /**
@@ -591,6 +648,7 @@ export const obsSearchShape = {
   live: z.boolean().optional().catch(undefined),
   errors: z.boolean().optional().catch(undefined),
   minDuration: z.string().optional().catch(undefined),
+  lat: z.string().regex(/^\d+(\.\d+)?-\d+(\.\d+)?$/).optional().catch(undefined),
   envs: z.array(z.string()).optional().catch(undefined),
   apps: z.array(z.string()).optional().catch(undefined),
   f: z.array(z.string()).optional().catch(undefined),
@@ -606,8 +664,14 @@ export const obsSearchShape = {
   assignee: z.string().optional().catch(undefined),
   session: z.string().optional().catch(undefined),
   t: z.number().int().nonnegative().optional().catch(undefined),
-  replay: z.boolean().optional().catch(undefined),
   user: z.string().optional().catch(undefined),
+  rsession: z.string().regex(/^[A-Za-z0-9_-]{1,128}$/).optional().catch(undefined),
+  // The client and build filters: exact names and versions, bounded as the server bounds them.
+  browser: z.string().max(64).optional().catch(undefined),
+  os: z.string().max(64).optional().catch(undefined),
+  fe: z.string().max(256).optional().catch(undefined),
+  be: z.string().max(256).optional().catch(undefined),
+  build: z.string().max(256).optional().catch(undefined),
   cursor: z.array(z.string()).optional().catch(undefined),
 };
 
@@ -808,7 +872,7 @@ export const forgeLegacySearchSchema = z.object({
 export const workflowsAreaSearchSchema = z.object({
   project: z.string().optional().catch(undefined),
   allProjects: z.boolean().optional().catch(undefined),
-  tour: tourParam.catch(undefined),
+  tour: tourParam,
 });
 export type WorkflowsAreaSearch = Partial<z.output<typeof workflowsAreaSearchSchema>>;
 

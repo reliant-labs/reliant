@@ -10,6 +10,7 @@ package reliantv1
 
 import (
 	_ "github.com/reliant-labs/forge/pkg/forgepb"
+	v1 "github.com/reliant-labs/reliant/sdk/go/gen/reliant/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
@@ -188,15 +189,15 @@ func (x *PackageCommand) GetRelativePath() string {
 
 // PackageProcess represents a running or completed package command process
 type PackageProcess struct {
-	state      protoimpl.MessageState  `protogen:"open.v1"`
-	Id         string                  `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	Command    string                  `protobuf:"bytes,2,opt,name=command,proto3" json:"command,omitempty"`
-	Status     BackgroundProcessStatus `protobuf:"varint,3,opt,name=status,proto3,enum=reliant.v1.BackgroundProcessStatus" json:"status,omitempty"`
-	WorktreeId *string                 `protobuf:"bytes,4,opt,name=worktree_id,json=worktreeId,proto3,oneof" json:"worktree_id,omitempty"`
-	WorkingDir string                  `protobuf:"bytes,5,opt,name=working_dir,json=workingDir,proto3" json:"working_dir,omitempty"`
-	StartTime  string                  `protobuf:"bytes,6,opt,name=start_time,json=startTime,proto3" json:"start_time,omitempty"`
-	EndTime    *string                 `protobuf:"bytes,7,opt,name=end_time,json=endTime,proto3,oneof" json:"end_time,omitempty"`
-	ExitCode   *int32                  `protobuf:"varint,8,opt,name=exit_code,json=exitCode,proto3,oneof" json:"exit_code,omitempty"`
+	state      protoimpl.MessageState     `protogen:"open.v1"`
+	Id         string                     `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Command    string                     `protobuf:"bytes,2,opt,name=command,proto3" json:"command,omitempty"`
+	Status     v1.BackgroundProcessStatus `protobuf:"varint,3,opt,name=status,proto3,enum=reliant.v1.BackgroundProcessStatus" json:"status,omitempty"`
+	WorktreeId *string                    `protobuf:"bytes,4,opt,name=worktree_id,json=worktreeId,proto3,oneof" json:"worktree_id,omitempty"`
+	WorkingDir string                     `protobuf:"bytes,5,opt,name=working_dir,json=workingDir,proto3" json:"working_dir,omitempty"`
+	StartTime  string                     `protobuf:"bytes,6,opt,name=start_time,json=startTime,proto3" json:"start_time,omitempty"`
+	EndTime    *string                    `protobuf:"bytes,7,opt,name=end_time,json=endTime,proto3,oneof" json:"end_time,omitempty"`
+	ExitCode   *int32                     `protobuf:"varint,8,opt,name=exit_code,json=exitCode,proto3,oneof" json:"exit_code,omitempty"`
 	// The machine the process runs on: the one holding its workspace's
 	// checkout. GetProcess, GetProcessLogs and KillProcess take it back.
 	DaemonId      string `protobuf:"bytes,9,opt,name=daemon_id,json=daemonId,proto3" json:"daemon_id,omitempty"`
@@ -248,11 +249,11 @@ func (x *PackageProcess) GetCommand() string {
 	return ""
 }
 
-func (x *PackageProcess) GetStatus() BackgroundProcessStatus {
+func (x *PackageProcess) GetStatus() v1.BackgroundProcessStatus {
 	if x != nil {
 		return x.Status
 	}
-	return BackgroundProcessStatus_BACKGROUND_PROCESS_STATUS_UNSPECIFIED
+	return v1.BackgroundProcessStatus(0)
 }
 
 func (x *PackageProcess) GetWorktreeId() string {
@@ -886,7 +887,7 @@ func (x *GetPackageProcessLogsRequest) GetDaemonId() string {
 // OutputLine represents a single line of output with its source type
 type OutputLine struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Type          OutputStreamType       `protobuf:"varint,1,opt,name=type,proto3,enum=reliant.v1.OutputStreamType" json:"type,omitempty"`
+	Type          v1.OutputStreamType    `protobuf:"varint,1,opt,name=type,proto3,enum=reliant.v1.OutputStreamType" json:"type,omitempty"`
 	Text          string                 `protobuf:"bytes,2,opt,name=text,proto3" json:"text,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -922,11 +923,11 @@ func (*OutputLine) Descriptor() ([]byte, []int) {
 	return file_reliant_v1_package_commands_proto_rawDescGZIP(), []int{12}
 }
 
-func (x *OutputLine) GetType() OutputStreamType {
+func (x *OutputLine) GetType() v1.OutputStreamType {
 	if x != nil {
 		return x.Type
 	}
-	return OutputStreamType_OUTPUT_STREAM_TYPE_UNSPECIFIED
+	return v1.OutputStreamType(0)
 }
 
 func (x *OutputLine) GetText() string {
@@ -1473,8 +1474,8 @@ var file_reliant_v1_package_commands_proto_goTypes = []any{
 	(*SetCommandFavoriteResponse)(nil),    // 20: reliant.v1.SetCommandFavoriteResponse
 	nil,                                   // 21: reliant.v1.ListPackageCommandsResponse.CommandsEntry
 	nil,                                   // 22: reliant.v1.RunPackageCommandRequest.EnvEntry
-	(BackgroundProcessStatus)(0),          // 23: reliant.v1.BackgroundProcessStatus
-	(OutputStreamType)(0),                 // 24: reliant.v1.OutputStreamType
+	(v1.BackgroundProcessStatus)(0),       // 23: reliant.v1.BackgroundProcessStatus
+	(v1.OutputStreamType)(0),              // 24: reliant.v1.OutputStreamType
 }
 var file_reliant_v1_package_commands_proto_depIdxs = []int32{
 	0,  // 0: reliant.v1.PackageCommand.package_type:type_name -> reliant.v1.PackageType
@@ -1516,7 +1517,6 @@ func file_reliant_v1_package_commands_proto_init() {
 	if File_reliant_v1_package_commands_proto != nil {
 		return
 	}
-	file_reliant_v1_common_proto_init()
 	file_reliant_v1_package_commands_proto_msgTypes[1].OneofWrappers = []any{}
 	file_reliant_v1_package_commands_proto_msgTypes[2].OneofWrappers = []any{}
 	file_reliant_v1_package_commands_proto_msgTypes[5].OneofWrappers = []any{}

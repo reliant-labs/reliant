@@ -23,6 +23,7 @@ import {
   DOMAIN_STATE_EXPLANATIONS,
   DOMAIN_STATE_LABELS,
   DOMAIN_STATE_NEXT_STEPS,
+  domainStatusLine,
   type DomainDnsRecord,
   type ForgeDomain,
 } from "@/services/forge/domains";
@@ -132,6 +133,54 @@ describe("VERIFYING and ISSUING", () => {
   it("ISSUING names the certificate as the thing being waited on", () => {
     renderDetail(domain({ state: "issuing" }));
     expect(screen.getByText(DOMAIN_STATE_EXPLANATIONS.issuing)).toHaveTextContent(/certificate/i);
+  });
+
+  it("ISSUING says how long it really takes — an edge certificate is not a minute or two", () => {
+    renderDetail(domain({ state: "issuing" }));
+    expect(screen.getByTestId("domain-next-step")).toHaveTextContent(/15–60 minutes/);
+    expect(DOMAIN_STATE_NEXT_STEPS.issuing).not.toMatch(/minute or two/);
+  });
+
+  it("an ISSUING domain with a last_error is labelled stuck, in the server's words", () => {
+    renderDetail(
+      domain({
+        state: "issuing",
+        lastError: "web is not deployed in its environment yet",
+      })
+    );
+    const box = screen.getByTestId("domain-last-error");
+    expect(box).toHaveTextContent(/^Stuck/);
+    expect(box).toHaveTextContent("web is not deployed in its environment yet");
+  });
+});
+
+describe("the row's status line", () => {
+  it("says the certificate is being issued and how long that takes", () => {
+    expect(domainStatusLine({ state: "issuing", lastError: "" })).toEqual({
+      tone: "muted",
+      text: "Issuing certificate — usually 15–60 min",
+    });
+  });
+
+  it("says stuck, with the reason, when the platform is stuck past DNS", () => {
+    expect(domainStatusLine({ state: "issuing", lastError: "publishing failed" })).toEqual({
+      tone: "danger",
+      text: "Stuck: publishing failed",
+    });
+    expect(domainStatusLine({ state: "live", lastError: "rebind failed" })?.text).toBe(
+      "Stuck: rebind failed"
+    );
+  });
+
+  it("does not call a DNS note stuck: waiting on records is the normal middle of setup", () => {
+    const line = domainStatusLine({ state: "pending-dns", lastError: "no TXT record found" });
+    expect(line).toEqual({ tone: "muted", text: "no TXT record found" });
+  });
+
+  it("says nothing where the badge already does", () => {
+    expect(domainStatusLine({ state: "live", lastError: "" })).toBeNull();
+    expect(domainStatusLine({ state: "pending-dns", lastError: "" })).toBeNull();
+    expect(domainStatusLine({ state: "conflict", lastError: "" })).toBeNull();
   });
 });
 

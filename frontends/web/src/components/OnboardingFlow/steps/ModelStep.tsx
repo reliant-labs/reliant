@@ -9,7 +9,8 @@ import {
   Loader2,
   XCircle,
 } from "lucide-react";
-import { api } from "@/api/client";
+import { addProviderApiKey } from "@/hooks/provider-account-queries";
+import { useValidateProviderAPIKey } from "@/hooks/settings-service-hooks_gen";
 import { cn } from "@/lib/utils";
 import { logger } from "@/lib/logger";
 import {
@@ -24,6 +25,7 @@ import {
   resolveOAuthFlow,
   type RedirectOAuthProvider,
 } from "@/lib/oauth-providers";
+import { ProviderLogo } from "@/components/icons/ProviderLogo";
 import { OAuthHelperPanel } from "@/components/OAuthHelperPanel";
 import { CopilotDevicePanel } from "@/components/CopilotDevicePanel";
 import { useWalletOverview } from "@/hooks/useReliantAIQueries";
@@ -196,14 +198,11 @@ export function ModelStep({ plan, updatePlan, onNext }: StepProps) {
     enabled: isRedirectOAuthProvider(provider.usesOAuth),
   });
 
-  const validateKeyMutation = useMutation({
-    mutationFn: ({ providerId, key }: { providerId: string; key: string }) =>
-      api.settings.validateProviderAPIKey(providerId, key),
-  });
+  const validateKeyMutation = useValidateProviderAPIKey();
 
   const saveKeyMutation = useMutation({
     mutationFn: ({ providerId, key }: { providerId: string; key: string }) =>
-      api.settings.updateProvider(providerId, key),
+      addProviderApiKey(providerId, key),
   });
 
   const saving = saveKeyMutation.isPending;
@@ -391,8 +390,8 @@ export function ModelStep({ plan, updatePlan, onNext }: StepProps) {
 
     try {
       const validation = await validateKeyMutation.mutateAsync({
-        providerId: selectedProvider,
-        key: apiKey.trim(),
+        provider: selectedProvider,
+        apiKey: apiKey.trim(),
       });
       if (!validation.valid) {
         setValidationResult({
@@ -480,13 +479,14 @@ export function ModelStep({ plan, updatePlan, onNext }: StepProps) {
                   copilotOAuth.reset();
                 }}
                 className={cn(
-                  "rounded-lg border px-3 py-2 text-left transition-colors",
+                  "flex items-center gap-2.5 rounded-lg border px-3 py-2 text-left transition-colors",
                   item.id === selectedProvider
                     ? "border-primary bg-primary/10 ring-2 ring-primary/20"
                     : "border-border/40 bg-background hover:bg-muted/60",
                 )}
               >
-                <span className="block text-sm font-medium text-foreground">
+                <ProviderLogo provider={item.id} size="lg" />
+                <span className="block min-w-0 text-sm font-medium text-foreground">
                   {item.name}
                 </span>
               </button>

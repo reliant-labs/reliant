@@ -16,7 +16,6 @@ const mocks = vi.hoisted(() => ({
   antigravityStart: vi.fn(),
 }));
 
-vi.mock("../../../../api/client", () => ({ api: { settings: { validateProviderAPIKey: vi.fn() } } }));
 vi.mock("../../../../store/globalDataStore", () => ({
   useGlobalDataStore: { getState: () => ({ refetchModels: vi.fn() }) },
 }));

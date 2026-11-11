@@ -30,6 +30,7 @@ import {
   privacyConsent,
   privacyConsentKnown,
   privacySettingsKey,
+  privacyWritesSettled,
   subscribePrivacyConsent,
   usePrivacyConsent,
   useUpdatePrivacySettings,
@@ -167,6 +168,23 @@ describe("the consent switches", () => {
     unsubscribe();
 
     expect(heard[0]).toBe(false);
+  });
+
+  it("are waited for by privacyWritesSettled", async () => {
+    await loadPrivacySettings();
+    await privacyWritesSettled();
+    const update = renderHook(() => useUpdatePrivacySettings(), { wrapper });
+
+    act(() => update.result.current.setCrashReporting(false));
+    await waitFor(() => expect(privacyConsent().crashReportingEnabled).toBe(false));
+    let settled = false;
+    const done = privacyWritesSettled().then(() => (settled = true));
+    await Promise.resolve();
+    expect(settled).toBe(false);
+
+    act(() => release?.());
+    await done;
+    expect(stored.crashReportingEnabled).toBe(false);
   });
 });
 

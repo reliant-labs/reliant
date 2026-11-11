@@ -74,6 +74,24 @@ type ToolRequest struct {
 	// command instead of the model's 10-minute cap.
 	RunStep bool
 
+	// RequestID is the transport id the daemon knows this call by (its result
+	// subject, its outbox entry, the key tool.status answers for). Empty mints
+	// a fresh one per call, which is what every caller but one wants. A run
+	// step names it (handlers.runStepRequestID), from its activity and the
+	// same on every attempt, so a retry on another worker can find the command
+	// its first attempt started (RemoteExecutor.ReattachTool) instead of
+	// running it again. It must be unique per execution and match
+	// [A-Za-z0-9_-]{1,128}; anything else is replaced by a fresh id.
+	RequestID string
+
+	// BoundParams names the parameters the run's configuration bound for
+	// this call (tools.ApplyBindings already merged their values into
+	// ToolInput and refused a model value that differs). Only execute_tools
+	// sets it, from the turn's capability set; it travels in the server-built
+	// context map (BoundParamsContextKey) as rctx.ToolContext.BoundParams, so
+	// a tool can tell a bound value from one the model wrote.
+	BoundParams []string
+
 	// Repos lists every repo in the project. Tools with a `repo` param resolve
 	// it to workspaceRoot/repo.relative_path. Empty for legacy single-repo /
 	// projects.

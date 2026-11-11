@@ -175,10 +175,12 @@ export function ComputeSubscriptionCheckout({
 
       <section className="space-y-3 border-t border-border p-5">
         <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-          Pay with card
+          {currentPlanId ? "Change plan" : "Pay with card"}
         </h3>
         {selected ? (
-          <MachineSaleConsent planId={selected.planId}>{monthlyPriceCents => <SubscriptionPaymentForm
+          /* A subscriber gets the plan change here, not a second subscription
+             (MachineSaleConsent decides from the server's readiness answer). */
+          <MachineSaleConsent planId={selected.planId} onPlanChanged={onDone}>{monthlyPriceCents => <SubscriptionPaymentForm
             plan={monthlyPriceCents === undefined ? selected : { ...selected, monthlyPriceCents }}
             confirmSettlement={confirmSettlement}
             onSettled={() => setSettled(true)}
@@ -190,7 +192,7 @@ export function ComputeSubscriptionCheckout({
              choose to run on your own computer." — which described a server
              misconfiguration in words that sound like a product limitation,
              and then asked the user to undo a correct choice to work around
-             it. The real cause was a stale admin-server whose `planToProto`
+             it. The real cause was a stale platform-api whose `planToProto`
              did not project `price_cents`, so every plan arrived unpriced and
              the purchasable filter emptied the list.
 

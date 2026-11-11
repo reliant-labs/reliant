@@ -788,7 +788,7 @@ LIMITATIONS:
 - Default reading limit is 1500 lines, which reads most source files whole
 - Lines longer than 500 characters are truncated
 - Cannot display binary files (executables, archives, etc.)
-- Images up to 5MB are supported (JPEG, PNG, GIF, BMP, SVG, WebP)
+- Images (PNG, JPEG, GIF, WebP, BMP) up to 3.75MB and 8000px on a side are shown to you as images; SVG files are read as text
 - PDFs up to 5MB are supported; large PDFs are read a page range at a time via the pages parameter
 
 TIPS:
@@ -2267,7 +2267,7 @@ Pause, resume or cancel another top-level run the user owns.
 
 - pause: park the run at its next step boundary. It stays alive and resumable.
 - resume: continue a paused (or interrupted) run from where it stopped.
-- cancel: hard-stop the run. This is terminal — a cancelled run is not resumed; sending it a message starts a fresh run in the same chat.
+- cancel: stop the run for good. Its in-flight steps are cancelled (a running command is stopped on its machine), then its workflow's finally: handler runs, so it releases what it holds. This is terminal — a cancelled run is not resumed; sending it a message starts a fresh run in the same chat.
 
 THE RECEIPT IS HONEST: pause and cancel REQUEST the stop. A run in the middle of a long tool call stops when that call returns. Confirm with get_run.
 
@@ -2753,6 +2753,8 @@ A PAUSED run is resumed by the message, exactly as if the user had typed into th
 
 THE RECEIPT IS HONEST: delivered means the message was saved to the run's thread and the run was nudged to look. It does NOT mean the run has read it or acted on it. Check with get_run.
 
+WHO READS IT: the message goes to the agent of the run that is running now (an agent chat's own agent, or a workflow's one running agent step). If several agents of the run are running in parallel, say which with thread (a thread id, or the node name of the agent, as get_run or the refusal lists them); the run never guesses. If no agent is running in it right now (a workflow between its agent steps), nothing is delivered and it says so.
+
 You cannot message the run you are executing in, and you can only message runs the user owns. To message a sub-agent you spawned, use spawn_send.
 
 ---
@@ -2937,13 +2939,17 @@ WORKSPACE SCOPING:
   wait on, message, or stop them.
 
 TWO MODES:
-1. LISTING (omit agent_id): returns every sub-agent you spawned — agent_id,
+1. LISTING (omit agent_id): returns the sub-agents you spawned — agent_id,
    title, preset, status, elapsed time, last activity time, turn count, and
    whether it appears gated on a question or approval (best-effort — this
-   signal can be unavailable and is never a hard guarantee).
+   signal can be unavailable and is never a hard guarantee). Running agents
+   come first, newest first, then the most recent finished ones; each agent
+   is listed once however often it was resumed. status: "running" or
+   "finished" narrows the list.
 2. SINGLE AGENT (agent_id set): returns that agent's status and its LAST
    ASSISTANT MESSAGE — "is it done, and what did it say?" without cancelling
-   it.
+   it. An unambiguous prefix of the agent_id (at least 4 characters) works
+   here and in spawn_send and spawn_stop.
 
 WAITING:
 Set wait: true with agent_id to block server-side until that agent reaches a

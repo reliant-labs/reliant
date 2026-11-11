@@ -114,6 +114,26 @@ describe("lockSlotGate", () => {
     expect(ran).toBe(false);
   });
 
+  it("hands a cancelled read's browser-wide slot to the next tab at once, even when its request never settles", async () => {
+    const locks = new FakeLocks();
+    const tabA = lockSlotGate(locks, 1);
+    const tabB = lockSlotGate(locks, 1);
+    const cancel = new AbortController();
+    const stuck = tabA.run(() => new Promise<string>(() => {}), cancel.signal);
+    await settle();
+    let otherRan = false;
+    const other = tabB.run(async () => {
+      otherRan = true;
+      return "b";
+    });
+    await settle();
+    expect(otherRan).toBe(false);
+
+    cancel.abort(new Error("unmounted"));
+    await expect(stuck).rejects.toThrow("unmounted");
+    await expect(other).resolves.toBe("b");
+  });
+
   it("passes a task's own failure through and gives its slot back", async () => {
     const locks = new FakeLocks();
     const gate = lockSlotGate(locks, 1);
@@ -136,7 +156,7 @@ describe("browserSlotGate without Web Locks: a per-tab limit", () => {
     expect(browserSlotGate(OBS_READ_CONCURRENCY, { locks: undefined, warn })).toBe(perTabGate);
     expect(browserSlotGate(OBS_READ_CONCURRENCY, { locks: undefined, warn })).toBe(perTabGate);
     expect(warn).toHaveBeenCalledTimes(1);
-    expect(warn.mock.calls[0]![0]).toMatch(/limited per tab \(4 at a time\), not across tabs/);
+    expect(warn.mock.calls[0]![0]).toMatch(new RegExp(`limited per tab \\(${OBS_READ_CONCURRENCY} at a time\\), not across tabs`));
   });
 
   it("is what jsdom gets: it has no navigator.locks, like an old browser", () => {

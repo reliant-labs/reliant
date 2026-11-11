@@ -3,6 +3,7 @@ package diskwatch
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -293,8 +294,10 @@ func TestTrimGoMod_AboveCeilingEvictsWholeOldVersionsOnly(t *testing.T) {
 	}
 }
 
-func TestTrimGoWorkDirs_RemovesOnlyStaleOnes(t *testing.T) {
+// Without /proc nothing is proven, and a go-build dir goes by age alone.
+func TestTrimGoWorkDirs_AgeOnlyWithoutProc(t *testing.T) {
 	m := newTrimMachine(t, 100*GiB, CacheTrimConfig{})
+	m.w.trim.procs = func() (procSnapshot, error) { return procSnapshot{}, errors.New("no /proc") }
 	stale := filepath.Join(m.tmpdir, "go-build1234")
 	live := filepath.Join(m.tmpdir, "go-build5678")
 	other := filepath.Join(m.tmpdir, "not-go")

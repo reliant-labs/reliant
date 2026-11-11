@@ -21,7 +21,9 @@ import (
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/reliant-labs/reliant/internal/analytics"
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/orgs"
 	"github.com/reliant-labs/reliant/internal/telemetry"
 )
 
@@ -77,7 +79,8 @@ func (t *sessionTracker) cleanup() {
 
 // AuthInterceptor provides authentication for gRPC requests. A session JWT (or
 // the self-host API key) goes to the configured validator; an `rlat_` access
-// token goes to the token authority, must carry reliant:api, and resolves to
+// token goes to the token authority, must carry reliant:api or a runs/triggers
+// slice of it (enforced per procedure: procedure_scopes.go), and resolves to
 // the same claims/identity object its acting user's session would.
 type AuthInterceptor struct {
 	validator      auth.TokenValidator
@@ -176,7 +179,7 @@ func (i *AuthInterceptor) authenticateRequest(ctx context.Context, procedure str
 	}
 
 	// Shape dispatch: `rlat_` bearers are access tokens (resolved by the token
-	// authority, reliant:api only); anything else goes through the configured
+	// authority, reliant:api or a runs/triggers slice of it); anything else goes through the configured
 	// JWT/apikey validator. A machine credential that reaches a token-MINTING
 	// RPC is refused by that handler (TokenService.CreateToken), not here.
 	isAccessToken := auth.IsAccessTokenFormat(tokenString)
@@ -189,7 +192,7 @@ func (i *AuthInterceptor) authenticateRequest(ctx context.Context, procedure str
 				"procedure", procedure)
 			return nil, nil, svcerr.ToConnect(svcerr.Unauthenticated("invalid or expired token"))
 		}
-		claims, principal, err = auth.ClaimsForAPIToken(ctx, i.accessTokens, tokenString)
+		claims, principal, err = auth.ClaimsForAccessToken(ctx, i.accessTokens, tokenString)
 	} else {
 		claims, err = i.validator.ValidateToken(tokenString)
 	}
@@ -216,8 +219,21 @@ func (i *AuthInterceptor) authenticateRequest(ctx context.Context, procedure str
 		return nil, nil, svcerr.ToConnect(svcerr.Unauthenticated("invalid or expired token"))
 	}
 
+	// A machine credential may be a narrow slice of reliant:api (runs:*,
+	// triggers:*): it reaches only the procedures procedureScopes grants it.
+	// A session carries no principal and is never asked.
+	if principal != nil {
+		if err := requireProcedureScope(procedure, principal); err != nil {
+			logging.DebugContext(ctx, "[gRPC Auth] Access token lacks the scope for this procedure",
+				"procedure", procedure,
+				"token_id", principal.TokenID)
+			return nil, nil, svcerr.ToConnect(err)
+		}
+	}
+
 	// Add claims to context
 	ctx = auth.WithUser(ctx, claims.Sub, claims.Role, claims.Email)
+	ctx = auth.WithCredential(ctx, claims.Credential)
 	ctx = telemetry.BindUser(ctx, claims.Sub)
 	if principal != nil {
 		ctx = auth.WithMachineToken(ctx, principal)
@@ -300,8 +316,30 @@ func (i *AuthInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
 			ctx = WithDaemonLastSeen(ctx, v)
 		}
 
-		return next(ctx, req)
+		resp, err := next(ctx, req)
+		return resp, credentialMismatch(ctx, err)
 	}
+}
+
+// credentialMismatch turns a refusal the handler answered as missing into one
+// that says why, when authz refused this request's credential a resource of
+// another org: a CLI user then knows to sign in for that org instead of
+// hunting for a resource that exists. Any other error passes as it is.
+func credentialMismatch(ctx context.Context, err error) error {
+	if err == nil {
+		return nil
+	}
+	bound, refused, ok := authz.CredentialRefusal(ctx)
+	if !ok {
+		return err
+	}
+	if code := svcerr.Code(err); code != connect.CodeNotFound && code != connect.CodePermissionDenied {
+		return err
+	}
+	return svcerr.ToConnect(svcerr.WithReason(svcerr.PermissionDenied(fmt.Sprintf(
+		"this credential acts in organization %s only, and this belongs to organization %s; "+
+			"to act there, sign in for it: `reliant auth login` (or `forge login --org %s`)",
+		bound, refused, refused)), orgs.ReasonOrgMismatch))
 }
 
 // WrapStreamingClient implements connect.Interceptor for client streaming (not used server-side)
@@ -322,6 +360,6 @@ func (i *AuthInterceptor) WrapStreamingHandler(next connect.StreamingHandlerFunc
 
 		i.trackSession(ctx, claims)
 
-		return next(ctx, conn)
+		return credentialMismatch(ctx, next(ctx, conn))
 	}
 }

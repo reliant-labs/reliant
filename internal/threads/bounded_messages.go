@@ -19,8 +19,12 @@ import (
 //
 // It is the scroll-back read, and it carries one guarantee: the page is the
 // tail of the below-the-cursor prefix of LoadDisplayMessages' full
-// resolution, so fork, compaction, and visual-thread normalization semantics
-// are identical by construction. It gets there without resolving the
+// resolution with its DISPLAY_STYLE_HIDDEN rows left out, so fork,
+// compaction, and visual-thread normalization semantics are identical by
+// construction. Hidden rows never reach a display response, so the page and
+// hasMoreOlder are counted over the rows the transcript renders: a page is
+// full whenever enough transcript lies below the cursor, and hasMoreOlder is
+// false once only hidden rows remain. It gets there without resolving the
 // history: recentDisplayMessagesBeforeFromCW walks the context-window chain
 // newest-first, one bounded indexed read per window, and stops once the page
 // is full -- the same walk the chat snapshot uses for its initial window. A

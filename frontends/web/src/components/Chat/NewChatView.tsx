@@ -43,10 +43,13 @@ import {
 import { daemonLabel } from "../Automations/daemonChoices";
 import { DaemonWaitState } from "../DaemonWaitState";
 import { NewChatProjectChip } from "./NewChatProjectChip";
+import { AttachProjectFolderDialog } from "../Projects/AttachProjectFolderDialog";
+import { useCurrentMachineStore } from "../../store/currentMachineStore";
 import { MachinePicker } from "./MachinePicker";
 import { useMakeDefaultMachine } from "@/hooks/useMakeDefaultMachine";
 import { capabilities } from "@/services/controlPlane/capabilities";
 import { ChatInput, type ComposerPrefill } from "./ChatInput";
+import { newChatAttachmentDraftId } from "./NewChatDraftBoundary";
 import { ReliantIcon } from "../icons/ReliantIcon";
 import { CreateWorktreeModal } from "../Worktrees/CreateWorktreeModal";
 import { LoadMoreWorktreesRow } from "../Worktrees/LoadMoreWorktreesRow";
@@ -69,6 +72,7 @@ import Tooltip from "../forge-ui/tooltip";
 import { trackEvent } from "../../lib/analytics";
 import { PendingFirstMessage } from "./PendingFirstMessage";
 import { useCurrentWorktree, useCachedWorktrees, getCachedWorktree } from "../../hooks/worktree-queries";
+import { useNewChatMachineStore } from "../../store/newChatMachineStore";
 
 // Text handed back after a failed start goes through the composer's prefill.
 // Its ids count up from here, so they can never equal a host's prefill id
@@ -162,6 +166,7 @@ export function NewChatView({
   // list means "none".
   const canPickMachine = useCapability("chatDaemonSelection");
   const [machineChoice, setMachineChoice] = useState<ChatMachineChoice | null>(null);
+  const [attachDaemonId, setAttachDaemonId] = useState<string | null>(null);
   const awaitingBundledDaemon = useBundledDaemonPending(hasMachine(daemons));
   // The machine a new chat lands on is the one the project is installed on
   // (research/CHAT_MACHINE_PLACEMENT.md), so the picker names that one.
@@ -202,6 +207,7 @@ export function NewChatView({
       canChoose(placement, machineChoice);
     if (!keep) setMachineChoice(null);
   }
+  const requestedMachine = useNewChatMachineStore((state) => state.pending);
   // A branch workspace is a checkout on one machine, so selecting one selects
   // its machine (lib/workspaceMachine.ts); the server refuses anything else.
   const machineIds = new Set(daemons.map((d) => d.daemonId));
@@ -234,6 +240,10 @@ export function NewChatView({
     : machine === DEFAULT_MACHINE
       ? defaultDaemon?.daemonId
       : machine;
+  useEffect(() => {
+    if (isFocused) useCurrentMachineStore.getState().setCurrentMachine(runsOnDaemonId ?? null);
+  }, [isFocused, runsOnDaemonId]);
+
   // Never a send that fails: a machine the project is not set up on (or is
   // still landing on) holds the composer, and says what to do.
   const placementBlock =
@@ -403,11 +413,9 @@ export function NewChatView({
         onChatCreated(chat.id);
       }
 
-      const { clearAttachments } = useAttachmentStore.getState();
-      clearAttachments("temp");
-
       const projectId = useProjectStore.getState().currentProject?.id;
       if (projectId) {
+        useAttachmentStore.getState().clearAttachments(newChatAttachmentDraftId(projectId));
         useWorkspaceStateStore.getState().clearNewChatDraft(projectId);
       }
     } catch (error) {
@@ -476,6 +484,29 @@ export function NewChatView({
       void handleWorkspaceSelect(mainWorktree?.id ?? null);
     }
   };
+
+  // The screen that opened this view named the machine the chat is for (Add
+  // project's folder or clone, newChatMachineStore): taken once its project
+  // is current, after the project-switch reset, and applied as the user's own
+  // pick. Like a pick in the picker, it leaves a branch workspace that lives
+  // on another machine for the main one, but only once the workspace
+  // selection has settled: the open chat's workspace (and so its machine's
+  // lock) is selected after this view mounts.
+  const [machineRequest, setMachineRequest] = useState<string | null>(null);
+  useEffect(() => {
+    if (!currentProject?.id || requestedMachine?.projectId !== currentProject.id) return;
+    const daemonId = useNewChatMachineStore.getState().take(currentProject.id);
+    if (!daemonId) return;
+    setMachineChoice(daemonId);
+    setMachineRequest(daemonId);
+  }, [currentProject?.id, requestedMachine]);
+  const leaveForMain = useRef(() => {});
+  leaveForMain.current = () => void handleWorkspaceSelect(mainWorktree?.id ?? null);
+  useEffect(() => {
+    if (!machineRequest || selectedWorkspaceId === undefined) return;
+    if (choiceLeavesWorkspace(machineRequest, resolvedMachine.lockedBy)) leaveForMain.current();
+    setMachineRequest(null);
+  }, [machineRequest, selectedWorkspaceId, resolvedMachine.lockedBy]);
 
   // Get display name for selected workspace
   const selectedWorkspaceName = selectedWorkspaceId
@@ -560,6 +591,7 @@ export function NewChatView({
                             name: currentProject.name,
                             placement,
                             onSetUp: setUpProjectOn,
+                            onUseFolder: setAttachDaemonId,
                             describeError: describeCloneError,
                           }
                         : undefined
@@ -783,6 +815,8 @@ export function NewChatView({
           <ChatInput
             ref={chatInputRef}
             onSend={handleCreateAndSend}
+            // The project's new-chat draft, like the text beside it, so both survive a reload.
+            attachmentDraftId={currentProject ? newChatAttachmentDraftId(currentProject.id) : undefined}
             disabled={isCreating || !machineReady || Boolean(placementBlock)}
             worktreeId={selectedWorkspaceId || mainWorktree?.id}
             prefill={restoredPrefill ?? composerPrefill}
@@ -814,6 +848,11 @@ export function NewChatView({
         </>
       )}
 
+      {attachDaemonId && currentProject && (
+        <AttachProjectFolderDialog open project={currentProject} daemonId={attachDaemonId} lockMachine
+          onClose={() => setAttachDaemonId(null)}
+          onAttached={({ daemonId }) => handleMachineChange(daemonId)} />
+      )}
       {showAddMachine && (
         <AddMachineSheet open onClose={() => setShowAddMachine(false)} onReady={() => refreshDaemons()} />
       )}

@@ -16,12 +16,10 @@ import { useMemo } from "react";
 import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 
 import {
-  ProviderAccountService,
   ProviderAccountStatus,
   type ListProviderAccountsResponse,
   type ProviderAccount as ProtoProviderAccount,
 } from "../gen/reliant/v1/provider_account_pb";
-import { connectClient } from "../lib/connect";
 import { queryClient } from "../lib/query-client";
 import { useAuthStore } from "../store/authStore";
 import { invalidateProviderStatuses } from "./settings-queries";
@@ -32,6 +30,7 @@ import {
 } from "../types/providerAccount";
 import {
   providerAccountServiceKeys,
+  providerAccountServiceMutations,
   useAddProviderAPIKey,
   useDeleteProviderAccount,
   useListProviderAccounts,
@@ -42,7 +41,7 @@ import {
 
 export type { ProviderAccount };
 
-const client = connectClient(ProviderAccountService);
+const accountMutations = providerAccountServiceMutations(queryClient);
 
 const listKey = () => providerAccountServiceKeys.listProviderAccounts({});
 
@@ -254,34 +253,24 @@ export function useProviderAccountActions(): ProviderAccountActions {
 
 // --- Writes outside a component ---
 //
-// Settings' single-credential view (api.settings.updateProvider /
-// deleteProvider) adds and removes accounts imperatively. They invalidate the
-// same scope the generated mutations do, so the account list never shows what
-// they just changed as stale — and the provider statuses that view renders,
-// which GetProviderStatuses derives from the accounts.
+// The single-credential key entry (onboarding's model step, the API key setup
+// modal) adds an account imperatively. It invalidates the same scope the
+// generated mutations do, so the account list never shows what it just changed
+// as stale — and the provider statuses those views render, which
+// GetProviderStatuses derives from the accounts.
 
 /** Add an API key as a new account of the provider. The same key twice is one account. */
 export async function addProviderApiKey(provider: string, apiKey: string): Promise<{ created: boolean }> {
   try {
-    const { created } = await client.addProviderAPIKey({ provider, apiKey });
+    const { created } = await accountMutations.addProviderAPIKey({ provider, apiKey });
     return { created };
-  } finally {
+  } catch (error) {
+    // The generated mutation refreshes accounts on success. Keep the old
+    // failure refresh: an account may have been saved before the error.
     void queryClient.invalidateQueries({ queryKey: providerAccountServiceKeys.all });
-    invalidateProviderStatuses();
-  }
-}
-
-/** Remove every account of the provider (it becomes disconnected). */
-export async function disconnectProvider(provider: string): Promise<void> {
-  try {
-    const { accounts } = await client.listProviderAccounts({});
-    for (const account of accounts) {
-      if (account.provider === provider) {
-        await client.deleteProviderAccount({ accountId: account.id });
-      }
-    }
+    throw error;
   } finally {
-    void queryClient.invalidateQueries({ queryKey: providerAccountServiceKeys.all });
+    // Cross-service dependency: GetProviderStatuses derives from accounts.
     invalidateProviderStatuses();
   }
 }

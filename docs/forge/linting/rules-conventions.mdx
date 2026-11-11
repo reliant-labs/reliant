@@ -1,0 +1,473 @@
+---
+title: "Lint rules: conventions, contracts and Deps"
+description: "The proto, handler, Deps and package-contract rules: what each prevents, a bad example and its fix, and severity"
+---
+
+These rules keep the shape forge generates against: one service per proto, handlers that map errors through one place, packages that depend on narrow interfaces instead of concrete types or the whole config. Most of them come from `forge lint --conventions` and `forge lint --contract`, with `--optional-deps-guard` and `--config-deps` for the `Deps` shape. They exist because forge's generators and mocks assume the shape, so a project that drifts from it gets a compile error in generated code, an untestable package, or a service that leaks internals to its callers.
+
+For the flags, output and silencing, see the [overview](/forge/linting/overview). The Severity column is the default for a project that does not set `lint.rules`; where a rule is a warning, `--strict` makes it an error.
+
+## Proto and service layout
+
+| Rule | Severity | What it catches |
+|------|----------|-----------------|
+| `forgeconv-one-service-per-file` | error | A `.proto` file that declares more than one `service`, which breaks the per-service handler package, stubs and mock |
+| `forgeconv-service-dir-consistency` | error | A service whose name disagrees with its `proto/services/<dir>/`, so `generate` and `lint` name it differently |
+| `forgeconv-list-filter-optional` | error | A List request filter field that is not `optional`, so the generated filter silently never applies |
+| `forgeconv-config-service-name` | error | A config field bound to `OTEL_SERVICE_NAME`, which makes every workload of the binary report as the same service |
+| `forgeconv-activity-declared` | error | A mutating rpc with no `activity` declaration, which leaves a silent hole in the activity stream |
+
+### `forgeconv-one-service-per-file`
+
+Forge generates one handler package, one set of stubs and one mock per service, keyed by the proto file. Two services in one file confuse every one of those.
+
+```protobuf
+// bad: orders.proto
+service OrderService { rpc GetOrder(GetOrderRequest) returns (GetOrderResponse); }
+service RefundService { rpc GetRefund(GetRefundRequest) returns (GetRefundResponse); }
+```
+
+Split `RefundService` into `proto/services/refund/v1/refund.proto`. Messages two services share go in `proto/shared/v1/types.proto`.
+
+### `forgeconv-service-dir-consistency`
+
+Forge finds a service's files by directory name. A proto at `proto/services/orders/v1/` that declares `service InvoiceService` makes `generate` and `lint` disagree about what the service is called. Rename the service or the directory so their logical names agree, ignoring separators and case.
+
+### `forgeconv-list-filter-optional`
+
+A proto3 scalar without `optional` has no presence: unset and the zero value are the same on the wire, so the generated filter either never applies or the handler cannot tell a missing parent id from an empty one. The scaffolded list page then fails with "org_id is required", a contract the proto never stated.
+
+```protobuf
+// bad
+message ListOrdersRequest {
+  string customer = 1;
+}
+
+// fix: a filter is optional, so unset means "no filter" end to end
+message ListOrdersRequest {
+  optional string customer = 1;
+}
+
+// or, for a parameter the handler insists on, say so
+message ListLinesRequest {
+  string order_id = 1 [(buf.validate.field).required = true];
+}
+```
+
+This is the real finding from a scratch project:
+
+```text
+✗ proto/services/order/v1/order.proto:25 [forgeconv-list-filter-optional] ListOrdersRequest.customer has no field presence: unset and "" are the same value on the wire, so the proto does not say whether it is a filter or a required parameter (as a filter its zero value can never be filtered on)
+```
+
+### `forgeconv-config-service-name`
+
+`service.name` is how every span, metric and error is attributed to a process, and one binary often runs as several workloads. Forge sets `OTEL_SERVICE_NAME` per workload. A config field bound to it projects one value into every workload, so the API, the worker and the operator all report as the same service. Older scaffolds shipped such a field (`string service_name = 22`, default `"unknown"`), and nothing read it.
+
+```protobuf
+// bad: any config field whose annotation sets env_var: "OTEL_SERVICE_NAME"
+string service_name = 22 [(forge.v1.config) = { env_var: "OTEL_SERVICE_NAME" }];
+
+// fix: delete the field and reserve its tag and name
+reserved 22;
+reserved "service_name";
+```
+
+A workload that really wants a different name sets `OTEL_SERVICE_NAME` in its own env.
+
+### `forgeconv-activity-declared`
+
+Every mutating rpc declares the activity event it records, or declares that it records none, so the activity stream has no silent holes. The rpc that forgot is exactly the one missing from a user's history. The fix is in the proto:
+
+```protobuf
+// bad
+rpc CancelOrder(CancelOrderRequest) returns (CancelOrderResponse);
+
+// fix: declare the event
+rpc CancelOrder(CancelOrderRequest) returns (CancelOrderResponse) {
+  option (forge.v1.method) = {
+    activity: { verb: "cancel", target: { kind: "order", id: "order_id" } }
+  };
+}
+
+// or declare, with a reason, that it records none
+option (forge.v1.method) = { activity: { none: "internal reconciliation, not user-visible" } };
+```
+
+The rule reads `gen/forge_descriptor/`, so run `forge generate` first. It uses the same functions the runtime interceptor uses to decide what counts as a mutation, so the two cannot disagree.
+
+## Handler errors
+
+Handlers return errors through `svcerr.Wrap(err)`, which maps a domain error to the right Connect code and redacts internals. Three rules defend that.
+
+| Rule | Severity | What it catches |
+|------|----------|-----------------|
+| `forgeconv-unwrapped-domain-error` | error | A handler that returns a collaborator's error untouched, so the caller gets `Unknown` with the driver's text |
+| `forgeconv-no-handler-error-mapping` | warning | A hand-rolled error-to-`connect.Error` switch in a handler instead of `svcerr.Wrap` |
+| `forgeconv-handler-connect-error` | warning | A `connect.NewError` in a handler, which bypasses `svcerr` redaction and can leak SQL, a DSN or an internal host |
+
+### `forgeconv-unwrapped-domain-error`
+
+A handler that hands a collaborator's error back untouched sends the caller `Unknown`, with the driver's text as the message.
+
+```go
+// bad
+res, err := s.deps.Lifecycle.ShipOrder(ctx, in)
+if err != nil {
+    return nil, err
+}
+
+// fix
+if err != nil {
+    return nil, svcerr.Wrap(err)
+}
+```
+
+### `forgeconv-no-handler-error-mapping`
+
+The opposite mistake: a per-service `toConnectError` or `mapServiceError` switch that re-implements what `svcerr` already does, with a slightly different mapping in each service.
+
+```go
+// bad
+func toConnectError(err error) error {
+    switch {
+    case errors.Is(err, ErrNotFound):
+        return connect.NewError(connect.CodeNotFound, err)
+    }
+    return connect.NewError(connect.CodeInternal, err)
+}
+
+// fix: delete it, and call svcerr.Wrap(err) at the return
+```
+
+It is a warning because a project may have a legitimate custom mapping for a project-specific sentinel. It tightened in v1.0.0: an `svcerr` import no longer silences it.
+
+### `forgeconv-handler-connect-error`
+
+`connect.Error.Message()` is the wrapped error's text, and `svcerr`'s interceptor passes a `*connect.Error` through untouched, so nothing redacts it. This publishes a driver's SQL, a DSN or an internal host to the caller, and pins a guessed code over a `NotFound` or a deadline.
+
+```go
+// bad
+return nil, connect.NewError(connect.CodeInternal, err)
+
+// fix
+return nil, svcerr.Wrap(err)
+return nil, svcerr.NotFound("order")            // "order not found"
+return nil, svcerr.InvalidArgument("id is required")
+```
+
+`forge fix connect-errors` rewrites the fixed-message sites with the same code and message, leaving the ones that wrap an `err`, which are the ones that leak, as your worklist. Test and generated files are not linted.
+
+## Deps shape
+
+A component's `Deps` struct is its entire view of the rest of the program. These rules keep it narrow, so a package can be unit-tested against mocks and a reader can see what it needs.
+
+| Rule | Severity | What it catches |
+|------|----------|-----------------|
+| `forgeconv-deps-are-interfaces` | error | A `Deps` field typed as a concrete struct, which defeats the all-mock unit-test surface of `New(Deps)` |
+| `forgeconv-deps-surface` | warning (error for a wide foreign interface) | A `Deps` interface with methods the package never calls, which is a concrete type in disguise |
+| `forgeconv-no-container-deps` | error | A `Deps` field that is a container, a service locator or `any`, so the component can fetch capabilities it was never granted |
+| `forgeconv-deps-no-downcast` | error | A type assertion that turns a `Deps` field back into a concrete type, taking more than the interface granted |
+| `forgeconv-deps-root-config` | warning, only under `--strict` | A `Deps` field holding the whole root `*config.Config`, which gives the component every other component's settings |
+| `forgeconv-no-getenv` | warning (error under `--strict`) | `os.Getenv` in a component package, which reads configuration the composition never declared |
+| `forge-config-deps` | warning | A scalar `Deps` field such as a `time.Duration` or a URL string, which is configuration and belongs in a config block |
+| `forge-optional-deps-guard` | warning | An unguarded dereference of an optional dep, a nil-pointer panic no construction-time check catches |
+| `forgeconv-optional-dep-marker-position` | error | A `forge:optional-dep` marker outside the doc-comment slot above a `Deps` field, where it is silently inert |
+
+### `forgeconv-deps-are-interfaces`
+
+A concrete `Deps` field defeats the all-mock unit-test surface `New(Deps)` exists to give you.
+
+```go
+// bad
+type Deps struct {
+    Repo *db.PostgresRepository
+}
+
+// fix: declare the narrow interface where it is consumed
+type orderStore interface {
+    GetOrder(ctx context.Context, id string) (*Order, error)
+}
+type Deps struct {
+    Repo orderStore
+}
+```
+
+### `forgeconv-deps-surface`
+
+An interface field that declares ten methods the package never calls is a concrete type in disguise. It is an error only when the interface comes from another package and has more than ten methods; otherwise a warning.
+
+```go
+// bad: the package calls only Get, through a 14-method interface from another package
+type Deps struct{ Store otherpkg.Store }
+
+// fix
+forge fix narrow-deps internal/handlers/order
+// declares the 1-method interface the package uses, here, and retypes the field.
+// compose.go needs no change.
+```
+
+A field the package never calls through at all should be deleted, with its key in `internal/app/compose.go`.
+
+### `forgeconv-no-container-deps`
+
+A component receives the capabilities it uses, never a bag to fetch them from.
+
+```go
+// bad
+type Deps struct {
+    App *app.Components   // the composition root itself
+    Any any
+}
+// fix: take each collaborator as its own typed field, and configuration as the component's own config block.
+```
+
+### `forgeconv-deps-no-downcast`
+
+The field's interface is the capability the component was granted. Asserting it back to a concrete type takes the rest.
+
+```go
+// bad
+real := s.deps.Store.(*postgresStore)
+
+// fix: add the methods you need to the interface, or take a second field
+```
+
+### `forgeconv-deps-root-config`
+
+Taking the whole `*config.Config` gives a component every field of every other component. Declare a config block for the component in `proto/<project>/config/v1`, take `Config config.<Block>`, and fill it with `g.Cfg.<Block>` in `compose.go`.
+
+### `forgeconv-no-getenv`
+
+A component that reads the process environment itself reads configuration the composition never handed it, which its workload's env, and the config-reach check, cannot see.
+
+```go
+// bad
+addr := os.Getenv("ORDER_QUEUE_ADDR")
+
+// fix: declare the setting in proto/<project>/config/v1 and take it through Deps
+```
+
+The golangci-lint `forbidigo` guardrail for `os.Getenv` (reported as `typed-config-guardrail`) covers the same ground outside component packages. If your `.golangci.yml` does not forbid it, that lane says it could not run and names the patterns to add.
+
+### `forge-config-deps`
+
+A scalar in `Deps` (`Timeout time.Duration`, `QueueURL string`) is configuration. Declare a `<Component>Config` block and take it as one typed field. `forge lint --config-deps` prints the exact proto block and `AppConfig` line to write.
+
+### `forge-optional-deps-guard`
+
+A `// forge:optional-dep` field may be nil, and `validateDeps` does not enforce it. An unguarded call is a nil-pointer panic no construction-time check will catch.
+
+```go
+// bad
+s.deps.Notifier.Send(ctx, msg)
+
+// fix
+if s.deps.Notifier != nil {
+    s.deps.Notifier.Send(ctx, msg)
+}
+// or, for a site that is provably safe by reasoning the analyzer cannot follow:
+s.deps.Notifier.Send(ctx, msg) // forge:optional-checked
+```
+
+### `forgeconv-optional-dep-marker-position`
+
+The marker only works in the doc-comment slot directly above a `Deps` field. On the struct, on a method, or floating, it is silently inert and `validateDeps` still demands the field.
+
+```go
+// bad
+// forge:optional-dep
+type Deps struct { Notifier notifier }
+
+// fix
+type Deps struct {
+    // forge:optional-dep
+    Notifier notifier
+}
+```
+
+## Package contracts
+
+An `internal/<pkg>/` component package has a `contract.go` with `type Service interface`, `type Deps struct` and `func New(Deps) Service`. The generated mock, the instrumentation decorator and the bootstrap all depend on those names.
+
+| Rule | Severity | What it catches |
+|------|----------|-----------------|
+| `forgeconv-internal-package-contract-names` | error | A `contract.go` that does not use the canonical `Service`, `Deps` and `New` names, so the mock and decorator generators cannot find them |
+| `forgeconv-internal-package-missing-contract` | warning | A package that looks like a component but has no `contract.go`, so it gets no mock, decorator or seam |
+| `forgeconv-outbound-io-no-rpc` | warning | An outbound-I/O adapter package that also registers an RPC handler, so it has grown into a service |
+| `forgeconv-contract-names` | error | A `contract.go` that does not use the canonical names; reported today under `forgeconv-internal-package-contract-names` |
+
+The contract linter (`--contract`) adds three findings without rule IDs of their own, because they come from a Go analysis pass: an exported method on a contract type that is not in its interface ("exported method X on type Y is not declared in the Service interface (contract.go)"), a package with exported methods and no `contract.go`, and an exported package-level variable that should be a method or getter. Sentinel errors, `go:embed` variables and constant-shaped data are exempt. These are governed by `features.contracts` and `contracts.exclude` in `forge.yaml`, not by `lint.rules`.
+
+### `forgeconv-internal-package-contract-names`
+
+The bootstrap template hardcodes the three names, so a non-canonical contract produces generated code that does not compile.
+
+```go
+// bad
+type OrderService interface { Get(ctx context.Context, id string) (*Order, error) }
+type Dependencies struct{ /* … */ }
+
+// fix
+type Service interface { Get(ctx context.Context, id string) (*Order, error) }
+type Deps struct{ /* … */ }
+func New(deps Deps) Service { /* … */ }
+```
+
+In a tree with no `forge.yaml` this reports as a warning, since there is no generated bootstrap to protect.
+
+### `forgeconv-internal-package-missing-contract`
+
+A package with the shape of a component (it has a `Service`-like type, constructors, state) and no `contract.go` gets no mock, no decorator and no seam. Run `forge scaffold package <name>`, move your code into the `service.go` it writes, or, if the package is deliberately not a component (a helper, a constants package), put `//forge:exclude-contract: <why>` at the top of one of its files.
+
+### `forgeconv-outbound-io-no-rpc`
+
+A package tagged `// forge:outbound-io` is an adapter to a third-party system. If it also registers a Connect handler it has grown into a service. Drop the tag, or move the handler to `internal/handlers/<svc>/` and have it depend on the package's `Service`.
+
+### `forgeconv-contract-names`
+
+This ID is in the graded set and the rollout table, but in v1.0.14 no analyzer emits it: the contract-name check reports under `forgeconv-internal-package-contract-names`. Grade that ID. This row exists so the reference matches the table.
+
+### The directives that opt out
+
+Each opt-out costs a reason, because it is the cheapest way to turn lint green and agents learned to reach for it.
+
+| Directive | Rule it enforces | Severity |
+|-----------|------------------|----------|
+| `//forge:exclude-contract` with no `: <why>` | `forge-exclude-contract-reason` | error |
+| `//forge:exclude-contract` on a package that does outbound I/O | `forge-exclude-contract-outbound-io` | error |
+| `//forge:exclude-contract` on a package that owns a multi-implementation interface | `forge-exclude-contract-multi-impl` | error |
+| `//forge:not-a-component` with no reason | `forge-not-a-component-reason` | error |
+| `//forge:not-a-component` on a package that is not an `internal/<pkg>` contract package | `forge-not-a-component-scope` | error |
+| both directives, or one declared twice and disagreeing | `forge-exclude-contract-conflict`, `forge-not-a-component-conflict` | error |
+
+These IDs are not in `lint.rules`; they are governed by the directive itself. Fix them by giving the reason, by writing the contract the package needs, or by deleting the marker.
+
+## Handler and test conventions
+
+| Rule | Severity | What it catches |
+|------|----------|-----------------|
+| `forgeconv-handler-file-size` | warning | A handler file over `lint.handler_file_max_loc` (default 1000 lines), which is usually several rpcs that should be split |
+| `forgeconv-handler-tests-use-tdd` | warning | A hand-rolled `tests := []struct{name, call}` loop in a handler test instead of `forge/pkg/tdd` |
+| `forgeconv-frontend-hook-tests` | warning | A generated `*-hooks.ts` file with no sibling test, so a broken hook is found only at run time |
+| `forgeconv-frontend-hook-test-shape` | error | A hook test whose assertions contradict its hook, such as awaiting `isSuccess` on a mutation, so it can never pass |
+| `forgeconv-tx-lock-under-serializable` | warning (error under `--strict`) | A lock taken inside a SERIALIZABLE or REPEATABLE READ transaction, which wakes into a stale snapshot and fails with 40001 |
+| `forgeconv-bun-dollar-placeholder` | error | A `$1` placeholder in SQL that bun formats, which is sent literally and fails with "there is no parameter $1" |
+| `forgeconv-bun-literal-question-mark` | error | A literal `?` in SQL that bun formats, which is read as a placeholder and shifts every later argument |
+
+`forgeconv-handler-file-size` counts non-blank, non-comment lines and is advisory; set `lint.handler_file_max_loc` to move the line. `forgeconv-handler-tests-use-tdd` points at `forge/pkg/tdd.RunRPCCases`, the library the scaffolded per-rpc tests use. `forgeconv-frontend-hook-tests` is advisory, since a hooks file with no test has simply never been executed.
+
+### `forgeconv-frontend-hook-test-shape`
+
+The hooks file is regenerated on every `generate`; the starter test is scaffold-once. When an rpc's query-versus-mutation classification changes (forge sharpens its name heuristic, you add `// forge:mutation`, or the rpc becomes `NO_SIDE_EFFECTS`), the hook flips and the test does not. A test that awaits `isSuccess` on a mutation, or calls `mutateAsync` on a query, can never pass. It gates, and runs in `--conventions` so `generate:check` catches it before vitest does.
+
+```ts
+// bad: useCancelOrder is a useMutation hook now, but the starter row still reads it as a query
+const { result } = renderHook(() => useCancelOrder(), { wrapper });
+await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+// fix (the replacement forge prints for a mutation row): fire it, then wait for it to settle
+const { result } = renderHook(() => useCancelOrder(), { wrapper });
+await result.current.mutateAsync({} as never).catch(() => {});
+await waitFor(() => expect(["success", "error"]).toContain(result.current.status));
+```
+
+Or delete the test file and run `forge project rescaffold <path>`.
+
+### `forgeconv-tx-lock-under-serializable`
+
+Two correctness arguments for a transaction are exclusive. SERIALIZABLE is correct with no locks, provided the aborted transaction (error 40001) is retried. READ COMMITTED plus a lock is correct because the lock makes writers take turns. Combining them is the trap: under SERIALIZABLE the writer that waited on a lock wakes into a snapshot from before the wait and fails with 40001, so it survives only by retrying, and a contended wait costs a full rollback and re-run.
+
+```go
+// bad
+s.deps.DB.RunTx(ctx, orm.Serializable, func(ctx context.Context) error {
+    row, err := q.For("UPDATE").Where("id = ?", id).Scan(ctx) // lock under SERIALIZABLE
+    // …
+})
+
+// fix: if the lock is what makes it correct, say so
+s.deps.DB.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error { /* same body */ })
+// or drop the lock and rely on SERIALIZABLE plus a retry
+```
+
+A project's own transaction opener is declared with `// forge:tx-opener` so the rule can judge its calls.
+
+### `forgeconv-bun-dollar-placeholder` and `forgeconv-bun-literal-question-mark`
+
+Two placeholder dialects share one data-access API and nothing at the call site says which one a string is in. The raw passthroughs (`orm.Context.Exec`, `Query`, `QueryRow`) take Postgres's `$1`. Everything bun formats (`db.Bun().NewRaw`, the builders' `Where` and `Set`, `bun.SafeQuery`) takes `?` or `?0`, and interpolates arguments client-side.
+
+```go
+// bad: $1 in a bun-formatted query is sent literally while bun drops the argument
+db.Bun().NewRaw("SELECT * FROM orders WHERE id = $1", id)
+// fails at run time: "there is no parameter $1"
+
+// fix
+db.Bun().NewRaw("SELECT * FROM orders WHERE id = ?", id)
+```
+
+A stray `?` is worse, because it can run: it consumes the next argument and shifts every later one onto the wrong placeholder.
+
+```go
+// bad: the ? in the jsonb operator is read as a placeholder
+db.Bun().NewRaw("SELECT * FROM orders WHERE tags ? ? ", tag)
+
+// fix: escape it
+db.Bun().NewRaw(`SELECT * FROM orders WHERE tags \? ?`, tag)
+// or use jsonb_exists(tags, ?)
+```
+
+Only string literals are read; a query built at run time is not judged.
+
+## Frontend conventions
+
+| Rule | Severity | What it catches |
+|------|----------|-----------------|
+| `forgeconv-frontend-process-env` | warning | A `process.env` or `import.meta.env` read in frontend source, which bypasses declared config and freezes the build to one environment |
+| `forgeconv-frontend-env-forge-owned` | warning | A committed dotenv value for a variable forge injects from KCL, such as a `*_MOCK_API=true` that can ship to prod |
+| `forgeconv-frontend-stores-no-server-data` | warning | A Zustand store that holds server data, which creates a second source of truth beside React Query |
+
+### `forgeconv-frontend-process-env`
+
+Frontend config is declared in proto and projected from KCL into a typed `config_gen.ts`, with values arriving at runtime from a per-environment `config.js`. A raw `process.env` read bypasses the schema, the types, the defaults and the secret refusal, and, because the bundler inlines it at build time, freezes the artifact to the environment it was built against. That breaks promotion: a bundle built with staging's issuer carries it into prod.
+
+```ts
+// bad
+const issuer = process.env.NEXT_PUBLIC_OIDC_ISSUER;
+
+// fix: declare it in the frontend_config message, run forge generate, then
+import { loadConfig } from "@/lib/config_gen";
+const issuer = loadConfig().NEXT_PUBLIC_OIDC_ISSUER;
+```
+
+The rule is silent on a frontend that has not adopted proto-declared config (no `src/lib/config_gen.ts`). It is a warning so a frontend mid-migration does not go red. When you finish, gate it with `lint.rules: {forgeconv-frontend-process-env: error}`. A value that is genuinely build-time-only gets a `// forge:lint-disable-next-line forgeconv-frontend-process-env: <why>`.
+
+### `forgeconv-frontend-env-forge-owned`
+
+A committed `.env.local` that sets `*_MOCK_API`, `*_API_URL`, `*_OTEL_ENDPOINT` or `*_ENVIRONMENT` fights the value forge injects from KCL at dev launch and build, and a committed `*_MOCK_API=true` is the classic mock that ships to prod. Declare the value in the frontend's KCL `config` block and delete the dotenv line. The same analyzer runs at error severity on the build and deploy path, so a forge-owned dotenv can never reach a shipped build.
+
+### `forgeconv-frontend-stores-no-server-data`
+
+Server state belongs in React Query through the generated hooks. Zustand is for client-only state (modals, theme, preferences). A store that also imports a generated Connect client creates two sources of truth that drift.
+
+```ts
+// bad: a Zustand store that fetches
+import { orderClient } from "@/gen/order_connect";
+export const useOrders = create<State>((set) => ({ orders: [], load: async () => set({ orders: (await orderClient.listOrders({})).orders }) }));
+
+// fix: use the generated hook
+const { data } = useListOrders({});
+```
+
+## Deploy-tooling conventions
+
+| Rule | Severity | What it catches |
+|------|----------|-----------------|
+| `forgeconv-allocate-port-spacing` | error | Two `allocate_port` bases that collide at some stack count, so one stack's port equals another's |
+
+### `forgeconv-allocate-port-spacing`
+
+`allocate_port(base, key)` computes `base + block(key) * BlockSize`. Two different bases that are congruent modulo `BlockSize` (default 100) collide at the block where their separation, in blocks, is reached: the first base's port equals the second base's literal. With bases `28090` and `29190`, both ≡ 90 mod 100, the 11th worktree's controller port equals the default stack's gateway port. The default maximum is 8 stacks, so it stays invisible until the limit is raised. Pick bases with different remainders modulo `BlockSize`.
+
+<Note>
+`forgeconv-allocate-port-spacing` is a graded and gating rule in the table, and its analyzer (`LintAllocatePortSpacing`) is in forge. In v1.0.14 the sweep does not call it, so it does not currently appear in a `forge lint` run. Treat the table entry as the contract and check the [reference index](/forge/linting/rules-index) after you upgrade.
+</Note>

@@ -1,21 +1,16 @@
 /**
- * Tests for the URL-driven tour navigation hook.
+ * useTourNavigation against FIXTURE journeys (the content modules are mocked),
+ * so the engine's contract is pinned independently of whatever content ships:
  *
- * Contract (see refactor doc):
- *   - `?tour=<step-id>` is the source of truth for which tour step is active.
- *   - The hook exposes `currentStepId`, `isWizardActive`, and four URL-driving
- *     actions: `goToStep`, `exitTour`, `completeAndAdvance`, `goBack`, plus
- *     `skipAll` for ending the tour with no completion.
- *   - The hook never reads tour state from the store; it just calls the
- *     store's persistence methods (`completeStep`, `skipStep`, etc.) as a
- *     side effect of URL transitions.
- *
- * The impl agent has not landed yet, so several of these tests will fail
- * until the hook + route schemas are added. That's expected — these tests
- * are the contract.
+ *   - `?tour=` is the source of truth: journey:step, bare step ids, legacy ids.
+ *   - goToStep follows a step's route — static, or built from the journey
+ *     context — merging its search when already on the page.
+ *   - an advanceOn that fires for a step the user already left is ignored.
+ *   - a step's `skip.run` runs before moving on; if it throws, the user stays.
+ *   - Finish lands on the journey's own `finish` target when it has one.
+ *   - onComplete runs on forward moves only.
  */
-/* eslint-disable @typescript-eslint/no-explicit-any */
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import React from "react";
 import { render, act, waitFor } from "@testing-library/react";
 import {
@@ -28,561 +23,232 @@ import {
 } from "@tanstack/react-router";
 import { z } from "zod";
 
-// ─── Mocks ────────────────────────────────────────────────────────────────────
-// We mock the tour store so the hook's persistence side-effects (completeStep,
-// markTourCompleted, etc.) can be observed without touching real settings RPCs.
-
-const tourStoreMocks = vi.hoisted(() => ({
-  completeStep: vi.fn(async () => undefined),
-  skipStep: vi.fn(async () => undefined),
-  markRemainingSkipped: vi.fn(() => undefined),
-  markTourCompleted: vi.fn(async () => undefined),
+const hooks = vi.hoisted(() => ({
+  onComplete: vi.fn(),
+  skipRun: vi.fn(async (_ctx?: unknown) => undefined as void),
 }));
 
-vi.mock("../../../store/tourStore", () => {
-  function getState() {
-    return {
-      completedSteps: new Set<string>(),
-      skippedSteps: new Set<string>(),
-      hasCompletedOnboarding: false,
-      completeStep: tourStoreMocks.completeStep,
-      skipStep: tourStoreMocks.skipStep,
-      markRemainingSkipped: tourStoreMocks.markRemainingSkipped,
-      markTourCompleted: tourStoreMocks.markTourCompleted,
-    };
-  }
-  const storeApi = Object.assign(
-    (selector: any) => (selector ? selector(getState()) : getState()),
-    {
-      getState,
-      setState: vi.fn(),
-      subscribe: vi.fn(() => () => undefined),
-    }
-  );
-  return { useTourStore: storeApi };
-});
+vi.mock("../journeys/workflows", () => ({
+  workflowsJourney: {
+    id: "workflows",
+    version: 1,
+    title: "Use AI workflows",
+    description: "d",
+    steps: [
+      { id: "wf-a", title: "A", description: "a", onComplete: hooks.onComplete },
+      {
+        id: "wf-b",
+        title: "B",
+        description: "b",
+        skip: { label: "Create it for me", run: hooks.skipRun },
+        route: {
+          path: "/workflow/",
+          label: "Open the builder",
+          open: (ctx: Record<string, unknown>) =>
+            ctx.workflowSlug ? { to: "/workflow/$workflowName", params: { workflowName: String(ctx.workflowSlug) } } : null,
+        },
+      },
+      { id: "wf-c", title: "C", description: "c" },
+    ],
+  },
+}));
 
-// chatStore is used by useTourNavigation's skipAll / completeAndAdvance
-// to clear the active chat once the tour ends.
+vi.mock("../journeys/forge", () => ({
+  forgeJourney: {
+    id: "forge",
+    version: 1,
+    title: "Explore a forge app",
+    description: "d",
+    finish: (shell: string) => (shell === "reliant" ? { to: "/apps" } : null),
+    steps: [
+      { id: "fg-a", title: "FA", description: "fa", route: { path: "/forge/demo", label: "Open", open: { to: "/forge/demo", search: { view: "overview" } } } },
+      { id: "fg-b", title: "FB", description: "fb", route: { path: "/forge/demo", label: "Open", open: { to: "/forge/demo", search: { view: "traces" } } } },
+    ],
+  },
+}));
+
+vi.mock("../../../lib/settingsPersistence", () => ({
+  safeGetSetting: vi.fn(async () => null),
+  upsertStringSetting: vi.fn(async () => undefined),
+  deleteSettingIfExists: vi.fn(async () => undefined),
+}));
+vi.mock("../../../lib/analytics", () => ({ trackEvent: vi.fn() }));
+vi.mock("../../../store/onboardingChecklistStore", () => ({
+  useOnboardingChecklistStore: {
+    getState: () => ({ markComplete: vi.fn(async () => undefined), markWelcomeShown: vi.fn(async () => undefined), completedItems: new Set() }),
+    setState: vi.fn(),
+    subscribe: vi.fn(() => () => undefined),
+  },
+}));
 vi.mock("../../../store/chatStore", () => ({
-  useChatStore: {
-    getState: () => ({ clearCurrentChat: vi.fn() }),
-  },
+  useChatStore: { getState: () => ({ clearCurrentChat: vi.fn() }) },
 }));
-
-// projectStore is read when the tour ends, to decide which chat route to land
-// the user on.
-const projectStoreMocks = vi.hoisted(() => ({
-  currentProject: { id: "project-1" } as { id: string } | null,
-}));
-
 vi.mock("../../../store/projectStore", () => ({
-  useProjectStore: {
-    getState: () => ({ currentProject: projectStoreMocks.currentProject }),
-  },
+  useProjectStore: { getState: () => ({ currentProject: { id: "project-1" } }) },
 }));
-
-// apiKeySetupStore is dynamically imported by useTourNavigation; ensure the
-// dynamic import resolves without touching real RPCs.
 vi.mock("../../../store/apiKeySetupStore", () => ({
   useApiKeySetupStore: {
-    getState: () => ({
-      hasApiKey: true,
-      ensureApiKeyOrShowModal: vi.fn(async () => undefined),
-    }),
+    getState: () => ({ hasApiKey: true, ensureApiKeyOrShowModal: vi.fn(async () => undefined) }),
     setState: vi.fn(),
   },
 }));
 
-// ─── Test router ─────────────────────────────────────────────────────────────
+// The workflows journey's content is registered by the Reliant shells (journeys/catalog.ts).
+import "../journeys/catalog";
+import { useTourNavigation, type TourNavigation } from "../useTourNavigation";
+import { useTourStore, __resetTourSaveScheduler } from "../../../store/tourStore";
+import { trackEvent } from "../../../lib/analytics";
 
-const tourSearchSchema = z.object({
-  tour: z.string().optional(),
-  drill: z.string().optional(),
-});
+const searchSchema = z.object({ tour: z.string().optional(), view: z.string().optional(), project: z.string().optional() });
 
-function buildRouter(initialEntries: string[], HookHarness: React.ComponentType) {
+function setup(url: string) {
+  const result: { current?: TourNavigation } = {};
+  function Harness() {
+    result.current = useTourNavigation();
+    return null;
+  }
   const rootRoute = createRootRoute({
-    component: () =>
-      React.createElement(
-        React.Fragment,
-        null,
-        React.createElement(Outlet),
-        React.createElement(HookHarness)
-      ),
+    component: () => React.createElement(React.Fragment, null, React.createElement(Outlet), React.createElement(Harness)),
   });
-
-  const indexRoute = createRoute({
-    getParentRoute: () => rootRoute,
-    path: "/",
-    validateSearch: tourSearchSchema,
-    component: () => null,
+  const route = (path: string) =>
+    createRoute({ getParentRoute: () => rootRoute, path, validateSearch: searchSchema, component: () => null });
+  const router = createRouter({
+    routeTree: rootRoute.addChildren([
+      route("/"),
+      route("/apps"),
+      route("/forge/demo"),
+      route("/project/$projectId"),
+      route("/workflow/$workflowName"),
+    ]) as any,
+    history: createMemoryHistory({ initialEntries: [url] }),
   });
-  const projectRoute = createRoute({
-    getParentRoute: () => rootRoute,
-    path: "/project/$projectId",
-    validateSearch: tourSearchSchema,
-    component: () => null,
-  });
-  const workflowHubRoute = createRoute({
-    getParentRoute: () => rootRoute,
-    path: "/workflows/library",
-    validateSearch: tourSearchSchema,
-    component: () => null,
-  });
-  const workflowNewRoute = createRoute({
-    getParentRoute: () => rootRoute,
-    path: "/workflow/new",
-    validateSearch: tourSearchSchema,
-    component: () => null,
-  });
-  const workflowBuilderRoute = createRoute({
-    getParentRoute: () => rootRoute,
-    path: "/workflow/$workflowName",
-    validateSearch: tourSearchSchema,
-    component: () => null,
-  });
-
-  const tree = rootRoute.addChildren([
-    indexRoute,
-    projectRoute,
-    workflowHubRoute,
-    workflowNewRoute,
-    workflowBuilderRoute,
-  ]);
-  return createRouter({
-    routeTree: tree as any,
-    history: createMemoryHistory({ initialEntries }),
-  });
-}
-
-// Render a hook in a router context. Returns a ref to the latest hook value
-// and the router for asserting on location.
-function renderHookWithRouter<T>(
-  hookFn: () => T,
-  initialEntries: string[]
-): {
-  result: { current: T | undefined };
-  router: ReturnType<typeof buildRouter>;
-} {
-  const result: { current: T | undefined } = { current: undefined };
-
-  function HookHarness() {
-    result.current = hookFn();
-    return null;
-  }
-
-  const router = buildRouter(initialEntries, HookHarness);
   render(React.createElement(RouterProvider as any, { router }));
-  return { result, router };
+  const nav = () => result.current!;
+  const tour = () => (router.state.location.search as { tour?: string }).tour;
+  return { router, nav, tour };
 }
-
-// ─── Lazy hook import ────────────────────────────────────────────────────────
-
-async function loadHook(): Promise<((..._args: any[]) => any) | null> {
-  try {
-    const mod = await import("../useTourNavigation");
-    return (mod as any).useTourNavigation ?? null;
-  } catch {
-    return null;
-  }
-}
-
-// ─── Tests ───────────────────────────────────────────────────────────────────
 
 describe("useTourNavigation", () => {
   beforeEach(() => {
-    tourStoreMocks.completeStep.mockClear();
-    tourStoreMocks.skipStep.mockClear();
-    tourStoreMocks.markRemainingSkipped.mockClear();
-    tourStoreMocks.markTourCompleted.mockClear();
-    projectStoreMocks.currentProject = { id: "project-1" };
+    vi.clearAllMocks();
+    __resetTourSaveScheduler();
+    useTourStore.setState({ contexts: {}, completedSteps: new Set(), skippedSteps: new Set() } as any);
   });
 
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
-
-  describe("currentStepId / isWizardActive", () => {
-    it("reads currentStepId from the ?tour search param", async () => {
-      const useTourNavigation = await loadHook();
-      if (!useTourNavigation) {
-        expect.fail("useTourNavigation hook not implemented yet");
-        return;
-      }
-      const { result } = renderHookWithRouter(
-        () => useTourNavigation(),
-        ["/?tour=workflow-hub"]
-      );
-      await waitFor(() =>
-        expect(result.current).toBeDefined()
-      );
-      expect(result.current.currentStepId).toBe("workflow-hub");
-      expect(result.current.isWizardActive).toBe(true);
+  describe("reading ?tour=", () => {
+    it("resolves journey:step, bare ids and journeys", async () => {
+      const a = setup("/?tour=workflows:wf-c");
+      await waitFor(() => expect(a.nav().currentStepId).toBe("wf-c"));
+      expect(a.nav().currentJourney).toBe("workflows");
+      expect(a.nav().isWizardActive).toBe(true);
     });
 
-    it("returns null currentStepId when no ?tour is present", async () => {
-      const useTourNavigation = await loadHook();
-      if (!useTourNavigation) {
-        expect.fail("useTourNavigation hook not implemented yet");
-        return;
-      }
-      const { result } = renderHookWithRouter(() => useTourNavigation(), ["/"]);
-      await waitFor(() => expect(result.current).toBeDefined());
-      expect(result.current.currentStepId).toBeNull();
-      expect(result.current.isWizardActive).toBe(false);
+    it("opens a bare step id in the journey that declares it", async () => {
+      const { nav } = setup("/?tour=fg-b");
+      await waitFor(() => expect(nav().currentJourney).toBe("forge"));
+      expect(nav().currentStepId).toBe("fg-b");
     });
 
-    it("treats an unknown ?tour value as absent (currentStepId = null)", async () => {
-      const useTourNavigation = await loadHook();
-      if (!useTourNavigation) {
-        expect.fail("useTourNavigation hook not implemented yet");
-        return;
-      }
-      const { result } = renderHookWithRouter(
-        () => useTourNavigation(),
-        ["/?tour=not-a-step"]
-      );
-      await waitFor(() => expect(result.current).toBeDefined());
-      expect(result.current.currentStepId).toBeNull();
-      expect(result.current.isWizardActive).toBe(false);
+    it("opens a retired single-tour id at its successor journey's first step", async () => {
+      const { nav } = setup("/?tour=workflow-hub");
+      await waitFor(() => expect(nav().currentStepId).toBe("wf-a"));
+    });
+
+    it("reports the picker, and nothing for junk", async () => {
+      const p = setup("/?tour=pick:menu");
+      await waitFor(() => expect(p.nav().isPickerOpen).toBe(true));
+      expect(p.nav().tour).toEqual({ kind: "picker", source: "menu" });
     });
   });
 
   describe("goToStep", () => {
-    it("navigates to the Library ?tour=workflow-hub for the workflow-hub step", async () => {
-      const useTourNavigation = await loadHook();
-      if (!useTourNavigation) {
-        expect.fail("useTourNavigation hook not implemented yet");
-        return;
-      }
-      const { result, router } = renderHookWithRouter(
-        () => useTourNavigation(),
-        ["/"]
-      );
-      await waitFor(() => expect(result.current).toBeDefined());
-      await act(async () => {
-        await result.current.goToStep("workflow-hub");
-      });
-      expect(router.state.location.pathname).toBe("/workflows/library");
-      expect(router.state.location.search).toMatchObject({
-        tour: "workflow-hub",
-      });
+    it("merges a route's search when already on its page", async () => {
+      const { router, nav, tour } = setup("/forge/demo?view=overview&project=shop&tour=forge:fg-a");
+      await waitFor(() => expect(nav().currentStepId).toBe("fg-a"));
+      await act(async () => nav().goToStep("forge", "fg-b"));
+      await waitFor(() => expect(tour()).toBe("forge:fg-b"));
+      expect(router.state.location.search).toMatchObject({ view: "traces", project: "shop" });
     });
 
-    it("navigates to the encoded builder URL with drill=attempt for workflow-builder", async () => {
-      const useTourNavigation = await loadHook();
-      if (!useTourNavigation) {
-        expect.fail("useTourNavigation hook not implemented yet");
-        return;
-      }
-      const { result, router } = renderHookWithRouter(
-        () => useTourNavigation(),
-        ["/"]
-      );
-      await waitFor(() => expect(result.current).toBeDefined());
-      await act(async () => {
-        await result.current.goToStep("workflow-builder");
-      });
-      // pathname should resolve to the encoded builtin workflow name
-      expect(router.state.location.pathname).toMatch(
-        /^\/workflow\/builtin(:|%3A)/i
-      );
-      expect(router.state.location.search).toMatchObject({
-        drill: "attempt",
-        tour: "workflow-builder",
-      });
+    it("builds the route from the journey context", async () => {
+      useTourStore.getState().setJourneyContext("workflows", { workflowSlug: "fix-my-pr" });
+      const { router, nav, tour } = setup("/?tour=workflows:wf-a");
+      await waitFor(() => expect(nav().currentStepId).toBe("wf-a"));
+      await act(async () => nav().advance("next"));
+      await waitFor(() => expect(router.state.location.pathname).toBe("/workflow/fix-my-pr"));
+      expect(tour()).toBe("workflows:wf-b");
+      expect(hooks.onComplete).toHaveBeenCalledTimes(1);
     });
 
-    it("stays on the current pathname for chat-and-sidebars on /project/abc", async () => {
-      const useTourNavigation = await loadHook();
-      if (!useTourNavigation) {
-        expect.fail("useTourNavigation hook not implemented yet");
-        return;
-      }
-      const { result, router } = renderHookWithRouter(
-        () => useTourNavigation(),
-        ["/project/abc"]
-      );
-      await waitFor(() => expect(result.current).toBeDefined());
-      await act(async () => {
-        await result.current.goToStep("chat-and-sidebars");
-      });
-      expect(router.state.location.pathname).toBe("/project/abc");
-      expect(router.state.location.search).toMatchObject({
-        tour: "chat-and-sidebars",
-      });
-    });
-
-    it("leaves the Library when transitioning to workspaces step", async () => {
-      const useTourNavigation = await loadHook();
-      if (!useTourNavigation) {
-        expect.fail("useTourNavigation hook not implemented yet");
-        return;
-      }
-      const { result, router } = renderHookWithRouter(
-        () => useTourNavigation(),
-        ["/workflows/library?tour=workflow-hub"]
-      );
-      await waitFor(() => expect(result.current).toBeDefined());
-      await act(async () => {
-        await result.current.goToStep("workspaces");
-      });
-      expect(router.state.location.search).toMatchObject({
-        tour: "workspaces",
-      });
-      // Allow either: hook stays on the Library updating only search, OR
-      // hook bounces to the chat route. Both are acceptable per the contract.
+    it("without the context it needs, stays put and just sets the step", async () => {
+      const { router, nav, tour } = setup("/?tour=workflows:wf-a");
+      await waitFor(() => expect(nav().currentStepId).toBe("wf-a"));
+      await act(async () => nav().goToStep("workflows", "wf-b"));
+      await waitFor(() => expect(tour()).toBe("workflows:wf-b"));
+      expect(router.state.location.pathname).toBe("/");
     });
   });
 
-  describe("exitTour", () => {
-    it("drops the ?tour param while preserving the pathname", async () => {
-      const useTourNavigation = await loadHook();
-      if (!useTourNavigation) {
-        expect.fail("useTourNavigation hook not implemented yet");
-        return;
-      }
-      const { result, router } = renderHookWithRouter(
-        () => useTourNavigation(),
-        ["/workflows/library?tour=workflow-hub"]
-      );
-      await waitFor(() => expect(result.current).toBeDefined());
-      await act(async () => {
-        await result.current.exitTour();
-      });
-      expect(router.state.location.pathname).toBe("/workflows/library");
-      expect(router.state.location.search.tour).toBeUndefined();
+  describe("advance", () => {
+    it("ignores an action for a step the user already left", async () => {
+      const { nav, tour } = setup("/?tour=workflows:wf-c");
+      await waitFor(() => expect(nav().currentStepId).toBe("wf-c"));
+      await act(async () => nav().advance("action", { journey: "workflows", stepId: "wf-a" }));
+      expect(tour()).toBe("workflows:wf-c");
+      expect(hooks.onComplete).not.toHaveBeenCalled();
+    });
+
+    it("on the last step, an action only completes it (Finish stays the user's)", async () => {
+      const { nav, tour } = setup("/?tour=workflows:wf-c");
+      await waitFor(() => expect(nav().currentStepId).toBe("wf-c"));
+      await act(async () => nav().advance("action", { journey: "workflows", stepId: "wf-c" }));
+      expect(tour()).toBe("workflows:wf-c");
+    });
+
+    it("Back does not run onComplete", async () => {
+      const { nav, tour } = setup("/?tour=workflows:wf-c");
+      await waitFor(() => expect(nav().currentStepId).toBe("wf-c"));
+      await act(async () => nav().goBack());
+      await waitFor(() => expect(tour()).toBe("workflows:wf-b"));
+      expect(hooks.onComplete).not.toHaveBeenCalled();
     });
   });
 
-  describe("goBack", () => {
-    it("steps the ?tour param backwards (workflow-controls → chat-and-sidebars)", async () => {
-      const useTourNavigation = await loadHook();
-      if (!useTourNavigation) {
-        expect.fail("useTourNavigation hook not implemented yet");
-        return;
-      }
-      const { result, router } = renderHookWithRouter(
-        () => useTourNavigation(),
-        ["/?tour=workflow-controls"]
-      );
-      await waitFor(() => expect(result.current).toBeDefined());
-      await act(async () => {
-        await result.current.goBack();
-      });
-      expect(router.state.location.search).toMatchObject({
-        tour: "chat-and-sidebars",
-      });
+  describe("skipStep", () => {
+    it("runs the step's skip handler, then moves on", async () => {
+      hooks.skipRun.mockImplementationOnce(async (ctx: any) => ctx.setContext({ workflowSlug: "seeded" }));
+      const { nav, tour } = setup("/?tour=workflows:wf-b");
+      await waitFor(() => expect(nav().currentStepId).toBe("wf-b"));
+      await act(async () => nav().skipStep());
+      await waitFor(() => expect(tour()).toBe("workflows:wf-c"));
+      expect(useTourStore.getState().contexts.workflows).toEqual({ workflowSlug: "seeded" });
+      expect(trackEvent).toHaveBeenCalledWith("journey_step_completed", expect.objectContaining({ step: "wf-b", via: "skip" }));
     });
 
-    it("exits the tour when called from the first step", async () => {
-      const useTourNavigation = await loadHook();
-      if (!useTourNavigation) {
-        expect.fail("useTourNavigation hook not implemented yet");
-        return;
-      }
-      const { result, router } = renderHookWithRouter(
-        () => useTourNavigation(),
-        ["/?tour=chat-and-sidebars"]
-      );
-      await waitFor(() => expect(result.current).toBeDefined());
-      await act(async () => {
-        await result.current.goBack();
-      });
-      expect(router.state.location.search.tour).toBeUndefined();
+    it("stays on the step when the skip handler fails", async () => {
+      hooks.skipRun.mockRejectedValueOnce(new Error("seed failed"));
+      const { nav, tour } = setup("/?tour=workflows:wf-b");
+      await waitFor(() => expect(nav().currentStepId).toBe("wf-b"));
+      await act(async () => nav().skipStep());
+      expect(tour()).toBe("workflows:wf-b");
     });
   });
 
-  describe("completeAndAdvance", () => {
-    it("marks the current step complete in the store", async () => {
-      const useTourNavigation = await loadHook();
-      if (!useTourNavigation) {
-        expect.fail("useTourNavigation hook not implemented yet");
-        return;
-      }
-      const { result } = renderHookWithRouter(
-        () => useTourNavigation(),
-        ["/?tour=workflow-intro"]
-      );
-      await waitFor(() => expect(result.current).toBeDefined());
-      await act(async () => {
-        await result.current.completeAndAdvance();
-      });
-      expect(tourStoreMocks.completeStep).toHaveBeenCalledWith(
-        "workflow-intro"
-      );
+  describe("finish", () => {
+    it("lands on the journey's own finish target, clearing the tour", async () => {
+      const { router, nav, tour } = setup("/forge/demo?tour=forge:fg-b");
+      await waitFor(() => expect(nav().currentStepId).toBe("fg-b"));
+      await act(async () => nav().finish());
+      await waitFor(() => expect(router.state.location.pathname).toBe("/apps"));
+      expect(tour()).toBeUndefined();
+      expect(useTourStore.getState().journeys.forge.current).toBe("completed");
     });
 
-    it("advances from workflow-intro to workflow-hub at the Library", async () => {
-      const useTourNavigation = await loadHook();
-      if (!useTourNavigation) {
-        expect.fail("useTourNavigation hook not implemented yet");
-        return;
-      }
-      const { result, router } = renderHookWithRouter(
-        () => useTourNavigation(),
-        ["/?tour=workflow-intro"]
-      );
-      await waitFor(() => expect(result.current).toBeDefined());
-      await act(async () => {
-        await result.current.completeAndAdvance();
-      });
-      expect(router.state.location.pathname).toBe("/workflows/library");
-      expect(router.state.location.search).toMatchObject({
-        tour: "workflow-hub",
-      });
-    });
-
-    it("on the last step (workflow-builder) calls markTourCompleted and drops the tour param", async () => {
-      const useTourNavigation = await loadHook();
-      if (!useTourNavigation) {
-        expect.fail("useTourNavigation hook not implemented yet");
-        return;
-      }
-      const { result, router } = renderHookWithRouter(
-        () => useTourNavigation(),
-        ["/?tour=workflow-builder"]
-      );
-      await waitFor(() => expect(result.current).toBeDefined());
-      await act(async () => {
-        await result.current.completeAndAdvance();
-      });
-      expect(tourStoreMocks.markTourCompleted).toHaveBeenCalled();
-      expect(router.state.location.search.tour).toBeUndefined();
-    });
-
-    it("finishing from the workflow screen returns the user to their project chat", async () => {
-      const useTourNavigation = await loadHook();
-      if (!useTourNavigation) {
-        expect.fail("useTourNavigation hook not implemented yet");
-        return;
-      }
-      // The tour's last spotlight step lives on the workflow builder, so this
-      // is where a user actually clicks "Finish".
-      const { result, router } = renderHookWithRouter(
-        () => useTourNavigation(),
-        ["/workflow/builtin%3A%2F%2Fget-it-right?drill=attempt&tour=workflow-builder"]
-      );
-      await waitFor(() => expect(result.current).toBeDefined());
-      await act(async () => {
-        await result.current.completeAndAdvance();
-      });
-      await waitFor(() =>
-        expect(router.state.location.pathname).toBe("/project/project-1")
-      );
-      // Tour is over, not restarted.
-      expect(router.state.location.search.tour).toBeUndefined();
-    });
-
-    // Finishing used to strip `?tour=` first and land on the chat only after
-    // a dynamic import settled: the user sat on the bare workflow builder for
-    // a chunk load, and a click there was overridden by the late jump. Under
-    // load the routing test caught it parked on /workflow/... . One
-    // navigation, straight to the chat, leaves no such window.
-    it("finishing goes straight to the project chat, never stopping on the builder without the tour", async () => {
-      const useTourNavigation = await loadHook();
-      if (!useTourNavigation) {
-        expect.fail("useTourNavigation hook not implemented yet");
-        return;
-      }
-      const { result, router } = renderHookWithRouter(
-        () => useTourNavigation(),
-        ["/workflow/builtin%3A%2F%2Fget-it-right?drill=attempt&tour=workflow-builder"]
-      );
-      await waitFor(() => expect(result.current).toBeDefined());
-      const visited: string[] = [];
-      const unsubscribe = router.history.subscribe(({ location }) => {
-        visited.push(location.pathname + location.search);
-      });
-      await act(async () => {
-        await result.current.completeAndAdvance();
-      });
-      unsubscribe();
-      expect(visited).toEqual(["/project/project-1"]);
-    });
-
-    it("skipping goes straight to the project chat, never stopping on the abandoned step's page", async () => {
-      const useTourNavigation = await loadHook();
-      if (!useTourNavigation) {
-        expect.fail("useTourNavigation hook not implemented yet");
-        return;
-      }
-      const { result, router } = renderHookWithRouter(
-        () => useTourNavigation(),
-        ["/workflows/library?tour=workflow-hub"]
-      );
-      await waitFor(() => expect(result.current).toBeDefined());
-      const visited: string[] = [];
-      const unsubscribe = router.history.subscribe(({ location }) => {
-        visited.push(location.pathname + location.search);
-      });
-      await act(async () => {
-        await result.current.skipAll();
-      });
-      unsubscribe();
-      expect(visited).toEqual(["/project/project-1"]);
-    });
-
-    it("finishing with no project selected lands on the home route", async () => {
-      projectStoreMocks.currentProject = null;
-      const useTourNavigation = await loadHook();
-      if (!useTourNavigation) {
-        expect.fail("useTourNavigation hook not implemented yet");
-        return;
-      }
-      const { result, router } = renderHookWithRouter(
-        () => useTourNavigation(),
-        ["/workflow/builtin%3A%2F%2Fget-it-right?tour=workflow-builder"]
-      );
-      await waitFor(() => expect(result.current).toBeDefined());
-      await act(async () => {
-        await result.current.completeAndAdvance();
-      });
-      await waitFor(() => expect(router.state.location.pathname).toBe("/"));
-    });
-  });
-
-  describe("skipAll", () => {
-    it("marks remaining steps skipped and drops the tour param", async () => {
-      const useTourNavigation = await loadHook();
-      if (!useTourNavigation) {
-        expect.fail("useTourNavigation hook not implemented yet");
-        return;
-      }
-      const { result, router } = renderHookWithRouter(
-        () => useTourNavigation(),
-        ["/?tour=workspaces"]
-      );
-      await waitFor(() => expect(result.current).toBeDefined());
-      await act(async () => {
-        await result.current.skipAll();
-      });
-      // skipAll now batches: it marks remaining steps skipped in memory (one
-      // call) and persists once via markTourCompleted, instead of awaiting a
-      // per-step skipStep save.
-      expect(tourStoreMocks.markRemainingSkipped).toHaveBeenCalledTimes(1);
-      expect(tourStoreMocks.markTourCompleted).toHaveBeenCalledTimes(1);
-      expect(router.state.location.search.tour).toBeUndefined();
-    });
-
-    it("skipping from the workflow screen also returns the user to their chat", async () => {
-      const useTourNavigation = await loadHook();
-      if (!useTourNavigation) {
-        expect.fail("useTourNavigation hook not implemented yet");
-        return;
-      }
-      const { result, router } = renderHookWithRouter(
-        () => useTourNavigation(),
-        ["/workflows/library?tour=workflow-hub"]
-      );
-      await waitFor(() => expect(result.current).toBeDefined());
-      await act(async () => {
-        await result.current.skipAll();
-      });
-      await waitFor(() =>
-        expect(router.state.location.pathname).toBe("/project/project-1")
-      );
+    it("defaults to the project chat in Reliant", async () => {
+      const { router, nav } = setup("/?tour=workflows:wf-c");
+      await waitFor(() => expect(nav().currentStepId).toBe("wf-c"));
+      await act(async () => nav().finish());
+      await waitFor(() => expect(router.state.location.pathname).toBe("/project/project-1"));
     });
   });
 });

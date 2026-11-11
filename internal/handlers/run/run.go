@@ -4,11 +4,13 @@ package run
 import (
 	"context"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/rundiagnostics"
 
 	"connectrpc.com/connect"
@@ -17,6 +19,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/errreason"
 	"github.com/reliant-labs/reliant/internal/runstateproto"
 )
 
@@ -47,7 +50,7 @@ func (s *Service) runOwnedBy(ctx context.Context, userID, runID string) (*core.W
 	if err != nil {
 		return nil, nil, svcerr.WrapOr(err, svcerr.Internal("failed to get run"))
 	}
-	if chat == nil || chat.UserID != userID {
+	if !authz.CanWriteChat(ctx, userID, chat) {
 		return nil, nil, svcerr.NotFound("run")
 	}
 
@@ -130,7 +133,7 @@ func (s *Service) startInSession(
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get session"))
 	}
-	if chat == nil || chat.UserID != userID {
+	if !authz.CanWriteChat(ctx, userID, chat) {
 		return nil, svcerr.NotFound("session")
 	}
 
@@ -219,16 +222,25 @@ func (s *Service) startWithNewSession(
 // — a headless run does not belong to a project in any meaningful sense, and
 // giving callers a knob here would make a temporary coupling look intentional.
 // The branch disappears with the run container.
+//
+// Only a project the caller may still run work in hosts it: not one of an org
+// they have left, nor of a credential's other org.
 func (s *Service) defaultProjectID(ctx context.Context, userID string) (string, error) {
-	projects, err := s.deps.Repo.ListProjects(ctx, db.ProjectFilters{UserID: userID, Limit: 1})
+	projects, err := s.deps.Repo.ListProjects(ctx, db.ProjectFilters{UserID: userID, Limit: defaultProjectScan})
 	if err != nil {
 		return "", svcerr.WrapOr(err, svcerr.Internal("failed to list projects"))
 	}
-	if len(projects) == 0 {
-		return "", svcerr.FailedPrecondition("no project available to host the run; supply session_id or create a project first")
+	for _, p := range projects {
+		if authz.CanWriteProject(ctx, userID, p) {
+			return p.ID, nil
+		}
 	}
-	return projects[0].ID, nil
+	return "", svcerr.FailedPrecondition("no project available to host the run; supply session_id or create a project first")
 }
+
+// defaultProjectScan bounds how many of the caller's most recently active
+// projects defaultProjectID reads to find one it may host a run in.
+const defaultProjectScan = 200
 
 // respondWithSessionRun reads the session's current run and returns it.
 func (s *Service) respondWithSessionRun(
@@ -277,19 +289,35 @@ func (s *Service) SignalRun(
 		return connect.NewResponse(&reliantv1.SignalRunResponse{Delivered: false}), nil
 	}
 
+	// Thread names a thread of the run (its id, or the node of an agent
+	// running in it). With none, the message goes to the thread an agent of
+	// the run is reading — the root of an agent chat, the one running agent
+	// of a graph run — and is refused, listing them, when several run in
+	// parallel (handlers/chat run_recipient.go). A run that is a sub-agent's
+	// keeps its own thread as the default.
 	thread := req.Msg.Thread
-	if thread == "" {
+	if thread == "" && run.ParentID != nil && *run.ParentID != "" {
 		thread = run.Thread
 	}
 
 	send := &reliantv1.SendMessageRequest{
-		ChatId:       chat.ID,
-		Messages:     req.Msg.Messages,
-		TargetThread: &thread,
+		ChatId:   chat.ID,
+		Messages: req.Msg.Messages,
+	}
+	if thread != "" {
+		send.TargetThread = &thread
 	}
 
 	resp, err := s.deps.Chats.SendMessage(ctx, connect.NewRequest(send))
 	if err != nil {
+		// Live, but no agent is running in it to read the message: nothing
+		// was queued. The documented answer to "nowhere to put the event"
+		// is delivered=false, not an error; the header says why.
+		if errors.Is(err, core.ErrRunNoListeningAgent) {
+			out := connect.NewResponse(&reliantv1.SignalRunResponse{Delivered: false})
+			out.Header().Set(errreason.NotDeliveredHeader, errreason.RunNoListeningAgent)
+			return out, nil
+		}
 		return nil, err
 	}
 
@@ -334,12 +362,23 @@ func (s *Service) ListRuns(
 	req *connect.Request[reliantv1.ListRunsRequest],
 ) (*connect.Response[reliantv1.ListRunsResponse], error) {
 	userID := auth.MustGetUserID(ctx)
+	// The org a request names is verified (and a machine credential's applied)
+	// before any branch: one chat's runs are its chat's org's, so a session or
+	// parent outside the scope lists nothing.
+	scope, err := s.listScope(ctx, userID, req.Msg.GetOrgId())
+	if err != nil {
+		return nil, err
+	}
 
 	switch {
 	case req.Msg.GetParentId() != "":
 		// Ownership is checked via the parent, which resolves to a chat.
-		if _, _, err := s.runOwnedBy(ctx, userID, req.Msg.GetParentId()); err != nil {
+		_, chat, err := s.runOwnedBy(ctx, userID, req.Msg.GetParentId())
+		if err != nil {
 			return nil, err
+		}
+		if !scope.Includes(chat.OrgID) {
+			return connect.NewResponse(filterRunsToProto(nil, req.Msg)), nil
 		}
 		children, err := s.deps.Repo.ListChildWorkflows(ctx, req.Msg.GetParentId())
 		if err != nil {
@@ -352,8 +391,11 @@ func (s *Service) ListRuns(
 		if err != nil {
 			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get session"))
 		}
-		if chat == nil || chat.UserID != userID {
+		if !authz.CanReadChat(ctx, userID, chat) {
 			return nil, svcerr.NotFound("session")
+		}
+		if !scope.Includes(chat.OrgID) {
+			return connect.NewResponse(filterRunsToProto(nil, req.Msg)), nil
 		}
 		runs, err := s.deps.Repo.ListRootWorkflows(ctx, req.Msg.GetSessionId())
 		if err != nil {
@@ -362,7 +404,7 @@ func (s *Service) ListRuns(
 		return connect.NewResponse(filterRunsToProto(runs, req.Msg)), nil
 
 	default:
-		return s.listAllRuns(ctx, userID, req.Msg)
+		return s.listAllRuns(ctx, userID, scope, req.Msg)
 	}
 }
 
@@ -374,6 +416,7 @@ const (
 func (s *Service) listAllRuns(
 	ctx context.Context,
 	userID string,
+	scope *core.OrgScope,
 	req *reliantv1.ListRunsRequest,
 ) (*connect.Response[reliantv1.ListRunsResponse], error) {
 	limit := int(req.Limit)
@@ -386,6 +429,7 @@ func (s *Service) listAllRuns(
 
 	filters := db.RunListFilters{
 		UserID:          userID,
+		Org:             scope,
 		ProjectID:       req.ProjectId,
 		Workflows:       req.Workflow,
 		TriggerID:       req.TriggerId,
@@ -435,6 +479,16 @@ func (s *Service) listAllRuns(
 		}
 		items, events, next = mergeRunLog(items, hasMore, events, eventsMore, limit)
 	}
+	// The store lists what the caller owns; a run (its chat) or a firing (its
+	// trigger) of an org they have left is not theirs to see, named org or
+	// not. Filtered after the page and its cursor are cut from the rows as
+	// read, so a page of denied rows is short, never the end of the log.
+	items = authz.Visible(ctx, userID, items, func(ctx context.Context, userID string, item *db.RunListItem) bool {
+		return authz.CanReadOwn(ctx, userID, item.OrgID)
+	})
+	events = authz.Visible(ctx, userID, events, func(ctx context.Context, userID string, event *db.UnlaunchedTriggerEvent) bool {
+		return authz.CanReadOwn(ctx, userID, event.OrgID)
+	})
 
 	resp := runLogResponse(items, events)
 	if next != nil {

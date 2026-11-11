@@ -225,6 +225,14 @@ enum DeployResourceKind {
   // both from one figure funds it twice. If SSD becomes a premium
   // option later it is a PLAN attribute, not a second meter kind.
   DEPLOY_RESOURCE_KIND_STORAGE_GIB = 10;
+
+  // KiB served from hosted static sites in the hour (an hourly flow per
+  // environment, no deployment). Billed past the monthly static-egress
+  // allowance.
+  DEPLOY_RESOURCE_KIND_STATIC_EGRESS_KIB = 11;
+  // Static sites live beyond the free one, per hour (an hourly flow per org,
+  // no environment or deployment): site-hours.
+  DEPLOY_RESOURCE_KIND_STATIC_SITE = 12;
 }
 
 // DeployLogStream selects which of a deployment's log streams to read. Build
@@ -846,6 +854,11 @@ message DomainBinding {
   string redirect_to = 5;
   google.protobuf.Timestamp created_at = 6;
   google.protobuf.Timestamp updated_at = 7;
+  // Add includeSubDomains to the hostname's Strict-Transport-Security, so a
+  // browser that has seen it uses HTTPS for every name under it. Off by
+  // default: it breaks any subdomain still served over plain HTTP. Honoured
+  // where the platform sends HSTS: static sites and their redirects.
+  bool hsts_include_subdomains = 8;
 }
 
 // Deployment is one deployable unit inside an environment.
@@ -1805,10 +1818,11 @@ enum WorkloadKind {
 message DeclaredWorkload {
   string name = 1;
   WorkloadKind kind = 2;
-  // True when the bundle carries the workload's spec (a snapshot), so the
-  // fields below are the declaration. False for a bundle recorded before
-  // snapshots: only name, kind and replicas are known, and an absent value
-  // there means "not recorded", never "not declared".
+  // True when the control plane holds the workload's spec — from the bundle's
+  // snapshot, or decoded from its manifests layer — so the fields below are the
+  // declaration. False otherwise: only name, kind and replicas are known (and
+  // image, when the shape pins one), an absent value there means "not
+  // recorded", never "not declared", and spec_gap says why.
   bool spec_recorded = 3;
   // The declared replica count; unset when the declaration has none.
   optional int32 replicas = 4;
@@ -1838,6 +1852,26 @@ message DeclaredWorkload {
   // Only those switches are read, and only this verdict leaves: never a value.
   // Meaningless when spec_recorded is false.
   repeated string telemetry_off = 16;
+  // Why spec_recorded is false. UNSPECIFIED when it is true, and from a
+  // control plane that predates this field.
+  DeclaredSpecGap spec_gap = 17;
+}
+
+// DeclaredSpecGap is why a declared workload's spec is not recorded.
+enum DeclaredSpecGap {
+  DECLARED_SPEC_GAP_UNSPECIFIED = 0;
+  // The control plane has not read this bundle's manifests yet. A bundle
+  // recorded before specs were decoded from them is read in the background,
+  // so this clears without a deploy.
+  DECLARED_SPEC_GAP_PENDING = 1;
+  // The bundle's manifests cannot be read: they are in a registry the control
+  // plane does not reach (bring-your-own), the registry no longer holds them,
+  // or the bundle carries no manifests layer. A deploy that pushes to the
+  // platform registry records the spec.
+  DECLARED_SPEC_GAP_UNREADABLE = 2;
+  // The manifests were read and hold no runnable object for this workload
+  // (the shape names it, the rendered objects do not).
+  DECLARED_SPEC_GAP_NOT_IN_MANIFESTS = 3;
 }
 
 message DeclaredPort {
@@ -2049,6 +2083,17 @@ message DeployLocalSession {
   // Set when the client reported `state = stopped`. A clean exit, as distinct
   // from a session that simply went quiet.
   google.protobuf.Timestamp stopped_at = 8;
+  // The dev instance this session's telemetry is stamped with
+  // (reliant.instance.id, the dev token's `sid`): the telemetry grant
+  // DeployService.MintLocalTelemetryToken holds for the session and its
+  // reporter (owner). What `forge obs --instance <label>` resolves a label of
+  // another machine's stack to, and QueryScope.instance_ids takes. Empty when
+  // the session has no grant: it never minted a dev token, so it sent no
+  // telemetry to the hosted store.
+  string instance_id = 9;
+  // The email of the person whose `forge env up` reported the session last.
+  // Empty when that user is gone.
+  string owner = 10;
 }
 
 // DeployPlan is what a deploy WOULD do, computed before anyone approves it.

@@ -293,6 +293,16 @@ What failed, for the nodes of a workflow's [`on_failure` handler](/workflows/pat
 
 All five are always present, so a handler never fails reporting a failure. Reads of the main graph's `nodes.*` inside the handler must be guarded (`has()` or `.?`): the nodes after the failed one never ran.
 
+`failure` is also declared inside a [`finally` handler](/workflows/patterns#however-a-run-ends-finally). There every key is empty (and `attempt` is 1) unless `run.status` is `'failed'`.
+
+### run.*
+
+How the run ended, for the nodes of a workflow's [`finally` handler](/workflows/patterns#however-a-run-ends-finally) and nowhere else: `run` anywhere else is a compile error.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `run.status` | string | `'completed'`, `'failed'` or `'cancelled'` |
+
 ### trigger.*
 
 The event that started the run, fixed at launch. Also the only namespace a trigger's `filter`, `origin_filter`, `inputs` and `prompt` can read. A chat started by a person has `trigger.kind` of `chat.start`.
@@ -510,7 +520,7 @@ standard library plus these extensions:
 | Strings | `trimPrefix`, `trimSuffix`, `split`, `join`, `replace`, `format`, `lowerAscii`, `upperAscii`, `trim`, `indexOf`, `substring`, `padLeft`, `padRight` |
 | Lists | `sort()`, `sortBy(x, key)`, `distinct()`, `flatten()`, `slice(a, b)`, `first()`, `last()`, `lists.range(n)` (at most 100,000) |
 | Sets | `sets.contains(a, b)`, `sets.intersects(a, b)`, `sets.equivalent(a, b)` |
-| Math | `math.greatest(...)`, `math.least(...)`, `math.abs`, `math.ceil`, `math.floor`, `math.round`, `math.sign` |
+| Math | `math.greatest(...)`, `math.least(...)`, `math.abs`, `math.ceil`, `math.floor`, `math.round`, `math.trunc`, `math.sign` (ceil, floor, round and trunc take an int too: a whole number read from another node is an int; an int beyond ±2^53 has no exact double and is an error) |
 | Encoders | `base64.encode(bytes)`, `base64.decode(string)` |
 | Bindings | `cel.bind(name, value, body)`: name an intermediate value once |
 | Regex | `regex.extract`, `regex.extractAll`, `regex.replace` (plus `string.matches(re)` from the standard library) |

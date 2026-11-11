@@ -75,10 +75,20 @@ func (e *waitingExecutor) wasArmed(toolCallID string) bool {
 	return e.armed[toolCallID]
 }
 
+// testPreemptionPoll stands in for preemptionPollInterval (1s), which would
+// make every preempted wait here cost a second of nothing.
+const testPreemptionPoll = 50 * time.Millisecond
+
+func newPreemptionTestActivity(store ExecuteToolsStore, executor toolexec.ToolExecutor) *ExecuteToolsActivity {
+	a := NewExecuteToolsActivity(store, executor)
+	a.preemptionPoll = testPreemptionPoll
+	return a
+}
+
 func (f *durableStatusFixture) runBatch(t *testing.T, executor toolexec.ToolExecutor, calls ...message.ToolCall) *ExecuteToolsOutput {
 	t.Helper()
 	var output ExecuteToolsOutput
-	err := f.h.ExecuteActivity(NewExecuteToolsActivity(f.h.Repo(), executor).Execute, ExecuteToolsInput{
+	err := f.h.ExecuteActivity(newPreemptionTestActivity(f.h.Repo(), executor).Execute, ExecuteToolsInput{
 		ChatID:    f.chatID,
 		Thread:    f.chatID,
 		ToolCalls: calls,
@@ -251,7 +261,7 @@ func TestPreemption_OneMessageEndsEveryWaitInTheBatch(t *testing.T) {
 
 			start := time.Now()
 			var output ExecuteToolsOutput
-			err := f.h.ExecuteActivity(NewExecuteToolsActivity(store, executor).Execute, ExecuteToolsInput{
+			err := f.h.ExecuteActivity(newPreemptionTestActivity(store, executor).Execute, ExecuteToolsInput{
 				ChatID: f.chatID, Thread: f.chatID, ToolCalls: []message.ToolCall{first, second},
 			}, &output)
 			require.NoError(t, err)
@@ -318,7 +328,8 @@ func TestPreemption_AMessagePreemptsOnlyOnce(t *testing.T) {
 	require.NoError(t, err)
 	require.EqualValues(t, 1, marked)
 
-	executor := newWaitingExecutor(2500 * time.Millisecond)
+	// Ten mailbox checks: a spent message that still preempted would be seen.
+	executor := newWaitingExecutor(10 * testPreemptionPoll)
 	output := f.runBatch(t, executor, waitCall())
 
 	require.Len(t, output.ToolResults, 1)

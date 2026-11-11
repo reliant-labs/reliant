@@ -4,6 +4,7 @@ package cmd
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -17,6 +18,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/daemonpolicy"
+	"github.com/reliant-labs/reliant/sdk/go/reliant"
 )
 
 // errAgentCannotEnable is what create, update, enable and activate say when an
@@ -326,7 +328,7 @@ func newTriggerListCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			req := &reliantv1.ListTriggersRequest{}
+			filter := reliant.ListTriggers{}
 			if !allProjects {
 				if projectID == "" {
 					// Default to the project in the working directory, which
@@ -337,15 +339,17 @@ func newTriggerListCmd() *cobra.Command {
 						projectID = id
 					}
 				}
-				if projectID != "" {
-					req.ProjectId = &projectID
-				}
+				filter.ProjectID = projectID
 			}
-			resp, err := newTriggerServiceClient(conn).ListTriggers(cmd.Context(), connect.NewRequest(req))
+			client, err := conn.sdkClient()
 			if err != nil {
-				return conn.annotate(fmt.Errorf("listing triggers: %w", err))
+				return err
 			}
-			printTriggerTable(cmd.OutOrStdout(), resp.Msg.GetTriggers())
+			list, err := client.Triggers.List(cmd.Context(), filter).All()
+			if err != nil {
+				return conn.annotate(fmt.Errorf("listing triggers: %w", sdkCause(err)))
+			}
+			printTriggerTable(cmd.OutOrStdout(), list)
 			return nil
 		},
 	}
@@ -364,9 +368,13 @@ func newTriggerGetCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			trigger, err := resolveTrigger(cmd.Context(), newTriggerServiceClient(conn), args[0])
+			client, err := conn.sdkClient()
 			if err != nil {
-				return conn.annotate(err)
+				return err
+			}
+			trigger, err := client.Triggers.Get(cmd.Context(), args[0])
+			if err != nil {
+				return conn.annotate(triggerLookupError(args[0], err))
 			}
 			printTriggerDetail(cmd.OutOrStdout(), trigger)
 			return nil
@@ -462,19 +470,21 @@ asynchronous — use ` + "`trigger events`" + ` to see what it did.`,
 			if err != nil {
 				return err
 			}
-			client := newTriggerServiceClient(conn)
-			trigger, err := resolveTrigger(cmd.Context(), client, args[0])
+			client, err := conn.sdkClient()
 			if err != nil {
-				return conn.annotate(err)
+				return err
 			}
-			resp, err := client.FireTrigger(cmd.Context(),
-				connect.NewRequest(&reliantv1.FireTriggerRequest{Id: trigger.GetId()}))
+			trigger, err := client.Triggers.Get(cmd.Context(), args[0])
 			if err != nil {
-				return conn.annotate(fmt.Errorf("firing trigger: %w", err))
+				return conn.annotate(triggerLookupError(args[0], err))
+			}
+			fired, err := client.Triggers.Fire(cmd.Context(), trigger.GetId())
+			if err != nil {
+				return conn.annotate(fmt.Errorf("firing trigger: %w", sdkCause(err)))
 			}
 			out := cmd.OutOrStdout()
 			fmt.Fprintf(out, "Fired trigger %q\n", trigger.GetName())
-			fmt.Fprintf(out, "  Fire workflow ID: %s\n", resp.Msg.GetFireWorkflowId())
+			fmt.Fprintf(out, "  Fire workflow ID: %s\n", fired.FireWorkflowID)
 			fmt.Fprintf(out, "\nThe firing is asynchronous. See what it did with:\n")
 			fmt.Fprintf(out, "  reliant trigger events %s\n", trigger.GetId())
 			return nil
@@ -493,25 +503,60 @@ func newTriggerEventsCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			client := newTriggerServiceClient(conn)
-			trigger, err := resolveTrigger(cmd.Context(), client, args[0])
+			client, err := conn.sdkClient()
 			if err != nil {
-				return conn.annotate(err)
+				return err
 			}
-			resp, err := client.ListTriggerEvents(cmd.Context(),
-				connect.NewRequest(&reliantv1.ListTriggerEventsRequest{
-					TriggerId: trigger.GetId(),
-					Limit:     limit,
-				}))
+			trigger, err := client.Triggers.Get(cmd.Context(), args[0])
 			if err != nil {
-				return conn.annotate(fmt.Errorf("listing trigger events: %w", err))
+				return conn.annotate(triggerLookupError(args[0], err))
 			}
-			printTriggerEventTable(cmd.OutOrStdout(), resp.Msg.GetEvents())
+			// One page, as it always was: a zero limit is the server's default
+			// page, and the SDK's iterator would otherwise follow every page.
+			if limit <= 0 {
+				limit = defaultTriggerEventLimit
+			}
+			events, err := client.Triggers.Events(cmd.Context(), trigger.GetId(),
+				reliant.EventFilter{PageSize: int(limit), Limit: int(limit)}).All()
+			if err != nil {
+				return conn.annotate(fmt.Errorf("listing trigger events: %w", sdkCause(err)))
+			}
+			printTriggerEventTable(cmd.OutOrStdout(), events)
 			return nil
 		},
 	}
 	cmd.Flags().Int32Var(&limit, "limit", 0, "Maximum firings to return (0 applies the server default)")
 	return cmd
+}
+
+// defaultTriggerEventLimit is how many firings the server returns when asked for
+// none (internal/handlers/trigger: defaultTriggerEventLimit).
+const defaultTriggerEventLimit = 50
+
+// triggerLookupError words a failed id-or-name lookup the way resolveTrigger
+// always has, from the SDK's error.
+func triggerLookupError(idOrName string, err error) error {
+	var re *reliant.Error
+	if errors.As(err, &re) {
+		switch {
+		case errors.Is(err, reliant.ErrAmbiguous):
+			return fmt.Errorf("%s", ambiguousTriggerMessage(re.Message))
+		case errors.Is(err, reliant.ErrNotFound) && re.Code == connect.CodeUnknown:
+			return fmt.Errorf("no trigger with id or name %q", idOrName)
+		}
+	}
+	return fmt.Errorf("looking up trigger %q: %w", idOrName, sdkCause(err))
+}
+
+// ambiguousTriggerMessage lays the SDK's one-line ambiguity error out the way
+// the CLI prints it: the ids one per line.
+func ambiguousTriggerMessage(msg string) string {
+	const marker = "use an id: "
+	head, ids, ok := strings.Cut(msg, marker)
+	if !ok {
+		return msg
+	}
+	return head + "use an id:\n  " + strings.Join(strings.Split(ids, ", "), "\n  ")
 }
 
 // resolveTrigger takes an id or a name. It tries the id first, because an id

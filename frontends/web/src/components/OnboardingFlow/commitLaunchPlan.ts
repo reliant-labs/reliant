@@ -122,6 +122,34 @@ export function daemonSizeForPlan(computePlanId: string | undefined): number {
 }
 
 /**
+ * The machine size to provision: the recorded plan's size when the server
+ * admits it, otherwise the first size the server says this account may run.
+ *
+ * The recorded size can predate the entitlement that pays for the machine. A
+ * user who reaches checkout uncovered has the cheapest tile (S1) recorded;
+ * redeeming a compute coupon there settles the bill and commits that plan, but
+ * a coupon runs only its unit tier (M), so CreateDaemon refused the S1 with
+ * "your plan does not include daemon size s1" at the last step of onboarding
+ * (prod, 2026-11-04). The coupon paid for a machine; provisioning the machine
+ * it pays for is the honest reading of that plan. A subscriber's own size is
+ * always in their allowance, so a paid choice is never overridden.
+ *
+ * `allowedSizes` is the server's `allowed_daemon_sizes`, read at the commit
+ * point. Empty or absent (an older server, a failed read) changes nothing.
+ */
+export function daemonSizeForCommit(
+  computePlanId: string | undefined,
+  allowedSizes: readonly string[] | undefined,
+): number {
+  const recorded = daemonSizeForPlan(computePlanId);
+  const allowed = (allowedSizes ?? [])
+    .map((size) => DAEMON_SIZE_BY_NAME[size.toLowerCase()])
+    .filter((size): size is number => size !== undefined);
+  if (allowed.length === 0 || allowed.includes(recorded)) return recorded;
+  return allowed[0];
+}
+
+/**
  * reliant.v1.DaemonStatus, from the generated enum.
  *
  * These were hand-written literals (1/2/3) for control-plane's enum, which is
@@ -134,6 +162,14 @@ const DAEMON_STATUS_PENDING = DaemonStatus.PENDING;
 const DAEMON_STATUS_ACTIVE = DaemonStatus.ACTIVE;
 const DAEMON_STATUS_SUSPENDED = DaemonStatus.SUSPENDED;
 
+/**
+ * What a requested-but-not-yet-running machine goes through. The stages are
+ * named here so every surface describes the wait the same way; the live gate
+ * beneath the checklist reports which one the machine is actually in.
+ */
+export const STARTING_MACHINE_DETAIL =
+  "Requesting compute → pulling the image → starting Reliant on it → connected. A first start can take a few minutes.";
+
 export type CommitTaskName = "grant_ai_access" | "provision_daemon";
 
 export type CommitTaskStatus =
@@ -141,6 +177,12 @@ export type CommitTaskStatus =
   | "skipped"
   /** Not finished, and not failed: waiting on a server fact (entitlement). */
   | "pending"
+  /**
+   * The request was accepted and the work is under way, but the result is not
+   * observable yet: a machine that was asked for is not a machine that is up.
+   * Shown with a spinner; it becomes done only once the machine is ACTIVE.
+   */
+  | "starting"
   | "complete"
   | "failed";
 
@@ -182,6 +224,8 @@ export interface CommitDeps {
   getComputeEligibility: () => Promise<{
     eligible: boolean;
     reason?: string | null;
+    /** The sizes the daemon service will admit (`allowed_daemon_sizes`). */
+    allowedDaemonSizes?: string[];
   }>;
   listDaemons: () => Promise<
     { daemons: Array<{ daemonId: string; status: number }> }
@@ -230,6 +274,7 @@ function defaultDeps(): CommitDeps {
       const result = await getComputeEligibility();
       return {
         eligible: result.eligible,
+        allowedDaemonSizes: result.allowedDaemonSizes,
         // Rendered through the same table the compute step uses, so the user
         // is not told two different things about one server fact.
         reason: result.eligible ? null : computeIneligibleCopy(result.reason),
@@ -322,13 +367,15 @@ async function grantAiAccess(
  */
 async function awaitComputeEligibility(
   deps: CommitDeps,
-): Promise<{ eligible: boolean; reason: string }> {
+): Promise<{ eligible: boolean; reason: string; allowedDaemonSizes?: string[] }> {
   let reason = "";
   for (let attempt = 0; attempt < ELIGIBILITY_POLL_ATTEMPTS; attempt++) {
     if (attempt > 0) await deps.sleep(ELIGIBILITY_POLL_INTERVAL_MS);
     try {
       const result = await deps.getComputeEligibility();
-      if (result.eligible) return { eligible: true, reason: "" };
+      if (result.eligible) {
+        return { eligible: true, reason: "", allowedDaemonSizes: result.allowedDaemonSizes };
+      }
       reason = result.reason ?? "";
     } catch (err) {
       reason = messageOf(err, "");
@@ -370,7 +417,7 @@ async function provisionDaemon(
     };
   }
 
-  const { eligible, reason } = await awaitComputeEligibility(deps);
+  const { eligible, reason, allowedDaemonSizes } = await awaitComputeEligibility(deps);
   if (!eligible) {
     // PENDING, not failed. A webhook that has not landed yet is a wait, and
     // calling CreateDaemon into a denial would tell a paying user to upgrade.
@@ -413,8 +460,8 @@ async function provisionDaemon(
     if (booting) {
       return {
         name: "provision_daemon",
-        status: "complete",
-        detail: "Starting your machine…",
+        status: "starting",
+        detail: STARTING_MACHINE_DETAIL,
         daemonId: booting.daemonId,
       };
     }
@@ -427,8 +474,8 @@ async function provisionDaemon(
       await deps.resumeDaemon(suspended.daemonId);
       return {
         name: "provision_daemon",
-        status: "complete",
-        detail: "Starting your machine…",
+        status: "starting",
+        detail: STARTING_MACHINE_DETAIL,
         daemonId: suspended.daemonId,
       };
     }
@@ -442,15 +489,15 @@ async function provisionDaemon(
       name: ONBOARDING_DAEMON_NAME,
       daemonType: DAEMON_TYPE_MANAGED,
       // The size the user actually picked, not a hardcoded SMALL.
-      size: daemonSizeForPlan(plan.computePlanId),
+      size: daemonSizeForCommit(plan.computePlanId, allowedDaemonSizes),
       gitRepo: "",
       gitBranch: "main",
       refreshExisting: true,
     });
     return {
       name: "provision_daemon",
-      status: "complete",
-      detail: "Starting your machine…",
+      status: daemonId ? "starting" : "complete",
+      detail: daemonId ? STARTING_MACHINE_DETAIL : "Your machine was requested.",
       daemonId: daemonId || undefined,
     };
   } catch (err) {
@@ -464,13 +511,16 @@ async function provisionDaemon(
 
 /** `complete` when nothing that was attempted failed; `failed` when nothing
  *  that was attempted succeeded; `partial` otherwise. Skipped work is not an
- *  attempt, so a local + own-key plan commits `complete` having done nothing. */
+ *  attempt, so a local + own-key plan commits `complete` having done nothing.
+ *  A `starting` task counts as done here: the commit's job is to make the
+ *  request, and the gate (not the commit) watches the machine come up. */
 export function deriveCommitStatus(tasks: CommitTask[]): CommitStatus {
   const attempted = tasks.filter((t) => t.status !== "skipped");
   if (attempted.length === 0) return "complete";
-  const unfinished = attempted.filter((t) => t.status !== "complete");
+  const accepted = (t: CommitTask) => t.status === "complete" || t.status === "starting";
+  const unfinished = attempted.filter((t) => !accepted(t));
   if (unfinished.length === 0) return "complete";
-  const succeeded = attempted.some((t) => t.status === "complete");
+  const succeeded = attempted.some(accepted);
   return succeeded ? "partial" : "failed";
 }
 

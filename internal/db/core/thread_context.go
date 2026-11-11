@@ -132,6 +132,8 @@ type Thread struct {
 	// the chat's: set on a sub-agent spawned with a `worktree`. Nil means the
 	// chat's own worktree (Chat.WorktreeID).
 	WorktreeID *string `json:"worktree_id,omitempty"`
+	// Once excluded, this thread and its descendants never inject ambient memory.
+	ExcludeAmbientMemory bool `json:"exclude_ambient_memory,omitempty"`
 }
 
 // ContextWindow represents an atomic unit for LLM context.

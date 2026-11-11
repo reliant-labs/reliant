@@ -126,7 +126,7 @@ describe('workspaceStateStore', () => {
       expect(state.activeChatId).toBeNull();
       expect(state.chatQueue).toEqual([]);
       expect(state.openViewers).toEqual([]);
-      expect(state.terminalOpen).toBe(true);
+      expect(state.terminalOpen).toBe(false);
     });
 
     it('should use MAIN_WORKTREE_KEY for null worktreeId', () => {
@@ -223,7 +223,7 @@ describe('workspaceStateStore', () => {
       act(() => {
         // Fresh but equal objects, as each save produces.
         useWorkspaceStateStore.getState().setOpenViewers(projectId, worktreeId, serialize(), 0);
-        useWorkspaceStateStore.getState().setTerminalOpen(projectId, worktreeId, true); // the default
+        useWorkspaceStateStore.getState().setTerminalOpen(projectId, worktreeId, false); // the default
       });
       expect(listener).not.toHaveBeenCalled();
       expect(useWorkspaceStateStore.getState()).toBe(before);
@@ -480,7 +480,7 @@ describe('Default State Factories', () => {
           fileBrowser: true,
         },
         rightSidebarTab: "files",
-        terminalOpen: true,
+        terminalOpen: false,
         scrollPositions: {},
         showTasksPanel: {},
         showRecentChanges: {},
@@ -490,6 +490,32 @@ describe('Default State Factories', () => {
         workflowViewerMode: {},
         workflowLayoutDirection: {},
       });
+    });
+  });
+
+  describe('terminal default', () => {
+    it('starts closed for a workspace that has no saved state', () => {
+      expect(createDefaultWorktreeState().terminalOpen).toBe(false);
+
+      const store = useWorkspaceStateStore.getState();
+      expect(store.getWorktreeState('never-seen', null).terminalOpen).toBe(false);
+      expect(store.getWorktreeState('never-seen', 'wt-new').terminalOpen).toBe(false);
+    });
+
+    it('keeps a terminal the user opened, and keeps it closed once they closed it', () => {
+      const store = useWorkspaceStateStore.getState();
+
+      act(() => {
+        store.setTerminalOpen('project-1', null, true);
+      });
+      expect(useWorkspaceStateStore.getState().getWorktreeState('project-1', null).terminalOpen).toBe(true);
+      // Other workspaces keep the default.
+      expect(useWorkspaceStateStore.getState().getWorktreeState('project-1', 'wt-1').terminalOpen).toBe(false);
+
+      act(() => {
+        useWorkspaceStateStore.getState().setTerminalOpen('project-1', null, false);
+      });
+      expect(useWorkspaceStateStore.getState().getWorktreeState('project-1', null).terminalOpen).toBe(false);
     });
   });
 
@@ -505,10 +531,8 @@ describe('Default State Factories', () => {
 });
 
 describe('Persisted state migration', () => {
-  it('should open the terminal for worktrees persisted with the old closed default', async () => {
-    // A v6 payload, which is what every existing install has on disk. The
-    // explicit `false` came from the old default, not from a user choice, and
-    // would otherwise shadow the new default forever.
+  it('leaves a terminal persisted as closed in an older payload closed', async () => {
+    // A v6 payload. Migration must never reopen a terminal on its own.
     localStorageMock.setItem(
       'workspace-state',
       JSON.stringify({
@@ -542,7 +566,42 @@ describe('Persisted state migration', () => {
     });
 
     const store = useWorkspaceStateStore.getState();
+    expect(store.getWorktreeState('project-1', null).terminalOpen).toBe(false);
+    expect(store.getWorktreeState('project-1', 'wt-1').terminalOpen).toBe(false);
+  });
+});
+
+describe('Persisted terminal choice across a reload', () => {
+  it('does not force-close a terminal a user already has open', async () => {
+    localStorageMock.setItem(
+      'workspace-state',
+      JSON.stringify({
+        version: 7,
+        state: {
+          version: 7,
+          lastProjectId: 'project-1',
+          leftSidebarExpanded: true,
+          projects: {
+            'project-1': {
+              lastWorktreeId: null,
+              activeView: 'chats',
+              worktrees: {
+                [MAIN_WORKTREE_KEY]: { ...createDefaultWorktreeState(), terminalOpen: true },
+                'wt-1': { ...createDefaultWorktreeState(), terminalOpen: false },
+              },
+            },
+          },
+        },
+      })
+    );
+
+    await act(async () => {
+      await useWorkspaceStateStore.persist.rehydrate();
+    });
+
+    const store = useWorkspaceStateStore.getState();
     expect(store.getWorktreeState('project-1', null).terminalOpen).toBe(true);
-    expect(store.getWorktreeState('project-1', 'wt-1').terminalOpen).toBe(true);
+    expect(store.getWorktreeState('project-1', 'wt-1').terminalOpen).toBe(false);
+    expect(store.getWorktreeState('project-2', null).terminalOpen).toBe(false);
   });
 });

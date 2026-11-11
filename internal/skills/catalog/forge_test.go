@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	forgecli "github.com/reliant-labs/forge/cli"
+	"github.com/reliant-labs/reliant/internal/forgepin"
 	skillscore "github.com/reliant-labs/reliant/internal/skills/core"
 	"github.com/stretchr/testify/require"
 )
@@ -465,4 +466,15 @@ func TestForgeSkillsForInput_SharedSkillsDiscoveredOnce(t *testing.T) {
 		require.Equal(t, 1, n, "skill %q must be discovered once, not per repo", p)
 	}
 	require.Equal(t, 1, counts[forgeNamespace])
+}
+
+// forge writes skill descriptions harness-agnostic and ListSkills returns them
+// raw; reliant prints them beside bodies RenderSkill has respelled, so they
+// take the same rewrite. The pinned forge's list is cached, so the input stays
+// untouched.
+func TestSpellForgeDescriptions_RespellsCommandsLikeTheBodies(t *testing.T) {
+	in := []forgecli.Skill{{Path: "greenfield", Description: "`forge project new` with every service; see forge/forge and forge's docs"}}
+	out := spellForgeDescriptions(in)
+	require.Equal(t, "`"+forgepin.CLIName()+" project new` with every service; see forge/forge and forge's docs", out[0].Description)
+	require.Equal(t, "`forge project new` with every service; see forge/forge and forge's docs", in[0].Description)
 }

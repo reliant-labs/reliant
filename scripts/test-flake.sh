@@ -33,12 +33,21 @@ fi
 
 annotate=false; [ -n "${GITHUB_ACTIONS:-}" ] && annotate=true
 status=0
-while IFS=$'\t' read -r pkg pattern; do
+# A third column names a nested Go module (sdk/go): its package path is relative
+# to that module, and it is tested from there, outside any workspace, as its
+# consumers build it. The root module does not contain it.
+while IFS=$'\t' read -r pkg pattern mod; do
   [ -n "$pkg" ] || continue
-  $annotate && echo "::group::$pkg -run '$pattern' -count=3"
-  echo "test-flake: $pkg -run '$pattern' -count=3"
-  if ! go test -short -count=3 -timeout=10m -run "$pattern" "$pkg"; then
-    msg="$pkg $pattern did not pass three runs in a row. A test that fails on a repeat is a flake; fix it at the root (shared state, a fixed port, wall-clock timing, test order)."
+  where=$pkg; [ -n "$mod" ] && where="$mod: $pkg"
+  $annotate && echo "::group::$where -run '$pattern' -count=3"
+  echo "test-flake: $where -run '$pattern' -count=3"
+  if [ -n "$mod" ]; then
+    (cd "$mod" && GOWORK=off go test -short -count=3 -timeout=10m -run "$pattern" "$pkg")
+  else
+    go test -short -count=3 -timeout=10m -run "$pattern" "$pkg"
+  fi
+  if [ $? -ne 0 ]; then
+    msg="$where $pattern did not pass three runs in a row. A test that fails on a repeat is a flake; fix it at the root (shared state, a fixed port, wall-clock timing, test order)."
     if $annotate; then echo "::error title=Flaky or failing new test::$msg"; else echo "test-flake: FAIL: $msg" >&2; fi
     status=1
   fi

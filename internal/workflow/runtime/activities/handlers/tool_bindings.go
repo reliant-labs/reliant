@@ -138,6 +138,7 @@ func (a *ExecuteToolsActivity) boundToolInput(ctx context.Context, caps *tools.C
 	if err != nil {
 		return "", err.Error()
 	}
+	tec.boundParams = bindings.Names()
 	bindingLogger(ctx).Debug("[ExecuteTools] Applied bound parameters",
 		"tool", tec.toolName, "toolCallID", tec.toolCallID, "params", bindings.Names())
 	return input, ""

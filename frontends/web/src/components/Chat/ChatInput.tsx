@@ -18,7 +18,9 @@ import { useCoarsePointer } from "./useCoarsePointer";
 import { CodeContextChip } from "./CodeContextChip";
 import { detectPlatform } from "../../lib/keyboard/platform";
 import { useComposerUploads } from "./useComposerUploads";
-import { useAttachmentStore } from "../../store/attachmentStore";
+import { legacyPasteDraftKeys, migrateLegacyPasteDrafts, pastedTextFilename, useLongPaste } from "./useLongPaste";
+import { isDraftAttachmentPersisted, useAttachmentStore } from "../../store/attachmentStore";
+import { useAuthStore } from "../../store/authStore";
 import { useChatParamsStore } from "../../store/chatParamsStore";
 import { useActiveChatId } from "../../store/chatStoreHooks";
 import { useModels } from "../../store/globalDataStore";
@@ -69,13 +71,16 @@ import { questionForThread } from "../../lib/pendingQuestions";
 import type { WorkflowExecution } from "./ExecutionSidebar/types";
 import { getThreadColor, formatNodeId, resolveThreadNameFromActiveThreads } from "./thread-views/threadUtils";
 import { useActiveThreads } from "../../store/threadActivityStore";
-import { getInputDefault, getInputNestedInputs, getInputPresetConfig, getInputUI } from "../../lib/inputHelpers";
+import { getInputDefault, getInputEnumValues, getInputNestedInputs, getInputPresetConfig, getInputUI } from "../../lib/inputHelpers";
+import { isSelectorHidden } from "../../lib/executionMode";
 import { isRequiredInput } from "../workflow/run/runWorkflowValues";
 import {
   adoptServerParams,
+  applyParamPatch,
   currentThinkingLevel,
   flatToNestedParams,
   groupNamesOf,
+  nestChangedParams,
   nestedToFlatParams,
   paramValuesEqual,
   threadParamsAcceptChanges,
@@ -226,6 +231,7 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
     const [optionsPage, setOptionsPage] = useState<ComposerOptionsPage | null>(null);
     const sendingRef = useRef(false);
     const [sending, setSending] = useState(false);
+    const [queueing, setQueueing] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const photoInputRef = useRef<HTMLInputElement>(null);
     const cameraInputRef = useRef<HTMLInputElement>(null);
@@ -425,8 +431,6 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
     } | null>(null);
     // Current thread param values (full values map, updated by WorkflowParamsPanel.onChange)
     const [threadParamValues, setThreadParamValues] = useState<Record<string, unknown> | null>(null);
-    // Last thread params synced to server (to detect unsaved changes)
-    const [threadSyncedParams, setThreadSyncedParams] = useState<Record<string, unknown>>({});
 
     // Whether we're currently showing a non-main thread's params
     const isViewingThreadParams = selectedThreadId != null && selectedThreadId !== chatId && threadParamsOverride != null;
@@ -498,20 +502,17 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
       if (!selectedThreadId || selectedThreadId === chatId) {
         setThreadParamsOverride(null);
         setThreadParamValues(null);
-        setThreadSyncedParams({});
         return;
       }
 
       if (!chatId || !currentProjectFromStore?.id) {
         setThreadParamsOverride(null);
         setThreadParamValues(null);
-        setThreadSyncedParams({});
         return;
       }
 
       // Clear stale state from previous thread immediately on switch
       setThreadParamValues(null);
-      setThreadSyncedParams({});
 
       let cancelled = false;
 
@@ -759,7 +760,7 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
       if (!workflowInputs) return [];
       const result: [string, InputDef][] = [];
       for (const [name, schema] of Object.entries(workflowInputs)) {
-        if (getInputUI(schema) === "toolbar") {
+        if (getInputUI(schema) === "toolbar" && !isSelectorHidden(getInputEnumValues(schema))) {
           result.push([name, schema]);
         }
       }
@@ -993,7 +994,7 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
           clearLegacyChatParams(chatId);
           legacyPendingRef.current = null;
         }
-        commitSynced({ ...syncedRef.current, ...result.pushed });
+        commitSynced(applyParamPatch(syncedRef.current, result.pushed));
         // The server's copy is the truth: it may have moved a model off a
         // provider that cannot serve it. Adopt that, keeping any edit made
         // while the request was in flight.
@@ -1039,29 +1040,20 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
       if (!isViewingThreadParams || !threadParamsAcceptChanges(threadParamsOverride)) return false;
       if (!chatId || !threadParamValues) return false;  // No local edits yet
 
-      const baseline = threadParamsOverride.values;
-      for (const [key, value] of Object.entries(threadParamValues)) {
-        // Compare against last-synced value if available, otherwise against fetched baseline
-        const reference = key in threadSyncedParams ? threadSyncedParams[key] : baseline[key];
-        if (!paramValuesEqual(reference, value)) return true;
-      }
-      return false;
-    }, [isViewingThreadParams, threadParamsOverride, chatId, threadParamValues, threadSyncedParams]);
+      return Object.keys(unsyncedParams(threadParamValues, threadParamsOverride.values)).length > 0;
+    }, [isViewingThreadParams, threadParamsOverride, chatId, threadParamValues]);
+
+    const selectedThreadRef = useRef(selectedThreadId);
+    selectedThreadRef.current = selectedThreadId;
 
     // Sync thread params to server
     const handleSyncThreadParams = useCallback(async () => {
       if (!chatId || !selectedThreadId || !threadParamValues || isSyncing) return;
 
       const baseline = threadParamsOverride?.values ?? {};
-      const changedParams: Record<string, unknown> = {};
-      for (const [key, value] of Object.entries(threadParamValues)) {
-        const reference = key in threadSyncedParams ? threadSyncedParams[key] : baseline[key];
-        if (!paramValuesEqual(reference, value)) {
-          changedParams[key] = value;
-        }
-      }
-
+      const changedParams = unsyncedParams(threadParamValues, baseline);
       if (Object.keys(changedParams).length === 0) return;
+      const patch = nestChangedParams(changedParams, threadParamValues, groupNamesOf(threadParamsOverride?.inputs));
 
       setIsSyncing(true);
       try {
@@ -1070,24 +1062,20 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
           threadId: selectedThreadId,
           changedParams,
         });
-        await chatActions.updateWorkflowParams(chatId, changedParams, selectedThreadId);
-        // Update the baseline to include synced values so the sync button clears.
-        // Also clear threadParamValues so UI falls back to the updated baseline.
-        if (threadParamsOverride) {
-          setThreadParamsOverride({
-            ...threadParamsOverride,
-            values: { ...threadParamsOverride.values, ...changedParams },
-          });
-        }
-        setThreadParamValues(null);
-        setThreadSyncedParams({});
+        await chatActions.updateWorkflowParams(chatId, patch, selectedThreadId);
+        if (selectedThreadRef.current !== selectedThreadId) return;
+        const acknowledged = applyParamPatch(baseline, changedParams);
+        setThreadParamsOverride((current) => current ? { ...current, values: acknowledged } : current);
+        // Keep edits made while this request was pending, including another reset.
+        setThreadParamValues((current) => current && !paramValuesEqual(current, threadParamValues) ? current : null);
+
         logger.info("[ChatInput] Thread params synced successfully");
       } catch (error) {
         logger.error("[ChatInput] Failed to sync thread params", { error, chatId, threadId: selectedThreadId });
       } finally {
         setIsSyncing(false);
       }
-    }, [chatId, selectedThreadId, threadParamValues, threadParamsOverride, threadSyncedParams, isSyncing]);
+    }, [chatId, selectedThreadId, threadParamValues, threadParamsOverride, isSyncing]);
 
     // Auto-sync edited params to the in-flight workflow run, debounced.
     // Replaces the former manual "Sync" button: while a run is active, param
@@ -1128,6 +1116,7 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
     const clearAttachments = useAttachmentStore(
       (state) => state.clearAttachments
     );
+    const replaceAttachment = useAttachmentStore((state) => state.replaceAttachment);
     const uploading = useAttachmentStore((state) => state.uploading);
 
     // Use tabId to isolate attachments per tab when no chatId exists
@@ -1187,9 +1176,46 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
     }, [isStreaming, effectiveStreaming, isChatBusy, chatId]);
 
     const uploadQueue = useComposerUploads(attachFile, removeAttachment, attachmentSessionId);
+    // A long paste is an ordinary upload, named after the draft's other files.
+    useLongPaste({
+      textarea: textareaRef,
+      input,
+      setInput: replaceInput,
+      attach: (text) => {
+        const name = pastedTextFilename([
+          ...attachments.map((attachment) => attachment.filename),
+          ...uploadQueue.uploads.map((upload) => upload.file.name),
+        ]);
+        void uploadQueue.add(attachmentSessionId, [new File([text], name, { type: "text/plain" })]);
+      },
+      disabled: !canAttach || disabled || sending || queueing,
+    });
+
+    // Long pastes a v1.10 composer stored for this draft become its attachments.
+    const pasteUserId = useAuthStore((state) => state.user?.id);
+    const pasteProjectId = currentProjectFromStore?.id;
+    useEffect(() => {
+      if (!canAttach) return;
+      const keys = legacyPasteDraftKeys({
+        userId: pasteUserId,
+        projectId: pasteProjectId,
+        sessionId: attachmentSessionId,
+        newChat: !chatId,
+      });
+      if (keys.length === 0) return;
+      void migrateLegacyPasteDrafts(
+        keys,
+        async (text) => {
+          const taken = useAttachmentStore.getState().getAttachments(attachmentSessionId).map((a) => a.filename);
+          const attachment = await attachFile(attachmentSessionId, new File([text], pastedTextFilename(taken), { type: "text/plain" }));
+          return attachment.id;
+        },
+        (id) => isDraftAttachmentPersisted(attachmentSessionId, id),
+      );
+    }, [canAttach, pasteUserId, pasteProjectId, attachmentSessionId, chatId, attachFile]);
     // Drag and drop functionality
     const handleFileDrop = async (files: File[]) => {
-      if (!canAttach || disabled || sendingRef.current) return;
+      if (!canAttach || disabled || sendingRef.current || queueingRef.current) return;
       await uploadQueue.add(attachmentSessionId, files);
     };
 
@@ -1217,11 +1243,7 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
     useEffect(() => {
       const handlePasteEvent = (e: ClipboardEvent) => {
         // Only handle paste if the chat input or a child element is focused
-        const activeElement = document.activeElement;
-        const chatInputContainer = document.querySelector(
-          ".chat-input-container"
-        );
-        if (chatInputContainer && chatInputContainer.contains(activeElement)) {
+        if (e.target === textareaRef.current && !e.defaultPrevented) {
           handlePaste(e);
         }
       };
@@ -1236,7 +1258,7 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
     }, [chatId, pendingQuestion]);
 
     const handleSend = async () => {
-      if (disabled || sendingRef.current || uploading || uploadQueue.hasPending()) return;
+      if (disabled || sendingRef.current || queueingRef.current || uploading || uploadQueue.hasPending()) return;
       if (canConfigure && hasUnsetParams) {
         // The server refuses a run missing a required input; take the user
         // straight to where they can fill it in.
@@ -1330,10 +1352,13 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
 
         // The composer holds a group's params flat ("<group>.<param>"); a send
         // and the server's selection nest them.
-        const paramsToSend =
-          Object.keys(workflowParams).length > 0
-            ? flatToNestedParams(workflowParams, groupNames)
-            : undefined;
+        // Sending before the debounce fires must carry resets too. New chats
+        // have no server baseline and therefore no overrides to delete.
+        const sendParams = {
+          ...flatToNestedParams(workflowParams, groupNames),
+          ...nestChangedParams(unsyncedParams(workflowParams, chatId ? syncedRef.current : {}), workflowParams, groupNames),
+        };
+        const paramsToSend = Object.keys(sendParams).length > 0 ? sendParams : undefined;
 
         // Filter selectedPresets to only include valid targets for current workflow
         // This prevents stale presets from a different workflow from being sent
@@ -1436,8 +1461,10 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
     );
 
     const handleQueue = useCallback(async () => {
-      const message = input.trim();
-      if (!message || queueingRef.current || disabled || uploading || uploadQueue.hasPending()) return;
+      // The mailbox requires a body; attachment-only submissions get an
+      // explicit description rather than a fabricated blank message.
+      const message = input.trim() || (attachments.length ? `Attached: ${attachments.map((a) => a.filename).join(", ")}` : "");
+      if (!message || sendingRef.current || queueingRef.current || disabled || uploading || uploadQueue.hasPending()) return;
       if (!chatId || !targetThreadId) {
         toast.error("Can't queue a message: this chat has no running agent yet.");
         return;
@@ -1454,6 +1481,7 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
       };
 
       queueingRef.current = true;
+      setQueueing(true);
       let queued = false;
       try {
         beginQueuedSend({ chatId, thread: targetThreadId, row });
@@ -1486,6 +1514,7 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
       } finally {
         endQueuedSend(clientMessageId);
         queueingRef.current = false;
+        setQueueing(false);
         if (!queued) {
           initEventBus().emit("agentMailbox:drained", {
             chatId,
@@ -1694,7 +1723,26 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
       event.target.value = "";
     };
 
+    // A submission in flight owns the draft's attachments: removing or
+    // replacing one now would delete what the message references.
     const handleRemoveAttachment = (attachmentId: string) => {
+      if (sendingRef.current || queueingRef.current) return;
+      removeAttachment(attachmentSessionId, attachmentId);
+    };
+
+    const handleSaveTextAttachment = async (attachmentId: string, filename: string, text: string) => {
+      if (sendingRef.current || queueingRef.current) throw new Error("A message is being sent");
+      const type = attachments.find((attachment) => attachment.id === attachmentId)?.mime_type || "text/plain";
+      await replaceAttachment(attachmentSessionId, attachmentId, new File([text], filename, { type }));
+    };
+
+    const handleInsertTextAttachment = (attachmentId: string, text: string) => {
+      if (sendingRef.current || queueingRef.current) return;
+      const el = textareaRef.current;
+      const current = latestInputRef.current;
+      const start = el?.selectionStart ?? current.length;
+      const end = el?.selectionEnd ?? start;
+      replaceInput(current.slice(0, start) + text + current.slice(end));
       removeAttachment(attachmentSessionId, attachmentId);
     };
 
@@ -1858,7 +1906,7 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
 
     const hasText = input.trim().length > 0;
     const hasContent = hasText || attachments.length > 0 || contexts.length > 0;
-    const sendDisabled = disabled || sending || uploading || uploadQueue.uploads.length > 0 || !isMessagingAllowed;
+    const sendDisabled = disabled || sending || queueing || uploading || uploadQueue.uploads.length > 0 || !isMessagingAllowed;
     const { isMac } = detectPlatform();
     const sendKeyHint = coarsePointer ? (isMac ? "⌘↵" : "Ctrl+Enter") : "Enter";
 
@@ -1979,6 +2027,8 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
                         <AttachmentPreview
                           attachments={attachments}
                           onRemove={handleRemoveAttachment}
+                          onSave={sending || queueing ? undefined : handleSaveTextAttachment}
+                          onInsert={sending || queueing ? undefined : handleInsertTextAttachment}
                         />
                         {threadBorderColor && (
                           <ComposerChip
@@ -2107,12 +2157,11 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
                             name={paramName}
                             schema={schema}
                             value={workflowParams[paramName] ?? getInputDefault(schema)}
-                            onChange={(value) =>
-                              handleWorkflowParamsChange({
-                                ...workflowParams,
-                                [paramName]: value,
-                              })
-                            }
+                            onChange={(value) => {
+                              // `undefined` resets the param: drop the key so its default applies.
+                              const { [paramName]: _previous, ...rest } = workflowParams;
+                              handleWorkflowParamsChange(value === undefined ? rest : { ...rest, [paramName]: value });
+                            }}
                             disabled={disabled || !isMessagingAllowed}
                             isStreaming={false}
                           />
@@ -2172,7 +2221,7 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
                         onQueue={handleQueue}
                         isStreaming={effectiveStreaming}
                         hasContent={hasContent}
-                        hasText={hasText}
+                        hasText={hasText || attachments.length > 0}
                         disabled={sendDisabled}
                         sendKeyHint={sendKeyHint}
                       />

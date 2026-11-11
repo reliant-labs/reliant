@@ -13,7 +13,7 @@
  * focus, Escape, restoration and portalling.
  */
 
-import { useLayoutEffect, useState, type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 import { Link } from "@tanstack/react-router";
 import { formatDistanceToNow } from "date-fns";
 import {
@@ -24,13 +24,14 @@ import {
   Download,
   FolderGit2,
   GitBranch,
+  ListCollapse,
   Loader2,
   Pencil,
   PieChart,
   Workflow as WorkflowIcon,
 } from "lucide-react";
 import Modal from "../forge-ui/modal";
-import { focusDialogOpener } from "../../lib/dialogOpener";
+import { dialogOpener } from "../../lib/dialogOpener";
 import { cn } from "../../lib/utils";
 import { WorkflowState, WorkflowStopReason } from "../../gen/reliant/v1/chat_pb";
 import type { WorkflowExecutionData } from "../../types/chat";
@@ -38,6 +39,7 @@ import { getWorkflowDisplayName } from "../workflow/useWorkflowInputs";
 import { useChatActions } from "../Chat/useChatActions";
 import { WorkspaceRecoveryMenuItems } from "../Chat/WorkspaceRecoveryMenuItems";
 import type { ThreadInfo } from "../Chat/thread-views";
+import { setChatThreadMode, useChatThreadMode } from "../Chat/thread-views/useChatThreadMode";
 import { MOBILE_ROW, MobileCardGroup, MobileRowIcon } from "./MobileChrome";
 import { contextUsageRatio, type ContextUsage } from "./MobileChatTopBar";
 
@@ -105,12 +107,15 @@ export function MobileChatSheet({
   contextUsage,
   onOpenWorkspace,
 }: MobileChatSheetProps) {
-  // Safari never focuses a button on tap, so Forge's Modal would record <body>
-  // as the opener; focusing the tapped control first makes it restore there.
-  useLayoutEffect(focusDialogOpener, []);
+  // Safari never focuses a button on tap, so Forge's Modal finds <body> focused
+  // and has no opener to restore. Read the tapped control while rendering, in
+  // the tap's task; the Modal's fallbackFocus focuses it on close (an effect
+  // here would run after the Modal recorded its opener).
+  const [opener] = useState(dialogOpener);
   const actions = useChatActions(chatId, worktreeId);
   const [renameDraft, setRenameDraft] = useState<string | null>(null);
   const [showThreads, setShowThreads] = useState(false);
+  const isSimplified = useChatThreadMode().mode === "simplified";
 
   // Every row that hands off to somewhere else closes the sheet first.
   const closeThen = (action: () => unknown) => () => {
@@ -144,6 +149,7 @@ export function MobileChatSheet({
   return (
     <Modal
       open
+      fallbackFocus={() => opener?.focus()}
       title={title}
       description={summary || undefined}
       onClose={onClose}
@@ -277,6 +283,16 @@ export function MobileChatSheet({
         </MobileCardGroup>
 
         <MobileCardGroup>
+          <button
+            type="button"
+            onClick={closeThen(() => setChatThreadMode(isSimplified ? "detailed" : "simplified"))}
+            aria-pressed={isSimplified}
+            className={MOBILE_ROW}
+          >
+            <MobileRowIcon icon={ListCollapse} />
+            <RowText label="Simplified view" detail="Collapse tool work into one fold" />
+            {isSimplified && <Check className="h-4 w-4 shrink-0 text-primary-ink" aria-hidden />}
+          </button>
           <button type="button" onClick={closeThen(actions.exportChat)} className={MOBILE_ROW}>
             <MobileRowIcon icon={Download} />
             <RowText label="Export chat" />

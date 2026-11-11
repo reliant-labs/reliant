@@ -141,3 +141,84 @@ func TestFileSystemProxy_ViewerRefusesCredentialStores(t *testing.T) {
 		})
 	}
 }
+
+// homeRouter is viewerGuardRouter on a machine whose home directory is home:
+// it answers skills.get_home_dir, and records the path of every fs command.
+type homeRouter struct {
+	viewerGuardRouter
+	home  string
+	paths []string
+}
+
+func (r *homeRouter) SendDaemonCommandToDaemon(ctx context.Context, userID, _ string, commandType string, payload []byte, timeoutMs int32) ([]byte, error) {
+	return r.SendDaemonCommand(ctx, userID, commandType, payload, timeoutMs)
+}
+
+func (r *homeRouter) SendDaemonCommand(ctx context.Context, userID string, commandType string, payload []byte, timeoutMs int32) ([]byte, error) {
+	if commandType == "skills.get_home_dir" {
+		return json.Marshal(map[string]string{"home_dir": r.home})
+	}
+	var req struct {
+		Path string `json:"path"`
+	}
+	if err := json.Unmarshal(payload, &req); err != nil {
+		return nil, err
+	}
+	r.paths = append(r.paths, req.Path)
+	return r.viewerGuardRouter.SendDaemonCommand(ctx, userID, commandType, payload, timeoutMs)
+}
+
+// A "~/..." path names the machine's home directory, not a directory "~" in
+// the workspace: prod, 2026-11-05, "/home/workspace/projects/x/~/projects/
+// growth/.../post.md" was not found on every click (issues b52cdbdb,
+// 584d1a9a). The machine is asked where home is, and the credential guard
+// still holds for what the expanded path names.
+func TestFileSystemProxy_ViewerExpandsHomeOnTheMachine(t *testing.T) {
+	repo, projectID, base := seedFSProxyProject(t)
+	// The fake daemon's guard reads the process's own home, as the real one does.
+	home, err := filepath.EvalSymlinks(t.TempDir())
+	require.NoError(t, err)
+	t.Setenv("HOME", home)
+	preview := func(router *homeRouter, p string) error {
+		_, err := newProxy(t, router, repo).GetFilePreviewInfo(fsProxyContext(),
+			connect.NewRequest(&reliantv1.GetFilePreviewInfoRequest{ProjectId: projectID, Path: p}))
+		return err
+	}
+
+	for requested, want := range map[string]string{
+		"~/projects/growth/post.md": home + "/projects/growth/post.md",
+		"~":                         home,
+	} {
+		router := &homeRouter{home: home}
+		require.NoError(t, preview(router, requested), requested)
+		assert.Equal(t, []string{want}, router.paths, requested)
+	}
+
+	router := &homeRouter{home: home}
+	err = preview(router, "~/.ssh/id_rsa")
+	assert.Equal(t, connect.CodePermissionDenied, svcerr.Code(err), "a credential store through ~: %v", err)
+
+	// Anything else is resolved as before, without asking the machine.
+	router = &homeRouter{home: home}
+	require.NoError(t, preview(router, "notes/~draft.md"))
+	assert.Equal(t, []string{filepath.Join(base, "notes/~draft.md")}, router.paths)
+}
+
+func TestHomeRelative(t *testing.T) {
+	for p, want := range map[string]struct {
+		rest string
+		ok   bool
+	}{
+		"~":          {"", true},
+		"~/a/b.md":   {"a/b.md", true},
+		`~\a\b.md`:   {`a\b.md`, true},
+		"~user/a.md": {"", false},
+		"a/~/b.md":   {"", false},
+		"/home/x/~":  {"", false},
+		"":           {"", false},
+	} {
+		rest, ok := homeRelative(p)
+		assert.Equal(t, want.rest, rest, p)
+		assert.Equal(t, want.ok, ok, p)
+	}
+}

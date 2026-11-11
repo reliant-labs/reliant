@@ -41,6 +41,7 @@ import (
 	"time"
 
 	"github.com/reliant-labs/forge/pkg/orm"
+	"github.com/uptrace/bun/dialect/pgdialect"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
 )
@@ -75,6 +76,61 @@ func GetThread(ctx context.Context, db orm.Context, id string) (*core.Thread, er
 		return nil, noRows("failed to get thread", "thread", err)
 	}
 	return threadFromRow(row), nil
+}
+
+// ResolveThreadAmbientMemoryExclusion reads the durable monotonic policy along
+// the thread's lineage, then latches an exclusion before any provider request.
+// A read/write error is returned: falling back to false would disclose memories.
+func ResolveThreadAmbientMemoryExclusion(ctx context.Context, db orm.Context, chatID, threadID string, requested bool) (bool, error) {
+	var row struct {
+		Excluded        bool `bun:"excluded"`
+		CurrentExcluded bool `bun:"current_excluded"`
+		Complete        bool `bun:"complete"`
+		Count           int  `bun:"count"`
+	}
+	// A chain is proved only when it reaches a real root. A missing parent
+	// (there is no parent FK), cycle or depth cutoff must never look like a
+	// default-false ancestor. Bound both traversal and cycles explicitly.
+	// Cross-chat ancestors are intentional: a conversation fork retains its
+	// source thread's policy, while the starting thread stays chat-scoped.
+	err := db.Bun().NewRaw(`WITH RECURSIVE lineage AS (
+ SELECT id, parent_thread_id, exclude_ambient_memory, ARRAY[id] AS visited
+ FROM threads WHERE id = ?0 AND chat_id = ?1
+ UNION ALL
+ SELECT t.id, t.parent_thread_id, t.exclude_ambient_memory, l.visited || t.id
+ FROM threads t JOIN lineage l ON t.id = l.parent_thread_id
+ WHERE cardinality(l.visited) < 256 AND NOT (t.id = ANY(l.visited))
+ ) SELECT COALESCE(bool_or(exclude_ambient_memory), false) AS excluded,
+ COALESCE(bool_or(id = ?0 AND exclude_ambient_memory), false) AS current_excluded,
+ COALESCE(bool_or(parent_thread_id IS NULL), false) AS complete,
+ count(*) AS count FROM lineage`, threadID, chatID).Scan(ctx, &row)
+	if err != nil {
+		return false, fmt.Errorf("read thread memory exclusion: %w", err)
+	}
+	if row.Count == 0 {
+		return false, fmt.Errorf("read thread memory exclusion: thread not found")
+	}
+	if !row.Complete {
+		return false, fmt.Errorf("read thread memory exclusion: incomplete lineage (missing ancestor, cycle or depth limit)")
+	}
+	if row.CurrentExcluded {
+		return true, nil // Already durable; avoid a redundant write each turn.
+	}
+	if !requested && !row.Excluded {
+		return false, nil
+	}
+	result, err := db.Bun().NewRaw(`UPDATE threads SET exclude_ambient_memory = true WHERE id = ?0 AND chat_id = ?1`, threadID, chatID).Exec(ctx)
+	if err != nil {
+		return false, fmt.Errorf("persist thread memory exclusion: %w", err)
+	}
+	count, err := result.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+	if count != 1 {
+		return false, fmt.Errorf("persist thread memory exclusion: thread not found")
+	}
+	return true, nil
 }
 
 // GetRootThread returns the chat's root thread (the first with no parent); a
@@ -136,6 +192,34 @@ func ListThreadsByIDs(ctx context.Context, db orm.Context, ids []string) ([]*cor
 		return nil, fmt.Errorf("failed to list threads by id: %w", err)
 	}
 	return threadsFromRows(rows), nil
+}
+
+// SenderTitlesByThreadIDs maps each sender thread id to the heading a message
+// from it is shown under: the thread's own title, or, for a chat's untitled
+// main thread (a run messaging another run), the chat's title. A thread with
+// neither is absent.
+func SenderTitlesByThreadIDs(ctx context.Context, db orm.Context, ids []string) (map[string]string, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	var rows []struct {
+		ID    string `bun:"id"`
+		Title string `bun:"title"`
+	}
+	err := db.Bun().NewRaw(`SELECT t.id, COALESCE(NULLIF(t.title, ''),
+	        CASE WHEN t.parent_thread_id IS NULL THEN NULLIF(c.title, '') END, '') AS title
+	    FROM threads t JOIN chats c ON c.id = t.chat_id
+	    WHERE t.id = ANY(?::text[])`, pgdialect.Array(ids)).Scan(ctx, &rows)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list sender titles: %w", err)
+	}
+	titles := make(map[string]string, len(rows))
+	for _, row := range rows {
+		if row.Title != "" {
+			titles[row.ID] = row.Title
+		}
+	}
+	return titles, nil
 }
 
 // ListChildThreads returns the threads forked directly from parentThreadID,
@@ -330,34 +414,36 @@ func threadToRow(t *core.Thread) *Thread {
 		status = core.ThreadStatusRunning
 	}
 	return &Thread{
-		ID:              t.ID,
-		ChatID:          t.ChatID,
-		ParentThreadID:  t.ParentThreadID,
-		WorkflowID:      t.WorkflowID,
-		CreatedAt:       t.CreatedAt,
-		Title:           t.Title,
-		Origin:          origin,
-		OriginNodeID:    t.OriginNodeID,
-		Status:          &status,
-		CompletedAt:     t.CompletedAt,
-		ForkAtMessageID: t.ForkAtMessageID,
-		WorktreeID:      t.WorktreeID,
+		ID:                   t.ID,
+		ChatID:               t.ChatID,
+		ParentThreadID:       t.ParentThreadID,
+		WorkflowID:           t.WorkflowID,
+		CreatedAt:            t.CreatedAt,
+		Title:                t.Title,
+		Origin:               origin,
+		OriginNodeID:         t.OriginNodeID,
+		Status:               &status,
+		CompletedAt:          t.CompletedAt,
+		ForkAtMessageID:      t.ForkAtMessageID,
+		WorktreeID:           t.WorktreeID,
+		ExcludeAmbientMemory: t.ExcludeAmbientMemory,
 	}
 }
 
 func threadFromRow(row *Thread) *core.Thread {
 	t := &core.Thread{
-		ID:              row.ID,
-		ChatID:          row.ChatID,
-		ParentThreadID:  row.ParentThreadID,
-		ForkAtMessageID: row.ForkAtMessageID,
-		WorkflowID:      row.WorkflowID,
-		Title:           row.Title,
-		CreatedAt:       row.CreatedAt,
-		Origin:          row.Origin,
-		OriginNodeID:    row.OriginNodeID,
-		CompletedAt:     row.CompletedAt,
-		WorktreeID:      row.WorktreeID,
+		ID:                   row.ID,
+		ChatID:               row.ChatID,
+		ParentThreadID:       row.ParentThreadID,
+		ForkAtMessageID:      row.ForkAtMessageID,
+		WorkflowID:           row.WorkflowID,
+		Title:                row.Title,
+		CreatedAt:            row.CreatedAt,
+		Origin:               row.Origin,
+		OriginNodeID:         row.OriginNodeID,
+		CompletedAt:          row.CompletedAt,
+		WorktreeID:           row.WorktreeID,
+		ExcludeAmbientMemory: row.ExcludeAmbientMemory,
 	}
 	if row.Status != nil {
 		t.Status = *row.Status

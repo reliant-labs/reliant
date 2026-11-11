@@ -208,6 +208,10 @@
   --color-ink: hsl(var(--foreground));
   --color-ink-muted: hsl(var(--muted-foreground));
   --color-ink-subtle: hsl(var(--muted-foreground) / 0.72);
+  /* Focus — the app's one focus ring (web-styling: "Focus: one recipe"). The
+     installed inputs and filter bar draw `ring-ring` so a forge field focuses
+     exactly like every other control; reliant's config declares the same. */
+  --color-ring: hsl(var(--ring));
   /* Accent — resolves through --forge-accent-src; scoped, see above. */
   --color-accent: hsl(var(--forge-accent-src));
   --color-accent-hover: hsl(var(--forge-accent-src) / 0.85);
@@ -288,6 +292,22 @@
   --accent-foreground: var(--primary-foreground);
 }
 
+/*
+ * THE CONSOLE'S CONTROL EDGE. The forge console (ConsoleShell, OrgShell,
+ * ForgeShellLayout) puts filters, toggles and selects directly above charts,
+ * and forge's control edge, `border-strong` (--input, 1.45-1.75:1 against the
+ * card), drew them as faintly as the chart's own frame. Inside the console it
+ * is muted ink at 80%: at least 3.2:1 against the page and the card in every
+ * scheme, light and dark (WCAG 1.4.11 non-text contrast; pinned by
+ * components/Settings/__tests__/consoleControlEdge.test.ts). Declared here,
+ * not in @theme: a var() inside a custom property resolves where it is
+ * declared, and --muted-foreground is inherited unchanged below this scope.
+ * Its vocabulary is components/Forge/controlStyles.ts.
+ */
+.forge-console {
+  --color-border-strong: hsl(var(--muted-foreground) / 0.8);
+}
+
 /* Animations */
 @layer utilities {
   @keyframes pulse-border {
@@ -317,22 +337,39 @@
     to { opacity: 1; transform: translateY(0); }
   }
 
-  /* The chat timeline's catch-up overlay fades in rather than popping; with
-     reduced motion it simply appears (the blur itself never animates). */
+  /* The chat timeline's catch-up overlay fades in rather than popping, and
+     out over the caught-up timeline (lib/timelineCatchUp CATCH_UP_EXIT_MS);
+     with reduced motion it simply appears and disappears (the blur itself
+     never animates). */
   @keyframes timelineCatchUpIn {
     from { opacity: 0; }
     to { opacity: 1; }
+  }
+
+  @keyframes timelineCatchUpOut {
+    from { opacity: 1; }
+    to { opacity: 0; }
   }
 
   .timeline-catchup-in {
     animation: timelineCatchUpIn 150ms ease-out;
   }
 
+  .timeline-catchup-out {
+    animation: timelineCatchUpOut 150ms ease-in forwards;
+  }
+
   @media (prefers-reduced-motion: reduce) {
     .timeline-catchup-in {
       animation: none;
     }
+
+    .timeline-catchup-out {
+      animation: none;
+      opacity: 0;
+    }
   }
+
 }
 
 /* Syntax highlighting themes - using .dark class instead of media queries */
@@ -1392,6 +1429,21 @@
     flex-direction: column;
     align-items: flex-start;
     width: 100%;
+  }
+
+  /*
+   * flex-start sizes each child to fit its content, and that size never goes
+   * below the child's min-content width. min-w-0 does not help: it relaxes
+   * the main (vertical) axis, not this one. A `truncate` line's min-content is
+   * the whole unwrapped line, so an agent message's long subject, or a tool
+   * group's long command on a phone, sized its box past the column and the
+   * whole transcript scrolled sideways instead of the line truncating. Capped
+   * at the column, the child keeps its fit-content width when it is narrow
+   * and truncates, wraps or scrolls inside itself when it is not.
+   * :where() keeps this at zero specificity, so a child's own max-w-* wins.
+   */
+  :where(.message-content) > * {
+    max-width: 100%;
   }
 
   /* User message content - removed blue left border highlight */

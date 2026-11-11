@@ -60,6 +60,19 @@ export interface PageHeaderProps {
    * itself (e.g. a `space-y-*` stack) and would otherwise get both.
    */
   className?: string;
+  /**
+   * "compact": ONE row. The title (text-lg) with `meta` inline on its
+   * baseline, and `controls` plus `actions` right-aligned on the same row.
+   * For a page inside chrome whose top bar already names it (a console with
+   * a breadcrumb): the default's second meta line and its own row of
+   * controls were empty space above every page.
+   */
+  density?: "default" | "compact";
+  /**
+   * Right-aligned controls that are not actions: a time range, a refresh, a
+   * view toggle. They sit before the actions on the title row.
+   */
+  controls?: React.ReactNode;
 }
 
 const variantStyles: Record<NonNullable<PageHeaderAction["variant"]>, string> = {
@@ -76,7 +89,52 @@ export default function PageHeader({
   breadcrumbs = [],
   actions = [],
   className,
+  density = "default",
+  controls,
 }: PageHeaderProps) {
+  const actionButtons = actions.map((action, i) => {
+    // rounded-md, matching the control radius the theme sets for
+    // buttons — rounded-lg is the CONTAINER radius, and a button
+    // wearing it reads as a small card. No shadow: only overlays
+    // cast one.
+    const cls = `inline-flex h-8 items-center gap-1.5 whitespace-nowrap rounded-md px-3 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 ${
+      variantStyles[action.variant ?? "secondary"]
+    }`;
+    if (action.href) {
+      return (
+        <Link key={i} href={action.href} className={cls}>
+          {action.icon}
+          {action.label}
+        </Link>
+      );
+    }
+    return (
+      <button key={i} type="button" onClick={action.onClick} disabled={action.disabled} className={cls}>
+        {action.icon}
+        {action.label}
+      </button>
+    );
+  });
+
+  if (density === "compact") {
+    return (
+      <div className={`flex min-h-8 flex-wrap items-center justify-between gap-x-4 gap-y-2 ${className ?? "mb-4"}`} data-density="compact">
+        <div className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1">
+          <h1 className="min-w-0 truncate text-lg font-semibold tracking-tight text-ink">{title}</h1>
+          {titleAccessory && <span className="self-center">{titleAccessory}</span>}
+          {meta ? <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-sm text-ink-muted">{meta}</div> : null}
+          {subtitle ? <p className="text-sm text-ink-muted">{subtitle}</p> : null}
+        </div>
+        {(controls || actionButtons.length > 0) && (
+          <div className="flex shrink-0 flex-wrap items-center gap-2">
+            {controls}
+            {actionButtons}
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className={className ?? "mb-6"}>
       {breadcrumbs.length > 0 && (
@@ -124,37 +182,10 @@ export default function PageHeader({
             </div>
           ) : null}
         </div>
-        {actions.length > 0 && (
+        {(controls || actionButtons.length > 0) && (
           <div className="flex shrink-0 items-center gap-2">
-            {actions.map((action, i) => {
-              // rounded-md, matching the control radius the theme sets for
-              // buttons — rounded-lg is the CONTAINER radius, and a button
-              // wearing it reads as a small card. No shadow: only overlays
-              // cast one.
-              const cls = `inline-flex h-8 items-center gap-1.5 whitespace-nowrap rounded-md px-3 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 ${
-                variantStyles[action.variant ?? "secondary"]
-              }`;
-              if (action.href) {
-                return (
-                  <Link key={i} href={action.href} className={cls}>
-                    {action.icon}
-                    {action.label}
-                  </Link>
-                );
-              }
-              return (
-                <button
-                  key={i}
-                  type="button"
-                  onClick={action.onClick}
-                  disabled={action.disabled}
-                  className={cls}
-                >
-                  {action.icon}
-                  {action.label}
-                </button>
-              );
-            })}
+            {controls}
+            {actionButtons}
           </div>
         )}
       </div>

@@ -37,10 +37,13 @@
     /* Path mapping */
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@reliantlabs/sdk/client": ["../../sdk/ts/src/client/index.ts"],
+      "@reliantlabs/sdk/react": ["../../sdk/ts/src/react/index.ts"],
+      "#gen/*": ["./src/gen/*"]
     }
   },
-  "references": [{ "path": "./tsconfig.gen.json" }],
+  "references": [{ "path": "./tsconfig.gen.json" }, { "path": "../../sdk/ts" }],
   "include": ["src"],
   "exclude": ["src/**/__tests__/**/*", "src/**/*.test.*", "src/**/*.spec.*", "src/test/**/*", "src/gen/**/*"]
 }

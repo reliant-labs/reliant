@@ -93,7 +93,7 @@ export const COMMANDS: CommandDefinition[] = [
   {
     id: "branch",
     title: "Branch Chat",
-    description: "Fork this conversation into its own worktree",
+    description: "Fork this conversation into its own workspace",
     category: "chat",
     keywords: ["fork", "worktree", "split", "copy"],
   },

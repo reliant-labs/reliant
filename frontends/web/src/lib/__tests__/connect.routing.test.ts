@@ -7,7 +7,7 @@
  * Packaged-only regressions are the reason this file exists. In dev the
  * renderer is same-origin and the Vite proxy sends `/reliant.v1.*` to
  * reliant-api, so a service routed at the wrong host still works by accident.
- * The packaged app dials absolute URLs, where admin-server answers
+ * The packaged app dials absolute URLs, where platform-api answers
  * `/reliant.v1.DaemonRegistryService/*` with HTTP 200 from a DIFFERENT
  * database ("you have no daemon") and does not serve TokenService at all.
  */
@@ -15,7 +15,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createElement, type ReactNode } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, renderHook, waitFor } from "@testing-library/react";
-import type { DescService } from "@bufbuild/protobuf";
+import type { DescMethodServerStreaming, DescService } from "@bufbuild/protobuf";
+import type { Transport } from "@connectrpc/connect";
 import { DaemonRegistryService } from "@/gen/reliant/v1/daemon_registry_pb";
 import { TokenService } from "@/gen/reliant/v1/token_pb";
 import { ForgeService } from "@/gen/reliant/v1/forge_pb";
@@ -271,6 +272,39 @@ describe("the test seam", () => {
     setTransport(null);
     await connectClient(SettingsService).listSettings({});
     expect(sent).toHaveLength(1);
+  });
+});
+
+describe("a shell's own transport", () => {
+  it("installed as a promise, answers unary and stream calls once it resolves", async () => {
+    state.controlPlaneUrl = CP_URL;
+    const { connectClient, installShellTransport, transport } = await load();
+    const { mockTransport } = await import("../test-utils");
+    const inner = mockTransport({ "SettingsService.ListSettings": { response: {} } });
+    const streamed: string[] = [];
+    const resolved: Transport = {
+      unary: (...args) => inner.unary(...args),
+      stream: async (method) => {
+        streamed.push(`${method.parent.typeName}/${method.name}`);
+        throw new Error("stream reached the shell transport");
+      },
+    };
+    // demoShellBoot installs a lazily imported transport: a Promise.
+    installShellTransport(Promise.resolve(resolved));
+    try {
+      await connectClient(SettingsService).listSettings({});
+      expect(sent).toHaveLength(0);
+
+      const method = StreamingService.methods.find(
+        (m): m is DescMethodServerStreaming => m.methodKind === "server_streaming",
+      )!;
+      await expect(
+        transport.stream(method, undefined, undefined, undefined, (async function* () {})(), undefined),
+      ).rejects.toThrow("stream reached the shell transport");
+      expect(streamed).toEqual([`${method.parent.typeName}/${method.name}`]);
+    } finally {
+      installShellTransport(null);
+    }
   });
 });
 

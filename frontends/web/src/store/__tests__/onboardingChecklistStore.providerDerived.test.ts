@@ -34,9 +34,6 @@ vi.mock("../../lib/settingsPersistence", () => ({
 // ─── Everything else the module graph drags in ───────────────────────────────
 
 const getProviders = vi.fn(async () => [] as unknown[]);
-vi.mock("../../api/client", () => ({
-  api: { settings: { getProviders: () => getProviders() } },
-}));
 
 // SettingsService is answered at the transport: the code under test reads
 // provider statuses / preferences through the generated hooks' cache entries.
@@ -71,9 +68,11 @@ vi.mock("../globalDataStore", () => ({
 // Never lets "api-key:saved" fire — `on` is captured but no test calls it.
 // If a regression made completion depend on this event, these tests would
 // hang or fail rather than pass, since nothing here ever emits it.
-vi.mock("../../lib/events", () => ({
-  getEventBus: () => ({ on: vi.fn(() => () => undefined) }),
-}));
+vi.mock("../../lib/events", () => {
+  const bus = { on: vi.fn(() => () => undefined), emit: vi.fn() };
+  // markComplete emits a tour signal through tourEvents, which uses initEventBus.
+  return { getEventBus: () => bus, initEventBus: () => bus };
+});
 vi.mock("../../hooks/chat-queries", () => ({
   chatKeys: { all: ["chats"] },
   getCachedChatList: () => [],

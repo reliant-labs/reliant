@@ -47,7 +47,7 @@ func (r *recordedRegistry) ListAttachedDaemonIDsForUser(context.Context, string,
 	return r.attached, nil
 }
 
-// fakeControlPlane serves what control-plane's admin-server actually serves
+// fakeControlPlane serves what control-plane's platform-api actually serves
 // for daemons — controlplane.v1.DaemonService — and answers every other path
 // the way the real server does: 404. Requests to any other path are recorded,
 // so a test can prove nothing still dials the route control-plane deleted

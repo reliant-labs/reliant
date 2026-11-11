@@ -3,8 +3,8 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import type { GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
-import { fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
+import type { GenEnum, GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
+import { enumDesc, fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
 import { file_buf_validate_validate } from "../../../buf/validate/validate_pb";
 import type { PanelResultColumn, PanelResultRow, PanelResultSeries } from "../../../controlplane/v1/shared_pb";
 import { file_controlplane_v1_shared } from "../../../controlplane/v1/shared_pb";
@@ -17,7 +17,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file services/app_database/v1/app_database.proto.
  */
 export const file_services_app_database_v1_app_database: GenFile = /*@__PURE__*/
-  fileDesc("CitzZXJ2aWNlcy9hcHBfZGF0YWJhc2UvdjEvYXBwX2RhdGFiYXNlLnByb3RvEg9jb250cm9scGxhbmUudjEikwIKFFF1ZXJ5RGF0YWJhc2VSZXF1ZXN0EiIKDmVudmlyb25tZW50X2lkGAEgASgJQgq6SAdyBRABGIABEhoKCGRhdGFiYXNlGAIgASgJQgi6SAVyAxiAARIYCgNzcWwYAyABKAlCC7pICHIGEAEogIABEhwKCG1heF9yb3dzGAQgASgFQgq6SAcaBRiQTigAEh8KCnRpbWVvdXRfbXMYBSABKAVCC7pICBoGGLDqASgAEiUKDmNvbmZpcm1fZW52X2lkGAYgASgJQgi6SAVyAxiAAUgAiAEBEh0KBnJlYXNvbhgHIAEoCUIIukgFcgMY9ANIAYgBAUIRCg9fY29uZmlybV9lbnZfaWRCCQoHX3JlYXNvbiL5AQoVUXVlcnlEYXRhYmFzZVJlc3BvbnNlEjAKB2NvbHVtbnMYASADKAsyHy5jb250cm9scGxhbmUudjEuRGF0YWJhc2VDb2x1bW4SKgoEcm93cxgCIAMoCzIcLmNvbnRyb2xwbGFuZS52MS5EYXRhYmFzZVJvdxIRCglyb3dfY291bnQYAyABKAMSEQoJdHJ1bmNhdGVkGAQgASgIEhMKC2R1cmF0aW9uX21zGAUgASgDEg8KB3JlcGxpY2EYBiABKAkSEAoIYXVkaXRfaWQYByABKAkSEgoKc3FsX3NoYTI1NhgIIAEoCRIQCghkYXRhYmFzZRgJIAEoCSIvCg5EYXRhYmFzZUNvbHVtbhIMCgRuYW1lGAEgASgJEg8KB3BnX3R5cGUYAiABKAkiNQoLRGF0YWJhc2VSb3cSJgoGdmFsdWVzGAEgAygLMhYuZ29vZ2xlLnByb3RvYnVmLlZhbHVlIoMEChlRdWVyeURhdGFiYXNlUGFuZWxSZXF1ZXN0EiUKDmVudmlyb25tZW50X2lkGAEgASgJQg26SArIAQFyBRABGIABEhoKCGRhdGFiYXNlGAIgASgJQgi6SAVyAxiAARIYCgNzcWwYAyABKAlCC7pICHIGEAEogIABEhUKBGRyYXcYBCABKAlCB7pIBHICGBASHAoLdGltZV9jb2x1bW4YBSABKAlCB7pIBHICGD8SJQoNdmFsdWVfY29sdW1ucxgGIAMoCUIOukgLkgEIEAoiBHICGD8SJQoNZ3JvdXBfY29sdW1ucxgHIAMoCUIOukgLkgEIEAMiBHICGD8SMAoEZnJvbRgIIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBCBrpIA8gBARIuCgJ0bxgJIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBCBrpIA8gBARIhCgxzdGVwX3NlY29uZHMYCiABKAVCC7pICBoGGICjBSgAEkIKDWRhc2hib2FyZF9yZWYYCyABKAlCK7pIKHImGIABMiFeKFtBLVphLXowLTldW0EtWmEtejAtOS5fOi8tXSopPyQSPQoIcGFuZWxfaWQYDCABKAlCK7pIKHImGIABMiFeKFtBLVphLXowLTldW0EtWmEtejAtOS5fOi8tXSopPyQihgQKGlF1ZXJ5RGF0YWJhc2VQYW5lbFJlc3BvbnNlEgwKBGRyYXcYASABKAkSNwoLc3FsX2NvbHVtbnMYAiADKAsyIi5jb250cm9scGxhbmUudjEuUGFuZWxSZXN1bHRDb2x1bW4SMgoGc2VyaWVzGAMgAygLMiIuY29udHJvbHBsYW5lLnYxLlBhbmVsUmVzdWx0U2VyaWVzEg8KB2NvbHVtbnMYBCADKAkSLQoEcm93cxgFIAMoCzIfLmNvbnRyb2xwbGFuZS52MS5QYW5lbFJlc3VsdFJvdxIRCgl0cnVuY2F0ZWQYBiABKAgSFAoMdHJ1bmNhdGVkX2J5GAcgASgJEhQKDHN0ZXBfc2Vjb25kcxgIIAEoBRITCgtkdXJhdGlvbl9tcxgJIAEoAxIPCgdyZXBsaWNhGAogASgJEikKBWFzX29mGAsgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBITCgtzZXJ2ZWRfZnJvbRgMIAEoCRIQCghhdWRpdF9pZBgNIAEoCRISCgpzcWxfc2hhMjU2GA4gASgJEhAKCGRhdGFiYXNlGA8gASgJEigKBGZyb20YECABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEiYKAnRvGBEgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCJGCh1MaXN0RGFzaGJvYXJkRGF0YWJhc2VzUmVxdWVzdBIlCg5lbnZpcm9ubWVudF9pZBgBIAEoCUINukgKyAEBcgUQARiAASJXCh5MaXN0RGFzaGJvYXJkRGF0YWJhc2VzUmVzcG9uc2USNQoJZGF0YWJhc2VzGAEgAygLMiIuY29udHJvbHBsYW5lLnYxLkRhc2hib2FyZERhdGFiYXNlIrcBChFEYXNoYm9hcmREYXRhYmFzZRIMCgRuYW1lGAEgASgJEg8KB3Jvd19jYXAYAiABKAUSEgoKdGltZW91dF9tcxgDIAEoBRIXCg9tYXhfY29uY3VycmVuY3kYBCABKAUSLwoGdGFibGVzGAUgAygLMh8uY29udHJvbHBsYW5lLnYxLkRhc2hib2FyZFRhYmxlEg8KB3JlcGxpY2EYBiABKAkSFAoMdGFibGVzX2Vycm9yGAcgASgJImEKDkRhc2hib2FyZFRhYmxlEg4KBnNjaGVtYRgBIAEoCRIMCgRuYW1lGAIgASgJEjEKB2NvbHVtbnMYAyADKAsyIC5jb250cm9scGxhbmUudjEuRGFzaGJvYXJkQ29sdW1uIjAKD0Rhc2hib2FyZENvbHVtbhIMCgRuYW1lGAEgASgJEg8KB3BnX3R5cGUYAiABKAky4QQKEkFwcERhdGFiYXNlU2VydmljZRLxAQoNUXVlcnlEYXRhYmFzZRIlLmNvbnRyb2xwbGFuZS52MS5RdWVyeURhdGFiYXNlUmVxdWVzdBomLmNvbnRyb2xwbGFuZS52MS5RdWVyeURhdGFiYXNlUmVzcG9uc2UikAGiuxiLAQgBOoYBCg5xdWVyeV9kYXRhYmFzZRIdCghkYXRhYmFzZRIRcmVzcG9uc2UuZGF0YWJhc2UaDmVudmlyb25tZW50X2lkKgZyZWFzb24qEnJlc3BvbnNlLnJvd19jb3VudCoUcmVzcG9uc2UuZHVyYXRpb25fbXMqE3Jlc3BvbnNlLnNxbF9zaGEyNTYSdQoSUXVlcnlEYXRhYmFzZVBhbmVsEiouY29udHJvbHBsYW5lLnYxLlF1ZXJ5RGF0YWJhc2VQYW5lbFJlcXVlc3QaKy5jb250cm9scGxhbmUudjEuUXVlcnlEYXRhYmFzZVBhbmVsUmVzcG9uc2UiBqK7GAIIARKBAQoWTGlzdERhc2hib2FyZERhdGFiYXNlcxIuLmNvbnRyb2xwbGFuZS52MS5MaXN0RGFzaGJvYXJkRGF0YWJhc2VzUmVxdWVzdBovLmNvbnRyb2xwbGFuZS52MS5MaXN0RGFzaGJvYXJkRGF0YWJhc2VzUmVzcG9uc2UiBqK7GAIIARpcgrUYWAoSQXBwRGF0YWJhc2VTZXJ2aWNlEgUxLjAuMBo7UmVhZC1vbmx5IFNRTCBhZ2FpbnN0IGFuIGVudmlyb25tZW50J3MgYXBwbGljYXRpb24gZGF0YWJhc2VC3gEKE2NvbS5jb250cm9scGxhbmUudjFCEEFwcERhdGFiYXNlUHJvdG9QAVpYZ2l0aHViLmNvbS9yZWxpYW50LWxhYnMvcmVsaWFudC9nZW4vY29udHJvbHBsYW5lL3NlcnZpY2VzL2FwcF9kYXRhYmFzZS92MTtjb250cm9scGxhbmV2MaICA0NYWKoCD0NvbnRyb2xwbGFuZS5WMcoCD0NvbnRyb2xwbGFuZVxWMeICG0NvbnRyb2xwbGFuZVxWMVxHUEJNZXRhZGF0YeoCEENvbnRyb2xwbGFuZTo6VjFiBnByb3RvMw", [file_buf_validate_validate, file_controlplane_v1_shared, file_forge_v1_forge, file_google_protobuf_struct, file_google_protobuf_timestamp]);
+  fileDesc("CitzZXJ2aWNlcy9hcHBfZGF0YWJhc2UvdjEvYXBwX2RhdGFiYXNlLnByb3RvEg9jb250cm9scGxhbmUudjEikwIKFFF1ZXJ5RGF0YWJhc2VSZXF1ZXN0EiIKDmVudmlyb25tZW50X2lkGAEgASgJQgq6SAdyBRABGIABEhoKCGRhdGFiYXNlGAIgASgJQgi6SAVyAxiAARIYCgNzcWwYAyABKAlCC7pICHIGEAEogIABEhwKCG1heF9yb3dzGAQgASgFQgq6SAcaBRiQTigAEh8KCnRpbWVvdXRfbXMYBSABKAVCC7pICBoGGLDqASgAEiUKDmNvbmZpcm1fZW52X2lkGAYgASgJQgi6SAVyAxiAAUgAiAEBEh0KBnJlYXNvbhgHIAEoCUIIukgFcgMY9ANIAYgBAUIRCg9fY29uZmlybV9lbnZfaWRCCQoHX3JlYXNvbiL5AQoVUXVlcnlEYXRhYmFzZVJlc3BvbnNlEjAKB2NvbHVtbnMYASADKAsyHy5jb250cm9scGxhbmUudjEuRGF0YWJhc2VDb2x1bW4SKgoEcm93cxgCIAMoCzIcLmNvbnRyb2xwbGFuZS52MS5EYXRhYmFzZVJvdxIRCglyb3dfY291bnQYAyABKAMSEQoJdHJ1bmNhdGVkGAQgASgIEhMKC2R1cmF0aW9uX21zGAUgASgDEg8KB3JlcGxpY2EYBiABKAkSEAoIYXVkaXRfaWQYByABKAkSEgoKc3FsX3NoYTI1NhgIIAEoCRIQCghkYXRhYmFzZRgJIAEoCSIvCg5EYXRhYmFzZUNvbHVtbhIMCgRuYW1lGAEgASgJEg8KB3BnX3R5cGUYAiABKAkiTgoLRGF0YWJhc2VSb3cSJgoGdmFsdWVzGAEgAygLMhYuZ29vZ2xlLnByb3RvYnVmLlZhbHVlEhcKD3RydW5jYXRlZF9jZWxscxgCIAMoBSKDBAoZUXVlcnlEYXRhYmFzZVBhbmVsUmVxdWVzdBIlCg5lbnZpcm9ubWVudF9pZBgBIAEoCUINukgKyAEBcgUQARiAARIaCghkYXRhYmFzZRgCIAEoCUIIukgFcgMYgAESGAoDc3FsGAMgASgJQgu6SAhyBhABKICAARIVCgRkcmF3GAQgASgJQge6SARyAhgQEhwKC3RpbWVfY29sdW1uGAUgASgJQge6SARyAhg/EiUKDXZhbHVlX2NvbHVtbnMYBiADKAlCDrpIC5IBCBAKIgRyAhg/EiUKDWdyb3VwX2NvbHVtbnMYByADKAlCDrpIC5IBCBADIgRyAhg/EjAKBGZyb20YCCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wQga6SAPIAQESLgoCdG8YCSABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wQga6SAPIAQESIQoMc3RlcF9zZWNvbmRzGAogASgFQgu6SAgaBhiAowUoABJCCg1kYXNoYm9hcmRfcmVmGAsgASgJQiu6SChyJhiAATIhXihbQS1aYS16MC05XVtBLVphLXowLTkuXzovLV0qKT8kEj0KCHBhbmVsX2lkGAwgASgJQiu6SChyJhiAATIhXihbQS1aYS16MC05XVtBLVphLXowLTkuXzovLV0qKT8kIoYEChpRdWVyeURhdGFiYXNlUGFuZWxSZXNwb25zZRIMCgRkcmF3GAEgASgJEjcKC3NxbF9jb2x1bW5zGAIgAygLMiIuY29udHJvbHBsYW5lLnYxLlBhbmVsUmVzdWx0Q29sdW1uEjIKBnNlcmllcxgDIAMoCzIiLmNvbnRyb2xwbGFuZS52MS5QYW5lbFJlc3VsdFNlcmllcxIPCgdjb2x1bW5zGAQgAygJEi0KBHJvd3MYBSADKAsyHy5jb250cm9scGxhbmUudjEuUGFuZWxSZXN1bHRSb3cSEQoJdHJ1bmNhdGVkGAYgASgIEhQKDHRydW5jYXRlZF9ieRgHIAEoCRIUCgxzdGVwX3NlY29uZHMYCCABKAUSEwoLZHVyYXRpb25fbXMYCSABKAMSDwoHcmVwbGljYRgKIAEoCRIpCgVhc19vZhgLIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASEwoLc2VydmVkX2Zyb20YDCABKAkSEAoIYXVkaXRfaWQYDSABKAkSEgoKc3FsX3NoYTI1NhgOIAEoCRIQCghkYXRhYmFzZRgPIAEoCRIoCgRmcm9tGBAgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBImCgJ0bxgRIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAiRgodTGlzdERhc2hib2FyZERhdGFiYXNlc1JlcXVlc3QSJQoOZW52aXJvbm1lbnRfaWQYASABKAlCDbpICsgBAXIFEAEYgAEiVwoeTGlzdERhc2hib2FyZERhdGFiYXNlc1Jlc3BvbnNlEjUKCWRhdGFiYXNlcxgBIAMoCzIiLmNvbnRyb2xwbGFuZS52MS5EYXNoYm9hcmREYXRhYmFzZSK3AQoRRGFzaGJvYXJkRGF0YWJhc2USDAoEbmFtZRgBIAEoCRIPCgdyb3dfY2FwGAIgASgFEhIKCnRpbWVvdXRfbXMYAyABKAUSFwoPbWF4X2NvbmN1cnJlbmN5GAQgASgFEi8KBnRhYmxlcxgFIAMoCzIfLmNvbnRyb2xwbGFuZS52MS5EYXNoYm9hcmRUYWJsZRIPCgdyZXBsaWNhGAYgASgJEhQKDHRhYmxlc19lcnJvchgHIAEoCSJhCg5EYXNoYm9hcmRUYWJsZRIOCgZzY2hlbWEYASABKAkSDAoEbmFtZRgCIAEoCRIxCgdjb2x1bW5zGAMgAygLMiAuY29udHJvbHBsYW5lLnYxLkRhc2hib2FyZENvbHVtbiIwCg9EYXNoYm9hcmRDb2x1bW4SDAoEbmFtZRgBIAEoCRIPCgdwZ190eXBlGAIgASgJIkYKHUxpc3RCcm93c2FibGVEYXRhYmFzZXNSZXF1ZXN0EiUKDmVudmlyb25tZW50X2lkGAEgASgJQg26SArIAQFyBRABGIABIlcKHkxpc3RCcm93c2FibGVEYXRhYmFzZXNSZXNwb25zZRI1CglkYXRhYmFzZXMYASADKAsyIi5jb250cm9scGxhbmUudjEuQnJvd3NhYmxlRGF0YWJhc2UiuQEKEUJyb3dzYWJsZURhdGFiYXNlEgwKBG5hbWUYASABKAkSNAoEa2luZBgCIAEoDjImLmNvbnRyb2xwbGFuZS52MS5Ccm93c2FibGVEYXRhYmFzZUtpbmQSMQoGcG9saWN5GAMgASgOMiEuY29udHJvbHBsYW5lLnYxLkRhdGFBY2Nlc3NQb2xpY3kSEQoJcmVhY2hhYmxlGAQgASgIEhoKEnVucmVhY2hhYmxlX3JlYXNvbhgFIAEoCSLCAQoXRGVzY3JpYmVEYXRhYmFzZVJlcXVlc3QSJQoOZW52aXJvbm1lbnRfaWQYASABKAlCDbpICsgBAXIFEAEYgAESHAoIZGF0YWJhc2UYAiABKAlCCrpIB3IFEAEYgAESJQoOY29uZmlybV9lbnZfaWQYAyABKAlCCLpIBXIDGIABSACIAQESHQoGcmVhc29uGAQgASgJQgi6SAVyAxj0A0gBiAEBQhEKD19jb25maXJtX2Vudl9pZEIJCgdfcmVhc29uIoMBChhEZXNjcmliZURhdGFiYXNlUmVzcG9uc2USEAoIZGF0YWJhc2UYASABKAkSLgoGdGFibGVzGAIgAygLMh4uY29udHJvbHBsYW5lLnYxLkRhdGFiYXNlVGFibGUSEwoLZHVyYXRpb25fbXMYAyABKAMSEAoIYXVkaXRfaWQYBCABKAkiywIKDURhdGFiYXNlVGFibGUSDgoGc2NoZW1hGAEgASgJEgwKBG5hbWUYAiABKAkSMAoEa2luZBgDIAEoDjIiLmNvbnRyb2xwbGFuZS52MS5EYXRhYmFzZVRhYmxlS2luZBIWCg5lc3RpbWF0ZWRfcm93cxgEIAEoAxIPCgdjb21tZW50GAUgASgJEjUKB2NvbHVtbnMYBiADKAsyJC5jb250cm9scGxhbmUudjEuRGF0YWJhc2VUYWJsZUNvbHVtbhITCgtwcmltYXJ5X2tleRgHIAMoCRI5Cgxmb3JlaWduX2tleXMYCCADKAsyIy5jb250cm9scGxhbmUudjEuRGF0YWJhc2VGb3JlaWduS2V5EjoKDXJlZmVyZW5jZWRfYnkYCSADKAsyIy5jb250cm9scGxhbmUudjEuRGF0YWJhc2VGb3JlaWduS2V5Iq8BChNEYXRhYmFzZVRhYmxlQ29sdW1uEgwKBG5hbWUYASABKAkSDwoHcGdfdHlwZRgCIAEoCRIQCghudWxsYWJsZRgDIAEoCBIPCgdjb21tZW50GAQgASgJEhYKDmlzX3ByaW1hcnlfa2V5GAUgASgIEj4KEGlkZW50aXR5X3N1YmplY3QYBiABKA4yJC5jb250cm9scGxhbmUudjEuSWRlbnRpdHlTdWJqZWN0S2luZCKUAQoSRGF0YWJhc2VGb3JlaWduS2V5EhIKCmNvbnN0cmFpbnQYASABKAkSDgoGc2NoZW1hGAIgASgJEg0KBXRhYmxlGAMgASgJEg8KB2NvbHVtbnMYBCADKAkSEgoKcmVmX3NjaGVtYRgFIAEoCRIRCglyZWZfdGFibGUYBiABKAkSEwoLcmVmX2NvbHVtbnMYByADKAki2wMKEkJyb3dzZVRhYmxlUmVxdWVzdBIlCg5lbnZpcm9ubWVudF9pZBgBIAEoCUINukgKyAEBcgUQARiAARIcCghkYXRhYmFzZRgCIAEoCUIKukgHcgUQARiAARIYCgV0YWJsZRgDIAEoCUIJukgGcgQQAxh/EiQKB2NvbHVtbnMYBCADKAlCE7pIEJIBDRDADBgBIgZyBBABGD8SOAoHZmlsdGVycxgFIAMoCzIdLmNvbnRyb2xwbGFuZS52MS5Ccm93c2VGaWx0ZXJCCLpIBZIBAhAUEjMKBHNvcnQYBiADKAsyGy5jb250cm9scGxhbmUudjEuQnJvd3NlU29ydEIIukgFkgECEAgSGQoFbGltaXQYByABKAVCCrpIBxoFGPQDKAESGwoGb2Zmc2V0GAggASgDQgu6SAgiBhjAhD0oABI1CgVjb3VudBgJIAEoDjIcLmNvbnRyb2xwbGFuZS52MS5Ccm93c2VDb3VudEIIukgFggECEAESJQoOY29uZmlybV9lbnZfaWQYCiABKAlCCLpIBXIDGIABSACIAQESHQoGcmVhc29uGAsgASgJQgi6SAVyAxj0A0gBiAEBQhEKD19jb25maXJtX2Vudl9pZEIJCgdfcmVhc29uIoMBCgxCcm93c2VGaWx0ZXISGQoGY29sdW1uGAEgASgJQgm6SAZyBBABGD8SNwoCb3AYAiABKA4yHy5jb250cm9scGxhbmUudjEuQnJvd3NlRmlsdGVyT3BCCrpIB4IBBBABIAASHwoGdmFsdWVzGAMgAygJQg+6SAySAQkQZCIFcgMYgCAiNQoKQnJvd3NlU29ydBIZCgZjb2x1bW4YASABKAlCCbpIBnIEEAEYPxIMCgRkZXNjGAIgASgIIt0CChNCcm93c2VUYWJsZVJlc3BvbnNlEjAKB2NvbHVtbnMYASADKAsyHy5jb250cm9scGxhbmUudjEuRGF0YWJhc2VDb2x1bW4SKgoEcm93cxgCIAMoCzIcLmNvbnRyb2xwbGFuZS52MS5EYXRhYmFzZVJvdxIQCghoYXNfbW9yZRgDIAEoCBISCgV0b3RhbBgEIAEoA0gAiAEBEhkKEXRvdGFsX2lzX2VzdGltYXRlGAUgASgIEhwKFHRvdGFsX2lzX2xvd2VyX2JvdW5kGAYgASgIEhMKC2R1cmF0aW9uX21zGAcgASgDEhAKCGF1ZGl0X2lkGAggASgJEhAKCGRhdGFiYXNlGAkgASgJEg0KBXRhYmxlGAogASgJEg8KB3JlcGxpY2EYCyABKAkSEQoJdHJ1bmNhdGVkGAwgASgIEhMKC25leHRfb2Zmc2V0GA0gASgDQggKBl90b3RhbCqLAQoVQnJvd3NhYmxlRGF0YWJhc2VLaW5kEicKI0JST1dTQUJMRV9EQVRBQkFTRV9LSU5EX1VOU1BFQ0lGSUVEEAASIwofQlJPV1NBQkxFX0RBVEFCQVNFX0tJTkRfTUFOQUdFRBABEiQKIEJST1dTQUJMRV9EQVRBQkFTRV9LSU5EX0VYVEVSTkFMEAIqkAEKEERhdGFBY2Nlc3NQb2xpY3kSIgoeREFUQV9BQ0NFU1NfUE9MSUNZX1VOU1BFQ0lGSUVEEAASGwoXREFUQV9BQ0NFU1NfUE9MSUNZX09QRU4QARIeChpEQVRBX0FDQ0VTU19QT0xJQ1lfQVVESVRFRBACEhsKF0RBVEFfQUNDRVNTX1BPTElDWV9ERU5ZEAMqxwEKEURhdGFiYXNlVGFibGVLaW5kEiMKH0RBVEFCQVNFX1RBQkxFX0tJTkRfVU5TUEVDSUZJRUQQABIdChlEQVRBQkFTRV9UQUJMRV9LSU5EX1RBQkxFEAESHAoYREFUQUJBU0VfVEFCTEVfS0lORF9WSUVXEAISKQolREFUQUJBU0VfVEFCTEVfS0lORF9NQVRFUklBTElaRURfVklFVxADEiUKIURBVEFCQVNFX1RBQkxFX0tJTkRfRk9SRUlHTl9UQUJMRRAEKnsKE0lkZW50aXR5U3ViamVjdEtpbmQSJQohSURFTlRJVFlfU1VCSkVDVF9LSU5EX1VOU1BFQ0lGSUVEEAASHAoYSURFTlRJVFlfU1VCSkVDVF9LSU5EX0lEEAESHwobSURFTlRJVFlfU1VCSkVDVF9LSU5EX0VNQUlMEAIq2AIKDkJyb3dzZUZpbHRlck9wEiAKHEJST1dTRV9GSUxURVJfT1BfVU5TUEVDSUZJRUQQABIXChNCUk9XU0VfRklMVEVSX09QX0VREAESGAoUQlJPV1NFX0ZJTFRFUl9PUF9ORVEQAhIXChNCUk9XU0VfRklMVEVSX09QX0xUEAMSGAoUQlJPV1NFX0ZJTFRFUl9PUF9MVEUQBBIXChNCUk9XU0VfRklMVEVSX09QX0dUEAUSGAoUQlJPV1NFX0ZJTFRFUl9PUF9HVEUQBhIZChVCUk9XU0VfRklMVEVSX09QX0xJS0UQBxIaChZCUk9XU0VfRklMVEVSX09QX0lMSUtFEAgSHAoYQlJPV1NFX0ZJTFRFUl9PUF9JU19OVUxMEAkSHQoZQlJPV1NFX0ZJTFRFUl9PUF9OT1RfTlVMTBAKEhcKE0JST1dTRV9GSUxURVJfT1BfSU4QCyp2CgtCcm93c2VDb3VudBIcChhCUk9XU0VfQ09VTlRfVU5TUEVDSUZJRUQQABIVChFCUk9XU0VfQ09VTlRfTk9ORRABEhoKFkJST1dTRV9DT1VOVF9FU1RJTUFURUQQAhIWChJCUk9XU0VfQ09VTlRfRVhBQ1QQAzKyCQoSQXBwRGF0YWJhc2VTZXJ2aWNlEvEBCg1RdWVyeURhdGFiYXNlEiUuY29udHJvbHBsYW5lLnYxLlF1ZXJ5RGF0YWJhc2VSZXF1ZXN0GiYuY29udHJvbHBsYW5lLnYxLlF1ZXJ5RGF0YWJhc2VSZXNwb25zZSKQAaK7GIsBCAE6hgEKDnF1ZXJ5X2RhdGFiYXNlEh0KCGRhdGFiYXNlEhFyZXNwb25zZS5kYXRhYmFzZRoOZW52aXJvbm1lbnRfaWQqBnJlYXNvbioScmVzcG9uc2Uucm93X2NvdW50KhRyZXNwb25zZS5kdXJhdGlvbl9tcyoTcmVzcG9uc2Uuc3FsX3NoYTI1NhJ1ChJRdWVyeURhdGFiYXNlUGFuZWwSKi5jb250cm9scGxhbmUudjEuUXVlcnlEYXRhYmFzZVBhbmVsUmVxdWVzdBorLmNvbnRyb2xwbGFuZS52MS5RdWVyeURhdGFiYXNlUGFuZWxSZXNwb25zZSIGorsYAggBEoEBChZMaXN0RGFzaGJvYXJkRGF0YWJhc2VzEi4uY29udHJvbHBsYW5lLnYxLkxpc3REYXNoYm9hcmREYXRhYmFzZXNSZXF1ZXN0Gi8uY29udHJvbHBsYW5lLnYxLkxpc3REYXNoYm9hcmREYXRhYmFzZXNSZXNwb25zZSIGorsYAggBEoQBChZMaXN0QnJvd3NhYmxlRGF0YWJhc2VzEi4uY29udHJvbHBsYW5lLnYxLkxpc3RCcm93c2FibGVEYXRhYmFzZXNSZXF1ZXN0Gi8uY29udHJvbHBsYW5lLnYxLkxpc3RCcm93c2FibGVEYXRhYmFzZXNSZXNwb25zZSIJkAIBorsYAggBEtQBChBEZXNjcmliZURhdGFiYXNlEiguY29udHJvbHBsYW5lLnYxLkRlc2NyaWJlRGF0YWJhc2VSZXF1ZXN0GikuY29udHJvbHBsYW5lLnYxLkRlc2NyaWJlRGF0YWJhc2VSZXNwb25zZSJrkAIBorsYZAgBOmAKEWRlc2NyaWJlX2RhdGFiYXNlEh0KCGRhdGFiYXNlEhFyZXNwb25zZS5kYXRhYmFzZRoOZW52aXJvbm1lbnRfaWQqBnJlYXNvbioUcmVzcG9uc2UuZHVyYXRpb25fbXMS8AEKC0Jyb3dzZVRhYmxlEiMuY29udHJvbHBsYW5lLnYxLkJyb3dzZVRhYmxlUmVxdWVzdBokLmNvbnRyb2xwbGFuZS52MS5Ccm93c2VUYWJsZVJlc3BvbnNlIpUBkAIBorsYjQEIATqIATqFAWEgcGFnZSB2aWV3OiBldmVyeSBjYWxsIHdyaXRlcyBpdHMgYXVkaXRfbG9nIHJvdyAod2l0aCB0aGUgcmVhc29uKSwgYW5kIHRoZSBmZWVkJ3Mgb25lIGxpbmUgcGVyIG9wZW5lZCBkYXRhYmFzZSBpcyBEZXNjcmliZURhdGFiYXNlJ3MaXIK1GFgKEkFwcERhdGFiYXNlU2VydmljZRIFMS4wLjAaO1JlYWQtb25seSBTUUwgYWdhaW5zdCBhbiBlbnZpcm9ubWVudCdzIGFwcGxpY2F0aW9uIGRhdGFiYXNlQt4BChNjb20uY29udHJvbHBsYW5lLnYxQhBBcHBEYXRhYmFzZVByb3RvUAFaWGdpdGh1Yi5jb20vcmVsaWFudC1sYWJzL3JlbGlhbnQvZ2VuL2NvbnRyb2xwbGFuZS9zZXJ2aWNlcy9hcHBfZGF0YWJhc2UvdjE7Y29udHJvbHBsYW5ldjGiAgNDWFiqAg9Db250cm9scGxhbmUuVjHKAg9Db250cm9scGxhbmVcVjHiAhtDb250cm9scGxhbmVcVjFcR1BCTWV0YWRhdGHqAhBDb250cm9scGxhbmU6OlYxYgZwcm90bzM", [file_buf_validate_validate, file_controlplane_v1_shared, file_forge_v1_forge, file_google_protobuf_struct, file_google_protobuf_timestamp]);
 
 /**
  * @generated from message controlplane.v1.QueryDatabaseRequest
@@ -189,6 +189,16 @@ export type DatabaseRow = Message<"controlplane.v1.DatabaseRow"> & {
    * @generated from field: repeated google.protobuf.Value values = 1;
    */
   values: Value[];
+
+  /**
+   * The 0-based indexes, into values, of the cells cut at 4 KiB, ascending;
+   * empty when none was. A cut cell's text also ends with a
+   * "…[truncated: N of M bytes shown]" marker, for a reader that shows the
+   * text as is.
+   *
+   * @generated from field: repeated int32 truncated_cells = 2;
+   */
+  truncatedCells: number[];
 };
 
 /**
@@ -571,6 +581,916 @@ export const DashboardColumnSchema: GenMessage<DashboardColumn> = /*@__PURE__*/
   messageDesc(file_services_app_database_v1_app_database, 10);
 
 /**
+ * @generated from message controlplane.v1.ListBrowsableDatabasesRequest
+ */
+export type ListBrowsableDatabasesRequest = Message<"controlplane.v1.ListBrowsableDatabasesRequest"> & {
+  /**
+   * The control-plane environment id (deploy_environments.id).
+   *
+   * @generated from field: string environment_id = 1;
+   */
+  environmentId: string;
+};
+
+/**
+ * Describes the message controlplane.v1.ListBrowsableDatabasesRequest.
+ * Use `create(ListBrowsableDatabasesRequestSchema)` to create a new message.
+ */
+export const ListBrowsableDatabasesRequestSchema: GenMessage<ListBrowsableDatabasesRequest> = /*@__PURE__*/
+  messageDesc(file_services_app_database_v1_app_database, 11);
+
+/**
+ * @generated from message controlplane.v1.ListBrowsableDatabasesResponse
+ */
+export type ListBrowsableDatabasesResponse = Message<"controlplane.v1.ListBrowsableDatabasesResponse"> & {
+  /**
+   * Sorted by name.
+   *
+   * @generated from field: repeated controlplane.v1.BrowsableDatabase databases = 1;
+   */
+  databases: BrowsableDatabase[];
+};
+
+/**
+ * Describes the message controlplane.v1.ListBrowsableDatabasesResponse.
+ * Use `create(ListBrowsableDatabasesResponseSchema)` to create a new message.
+ */
+export const ListBrowsableDatabasesResponseSchema: GenMessage<ListBrowsableDatabasesResponse> = /*@__PURE__*/
+  messageDesc(file_services_app_database_v1_app_database, 12);
+
+/**
+ * BrowsableDatabase is one database of the environment, as the data browser's
+ * database selector shows it.
+ *
+ * @generated from message controlplane.v1.BrowsableDatabase
+ */
+export type BrowsableDatabase = Message<"controlplane.v1.BrowsableDatabase"> & {
+  /**
+   * The name DescribeDatabase and BrowseTable take as database: the
+   * ManagedDatabase's or ExternalDatabase's name in the release shape.
+   *
+   * @generated from field: string name = 1;
+   */
+  name: string;
+
+  /**
+   * @generated from field: controlplane.v1.BrowsableDatabaseKind kind = 2;
+   */
+  kind: BrowsableDatabaseKind;
+
+  /**
+   * The data_access policy a read of this database runs under. AUDITED means
+   * DescribeDatabase and BrowseTable need confirm_env_id and a reason; DENY
+   * means they are refused.
+   *
+   * @generated from field: controlplane.v1.DataAccessPolicy policy = 3;
+   */
+  policy: DataAccessPolicy;
+
+  /**
+   * Whether the control plane can connect to the database. False: the
+   * database is listed but cannot be browsed, and unreachable_reason says why.
+   *
+   * @generated from field: bool reachable = 4;
+   */
+  reachable: boolean;
+
+  /**
+   * Why the database cannot be reached, for a person: "self-managed: no hosted
+   * placement", "external database not dialable from the control plane".
+   * Empty when reachable.
+   *
+   * @generated from field: string unreachable_reason = 5;
+   */
+  unreachableReason: string;
+};
+
+/**
+ * Describes the message controlplane.v1.BrowsableDatabase.
+ * Use `create(BrowsableDatabaseSchema)` to create a new message.
+ */
+export const BrowsableDatabaseSchema: GenMessage<BrowsableDatabase> = /*@__PURE__*/
+  messageDesc(file_services_app_database_v1_app_database, 13);
+
+/**
+ * @generated from message controlplane.v1.DescribeDatabaseRequest
+ */
+export type DescribeDatabaseRequest = Message<"controlplane.v1.DescribeDatabaseRequest"> & {
+  /**
+   * The control-plane environment id (deploy_environments.id).
+   *
+   * @generated from field: string environment_id = 1;
+   */
+  environmentId: string;
+
+  /**
+   * Which database of the environment: a BrowsableDatabase.name.
+   *
+   * @generated from field: string database = 2;
+   */
+  database: string;
+
+  /**
+   * For an audited environment: must equal environment_id, as in
+   * QueryDatabaseRequest.
+   *
+   * @generated from field: optional string confirm_env_id = 3;
+   */
+  confirmEnvId?: string | undefined;
+
+  /**
+   * For an audited environment: why. Recorded in the audit row and the
+   * activity feed.
+   *
+   * @generated from field: optional string reason = 4;
+   */
+  reason?: string | undefined;
+};
+
+/**
+ * Describes the message controlplane.v1.DescribeDatabaseRequest.
+ * Use `create(DescribeDatabaseRequestSchema)` to create a new message.
+ */
+export const DescribeDatabaseRequestSchema: GenMessage<DescribeDatabaseRequest> = /*@__PURE__*/
+  messageDesc(file_services_app_database_v1_app_database, 14);
+
+/**
+ * @generated from message controlplane.v1.DescribeDatabaseResponse
+ */
+export type DescribeDatabaseResponse = Message<"controlplane.v1.DescribeDatabaseResponse"> & {
+  /**
+   * The database described: the request's.
+   *
+   * @generated from field: string database = 1;
+   */
+  database: string;
+
+  /**
+   * Every table and view forge_ro may SELECT, sorted by schema then name.
+   * System schemas (pg_catalog, information_schema, pg_toast) are absent.
+   *
+   * @generated from field: repeated controlplane.v1.DatabaseTable tables = 2;
+   */
+  tables: DatabaseTable[];
+
+  /**
+   * @generated from field: int64 duration_ms = 3;
+   */
+  durationMs: bigint;
+
+  /**
+   * The audit_log row that recorded this call.
+   *
+   * @generated from field: string audit_id = 4;
+   */
+  auditId: string;
+};
+
+/**
+ * Describes the message controlplane.v1.DescribeDatabaseResponse.
+ * Use `create(DescribeDatabaseResponseSchema)` to create a new message.
+ */
+export const DescribeDatabaseResponseSchema: GenMessage<DescribeDatabaseResponse> = /*@__PURE__*/
+  messageDesc(file_services_app_database_v1_app_database, 15);
+
+/**
+ * DatabaseTable is one table or view as forge_ro sees it.
+ *
+ * @generated from message controlplane.v1.DatabaseTable
+ */
+export type DatabaseTable = Message<"controlplane.v1.DatabaseTable"> & {
+  /**
+   * @generated from field: string schema = 1;
+   */
+  schema: string;
+
+  /**
+   * @generated from field: string name = 2;
+   */
+  name: string;
+
+  /**
+   * @generated from field: controlplane.v1.DatabaseTableKind kind = 3;
+   */
+  kind: DatabaseTableKind;
+
+  /**
+   * The planner's estimate (pg_class.reltuples), not a count. -1 when
+   * unknown: a view, or a table never analyzed.
+   *
+   * @generated from field: int64 estimated_rows = 4;
+   */
+  estimatedRows: bigint;
+
+  /**
+   * COMMENT ON TABLE, or empty.
+   *
+   * @generated from field: string comment = 5;
+   */
+  comment: string;
+
+  /**
+   * The columns forge_ro may SELECT, in table order. A column it cannot read
+   * (forge:secret) is absent.
+   *
+   * @generated from field: repeated controlplane.v1.DatabaseTableColumn columns = 6;
+   */
+  columns: DatabaseTableColumn[];
+
+  /**
+   * The primary key's columns, in key order. Empty when the table has none
+   * (or is a view); the row page then has no stable address. A key column
+   * forge_ro cannot read makes this empty too.
+   *
+   * @generated from field: repeated string primary_key = 7;
+   */
+  primaryKey: string[];
+
+  /**
+   * The foreign keys declared on this table, pointing out of it: schema and
+   * table are this table's, ref_schema and ref_table the referenced one's.
+   * The referenced table may be absent from tables when forge_ro cannot read
+   * it; the value is still shown, without a link.
+   *
+   * @generated from field: repeated controlplane.v1.DatabaseForeignKey foreign_keys = 8;
+   */
+  foreignKeys: DatabaseForeignKey[];
+
+  /**
+   * The foreign keys of other readable tables that point at this one: schema
+   * and table are the referencing table's, ref_schema and ref_table this
+   * table's. A referencing table forge_ro cannot read is absent, so every
+   * entry can be browsed with an eq filter on its columns.
+   *
+   * @generated from field: repeated controlplane.v1.DatabaseForeignKey referenced_by = 9;
+   */
+  referencedBy: DatabaseForeignKey[];
+};
+
+/**
+ * Describes the message controlplane.v1.DatabaseTable.
+ * Use `create(DatabaseTableSchema)` to create a new message.
+ */
+export const DatabaseTableSchema: GenMessage<DatabaseTable> = /*@__PURE__*/
+  messageDesc(file_services_app_database_v1_app_database, 16);
+
+/**
+ * DatabaseTableColumn is one column of a DatabaseTable.
+ *
+ * @generated from message controlplane.v1.DatabaseTableColumn
+ */
+export type DatabaseTableColumn = Message<"controlplane.v1.DatabaseTableColumn"> & {
+  /**
+   * @generated from field: string name = 1;
+   */
+  name: string;
+
+  /**
+   * The column's declared type as Postgres prints it (format_type), with
+   * its modifiers: "bigint", "character varying(40)", "timestamp with time
+   * zone", "text[]", an enum's name. For display: it is the spelling a
+   * person reads, not DatabaseColumn's internal name ("int8") that a
+   * BrowseTable result column carries.
+   *
+   * @generated from field: string pg_type = 2;
+   */
+  pgType: string;
+
+  /**
+   * @generated from field: bool nullable = 3;
+   */
+  nullable: boolean;
+
+  /**
+   * COMMENT ON COLUMN, or empty.
+   *
+   * @generated from field: string comment = 4;
+   */
+  comment: string;
+
+  /**
+   * The column is part of the table's primary key.
+   *
+   * @generated from field: bool is_primary_key = 5;
+   */
+  isPrimaryKey: boolean;
+
+  /**
+   * Explicit forge:identity-subject marker on this role-visible column.
+   * Invalid or conflicting markers are UNSPECIFIED; names are never inferred.
+   *
+   * @generated from field: controlplane.v1.IdentitySubjectKind identity_subject = 6;
+   */
+  identitySubject: IdentitySubjectKind;
+};
+
+/**
+ * Describes the message controlplane.v1.DatabaseTableColumn.
+ * Use `create(DatabaseTableColumnSchema)` to create a new message.
+ */
+export const DatabaseTableColumnSchema: GenMessage<DatabaseTableColumn> = /*@__PURE__*/
+  messageDesc(file_services_app_database_v1_app_database, 17);
+
+/**
+ * DatabaseForeignKey is one foreign-key constraint, always written from the
+ * referencing side: columns[i] of schema.table references ref_columns[i] of
+ * ref_schema.ref_table.
+ *
+ * @generated from message controlplane.v1.DatabaseForeignKey
+ */
+export type DatabaseForeignKey = Message<"controlplane.v1.DatabaseForeignKey"> & {
+  /**
+   * The constraint's name.
+   *
+   * @generated from field: string constraint = 1;
+   */
+  constraint: string;
+
+  /**
+   * The referencing table.
+   *
+   * @generated from field: string schema = 2;
+   */
+  schema: string;
+
+  /**
+   * @generated from field: string table = 3;
+   */
+  table: string;
+
+  /**
+   * The referencing columns, in constraint order.
+   *
+   * @generated from field: repeated string columns = 4;
+   */
+  columns: string[];
+
+  /**
+   * The referenced table.
+   *
+   * @generated from field: string ref_schema = 5;
+   */
+  refSchema: string;
+
+  /**
+   * @generated from field: string ref_table = 6;
+   */
+  refTable: string;
+
+  /**
+   * The referenced columns, in constraint order: as long as columns.
+   *
+   * @generated from field: repeated string ref_columns = 7;
+   */
+  refColumns: string[];
+};
+
+/**
+ * Describes the message controlplane.v1.DatabaseForeignKey.
+ * Use `create(DatabaseForeignKeySchema)` to create a new message.
+ */
+export const DatabaseForeignKeySchema: GenMessage<DatabaseForeignKey> = /*@__PURE__*/
+  messageDesc(file_services_app_database_v1_app_database, 18);
+
+/**
+ * @generated from message controlplane.v1.BrowseTableRequest
+ */
+export type BrowseTableRequest = Message<"controlplane.v1.BrowseTableRequest"> & {
+  /**
+   * The control-plane environment id (deploy_environments.id).
+   *
+   * @generated from field: string environment_id = 1;
+   */
+  environmentId: string;
+
+  /**
+   * Which database of the environment: a BrowsableDatabase.name.
+   *
+   * @generated from field: string database = 2;
+   */
+  database: string;
+
+  /**
+   * The table or view, schema-qualified and unquoted: "public.chats". It must
+   * equal schema + "." + name of one DescribeDatabase table.
+   *
+   * @generated from field: string table = 3;
+   */
+  table: string;
+
+  /**
+   * The columns to return, in this order. Empty = every column forge_ro may
+   * read, in table order.
+   *
+   * @generated from field: repeated string columns = 4;
+   */
+  columns: string[];
+
+  /**
+   * ANDed together.
+   *
+   * @generated from field: repeated controlplane.v1.BrowseFilter filters = 5;
+   */
+  filters: BrowseFilter[];
+
+  /**
+   * In priority order. Empty = the primary key ascending, or no ORDER BY when
+   * the table has none (pages are then not stable).
+   *
+   * @generated from field: repeated controlplane.v1.BrowseSort sort = 6;
+   */
+  sort: BrowseSort[];
+
+  /**
+   * Rows in the page, 1 to 500.
+   *
+   * @generated from field: int32 limit = 7;
+   */
+  limit: number;
+
+  /**
+   * Rows skipped before the page. At most 1,000,000: past that, narrow with a
+   * filter or a sort instead.
+   *
+   * @generated from field: int64 offset = 8;
+   */
+  offset: bigint;
+
+  /**
+   * Whether and how to count the rows that match the filters.
+   *
+   * @generated from field: controlplane.v1.BrowseCount count = 9;
+   */
+  count: BrowseCount;
+
+  /**
+   * For an audited environment: must equal environment_id, as in
+   * QueryDatabaseRequest.
+   *
+   * @generated from field: optional string confirm_env_id = 10;
+   */
+  confirmEnvId?: string | undefined;
+
+  /**
+   * For an audited environment: why. Recorded in the audit row and the
+   * activity feed.
+   *
+   * @generated from field: optional string reason = 11;
+   */
+  reason?: string | undefined;
+};
+
+/**
+ * Describes the message controlplane.v1.BrowseTableRequest.
+ * Use `create(BrowseTableRequestSchema)` to create a new message.
+ */
+export const BrowseTableRequestSchema: GenMessage<BrowseTableRequest> = /*@__PURE__*/
+  messageDesc(file_services_app_database_v1_app_database, 19);
+
+/**
+ * BrowseFilter is one condition on one column. Values are bound as text
+ * parameters and converted by Postgres to the column's type, so "42",
+ * "2026-01-31" and "true" all work against the matching types.
+ *
+ * @generated from message controlplane.v1.BrowseFilter
+ */
+export type BrowseFilter = Message<"controlplane.v1.BrowseFilter"> & {
+  /**
+   * @generated from field: string column = 1;
+   */
+  column: string;
+
+  /**
+   * @generated from field: controlplane.v1.BrowseFilterOp op = 2;
+   */
+  op: BrowseFilterOp;
+
+  /**
+   * Exactly one for EQ through ILIKE; one or more for IN; none for IS_NULL
+   * and NOT_NULL.
+   *
+   * @generated from field: repeated string values = 3;
+   */
+  values: string[];
+};
+
+/**
+ * Describes the message controlplane.v1.BrowseFilter.
+ * Use `create(BrowseFilterSchema)` to create a new message.
+ */
+export const BrowseFilterSchema: GenMessage<BrowseFilter> = /*@__PURE__*/
+  messageDesc(file_services_app_database_v1_app_database, 20);
+
+/**
+ * BrowseSort orders the page by one column.
+ *
+ * @generated from message controlplane.v1.BrowseSort
+ */
+export type BrowseSort = Message<"controlplane.v1.BrowseSort"> & {
+  /**
+   * @generated from field: string column = 1;
+   */
+  column: string;
+
+  /**
+   * Descending, NULLs first (Postgres's default for DESC); ascending puts
+   * them last.
+   *
+   * @generated from field: bool desc = 2;
+   */
+  desc: boolean;
+};
+
+/**
+ * Describes the message controlplane.v1.BrowseSort.
+ * Use `create(BrowseSortSchema)` to create a new message.
+ */
+export const BrowseSortSchema: GenMessage<BrowseSort> = /*@__PURE__*/
+  messageDesc(file_services_app_database_v1_app_database, 21);
+
+/**
+ * @generated from message controlplane.v1.BrowseTableResponse
+ */
+export type BrowseTableResponse = Message<"controlplane.v1.BrowseTableResponse"> & {
+  /**
+   * The columns returned, in order: the request's, or every readable one.
+   *
+   * @generated from field: repeated controlplane.v1.DatabaseColumn columns = 1;
+   */
+  columns: DatabaseColumn[];
+
+  /**
+   * In column order. A cell longer than 4 KiB is cut and marked.
+   *
+   * @generated from field: repeated controlplane.v1.DatabaseRow rows = 2;
+   */
+  rows: DatabaseRow[];
+
+  /**
+   * There are rows past this page. The next page is offset + len(rows): the
+   * response-size cap may cut a page shorter than limit.
+   *
+   * @generated from field: bool has_more = 3;
+   */
+  hasMore: boolean;
+
+  /**
+   * The matching rows, when count was ESTIMATED or EXACT. Absent for NONE.
+   *
+   * @generated from field: optional int64 total = 4;
+   */
+  total?: bigint | undefined;
+
+  /**
+   * total is the planner's estimate (count ESTIMATED).
+   *
+   * @generated from field: bool total_is_estimate = 5;
+   */
+  totalIsEstimate: boolean;
+
+  /**
+   * total is the EXACT count's cap: at least this many rows match.
+   *
+   * @generated from field: bool total_is_lower_bound = 6;
+   */
+  totalIsLowerBound: boolean;
+
+  /**
+   * @generated from field: int64 duration_ms = 7;
+   */
+  durationMs: bigint;
+
+  /**
+   * The audit_log row that recorded this call.
+   *
+   * @generated from field: string audit_id = 8;
+   */
+  auditId: string;
+
+  /**
+   * The database and table that answered, as the request named them.
+   *
+   * @generated from field: string database = 9;
+   */
+  database: string;
+
+  /**
+   * @generated from field: string table = 10;
+   */
+  table: string;
+
+  /**
+   * Which server answered: "ro" (a read replica) or "rw" (the primary).
+   *
+   * @generated from field: string replica = 11;
+   */
+  replica: string;
+
+  /**
+   * The response-size cap cut the page short of limit: fewer rows came back
+   * than asked for although more match (has_more is set too). Continue from
+   * next_offset, not offset + limit.
+   *
+   * @generated from field: bool truncated = 12;
+   */
+  truncated: boolean;
+
+  /**
+   * The offset of the next page: the request's offset plus the rows
+   * returned. Meaningful when has_more is set.
+   *
+   * @generated from field: int64 next_offset = 13;
+   */
+  nextOffset: bigint;
+};
+
+/**
+ * Describes the message controlplane.v1.BrowseTableResponse.
+ * Use `create(BrowseTableResponseSchema)` to create a new message.
+ */
+export const BrowseTableResponseSchema: GenMessage<BrowseTableResponse> = /*@__PURE__*/
+  messageDesc(file_services_app_database_v1_app_database, 22);
+
+/**
+ * BrowsableDatabaseKind is how the environment declares a database.
+ *
+ * @generated from enum controlplane.v1.BrowsableDatabaseKind
+ */
+export enum BrowsableDatabaseKind {
+  /**
+   * @generated from enum value: BROWSABLE_DATABASE_KIND_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * A forge.ManagedDatabase: forge provisions and runs it.
+   *
+   * @generated from enum value: BROWSABLE_DATABASE_KIND_MANAGED = 1;
+   */
+  MANAGED = 1,
+
+  /**
+   * A forge.ExternalDatabase: a Postgres the environment uses and forge does
+   * not run.
+   *
+   * @generated from enum value: BROWSABLE_DATABASE_KIND_EXTERNAL = 2;
+   */
+  EXTERNAL = 2,
+}
+
+/**
+ * Describes the enum controlplane.v1.BrowsableDatabaseKind.
+ */
+export const BrowsableDatabaseKindSchema: GenEnum<BrowsableDatabaseKind> = /*@__PURE__*/
+  enumDesc(file_services_app_database_v1_app_database, 0);
+
+/**
+ * DataAccessPolicy is the environment's recorded forge.DataAccess db_query
+ * policy (the service header's POLICY).
+ *
+ * @generated from enum controlplane.v1.DataAccessPolicy
+ */
+export enum DataAccessPolicy {
+  /**
+   * Not recorded or not understood: refused, as DENY.
+   *
+   * @generated from enum value: DATA_ACCESS_POLICY_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * Anyone who may query reads without a confirmation or reason.
+   *
+   * @generated from enum value: DATA_ACCESS_POLICY_OPEN = 1;
+   */
+  OPEN = 1,
+
+  /**
+   * A person with the db:query grant, plus confirm_env_id and a reason on
+   * every call.
+   *
+   * @generated from enum value: DATA_ACCESS_POLICY_AUDITED = 2;
+   */
+  AUDITED = 2,
+
+  /**
+   * Every read is refused.
+   *
+   * @generated from enum value: DATA_ACCESS_POLICY_DENY = 3;
+   */
+  DENY = 3,
+}
+
+/**
+ * Describes the enum controlplane.v1.DataAccessPolicy.
+ */
+export const DataAccessPolicySchema: GenEnum<DataAccessPolicy> = /*@__PURE__*/
+  enumDesc(file_services_app_database_v1_app_database, 1);
+
+/**
+ * DatabaseTableKind is what kind of relation a DatabaseTable is.
+ *
+ * @generated from enum controlplane.v1.DatabaseTableKind
+ */
+export enum DatabaseTableKind {
+  /**
+   * @generated from enum value: DATABASE_TABLE_KIND_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * An ordinary or partitioned table.
+   *
+   * @generated from enum value: DATABASE_TABLE_KIND_TABLE = 1;
+   */
+  TABLE = 1,
+
+  /**
+   * @generated from enum value: DATABASE_TABLE_KIND_VIEW = 2;
+   */
+  VIEW = 2,
+
+  /**
+   * @generated from enum value: DATABASE_TABLE_KIND_MATERIALIZED_VIEW = 3;
+   */
+  MATERIALIZED_VIEW = 3,
+
+  /**
+   * A foreign table (postgres_fdw and the like).
+   *
+   * @generated from enum value: DATABASE_TABLE_KIND_FOREIGN_TABLE = 4;
+   */
+  FOREIGN_TABLE = 4,
+}
+
+/**
+ * Describes the enum controlplane.v1.DatabaseTableKind.
+ */
+export const DatabaseTableKindSchema: GenEnum<DatabaseTableKind> = /*@__PURE__*/
+  enumDesc(file_services_app_database_v1_app_database, 2);
+
+/**
+ * IdentitySubjectKind describes an explicitly marked managed-identity subject.
+ *
+ * @generated from enum controlplane.v1.IdentitySubjectKind
+ */
+export enum IdentitySubjectKind {
+  /**
+   * @generated from enum value: IDENTITY_SUBJECT_KIND_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * @generated from enum value: IDENTITY_SUBJECT_KIND_ID = 1;
+   */
+  ID = 1,
+
+  /**
+   * @generated from enum value: IDENTITY_SUBJECT_KIND_EMAIL = 2;
+   */
+  EMAIL = 2,
+}
+
+/**
+ * Describes the enum controlplane.v1.IdentitySubjectKind.
+ */
+export const IdentitySubjectKindSchema: GenEnum<IdentitySubjectKind> = /*@__PURE__*/
+  enumDesc(file_services_app_database_v1_app_database, 3);
+
+/**
+ * BrowseFilterOp is a BrowseFilter's comparison.
+ *
+ * @generated from enum controlplane.v1.BrowseFilterOp
+ */
+export enum BrowseFilterOp {
+  /**
+   * Refused.
+   *
+   * @generated from enum value: BROWSE_FILTER_OP_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * column = value
+   *
+   * @generated from enum value: BROWSE_FILTER_OP_EQ = 1;
+   */
+  EQ = 1,
+
+  /**
+   * column <> value. A NULL cell does not match.
+   *
+   * @generated from enum value: BROWSE_FILTER_OP_NEQ = 2;
+   */
+  NEQ = 2,
+
+  /**
+   * @generated from enum value: BROWSE_FILTER_OP_LT = 3;
+   */
+  LT = 3,
+
+  /**
+   * @generated from enum value: BROWSE_FILTER_OP_LTE = 4;
+   */
+  LTE = 4,
+
+  /**
+   * @generated from enum value: BROWSE_FILTER_OP_GT = 5;
+   */
+  GT = 5,
+
+  /**
+   * @generated from enum value: BROWSE_FILTER_OP_GTE = 6;
+   */
+  GTE = 6,
+
+  /**
+   * column LIKE value, the value's % and _ as Postgres reads them. A text
+   * column only.
+   *
+   * @generated from enum value: BROWSE_FILTER_OP_LIKE = 7;
+   */
+  LIKE = 7,
+
+  /**
+   * column ILIKE value. A text column only.
+   *
+   * @generated from enum value: BROWSE_FILTER_OP_ILIKE = 8;
+   */
+  ILIKE = 8,
+
+  /**
+   * column IS NULL
+   *
+   * @generated from enum value: BROWSE_FILTER_OP_IS_NULL = 9;
+   */
+  IS_NULL = 9,
+
+  /**
+   * column IS NOT NULL
+   *
+   * @generated from enum value: BROWSE_FILTER_OP_NOT_NULL = 10;
+   */
+  NOT_NULL = 10,
+
+  /**
+   * column = ANY(values)
+   *
+   * @generated from enum value: BROWSE_FILTER_OP_IN = 11;
+   */
+  IN = 11,
+}
+
+/**
+ * Describes the enum controlplane.v1.BrowseFilterOp.
+ */
+export const BrowseFilterOpSchema: GenEnum<BrowseFilterOp> = /*@__PURE__*/
+  enumDesc(file_services_app_database_v1_app_database, 4);
+
+/**
+ * BrowseCount is whether BrowseTable counts the matching rows.
+ *
+ * @generated from enum controlplane.v1.BrowseCount
+ */
+export enum BrowseCount {
+  /**
+   * As NONE.
+   *
+   * @generated from enum value: BROWSE_COUNT_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * No count: total is absent. The cheapest; has_more still says whether
+   * there is a next page.
+   *
+   * @generated from enum value: BROWSE_COUNT_NONE = 1;
+   */
+  NONE = 1,
+
+  /**
+   * The planner's estimate for the filtered query: total_is_estimate is set.
+   *
+   * @generated from enum value: BROWSE_COUNT_ESTIMATED = 2;
+   */
+  ESTIMATED = 2,
+
+  /**
+   * count(*) over the filtered query, stopping at a cap the server sets: past
+   * it, total is the cap and total_is_lower_bound is set.
+   *
+   * @generated from enum value: BROWSE_COUNT_EXACT = 3;
+   */
+  EXACT = 3,
+}
+
+/**
+ * Describes the enum controlplane.v1.BrowseCount.
+ */
+export const BrowseCountSchema: GenEnum<BrowseCount> = /*@__PURE__*/
+  enumDesc(file_services_app_database_v1_app_database, 5);
+
+/**
  * === AppDatabaseService (controlplane.v1.AppDatabaseService) ===
  *
  * Read-only SQL against an environment's APPLICATION database (the Postgres a
@@ -643,6 +1563,57 @@ export const DashboardColumnSchema: GenMessage<DashboardColumn> = /*@__PURE__*/
  *      lock; the panel gave up in 500ms instead of queueing behind it), then
  *      "statement_timeout".
  *
+ * THE DATA BROWSER (ListBrowsableDatabases, DescribeDatabase, BrowseTable) is
+ * the console's read-only table viewer: the same databases, the same forge_ro
+ * role, the same READ ONLY transaction and the same policy as QueryDatabase,
+ * with no SQL on the wire. A request names a table, columns, filters, a sort
+ * and a page; the server checks every identifier against what forge_ro may
+ * SELECT (has_table_privilege / has_column_privilege), quotes it, and binds
+ * every value as a parameter. So the browser reads exactly what forge_ro reads,
+ * and a forge:secret column is neither listed nor readable. It covers every
+ * database of the environment: each forge.ManagedDatabase and each
+ * forge.ExternalDatabase. Admission order, each step's error:
+ *   1. unknown environment: NotFound.
+ *   2. not a member of its org: NotFound (existence is not revealed).
+ *   3. no db:query grant or scope: PermissionDenied.
+ *   ListBrowsableDatabases stops here: it lists names, kinds and policies and
+ *   reads no rows, so a deny environment still answers, with policy DENY, and
+ *   the console can say why it shows no data.
+ *   4. data_access policy deny (or unknown), or a machine credential on an
+ *      audited environment: PermissionDenied.
+ *   5. audited environment without confirm_env_id equal to environment_id and
+ *      a reason: FailedPrecondition, reason "confirmation_required". The
+ *      console asks once per tab session and sends both on every call.
+ *   6. unknown database: NotFound.
+ *   7. the control plane has no way to reach the database (no hosted
+ *      placement, an external database it cannot dial): FailedPrecondition,
+ *      reason "datasource_unreachable". An external database is reached as
+ *      its `reach` says: "direct" by a control plane running in its cluster,
+ *      with the role's password Secret mounted into it; "port_forward" is
+ *      listed and not reachable yet.
+ *   8. per-principal budget (shared with QueryDatabase): ResourceExhausted,
+ *      reason "rate_limited", with Retry-After; too many reads in flight for
+ *      this principal on this environment (a few, so a row page's Related
+ *      counts run together; separate from QueryDatabase's one):
+ *      ResourceExhausted, reason "query_in_flight".
+ *   9. (BrowseTable) a table forge_ro cannot read: NotFound. A table that
+ *      exists but is not readable looks the same as one that does not exist.
+ *      It is judged against the database's description, which is a read of
+ *      its catalog and so runs inside the budget.
+ *  10. at run time: DeadlineExceeded, reason "statement_timeout"; Unavailable
+ *      when the database does not answer. For an external database, before
+ *      anything runs: FailedPrecondition, reason "credential_missing", when
+ *      its password Secret is not mounted on this control plane, and reason
+ *      "writable_role" when the role the route names can do more than read
+ *      (the server is asked; the declaration is not trusted).
+ * DescribeDatabase and BrowseTable each write ONE audit_log row per call, like
+ * QueryDatabase, with the structured request, the statements as run and their
+ * bound values, and the reason; a counted page runs two statements and is
+ * still one row. DescribeDatabase also records a typed activity event, so the
+ * feed shows who opened which database of an audited environment and why;
+ * BrowseTable records none (a page view is not a feed line), and its audit
+ * rows are the per-read record.
+ *
  * @generated from service controlplane.v1.AppDatabaseService
  */
 export const AppDatabaseService: GenService<{
@@ -687,6 +1658,68 @@ export const AppDatabaseService: GenService<{
     methodKind: "unary";
     input: typeof ListDashboardDatabasesRequestSchema;
     output: typeof ListDashboardDatabasesResponseSchema;
+  },
+  /**
+   * ListBrowsableDatabases returns every database of the environment the data
+   * browser can offer: each managed and each external database, the policy a
+   * read of it runs under, and whether the control plane can reach it. Reads
+   * no rows and writes no audit row.
+   *
+   * Admission is the data browser's steps 1 to 3. A database the control plane
+   * cannot reach is still listed, with reachable false and unreachable_reason
+   * saying why, because the environment declares it.
+   *
+   * ERRORS: NotFound (steps 1, 2), PermissionDenied (step 3),
+   * FailedPrecondition reason "shape_unknown" (the environment has not
+   * recorded what it deploys yet, so its databases are not known),
+   * Unavailable (browsing is not configured on this server).
+   *
+   * @generated from rpc controlplane.v1.AppDatabaseService.ListBrowsableDatabases
+   */
+  listBrowsableDatabases: {
+    methodKind: "unary";
+    input: typeof ListBrowsableDatabasesRequestSchema;
+    output: typeof ListBrowsableDatabasesResponseSchema;
+  },
+  /**
+   * DescribeDatabase returns the tables and views forge_ro may SELECT in one
+   * database, each with the columns it may read, its primary key, its foreign
+   * keys and the foreign keys of readable tables that point at it (what the
+   * row page's Related section lists). Read by live introspection on every
+   * call; BrowseTable then compiles against that reading for up to a minute.
+   *
+   * ERRORS: every step of the data browser's admission except step 9.
+   * InvalidArgument when a bound is out of range.
+   *
+   * @generated from rpc controlplane.v1.AppDatabaseService.DescribeDatabase
+   */
+  describeDatabase: {
+    methodKind: "unary";
+    input: typeof DescribeDatabaseRequestSchema;
+    output: typeof DescribeDatabaseResponseSchema;
+  },
+  /**
+   * BrowseTable returns one page of one table or view: the chosen columns,
+   * filtered, sorted and paged, compiled into one parameterised SELECT. It also
+   * serves the row page (a primary-key eq filter, limit 1) and the Related
+   * counts (a foreign-key eq filter with count ESTIMATED or EXACT).
+   *
+   * The request is checked against a description of the database at most a
+   * minute old (the one DescribeDatabase last read, or a fresh one); a table
+   * the description does not know is looked up live once before it is
+   * refused.
+   *
+   * ERRORS: every step of the data browser's admission. InvalidArgument when a
+   * bound is out of range; a column (in columns, filters or sort) forge_ro
+   * cannot read in the table; a filter whose values do not fit its op; or a
+   * value Postgres cannot convert to the column's type.
+   *
+   * @generated from rpc controlplane.v1.AppDatabaseService.BrowseTable
+   */
+  browseTable: {
+    methodKind: "unary";
+    input: typeof BrowseTableRequestSchema;
+    output: typeof BrowseTableResponseSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_services_app_database_v1_app_database, 0);

@@ -1,7 +1,6 @@
 package core
 
 import (
-	"database/sql"
 	"errors"
 	"fmt"
 	"testing"
@@ -33,7 +32,7 @@ func TestSentinelsAreClassifiedWithUnchangedIdentityAndText(t *testing.T) {
 		{ErrConnectionNotFound, connect.CodeNotFound, "connection not found"},
 		{ErrModelEndpointNotFound, connect.CodeNotFound, "model endpoint not found"},
 		{ErrIntegrationWriteNotFound, connect.CodeNotFound, "integration write not found"},
-		{ErrPlanNotFound, connect.CodeNotFound, "plan not found: sql: no rows in result set"},
+		{ErrPlanNotFound, connect.CodeNotFound, "plan not found"},
 
 		{ErrWorktreeNameTaken, connect.CodeAlreadyExists, "a live worktree already has this name"},
 		{ErrConnectionNameTaken, connect.CodeAlreadyExists, "connection name already in use"},
@@ -55,15 +54,9 @@ func TestSentinelsAreClassifiedWithUnchangedIdentityAndText(t *testing.T) {
 			if wire.Code() != tc.code {
 				t.Errorf("wire code = %v, want %v", wire.Code(), tc.code)
 			}
-			// svcerr publishes the sentinel's own sentence, never the wrapper's
-			// id: ErrPlanNotFound's text is the one exception, the constructor's
-			// detail ("plan not found") being what it was declared with.
-			want := tc.text
-			if tc.err == ErrPlanNotFound {
-				want = "plan not found"
-			}
-			if wire.Message() != want {
-				t.Errorf("wire message = %q, want %q", wire.Message(), want)
+			// svcerr publishes the sentinel's own sentence, never the wrapper's id.
+			if wire.Message() != tc.text {
+				t.Errorf("wire message = %q, want %q", wire.Message(), tc.text)
 			}
 		})
 	}
@@ -72,8 +65,8 @@ func TestSentinelsAreClassifiedWithUnchangedIdentityAndText(t *testing.T) {
 	if errors.Is(ErrChatNotFound, ErrWorktreeNotFound) {
 		t.Error("ErrChatNotFound matches ErrWorktreeNotFound")
 	}
-	// ErrPlanNotFound still answers the tool layer's sql.ErrNoRows branch.
-	if !errors.Is(fmt.Errorf("x: %w", ErrPlanNotFound), sql.ErrNoRows) {
-		t.Error("ErrPlanNotFound lost sql.ErrNoRows")
+	// ErrPlanNotFound still answers the tool layer's svcerr.IsNotFound branch.
+	if !svcerr.IsNotFound(fmt.Errorf("x: %w", ErrPlanNotFound)) {
+		t.Error("ErrPlanNotFound lost svcerr.NotFound")
 	}
 }

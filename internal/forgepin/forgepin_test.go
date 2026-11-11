@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	forgecli "github.com/reliant-labs/forge/cli"
 	"github.com/stretchr/testify/assert"
@@ -53,6 +54,28 @@ func TestOutput_FirstAcceptedTryIsCachedPerVersion(t *testing.T) {
 	assert.Equal(t, []string{"a --new-flag", "a"}, runs, "asked again for what the pinned forge already said")
 }
 
+// A pinned forge that refuses every try is not run again on the next ask: the
+// daemon asks for the framework guide on every config poll of every project.
+// The failure is retried once it is older than failedResolutionTTL.
+func TestOutput_AFailureIsReusedUntilItAges(t *testing.T) {
+	var runs []string
+	s := fakeSource(t, "pin:v1.0.4", &runs)
+	pf, _, err := s.Pinned(t.TempDir(), "project memory")
+	require.NoError(t, err)
+
+	for range 3 {
+		_, err := s.Output(pf, "", "memory.json", []string{"project", "memory", "--new-flag"})
+		require.ErrorContains(t, err, "unknown flag")
+	}
+	assert.Len(t, runs, 1, "the refused command ran again within the failure TTL")
+
+	key := pf.Key + "\x00memory.json"
+	s.failures.Store(key, failedOutput{at: time.Now().Add(-failedResolutionTTL - time.Second), err: errors.New("old")})
+	_, err = s.Output(pf, "", "memory.json", []string{"project", "memory", "--new-flag"})
+	require.ErrorContains(t, err, "unknown flag")
+	assert.Len(t, runs, 2, "an aged failure was not retried")
+}
+
 // A linked checkout changes with every edit: its output is not kept on disk.
 func TestOutput_ACheckoutIsNotCachedOnDisk(t *testing.T) {
 	var runs []string
@@ -81,6 +104,32 @@ func TestPinned_IsReusedWhileForgeYAMLIsUnchanged(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "forge.yaml"), []byte("forge_version: v1.0.5\n"), 0o644))
 	_, _, _ = s.Pinned(dir, "project memory")
 	assert.Equal(t, 2, calls, "a moved pin was not resolved again")
+}
+
+// A failure is reused for longer than a success: obtaining the pin may mean a
+// build, and a failing build retried every minute per project kept a loaded
+// machine failing.
+func TestPinned_BacksOffAFailure(t *testing.T) {
+	s := &source{Deps: Deps{Resolve: func(context.Context, string, string, io.Writer) (forgecli.PinnedForge, bool, error) {
+		return forgecli.PinnedForge{}, false, errors.New("signal: killed")
+	}}}
+	dir := t.TempDir()
+	yaml := "forge_version: v1.0.4\n"
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "forge.yaml"), []byte(yaml), 0o644))
+	key := dir + "\x00project memory"
+	for _, tc := range []struct {
+		age    time.Duration
+		err    error
+		reused bool
+	}{
+		{2 * resolutionTTL, errors.New("signal: killed"), true},
+		{failedResolutionTTL + time.Second, errors.New("signal: killed"), false},
+		{2 * resolutionTTL, nil, false},
+	} {
+		s.resolutions.Store(key, resolution{yaml: yaml, at: time.Now().Add(-tc.age), err: tc.err, pf: forgecli.PinnedForge{Want: "cached"}})
+		pf, _, _ := s.Pinned(dir, "project memory")
+		assert.Equal(t, tc.reused, pf.Want == "cached", "age %s, err %v", tc.age, tc.err)
+	}
 }
 
 // The pinned forge names itself as an agent types it, so what it prints says

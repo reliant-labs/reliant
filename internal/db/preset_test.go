@@ -3,10 +3,10 @@ package db
 
 import (
 	"context"
-	"database/sql"
-	"errors"
 	"testing"
 	"time"
+
+	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	"github.com/google/uuid"
 	"github.com/reliant-labs/reliant/internal/ptr"
@@ -122,8 +122,8 @@ func TestPresetCRUD(t *testing.T) {
 		if err == nil {
 			t.Error("expected error for nonexistent preset")
 		}
-		if !errors.Is(err, sql.ErrNoRows) {
-			t.Errorf("expected sql.ErrNoRows, got %v", err)
+		if !svcerr.IsNotFound(err) {
+			t.Errorf("expected svcerr.NotFound, got %v", err)
 		}
 		if found != nil {
 			t.Errorf("expected nil, got preset with name %q", found.Name)
@@ -250,13 +250,13 @@ func TestPresetCRUD(t *testing.T) {
 			t.Fatalf("DeletePreset failed: %v", err)
 		}
 
-		// Verify it's gone - should return sql.ErrNoRows
+		// Verify it's gone - should return svcerr.NotFound
 		found, err := repo.GetPreset(ctx, saved.ID)
 		if err == nil {
 			t.Error("expected error for deleted preset")
 		}
-		if !errors.Is(err, sql.ErrNoRows) {
-			t.Errorf("expected sql.ErrNoRows, got %v", err)
+		if !svcerr.IsNotFound(err) {
+			t.Errorf("expected svcerr.NotFound, got %v", err)
 		}
 		if found != nil {
 			t.Error("expected preset to be deleted, but it still exists")

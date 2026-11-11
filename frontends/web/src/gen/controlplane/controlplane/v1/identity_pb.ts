@@ -15,7 +15,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file controlplane/v1/identity.proto.
  */
 export const file_controlplane_v1_identity: GenFile = /*@__PURE__*/
-  fileDesc("Ch5jb250cm9scGxhbmUvdjEvaWRlbnRpdHkucHJvdG8SD2NvbnRyb2xwbGFuZS52MSJAChNJZGVudGl0eUVudmlyb25tZW50EgoKAmlkGAEgASgJEgwKBG5hbWUYAiABKAkSDwoHcHJvamVjdBgDIAEoCSJnChRJZGVudGl0eVBhc3N3b3JkQ29kZRIMCgRjb2RlGAEgASgJEi4KCmV4cGlyZXNfYXQYAiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhEKCXJlc2V0X3VybBgDIAEoCSJlCgtJZGVudGl0eUFwcBIMCgRuYW1lGAEgASgJEhEKCWNsaWVudF9pZBgCIAEoCRI1ChFicm9rZXJfZXhwaXJlc19hdBgDIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAiiAIKEElkZW50aXR5RGVsaXZlcnkSDAoEa2luZBgBIAEoCRIPCgdjbHVzdGVyGAIgASgJEhEKCW5hbWVzcGFjZRgDIAEoCRIMCgRuYW1lGAQgASgJEjUKBXN0YXRlGAUgASgOMiYuY29udHJvbHBsYW5lLnYxLklkZW50aXR5RGVsaXZlcnlTdGF0ZRISCgpsYXN0X2Vycm9yGAYgASgJEjQKEGxhc3RfdmVyaWZpZWRfYXQYByABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEjMKD2xhc3Rfd3JpdHRlbl9hdBgIIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAiUgoMSWRlbnRpdHlSb2xlEgsKA2tleRgBIAEoCRIUCgxkaXNwbGF5X25hbWUYAiABKAkSDQoFZ3JvdXAYAyABKAkSEAoIZGVjbGFyZWQYBCABKAgi6wEKDElkZW50aXR5VXNlchIPCgd1c2VyX2lkGAEgASgJEg0KBWVtYWlsGAIgASgJEhQKDGRpc3BsYXlfbmFtZRgDIAEoCRIxCgVzdGF0ZRgEIAEoDjIiLmNvbnRyb2xwbGFuZS52MS5JZGVudGl0eVVzZXJTdGF0ZRINCgVyb2xlcxgFIAMoCRIuCgpjcmVhdGVkX2F0GAYgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIzCg9sYXN0X3NpZ25faW5fYXQYByABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wKs0CCg1JZGVudGl0eVN0YXRlEh4KGklERU5USVRZX1NUQVRFX1VOU1BFQ0lGSUVEEAASGgoWSURFTlRJVFlfU1RBVEVfUEVORElORxABEhsKF0lERU5USVRZX1NUQVRFX0NSRUFUSU5HEAISHwobSURFTlRJVFlfU1RBVEVfUFJPVklTSU9OSU5HEAMSGAoUSURFTlRJVFlfU1RBVEVfUkVBRFkQBBIbChdJREVOVElUWV9TVEFURV9ERUdSQURFRBAFEhoKFklERU5USVRZX1NUQVRFX0ZBSUxJTkcQBhIcChhJREVOVElUWV9TVEFURV9XSVRIRFJBV04QBxIYChRJREVOVElUWV9TVEFURV9HUkFDRRAIEhsKF0lERU5USVRZX1NUQVRFX0RFTEVUSU5HEAkSGgoWSURFTlRJVFlfU1RBVEVfREVMRVRFRBAKKvEBChhJZGVudGl0eU5vdEVuYWJsZWRSZWFzb24SKwonSURFTlRJVFlfTk9UX0VOQUJMRURfUkVBU09OX1VOU1BFQ0lGSUVEEAASLAooSURFTlRJVFlfTk9UX0VOQUJMRURfUkVBU09OX05PVF9ERUNMQVJFRBABEicKI0lERU5USVRZX05PVF9FTkFCTEVEX1JFQVNPTl9SRUZVU0VEEAISJwojSURFTlRJVFlfTk9UX0VOQUJMRURfUkVBU09OX1BFTkRJTkcQAxIoCiRJREVOVElUWV9OT1RfRU5BQkxFRF9SRUFTT05fTk9fU0hBUEUQBCqjAgoVSWRlbnRpdHlEZWxpdmVyeVN0YXRlEicKI0lERU5USVRZX0RFTElWRVJZX1NUQVRFX1VOU1BFQ0lGSUVEEAASJQohSURFTlRJVFlfREVMSVZFUllfU1RBVEVfREVMSVZFUkVEEAESIwofSURFTlRJVFlfREVMSVZFUllfU1RBVEVfUEVORElORxACEiMKH0lERU5USVRZX0RFTElWRVJZX1NUQVRFX0ZBSUxJTkcQAxIjCh9JREVOVElUWV9ERUxJVkVSWV9TVEFURV9VTkJPVU5EEAQSJQohSURFTlRJVFlfREVMSVZFUllfU1RBVEVfV0lUSERSQVdOEAUSJAogSURFTlRJVFlfREVMSVZFUllfU1RBVEVfRElTQUJMRUQQBiqAAQoUSWRlbnRpdHlNYWlsRGVsaXZlcnkSJgoiSURFTlRJVFlfTUFJTF9ERUxJVkVSWV9VTlNQRUNJRklFRBAAEh8KG0lERU5USVRZX01BSUxfREVMSVZFUllfTk9ORRABEh8KG0lERU5USVRZX01BSUxfREVMSVZFUllfU01UUBACKrsBChFJZGVudGl0eVVzZXJTdGF0ZRIjCh9JREVOVElUWV9VU0VSX1NUQVRFX1VOU1BFQ0lGSUVEEAASHwobSURFTlRJVFlfVVNFUl9TVEFURV9JTlZJVEVEEAESHgoaSURFTlRJVFlfVVNFUl9TVEFURV9BQ1RJVkUQAhIeChpJREVOVElUWV9VU0VSX1NUQVRFX0xPQ0tFRBADEiAKHElERU5USVRZX1VTRVJfU1RBVEVfRElTQUJMRUQQBELSAQoTY29tLmNvbnRyb2xwbGFuZS52MUINSWRlbnRpdHlQcm90b1ABWk9naXRodWIuY29tL3JlbGlhbnQtbGFicy9yZWxpYW50L2dlbi9jb250cm9scGxhbmUvY29udHJvbHBsYW5lL3YxO2NvbnRyb2xwbGFuZXYxogIDQ1hYqgIPQ29udHJvbHBsYW5lLlYxygIPQ29udHJvbHBsYW5lXFYx4gIbQ29udHJvbHBsYW5lXFYxXEdQQk1ldGFkYXRh6gIQQ29udHJvbHBsYW5lOjpWMWIGcHJvdG8z", [file_google_protobuf_timestamp]);
+  fileDesc("Ch5jb250cm9scGxhbmUvdjEvaWRlbnRpdHkucHJvdG8SD2NvbnRyb2xwbGFuZS52MSJAChNJZGVudGl0eUVudmlyb25tZW50EgoKAmlkGAEgASgJEgwKBG5hbWUYAiABKAkSDwoHcHJvamVjdBgDIAEoCSJjChRJZGVudGl0eVNvY2lhbFN0YXR1cxIMCgR0eXBlGAEgASgJEg0KBXN0YXRlGAIgASgJEi4KCmFwcGxpZWRfYXQYAyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wImcKFElkZW50aXR5UGFzc3dvcmRDb2RlEgwKBGNvZGUYASABKAkSLgoKZXhwaXJlc19hdBgCIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASEQoJcmVzZXRfdXJsGAMgASgJImUKC0lkZW50aXR5QXBwEgwKBG5hbWUYASABKAkSEQoJY2xpZW50X2lkGAIgASgJEjUKEWJyb2tlcl9leHBpcmVzX2F0GAMgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCKIAgoQSWRlbnRpdHlEZWxpdmVyeRIMCgRraW5kGAEgASgJEg8KB2NsdXN0ZXIYAiABKAkSEQoJbmFtZXNwYWNlGAMgASgJEgwKBG5hbWUYBCABKAkSNQoFc3RhdGUYBSABKA4yJi5jb250cm9scGxhbmUudjEuSWRlbnRpdHlEZWxpdmVyeVN0YXRlEhIKCmxhc3RfZXJyb3IYBiABKAkSNAoQbGFzdF92ZXJpZmllZF9hdBgHIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASMwoPbGFzdF93cml0dGVuX2F0GAggASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCJSCgxJZGVudGl0eVJvbGUSCwoDa2V5GAEgASgJEhQKDGRpc3BsYXlfbmFtZRgCIAEoCRINCgVncm91cBgDIAEoCRIQCghkZWNsYXJlZBgEIAEoCCLrAQoMSWRlbnRpdHlVc2VyEg8KB3VzZXJfaWQYASABKAkSDQoFZW1haWwYAiABKAkSFAoMZGlzcGxheV9uYW1lGAMgASgJEjEKBXN0YXRlGAQgASgOMiIuY29udHJvbHBsYW5lLnYxLklkZW50aXR5VXNlclN0YXRlEg0KBXJvbGVzGAUgAygJEi4KCmNyZWF0ZWRfYXQYBiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEjMKD2xhc3Rfc2lnbl9pbl9hdBgHIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAqzQIKDUlkZW50aXR5U3RhdGUSHgoaSURFTlRJVFlfU1RBVEVfVU5TUEVDSUZJRUQQABIaChZJREVOVElUWV9TVEFURV9QRU5ESU5HEAESGwoXSURFTlRJVFlfU1RBVEVfQ1JFQVRJTkcQAhIfChtJREVOVElUWV9TVEFURV9QUk9WSVNJT05JTkcQAxIYChRJREVOVElUWV9TVEFURV9SRUFEWRAEEhsKF0lERU5USVRZX1NUQVRFX0RFR1JBREVEEAUSGgoWSURFTlRJVFlfU1RBVEVfRkFJTElORxAGEhwKGElERU5USVRZX1NUQVRFX1dJVEhEUkFXThAHEhgKFElERU5USVRZX1NUQVRFX0dSQUNFEAgSGwoXSURFTlRJVFlfU1RBVEVfREVMRVRJTkcQCRIaChZJREVOVElUWV9TVEFURV9ERUxFVEVEEAoq8QEKGElkZW50aXR5Tm90RW5hYmxlZFJlYXNvbhIrCidJREVOVElUWV9OT1RfRU5BQkxFRF9SRUFTT05fVU5TUEVDSUZJRUQQABIsCihJREVOVElUWV9OT1RfRU5BQkxFRF9SRUFTT05fTk9UX0RFQ0xBUkVEEAESJwojSURFTlRJVFlfTk9UX0VOQUJMRURfUkVBU09OX1JFRlVTRUQQAhInCiNJREVOVElUWV9OT1RfRU5BQkxFRF9SRUFTT05fUEVORElORxADEigKJElERU5USVRZX05PVF9FTkFCTEVEX1JFQVNPTl9OT19TSEFQRRAEKqMCChVJZGVudGl0eURlbGl2ZXJ5U3RhdGUSJwojSURFTlRJVFlfREVMSVZFUllfU1RBVEVfVU5TUEVDSUZJRUQQABIlCiFJREVOVElUWV9ERUxJVkVSWV9TVEFURV9ERUxJVkVSRUQQARIjCh9JREVOVElUWV9ERUxJVkVSWV9TVEFURV9QRU5ESU5HEAISIwofSURFTlRJVFlfREVMSVZFUllfU1RBVEVfRkFJTElORxADEiMKH0lERU5USVRZX0RFTElWRVJZX1NUQVRFX1VOQk9VTkQQBBIlCiFJREVOVElUWV9ERUxJVkVSWV9TVEFURV9XSVRIRFJBV04QBRIkCiBJREVOVElUWV9ERUxJVkVSWV9TVEFURV9ESVNBQkxFRBAGKskBChRJZGVudGl0eU1haWxEZWxpdmVyeRImCiJJREVOVElUWV9NQUlMX0RFTElWRVJZX1VOU1BFQ0lGSUVEEAASHwobSURFTlRJVFlfTUFJTF9ERUxJVkVSWV9OT05FEAESHwobSURFTlRJVFlfTUFJTF9ERUxJVkVSWV9TTVRQEAISIwofSURFTlRJVFlfTUFJTF9ERUxJVkVSWV9QTEFURk9STRADEiIKHklERU5USVRZX01BSUxfREVMSVZFUllfU0FOREJPWBAEKrsBChFJZGVudGl0eVVzZXJTdGF0ZRIjCh9JREVOVElUWV9VU0VSX1NUQVRFX1VOU1BFQ0lGSUVEEAASHwobSURFTlRJVFlfVVNFUl9TVEFURV9JTlZJVEVEEAESHgoaSURFTlRJVFlfVVNFUl9TVEFURV9BQ1RJVkUQAhIeChpJREVOVElUWV9VU0VSX1NUQVRFX0xPQ0tFRBADEiAKHElERU5USVRZX1VTRVJfU1RBVEVfRElTQUJMRUQQBELSAQoTY29tLmNvbnRyb2xwbGFuZS52MUINSWRlbnRpdHlQcm90b1ABWk9naXRodWIuY29tL3JlbGlhbnQtbGFicy9yZWxpYW50L2dlbi9jb250cm9scGxhbmUvY29udHJvbHBsYW5lL3YxO2NvbnRyb2xwbGFuZXYxogIDQ1hYqgIPQ29udHJvbHBsYW5lLlYxygIPQ29udHJvbHBsYW5lXFYx4gIbQ29udHJvbHBsYW5lXFYxXEdQQk1ldGFkYXRh6gIQQ29udHJvbHBsYW5lOjpWMWIGcHJvdG8z", [file_google_protobuf_timestamp]);
 
 /**
  * IdentityEnvironment names an environment of the caller's org: the owner of
@@ -50,6 +50,44 @@ export type IdentityEnvironment = Message<"controlplane.v1.IdentityEnvironment">
  */
 export const IdentityEnvironmentSchema: GenMessage<IdentityEnvironment> = /*@__PURE__*/
   messageDesc(file_controlplane_v1_identity, 0);
+
+/**
+ * IdentitySocialStatus is one declared social sign-in provider.
+ *
+ * @generated from message controlplane.v1.IdentitySocialStatus
+ */
+export type IdentitySocialStatus = Message<"controlplane.v1.IdentitySocialStatus"> & {
+  /**
+   * google | github
+   *
+   * @generated from field: string type = 1;
+   */
+  type: string;
+
+  /**
+   * applied: the provider exists with the current client secret and is in
+   * the login policy. pending: not applied yet. secret_missing: the
+   * environment's managed secret holding its client id or secret is unset.
+   *
+   * @generated from field: string state = 2;
+   */
+  state: string;
+
+  /**
+   * When the provider was last written (created, or updated with a rotated
+   * secret), or first found current by the running reconciler.
+   *
+   * @generated from field: google.protobuf.Timestamp applied_at = 3;
+   */
+  appliedAt?: Timestamp | undefined;
+};
+
+/**
+ * Describes the message controlplane.v1.IdentitySocialStatus.
+ * Use `create(IdentitySocialStatusSchema)` to create a new message.
+ */
+export const IdentitySocialStatusSchema: GenMessage<IdentitySocialStatus> = /*@__PURE__*/
+  messageDesc(file_controlplane_v1_identity, 1);
 
 /**
  * IdentityPasswordCode is a one-time code that sets a user's password, handed
@@ -87,7 +125,7 @@ export type IdentityPasswordCode = Message<"controlplane.v1.IdentityPasswordCode
  * Use `create(IdentityPasswordCodeSchema)` to create a new message.
  */
 export const IdentityPasswordCodeSchema: GenMessage<IdentityPasswordCode> = /*@__PURE__*/
-  messageDesc(file_controlplane_v1_identity, 1);
+  messageDesc(file_controlplane_v1_identity, 2);
 
 /**
  * IdentityApp is one registered application. A client id is not a secret.
@@ -119,7 +157,7 @@ export type IdentityApp = Message<"controlplane.v1.IdentityApp"> & {
  * Use `create(IdentityAppSchema)` to create a new message.
  */
 export const IdentityAppSchema: GenMessage<IdentityApp> = /*@__PURE__*/
-  messageDesc(file_controlplane_v1_identity, 2);
+  messageDesc(file_controlplane_v1_identity, 3);
 
 /**
  * IdentityDelivery is one destination the instance's outputs are delivered to.
@@ -177,7 +215,7 @@ export type IdentityDelivery = Message<"controlplane.v1.IdentityDelivery"> & {
  * Use `create(IdentityDeliverySchema)` to create a new message.
  */
 export const IdentityDeliverySchema: GenMessage<IdentityDelivery> = /*@__PURE__*/
-  messageDesc(file_controlplane_v1_identity, 3);
+  messageDesc(file_controlplane_v1_identity, 4);
 
 /**
  * IdentityRole is a role the environment's identity declares. A declared role
@@ -213,7 +251,7 @@ export type IdentityRole = Message<"controlplane.v1.IdentityRole"> & {
  * Use `create(IdentityRoleSchema)` to create a new message.
  */
 export const IdentityRoleSchema: GenMessage<IdentityRole> = /*@__PURE__*/
-  messageDesc(file_controlplane_v1_identity, 4);
+  messageDesc(file_controlplane_v1_identity, 5);
 
 /**
  * @generated from message controlplane.v1.IdentityUser
@@ -266,7 +304,7 @@ export type IdentityUser = Message<"controlplane.v1.IdentityUser"> & {
  * Use `create(IdentityUserSchema)` to create a new message.
  */
 export const IdentityUserSchema: GenMessage<IdentityUser> = /*@__PURE__*/
-  messageDesc(file_controlplane_v1_identity, 5);
+  messageDesc(file_controlplane_v1_identity, 6);
 
 /**
  * IdentityState is where an environment's identity instance stands in the
@@ -467,6 +505,22 @@ export enum IdentityMailDelivery {
    * @generated from enum value: IDENTITY_MAIL_DELIVERY_SMTP = 2;
    */
   SMTP = 2,
+
+  /**
+   * The platform's identity mail relay renders and sends invitations,
+   * verification, reset and sign-in links.
+   *
+   * @generated from enum value: IDENTITY_MAIL_DELIVERY_PLATFORM = 3;
+   */
+  PLATFORM = 3,
+
+  /**
+   * The relay, for an unclaimed organization: mail is captured for the
+   * organization's admins to read and never sent.
+   *
+   * @generated from enum value: IDENTITY_MAIL_DELIVERY_SANDBOX = 4;
+   */
+  SANDBOX = 4,
 }
 
 /**

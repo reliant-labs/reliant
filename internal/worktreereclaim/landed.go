@@ -64,6 +64,11 @@ func (r *Reclaimer) probeLanded(ctx context.Context, w Worktree, res *Result) {
 				res.Detail = "worktree retained: " + err.Error()
 				return
 			}
+			// A file written in it is use the server cannot see either
+			// (reportUse).
+			if newest := tree.newest.UTC(); !tree.newest.IsZero() && (res.LastUse == nil || newest.After(*res.LastUse)) {
+				res.LastUse = &newest
+			}
 			tree.close()
 		}
 		res.Landed = true

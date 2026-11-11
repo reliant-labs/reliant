@@ -18,6 +18,13 @@ func TestForgeScopes_IsEveryControlPlaneCapability(t *testing.T) {
 		// Session and personal-resource authority: never delegated to forge.
 		fat.ScopeReliantAPI, fat.ScopeDaemonConnect, fat.ScopeLLMInvoke,
 		fat.ScopeMCPConnector, fat.ScopeDaemonResume,
+		// Slices of a person's Reliant API (forge #1757): they act as a
+		// person (RequiresActingUser), like reliant:api, so they never ride a
+		// forge credential either.
+		fat.ScopeRunsStart, fat.ScopeRunsRead, fat.ScopeRunsControl,
+		fat.ScopeTriggersFire, fat.ScopeTriggersManage,
+		fat.ScopeInboxRead, fat.ScopeInboxManage,
+		fat.ScopeApprovalsDecide, fat.ScopeQuestionsAnswer,
 		// A port share: forge refuses it on a daemon binding.
 		fat.ScopeProxyPort,
 		// Token administration: reserved to a signed-in person.
@@ -47,6 +54,30 @@ func TestForgeScopes_IsEveryControlPlaneCapability(t *testing.T) {
 	} {
 		if !requested.Has(want) {
 			t.Errorf("ForgeScopes() lacks %s", want)
+		}
+	}
+}
+
+// TestForgeScopes_NeverActAsAPerson: the exclusion list above is written by
+// hand; this walk is not. Every scope forge's catalog marks as acting for a
+// person (RequiresActingUser) — today and any it adds later — stays out of the
+// CLI sign-in's forge ceiling, and so out of every exchange derived from it.
+func TestForgeScopes_NeverActAsAPerson(t *testing.T) {
+	requested, err := fat.NewSet(ForgeScopes())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, scope := range fat.AllScopes {
+		if fat.RequiresActingUser(scope) && requested.Has(scope) {
+			t.Errorf("ForgeScopes() requests %s, which acts as a person", scope)
+		}
+	}
+	for _, scope := range []fat.Scope{
+		fat.ScopeRunsStart, fat.ScopeRunsRead, fat.ScopeRunsControl,
+		fat.ScopeTriggersFire, fat.ScopeTriggersManage,
+	} {
+		if !fat.RequiresActingUser(scope) {
+			t.Errorf("forge no longer marks %s as acting for a person: revisit ForgeScopes' exclusions", scope)
 		}
 	}
 }

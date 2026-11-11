@@ -760,7 +760,7 @@ func buildAnalyzeReport(executionID string, rd *runData) analyzeReport {
 		}
 		for _, s := range rd.stepsByWF[wf.ID] {
 			totalSteps++
-			if s.Success.Valid && !s.Success.Bool {
+			if s.Success != nil && !*s.Success {
 				failedSteps++
 			}
 			if s.CreatedAt.After(runEnd) {
@@ -955,11 +955,11 @@ func buildNodeTimings(rd *runData) []analyzeNodeTiming {
 				byNode[s.StepID] = a
 			}
 			a.execs++
-			if s.Success.Valid && !s.Success.Bool {
+			if s.Success != nil && !*s.Success {
 				a.failures++
 			}
-			if s.DurationMs.Valid {
-				a.totalMs += s.DurationMs.Int64
+			if s.DurationMs != nil {
+				a.totalMs += *s.DurationMs
 			}
 			if s.ActivityName != "" {
 				a.activities[s.ActivityName] = true

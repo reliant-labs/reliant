@@ -11,7 +11,7 @@ import { describe, expect, it, vi } from "vitest";
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
-import { FIXTURE_HOSTED } from "../__fixtures__/workloadFixtures";
+import { FIXTURE_HOSTED, STRIP_ENVS } from "../__fixtures__/workloadFixtures";
 import { renderOverview } from "./workloadsTestUtils";
 
 vi.mock("uplot", async () => (await import("../../Observability/__tests__/obsMocks")).obsMocks.uplot());
@@ -120,6 +120,26 @@ describe("the Overview's Frontends panel", () => {
     renderOverview({ hosted: new Map(), hostedLoading: true });
     await ready();
     expect(screen.getByTestId("frontends-loading")).toBeInTheDocument();
+    expect(screen.queryByTestId("frontends-empty")).toBeNull();
+  });
+
+  // Prod: control-plane's prod is self-managed (its services on its own GKE
+  // cluster) while the platform serves its reliant-web site. The panel covered
+  // only Reliant-run environments, so a live site had no link anywhere.
+  it("links the site the platform serves for a self-managed environment", async () => {
+    const site = FIXTURE_HOSTED.get("prod")!.get("web")!;
+    const envs = STRIP_ENVS.map((e) => (e.name === "prod" ? { ...e, placed: false } : e));
+    renderOverview({ envs, hosted: new Map([["prod", new Map([["web", site]])]]) });
+    await ready();
+    const web = within(screen.getByTestId("overview-frontends")).getByTestId("frontend-prod-web");
+    expect(within(web).getByTestId("frontend-url")).toHaveAttribute("href", "https://app.reliantlabs.io");
+    expect(within(web).getByTestId("frontend-release")).toBeInTheDocument();
+  });
+
+  it("leaves the panel out of a self-managed scope the platform serves no site for", async () => {
+    renderOverview({ env: "staging", hosted: new Map([["staging", new Map()]]) });
+    await waitFor(() => expect(screen.getByTestId("overview")).toBeInTheDocument());
+    expect(screen.queryByTestId("overview-frontends")).toBeNull();
     expect(screen.queryByTestId("frontends-empty")).toBeNull();
   });
 

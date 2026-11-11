@@ -34,12 +34,16 @@ import type {
 } from "@/services/controlPlane/observability/issuesTypes";
 import type { ObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
 import type { TimeWindow } from "@/services/controlPlane/observability/types";
+import { NO_CLIENT } from "@/services/controlPlane/observability/client";
+import { FIXTURE_CLIENTS } from "./fixtureSessions";
 
 const MIN = 60_000;
 const HOUR = 60 * MIN;
 const DAY = 24 * HOUR;
 
 export interface IssuesFixtureOptions {
+  /** The demo console's busier app: three more issues across releases (DEMO_EXTRA_ISSUES). */
+  moreIssues?: boolean;
   /** "empty": no issues. "not-configured": a control plane from before issues (Unimplemented). */
   issues?: "ok" | "empty" | "not-configured";
   /** The first triage finds the issue changed by someone else (Aborted). */
@@ -220,6 +224,91 @@ export function fixtureIssueSeeds(t0: number): Seed[] {
   ];
 }
 
+/**
+ * The demo's busier app (`moreIssues`): a payments regression that v1.8.3
+ * brought back and v1.8.4 fixed, an inventory warning that has been there
+ * for weeks, and a browser error on the product page.
+ */
+export function demoExtraIssueSeeds(t0: number): Seed[] {
+  const base = {
+    fingerprint: "",
+    exceptionType: "",
+    firstRelease: "",
+    resolvedAtMs: 0,
+    resolvedVersion: "",
+    regressedAtMs: 0,
+    ignoredUntilMs: 0,
+    mergedInto: "",
+    symbolicated: true,
+  };
+  return [
+    {
+      ...base,
+      id: "iss-payments-idempotency",
+      platform: "server",
+      envId: "env-prod",
+      envName: "prod",
+      service: "payments",
+      fingerprint: "fp-payments-idempotency",
+      title: "Charge: duplicate idempotency key reused across retries",
+      culprit: "(*Client).Charge in internal/payments/client.go",
+      exceptionType: "payments.ErrDuplicateKey",
+      status: "resolved",
+      firstSeenMs: t0 - 16 * DAY,
+      firstVersion: "v1.7.3",
+      firstRelease: "v1.7.3",
+      regressedAtMs: t0 - 38 * MIN,
+      lastSeenMs: t0 - 22 * MIN,
+      lastVersion: "v1.8.3",
+      resolvedAtMs: t0 - 18 * MIN,
+      resolvedVersion: "v1.8.4",
+      assignee: userOf(FIXTURE_USERS.ada),
+      rate: 0.4,
+      affectedShare: 0.6,
+    },
+    {
+      ...base,
+      id: "iss-inventory-lock",
+      platform: "server",
+      envId: "env-prod",
+      envName: "prod",
+      service: "inventory",
+      fingerprint: "fp-inventory-lock",
+      title: "Reserve: could not obtain lock on row in relation \"stock\"",
+      culprit: "(*Store).Reserve in internal/inventory/store.go",
+      exceptionType: "*pgconn.PgError",
+      status: "unresolved",
+      firstSeenMs: t0 - 21 * DAY,
+      firstVersion: "v1.7.3",
+      firstRelease: "v1.7.3",
+      lastSeenMs: t0 - 7 * MIN,
+      lastVersion: "v1.8.3",
+      rate: 0.8,
+      affectedShare: 0.4,
+    },
+    {
+      ...base,
+      id: "iss-product-image",
+      platform: "browser",
+      envId: "env-prod",
+      envName: "prod",
+      service: "web",
+      fingerprint: "fp-product-image",
+      title: "Error: image failed to decode: /img/espresso-grinder@2x.webp",
+      culprit: "ProductGallery in src/pages/product/Gallery.tsx",
+      exceptionType: "Error",
+      status: "new",
+      firstSeenMs: t0 - 5 * HOUR,
+      firstVersion: "v1.8.2",
+      firstRelease: "v1.8.2",
+      lastSeenMs: t0 - 3 * MIN,
+      lastVersion: "v1.8.3",
+      rate: 2.5,
+      affectedShare: 0.12,
+    },
+  ];
+}
+
 const OPEN: IssueStatus[] = ["new", "unresolved", "regressed"];
 
 /** Hourly counts over `window`, from the issue's rate, only while it was being seen. */
@@ -272,6 +361,9 @@ function framesOf(seed: Seed) {
   ];
 }
 
+/** The users eventOf's events name (every issue has at least three events, so both). */
+const FIXTURE_EVENT_USERS = ["u_8812", "u_8813"];
+
 function eventOf(seed: Seed, atMs: number, index: number): IssueEvent {
   return {
     timeMs: atMs,
@@ -282,6 +374,9 @@ function eventOf(seed: Seed, atMs: number, index: number): IssueEvent {
     attributes: seed.platform === "browser" ? { "browser.name": "Chrome", "url.path": "/checkout" } : { "rpc.method": "CreateOrder", "http.response.status_code": "504" },
     sessionId: seed.platform === "browser" ? `sess-${(index * 7919).toString(16).padStart(8, "0")}` : "",
     urlPath: seed.platform === "browser" ? "/checkout" : "",
+    userId: index % 3 === 2 ? "" : `u_${8812 + (index % 2)}`,
+    ...(seed.platform === "browser" ? { country: "US", region: "California", city: "San Francisco" } : { country: "", region: "", city: "" }),
+    client: seed.platform === "browser" ? FIXTURE_CLIENTS[index % 3] : NO_CLIENT,
   };
 }
 
@@ -311,7 +406,7 @@ export function createIssuesFixture(
 ): IssuesApi {
   const t0 = now();
   const mode = options.issues ?? "ok";
-  const seeds = mode === "empty" ? [] : fixtureIssueSeeds(t0);
+  const seeds = mode === "empty" ? [] : [...fixtureIssueSeeds(t0), ...(options.moreIssues ? demoExtraIssueSeeds(t0) : [])];
   if (options.mergedIssue) {
     const merged = seeds.find((s) => s.id === "iss-checkout-total");
     if (merged) merged.mergedInto = "iss-orders-deadline";
@@ -494,6 +589,12 @@ export function createIssuesFixture(
           .filter((s) => !req.platform || s.platform === req.platform)
           .filter((s) => !req.services?.length || req.services.includes(s.service))
           .filter((s) => !req.assignee || s.assignee?.id === req.assignee)
+          // Every fixture issue has events of both of eventOf's users, and of no one else.
+          .filter(() => !req.userId || FIXTURE_EVENT_USERS.includes(req.userId))
+          // Browser events carry the first three fixture clients; a server event has none.
+          .filter((s) => !req.browser || (s.platform === "browser" && FIXTURE_CLIENTS.slice(0, 3).some((c) => c.browserName === req.browser)))
+          .filter((s) => !req.os || (s.platform === "browser" && FIXTURE_CLIENTS.slice(0, 3).some((c) => c.osName === req.os)))
+          .filter((s) => !req.serviceVersion || s.lastVersion === req.serviceVersion)
           .filter((s) => !text || s.title.toLowerCase().includes(text) || s.culprit.toLowerCase().includes(text))
           .map((s) => build(s, req.window, versions.get(s.id) ?? 1));
         const order: Record<typeof req.sort, (a: Issue, b: Issue) => number> = {

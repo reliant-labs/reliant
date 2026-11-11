@@ -296,11 +296,12 @@ func stoppedAgentsSuccessorInput(input WorkflowInput, awaiting []SpawnHandoff, t
 		}
 	}
 	successor.Resume = &ResumeInput{
-		AwaitSpawnsFirst: !rootWoken,
-		ResumeStopped:    awaiting,
-		StoppedSpawns:    remembered,
-		ToolGrants:       tracker.toolGrantsHandoff(),
-		ThreadInputs:     tracker.threadInputOverridesHandoff(),
+		AwaitSpawnsFirst:      !rootWoken,
+		ResumeStopped:         awaiting,
+		StoppedSpawns:         remembered,
+		ToolGrants:            tracker.toolGrantsHandoff(),
+		AmbientMemoryExcluded: tracker.ambientMemoryHandoff(),
+		ThreadInputs:          tracker.threadInputOverridesHandoff(),
 		// Unlike a late wake's fresh run, this continues the interrupted
 		// tree: it resumes the stopped agents and the parent's loop against
 		// the catalog they started with, not one pushed while they were
@@ -526,6 +527,10 @@ func resumeStoppedSpawn(ctx workflow.Context, thread string, deps stoppedSpawnRe
 	// it to fail before taking that turn, those rings must not resume it
 	// again — one message buys one resume.
 	tracker.recordTurnStart(thread)
+	// It stopped mid-work, so the assistant turn its history may end with was
+	// cut off. With no new input (a capacity wake), its first turn continues
+	// that turn instead of yielding it as the agent's answer.
+	tracker.markResumeTurn(ctx, h.ChildThread)
 	// A stop aimed at the run that failed does not carry over to the one a
 	// message has just asked for. (A sub-agent the user stopped is cancelled,
 	// not stopped on a failure, and is never resumed.)

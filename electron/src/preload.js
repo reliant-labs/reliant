@@ -1,5 +1,22 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
+// Deliver the clipboard value as one operation, never a flag consumed by a
+// later paste. The composer cancels this event to insert without conversion;
+// native editable fields retain Chromium's input/undo/React event behavior.
+ipcRenderer.on('paste-plain-text', (_event, text) => {
+  if (typeof text !== 'string' || text === '') return;
+  const target = document.activeElement;
+  if (!target) return;
+  const event = new CustomEvent('reliant:paste-plain-text', {
+    bubbles: true,
+    cancelable: true,
+    detail: { text },
+  });
+  if (target.dispatchEvent(event)) {
+    document.execCommand('insertText', false, text);
+  }
+});
+
 // Store config in preload context
 let reliantConfig = null;
 
@@ -59,6 +76,32 @@ ipcRenderer.on('menu-shortcut', (_event, shortcutId) => {
   heldMenuShortcuts = heldMenuShortcuts.slice(-MENU_SHORTCUT_HOLD_MAX);
 });
 
+// The desktop app's versions, for the web runtime's telemetry: it reads
+// window.forgeDesktop once at startup and reports them as app.desktop.version,
+// app.desktop.electron.version and app.desktop.chromium.version, so the console
+// can tell which desktop release a session, trace or error ran on. Only the main
+// process knows the app's version (app.getVersion()), so it passes it on the
+// command line (window-config.js, DESKTOP_VERSION_ARG); this sandboxed preload
+// can read process.argv and process.versions, and nothing else of the app. Each
+// value must look like a version or it is left out. Nothing is sent from here:
+// the runtime sends only while crash and error reporting is on.
+const DESKTOP_VERSION_ARG = '--reliant-app-version=';
+const DESKTOP_VERSION_RE = /^[0-9A-Za-z][0-9A-Za-z.+_-]{0,63}$/;
+
+function desktopVersions() {
+  const pick = (v) => (typeof v === 'string' && DESKTOP_VERSION_RE.test(v) ? v : undefined);
+  const argv = Array.isArray(process.argv) ? process.argv : [];
+  const arg = argv.find((a) => typeof a === 'string' && a.startsWith(DESKTOP_VERSION_ARG));
+  const versions = process.versions || {};
+  return Object.freeze({
+    appVersion: pick(arg ? arg.slice(DESKTOP_VERSION_ARG.length) : undefined),
+    electronVersion: pick(versions.electron),
+    chromiumVersion: pick(versions.chrome),
+  });
+}
+
+contextBridge.exposeInMainWorld('forgeDesktop', desktopVersions());
+
 // Expose protected methods that allow the renderer process to use
 // the ipcRenderer without exposing the entire object
 contextBridge.exposeInMainWorld('electronAPI', {
@@ -81,11 +124,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   installCLI: () => ipcRenderer.invoke('install-cli'),
   getCliStatus: () => ipcRenderer.invoke('get-cli-status'),
 
-  // Mock driver configuration
-  getMockDriverConfig: () => ipcRenderer.invoke('get-mock-driver-config'),
-  setMockDriverConfig: (config) => ipcRenderer.invoke('set-mock-driver-config', config),
-  browseMockFile: () => ipcRenderer.invoke('browse-mock-file'),
-
   // Window management
   getWindowContext: () => ipcRenderer.invoke('get-window-context'),
   openWorktreeWindow: (worktreeData) => ipcRenderer.invoke('open-worktree-window', worktreeData),
@@ -105,6 +143,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Auto-updater
   checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
+  // The updater's current state, for a window that mounts after a check.
+  getUpdateStatus: () => ipcRenderer.invoke('get-update-status'),
   downloadUpdate: () => ipcRenderer.invoke('download-update'),
   installUpdate: () => ipcRenderer.invoke('install-update'),
 
@@ -114,6 +154,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // that is already listening, and this is how a renderer that mounted late
   // (the post-sign-in reload) finds out without waiting for a poll.
   isDaemonConnected: () => ipcRenderer.invoke('daemon:is-connected'),
+
+  // Only the current instance's public registry id; no credential or path.
+  getLocalDaemonId: () => ipcRenderer.invoke('daemon:get-local-id'),
 
   // Fires when the local daemon's gateway stream comes up.
   //
@@ -391,6 +434,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
     return () => ipcRenderer.removeListener('update-status', listener);
   },
 
+  // The app menu's "Check for Updates…" found an update: show the update
+  // dialog with this status.
+  onUpdateReveal: (callback) => {
+    const listener = (event, status) => callback(status);
+    ipcRenderer.on('update-reveal', listener);
+    return () => ipcRenderer.removeListener('update-reveal', listener);
+  },
+
 
 });
 
@@ -418,7 +469,7 @@ const injectReliantConfig = async () => {
      * the Electron app now runs a local daemon that bridges to the cloud.
      */
     const buildConfig = (status, info) => {
-      // apiUrl         = daemon --server URL (admin-server in cloud-dev, the
+      // apiUrl         = daemon --server URL (platform-api in cloud-dev, the
       //                  build-config-injected hosted endpoint in packaged
       //                  commercial builds). Renderer code that reads
       //                  RELIANT_CONFIG.apiUrl for non-grpc purposes still
@@ -437,7 +488,7 @@ const injectReliantConfig = async () => {
         grpcUrl: rendererApiUrl,
         apiUrl: apiUrl,
         gatewayUrl: status?.gatewayUrl || '',
-        // controlPlaneURL = the admin-server origin (billing, coupons,
+        // controlPlaneURL = the platform-api origin (billing, coupons,
         // /api/proxy-session). getControlPlaneURL() in frontends/web/src/lib/constants.ts
         // prefers THIS over the build-time VITE_CONTROL_PLANE_API_URL, so
         // injecting it at runtime lets a config change reach the app without

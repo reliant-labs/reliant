@@ -110,6 +110,9 @@ func TestIntrospect_WildcardSkipsScopesThisBinaryDoesNotKnow(t *testing.T) {
 		if len(p.Scopes) != 2 || !p.Scopes.Has(fat.ScopeDaemonConnect) || !p.Scopes.Has(fat.ScopeDeployWrite) {
 			t.Fatalf("wildcard scopes = %s", p.Scopes)
 		}
+		if !p.AllScopes {
+			t.Fatalf("the wildcard marker was dropped: %+v", p)
+		}
 	}
 }
 
@@ -296,5 +299,21 @@ func TestRevokeForUser_NotFoundIsRecognisable(t *testing.T) {
 	err := New(Deps{BaseURL: srv.URL, Sign: sign}).RevokeForUser(context.Background(), "u", "t")
 	if !IsNotFound(err) {
 		t.Fatalf("err = %v, want a recognisable not_found", err)
+	}
+}
+
+// An active token that resolves to no scope (a ceiling of environment-held
+// grants alone, clipped to nothing org-wide) is refused with
+// ErrNoRecognisedScope, which ExchangeToken reports as such rather than as an
+// outage. Never authenticated as nothing.
+func TestIntrospect_NoScopeIsErrNoRecognisedScope(t *testing.T) {
+	srv := fakeCP(t, func(string, map[string]any) (int, string) {
+		return 200, `{"active":true,"tokenId":"tok-1","orgId":"org-1","actingUserId":"user-1","scopes":[]}`
+	})
+	defer srv.Close()
+
+	p, err := New(Deps{BaseURL: srv.URL, Sign: sign}).Introspect(context.Background(), liveToken)
+	if !errors.Is(err, ErrNoRecognisedScope) || p != nil {
+		t.Fatalf("Introspect = (%v, %v), want ErrNoRecognisedScope", p, err)
 	}
 }

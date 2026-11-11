@@ -11,7 +11,11 @@
  *               "Save as copy" forks one into the workspace.
  *   workspace   authored in the console: saved in place, versioned (author,
  *               message, history, restore), promotable to code.
- *   template    a built-in starting point; SaveAsCopy instantiates it.
+ *   builtin     defined by the platform: an organization view (a typed view,
+ *               no spec), or one of the standard dashboards every project
+ *               gets (a spec over its data). Read-only; a standard one has
+ *               "Save as copy".
+ *   template    a gallery starting point; SaveAsCopy instantiates it.
  *
  * The spec a dashboard carries is forge's (`forge.dashboards/v1`, the
  * `Dashboard` of types.ts). The server validates and canonicalizes it on every
@@ -38,7 +42,7 @@ export interface DashboardRef {
   kind: DashboardKind;
   /** The forge project ("" = project-less). */
   projectId: string;
-  /** A release dashboard's id, a workspace dashboard's slug, a template's id. */
+  /** A release dashboard's id, a workspace dashboard's slug, a template's or a built-in's id. */
   key: string;
 }
 
@@ -64,7 +68,7 @@ export interface DashboardWorkspaceInfo {
   updatedBy: DashboardUser | null;
   createdAtMs: number | null;
   updatedAtMs: number | null;
-  /** "release:<id>", "template:<id>" or "workspace:<slug>"; empty when started blank. */
+  /** "release:<id>", "builtin:<id>", "template:<id>" or "workspace:<slug>"; empty when started blank. */
   forkedFrom: string;
   /** The environments it is about. Empty: every environment. */
   envIds: string[];
@@ -93,7 +97,11 @@ export interface DashboardSummary {
   previewPanels: Dashboard["panels"];
   release: DashboardReleaseInfo | null;
   workspace: DashboardWorkspaceInfo | null;
-  /** Templates: "generated" or "platform". */
+  /**
+   * Templates: "platform" ("generated" from a control plane that still listed
+   * the standard dashboards as templates). Built-ins: "billing" (an
+   * organization view) or "standard" (one of a project's standard dashboards).
+   */
   category: string;
   /**
    * The page group the spec declares (overview, services, jobs, product,

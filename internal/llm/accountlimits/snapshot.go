@@ -99,9 +99,13 @@ type exhaustion struct {
 // exhausted reads whether the account should be benched from a state. Only an
 // unscoped window being spent counts: Opus' weekly cap does not stop Sonnet. A
 // "rejected" status with no usable window falls back to the representative
-// window's reset.
+// window's reset. An "overage" status benches nothing: the provider serves the
+// spent window from credits.
 func exhausted(windows []core.LimitWindow, representative, status string, now time.Time) exhaustion {
 	var out exhaustion
+	if status == string(ratelimit.StatusOverage) {
+		return out
+	}
 	for _, w := range windows {
 		if isScoped(w.Name) {
 			continue

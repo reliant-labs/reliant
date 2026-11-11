@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"sort"
 	"strings"
 	"time"
@@ -115,7 +116,8 @@ type ResumeInput struct {
 	// fresh restart from the durable tool results (see
 	// ToolGrantsFromDurableState). Relaunched spawns keep their thread, and
 	// with it their grants.
-	ToolGrants map[string][]string `json:"tool_grants,omitempty"`
+	ToolGrants            map[string][]string `json:"tool_grants,omitempty"`
+	AmbientMemoryExcluded map[string]bool     `json:"ambient_memory_excluded,omitempty"`
 	// StoppedSpawns are the sub-agents that stopped on a failure in the
 	// predecessor and can still be resumed by a message (subagent_resume.go).
 	// Carried by a continue-as-new only; they are not relaunched, just
@@ -309,6 +311,12 @@ type ChildWorkflowTracker struct {
 	// deliberately; only the blind global fan-out is held back.
 	threadOwnedKeys map[string]map[string]bool
 
+	// Reset state is captured before user overrides. Ownership here is only
+	// preset/node ownership, never the additional ownership of a user override.
+	// Keep it after unregister so stopped threads can still be reset.
+	threadResetInputs    map[string]map[string]interface{}
+	threadResetOwnedKeys map[string]map[string]bool
+
 	// liveDetachedSpawns is every background
 	// spawn currently in flight, keyed by its tool_call_id. This is the
 	// registry the loop-exit gate (spec §6.1) and the terminal drain
@@ -344,6 +352,16 @@ type ChildWorkflowTracker struct {
 	// speculativeTurns marks the threads whose current loop turn was taken
 	// on a hint rather than on known input — see setSpeculativeTurn.
 	speculativeTurns map[string]bool
+
+	// agentLoops is the run's agent-loop registry: the threads an agent loop
+	// driven by the graph runs on now (agent_loop_threads.go).
+	agentLoops map[string]*agentLoop
+	// rootRanAgentLoop records that an agent loop ran on the root thread in
+	// this execution, so a wake on that thread is input a turn can read.
+	rootRanAgentLoop bool
+	// resumeTurns marks the threads whose next call_llm turn is the first of
+	// a loop resumed mid-work — see markResumeTurn.
+	resumeTurns map[string]bool
 
 	// userInputs counts, per recipient thread, the thread wakes a PERSON
 	// rang (ThreadWakeSignal.FromUser) — a subset of threadWakes. An ask_user
@@ -425,7 +443,8 @@ type ChildWorkflowTracker struct {
 	// this run (tool_capabilities.go). Each grant is also on its load_tool
 	// result's row, which is what a restart from the checkpoint rebuilds this
 	// from (ToolGrantsFromDurableState).
-	toolGrants map[string][]string
+	toolGrants            map[string][]string
+	ambientMemoryExcluded map[string]bool
 
 	// ── Resuming a stopped sub-agent (subagent_resume.go) ─────────────────
 
@@ -545,6 +564,38 @@ func (t *ChildWorkflowTracker) setSpeculativeTurn(thread string, speculative boo
 // hint (see setSpeculativeTurn).
 func (t *ChildWorkflowTracker) isSpeculativeTurn(thread string) bool {
 	return t != nil && t.speculativeTurns[thread]
+}
+
+// resumeCutOffTurnChangeID gates marking a resumed loop's first turn
+// (markResumeTurn). A history recorded before it replays without the mark,
+// and its turn yields on an assistant tail as it did.
+const resumeCutOffTurnChangeID = "resume-continues-cut-off-turn"
+
+// markResumeTurn records that thread's next call_llm turn is the first of a
+// loop resumed after it stopped mid-work (RuntimeContext.ResumeTurn), under
+// the resumeCutOffTurnChangeID gate. Workflow code only: the mark is part of
+// the run's state, so a replay marks the same turn.
+func (t *ChildWorkflowTracker) markResumeTurn(ctx workflow.Context, thread string) {
+	if t == nil || thread == "" {
+		return
+	}
+	if workflow.GetVersion(ctx, resumeCutOffTurnChangeID, workflow.DefaultVersion, 1) == workflow.DefaultVersion {
+		return
+	}
+	if t.resumeTurns == nil {
+		t.resumeTurns = make(map[string]bool)
+	}
+	t.resumeTurns[thread] = true
+}
+
+// takeResumeTurn reports whether thread's turn about to run is the first of
+// a resumed loop, and clears the mark: it describes exactly one turn.
+func (t *ChildWorkflowTracker) takeResumeTurn(thread string) bool {
+	if t == nil || !t.resumeTurns[thread] {
+		return false
+	}
+	delete(t.resumeTurns, thread)
+	return true
 }
 
 // hasLiveDetachedSpawns reports whether thread has any background spawns
@@ -695,12 +746,86 @@ func (t *ChildWorkflowTracker) spawnHandoffs() []SpawnHandoff {
 	return out
 }
 
-// RegisterThreadInputs registers a thread's input map for later query/update access.
-// The inputs map is the same pointer used by the inline executor, so updates are reflected live.
-//
-// ownedKeys names the inputs this thread set explicitly for itself (preset params
-// and node args). Those are protected from global param updates; see
-// ChildWorkflowTracker.threadOwnedKeys.
+// captureThreadResetInputs snapshots the resolved inputs before user overrides.
+func (t *ChildWorkflowTracker) captureThreadResetInputs(thread string, inputs map[string]interface{}, ownedKeys map[string]bool) {
+	if t == nil || thread == "" {
+		return
+	}
+	if t.threadResetInputs == nil {
+		t.threadResetInputs = make(map[string]map[string]interface{})
+		t.threadResetOwnedKeys = make(map[string]map[string]bool)
+	}
+	t.threadResetInputs[thread] = deepCopyJSONMap(inputs)
+	t.threadResetOwnedKeys[thread] = maps.Clone(ownedKeys)
+}
+
+func (t *ChildWorkflowTracker) getThreadResetInputs(thread string) (map[string]interface{}, error) {
+	inputs, ok := t.threadResetInputs[thread]
+	if !ok {
+		return nil, fmt.Errorf("reset inputs unavailable for thread %q", thread)
+	}
+	return deepCopyJSONMap(inputs), nil
+}
+
+// This updates stopped threads too, and ignores user-override ownership: a
+// user choice hides inheritance but must never freeze the reset destination.
+func (t *ChildWorkflowTracker) updateThreadResetInputs(update map[string]interface{}) {
+	for thread, inputs := range t.threadResetInputs {
+		for key, value := range update {
+			if _, exists := inputs[key]; exists && !strings.HasPrefix(key, "__") && !t.threadResetOwnedKeys[thread][key] {
+				inputs[key] = deepCopyJSONValue(value)
+			}
+		}
+	}
+}
+
+// consumeThreadResetKeys removes transport metadata and releases only the
+// ownership introduced by user overrides. Concrete reset values stay in update
+// for the running executor, but are not persisted as fresh user overrides.
+func (t *ChildWorkflowTracker) consumeThreadResetKeys(thread string, update map[string]interface{}) map[string]interface{} {
+	keys := make([]string, 0)
+	switch v := update["__reset_keys"].(type) {
+	case []string:
+		keys = v
+	case []interface{}:
+		for _, key := range v {
+			if s, ok := key.(string); ok {
+				keys = append(keys, s)
+			}
+		}
+	}
+	delete(update, "__reset_keys")
+	overrides := maps.Clone(update)
+	for _, key := range keys {
+		if _, present := update[key]; !present {
+			continue
+		}
+		// A global update can land between the backend's query and this
+		// signal. Reset to the current baseline, not that stale snapshot.
+		// If reconstruction has not restored a baseline, retain the concrete
+		// value supplied by the backend rather than assigning a missing/null value.
+		if value, available := t.threadResetInputs[thread][key]; available {
+			update[key] = deepCopyJSONValue(value)
+		}
+		delete(overrides, key)
+		delete(t.threadInputOverrides[thread], key)
+		if owned := t.threadOwnedKeys[thread]; owned != nil {
+			if t.threadResetOwnedKeys[thread][key] {
+				owned[key] = true
+			} else {
+				delete(owned, key)
+			}
+		}
+		// The stopped-input query overlays stored overrides on this snapshot.
+		if last := t.lastThreadInputs[thread]; last != nil {
+			last[key] = update[key]
+		}
+	}
+	return overrides
+}
+
+// RegisterThreadInputs registers the live executor's map for query/update access.
+// ownedKeys protects preset/node args and restored user overrides from globals.
 func (t *ChildWorkflowTracker) RegisterThreadInputs(thread string, inputs map[string]interface{}, ownedKeys map[string]bool) {
 	if t.threadInputs == nil {
 		t.threadInputs = make(map[string]map[string]interface{})
@@ -805,6 +930,9 @@ type WorkflowResult struct {
 }
 
 func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *WorkflowResult, retErr error) {
+	// Only the in-memory scenario wrapper supplies fixtures. Consume them at
+	// entry so child workflows cannot inherit the root's seeded outputs.
+	scenarioState, ctx := takeScenarioState(ctx)
 	logger := workflow.GetLogger(ctx)
 	info := workflow.GetInfo(ctx)
 	workflowID := info.WorkflowExecution.ID
@@ -825,6 +953,11 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 	// tool results (ToolGrantsFromDurableState).
 	if input.Resume != nil {
 		childTracker.seedToolGrants(input.Resume.ToolGrants)
+		for thread, excluded := range input.Resume.AmbientMemoryExcluded {
+			if excluded {
+				childTracker.excludeAmbientMemory(thread)
+			}
+		}
 		// Likewise the sub-agents that stopped on a failure, which a message
 		// can still resume, and the params the user set on single threads.
 		childTracker.seedStoppedSpawns(input.Resume.StoppedSpawns)
@@ -860,6 +993,9 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 	// allocated-but-unfinalized assistant message ids. workflow.WithValue is
 	// not a Temporal command — safe for all histories.
 	ctx = WithStreamIDTracker(ctx, NewStreamIDTracker())
+	// Numbers each spawn call's version decision (spawn_node.go); like the
+	// tracker above, not a Temporal command.
+	ctx = withSpawnVersionOccurrences(ctx)
 
 	// on_failure: where the run failed, the handler to run for it and the
 	// outputs the run had produced when it did. The latter two are filled in
@@ -875,6 +1011,24 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 		return onFailureRecord, nil
 	}); err != nil {
 		return nil, fmt.Errorf("failed to set on_failure query handler: %w", err)
+	}
+	// finally: the handler for however the run ends (finally.go), armed with
+	// on_failure's and run by the same defer, after it.
+	var finallyHandler *reliantv1.Workflow
+	var finallyRecord FinallyRecord
+	if err := workflow.SetQueryHandler(ctx, FinallyQuery, func() (FinallyRecord, error) {
+		return finallyRecord, nil
+	}); err != nil {
+		return nil, fmt.Errorf("failed to set finally query handler: %w", err)
+	}
+	// The run's answer to a cooperative cancel (model.RunStopQuery): set the
+	// moment the completion defer below is entered. A query handler is not a
+	// command, so it is safe for every history.
+	var runStop model.RunStopState
+	if err := workflow.SetQueryHandler(ctx, model.RunStopQuery, func() (model.RunStopState, error) {
+		return runStop, nil
+	}); err != nil {
+		return nil, fmt.Errorf("failed to set run stop query handler: %w", err)
 	}
 
 	logger.Debug("[Workflow Runtime] Using execution context",
@@ -909,6 +1063,9 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 		if caught.value != nil {
 			result, retErr = nil, recoveredPanic(ctx, caught)
 		}
+		// From here the run ends by itself; a cancel waiting on it must not
+		// terminate it (runs.Service.Terminate).
+		runStop.Ending = true
 		// From here a message to a stopped sub-agent is its successor's to
 		// act on, not this run's (subagent_resume.go).
 		childTracker.runEnding = true
@@ -923,6 +1080,15 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 			workflow.GetVersion(ctx, onFailureChangeID, workflow.DefaultVersion, 1) != workflow.DefaultVersion {
 			runOnFailure(ctx, onFailureHandler, input, workflowID, execCtx, childTracker, failureNodeOutputs,
 				failureFor(failRec, retErr, runOutcome, runOutcomeNode), &onFailureRecord)
+		}
+		// Every ending gets the finally handler, once, after on_failure and
+		// before the run reports how it ended: a cancelled run included,
+		// which is the ending it exists for.
+		if finallyHandler != nil {
+			if status, ending := runEnding(ctx, retErr, runOutcome); ending && finallyGate(ctx) {
+				runFinallyAt(ctx, finallyHandler, input, workflowID, execCtx, childTracker, failureNodeOutputs,
+					status, failureFor(failRec, retErr, runOutcome, runOutcomeNode), &finallyRecord, "")
+			}
 		}
 		// Read at exit, off the final inputs map (ApplyDefaults replaces it).
 		launchRun := IsLaunchRun(input.Inputs)
@@ -971,6 +1137,7 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 	// resolution leaves on_failure untouched (it is runtime-evaluated), so the
 	// parsed definition's handler is the handler the resolved one carries.
 	onFailureHandler = wfWithPlaceholders.GetOnFailure()
+	finallyHandler = wfWithPlaceholders.GetFinally()
 
 	// STEP 5.5: Validate and apply defaults from workflow input schemas
 	// This ensures all inputs with defaults are available for CEL evaluation
@@ -1170,6 +1337,15 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 		return nil, fmt.Errorf("failed to set thread liveness query handler: %w", err)
 	}
 
+	// Which threads an agent is reading now, for routing input addressed to
+	// the run (agent_loop_threads.go).
+	err = workflow.SetQueryHandler(ctx, AgentLoopThreadsQuery, func() ([]AgentLoopThread, error) {
+		return childTracker.agentLoopThreads(), nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to set agent loop threads query handler: %w", err)
+	}
+
 	// Register workflow inputs query handler (for checking if params actually changed)
 	err = workflow.SetQueryHandler(ctx, "get_workflow_inputs", func() (map[string]interface{}, error) {
 		return input.Inputs, nil
@@ -1227,6 +1403,12 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to set thread inputs query handler: %w", err)
+	}
+
+	// Additive query only: baseline bookkeeping emits no history commands.
+	err = workflow.SetQueryHandler(ctx, "get_thread_reset_inputs", childTracker.getThreadResetInputs)
+	if err != nil {
+		return nil, fmt.Errorf("failed to set thread reset inputs query handler: %w", err)
 	}
 
 	// STEP 6.5: Notify UI that workflow has started and create workflow record
@@ -1312,6 +1494,13 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 			"checkpointNode", input.Resume.NodeID,
 			"yamlOverride", wf.GetResumeNode(),
 		)
+		// The predecessor stopped inside this loop (it failed, was lost, or
+		// handed off mid-loop), so an assistant turn at the root thread's
+		// tail was cut off. A successor run that only resumes stopped agents
+		// is not one: its root's loop had finished.
+		if input.Resume != nil && !input.Resume.RecoveryOnly && len(input.Resume.ResumeStopped) == 0 && !input.Resume.ResumeAllStopped {
+			childTracker.markResumeTurn(ctx, thread)
+		}
 		pendingResumeStep = &core.TriggeredNode{
 			Node: resumeTarget,
 			Event: &core.WorkflowEvent{
@@ -1349,6 +1538,7 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 	// is injected directly into the first batch of triggered steps below.
 	// Track outputs from completed nodes using NodeOutputStore for centralized management
 	nodeOutputStore := NewNodeOutputStore(input.WorkflowName)
+	nodeOutputStore.MergeMap(scenarioState)
 	nodeOutputs := nodeOutputStore.AsMap() // Backwards compatible - existing code can use the map directly
 	failureNodeOutputs = nodeOutputs
 
@@ -2129,19 +2319,20 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 					}
 
 					if initErr := initChildWorkflow(ChildWorkflowInitOpts{
-						Ctx:              ctx,
-						ChatID:           input.ChatID,
-						ParentWorkflowID: parentWorkflowID,
-						ChildWorkflowID:  workflowID, // Inline workflows use parent's workflow ID
-						ChildThreadID:    childExecCtx.Thread,
-						WorkflowName:     contract.WorkflowIdentity,
-						ThreadTitle:      childThreadTitle,
-						ThreadMode:       model.NodeThreadMode(evalResult),
-						ForkFromThread:   childExecCtx.ForkedFrom,
-						ParentThread:     thread, // Current execution's thread
-						SpawnedByNodeID:  step.Node.GetId(),
-						InjectMessage:    injectMsg,
-						Logger:           logger,
+						Ctx:                  ctx,
+						ChatID:               input.ChatID,
+						ParentWorkflowID:     parentWorkflowID,
+						ChildWorkflowID:      workflowID, // Inline workflows use parent's workflow ID
+						ChildThreadID:        childExecCtx.Thread,
+						ExcludeAmbientMemory: childExecCtx.ExcludeAmbientMemory || model.NodeThreadConfig(evalResult).GetExcludeAmbientMemory(),
+						WorkflowName:         contract.WorkflowIdentity,
+						ThreadTitle:          childThreadTitle,
+						ThreadMode:           model.NodeThreadMode(evalResult),
+						ForkFromThread:       childExecCtx.ForkedFrom,
+						ParentThread:         thread, // Current execution's thread
+						SpawnedByNodeID:      step.Node.GetId(),
+						InjectMessage:        injectMsg,
+						Logger:               logger,
 					}); initErr != nil {
 						logger.Error("[Workflow Runtime] Failed to initialize child workflow thread",
 							"stepID", step.Node.GetId(),
@@ -2364,18 +2555,19 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 				if childThreadMode != model.ThreadModeInherit {
 					nodeID := step.Node.GetId()
 					if initErr := initChildWorkflow(ChildWorkflowInitOpts{
-						Ctx:              ctx,
-						ChatID:           input.ChatID,
-						ParentWorkflowID: parentWorkflowID,
-						ChildWorkflowID:  workflowID,
-						ChildThreadID:    childExecCtx.Thread,
-						WorkflowName:     childIdentity,
-						ThreadTitle:      &nodeID,
-						ThreadMode:       childThreadMode,
-						ForkFromThread:   childExecCtx.ForkedFrom,
-						ParentThread:     thread,
-						SpawnedByNodeID:  step.Node.GetId(),
-						Logger:           logger,
+						Ctx:                  ctx,
+						ChatID:               input.ChatID,
+						ParentWorkflowID:     parentWorkflowID,
+						ChildWorkflowID:      workflowID,
+						ChildThreadID:        childExecCtx.Thread,
+						ExcludeAmbientMemory: childExecCtx.ExcludeAmbientMemory || model.NodeThreadConfig(evalResult).GetExcludeAmbientMemory(),
+						WorkflowName:         childIdentity,
+						ThreadTitle:          &nodeID,
+						ThreadMode:           childThreadMode,
+						ForkFromThread:       childExecCtx.ForkedFrom,
+						ParentThread:         thread,
+						SpawnedByNodeID:      step.Node.GetId(),
+						Logger:               logger,
 					}); initErr != nil {
 						logger.Error("[Workflow Runtime] Failed to initialize router child thread",
 							"stepID", step.Node.GetId(),
@@ -2830,6 +3022,7 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 				}
 
 				// Store output for edge routing
+				running.Output = publishWorkflowNodeOutputs(ctx, running.Node, running.Output)
 				nodeOutputStore.Set(running.StepID, running.Output)
 
 				// Execute save_message if configured on the workflow node
@@ -3070,7 +3263,8 @@ func setupInputUpdateHandler(ctx workflow.Context, workflowInputs map[string]int
 					// Remembered for the thread itself, not only applied to
 					// the run in flight: a thread that is retried or resumed
 					// rebuilds its inputs, and must rebuild them with this.
-					childTracker.recordThreadInputOverride(targetThread, update)
+					overrides := childTracker.consumeThreadResetKeys(targetThread, update)
+					childTracker.recordThreadInputOverride(targetThread, overrides)
 					threadInputs := childTracker.GetThreadInputs(targetThread)
 					if threadInputs != nil {
 						for key, value := range update {
@@ -3092,6 +3286,8 @@ func setupInputUpdateHandler(ctx workflow.Context, workflowInputs map[string]int
 						)
 					}
 				} else {
+					delete(update, "__reset_keys")
+					childTracker.updateThreadResetInputs(update)
 					switchedProvider := childTracker.applyProviderSwitch(ctx, workflowInputs, update)
 					// Global update: apply to root workflowInputs
 					for key, value := range update {
@@ -3304,6 +3500,9 @@ func splitProtoToolCalls(toolCalls []*reliantv1.ToolCallMsg) protoToolCallSplit 
 // whole unattended run on a gate nobody will ever answer.
 func buildSpawnChildInputs(workflowInputs map[string]interface{}) map[string]interface{} {
 	childInputs := map[string]interface{}{}
+	if excludesAmbientMemory(workflowInputs) {
+		childInputs[ambientMemoryInput] = true
+	}
 
 	mode := getModeFromInputs(workflowInputs)
 	if mode != "" {
@@ -3421,8 +3620,16 @@ func parseSpawnToolCall(ctx workflow.Context, spawnToolCall *reliantv1.ToolCallM
 
 	// See spawn_node.go for what a spawn tool call says.
 	parsed, err := parseSpawnToolInput(spawnToolCall.GetInput())
+	if parsed.providersFromString &&
+		workflow.GetVersion(ctx, nextSpawnStringProvidersVersionID(ctx, toolCallID), workflow.DefaultVersion, spawnStringProvidersVersion) == workflow.DefaultVersion {
+		// Recorded by a build that refused a stringified `providers`:
+		// refuse it again, or the replay would start a child it never did.
+		err = parsed.strictProvidersErr
+	}
 	if err != nil {
-		logger.Error("[ExecuteTools] Failed to parse spawn tool input",
+		// The model wrote these arguments, and the error goes back to it as
+		// the tool's result to correct: an outcome of the run, not a fault.
+		logger.Warn("[ExecuteTools] Failed to parse spawn tool input",
 			"error", err, "tool_call_id", toolCallID, "preset", parsed.preset)
 		return nil, err
 	}
@@ -3690,21 +3897,22 @@ func prepareSpawnInline(
 
 	var threadWorktreePath string
 	if err := initChildWorkflow(ChildWorkflowInitOpts{
-		Ctx:              ctx,
-		ChatID:           chatID,
-		ParentWorkflowID: parentWorkflowID,
-		ChildWorkflowID:  config.childWorkflowID,
-		ChildThreadID:    config.childThread,
-		WorkflowName:     targetWorkflow,
-		ThreadTitle:      ptr.StringIfNotEmpty(threadTitle),
-		ThreadMode:       threadMode,
-		ForkFromThread:   forkedFrom,
-		ParentThread:     parentThread,
-		Origin:           model.ThreadOriginSpawn,
-		Worktree:         config.worktree,
-		WorktreePath:     &threadWorktreePath,
-		InjectMessage:    injectMsg,
-		Logger:           logger,
+		Ctx:                  ctx,
+		ChatID:               chatID,
+		ParentWorkflowID:     parentWorkflowID,
+		ChildWorkflowID:      config.childWorkflowID,
+		ChildThreadID:        config.childThread,
+		ExcludeAmbientMemory: excludesAmbientMemory(workflowInputs),
+		WorkflowName:         targetWorkflow,
+		ThreadTitle:          ptr.StringIfNotEmpty(threadTitle),
+		ThreadMode:           threadMode,
+		ForkFromThread:       forkedFrom,
+		ParentThread:         parentThread,
+		Origin:               model.ThreadOriginSpawn,
+		Worktree:             config.worktree,
+		WorktreePath:         &threadWorktreePath,
+		InjectMessage:        injectMsg,
+		Logger:               logger,
 	}); err != nil {
 		var refusal *ChildInitRefusal
 		if errors.As(err, &refusal) {
@@ -3751,17 +3959,18 @@ func prepareSpawnInline(
 	}
 
 	childExecContext := &ExecutionContext{
-		WorkflowID:       config.childWorkflowID,
-		ChatID:           chatID,
-		WorkflowName:     targetWorkflow,
-		Thread:           config.childThread,
-		ThreadMode:       threadMode,
-		ThreadTitle:      threadTitle,
-		ForkedFrom:       forkedFrom,
-		ParentThread:     parentThread,
-		ProjectPath:      childProjectPath, // Inherits the parent's unless the thread has its own worktree
-		SpawnDepth:       parentSpawnDepth + 1,
-		ParentPermission: parentPermission,
+		WorkflowID:           config.childWorkflowID,
+		ChatID:               chatID,
+		WorkflowName:         targetWorkflow,
+		Thread:               config.childThread,
+		ThreadMode:           threadMode,
+		ThreadTitle:          threadTitle,
+		ForkedFrom:           forkedFrom,
+		ParentThread:         parentThread,
+		ProjectPath:          childProjectPath, // Inherits the parent's unless the thread has its own worktree
+		SpawnDepth:           parentSpawnDepth + 1,
+		ParentPermission:     parentPermission,
+		ExcludeAmbientMemory: excludesAmbientMemory(childInputs),
 		Parent: &ParentContext{
 			WorkflowID: parentWorkflowID,
 			StepPath:   "spawn_tool",
@@ -4417,6 +4626,10 @@ func prepareSpawnRelaunch(
 	if childInputs == nil {
 		childInputs = buildSpawnChildInputs(workflowInputs)
 	}
+	if excludesAmbientMemory(workflowInputs) {
+		childInputs = copyMap(childInputs)
+		childInputs[ambientMemoryInput] = true
+	}
 	threadTitle := config.title
 	if threadTitle == "" {
 		threadTitle = config.presetName
@@ -4434,16 +4647,17 @@ func prepareSpawnRelaunch(
 		childProjectPath = handoff.ProjectPath
 	}
 	childExecContext := &ExecutionContext{
-		WorkflowID:       config.childWorkflowID,
-		ChatID:           chatID,
-		WorkflowName:     spawnTargetWorkflow,
-		Thread:           config.childThread,
-		ThreadMode:       model.ThreadModeInherit,
-		ThreadTitle:      threadTitle,
-		ParentThread:     handoff.ParentThread,
-		ProjectPath:      childProjectPath,
-		SpawnDepth:       spawnDepth,
-		ParentPermission: parentPermission,
+		WorkflowID:           config.childWorkflowID,
+		ChatID:               chatID,
+		WorkflowName:         spawnTargetWorkflow,
+		Thread:               config.childThread,
+		ThreadMode:           model.ThreadModeInherit,
+		ThreadTitle:          threadTitle,
+		ParentThread:         handoff.ParentThread,
+		ProjectPath:          childProjectPath,
+		SpawnDepth:           spawnDepth,
+		ParentPermission:     parentPermission,
+		ExcludeAmbientMemory: excludesAmbientMemory(childInputs),
 		Parent: &ParentContext{
 			WorkflowID: handoff.ParentWorkflowID,
 			StepPath:   "spawn_tool",
@@ -4618,7 +4832,12 @@ func executeToolsWithSpawnSupport(
 		return regularToolsFuture
 	}
 
-	// Execute spawn tool calls inline and combine with regular tool results
+	// Execute spawn tool calls inline and combine with regular tool results.
+	// The execution policy is runtime-authored, not a model spawn argument.
+	if rtx.ExcludeAmbientMemory || childTracker.excludesAmbientMemory(rtx.Thread) {
+		workflowInputs = copyMap(workflowInputs)
+		workflowInputs[ambientMemoryInput] = true
+	}
 	var spawnConfigs []*spawnChildWorkflowConfig
 	var spawnParseErrors []interface{}
 	spawnToolCalls := split.spawnToolCalls

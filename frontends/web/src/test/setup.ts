@@ -1,7 +1,7 @@
 import '@testing-library/jest-dom'
-import { configure } from '@testing-library/react'
-import { afterEach, beforeEach, vi } from 'vitest'
-import { resetConfigForTests } from '@/lib/config_gen'
+import { cleanup, configure } from '@testing-library/react'
+import { afterAll, afterEach, beforeEach, vi } from 'vitest'
+import { configSchema, resetConfigForTests } from '@/lib/config_gen'
 
 // Runtime config: every test starts from an EMPTY config.js document, i.e.
 // config_gen.ts's defaults (the self-hosted app). An absent document is not
@@ -10,9 +10,19 @@ import { resetConfigForTests } from '@/lib/config_gen'
 // exports would leak into them. Set before any test file imports a module
 // that reads the config at module scope; tests override it with
 // src/test/runtimeConfig.ts setRuntimeConfig().
-window.__FORGE_CONFIG__ = {}
+//
+// A file that needs no DOM runs in the node environment instead (a
+// `// @vitest-environment node` line at its top: jsdom costs every file about
+// a second to build). There is no window to hold the document, and config_gen
+// reads process.env instead, so the config keys are removed from it: the same
+// defaults, whatever the shell exports.
+const hasWindow = typeof window !== 'undefined'
+if (!hasWindow) {
+  for (const key of Object.keys(configSchema.shape)) delete process.env[key]
+}
+if (hasWindow) window.__FORGE_CONFIG__ = {}
 beforeEach(() => {
-  window.__FORGE_CONFIG__ = {}
+  if (hasWindow) window.__FORGE_CONFIG__ = {}
   resetConfigForTests()
 })
 
@@ -203,11 +213,38 @@ globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
   return Promise.reject(new TypeError(`Unit tests have no network: unmocked request ${request}`))
 }) as typeof fetch
 
+// ── Nothing loads after teardown ───────────────────────────────────────────
+//
+// A component that loads code lazily (`import()` in an effect, React.lazy,
+// a boot step that installs a transport) can still be loading that module
+// when its test, or its whole file, is done. Vitest then tears the
+// environment down under the load and fails the entire run with
+//
+//   EnvironmentTeardownError: Cannot load '…' imported from … after the
+//   environment was torn down.
+//
+// blaming whichever file was tearing down, with every test green: the demo
+// shell's demoTransport (#2314) and the session replay player's
+// @rrweb/replay, which TracesView's "open the session" test reaches. So
+// every test, and every file, waits for the modules it started loading.
+//
+// A test waits only once what it rendered is unmounted (Testing Library's own
+// cleanup runs after this hook, and a second cleanup is a no-op). A module
+// that finished loading into a still-mounted tree would run the component
+// that asked for it after the test was over, and that is not the test's
+// behaviour any more.
+async function settleLazyImports() {
+  await vi.dynamicImportSettled()
+}
+afterAll(settleLazyImports)
+
 afterEach(async () => {
   // A call that settles can start another (a retry, a follow-up refetch).
   while (rpcs.inFlight.size > 0) {
     await Promise.allSettled([...rpcs.inFlight])
   }
+  cleanup()
+  await settleLazyImports()
   if (unmockedRequests.length === 0) return
   const requests = [...new Set(unmockedRequests.splice(0))]
   throw new Error(

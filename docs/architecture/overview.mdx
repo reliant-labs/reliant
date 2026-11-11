@@ -21,7 +21,7 @@ Every Reliant deployment consists of these components:
 
 **Daemon Gateway** — Holds those daemon streams and bridges them to NATS, so any API server or worker can reach any connected daemon.
 
-**Database** — Stores chats, messages, content blocks, workflows, projects, and worktree associations. Postgres is the only supported database.
+**Database** — Stores chats, messages, content blocks, workflows, projects, and workspace associations. Postgres is the only supported database.
 
 **Streaming Layer** — Delivers real-time updates (new messages, tool outputs, workflow state changes) from workers to the frontend via NATS.
 

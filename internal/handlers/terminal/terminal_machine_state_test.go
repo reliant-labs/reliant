@@ -25,6 +25,7 @@ func TestTerminalMachineState(t *testing.T) {
 		{"starting", fmt.Errorf("resolving daemon for command: your machine is still starting: %w", toolexec.ErrDaemonPending), "starting_or_asleep", true},
 		{"suspended", fmt.Errorf("the machine for this request is suspended and will wake when you next message it: %w", toolexec.ErrDaemonPending), "starting_or_asleep", true},
 		{"not connected", connect.NewError(connect.CodeUnavailable, errors.New("no daemon connected for user")), "not_connected", true},
+		{"connection closed mid-create", fmt.Errorf("daemon command %q failed: %w", "terminal.create", toolexec.ErrDaemonConnectionInterrupted), "not_connected", true},
 		{"a real failure", errors.New("terminal.create via NATS failed: nats: timeout"), "", false},
 	}
 	for _, tc := range cases {

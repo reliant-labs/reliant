@@ -76,6 +76,7 @@ import { captureClaimLinkFromUrl, readPendingClaim, resetClaimLinkMemoryForTests
 import { setTransport } from '@/lib/connect'
 import { mockTransport, type MockHandlers } from '@/lib/test-utils'
 import { ClaimPage } from '../ClaimPage'
+import { resetShellForTests } from '@/lib/shell'
 
 const TOKEN = 'rcl_9f3KQeAbCdEfGhIjKlMnOpQrStUvWxYz0123456789-_'
 const EXPIRES = new Date(Date.now() + 70 * 3600_000)
@@ -783,5 +784,47 @@ describe('the control plane cannot be reached', () => {
     up = true
     fireEvent.click(screen.getByRole('button', { name: /try again/i }))
     expect(await screen.findByTestId('claim-site')).toBeInTheDocument()
+  })
+})
+
+describe('in the forge shell (forge.reliantlabs.io)', () => {
+  beforeEach(() => {
+    resetShellForTests('forge')
+    updatePendingClaim({ anonUserId: 'anon-1', project: 'storefront' })
+    auth.user = { id: 'anon-1', is_anonymous: false }
+  })
+  afterEach(() => resetShellForTests())
+
+  it('previews before sign-in exactly as in Reliant: GetClaim only', async () => {
+    auth.user = null
+    updatePendingClaim({ anonUserId: undefined })
+    const handlers = { 'ClaimableService.GetClaim': vi.fn(() => LIVE), 'ClaimableService.OpenClaimSession': vi.fn() }
+    arrive(handlers)
+    expect(await screen.findByText(/storefront/i)).toBeInTheDocument()
+    expect(handlers['ClaimableService.OpenClaimSession']).not.toHaveBeenCalled()
+  })
+
+  it('completes the claim and lands in the claimed app’s console, not /apps', async () => {
+    const complete = vi.fn(() => ({ orgId: 'org_1', claimPath: 'upgrade', hostnames: ['a.sites.reliantlabs.dev'], holds: [] }))
+    arrive({ 'ClaimableService.CompleteClaim': complete })
+
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith({ href: '/forge/p/storefront', replace: true }))
+    expect(complete).toHaveBeenCalledWith(expect.objectContaining({ claimToken: TOKEN }))
+    expect(navigate).not.toHaveBeenCalledWith(expect.objectContaining({ to: '/apps' }))
+    expect(readPendingClaim()).toBeNull()
+  })
+
+  it('a claim that paused a free site still lands on /apps, whose banner explains it', async () => {
+    arrive({
+      'ClaimableService.CompleteClaim': () => ({
+        orgId: 'o',
+        claimPath: 'upgrade',
+        hostnames: [],
+        holds: [],
+        freeSiteOutcome: FreeSiteOutcome.CLAIMED_SITE_LIVE,
+        pausedSite: MINE,
+      }),
+    })
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith(expect.objectContaining({ to: '/apps' })))
   })
 })

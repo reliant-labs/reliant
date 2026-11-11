@@ -5,7 +5,7 @@
 
 import { UserService } from "@/gen/controlplane/services/user/v1/user_pb";
 import { getControlPlaneClient } from "../client";
-import { api } from "@/api/client";
+import { syncReliantProvider } from "@/hooks/settings-queries";
 import type { OnboardingUser } from "./types";
 
 /** Cache the in-flight GetCurrentUser promise for 30s so that the dozen-odd
@@ -64,6 +64,6 @@ export async function completeOnboarding(
 export async function provisionManagedKey(): Promise<{ synced: boolean }> {
   // Provisions (or fetches) the per-user managed Reliant LLM key and writes it
   // to the local provider_api_keys store. Idempotent on the server.
-  const result = await api.settings.syncReliantProvider();
+  const result = await syncReliantProvider();
   return { synced: !!result.synced };
 }

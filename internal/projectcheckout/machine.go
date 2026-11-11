@@ -10,6 +10,7 @@ import (
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/daemonplacement"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -54,7 +55,7 @@ type ownNames struct {
 
 func (o ownNames) GetDaemon(ctx context.Context, id string) (*db.Daemon, error) {
 	d, err := o.r.GetDaemon(ctx, id)
-	if err != nil || d == nil || d.UserID != o.userID {
+	if err != nil || !authz.CanWriteMachine(ctx, o.userID, d) {
 		return nil, err
 	}
 	return d, nil
@@ -196,7 +197,7 @@ func NotOnError(ctx context.Context, names daemonplacement.DaemonReader, project
 // ownedBy reports whether daemonID is a machine of userID's.
 func ownedBy(ctx context.Context, r Reader, daemonID, userID string) bool {
 	d, err := r.GetDaemon(ctx, daemonID)
-	return err == nil && d != nil && d.UserID == userID
+	return err == nil && authz.CanWriteMachine(ctx, userID, d)
 }
 
 // installedRoots is every installed checkout path among rows, for Rebase.

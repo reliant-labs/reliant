@@ -75,6 +75,14 @@ describe("listProjectEnvironments", () => {
       ["a", "prod", "persistent"],
     ]);
   });
+
+  it("reads a self-managed environment as itself, not as an unknown kind", async () => {
+    listEnvironments.mockResolvedValue({
+      environments: [create(DeployEnvironmentSchema, { id: "cp", name: "prod", project: "control-plane", kind: DeployEnvironmentKind.SELF_MANAGED })],
+    });
+    const envs = await listProjectEnvironments("control-plane");
+    expect(envs.map((e) => e.kind)).toEqual(["self_managed"]);
+  });
 });
 
 describe("getEnvironmentStatus: a hosted frontend", () => {

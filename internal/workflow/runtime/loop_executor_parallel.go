@@ -526,20 +526,21 @@ func (e *InlineLoopExecutor) executeParallelIteration(
 
 						loopIter := int64(index)
 						if initErr := initChildWorkflow(ChildWorkflowInitOpts{
-							Ctx:              gCtx,
-							ChatID:           e.chatID,
-							ParentWorkflowID: parentWorkflowID,
-							ChildWorkflowID:  e.workflowID,
-							ChildThreadID:    childExecCtx.Thread,
-							WorkflowName:     contract.WorkflowIdentity,
-							ThreadTitle:      ptr.StringIfNotEmpty(childExecCtx.ThreadTitle),
-							ThreadMode:       model.NodeThreadMode(evalResult),
-							ForkFromThread:   childExecCtx.ForkedFrom,
-							ParentThread:     iterExecContext.Thread,
-							SpawnedByNodeID:  step.Node.GetId(),
-							LoopIteration:    &loopIter,
-							InjectMessage:    injectMsg,
-							Logger:           e.logger,
+							Ctx:                  gCtx,
+							ChatID:               e.chatID,
+							ParentWorkflowID:     parentWorkflowID,
+							ChildWorkflowID:      e.workflowID,
+							ChildThreadID:        childExecCtx.Thread,
+							ExcludeAmbientMemory: childExecCtx.ExcludeAmbientMemory || model.NodeThreadConfig(evalResult).GetExcludeAmbientMemory(),
+							WorkflowName:         contract.WorkflowIdentity,
+							ThreadTitle:          ptr.StringIfNotEmpty(childExecCtx.ThreadTitle),
+							ThreadMode:           model.NodeThreadMode(evalResult),
+							ForkFromThread:       childExecCtx.ForkedFrom,
+							ParentThread:         iterExecContext.Thread,
+							SpawnedByNodeID:      step.Node.GetId(),
+							LoopIteration:        &loopIter,
+							InjectMessage:        injectMsg,
+							Logger:               e.logger,
 						}); initErr != nil {
 							result.Error = fmt.Errorf("failed to init child workflow thread: %w", initErr)
 							return result
@@ -587,6 +588,7 @@ func (e *InlineLoopExecutor) executeParallelIteration(
 					return result
 				}
 
+				inlineOutput = publishWorkflowNodeOutputs(gCtx, step.Node, inlineOutput)
 				iterNodeOutputs[step.Node.GetId()] = inlineOutput
 
 				// Execute save_message if configured
@@ -873,20 +875,21 @@ func (e *InlineLoopExecutor) buildParallelIterExecContext(
 
 	loopIter := int64(index)
 	if initErr := initChildWorkflow(ChildWorkflowInitOpts{
-		Ctx:              gCtx,
-		ChatID:           e.chatID,
-		ParentWorkflowID: parentWorkflowID,
-		ChildWorkflowID:  e.workflowID,
-		ChildThreadID:    childExecCtx.Thread,
-		WorkflowName:     e.workflowIdentity(),
-		ThreadTitle:      ptr.StringIfNotEmpty(childExecCtx.ThreadTitle),
-		ThreadMode:       threadMode,
-		ForkFromThread:   childExecCtx.ForkedFrom,
-		ParentThread:     e.execContext.Thread,
-		SpawnedByNodeID:  e.loopID,
-		LoopIteration:    &loopIter,
-		InjectMessage:    injectMsg,
-		Logger:           e.logger,
+		Ctx:                  gCtx,
+		ChatID:               e.chatID,
+		ParentWorkflowID:     parentWorkflowID,
+		ChildWorkflowID:      e.workflowID,
+		ChildThreadID:        childExecCtx.Thread,
+		ExcludeAmbientMemory: childExecCtx.ExcludeAmbientMemory,
+		WorkflowName:         e.workflowIdentity(),
+		ThreadTitle:          ptr.StringIfNotEmpty(childExecCtx.ThreadTitle),
+		ThreadMode:           threadMode,
+		ForkFromThread:       childExecCtx.ForkedFrom,
+		ParentThread:         e.execContext.Thread,
+		SpawnedByNodeID:      e.loopID,
+		LoopIteration:        &loopIter,
+		InjectMessage:        injectMsg,
+		Logger:               e.logger,
 	}); initErr != nil {
 		e.logger.Error("[InlineLoop] Failed to initialize parallel iteration thread",
 			"loopID", e.loopID,

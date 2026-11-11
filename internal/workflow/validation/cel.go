@@ -20,6 +20,7 @@ import (
 	"github.com/google/cel-go/common/types"
 	"github.com/google/cel-go/common/types/ref"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/stepsecrets"
 	wfcel "github.com/reliant-labs/reliant/internal/workflow/cel"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 	"google.golang.org/protobuf/reflect/protoreflect"
@@ -469,12 +470,24 @@ var (
 // extractTemplateExpressions returns the well-formed {{ }} holes of input.
 // A {{ that does not close yields none here: validateTemplateSyntax has already
 // reported it, with its position, before any semantic check runs.
+//
+// A plain {{ secrets.NAME }} hole is not returned: it is not CEL. The runtime
+// renders it into a marker before any expression is evaluated, and
+// validateSecrets decides where one may appear. Any other read of `secrets` is
+// returned, so the compiler rejects it as the undeclared reference it is.
 func extractTemplateExpressions(input string) []wfcel.TemplateMatch {
 	matches, err := wfcel.ScanTemplate(input)
 	if err != nil {
 		return nil
 	}
-	return matches
+	kept := matches[:0:0]
+	for _, m := range matches {
+		if _, plain := stepsecrets.PlainName(m.Expr); plain {
+			continue
+		}
+		kept = append(kept, m)
+	}
+	return kept
 }
 
 func containsTemplate(s string) bool { return wfcel.ContainsTemplate(s) }

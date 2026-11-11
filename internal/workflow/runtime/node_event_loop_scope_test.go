@@ -5,6 +5,8 @@ import (
 	"context"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/ptr"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -78,8 +80,8 @@ func TestNodeExecutionEvent_CarriesLoopScopeAndNodePath(t *testing.T) {
 
 	rows := repo.stepRows()
 	require.Len(t, rows, 1)
-	require.True(t, rows[0].LoopIteration.Valid)
-	assert.Equal(t, int64(0), rows[0].LoopIteration.Int64, "the step row belongs to iteration 0")
+	require.NotNil(t, rows[0].LoopIteration)
+	assert.Equal(t, int64(0), ptr.From(rows[0].LoopIteration), "the step row belongs to iteration 0")
 }
 
 // Outside a loop the event carries no loop scope — a root node's status is

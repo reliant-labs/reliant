@@ -16,6 +16,7 @@ import { createContext, useContext, type ReactNode } from "react";
 import { currentOrgId } from "../orgs";
 import * as activity from "./activityApi";
 import * as alerting from "./alertingApi";
+import * as appDatabase from "./appDatabaseApi";
 import * as rpc from "./api";
 import * as graph from "./graphApi";
 import * as dashboards from "./dashboardsApi";
@@ -98,6 +99,9 @@ export interface ObservabilityApi {
   starDashboard: typeof dashboards.starDashboard;
   recordDashboardView: typeof dashboards.recordDashboardView;
   promoteDashboardToCode: typeof dashboards.promoteDashboardToCode;
+  // Postgres panels (AppDatabaseService, C3): one environment's database, read live.
+  queryDatabasePanel: typeof appDatabase.queryDatabasePanel;
+  listDashboardDatabases: typeof appDatabase.listDashboardDatabases;
 }
 
 export const controlPlaneObservabilityApi: ObservabilityApi = {
@@ -162,6 +166,8 @@ export const controlPlaneObservabilityApi: ObservabilityApi = {
   starDashboard: dashboards.starDashboard,
   recordDashboardView: dashboards.recordDashboardView,
   promoteDashboardToCode: dashboards.promoteDashboardToCode,
+  queryDatabasePanel: appDatabase.queryDatabasePanel,
+  listDashboardDatabases: appDatabase.listDashboardDatabases,
 };
 
 const ObservabilityApiContext = createContext<ObservabilityApi>(controlPlaneObservabilityApi);

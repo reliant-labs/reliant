@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/ptr"
+
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -30,9 +32,9 @@ func basicViewStepIDs(t *testing.T, view reliantv1.WorkflowExecutionView, repo R
 		View:   view,
 	}))
 	require.NoError(t, err)
-	require.NotNil(t, resp.Msg.RootWorkflow)
+	require.NotEmpty(t, resp.Msg.AllRootWorkflows)
 	out := map[string]*reliantv1.StepExecution{}
-	for _, step := range resp.Msg.RootWorkflow.Steps {
+	for _, step := range resp.Msg.AllRootWorkflows[0].Steps {
 		key := step.StepId
 		if step.LoopIteration != nil {
 			key += "#" + string(rune('0'+*step.LoopIteration))
@@ -50,8 +52,7 @@ func loopStep(stepID, activity, loopNode string, iteration int64, at time.Time, 
 		OutputJSON:   stepOutput(output),
 		CreatedAt:    at,
 	}
-	step.LoopNodeID.String, step.LoopNodeID.Valid = loopNode, true
-	step.LoopIteration.Int64, step.LoopIteration.Valid = iteration, true
+	step.LoopNodeID, step.LoopIteration = ptr.Of(loopNode), ptr.Of(iteration)
 	return step
 }
 
@@ -193,8 +194,8 @@ func TestGetWorkflowExecutions_ThreadTreeHasNoPerWorkflowQueries(t *testing.T) {
 	service := &Service{deps: Deps{Repo: counting}}
 	resp, err := service.GetWorkflowExecutions(ctx, connect.NewRequest(&reliantv1.GetWorkflowExecutionsRequest{ChatId: chatID}))
 	require.NoError(t, err)
-	require.Len(t, resp.Msg.RootWorkflow.Children, childCount+1)
-	for _, child := range resp.Msg.RootWorkflow.Children {
+	require.Len(t, resp.Msg.AllRootWorkflows[0].Children, childCount+1)
+	for _, child := range resp.Msg.AllRootWorkflows[0].Children {
 		require.Equal(t, "spawn", child.Origin, "thread metadata must still be attached")
 	}
 

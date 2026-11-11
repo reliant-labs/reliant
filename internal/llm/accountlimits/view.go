@@ -10,6 +10,7 @@ import (
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/llm/models"
+	"github.com/reliant-labs/reliant/internal/llm/ratelimit"
 )
 
 // ProtoAccount is the account as Settings → Providers shows it: identity and
@@ -74,7 +75,26 @@ func ProtoAccount(a core.ProviderAccount, limits *core.LimitState, now time.Time
 	}
 	out.UsageSource = protoSource(limits.Source, !limits.ObservedAt.IsZero())
 	out.UsageError = optional(limits.UsageAPIError)
+	out.UsingCredits = usingCredits(limits, now)
 	return out
+}
+
+// usingCredits reports whether the account is served from credits past a
+// spent window: its latest reading was overage and an account-wide window is
+// still spent at now (one that has since reset is a new window).
+func usingCredits(l *core.LimitState, now time.Time) bool {
+	if l.Status != string(ratelimit.StatusOverage) {
+		return false
+	}
+	for _, w := range l.Windows {
+		if isScoped(w.Name) {
+			continue
+		}
+		if used, known := Effective(w, l.ObservedAt, now); known && used >= 1 {
+			return true
+		}
+	}
+	return false
 }
 
 // WindowLabel is the display label of a window: "5-hour", "Weekly", and

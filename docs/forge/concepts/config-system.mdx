@@ -1,0 +1,211 @@
+---
+title: "The config system"
+description: "How settings are declared in a proto message, loaded with a fixed precedence, validated at startup, and supplied per environment from KCL and the secret store"
+---
+
+Every setting your service reads is declared once, in a protobuf message, with the environment variable, flag and default that go with it. From that declaration forge generates the typed config your code receives, the command-line flags, and the KCL schema that environments fill in. There is no hand-written config struct, no `os.Getenv` in your handlers, and no list of environment variables to keep in step with the code.
+
+The arrangement has a payoff beyond tidiness. The set of valid settings is data a tool can read, so a typo in a variable name, a value outside its allowed set, or a missing required field is caught when the process starts (or when you render an environment), with a message naming the field, instead of surfacing as odd behavior in production. For an agent, that is feedback it can act on in the same minute.
+
+## Declaring a setting
+
+Config lives in `proto/<project>/config/v1/config.proto`, in package `<project>.config.v1`. Each field carries a `(forge.v1.config)` annotation. This is the database setting from a freshly scaffolded project, with the long description trimmed:
+
+```protobuf
+string database_url = 3 [(forge.v1.config) = {
+  env_var: "DATABASE_URL"
+  flag: "database-url"
+  required: true
+  sensitive: true
+  description: "PostgreSQL connection string. SENSITIVE — it embeds the database password …"
+}];
+```
+
+And an ordinary setting with a default:
+
+```protobuf
+int32 rate_limit_rps = 7 [(forge.v1.config) = {
+  env_var: "RATE_LIMIT_RPS"
+  flag: "rate-limit-rps"
+  default_value: "100"
+  description: "Per-key request rate limit (requests per second). 0 or negative disables rate limiting."
+}];
+```
+
+The annotation fields you will use most:
+
+| Field | Meaning |
+|---|---|
+| `env_var`, `flag` | The environment variable and command-line flag that set the field. Flags are registered without leading dashes (`flag: "log-level"` is `--log-level`). |
+| `default_value` | The default, as a string. |
+| `required` | Loading fails if no layer supplies a value. This is the one runtime presence check. |
+| `sensitive` | The value comes from a secret store, never from a flag or an inline manifest value (see below). |
+| `optional` | At deploy time, tolerate a sensitive field being unset instead of failing the secret pre-flight. |
+| `allowed_values` | Restricts a string field to a closed set, enforced on load. |
+| `role` | Marks a field as the runtime mode, or as one of the CORS or TLS settings, so behavior follows the annotation rather than the field name. |
+| `category` | Groups related fields in the generated KCL. |
+| `description` | Shown in `--help` and carried into the generated KCL as a comment. |
+
+A scaffolded project ships dozens of settings: the port, log level and format, database pool tuning, CORS, TLS, shutdown timing, rate limits, payload caps, JWT and OIDC settings, and more. Add a field to the proto, run `forge generate`, and it appears in the typed config, as a flag, and in the KCL schema.
+
+Durations are declared as `google.protobuf.Duration` and written as Go durations in the environment (`5s`, `168h`). Declare a duration as a plain string and it stays a string: the loader has no name heuristics, so behavior always follows the declared type.
+
+<Note>
+Because behavior follows annotations, renaming a field is safe. The `environment` field is the runtime mode because it carries `role: CONFIG_FIELD_ROLE_MODE`, and a field that merely happens to be named `environment` gets no special behavior. Exactly `development` (not `dev`, not `Development`) relaxes CORS to an origin-reflecting policy and turns off HSTS. Every other value, including unset, is a deployed environment and stays closed.
+</Note>
+
+### What gets generated
+
+`pkg/config/config_gen.go` is a thin shim. The config type is an alias for the generated proto message, so holding a `*config.Config` is holding the message:
+
+```go
+// Config IS the application configuration: a type alias to the proto message
+// generated from proto/demo/config/v1/config.proto. Holding a *config.Config is
+// holding a *configv1.AppConfig — there is no second struct to drift from it.
+type Config = configv1.AppConfig
+```
+
+The loader is a runtime library, `forge/pkg/config`, that reads the annotations off the message descriptor. Adding a field costs a proto edit and a `forge generate`, with no per-field Go code. The same declaration also projects to `deploy/kcl/config_gen.k`, which holds a typed `AppConfig` schema and an `appConfigEnvMap` function that turns values into a workload's environment.
+
+## How a value is chosen
+
+Each setting is resolved through fixed layers. Later layers override earlier ones:
+
+1. the proto `default_value`;
+2. a **build default**, if the binary was built with one (below);
+3. a **config file**, only if you pass one;
+4. the **environment variable**;
+5. an explicit **command-line flag**.
+
+In order: default, build, file, environment, flag. A variable set to the empty string counts as unset, whatever the field's type, so the lower layer stands. An explicit empty value is a flag's to set.
+
+The **config file** layer loads only for a path you name, with `--config <path>` (`.yaml`, `.yml` or `.json`, keyed by the proto field names) or the binary's own path variable, `<BINARY>_CONFIG`. A path that is given but missing, unreadable or invalid stops startup and says where the path came from:
+
+```text
+config file "/x.yaml" (from env RELIANT_CONFIG) does not exist
+```
+
+No path given is not an error; the layer is skipped. A key in the file that no config the command loads declares is an error naming it, so a misspelled `grcp_port` fails instead of being ignored. The variable is per binary on purpose, so a shell that sets it for one program cannot make another load a file written for a different schema.
+
+**Build defaults** let one build of a binary carry its own values, such as a release stamped with its environment's endpoints, while `go install` of the same source keeps the proto defaults. They are stamped with a linker flag, in URL query form keyed by `env_var`:
+
+```bash
+go build -ldflags "-X 'example.com/app/pkg/config.BuildDefaults=APP_SERVER_URL=https://api.example.com&APP_REGION=eu'" ./cmd/app
+```
+
+A sensitive field cannot take a build default, because a secret in a binary is published. A key that names no field, a duplicate key, or a value that does not parse fails every load, so a bad stamp is a build defect rather than a silently ignored string.
+
+## Validated before the process does anything
+
+Loading ends with validation, so a config that reaches your code has already passed every declared check. In order, after the layers are applied:
+
+- every `required` field must have a value from some layer;
+- each `allowed_values` set is checked;
+- the role invariants are enforced, for example both TLS paths or neither, and no wildcard CORS origin combined with credentials;
+- any `buf.validate` rules on the config message are evaluated, which is where range checks and cross-field rules live.
+
+Cross-field rules are written in the proto beside the fields, so they are checked at the first load rather than inside whichever constructor happens to read the config first (which might run after the process has migrated a database):
+
+```protobuf
+int32 grpc_port = 1 [
+  (forge.v1.config) = {env_var: "GRPC_PORT", default_value: "8080"},
+  (buf.validate.field).int32 = {gte: 1, lte: 65535}
+];
+option (buf.validate.message).cel = {
+  id: "stripe_secret_key_required",
+  message: "BILLING_PROVIDER=stripe requires STRIPE_SECRET_KEY",
+  expression: "this.billing_provider != 'stripe' || this.stripe_secret_key != ''"
+};
+```
+
+A violation is reported naming the field by path, the variable and flag that set it, and its value unless the field is sensitive. The server refuses to start before binding a port.
+
+### Each process loads only what it reaches
+
+A project with several processes should not give each one every credential. A process (a **root**, usually the binary's `server` command) loads only the settings that its part of the composition graph can reach. `cmd/<binary>/cmd/roots_gen.go` records that reach, and the loader uses it to demand `required` fields only where the root reads them. In KCL, `config_gen.ROOTS` lists each root's variables and credentials, and a workload bound to a root receives exactly those.
+
+For finer control, split config per binary or per command with `(forge.v1.binary_config) = {binary: "admin"}` on a config message, or `{binary: "app", command: ["server", "api"]}` to scope it to one process of a binary. Ownership then becomes disjoint: deleting a field from one binary's config touches no other binary, and a worker's deployment never carries an API credential. `forge lint --config-reach` warns about config fields that no binary or frontend loads.
+
+### Components do not read the environment
+
+A component takes its configuration through `Deps`, never from the process environment. `forgeconv-no-getenv` flags `os.Getenv` in component packages, and the scaffold's `config.enforce_typed_access: error` in `forge.yaml` turns the same guardrail into a gating lint for hand-written code too. That is the lint-level half of the design: one way to read config, enforceable by a tool.
+
+The scaffold currently hands each component the whole root `*config.Config`. A component that has its own block takes only that block: declare a `<Component>Config` message, compose it as a field on `AppConfig`, and take `Cfg *config.<Component>Config` in the component's `Deps`.
+
+## Supplying values per environment
+
+Declaring a setting says what exists. Each environment says what it is set to, in `deploy/kcl/<env>/config.k`, a file you own. It instantiates the generated `AppConfig` schema and sets only the fields that environment pins:
+
+```python
+# deploy/kcl/dev/config.k
+import config_gen
+
+app_config: config_gen.AppConfig = {
+    auto_migrate = True
+    environment = "development"
+}
+```
+
+```python
+# deploy/kcl/prod/config.k
+import config_gen
+
+app_config: config_gen.AppConfig = {
+}
+```
+
+Every field not set inherits the schema default, so a production environment that sets nothing runs on the proto defaults, and the diff between environments is exactly the fields that differ. A typo in a field name or a wrong type is a KCL evaluation error, caught when you render the environment.
+
+The environment's `main.k` projects those values into each workload's environment with the generated function, merging in values only that environment knows (ports on this machine, the dev database):
+
+```python
+config_gen.workloadEnvMap(appcfg.app_config, w) | w.env | _machine | _port | _sign_in
+```
+
+To see what each workload ends up with, without deploying anything:
+
+```bash
+forge env config dev --workload api
+```
+
+```text
+api (service)
+  AUTO_MIGRATE                          true
+  CORS_ALLOW_CREDENTIALS                true
+  DATABASE_URL                          postgres://postgres:postgres@localhost:5432/demo?sslmode=disable
+  DB_MAX_OPEN_CONNS                     25
+  ENVIRONMENT                           development
+  …
+```
+
+A declared secret the environment's store cannot supply is reported at the top of the output and left out, and the command still exits 0 so you can read the rest. `--strict` makes it fail instead. `forge env up` and `forge env exec` refuse to start a process while one is missing. `forge env render <env>` shows the full rendered objects.
+
+### Secrets are references, never values
+
+A field marked `sensitive: true` is never an inline value in a rendered manifest. In the generated schema it is a reference to a key in a named secret:
+
+```python
+database_url: ConfigSecretRef = ConfigSecretRef { name = "demo-secrets", key = "database_url" }
+```
+
+and it is projected into a workload's environment as a secret reference, not a string. A workload receives a credential only if it lists the variable in its `config_secrets` **and** its root reaches it. The scaffolded `migrate` job, for example, declares `config_secrets = ["DATABASE_URL"]` and gets nothing else. This is deliberate: a pod whose secret reference names a missing key does not start, so broadcasting every credential to every pod turns one missing secret into a whole-namespace outage. A `config_secrets` entry that the workload's root does not reach is a render error.
+
+Before anything starts, deploy checks every secret a workload declares against the environment's store, where forge can see the store, and fails with the full list of what is missing. A credential that is genuinely optional (a feature's off-switch) says so with `optional: true` next to `sensitive: true`. Setting values is covered in [Secrets](/forge/secrets), and `forge secret set --env <env> <NAME>` is the command.
+
+### Checking a deployment's values against the schema
+
+When the repository that holds a deployment's values is separate from the one that defines the schema, `pkg/config/roots_gen.go` exposes the same data as Go: `config.Roots()`, `config.RootNamed(name)` and `config.ValidateRootEnv(name, env)`. A unit test in the values repository can render each workload's environment and call `ValidateRootEnv`. It runs the process's boot load over that environment with no flags, reports every problem instead of the first, and adds an `UnreachedVarError` for each variable the root never reads, so a value set under a name nothing consumes is a test failure.
+
+```go
+for _, r := range config.Roots() {
+	for _, problem := range r.Validate(renderedEnvOf(r.Name)) {
+		t.Error(problem)
+	}
+}
+```
+
+This is a library you call, not a step `forge generate` runs for you.
+
+## Related topics
+
+[Environments and deploys](/forge/environments-and-deploys) covers how environments are bound to runtimes and how a release is planned. [Secrets](/forge/secrets) covers setting and rotating the values behind `sensitive` fields. [Adding a feature](/forge/adding-features#configuration) has the short version of declaring a setting. Agents can load the `binaries/config-files`, `binaries/subtrees` and `deploy` skills for the full reference.

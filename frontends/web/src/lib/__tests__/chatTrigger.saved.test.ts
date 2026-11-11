@@ -1,3 +1,4 @@
+// @vitest-environment node
 /**
  * The Chat card writes the definition's `automation_only`. A builder save
  * rebuilds the definition from the canvas plus the fields it holds, so the

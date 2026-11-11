@@ -173,6 +173,95 @@ nodes:
 	}
 }
 
+// A request whose deadline passes mid-write must still put back what it
+// wrote. The undo used to run on the request's dead context, so it could not
+// write at all: the trigger stayed enabled while its result said "failed", and
+// `reliant trigger activate` printed "nothing new is running".
+func TestEnableWorkflowUndoesAWriteWhenTheRequestDeadlinePassesMidWrite(t *testing.T) {
+	t.Parallel()
+
+	env, _ := setupInboundTriggerTest(t)
+	env.saveWorkflow(t, "triage", `name: triage
+triggers:
+  - name: nightly
+    schedule: {cron: "0 9 * * *"}
+    prompt: "y"
+entry: [a]
+nodes:
+  - id: a
+    type: approval
+    args: {title: ok}
+`)
+	require.True(t, env.enable(t, env.enableRequest(nil)).Enabled)
+	_, err := env.svc.DisableWorkflow(env.ctx, connect.NewRequest(&reliantv1.DisableWorkflowRequest{Workflow: "triage"}))
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithCancel(env.ctx)
+	defer cancel()
+	first := true
+	env.backend.mu.Lock()
+	env.backend.syncHook = func(syncCtx context.Context) error {
+		if first {
+			// The deadline passes after the row was written, mid-converge.
+			first = false
+			cancel()
+			return context.DeadlineExceeded
+		}
+		return syncCtx.Err()
+	}
+	env.backend.mu.Unlock()
+
+	resp, err := env.svc.EnableWorkflow(ctx, connect.NewRequest(env.enableRequest(nil)))
+	require.NoError(t, err)
+	assert.False(t, resp.Msg.Enabled)
+	assert.Equal(t, reliantv1.WorkflowTriggerOutcome_WORKFLOW_TRIGGER_OUTCOME_FAILED, outcomes(resp.Msg)["nightly"])
+	stored := env.storedTriggers(t)
+	require.Len(t, stored, 1)
+	assert.False(t, stored[0].Enabled, "a failed resume is switched back off, even after the request's deadline")
+}
+
+// An update of an enabled activation whose write fails, and whose restore of
+// the previous settings fails too, leaves the activation running. Its result
+// must say LEFT_ENABLED: "failed" made `reliant trigger activate` print
+// "nothing new is running" over a trigger that may run the new settings.
+func TestEnableWorkflowReportsAnUpdateItCouldNotPutBackAsLeftEnabled(t *testing.T) {
+	t.Parallel()
+
+	env, _ := setupInboundTriggerTest(t)
+	env.saveWorkflow(t, "triage", `name: triage
+inputs:
+  mode: {type: string, default: ""}
+triggers:
+  - name: nightly
+    schedule: {cron: "0 9 * * *"}
+    prompt: "y"
+entry: [a]
+nodes:
+  - id: a
+    type: approval
+    args: {title: ok}
+`)
+	withMode := func(mode string) func(*reliantv1.EnableWorkflowRequest) {
+		return func(r *reliantv1.EnableWorkflowRequest) {
+			r.Params = map[string]*structpb.Value{"mode": structpb.NewStringValue(mode)}
+		}
+	}
+	require.True(t, env.enable(t, env.enableRequest(withMode("lenient"))).Enabled)
+	env.backend.mu.Lock()
+	env.backend.syncErr = errors.New("temporal is down") // the update's converge and the restore's
+	env.backend.mu.Unlock()
+
+	resp := env.enable(t, env.enableRequest(withMode("strict")))
+
+	assert.False(t, resp.Enabled)
+	r := resultFor(resp, "nightly")
+	assert.Equal(t, reliantv1.WorkflowTriggerOutcome_WORKFLOW_TRIGGER_OUTCOME_LEFT_ENABLED, r.Outcome)
+	assert.Contains(t, r.Message, "previous settings could not be put back")
+	stored := env.storedTriggers(t)
+	require.Len(t, stored, 1)
+	assert.True(t, stored[0].Enabled, "the activation is still on, as its result says")
+}
+
 func TestEnableWorkflowResumesAPausedActivationAndKeepsItsSettings(t *testing.T) {
 	testkit.Slow(t, "a DB-backed trigger handler test with many round trips to pgtest's Postgres")
 	t.Parallel()
@@ -350,7 +439,10 @@ nodes:
 	resp := env.enable(t, env.enableRequest(withMode("strict")))
 
 	assert.False(t, resp.Enabled)
-	assert.Equal(t, reliantv1.WorkflowTriggerOutcome_WORKFLOW_TRIGGER_OUTCOME_FAILED, outcomes(resp)["nightly"])
+	// nightly's own restore reconverges its schedule too, which fails the
+	// same way: it is still on, and its result says so rather than "failed".
+	assert.Equal(t, reliantv1.WorkflowTriggerOutcome_WORKFLOW_TRIGGER_OUTCOME_LEFT_ENABLED, outcomes(resp)["nightly"])
+	assert.Contains(t, resultFor(resp, "nightly").Message, "previous settings could not be put back")
 	assert.Equal(t, reliantv1.WorkflowTriggerOutcome_WORKFLOW_TRIGGER_OUTCOME_NOT_ENABLED, outcomes(resp)["hook"])
 	assert.Contains(t, resultFor(resp, "hook").Message, "keeps its previous settings")
 	for _, tr := range env.storedTriggers(t) {

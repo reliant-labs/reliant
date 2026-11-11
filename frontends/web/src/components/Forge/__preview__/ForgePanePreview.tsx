@@ -54,7 +54,9 @@ import {
   ObservabilityViewPage,
   SecretsPage,
 } from "../Console/ConsolePages";
+import { DataPage } from "../Data/DataPage";
 import { ReleasePage, ReleasesPage } from "../Releases/ReleasesPages";
+import { StoragePage } from "../Storage/StoragePage";
 import { OverviewPage, WorkloadPage } from "../Workloads/WorkloadPages";
 import {
   ForgeLandingRoute,
@@ -70,7 +72,7 @@ import { ForgeLayout } from "../ForgeLayout";
 import { createFixtureApi } from "../Observability/__fixtures__/fixtureApi";
 import { EnvironmentsPage } from "../Overview/EnvironmentsPage";
 
-type Scenario = "registered" | "unregistered" | "daemon-offline" | "queued" | "queued-member";
+export type Scenario = "registered" | "unregistered" | "daemon-offline" | "queued" | "queued-member";
 
 const PROJECT: Project = {
   id: "cp-project",
@@ -321,7 +323,7 @@ function forgeReply(report: unknown) {
   return { meta: META_OK, reportJson: JSON.stringify(report) };
 }
 
-function answer(scenario: Scenario, path: string, body: Record<string, unknown>): { status: number; json: unknown } | null {
+export function forgePaneAnswer(scenario: Scenario, path: string, body: Record<string, unknown>): { status: number; json: unknown } | null {
   const method = path.split("/").pop() ?? "";
   if (path.includes("reliant.v1.ForgeService/")) {
     if (scenario === "daemon-offline") {
@@ -407,7 +409,7 @@ function installFakeNetwork(scenario: Scenario): () => void {
     } catch {
       body = {};
     }
-    const reply = answer(scenario, path, body);
+    const reply = forgePaneAnswer(scenario, path, body);
     if (!reply) return realFetch(input, init);
     const side = path.includes("ForgeService") ? "DAEMON" : "BACKEND";
     console.info(`[forge-pane-preview] ${side} ${path} ${JSON.stringify(body)}`);
@@ -438,6 +440,8 @@ function buildRouter(path: string) {
     observabilityView: ObservabilityViewPage,
     dashboards: DashboardsPage,
     dashboard: DashboardPage,
+    storage: StoragePage,
+    data: DataPage,
     environments: EnvironmentsPage,
     environment: ForgeEnvPage,
     secrets: SecretsPage,

@@ -76,6 +76,25 @@ func (r *Repo) ResolvePendingApproval(ctx context.Context, id string, status int
 	return true, nil
 }
 
+// AttributeApprovalUpdate adds to an approval's chat feed update the workflow
+// that raised it (the workflow_id Approval.workflow_id reports) and its thread,
+// when known. Every approval update carries them, its resolution included, so
+// a client replaying the feed attributes an approval to its run on its own:
+// once resolved it is gone from the pending-only ListApprovalsByChat.
+func AttributeApprovalUpdate(update map[string]any, a *core.Approval) {
+	if a.Metadata != nil {
+		var metadata struct {
+			WorkflowID string `json:"workflow_id"`
+		}
+		if err := json.Unmarshal([]byte(*a.Metadata), &metadata); err == nil && metadata.WorkflowID != "" {
+			update["workflow_id"] = metadata.WorkflowID
+		}
+	}
+	if a.ThreadID != nil && *a.ThreadID != "" {
+		update["thread_id"] = *a.ThreadID
+	}
+}
+
 // AnnounceApprovalResolution writes the chat feed update that tells clients
 // an approval is resolved, with its status, reason and when.
 func (r *Repo) AnnounceApprovalResolution(ctx context.Context, a *core.Approval) error {
@@ -101,6 +120,7 @@ func (r *Repo) AnnounceApprovalResolution(ctx context.Context, a *core.Approval)
 	if a.ResolvedAt != nil {
 		update["resolved_at"] = a.ResolvedAt.UTC().Format(time.RFC3339)
 	}
+	AttributeApprovalUpdate(update, a)
 	data, err := json.Marshal(update)
 	if err != nil {
 		return fmt.Errorf("marshal approval resolution: %w", err)

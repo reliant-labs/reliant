@@ -170,6 +170,28 @@ describe("orphaned stream settles its unfinished tool calls", () => {
     expect(liveStatus(chatId, "call-5")).toBe("completed");
   });
 
+  it("settles one batch of interleaved deltas, statuses and an aborting marker in stream order", () => {
+    // Deltas, tool statuses and the marker share one batch, and a completion
+    // lands AFTER the marker. The batch reaches the reducer in its server
+    // order; the terminal status still protects its tool, and the tool that
+    // never reported an outcome is settled as cancelled.
+    const chatId = "orphan-interleaved";
+
+    useChatStore.getState().processChatStreamUpdates(chatId, [
+      toolUseStart("msg-7", "call-7a"),
+      toolStatus("call-7a", "executing"),
+      toolUseStart("msg-7", "call-7b"),
+      toolStatus("call-7b", "executing"),
+      finalized("msg-7", "cancelled"),
+      toolStatus("call-7a", "completed"),
+    ]);
+
+    expect(liveStatus(chatId, "call-7a"), "a completion after the marker is still the tool's outcome").toBe(
+      "completed",
+    );
+    expect(liveStatus(chatId, "call-7b"), "a tool with no outcome settles with its stream").toBe("cancelled");
+  });
+
   it("leaves a normally completed stream alone", () => {
     // reason "completed" means the assistant message WILL be persisted, so the
     // placeholder is retired the usual way and nothing is painted cancelled.

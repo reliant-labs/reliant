@@ -12,6 +12,7 @@ Forge's errors are written to be acted on: most say what was expected, what was 
 | What is running locally, on which port, and is it healthy? | `forge env status dev` |
 | Where is a service's output? | `.forge/logs/dev/<service>.log` |
 | What did the browser log? | `grep '\[browser:error\]' .forge/logs/dev/*.log` |
+| Did the last deploy make things worse? | `forge obs check <env> --wait` (see [Querying with forge obs](/forge/observability/forge-obs)) |
 | Which RPCs does the binary actually serve? | `forge project introspect handlers` |
 | How do I call one by hand? | `forge api curl <service.Method>` prints a ready-to-run `curl` (add your own token for an authenticated RPC) |
 | What configuration does a workload get? | `forge env config dev --workload api` |
@@ -33,7 +34,7 @@ In development, the frontend forwards every `console` call, uncaught error and u
 
 ## `forge lint` fails
 
-Run `forge lint --quiet` to see only the failures, with the verdict on the last line. Each finding names its rule, and `forge project capabilities` explains every analyzer. Common ones:
+Run `forge lint --quiet` to see only the failures, with the verdict on the last line. Each finding names its rule, and `forge project capabilities` explains every analyzer. [Linting](/forge/linting/overview) explains the lanes and scopes, and [the rules index](/forge/linting/rules-index) has every rule with its fix. Common ones:
 
 - **A list filter that is not `optional`.** Generated filters silently do nothing without presence, so a filter field on a `List…Request` must be `optional`.
 - **More than one service in a proto file.** Split it: one service per file.
@@ -72,12 +73,7 @@ Other common causes:
 
 ## Nothing shows up in Observability
 
-- **Local environments have none.** `dev` keeps its telemetry in the ClickStack on your machine; `forge env status dev` prints the HyperDX URL and checks that traces, metrics and logs are arriving.
-- **Data appears a little after a deploy.** The first data arrives once the new pods are serving traffic.
-- **A category is switched off.** Check the environment's `observability` block for `enabled = False` or a signal set to `False`. Profiles and session replay are off on hosting until you turn them on.
-- **The frontend sends nothing.** A production build sends browser telemetry only when its OTLP endpoint is configured; a scaffolded frontend deployed to hosting is set up for it. `signals.browser = False` turns it off.
-- **Alerts never notify.** A route names a receiver that is not set up in **Observability → Alerts → Receivers**; that tab lists routes with no receiver.
-- **Usage is over the allowance.** Past it, an organization without a payment method has debug logs and routine traces dropped. **Project settings → Usage** shows the state.
+See [When nothing shows up](/forge/observability/where-it-goes#when-nothing-shows-up): local environments, a switched-off category, a frontend that sends nothing, alerts with no receiver and usage over the allowance.
 
 ## Getting more detail
 

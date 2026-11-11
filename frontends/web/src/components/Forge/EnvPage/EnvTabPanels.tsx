@@ -11,6 +11,8 @@
  * hand-rolled copies of the same heading-and-rule.
  */
 
+import { isForgeShell } from "@/lib/shell";
+import { RunFromTerminal } from "@/components/ForgeShell/RunFromTerminal";
 import { useState, type ReactNode } from "react";
 import { Play, RefreshCw } from "lucide-react";
 
@@ -30,7 +32,7 @@ import type { ForgeEnvStatusReport } from "@/services/forge/status";
 import type { ForgeOutcome, ForgeTopologyEnv } from "@/services/forge/topology";
 
 import { FrontendList, FrontendsEmpty, FrontendsLoading } from "../Frontends/FrontendList";
-import { formatTimestamp } from "../Overview/EnvironmentTable";
+import { formatTimestamp } from "../Overview/EnvironmentList";
 import { RegisterEnvPanel } from "../Preview/RegisterEnvPanel";
 import { DevStackPanel } from "../Status/DevStackPanel";
 import { CheckoutMissing } from "./CheckoutMissing";
@@ -103,6 +105,8 @@ export interface OverviewTabProps {
   checkoutMissing?: ProjectCheckoutMissing | null;
   /** The Reliant project's name, for the checkout-missing sentence. */
   projectName?: string;
+  /** The Promotions card (EnvPromotions), under State; omitted for an env with no ledger (local). */
+  promotions?: ReactNode;
 }
 
 export function OverviewTab(props: OverviewTabProps) {
@@ -126,7 +130,13 @@ export function OverviewTab(props: OverviewTabProps) {
           description="Reliant has no record of this environment, so its releases and secrets aren't tracked here yet. Register it from your checkout — after that it shows here with your daemon offline."
           testId="env-register-panel"
         >
-          {props.daemon === "ok" ? (
+          {isForgeShell() ? (
+            <RunFromTerminal
+              title="Register it from your terminal"
+              description="The first deploy from a checkout registers the environment."
+              commands={[{ label: `Deploy ${envName}`, command: `forge env deploy ${envName}` }]}
+            />
+          ) : props.daemon === "ok" ? (
             <RegisterEnvPanel
               projectId={props.projectId}
               envName={envName}
@@ -192,6 +202,9 @@ export function OverviewTab(props: OverviewTabProps) {
           </div>
         )}
       </Panel>
+
+      {/* What was put here, and when: the ledger as a timeline. */}
+      {props.promotions}
 
       {/* Frontends: the sites people open. Each is live at its generated
           address already; a custom domain only adds a second one. Omitted for

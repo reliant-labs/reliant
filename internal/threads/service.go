@@ -2,13 +2,12 @@ package threads
 
 import (
 	"context"
-	"database/sql"
-	"errors"
 	"fmt"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/orm"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -23,8 +22,12 @@ type Repository interface {
 	// Thread operations
 	CreateThread(ctx context.Context, thread *db.Thread) (*db.Thread, error)
 	GetThread(ctx context.Context, id string) (*db.Thread, error)
+	ResolveThreadAmbientMemoryExclusion(ctx context.Context, chatID, threadID string, requested bool) (bool, error)
 	GetThreadWithParent(ctx context.Context, id string) (*db.Thread, *string, error)
 	GetRootThread(ctx context.Context, conversationID string) (*db.Thread, error)
+	// SenderTitle is the heading for a message from threadID: its title, or
+	// the run's for another run's untitled main thread (db.Repo.SenderTitle).
+	SenderTitle(ctx context.Context, threadID string) *string
 
 	// Workflow operations
 	CreateWorkflow(ctx context.Context, workflow *db.Workflow) error
@@ -52,10 +55,11 @@ type Repository interface {
 	// Bounded message operations for the display walk
 	// (recentDisplayMessagesBeforeFromCW) and CountCurrentMessages -- these
 	// bound the read or count in SQL, one window at a time, instead of
-	// resolving a thread's whole history.
+	// resolving a thread's whole history. The walk's read leaves out
+	// DISPLAY_STYLE_HIDDEN rows, so its limit counts transcript rows.
 	CountMessagesByContextWindow(ctx context.Context, contextWindowID string) (int, error)
 	CountMessagesByContextWindowUpToSeq(ctx context.Context, contextWindowID string, maxSeq int64) (int, error)
-	ListRecentMessagesInContextWindowBeforeSeq(ctx context.Context, contextWindowID string, beforeSeq int64, limit int) ([]*db.Message, error)
+	ListRecentTranscriptMessagesInContextWindowBeforeSeq(ctx context.Context, contextWindowID string, beforeSeq int64, limit int) ([]*db.Message, error)
 
 	// Message operations (for SaveMessage)
 	CreateMessage(ctx context.Context, msg *db.Message) error
@@ -166,10 +170,11 @@ type CreateWorkflowWithThreadOpts struct {
 	Workflow *db.Workflow
 
 	// Thread
-	ThreadID     string  // Empty = generate new ID, exists = reuse/inherit, doesn't exist = create new
-	ChatID       string  // Required - the conversation this thread belongs to
-	ThreadTitle  *string // Optional human-readable title
-	ParentThread *string // Optional - parent thread ID for non-fork child threads (e.g., spawn)
+	ThreadID             string  // Empty = generate new ID, exists = reuse/inherit, doesn't exist = create new
+	ChatID               string  // Required - the conversation this thread belongs to
+	ThreadTitle          *string // Optional human-readable title
+	ParentThread         *string // Optional - parent thread ID for non-fork child threads (e.g., spawn)
+	ExcludeAmbientMemory bool
 
 	// Origin records how the thread was created — see db.ThreadOrigin. The
 	// fork paths override this to ThreadOriginFork, since fork metadata is
@@ -284,7 +289,7 @@ func (s *Service) CreateWorkflowWithThread(ctx context.Context, opts CreateWorkf
 		// here would run the create path on a poisoned transaction and
 		// surface a misleading 25P02 from whatever statement runs next.
 		_, err := s.repo.GetThread(txCtx, threadID)
-		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		if err != nil && !svcerr.IsNotFound(err) {
 			return fmt.Errorf("failed to check for existing thread: %w", err)
 		}
 		if err == nil {
@@ -335,6 +340,13 @@ func (s *Service) CreateWorkflowWithThread(ctx context.Context, opts CreateWorkf
 			resultCW = cw
 		}
 
+		// Commit the runtime policy atomically with thread creation: a crash
+		// between creation and the child's first turn must not lose its cap.
+		excluded, err := s.repo.ResolveThreadAmbientMemoryExclusion(txCtx, opts.ChatID, resultThread.ID, opts.ExcludeAmbientMemory)
+		if err != nil {
+			return fmt.Errorf("persist thread memory exclusion: %w", err)
+		}
+		resultThread.ExcludeAmbientMemory = excluded
 		return nil
 	})
 

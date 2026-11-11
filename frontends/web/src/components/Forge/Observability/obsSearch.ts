@@ -97,6 +97,13 @@ export interface ObsSearch {
   /** Traces: only the ones slower than this ("500ms", "1s"). */
   minDuration?: string;
   /**
+   * Traces: a latency band, "<lo>-<hi>" in ms ("120-480"): what a bucket of
+   * the Overview's latency histogram opens. It seeds the chart's selected
+   * region (every time, that band of latency) and asks the server for traces
+   * at least `lo` long.
+   */
+  lat?: string;
+  /**
    * The project area's environment filter: env NAMES (unique within a
    * project, and readable in a shared link). Absent: every environment. An
    * env page pins its own environment and ignores this.
@@ -133,10 +140,18 @@ export interface ObsSearch {
   session?: string;
   /** Sessions: the moment to open the replay at, epoch ms (a link from an error or a trace). */
   t?: number;
-  /** Sessions: only the ones with a recorded replay. */
-  replay?: boolean;
-  /** Sessions: only this user id's. */
+  /** Sessions, Errors and Traces: only this user id's. */
   user?: string;
+  /** Traces: only the ones of this browser session (its rum.sessionId). */
+  rsession?: string;
+  /** Sessions, Errors and Traces: only this browser's / OS's (the platform-derived name, exact). */
+  browser?: string;
+  os?: string;
+  /** Sessions and Traces: only this frontend build's; Traces: only this backend build's. */
+  fe?: string;
+  be?: string;
+  /** Errors: only the issues with an event of this build. */
+  build?: string;
   /**
    * Sessions: the page tokens walked to reach the page shown, oldest first —
    * the last is the page's own. Absent: the first page. A trail, not one
@@ -169,6 +184,7 @@ export const OBS_SEARCH_KEYS = [
   "live",
   "errors",
   "minDuration",
+  "lat",
   "envs",
   "apps",
   "f",
@@ -184,8 +200,13 @@ export const OBS_SEARCH_KEYS = [
   "assignee",
   "session",
   "t",
-  "replay",
   "user",
+  "rsession",
+  "browser",
+  "os",
+  "fe",
+  "be",
+  "build",
   "cursor",
 ] as const satisfies readonly (keyof ObsSearch)[];
 

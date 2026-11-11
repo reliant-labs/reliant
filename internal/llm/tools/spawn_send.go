@@ -14,7 +14,7 @@ import (
 )
 
 type SpawnSendParams struct {
-	AgentID string `json:"agent_id" jsonschema:"required,description=The agent_id (thread id) to send a message to: one of your sub-agents, or your own parent"`
+	AgentID string `json:"agent_id" jsonschema:"required,description=The agent_id (thread id) to send a message to: one of your sub-agents or your own parent. An unambiguous prefix of at least 4 characters is accepted."`
 	Subject string `json:"subject" jsonschema:"required,description=A one-line summary of the message (at most 100 characters\\, no line breaks). The transcript shows the message collapsed to this line\\, so say what it is about: 'Auth refactor done: 3 files changed' or 'Blocked: need the staging DB URL'"`
 	Message string `json:"message" jsonschema:"required,description=The full message to deliver"`
 }
@@ -108,6 +108,15 @@ func (s *spawnSendTool) Execute(rctx *rctx.ToolContext, params SpawnSendParams) 
 	if params.Message == "" {
 		return NewTextErrorResponse("message is required"), nil
 	}
+	parentID := ""
+	if caller, callerErr := s.repo.GetThread(rctx.Context, threadID); callerErr == nil && caller != nil && caller.ParentThreadID != nil {
+		parentID = *caller.ParentThreadID
+	}
+	resolved, err := resolveSpawnAgentID(rctx, s.repo, threadID, params.AgentID, parentID)
+	if err != nil {
+		return NewTextErrorResponse(err.Error()), nil
+	}
+	params.AgentID = resolved
 	if params.AgentID == threadID {
 		return NewTextErrorResponse("agent_id cannot be this thread itself"), nil
 	}

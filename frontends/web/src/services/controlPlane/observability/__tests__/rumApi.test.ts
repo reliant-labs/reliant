@@ -33,6 +33,7 @@ import {
   mapSessionSummary,
   mapTimelineEntry,
 } from "../rumApi";
+import { NO_CLIENT } from "../client";
 
 const client = { listSessions: vi.fn(), getSession: vi.fn(), getSessionTimeline: vi.fn(), getSessionReplay: vi.fn() };
 vi.mock("../../client", () => ({ getControlPlaneClient: () => client }));
@@ -79,6 +80,12 @@ describe("sessions", () => {
       interactions: 12,
       errors: 1,
       hasReplay: true,
+      country: "",
+      region: "",
+      city: "",
+      clientAddress: "",
+      client: NO_CLIENT,
+      release: "",
     });
     const fromBinary = mapSessionSummary(create(SessionSummarySchema, { sessionId: "s", pageViews: 4n, errors: 0n }));
     expect(fromBinary).toMatchObject({ pageViews: 4, errors: 0, startedMs: 0, hasReplay: false });
@@ -173,7 +180,7 @@ describe("replay bytes", () => {
   const SNAPSHOT = { type: 2, timestamp: T + 10, data: { node: { type: 0, id: 1, childNodes: [] }, initialOffset: { left: 0, top: 0 } } };
 
   it("decodes Connect-JSON's base64 `data` back to the recorded event, byte for byte", async () => {
-    // What admin-server writes: protojson renders `bytes` as base64.
+    // What platform-api writes: protojson renders `bytes` as base64.
     const res = fromJson(GetSessionReplayResponseSchema, {
       events: [
         { time: new Date(T).toISOString(), index: 1, chunks: 1, data: b64(JSON.stringify(META)) },

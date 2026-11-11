@@ -1,8 +1,7 @@
-// This package carries no jsdom by design (see service-hooks.test.ts), so the
-// DOM surfaces devlog touches — window/document.addEventListener, the event
-// objects, navigator.sendBeacon — are stubbed here rather than pulling in a
-// renderer. They are small and stable enough that a stub tests the same thing
-// a DOM would.
+// Adoption contract for the installed forge runtime's devlog client and this
+// app's v2 Vite sink. Retained from the former vendored client so switching to
+// the published package proves batching, loss reporting and unload behavior
+// without relying on a new dev server. DOM lifecycle surfaces are stubbed.
 //
 // Every test that expects a POST must advance the fake clock past
 // FLUSH_INTERVAL_MS (or trigger an error/threshold/unload flush): forwarding is
@@ -14,7 +13,7 @@ import {
   devLoggingInstalled,
   installDevLogging,
   uninstallDevLogging,
-} from "../browser-log-forward";
+} from "@reliantlabs/forge-web-runtime";
 
 interface Entry {
   level: string;
@@ -173,6 +172,18 @@ describe("dev log forwarding", () => {
       { level: "warn", msg: 'three {"userId":42}' },
       { level: "debug", msg: "four" },
     ]);
+  });
+
+  it("preserves the published runtime's server trace correlation, absent from the old vendored client", () => {
+    const f = stubFetch();
+    installDevLogging({ dev: true, mirrorToConsole: false });
+    const traceId = "0af7651916cd43dd8448eb211c80319c";
+    const error = Object.assign(new Error("not yet"), { name: "ConnectError", traceId });
+
+    console.warn("save failed:", error);
+    vi.advanceTimersByTime(FLUSH_MS);
+
+    expect(f.all()[0]?.msg).toContain(`trace_id=${traceId}`);
   });
 
   it("posts batches to the forge endpoint convention as JSON", () => {
@@ -450,7 +461,6 @@ describe("dev log forwarding", () => {
     expect(entry?.level).toBe("error");
     expect(entry?.msg).toContain("Error: boom");
     // The stack is the reason this feature exists; assert it survived.
-    // (Vendored copy: forge's original asserts "devlog.test", its own filename.)
     expect(entry?.msg).toContain("browser-log-forward.test");
   });
 

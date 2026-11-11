@@ -3,7 +3,8 @@ import { useNavigate, useSearch } from "@tanstack/react-router";
 import { supabase } from "@/lib/supabase";
 import { useAuthStore } from "@/store/authStore";
 import { isSafeReturnTo } from "@/lib/returnTo";
-import { describeAuthError } from "@/lib/authErrors";
+import { callbackExchangeFailure, providerCallbackFailure } from "@/lib/oauthCallbackSafety";
+import { takeOAuthCallbackCredentials } from "@/lib/oauthCallbackCredentials";
 import { logger } from "@/lib/logger";
 import { githubCredentialSync } from "@/lib/githubCredentialSync";
 import { GradientBackground } from "./GradientBackground";
@@ -65,43 +66,18 @@ export function OAuthCallback() {
         error: errorParam,
         error_description: errorDescription,
         returnTo,
-      } = search;
+      } = { ...search, ...takeOAuthCallbackCredentials() };
 
       if (errorParam) {
-        let friendlyMessage = "Authentication failed";
-
-        if (
-          errorParam === "identity_already_exists" ||
-          errorDescription?.includes("already linked") ||
-          errorDescription?.includes("already registered") ||
-          errorDescription?.includes("Identity is already linked")
-        ) {
-          // Anon user tried to link an identity that already belongs to another
-          // account. Do NOT sign them in as that user — that discards the anon
-          // session's chats/code. Just inform them; their session stays intact.
-          friendlyMessage =
-            "This account is already registered. You can either sign in and out, or link a different account";
-          setAlreadyRegistered(true);
-        } else if (
-          errorDescription?.includes("Multiple accounts") ||
-          errorDescription?.includes("same email")
-        ) {
-          friendlyMessage =
-            "An account with this email already exists. Please sign in with your existing method first, then link your OAuth provider in settings.";
-        } else if (
-          errorDescription?.includes("denied") ||
-          errorDescription?.includes("cancelled")
-        ) {
-          friendlyMessage = "Authorization cancelled. Please try again.";
-        } else if (errorDescription) {
-          friendlyMessage = errorDescription.replace(/\+/g, " ");
-        }
-
+        const failure = providerCallbackFailure(errorParam, errorDescription);
+        // A failed identity link must leave the anonymous session intact.
+        setAlreadyRegistered(failure.alreadyRegistered);
         logger.error("[OAuthCallback] Error from provider", {
-          error: errorParam,
-          errorDescription,
+          stage: "provider_callback",
+          code: failure.code,
+          category: failure.category,
         });
-        setError(friendlyMessage);
+        setError(failure.message);
         return;
       }
 
@@ -113,7 +89,7 @@ export function OAuthCallback() {
           "[OAuthCallback] Callback URL carried neither an authorization code nor a token_hash",
         );
         setError(
-          "Invalid authentication callback. Please try signing in again.",
+          "Invalid authentication callback. Please start sign-in again.",
         );
         return;
       }
@@ -130,7 +106,8 @@ export function OAuthCallback() {
             await supabase.auth.exchangeCodeForSession(code);
 
           if (exchangeError) {
-            logger.error("[OAuthCallback] Code exchange failed", exchangeError);
+            const failure = callbackExchangeFailure(exchangeError, "We couldn't complete that sign-in link. Please start sign-in again.");
+            logger.error("[OAuthCallback] Code exchange failed", { stage: "code_exchange", code: failure.code });
             // A missing PKCE verifier is not a transient failure and not a
             // misconfiguration — it is structural. The verifier is stored by
             // the browser that STARTED the flow; an email link is opened by
@@ -143,12 +120,7 @@ export function OAuthCallback() {
             // arrive as `token_hash` (the template builds them from
             // {{ .TokenHash }}), so reaching this branch means a STALE link
             // from before that change.
-            setError(
-              describeAuthError(
-                exchangeError,
-                "We couldn't complete that sign-in link.",
-              ),
-            );
+            setError(failure.message);
             return;
           }
           user = data.user;
@@ -167,16 +139,9 @@ export function OAuthCallback() {
           });
 
           if (verifyError) {
-            logger.error(
-              "[OAuthCallback] Confirmation link verification failed",
-              verifyError,
-            );
-            setError(
-              describeAuthError(
-                verifyError,
-                "We couldn't confirm that email link.",
-              ),
-            );
+            const failure = callbackExchangeFailure(verifyError, "We couldn't confirm that email link. Please request a new one.");
+            logger.error("[OAuthCallback] Confirmation link verification failed", { stage: "email_verification", code: failure.code });
+            setError(failure.message);
             return;
           }
           user = data.user;
@@ -186,13 +151,7 @@ export function OAuthCallback() {
         setUser(user);
         setSession(session);
 
-        logger.info("[OAuthCallback] post-callback session state", {
-          provider: user?.app_metadata?.provider,
-          hasProviderToken: !!session?.provider_token,
-          userId: user?.id,
-          isAnonymous: user?.is_anonymous,
-          hasEmail: !!user?.email,
-        });
+        logger.info("[OAuthCallback] Session established");
 
         // A GitHub sign-in backed by the GitHub App hands us a user token
         // that is already authorized for repo access: keep it, so signing in
@@ -219,8 +178,9 @@ export function OAuthCallback() {
 
         navigate({ to: "/", search: {} });
       } catch (err) {
-        logger.error("[OAuthCallback] Unexpected callback error", err);
-        setError(err instanceof Error ? err.message : "Authentication failed");
+        const failure = callbackExchangeFailure(err, "Authentication failed. Please start sign-in again.");
+        logger.error("[OAuthCallback] Unexpected callback error", { stage: "callback", code: failure.code });
+        setError(failure.message);
       }
     };
 

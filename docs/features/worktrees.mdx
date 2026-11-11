@@ -1,12 +1,9 @@
 ---
-title: "Worktrees & Workspaces"
+title: "Workspaces"
 description: "Isolated checkouts for parallel work: creating, branching into, archiving and cleaning up workspaces"
 ---
 
-Workspaces let you work on several branches of a project at once. Each one is a git worktree: its own working directory and branch, sharing the repository's history with the main checkout. Two agents in two workspaces can edit, install dependencies, build and commit without stepping on each other, and without you stashing anything.
-
-> [!NOTE]
-> In Reliant, we call these **Workspaces**. Under the hood, they are standard Git worktrees.
+Workspaces let you work on several branches of a project at once. A workspace is an isolated copy of your repo on its own git branch (a git worktree): its own working directory, sharing the repository's history with the main checkout. Two agents in two workspaces can edit, install dependencies, build and commit without stepping on each other, and without you stashing anything.
 
 A workspace lives on the disk of one [machine](/machines/overview), the machine of the chat it was created for, and every chat that works in it runs there. That is also what a **branched chat** is: a chat whose workspace is its own branch on disk.
 
@@ -45,9 +42,9 @@ Archived workspaces are listed under the **Archived** tab of **Settings → Work
 
 ## Cleaning up
 
-Worktrees take disk space, so archive a workspace when you are done with it and Reliant reclaims its directory without losing work. An archived workspace is removed from disk once nothing in it would be lost: it has no uncommitted changes and its branch is pushed or already merged, including by a squash or rebase merge. Commits that exist only in that workspace are saved in the repository before its directory is removed. One that still holds work Reliant can't save that way, such as uncommitted changes, is kept, though rebuildable files like `node_modules` and build output are deleted from it. Restoring a workspace whose directory was removed checks it out again.
+Workspaces take disk space, so archive a workspace when you are done with it and Reliant reclaims its directory without losing work. An archived workspace is removed from disk once nothing in it would be lost: it has no uncommitted changes and its branch is pushed or already merged, including by a squash or rebase merge. Commits that exist only in that workspace are saved in the repository before its directory is removed. One that still holds work Reliant can't save that way, such as uncommitted changes, is kept, though rebuildable files like `node_modules` and build output are deleted from it. Restoring a workspace whose directory was removed checks it out again.
 
-When a machine's disk runs low, the **Inbox** shows a storage item for it, and its **Clean up** action removes the archived worktrees you confirm.
+When a machine's disk runs low, the **Inbox** shows a storage item for it, and its **Clean up** action removes the archived workspaces you confirm.
 
 ## Workspaces in workflows
 

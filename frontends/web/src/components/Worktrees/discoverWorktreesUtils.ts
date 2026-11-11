@@ -47,5 +47,5 @@ export function shouldShowHint(count: number, dismissedCount: number): boolean {
 }
 
 export function hintLabel(count: number): string {
-  return `${count} ${count === 1 ? "worktree" : "worktrees"} made outside Reliant`;
+  return `${count} git ${count === 1 ? "worktree" : "worktrees"} made outside Reliant`;
 }

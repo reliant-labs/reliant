@@ -116,7 +116,7 @@ Daemons authenticate with their `rlat_` access token, which the gateway resolves
 
 Distributed mode depends on three external services that all server types connect to.
 
-**Postgres** serves as the shared application database. All three server types connect to the same Postgres instance (or cluster) for chats, messages, workflows, projects, worktrees, and user data. Every server validates its database connection as part of the `/ready` health check.
+**Postgres** serves as the shared application database. All three server types connect to the same Postgres instance (or cluster) for chats, messages, workflows, projects, workspaces, and user data. Every server validates its database connection as part of the `/ready` health check.
 
 **Temporal** orchestrates workflow execution. The API server uses the Temporal client to start and signal workflows. The worker registers with Temporal to process workflow tasks. Both connect via `temporal.NewExternalClient` using the configured host, port, and namespace. This can be a self-hosted Temporal deployment or Temporal Cloud—Reliant only needs a standard Temporal gRPC endpoint.
 

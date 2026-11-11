@@ -6,15 +6,23 @@
  * the dashboard's scope, window and service — the same PanelBody the grid
  * draws, so what the preview shows is what the dashboard will.
  *
- *   Builder   visualization (time series, stat, table, funnel, issues,
- *             sessions, rows); signal; series with an aggregation preset
- *             (count, p50 / p95 / p99, avg, max, sum, distinct), a field and
- *             "errors only"; a ratio (A / B as a percentage); filters;
- *             group-by (up to three); funnel steps, window and journey;
- *             unit; width.
- *   Spec      the panel exactly as forge stores it, editable. The server
- *             compiles it into its query (same engine and limits as alert
- *             rules); the console never sends SQL.
+ *   Builder   visualization: every kind forge's spec has (KindPicker); how
+ *             it is drawn (style, stacked, horizontal, gauge scale, top N),
+ *             filtered to what the kind takes; signal; series with an
+ *             aggregation preset (count, p50 / p95 / p99, avg, max, sum,
+ *             distinct), a field and "errors only"; a ratio (A / B as a
+ *             percentage); filters; group-by (up to three) and a row limit;
+ *             a heatmap's bucketed field; funnel steps, window and journey;
+ *             a sql or postgres panel's statement, with its parameters, a
+ *             schema browser and Run (StatementEditor); a text panel's
+ *             Markdown; unit; width.
+ *   Spec      the panel exactly as forge stores it, editable.
+ *
+ * Panels over series are compiled by the server into their query (same
+ * engine and limits as alert rules); a sql or postgres panel carries its own
+ * read-only statement, which the server runs under its guard. Either way the
+ * preview is the server's answer: a series panel's as it is edited, a
+ * statement's when it is run, and a text panel's Markdown as it is typed.
  *
  * Saving writes a new version of the workspace dashboard. A read-only
  * dashboard opens the drawer in view mode: the spec and the preview, no
@@ -22,11 +30,12 @@
  */
 
 import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
+import { hashKey, useQueryClient } from "@tanstack/react-query";
 import { Plus, Trash2, X } from "lucide-react";
 
-import { usePanelQuery } from "@/hooks/observability-queries";
+import { obsKeys, usePanelQuery } from "@/hooks/observability-queries";
 import { useEscapeLayer } from "@/hooks/useEscapeLayer";
-import type { ObsScope, Panel, Predicate, SeriesIntent, Unit } from "@/services/controlPlane/observability/types";
+import type { ObsScope, Panel, PanelDisplay, Predicate, SeriesIntent, Unit } from "@/services/controlPlane/observability/types";
 import type { ObsEnvironment } from "../obsPlace";
 import type { RangePreset } from "@/services/controlPlane/observability/window";
 import { RANGE_LABELS } from "@/services/controlPlane/observability/window";
@@ -50,7 +59,13 @@ import {
   suggestedUnit,
   updateFilter,
   updateSeries,
-  VISUALIZATIONS,
+  DISPLAY_STYLES,
+  displayOptions,
+  MAX_TOP_N,
+  STATEMENT_KINDS,
+  STYLE_LABELS,
+  styleOf,
+  withDisplay,
   withErrorsOnly,
   withKind,
   withPreset,
@@ -62,8 +77,11 @@ import {
 import { AskReliantButton } from "../AskReliant/AskReliant";
 import { AlertFromPanelDialog, CreateAlertButton } from "./AlertFromPanelDialog";
 import { unsupportedReason } from "./alertSnippet";
+import { KindPicker } from "./KindPicker";
 import { PanelBody } from "./PanelBody";
 import { BUTTON_PRIMARY, BUTTON_SECONDARY, BUTTON_SMALL, ICON_BUTTON } from "./parts";
+import { MarkdownEditor, PostgresStatementEditor, SqlStatementEditor, type StatementRun } from "./StatementEditor";
+import { CONTROL_FIELD } from "../../controlStyles";
 
 export type DrawerMode = "add" | "edit" | "view";
 
@@ -91,7 +109,7 @@ export interface PanelDrawerProps {
 
 const UNIT_LABELS: Record<Unit, string> = { "": "none", count: "count", ms: "milliseconds", bytes: "bytes", percent: "percent", s: "seconds" };
 const INPUT =
-  "h-8 w-full min-w-0 rounded-md border border-border bg-surface px-2.5 text-sm text-ink placeholder:text-ink-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60";
+  `${CONTROL_FIELD} h-8 w-full min-w-0 px-2.5 text-sm disabled:opacity-60`;
 
 function useDebounced<T>(value: T, ms: number): T {
   const [settled, setSettled] = useState(value);
@@ -108,8 +126,35 @@ export function PanelDrawer({ mode, panel: initial, dashboardTitle, scope, range
   const escape = useEscapeLayer(true, onCancel);
   const problems = useMemo(() => panelProblems(draft), [draft]);
   const settled = useDebounced(draft, 300);
-  const previewable = panelProblems(settled).length === 0;
-  const preview = usePanelQuery(scope, range, settled, services, [], { enabled: previewable });
+  // A statement runs when it is asked to, not per keystroke: an existing panel's is already on the dashboard, a new one waits for Run.
+  const statement = STATEMENT_KINDS.includes(draft.kind);
+  const [ran, setRan] = useState<Panel | null>(() => (mode !== "add" && STATEMENT_KINDS.includes(initial.kind) ? initial : null));
+  const ranCurrent = ran && ran.kind === draft.kind ? ran : null;
+  const queried = statement ? ranCurrent : settled;
+  const previewable = !!queried && panelProblems(queried).length === 0;
+  const preview = usePanelQuery(scope, range, queried ?? settled, services, [], { enabled: previewable });
+  // A statement's picture (style, unit, title) follows the draft; only its statement waits for Run.
+  const drawn: Panel | null = statement ? (ranCurrent ? { ...draft, sql: ranCurrent.sql, minStep: ranCurrent.minStep, postgres: ranCurrent.postgres } : null) : draft.kind === "text" ? draft : settled;
+  // Every Run executes the statement. Run again over an unchanged request re-reads it: setting the same key would fetch nothing.
+  // A changed request whose answer is still cached (A, then B, then A again) is marked stale first, so switching to it fetches
+  // instead of showing the old rows; an uncached one fetches once, on the switch.
+  const queryClient = useQueryClient();
+  const sameRequest = (a: Panel, b: Panel) => hashKey(obsKeys.panel(scope, range, a, services, [])) === hashKey(obsKeys.panel(scope, range, b, services, []));
+  const run: StatementRun = {
+    onRun: () => {
+      if (ranCurrent && previewable && sameRequest(ranCurrent, draft)) {
+        void preview.refetch();
+        return;
+      }
+      void queryClient.invalidateQueries({ queryKey: obsKeys.panel(scope, range, draft, services, []), exact: true, refetchType: "none" });
+      setRan(draft);
+    },
+    canRun: problems.length === 0,
+    running: previewable && preview.isFetching,
+    stale: !!ranCurrent && (ranCurrent.sql !== draft.sql || ranCurrent.minStep !== draft.minStep || JSON.stringify(ranCurrent.postgres) !== JSON.stringify(draft.postgres)),
+    error: previewable ? preview.error : null,
+  };
+  const environmentId = scope?.envIds.length === 1 ? scope.envIds[0] : null;
   const readOnly = mode === "view";
   const titleId = useId();
   const [alerting, setAlerting] = useState(false);
@@ -180,15 +225,21 @@ export function PanelDrawer({ mode, panel: initial, dashboardTitle, scope, range
             </div>
             <div className="rounded-lg border border-border/60 bg-surface-sunken p-3" data-testid="panel-drawer-preview">
               <p className="mb-2 truncate text-sm font-medium text-ink">{draft.title || "Untitled panel"}</p>
-              {previewable ? (
-                <PanelBody panel={settled} query={preview} height={140} />
+              {drawn && (previewable || drawn.kind === "text") ? (
+                <PanelBody panel={drawn} query={preview} height={140} />
               ) : (
-                <p className="text-xs text-ink-muted">The preview runs once the panel is complete.</p>
+                <p className="text-xs text-ink-muted">
+                  {statement ? "Run the statement to see what it draws." : "The preview runs once the panel is complete."}
+                </p>
               )}
             </div>
           </section>
 
-          {tab === "builder" ? <Builder draft={draft} setDraft={setDraft} /> : <SpecTab draft={draft} setDraft={setDraft} readOnly={readOnly} />}
+          {tab === "builder" ? (
+            <Builder draft={draft} setDraft={setDraft} scope={scope} range={range} environmentId={environmentId} run={run} />
+          ) : (
+            <SpecTab draft={draft} setDraft={setDraft} readOnly={readOnly} />
+          )}
 
           {!readOnly && problems.length > 0 && (
             <ul className="space-y-1 rounded-md border border-border px-3 py-2 text-xs text-warning-ink" data-testid="panel-drawer-problems" role="status">
@@ -265,12 +316,28 @@ function Choice<T extends string>({ label, value, options, onChange, testId }: {
   );
 }
 
-function Builder({ draft, setDraft: set }: { draft: Panel; setDraft: (panel: Panel) => void }) {
+function Builder({
+  draft,
+  setDraft: set,
+  scope,
+  range,
+  environmentId,
+  run,
+}: {
+  draft: Panel;
+  setDraft: (panel: Panel) => void;
+  scope: ObsScope | null;
+  range: RangePreset;
+  environmentId: string | null;
+  run: StatementRun;
+}) {
   const id = useId();
   // Every change but an explicit unit pick lets the unit follow what the panel measures.
   const setDraft = (next: Panel) => set(next.unit !== draft.unit ? next : followUnit(draft, next));
   const kind = draft.kind as Visualization;
-  const aggregates = kind === "line" || kind === "number" || kind === "table";
+  const aggregates = kind === "line" || kind === "number" || kind === "table" || kind === "bar";
+  // A sql, postgres or text panel carries its own statement or prose: it takes no signal, series, filters or group-by.
+  const selfContained = kind === "sql" || kind === "postgres" || kind === "text";
   const signals = FIELD_SUGGESTIONS[(draft.signal as keyof typeof FIELD_SUGGESTIONS) ?? "traces"] ?? FIELD_SUGGESTIONS.traces;
   const fieldsId = `${id}-fields`;
   return (
@@ -293,18 +360,39 @@ function Builder({ draft, setDraft: set }: { draft: Panel; setDraft: (panel: Pan
         />
       </Row>
       <Row label="Visualization">
-        <Choice label="Visualization" value={kind} options={VISUALIZATIONS.map((v) => ({ value: v.kind, label: v.label }))} onChange={(next) => setDraft(withKind(draft, next))} testId="panel-builder-kind" />
+        <KindPicker value={kind} onChange={(next) => setDraft(withKind(draft, next))} />
       </Row>
 
-      {(aggregates || kind === "search") && (
+      {DISPLAY_STYLES[kind] && <DisplayControls draft={draft} setDraft={setDraft} />}
+
+      {kind === "sql" && <SqlStatementEditor draft={draft} setDraft={setDraft} scope={scope} range={range} run={run} />}
+      {kind === "postgres" && <PostgresStatementEditor draft={draft} setDraft={setDraft} environmentId={environmentId} run={run} />}
+      {kind === "text" && <MarkdownEditor draft={draft} setDraft={setDraft} />}
+
+      {(aggregates || kind === "search" || kind === "heatmap") && (
         <Row label="Signal">
           <Choice
             label="Signal"
             value={draft.signal}
-            options={(kind === "search" ? ["traces", "logs"] : ["traces", "logs", "metrics"]).map((s) => ({ value: s, label: s === "traces" ? "Traces · spans" : s === "logs" ? "Logs" : "Metrics" }))}
+            options={(kind === "search" || kind === "heatmap" ? ["traces", "logs"] : ["traces", "logs", "metrics"]).map((s) => ({ value: s, label: s === "traces" ? "Traces · spans" : s === "logs" ? "Logs" : "Metrics" }))}
             onChange={(next) => setDraft(withSignal(draft, next))}
             testId="panel-builder-signal"
           />
+        </Row>
+      )}
+
+      {kind === "heatmap" && (
+        <Row label="Bucketed field" htmlFor={`${id}-heatmap-field`}>
+          <input
+            id={`${id}-heatmap-field`}
+            list={fieldsId}
+            value={draft.series[0]?.field ?? ""}
+            onChange={(e) => setDraft({ ...draft, series: [{ label: draft.series[0]?.label || "events", agg: "count", field: e.target.value }] })}
+            placeholder={draft.signal === "logs" ? "log.attr.duration_ms" : "span.duration"}
+            className={cn(INPUT, "font-mono")}
+            data-testid="panel-builder-heatmap-field"
+          />
+          <p className="mt-1 text-xs text-ink-muted">A numeric field: time runs across, its values are bucketed up, and each cell counts the events in it.</p>
         </Row>
       )}
 
@@ -361,19 +449,21 @@ function Builder({ draft, setDraft: set }: { draft: Panel; setDraft: (panel: Pan
         </Row>
       )}
 
-      <Row label="Filters">
-        <div className="space-y-2">
-          {(draft.where ?? []).map((predicate, index) => (
-            <FilterRow key={index} predicate={predicate} fieldsId={fieldsId} onChange={(next) => setDraft(updateFilter(draft, index, next))} onRemove={() => setDraft(removeFilter(draft, index))} />
-          ))}
-          <button type="button" className={BUTTON_SMALL} onClick={() => setDraft(addFilter(draft))} data-testid="panel-builder-add-filter">
-            <Plus className="h-3 w-3" aria-hidden="true" />
-            Filter
-          </button>
-        </div>
-      </Row>
+      {!selfContained && (
+        <Row label="Filters">
+          <div className="space-y-2">
+            {(draft.where ?? []).map((predicate, index) => (
+              <FilterRow key={index} predicate={predicate} fieldsId={fieldsId} onChange={(next) => setDraft(updateFilter(draft, index, next))} onRemove={() => setDraft(removeFilter(draft, index))} />
+            ))}
+            <button type="button" className={BUTTON_SMALL} onClick={() => setDraft(addFilter(draft))} data-testid="panel-builder-add-filter">
+              <Plus className="h-3 w-3" aria-hidden="true" />
+              Filter
+            </button>
+          </div>
+        </Row>
+      )}
 
-      {(kind === "line" || kind === "table" || kind === "number") && (
+      {aggregates && (
         <Row label="Group by">
           <div className="space-y-2">
             {(draft.groupBy ?? []).map((field, index) => (
@@ -405,12 +495,33 @@ function Builder({ draft, setDraft: set }: { draft: Panel; setDraft: (panel: Pan
                 Group by
               </button>
             )}
-            {kind !== "number" && <p className="text-xs text-ink-muted">One {kind === "line" ? "line" : "row"} per value; the largest {kind === "line" ? "50" : "200"} are kept.</p>}
+            {kind !== "number" && (
+              <p className="text-xs text-ink-muted">
+                {kind === "bar" ? "One bar group per value: a bar panel needs one." : `One ${kind === "line" ? "line" : "row"} per value; the largest ${kind === "line" ? "50" : "200"} are kept.`}
+              </p>
+            )}
           </div>
         </Row>
       )}
 
-      {aggregates && (
+      {(kind === "table" || kind === "bar") && (
+        <Row label={kind === "bar" ? "Bars" : "Rows"} htmlFor={`${id}-limit`}>
+          <input
+            id={`${id}-limit`}
+            type="number"
+            min={1}
+            max={200}
+            value={draft.limit ?? ""}
+            onChange={(e) => setDraft({ ...draft, limit: e.target.value === "" ? undefined : Number(e.target.value) })}
+            placeholder={kind === "bar" ? "10" : "all"}
+            className={cn(INPUT, "w-24")}
+            data-testid="panel-builder-limit"
+          />
+          <p className="mt-1 text-xs text-ink-muted">The top groups by the first series are kept, at most 200.</p>
+        </Row>
+      )}
+
+      {(aggregates || kind === "heatmap" || kind === "sql" || kind === "postgres") && (
         <Row label="Unit" htmlFor={`${id}-unit`}>
           <select
             id={`${id}-unit`}
@@ -437,6 +548,86 @@ function Builder({ draft, setDraft: set }: { draft: Panel; setDraft: (panel: Pan
         />
       </Row>
     </div>
+  );
+}
+
+/**
+ * How a line, bar, number or sql panel is drawn: the styles its kind takes,
+ * then only the options the chosen style uses, so the builder never offers
+ * one forge would refuse (withDisplay drops the rest on a style change).
+ */
+function DisplayControls({ draft, setDraft }: { draft: Panel; setDraft: (panel: Panel) => void }) {
+  const id = useId();
+  const styles = DISPLAY_STYLES[draft.kind] ?? [];
+  const style = styleOf(draft);
+  const options = displayOptions(draft.kind, style);
+  const display = draft.display ?? {};
+  const set = (patch: Partial<PanelDisplay>) => setDraft(withDisplay(draft, patch));
+  const number = (text: string) => (text.trim() === "" || !Number.isFinite(Number(text)) ? undefined : Number(text));
+  const pie = style === "pie" || style === "donut";
+  return (
+    <Row label="Draw as">
+      <div className="space-y-2" data-testid="panel-builder-display">
+        <Choice label="Display style" value={style} options={styles.map((s) => ({ value: s, label: STYLE_LABELS[s] ?? s }))} onChange={(next) => set({ style: next })} testId="panel-builder-style" />
+        {(options.stack || options.horizontal) && (
+          <div className="flex flex-wrap gap-4">
+            {options.stack && (
+              <label className="inline-flex items-center gap-2 text-xs text-ink">
+                <input type="checkbox" checked={!!display.stack} onChange={(e) => set({ stack: e.target.checked })} data-testid="panel-builder-stack" />
+                Stacked: the top edge is the total
+              </label>
+            )}
+            {options.horizontal && (
+              <label className="inline-flex items-center gap-2 text-xs text-ink">
+                <input type="checkbox" checked={!!display.horizontal} onChange={(e) => set({ horizontal: e.target.checked })} data-testid="panel-builder-horizontal" />
+                Horizontal bars
+              </label>
+            )}
+          </div>
+        )}
+        {options.stack && display.stack && <p className="text-xs text-ink-muted">Only values that add up (counts, sums, rates) make a meaningful total; a p95 or an average does not.</p>}
+        {options.gauge && (
+          <div className="flex flex-wrap items-center gap-3">
+            <label htmlFor={`${id}-min`} className="text-xs text-ink-muted">
+              Min
+            </label>
+            <input id={`${id}-min`} type="number" value={display.min ?? ""} onChange={(e) => set({ min: number(e.target.value) })} placeholder="0" className={cn(INPUT, "w-24")} data-testid="panel-builder-gauge-min" />
+            <label htmlFor={`${id}-max`} className="text-xs text-ink-muted">
+              Max
+            </label>
+            <input
+              id={`${id}-max`}
+              type="number"
+              value={display.max ?? ""}
+              onChange={(e) => set({ max: number(e.target.value) })}
+              placeholder={draft.unit === "percent" ? "1 (100%)" : "required"}
+              className={cn(INPUT, "w-24")}
+              data-testid="panel-builder-gauge-max"
+            />
+          </div>
+        )}
+        {options.topN && (
+          <div className="flex flex-wrap items-center gap-3">
+            <label htmlFor={`${id}-top-n`} className="text-xs text-ink-muted">
+              Top N
+            </label>
+            <input
+              id={`${id}-top-n`}
+              type="number"
+              min={1}
+              max={MAX_TOP_N}
+              value={display.topN ?? ""}
+              onChange={(e) => set({ topN: number(e.target.value) })}
+              placeholder="auto"
+              className={cn(INPUT, "w-24")}
+              data-testid="panel-builder-top-n"
+            />
+            <span className="text-xs text-ink-muted">{pie ? "slices" : "series"} drawn before the rest fold into &ldquo;Other&rdquo;</span>
+          </div>
+        )}
+        {pie && draft.series.length > 1 && <p className="text-xs text-warning-ink">A {style} draws one value per group: keep one series.</p>}
+      </div>
+    </Row>
   );
 }
 
@@ -619,8 +810,8 @@ function SpecTab({ draft, setDraft, readOnly }: { draft: Panel; setDraft: (panel
   return (
     <div className="space-y-2" data-testid="panel-spec">
       <p className="text-xs text-ink-muted">
-        The panel exactly as forge stores it. The server compiles it into its query, with the same engine and limits as alert rules; the console never sends
-        SQL.
+        The panel exactly as forge stores it. The server compiles a panel over series into its query, with the same engine and limits as alert rules; a sql
+        or postgres panel carries its own read-only statement, which the server runs under its guard.
       </p>
       <textarea
         aria-label="Panel spec (JSON)"

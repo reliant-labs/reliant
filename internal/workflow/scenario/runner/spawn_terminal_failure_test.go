@@ -2,9 +2,12 @@
 package runner
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/workflow/scenario"
 	"github.com/stretchr/testify/require"
 )
 
@@ -41,10 +44,19 @@ import (
 // loop legitimately re-enters after the spawn resolves and outruns its 3
 // mocks), and pinning its pass/fail here would couple this regression to that
 // unrelated question. What must never regress is that the run ENDS.
+//
+// The scenario lives in testdata/, not in structured-agent's builtin
+// scenarios: as a builtin scenario its exact iteration count raced the
+// detached spawn's completion (3 turns instead of 4, leaving events
+// unconsumed), so it was removed from that suite under the flake rule. It
+// stays here as the fixture for this termination check, which does not
+// depend on that count.
 func TestSpawnTerminalFailure_DoesNotHangParentLoop(t *testing.T) {
 	wf := loadBuiltin(t, "structured-agent")
-	all := loadScenarios(t, "structured-agent")
-	sc := findScenario(t, all, "spawn_drops_response_data")
+	data, err := os.ReadFile(filepath.Join("testdata", "spawn_drops_response_data.yaml"))
+	require.NoError(t, err)
+	sc, err := scenario.ParseScenarioFile(data, "spawn_drops_response_data")
+	require.NoError(t, err)
 
 	start := time.Now()
 	res := NewRunner(wf).Run(sc)
@@ -57,7 +69,7 @@ func TestSpawnTerminalFailure_DoesNotHangParentLoop(t *testing.T) {
 	require.Less(t, elapsed, DefaultTimeout,
 		"the workflow must terminate on its own, not be cut off by the run budget")
 	for _, m := range res.Mismatches {
-		require.NotEqual(t, nonTerminatingMessage, m,
+		require.NotContains(t, m, nonTerminatingPrefix,
 			"a deterministic spawn failure must not leave the parent loop parked "+
 				"in awaitLiveDetachedSpawns; the spawn has to fail terminally so "+
 				"completeDetachedSpawn releases the parent")

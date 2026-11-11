@@ -187,7 +187,7 @@ func (e *InlineWorkflowExecutor) nodePath() string {
 // WithExecContext sets the unified execution context.
 // Required: This is the source of truth for execution state.
 func (e *InlineWorkflowExecutor) WithExecContext(ctx *ExecutionContext) *InlineWorkflowExecutor {
-	e.execContext = ctx
+	e.execContext = e.childTracker.ambientMemoryContext(ctx, e.evalResult)
 	return e
 }
 
@@ -741,6 +741,7 @@ func (e *InlineWorkflowExecutor) executeSubWorkflow() (map[string]interface{}, e
 		subInputs["mode"] = getModeFromInputs(e.workflowInputs)
 	}
 	e.bodyInputs, e.bodyNodeOutputs = subInputs, subNodeOutputs
+	e.childTracker.captureThreadResetInputs(subThread, subInputs, ownedKeys)
 	// What the user set on this thread alone wins over everything the thread
 	// started with — the model they switched a stopped agent to, above all.
 	// Only for a body with inputs of its own: an inline body's map IS its
@@ -961,6 +962,7 @@ func (e *InlineWorkflowExecutor) executeSubWorkflow() (map[string]interface{}, e
 					return nil, err
 				}
 				nid := node.GetId()
+				inlineOutput = publishWorkflowNodeOutputs(e.ctx, node, inlineOutput)
 				subNodeOutputs[nid] = inlineOutput
 
 				// Execute save_message if configured on the nested workflow node
@@ -1482,19 +1484,20 @@ func (e *InlineWorkflowExecutor) executeNestedWorkflow(
 			}
 
 			if initErr := initChildWorkflow(ChildWorkflowInitOpts{
-				Ctx:              e.ctx,
-				ChatID:           e.chatID,
-				ParentWorkflowID: parentWorkflowID,
-				ChildWorkflowID:  e.workflowID, // Inline workflows use parent's workflow ID
-				ChildThreadID:    childExecCtx.Thread,
-				WorkflowName:     nestedWorkflowName,
-				ThreadMode:       model.NodeThreadMode(evalResult),
-				ForkFromThread:   childExecCtx.ForkedFrom,
-				ParentThread:     e.execContext.Thread, // Current execution's thread
-				SpawnedByNodeID:  nid,
-				LoopIteration:    loopIter,
-				InjectMessage:    injectMsg,
-				Logger:           e.logger,
+				Ctx:                  e.ctx,
+				ChatID:               e.chatID,
+				ParentWorkflowID:     parentWorkflowID,
+				ChildWorkflowID:      e.workflowID, // Inline workflows use parent's workflow ID
+				ChildThreadID:        childExecCtx.Thread,
+				ExcludeAmbientMemory: childExecCtx.ExcludeAmbientMemory || model.NodeThreadConfig(evalResult).GetExcludeAmbientMemory(),
+				WorkflowName:         nestedWorkflowName,
+				ThreadMode:           model.NodeThreadMode(evalResult),
+				ForkFromThread:       childExecCtx.ForkedFrom,
+				ParentThread:         e.execContext.Thread, // Current execution's thread
+				SpawnedByNodeID:      nid,
+				LoopIteration:        loopIter,
+				InjectMessage:        injectMsg,
+				Logger:               e.logger,
 			}); initErr != nil {
 				e.logger.Error("[InlineWorkflow] Failed to initialize nested workflow thread",
 					"nodeID", nid,

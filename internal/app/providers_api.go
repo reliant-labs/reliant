@@ -45,6 +45,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/machinepool"
 	"github.com/reliant-labs/reliant/internal/machinewake"
 	"github.com/reliant-labs/reliant/internal/netguard"
+	"github.com/reliant-labs/reliant/internal/orgs"
 	"github.com/reliant-labs/reliant/internal/queueddelivery"
 	"github.com/reliant-labs/reliant/internal/readguard"
 	"github.com/reliant-labs/reliant/internal/temporal"
@@ -241,6 +242,8 @@ type APIListenerDeps struct {
 	Routes *UserRoutes
 	HTTP   *grpcserver.APIHTTPRoutes
 	Logger *slog.Logger
+	// Membership decides org resources (authz); the org resolver.
+	Membership *orgs.Resolver
 }
 
 // NewAPIListener is the address browsers, the CLI and `rlat_` tokens call
@@ -258,6 +261,7 @@ func NewAPIListener(d APIListenerDeps) (*grpcserver.APIListener, error) {
 		TLSKeyFile:         d.TLS.KeyFile,
 		CORSAllowedOrigins: d.API.GetCorsAllowedOrigins(),
 		Chain:              d.Chain,
+		Membership:         d.Membership,
 		Routes: serverkit.RoutesFunc(func(mux *http.ServeMux, opts ...connect.HandlerOption) []string {
 			services := d.Routes.Register(mux, opts...)
 			d.HTTP.Register(mux)
@@ -903,6 +907,10 @@ type WorktreeSweepDeps struct {
 	Settings     *APISettings
 }
 
+// The sweep records the use a daemon reports through the optional UseStore;
+// a Repo that lost the method would silently stop recording it.
+var _ worktreesweep.UseStore = (*db.Repo)(nil)
+
 // NewWorktreeSweep settles archived worktrees' directories through their
 // daemons: WorktreeService and InboxService settle one at a time through it,
 // and the WorktreeSweeper loop sweeps them all.
@@ -1194,6 +1202,74 @@ func NewPayloadGC(d PayloadGCDeps) (*PayloadGC, error) {
 func (p *PayloadGC) Run(ctx context.Context) error {
 	p.store.RunGC(ctx, p.horizon)
 	return nil
+}
+
+// The chat snapshot heads backfill: how often a pass starts, how many chat
+// ids it lists at a time, how long it waits between chats, and the lock that
+// keeps it to one replica at a time ("reliant\x03"). A pass over chats that
+// are all complete is one indexed walk of update_stream_counters.
+const (
+	chatUpdateHeadsBackfillInterval       = 10 * time.Minute
+	chatUpdateHeadsBackfillBatch          = 200
+	chatUpdateHeadsBackfillPause          = 25 * time.Millisecond
+	chatUpdateHeadsBackfillLockKey  int64 = 0x7265_6c69_616e_7403
+)
+
+// ChatUpdateHeadsBackfill brings every chat's materialized snapshot heads up
+// to its log: the chats that predate chat_update_heads, and any the previous
+// release writes to during a rollout or after a rollback
+// (db.Repo.BackfillIncompleteChatUpdateHeads, dev-docs/design/
+// chat-update-heads.md). Until a chat is backfilled its snapshot reads the
+// log, as before, so this only makes opens faster; nothing waits on it. One
+// replica runs a pass at a time; the others skip theirs.
+type ChatUpdateHeadsBackfill struct{ repo *db.Repo }
+
+// ChatUpdateHeadsBackfillDeps is the repository whose heads are backfilled.
+type ChatUpdateHeadsBackfillDeps struct {
+	DB *db.Repo
+}
+
+// NewChatUpdateHeadsBackfill is the backfill loop.
+//
+//forge:root-only api
+func NewChatUpdateHeadsBackfill(d ChatUpdateHeadsBackfillDeps) (*ChatUpdateHeadsBackfill, error) {
+	return &ChatUpdateHeadsBackfill{repo: d.DB}, nil
+}
+
+// Run backfills until ctx ends.
+func (b *ChatUpdateHeadsBackfill) Run(ctx context.Context) error {
+	ticker := time.NewTicker(chatUpdateHeadsBackfillInterval)
+	defer ticker.Stop()
+	for {
+		b.pass(ctx)
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-ticker.C:
+		}
+	}
+}
+
+func (b *ChatUpdateHeadsBackfill) pass(ctx context.Context) {
+	release, ok, err := b.repo.TryAdvisoryLock(ctx, chatUpdateHeadsBackfillLockKey)
+	if err != nil {
+		logging.WarnContext(ctx, "chat snapshot heads backfill: taking the lock failed", "error", err)
+		return
+	}
+	if !ok {
+		return
+	}
+	defer release()
+	report, err := b.repo.BackfillIncompleteChatUpdateHeads(ctx, chatUpdateHeadsBackfillBatch, chatUpdateHeadsBackfillPause)
+	if err != nil && ctx.Err() == nil {
+		logging.WarnContext(ctx, "chat snapshot heads backfill pass failed",
+			"backfilled", report.Backfilled, "failed", report.Failed, "error", err)
+		return
+	}
+	if report.Backfilled > 0 || report.Failed > 0 {
+		logging.InfoContext(ctx, "chat snapshot heads backfill pass",
+			"backfilled", report.Backfilled, "failed", report.Failed)
+	}
 }
 
 // llmUsageRetentionInterval is how often the retention job runs. Each pass

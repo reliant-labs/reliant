@@ -52,12 +52,13 @@ import {
   type TraceRedSummary as WireRed,
   type TraceSummary as WireTraceSummary,
 } from "@/gen/controlplane/services/observability/v1/observability_pb";
-import { WorkloadKind as WireWorkloadKind, type DeclaredWorkload as WireDeclaredWorkload } from "@/gen/controlplane/controlplane/v1/deploy_pb";
+import { DeclaredSpecGap as WireDeclaredSpecGap, WorkloadKind as WireWorkloadKind, type DeclaredWorkload as WireDeclaredWorkload } from "@/gen/controlplane/controlplane/v1/deploy_pb";
 
 import { obsClient } from "./obsClient";
 import type {
   AttributeFilter,
   AttributeOp,
+  DeclaredSpecGap,
   DeclaredWorkload,
   Workload,
   WorkloadCause,
@@ -105,6 +106,7 @@ import type {
 } from "./types";
 import { SERVICE_SIGNALS } from "./types";
 import type { MetricKind, SeriesMeta } from "./metricsTypes";
+import { mapClient, mapServiceBuilds } from "./client";
 
 function client() {
   return obsClient(ObservabilityService);
@@ -244,6 +246,14 @@ function mapTraceSummary(t: WireTraceSummary): TraceSummary {
     spanCount: t.spanCount,
     errorCount: t.errorCount,
     services: [...t.services],
+    userId: t.userId,
+    sessionId: t.sessionId,
+    country: t.country,
+    region: t.region,
+    city: t.city,
+    client: mapClient(t.client),
+    frontendVersion: t.frontendVersion,
+    backendBuilds: mapServiceBuilds(t.backendBuilds),
     source: t.source,
     operatorData: t.operatorData,
   };
@@ -255,6 +265,12 @@ export async function listTraces(req: ListTracesRequest, options: { signal?: Abo
     errorsOnly: req.errorsOnly || undefined,
     minDurationMs: req.minDurationMs > 0 ? req.minDurationMs : undefined,
     rootSpanName: req.rootSpanName || undefined,
+    userId: req.userId || undefined,
+    sessionId: req.sessionId || undefined,
+    browser: req.browser || undefined,
+    os: req.os || undefined,
+    frontendVersion: req.frontendVersion || undefined,
+    backendVersion: req.backendVersion || undefined,
     pageSize: req.limit,
     pageToken: req.cursor ?? "",
     groupBy: req.groupBy ?? [],
@@ -506,7 +522,19 @@ export async function getServiceOverview(
       operatorData: s.operatorData,
     };
   });
-  return { services, trendStepSeconds: step };
+  return { services, trendStepSeconds: step, unavailableSections: unavailableSectionsOf(res) };
+}
+
+/**
+ * The response's unavailable_sections (control-plane: the sections of a
+ * ListWorkloads / GetServiceOverview answer that did not arrive within the
+ * read's budget). Read by name because the vendored contract gains the field
+ * at the next control-plane sync; until then it is empty, as from a server
+ * that always answers whole.
+ */
+function unavailableSectionsOf(res: object): string[] {
+  const sections = (res as { unavailableSections?: unknown }).unavailableSections;
+  return Array.isArray(sections) ? sections.filter((s): s is string => typeof s === "string") : [];
 }
 
 // ── Profiles ─────────────────────────────────────────────────────────────────
@@ -716,11 +744,26 @@ function mapPod(p: WireWorkloadPod): WorkloadPod {
   };
 }
 
+/** Why a declared spec is not recorded; "unknown" from a control plane that predates the reason. */
+function specGapOf(gap: WireDeclaredSpecGap): DeclaredSpecGap {
+  switch (gap) {
+    case WireDeclaredSpecGap.PENDING:
+      return "pending";
+    case WireDeclaredSpecGap.UNREADABLE:
+      return "unreadable";
+    case WireDeclaredSpecGap.NOT_IN_MANIFESTS:
+      return "not-in-manifests";
+    default:
+      return "unknown";
+  }
+}
+
 function mapDeclared(d: WireDeclaredWorkload): DeclaredWorkload {
   return {
     name: d.name,
     kind: kindOf(d.kind),
     specRecorded: d.specRecorded,
+    specGap: d.specRecorded ? null : specGapOf(d.specGap),
     replicas: d.replicas ?? null,
     cpuRequestMillicores: Number(d.cpuRequestMillicores),
     cpuLimitMillicores: Number(d.cpuLimitMillicores),
@@ -792,6 +835,7 @@ export async function listWorkloads(req: ObsScope & { window: TimeWindow; servic
     workloads: res.workloads.map(mapWorkload),
     jobs: res.jobs.map(mapJob),
     jobsTruncated: res.jobsTruncated,
+    unavailableSections: unavailableSectionsOf(res),
   };
 }
 

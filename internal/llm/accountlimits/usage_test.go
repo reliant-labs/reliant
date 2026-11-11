@@ -298,7 +298,7 @@ func TestExhaustedUsageWindowBenchesTheAccount(t *testing.T) {
 	require.NotNil(t, l.LimitedUntil, "a spent 5h window benches the account until its reset")
 	assert.True(t, l.LimitedUntil.Equal(fx.clock.Now().Add(2*time.Hour).Truncate(time.Second)))
 	assert.Equal(t, "five_hour", l.LimitedWindow)
-	assert.True(t, l.UsageAPINextAt.Equal(l.LimitedUntil.Add(30*time.Second)), "confirm 30s after the reset")
+	assert.True(t, l.UsageAPINextAt.Equal(fx.clock.Now().Add(benchRecheckEvery)), "read again before the 2h reset")
 }
 
 // benchFixture is a fixture whose account a1 the provider benched on window
@@ -368,6 +368,83 @@ func TestUsageReadingKeepsABenchItCannotSee(t *testing.T) {
 			assert.Empty(t, *woken, "nothing is woken for an account still limited")
 		})
 	}
+}
+
+// codexCreditsBody is a Codex reading whose weekly window is spent while the
+// workspace's credits pay for requests: the shape of a live Team capture
+// (providerusage/testdata/codex_usage_team_credits.json).
+func codexCreditsBody(now time.Time) string {
+	return fmt.Sprintf(`{"plan_type":"team","rate_limit":{"allowed":false,"limit_reached":true,
+		"primary_window":{"used_percent":0,"limit_window_seconds":18000,"reset_at":%d},
+		"secondary_window":{"used_percent":100,"limit_window_seconds":604800,"reset_at":%d}},
+		"credits":{"has_credits":true,"unlimited":false,"overage_limit_reached":false},
+		"spend_control":{"reached":false}}`, now.Add(5*time.Hour).Unix(), now.Add(65*time.Hour).Unix())
+}
+
+// The report: a Team account past its weekly window was benched for three
+// days and every message refused with "usage limit reached", while ChatGPT
+// showed the account usable and the Codex CLI kept answering on its credits.
+// A reading in overage benches nothing and lifts the bench the spent window set.
+func TestUsageReadingInOverageLiftsTheBench(t *testing.T) {
+	for _, window := range []string{"secondary", "seven_day"} {
+		t.Run(window, func(t *testing.T) {
+			fx, _, woken := benchFixture(t, "codex", window, codexCreditsBody)
+
+			res, err := fx.f.RefreshUsage(context.Background(), "u1", "a1")
+			require.NoError(t, err)
+			l := fx.store.limit("a1")
+			assert.Equal(t, "overage", l.Status)
+			assert.Nil(t, l.LimitedUntil, "credits pay for the spent window: the account serves")
+			require.NotNil(t, res.Limits)
+			assert.Nil(t, res.Limits.LimitedUntil)
+			assert.Equal(t, []string{"u1/a1"}, *woken, "the user's blocked chats are woken")
+		})
+	}
+}
+
+func TestUsageReadingInOverageDoesNotBench(t *testing.T) {
+	fx := newFixture(t, "codex")
+	fx.doer.reply = func(*http.Request) (*http.Response, error) { return resp(200, codexCreditsBody(fx.clock.Now())) }
+
+	res := fx.f.PollLeased(context.Background(), "a1")
+	require.Equal(t, OutcomeUpdated, res.Outcome)
+	assert.Nil(t, fx.store.limit("a1").LimitedUntil)
+	assert.Empty(t, fx.store.benches)
+}
+
+// Overage pays for the plan's windows, not another limit family's: a bench
+// on one stands.
+func TestUsageReadingInOverageKeepsABenchOnAnotherLimitFamily(t *testing.T) {
+	fx, until, woken := benchFixture(t, "codex", "codex_bengalfox.primary", codexCreditsBody)
+
+	_, err := fx.f.RefreshUsage(context.Background(), "u1", "a1")
+	require.NoError(t, err)
+	l := fx.store.limit("a1")
+	require.NotNil(t, l.LimitedUntil)
+	assert.False(t, l.LimitedUntil.Before(until))
+	assert.Empty(t, *woken)
+}
+
+// No request reaches a benched account, so nothing but a poll can notice that
+// the bench outlived its cause. A long bench is read again every
+// benchRecheckEvery after the last observation, not only after its reset.
+func TestBenchedAccountIsReadAgainBeforeItsReset(t *testing.T) {
+	now := t0
+	until := now.Add(72 * time.Hour)
+	l := &core.LimitState{LimitedUntil: &until, ObservedAt: now.Add(-10 * time.Minute)}
+	next, due := nextForLease(l, now)
+	assert.False(t, due)
+	assert.True(t, next.Equal(now.Add(20*time.Minute)), "next = %v", next)
+
+	l.ObservedAt = now.Add(-benchRecheckEvery)
+	_, due = nextForLease(l, now)
+	assert.True(t, due, "half an hour after the last observation, the benched account is read")
+
+	short := now.Add(5 * time.Minute)
+	l = &core.LimitState{LimitedUntil: &short, ObservedAt: now}
+	next, due = nextForLease(l, now)
+	assert.False(t, due)
+	assert.True(t, next.Equal(short.Add(confirmAfterReset)), "a short bench is confirmed just after it ends")
 }
 
 func TestOnDemandRefreshIsThrottledAt60Seconds(t *testing.T) {

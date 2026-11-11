@@ -1,5 +1,7 @@
 name: happy_path
-description: The build passes. Full pipeline through the preview handoff to success.
+description: >-
+  Despite its name, the build never passes: every attempt is graded fail, so the run ends at
+  `failed` (outcome: failure) and never reaches the preview handoff.
 
 events:
   # One loop: scoped with the user, scaffolded the substrate green, fanned out
@@ -212,7 +214,7 @@ events:
       tool_results: []
       thread_token_count: 100
 expect:
-  outcome: completed
+  outcome: failed
   reached:
     - build_app
     - failed

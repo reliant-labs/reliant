@@ -112,12 +112,26 @@ func supervise(c config) (int, error) {
 
 	go func() {
 		for s := range sigs {
+			announce(c.stderr, s, pid)
 			// ESRCH means the program is already gone; reap is about to
 			// collect it and exit.
 			_ = syscall.Kill(pid, s.(syscall.Signal))
 		}
 	}()
 	return reap(pid, c.stderr), nil
+}
+
+// announce says on stderr that a stop signal was aimed at PID 1 (kubelet,
+// `docker stop`, `kill 1`) and is being relayed. The program reports the
+// state of the machine when it arrives (internal/stopcause); this line is
+// what tells that apart from a signal sent to the program's own pid, which
+// the init never sees. Terminal resizes and the user signals are not stops
+// and stay quiet.
+func announce(w io.Writer, s os.Signal, pid int) {
+	switch s {
+	case syscall.SIGHUP, syscall.SIGINT, syscall.SIGQUIT, syscall.SIGTERM:
+		fmt.Fprintf(w, "reliant init: %s was sent to PID 1; relaying it to pid %d\n", s, pid)
+	}
 }
 
 // start forks and execs the program in its own process group. When this

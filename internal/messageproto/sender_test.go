@@ -29,10 +29,19 @@ func (f *fakeReader) ListToolCallsByIDs(context.Context, []string) ([]*db.ToolCa
 	return nil, nil
 }
 
-func (f *fakeReader) ListThreadsByIDs(_ context.Context, ids []string) ([]*db.Thread, error) {
+func (f *fakeReader) SenderTitles(_ context.Context, ids []string) (map[string]string, error) {
 	f.listCalls++
 	f.askedIDs = ids
-	return f.threads, f.err
+	if f.err != nil {
+		return nil, f.err
+	}
+	titles := map[string]string{}
+	for _, t := range f.threads {
+		if t.Title != nil {
+			titles[t.ID] = *t.Title
+		}
+	}
+	return titles, nil
 }
 
 func textBlock(messageID, text string) *db.MessageContentBlock {
@@ -107,7 +116,7 @@ func TestAssembleForDisplay_BatchesSenderTitles(t *testing.T) {
 		{ID: "peer-b"},
 	}}
 
-	got := AssembleForDisplay(context.Background(), reader, messages, blocks, nil, "main", 0)
+	got := AssembleForDisplay(context.Background(), reader, messages, blocks, nil, "main", 0, reliantv1.ToolBodyMode_TOOL_BODY_MODE_UNSPECIFIED)
 
 	require.Len(t, got, 4)
 	assert.Equal(t, 1, reader.listCalls, "sender titles are loaded once per response, not per message")
@@ -126,7 +135,7 @@ func TestAssembleForDisplay_NoSendersNoThreadQuery(t *testing.T) {
 	blocks := map[string][]*db.MessageContentBlock{"m1": {textBlock("m1", "hi")}}
 	reader := &fakeReader{}
 
-	AssembleForDisplay(context.Background(), reader, messages, blocks, nil, "main", 0)
+	AssembleForDisplay(context.Background(), reader, messages, blocks, nil, "main", 0, reliantv1.ToolBodyMode_TOOL_BODY_MODE_UNSPECIFIED)
 
 	assert.Zero(t, reader.listCalls)
 }
@@ -139,7 +148,7 @@ func TestAssembleForDisplay_TitleLookupFailureKeepsAttribution(t *testing.T) {
 	blocks := map[string][]*db.MessageContentBlock{"m1": {textBlock("m1", "hi")}}
 	reader := &fakeReader{err: errors.New("db down")}
 
-	got := AssembleForDisplay(context.Background(), reader, messages, blocks, nil, "main", 0)
+	got := AssembleForDisplay(context.Background(), reader, messages, blocks, nil, "main", 0, reliantv1.ToolBodyMode_TOOL_BODY_MODE_UNSPECIFIED)
 
 	require.Len(t, got, 1)
 	require.NotNil(t, got[0].Sender, "a failed title lookup must not turn an agent's message into the human's")

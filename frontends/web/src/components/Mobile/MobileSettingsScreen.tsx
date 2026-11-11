@@ -49,6 +49,7 @@ import { MobileWorkspacePreferencesScreen } from "./MobileWorkspacePreferencesSc
 import { MobileAboutScreen } from "./MobileAboutScreen";
 import { MobileDiagnosticsScreen } from "./MobileDiagnosticsScreen";
 import { MobileMenuButton } from "./MobileMenuButton";
+import { isSafeReturnTo } from "@/lib/returnTo";
 import {
   MOBILE_ROW,
   MobileCardGroup,
@@ -132,7 +133,7 @@ export function MobileSettingsScreen() {
   // "Subscribe to keep both") opens on that section and returns there, instead
   // of dropping the person on the list with nothing to say where they were.
   const { section, returnTo } = useSearch({ strict: false }) as { section?: string; returnTo?: string };
-  const comeBackTo = returnTo && returnTo.startsWith("/") && !returnTo.startsWith("//") ? returnTo : undefined;
+  const comeBackTo = isSafeReturnTo(returnTo) ? returnTo : undefined;
 
   // Computed per render (not module scope) so `hasControlPlane` — read at
   // call time — can't get frozen into a stale constant, which matters both
@@ -191,8 +192,8 @@ export function MobileSettingsScreen() {
     },
     {
       id: "workspace",
-      label: "Branches",
-      description: "Cleanup defaults for branched chats",
+      label: "Workspaces",
+      description: "Cleanup defaults for workspaces",
       icon: FolderGit2,
       group: "preferences",
       capability: "settingsWorkspace",

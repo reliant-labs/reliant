@@ -111,15 +111,15 @@ class BackendManager {
     // processes on different ports:
     //
     //   apiUrl         (RELIANT_SERVER_URL) — the daemon's --server target.
-    //                    In cloud-dev this is admin-server. It keys
+    //                    In cloud-dev this is platform-api. It keys
     //                    daemon.json; the daemon credential itself is minted
     //                    from rendererApiUrl (reliant.v1.TokenService).
     //
     //   rendererApiUrl (RELIANT_API_URL)    — the URL the renderer's MAIN
     //                    Connect transport hits for reliant.v1.* services
     //                    (ProjectService, ChatService, WorktreeService, …).
-    //                    Those live on reliant api-server, not admin-server.
-    //                    Conflating the two routes the renderer at admin-server
+    //                    Those live on reliant api-server, not platform-api.
+    //                    Conflating the two routes the renderer at platform-api
     //                    and every non-daemon-token reliant.v1 RPC 404s.
     //
     // Default rendererApiUrl to apiUrl so prod (single URL) stays unchanged.
@@ -174,7 +174,7 @@ class BackendManager {
     this.apiUrl = BackendManager.resolveDaemonServerURL();
     this.rendererApiUrl = process.env.RELIANT_API_URL || this.apiUrl;
     this.gatewayUrl = process.env.RELIANT_GATEWAY_URL || DEFAULT_GATEWAY_URL;
-    // The admin-server origin, surfaced to the renderer as
+    // The platform-api origin, surfaced to the renderer as
     // window.RELIANT_CONFIG.controlPlaneURL. This read has to happen HERE,
     // after build-config.js has been projected into process.env above —
     // in a packaged app that file is the only source for it.
@@ -543,6 +543,21 @@ class BackendManager {
    */
   daemonDataDir() {
     return daemonCreds.instanceDataDir(this.daemonInstanceKey());
+  }
+
+  /**
+   * The registry id assigned to this instance, not the user's default daemon.
+   * Resolve the account/server's data dir and read afresh on EVERY request:
+   * sign-in, server changes and re-registration can all change the answer.
+   * This file contains only an id; never consult the shared credential store.
+   */
+  getLocalDaemonId() {
+    try {
+      return fs.readFileSync(path.join(this.daemonDataDir(), 'daemon-id'), 'utf8').trim() || null;
+    } catch {
+      // Not registered yet, unreadable file, or no resolvable instance.
+      return null;
+    }
   }
 
   /**
@@ -2021,7 +2036,7 @@ class BackendManager {
       // daemon.json is keyed by the daemon's --server origin...
       apiUrl: this.apiUrl,
       // ...but the credential is minted by reliant.v1.TokenService, which only
-      // reliant's api-server serves. In cloud-dev --server is admin-server,
+      // reliant's api-server serves. In cloud-dev --server is platform-api,
       // which does not; in a packaged build the two are the same host.
       mintApiUrl: this.rendererApiUrl || this.apiUrl,
       gatewayUrl: this.gatewayUrl || process.env.RELIANT_GATEWAY_URL || '',

@@ -23,6 +23,7 @@ import { cn } from "@/lib/utils";
 import { formatDuration } from "../format";
 import { shortId } from "../LogsView";
 import { currentEntryIndex, filterTimeline, formatOffset, navigationLabel, TIMELINE_FILTERS, TIMELINE_KIND_LABEL, type TimelineFilter } from "./sessionModel";
+import { SEGMENTED, segmentTone } from "../../controlStyles";
 
 export interface SessionTimelineProps {
   entries: readonly TimelineEntry[];
@@ -54,7 +55,7 @@ export function SessionTimeline({ entries, startMs, currentMs, hasMore, loadingM
 
   return (
     <div className="space-y-2" data-testid="session-timeline">
-      <div role="group" aria-label="Show" className="inline-flex flex-wrap rounded-lg border border-border bg-surface-sunken p-0.5">
+      <div role="group" aria-label="Show" className={cn(SEGMENTED, "flex-wrap")}>
         {TIMELINE_FILTERS.map((option) => (
           <button
             key={option.id}
@@ -63,7 +64,7 @@ export function SessionTimeline({ entries, startMs, currentMs, hasMore, loadingM
             onClick={() => setFilter(option.id)}
             className={cn(
               "rounded-md px-2.5 py-1 text-xs transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-              filter === option.id ? "bg-surface font-medium text-ink shadow-sm" : "text-ink-muted hover:text-ink"
+              segmentTone(filter === option.id)
             )}
             data-testid={`session-timeline-filter-${option.id}`}
           >

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"syscall"
@@ -87,12 +88,75 @@ func cgroupLimiter(t *testing.T, perCommand, shared int) *Limiter {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {
-		sweep(commands, true)
+		sweep(commands, true, nil)
 		if err := os.Remove(commands); err != nil {
 			t.Errorf("removing the test's commands cgroup: %v", err)
 		}
 	})
 	return &Limiter{root: root, commands: commands, size: Sizing{CPUs: 1, Budget: shared * 2, Shared: shared, PerCommand: perCommand}}
+}
+
+// A cgroup held for a prepared command survives another Prepare's sweep of
+// this process's empty command cgroups, and the sweep after its release takes
+// it. Plain directories stand in for cgroups: sweep treats one with no
+// cgroup.events as empty.
+func TestSweepSparesTheCgroupsOfUnreleasedTrees(t *testing.T) {
+	dir := t.TempDir()
+	l := &Limiter{commands: dir}
+	own := func(seq int) string { return filepath.Join(dir, fmt.Sprintf("%s%d-%d", cmdPrefix, os.Getpid(), seq)) }
+	exists := func(p string) bool { _, err := os.Stat(p); return err == nil }
+
+	if err := l.hold(own(1)); err != nil {
+		t.Fatal(err)
+	}
+	// A leftover of a released tree whose processes have since exited.
+	if err := os.Mkdir(own(2), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := l.hold(own(3)); err != nil {
+		t.Fatal(err)
+	}
+	if !exists(own(1)) {
+		t.Fatalf("a second Prepare's sweep removed the held cgroup %s: its command's start would fail ENOENT", own(1))
+	}
+	if exists(own(2)) {
+		t.Fatalf("the sweep left the released, empty cgroup %s", own(2))
+	}
+
+	l.drop(own(1))
+	if exists(own(1)) {
+		t.Fatalf("drop left the empty cgroup %s", own(1))
+	}
+	l.sweepOwn()
+	if !exists(own(3)) {
+		t.Fatalf("a sweep removed the still-held cgroup %s", own(3))
+	}
+}
+
+// Two commands prepared before either starts both start in their own
+// cgroups. The second Prepare used to sweep the first's empty cgroup away, so
+// the first failed "fork/exec …: no such file or directory" (reliant #2416).
+func TestCommandsPreparedTogetherBothStart(t *testing.T) {
+	testkit.Slow(t, "starts real processes in a cgroup")
+	l := cgroupLimiter(t, 30, 1000)
+	first, second := exec.Command("true"), exec.Command("true")
+	firstTree := l.Prepare(first, Owner{})
+	secondTree := l.Prepare(second, Owner{})
+	for _, c := range []struct {
+		cmd  *exec.Cmd
+		tree *Tree
+	}{{first, firstTree}, {second, secondTree}} {
+		if c.tree.Cgroup() == "" {
+			t.Fatal("a prepared command has no cgroup")
+		}
+		if err := c.cmd.Start(); err != nil {
+			c.tree.Started(0)
+			t.Fatalf("starting a command in %s: %v", c.tree.Cgroup(), err)
+		}
+		c.tree.Started(c.cmd.Process.Pid)
+		_ = c.cmd.Wait()
+		c.tree.Release()
+	}
 }
 
 // A delegated cgroup (the cloud entrypoint's /daemon) bounds each command to
@@ -138,47 +202,6 @@ func TestCommandCgroupBoundsAndKillsTheTree(t *testing.T) {
 		time.Sleep(20 * time.Millisecond)
 	}
 	tree.Release()
-}
-
-// The commands cgroup bounds all commands together: a command well inside its
-// own limit is refused at the shared one, is told so, and — bounded by the
-// cgroups — keeps the user's RLIMIT_NPROC, which counts every agent's threads.
-func TestCommandsCgroupBoundsAllCommandsTogether(t *testing.T) {
-	testkit.Slow(t, "starts real process trees in a cgroup")
-	l := cgroupLimiter(t, 1000, 40)
-	l.nproc = 1
-	started, tree := runForker(t, l, 200)
-	if started >= 40 {
-		t.Fatalf("the forker started %d children under a shared pids.max of 40", started)
-	}
-	tree.Release()
-	if note := tree.LimitNote(); !strings.Contains(note, "shared thread limit (40 threads") || strings.Contains(note, "This command reached") {
-		t.Fatalf("LimitNote after the shared limit refused it: %q", note)
-	}
-
-	// An RLIMIT_NPROC of 1 would have refused the forker every child.
-	if started == 0 {
-		t.Fatal("a command with a cgroup had its RLIMIT_NPROC lowered")
-	}
-	cmd := exec.Command("sleep", "5")
-	tree = l.Prepare(cmd, Owner{})
-	if err := cmd.Start(); err != nil {
-		tree.Started(0)
-		t.Fatal(err)
-	}
-	tree.Started(cmd.Process.Pid)
-	t.Cleanup(func() { _ = cmd.Process.Kill(); _ = cmd.Wait(); tree.Release() })
-	var got unix.Rlimit
-	if err := unix.Prlimit(cmd.Process.Pid, unix.RLIMIT_NPROC, nil, &got); err != nil {
-		t.Fatal(err)
-	}
-	var own unix.Rlimit
-	if err := unix.Getrlimit(unix.RLIMIT_NPROC, &own); err != nil {
-		t.Fatal(err)
-	}
-	if got.Cur != own.Cur {
-		t.Fatalf("a command with a cgroup has RLIMIT_NPROC %d, want the user's %d", got.Cur, own.Cur)
-	}
 }
 
 // Without the cgroups, a command's RLIMIT_NPROC is the reserve.

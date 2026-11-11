@@ -4,6 +4,8 @@ import { ChevronDown, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { HOMEBREW_CASK_INSTALL } from "@/lib/cli-commands";
 import { loadConfig } from "@/lib/config_gen";
+import { CommandBlock } from "@/components/CommandBlock";
+import { SetupHelp } from "@/components/SetupHelp";
 
 /**
  * "How do I get Reliant onto this machine?" — the single answer, shared by
@@ -223,6 +225,8 @@ export interface ReliantDownloadOptionsProps {
   defaultCollapsed?: boolean;
   /** Line shown beside the toggle while collapsed, explaining the fold. */
   collapsedNote?: string;
+  /** The enclosing setup panel puts installation explanations in its More help. */
+  hideHelp?: boolean;
 }
 
 /**
@@ -235,6 +239,7 @@ export function ReliantDownloadOptions({
   className,
   defaultCollapsed = false,
   collapsedNote,
+  hideHelp = false,
 }: ReliantDownloadOptionsProps) {
   const detectedOS = useDetectedOS();
   const [showOtherPlatforms, setShowOtherPlatforms] = useState(false);
@@ -269,14 +274,12 @@ export function ReliantDownloadOptions({
         <button
           type="button"
           onClick={() => setExpandedOverride(true)}
-          className="inline-flex items-center gap-1.5 text-xs font-medium text-sky-600 transition-colors hover:text-sky-500 dark:text-sky-400 dark:hover:text-sky-300"
+          className="inline-flex min-h-[44px] items-center gap-1.5 text-xs font-medium text-sky-600 transition-colors hover:text-sky-500 dark:text-sky-400 dark:hover:text-sky-300"
         >
           <ChevronRight className="h-3.5 w-3.5" />
           Show download instructions
         </button>
-        {collapsedNote && (
-          <p className="text-xs text-muted-foreground">{collapsedNote}</p>
-        )}
+        {!hideHelp && collapsedNote && <SetupHelp label="Download help"><p>{collapsedNote}</p></SetupHelp>}
       </div>
     );
   }
@@ -287,7 +290,7 @@ export function ReliantDownloadOptions({
         <button
           type="button"
           onClick={() => setExpandedOverride(false)}
-          className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+          className="inline-flex min-h-[44px] items-center gap-1.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
         >
           <ChevronDown className="h-3.5 w-3.5" />
           Hide download instructions
@@ -299,7 +302,7 @@ export function ReliantDownloadOptions({
           <a
             href={primaryDownload.url}
             className={cn(
-              "flex w-full items-center justify-center gap-2 rounded-lg bg-sky-600 font-semibold text-white shadow-sm shadow-sky-600/20 transition-colors hover:bg-sky-500",
+              "no-color flex min-h-[44px] w-full items-center justify-center gap-2 rounded-lg bg-sky-600 font-semibold text-white shadow-sm shadow-sky-600/20 transition-colors hover:bg-sky-500",
               compact ? "py-2.5 text-xs" : "py-3 text-sm",
             )}
           >
@@ -309,7 +312,8 @@ export function ReliantDownloadOptions({
           <button
             type="button"
             onClick={() => setShowOtherPlatforms(!showOtherPlatforms)}
-            className="w-full text-center text-xs text-muted-foreground transition-colors hover:text-foreground"
+            aria-expanded={showOtherPlatforms}
+            className="min-h-[44px] w-full text-center text-xs text-muted-foreground transition-colors hover:text-foreground"
           >
             {showOtherPlatforms ? "Hide" : "Other platforms"}
           </button>
@@ -320,7 +324,7 @@ export function ReliantDownloadOptions({
                 <a
                   key={link.url}
                   href={link.url}
-                  className="flex items-center justify-between rounded px-3 py-2 text-xs text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
+                  className="no-color flex min-h-[44px] items-center justify-between rounded px-3 py-2 text-xs text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
                 >
                   <span>{link.label}</span>
                   <span className="text-sky-500">Download</span>
@@ -336,7 +340,7 @@ export function ReliantDownloadOptions({
             <a
               key={link.url}
               href={link.url}
-              className="flex items-center justify-between rounded border border-border/40 px-3 py-2 text-xs text-foreground transition-colors hover:bg-muted/50"
+              className="no-color flex min-h-[44px] items-center justify-between rounded border border-border/40 px-3 py-2 text-xs text-foreground transition-colors hover:bg-muted/50"
             >
               <span>{link.label}</span>
               <span className="text-sky-500">Download</span>
@@ -345,14 +349,10 @@ export function ReliantDownloadOptions({
         </div>
       )}
 
-      {/* Platform-neutral and true everywhere: the installer above is the
-          whole story on Windows and Linux, where there is no package manager
-          we publish to. */}
-      <p className="text-xs text-muted-foreground">
-        The installer ships the{" "}
-        <code className="font-mono text-foreground">reliant</code> CLI and adds
-        it to your PATH the first time you open the app — no separate download.
-      </p>
+      {!hideHelp && <SetupHelp label="Download help">
+        <p>The installer includes the Reliant CLI and adds it to your PATH when you first open the app. No separate CLI download is needed.</p>
+        {collapsedNote && <p>{collapsedNote}</p>}
+      </SetupHelp>}
 
       {/* Homebrew casks are macOS-only. Rendering this unconditionally sent
           Windows and Linux users to a command that cannot work, on the one
@@ -360,14 +360,11 @@ export function ReliantDownloadOptions({
           as a labelled alternative rather than as *the* answer. */}
       {supportsHomebrewCask(detectedOS) || detectedOS === "unknown" ? (
         <div className="space-y-1.5">
-          <span className="block text-xs text-muted-foreground">
-            {detectedOS === "unknown"
-              ? "On macOS, you can install via Homebrew instead:"
-              : "Or install via Homebrew:"}
-          </span>
-          <code className="block select-all rounded border border-border/40 bg-background px-3 py-2 font-mono text-xs text-foreground">
-            {HOMEBREW_CASK_INSTALL}
-          </code>
+          <span className="block text-xs text-muted-foreground">{detectedOS === "unknown" ? "macOS alternative · Homebrew" : "Or use Homebrew"}</span>
+          <CommandBlock
+            command={HOMEBREW_CASK_INSTALL}
+            label="Homebrew install command"
+          />
         </div>
       ) : null}
     </div>

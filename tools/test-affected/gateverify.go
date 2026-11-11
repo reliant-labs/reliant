@@ -101,14 +101,16 @@ func verifyGate(planPath, dir string) []string {
 	if pl.Web.Full || len(pl.Web.Tests) > 0 || web {
 		obliged["typecheck"] = "a web lane or frontends/web/ change needs the type-check"
 	}
-	// The merge queue's tier (merge-gate.sh --queue writes <dir>/tier) leaves
-	// vet and the scoped forge lint to the release gate, which runs both over
-	// the whole module: the queue's budget is five minutes (owner, 2026-11-01).
-	queue := false
+	// The merge queue's tier and --skip-lint (merge-gate.sh writes <dir>/tier:
+	// "queue" or "skip-lint") leave vet and the scoped forge lint to the
+	// release gate, which runs both over the whole module: the queue's budget
+	// is five minutes (owner, 2026-11-01).
+	skipLint := false
 	if tb, err := os.ReadFile(filepath.Join(dir, "tier")); err == nil {
-		queue = strings.TrimSpace(string(tb)) == "queue"
+		tier := strings.TrimSpace(string(tb))
+		skipLint = tier == "queue" || tier == "skip-lint"
 	}
-	if !queue && (len(pl.Go.Build) > 0 || len(pl.Go.Packages) > 0 || pl.Go.Full) {
+	if !skipLint && (len(pl.Go.Build) > 0 || len(pl.Go.Packages) > 0 || pl.Go.Full) {
 		obliged["vet"] = "production build reach and affected test packages are vetted"
 	}
 	if migration {
@@ -117,7 +119,7 @@ func verifyGate(planPath, dir string) []string {
 	// Lint is scoped to the changed directories. A diff that moves only a pin
 	// at the root (go.mod, go.sum, forge.yaml) has none: its whole-module
 	// lint is the release gate's (dev-docs/merge-and-release-gates.md).
-	if subdir && !queue {
+	if subdir && !skipLint {
 		obliged["lint"] = "the diff touches linted code"
 	}
 	// Phases the script itself decided to run (it appends each to <dir>/expected

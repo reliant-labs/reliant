@@ -58,6 +58,7 @@ import { getActionArgsRecord, hasTypedArgs } from "../../lib/actionStepArgs";
 import { useGetMessage } from "../../hooks/message-service-hooks_gen";
 import type { GetMessageResponse } from "../../gen/reliant/v1/message_pb";
 import { messageText } from "../../lib/transcript";
+import { TRANSCRIPT_TOOL_BODY_MODE } from "../../lib/toolBodies";
 import { MarkdownRenderer } from "../Chat/MarkdownRenderer";
 
 function savedMessageText(response: GetMessageResponse): string {
@@ -72,7 +73,7 @@ function savedMessageText(response: GetMessageResponse): string {
  */
 function SavedMessageSection({ messageId }: { messageId: string }) {
   // A saved message does not change, so it is read once.
-  const { data, isLoading, isError } = useGetMessage({ messageId }, { staleTime: Infinity, select: savedMessageText });
+  const { data, isLoading, isError } = useGetMessage({ messageId, toolBodies: TRANSCRIPT_TOOL_BODY_MODE }, { staleTime: Infinity, select: savedMessageText });
 
   if (isLoading) {
     return (

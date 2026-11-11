@@ -14,7 +14,7 @@ import { createPortal } from "react-dom";
 import { 
   Search, Settings, Keyboard, Info, Palette, Shield, 
   FolderOpen, GitBranch, Workflow, Bot, Terminal,
-  Code, CalendarClock, Activity, Inbox
+  Code, CalendarClock, Activity, Inbox, Compass
 } from "lucide-react";
 import { useNavigate, useRouterState } from "@tanstack/react-router";
 import { cn } from "../../lib/utils";
@@ -25,6 +25,8 @@ import { focusChatInput } from "../../hooks/useFocusManager";
 import { useShortcutHost } from "../../hooks/useShortcutHost";
 import type { SettingsSection } from "../../routeSchemas";
 import { showDeveloperSettings } from "../Settings/SettingsNavigation";
+import { useTourNavigation } from "../Onboarding/useTourNavigation";
+import { availableJourneys } from "../Onboarding/journeys/registry";
 
 interface Command {
   id: string;
@@ -64,6 +66,7 @@ export function CommandPalette({ isOpen, onClose, inWorkspace }: CommandPaletteP
     const pathname = useRouterState({ select: (s) => s.location.pathname });
     const navigate = useNavigate();
     const host = useShortcutHost();
+    const tourNav = useTourNavigation();
     
     // Focus the search box when opened.
     useEffect(() => {
@@ -245,6 +248,27 @@ export function CommandPalette({ isOpen, onClose, inWorkspace }: CommandPaletteP
         available: pathname !== "/settings/about",
         action: goTo('about'),
       },
+      // Tours — restart either onboarding journey, or choose between them.
+      {
+        id: "tours",
+        title: "Tours",
+        description: "Choose a guided tour",
+        icon: <Compass className="w-4 h-4" />,
+        category: "actions",
+        keywords: ["tour", "onboarding", "guide", "help", "walkthrough", "journey"],
+        available: !tourNav.isPickerOpen,
+        action: () => tourNav.openPicker("menu"),
+      },
+      ...availableJourneys().map((journey): Command => ({
+        id: `tour-${journey.id}`,
+        title: `Tour: ${journey.title}`,
+        description: journey.description,
+        icon: <Compass className="w-4 h-4" />,
+        category: "actions",
+        keywords: ["tour", "onboarding", "guide", "help", "walkthrough", journey.id],
+        available: tourNav.currentJourney !== journey.id,
+        action: () => tourNav.startJourney(journey.id, "menu"),
+      })),
       // Actions — the same handlers as their keyboard shortcuts. Off the
       // workspace the toggle opens the terminal there rather than toggling a
       // panel nobody can see (lib/keyboard/scope).

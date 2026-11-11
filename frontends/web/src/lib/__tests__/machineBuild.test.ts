@@ -1,3 +1,4 @@
+// @vitest-environment node
 // Copyright (c) 2025 Reliant Labs
 import { describe, expect, it } from "vitest";
 import { DaemonStatus } from "@/gen/reliant/v1/daemon_registry_pb";

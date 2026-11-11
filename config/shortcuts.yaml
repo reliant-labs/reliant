@@ -376,8 +376,8 @@ shortcuts:
     handler: onSwitchChat
 
   - id: switchWorktree
-    name: Switch Branch Chat
-    description: Jump between branched (worktree) chats
+    name: Switch Workspace
+    description: Open the workspaces panel to jump to another workspace
     category: Chat Navigation
     binding: Cmd+K B
     handler: onSwitchWorktree

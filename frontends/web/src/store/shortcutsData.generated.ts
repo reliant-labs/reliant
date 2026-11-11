@@ -326,8 +326,8 @@ export const defaultShortcuts: Record<string, Omit<ShortcutDefinition, 'currentB
   },
   switchWorktree: {
     id: 'switchWorktree',
-    name: 'Switch Branch Chat',
-    description: 'Jump between branched (worktree) chats',
+    name: 'Switch Workspace',
+    description: 'Open the workspaces panel to jump to another workspace',
     category: 'Chat Navigation',
     defaultBinding: 'Cmd+K B',
     defaultWebBinding: 'Cmd+K B',

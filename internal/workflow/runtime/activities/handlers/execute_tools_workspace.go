@@ -137,6 +137,19 @@ func (a *ExecuteToolsActivity) ensureBatchWorkspace(
 		out.blocked = missingRefusal(checkout.missing)
 		return out
 	}
+	if inBranch && worktreeDaemon != "" && checkout.daemonID != "" && checkout.daemonID != worktreeDaemon {
+		// A selector the workflow or node configures keeps its precedence
+		// (toolDaemonSelector), and here it named a machine that is not the
+		// branch workspace's owner. The workspace exists on its owner alone:
+		// running there would carry the owner's path to a disk without it,
+		// and the ensure below would recreate the worktree on a machine that
+		// does not own it — two diverging copies of one branch (#2085).
+		// Nothing is sent; every machine call says why.
+		logging.WarnContext(ctx, "[ExecuteTools] Selector routes a branch workspace's calls away from its owner; refused",
+			"chatID", rtx.ChatID, "worktreeID", worktree.ID, "owner", worktreeDaemon, "selected", checkout.daemonID)
+		out.blocked = foreignWorkspaceMachineRefusal(worktree, worktreeDaemon, checkout.daemonID)
+		return out
+	}
 	selector = checkout.pin(selector)
 	mainPath := checkout.main.Path
 
@@ -322,6 +335,16 @@ func threadWorkspaceMissingNote(worktree *db.Worktree, reason string) string {
 	return b.String()
 }
 
+// foreignWorkspaceMachineRefusal is what every machine call of a batch
+// answers when a configured selector routes a branch workspace's calls to a
+// machine other than the workspace's owner.
+func foreignWorkspaceMachineRefusal(worktree *db.Worktree, owner, selected string) string {
+	return fmt.Sprintf("This chat's workspace %q (branch `%s`) lives on machine %s, but this workflow routes its tools to machine %s, which does not have it. "+
+		"No machine tools ran, and the workspace was not recreated there. Retrying will not help: stop calling tools that need the machine, "+
+		"tell the user exactly this, and ask them to run this chat on %s (or change the workflow's machine selector).",
+		worktree.Name, worktree.Branch, owner, selected, owner)
+}
+
 // mainPath is the project's checkout on the machine that ran the batch.
 func workspaceNoticeText(n *toolexec.WorkspaceNotice, mainPath string) string {
 	if n == nil {
@@ -336,6 +359,13 @@ func workspaceNoticeText(n *toolexec.WorkspaceNotice, mainPath string) string {
 	var b strings.Builder
 	switch n.Kind {
 	case toolexec.NoticeRepaired:
+		if n.RestoredWork != "" {
+			// The machine sweep reclaimed it while idle and kept a capture.
+			fmt.Fprintf(&b, "[Workspace recreated] %s %s was reclaimed from disk while idle and has been recreated from branch `%s`%s; %s. "+
+				"Build outputs and ignored files (node_modules, caches) are gone and must be rebuilt: check `git status` before relying on earlier results.",
+				subject, n.WorkspacePath, n.Branch, checkoutList(n.Checkouts), strings.TrimSpace(n.RestoredWork))
+			break
+		}
 		fmt.Fprintf(&b, "[Workspace recreated] %s %s had disappeared from disk, so it was recreated from branch `%s`%s. "+
 			"Committed work on the branch is intact. Uncommitted changes, untracked files (.env and the like) and build outputs "+
 			"that were in the old directory are gone: check `git status` and `git log` before relying on earlier results.",

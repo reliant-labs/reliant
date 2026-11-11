@@ -73,6 +73,7 @@ import { ManagedSecretsView } from "../Secrets/ManagedSecretsView";
 import { SetSecretModal } from "../Secrets/SetSecretModal";
 import { StepUpDialog, StepUpPanel } from "../Secrets/StepUpDialog";
 import { isStepUpCancelled, useStepUpGate } from "../Secrets/useStepUpGate";
+import { useObsReadOnly } from "../Observability/obsReadOnly";
 
 /**
  * §10 STATE 3's remedy, in the exact words the design settles on.
@@ -109,6 +110,7 @@ export function LiveSecretsSection({
   onSelectSecret,
 }: LiveSecretsSectionProps) {
   const name = env?.name ?? envName ?? "";
+  const lock = useObsReadOnly();
 
   // The store is keyed on the environment's control-plane id, which the row
   // supplies directly. No forge report, no endpoint comparison, no guessed id:
@@ -263,8 +265,10 @@ export function LiveSecretsSection({
         <button
           type="button"
           onClick={() => setModal({ existing: null })}
+          disabled={lock.readOnly}
+          title={lock.readOnly ? lock.reason : undefined}
           data-testid="add-secret"
-          className="rounded-md border border-border px-3 py-1.5 text-sm text-ink-muted transition-colors hover:text-ink"
+          className="disabled:cursor-not-allowed disabled:opacity-50 rounded-md border border-border px-3 py-1.5 text-sm text-ink-muted transition-colors hover:text-ink"
         >
           Add secret
         </button>

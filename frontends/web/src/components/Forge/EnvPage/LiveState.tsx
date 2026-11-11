@@ -51,7 +51,7 @@ import {
   type LiveEnv,
 } from "@/services/forge/live";
 
-import { formatTimestamp } from "../Overview/EnvironmentTable";
+import { formatTimestamp } from "../Overview/EnvironmentList";
 
 export function LiveState({ env }: { env: LiveEnv }) {
   const intent = intentLine(env);

@@ -1,10 +1,11 @@
+// @vitest-environment node
 // Copyright (c) 2025 Reliant Labs
 
 import { describe, expect, it } from "vitest";
 
 import type { Span } from "@/services/controlPlane/observability/types";
 
-import { operationName, traceTitle } from "../traceTitle";
+import { operationName, rootSpanQuery, traceTitle } from "../traceTitle";
 
 const span = (spanId: string, parentSpanId: string, name: string, service: string, extra: Partial<Span> = {}): Span => ({
   spanId,
@@ -82,5 +83,22 @@ describe("traceTitle", () => {
     const spans = [span("a", "", "orders.v1.OrdersService/CreateOrder", "api", { kind: "server" }), span("b", "a", "SELECT orders", "api")];
     expect(traceTitle(spans)).toEqual({ service: "api", operation: "OrdersService.CreateOrder", raw: "orders.v1.OrdersService/CreateOrder" });
     expect(traceTitle([])).toBeNull();
+  });
+});
+
+describe("rootSpanQuery", () => {
+  it("sends an RPC's title as a substring of every stored spelling of it", () => {
+    for (const stored of ["reliant.v1.ChatService/SendMessage", "POST /reliant.v1.ChatService/SendMessage", "/ChatService/SendMessage"]) {
+      expect(stored).toContain(rootSpanQuery("ChatService.SendMessage"));
+      expect(operationName(stored)).toBe("ChatService.SendMessage");
+    }
+    expect(rootSpanQuery(" reliant.v1.ChatService.SendMessage ")).toBe("reliant.v1.ChatService/SendMessage");
+  });
+
+  it("sends anything else as typed", () => {
+    expect(rootSpanQuery("GetUser")).toBe("GetUser");
+    expect(rootSpanQuery("orders.v1.OrdersService/")).toBe("orders.v1.OrdersService/");
+    expect(rootSpanQuery("worker.issues.pass")).toBe("worker.issues.pass");
+    expect(rootSpanQuery("GET /v1/items")).toBe("GET /v1/items");
   });
 });

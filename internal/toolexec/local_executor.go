@@ -168,6 +168,14 @@ func (e *LocalToolExecutor) executeTool(
 	// A workflow run step, marked by the server (ToolRequest.RunStep). Read
 	// from the context map only — never from toolInput, which a model writes.
 	toolContext.RunStep, _ = contextMap[RunStepContextKey].(bool)
+	if toolContext.RunStep {
+		toolContext.RunWorkDir, _ = contextMap[RunWorkDirContextKey].(string)
+	}
+	toolContext.BoundParams = boundParamsFrom(contextMap)
+	if machine, ok := contextMap[RunMachineContextKey].(map[string]interface{}); ok {
+		toolContext.RunMachine.ID, _ = machine["id"].(string)
+		toolContext.RunMachine.Name, _ = machine["name"].(string)
+	}
 
 	// Decode the project's nested repos so tools with a `repo` param can
 	// resolve it to a workspace-relative path. Absent when single-repo.
@@ -278,4 +286,23 @@ func (e *LocalToolExecutor) executeTool(
 		ErrorMessage: "",
 		ErrorCode:    "",
 	}
+}
+
+// boundParamsFrom is the parameters the run's configuration bound, as the
+// server recorded them in the context map (ToolRequest.BoundParams). The map
+// has crossed JSON on the way to a daemon, and stayed a []string on the way to
+// a worker.
+func boundParamsFrom(contextMap map[string]interface{}) []string {
+	var out []string
+	switch bound := contextMap[BoundParamsContextKey].(type) {
+	case []string:
+		out = append(out, bound...)
+	case []interface{}:
+		for _, name := range bound {
+			if s, ok := name.(string); ok {
+				out = append(out, s)
+			}
+		}
+	}
+	return out
 }

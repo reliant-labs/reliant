@@ -442,24 +442,111 @@ func (s *Service) resolveRepoBaseBranch(worktree *db.Worktree, repo *core.Repo) 
 // validateWorktreeForGitOps validates that a worktree is suitable for git operations
 func (s *Service) validateWorktreeForGitOps(ctx context.Context, userID string, worktree *db.Worktree) error {
 	if worktree.DeletedAt != nil {
-		return svcerr.FailedPrecondition("worktree is archived; unarchive it before performing git operations")
+		return errWorktreeArchived()
 	}
 
-	var resp struct {
-		Exists bool   `json:"exists"`
-		Error  string `json:"error,omitempty"`
-	}
+	var resp validatePathAnswer
 	if err := s.sendWorktreeDaemonCommand(ctx, userID, daemonplacement.WorktreeOwner(worktree), "worktree.validate_path", map[string]string{"path": worktree.Path}, &resp); err != nil {
 		return daemonerr.Error("access the worktree directory", err)
 	}
-	if !resp.Exists {
-		if resp.Error == "not_found" {
-			return svcerr.FailedPrecondition(fmt.Sprintf("worktree directory does not exist: %s; the worktree may need to be recreated", worktree.Path))
-		}
-		return svcerr.Internal(fmt.Sprintf("cannot access worktree directory: %s", resp.Error))
-	}
+	return resp.verdict(worktree.Path)
+}
 
-	return nil
+// gitReadOnDisk runs read, the rest of a read-only git rpc on worktree's
+// directory, with the worktree.validate_path probe that
+// validateWorktreeForGitOps sends before a mutation running beside it rather
+// than first. A read that succeeds found the directory, so its answer stands
+// without waiting for the probe; when read fails, the probe's verdict on a
+// missing or unreadable directory comes first, exactly as
+// validateWorktreeForGitOps would have answered before read ran. The polled
+// read paths (GetWorktreeChanges, ListWorktreeRepoStatuses, ...) so lose a
+// serial daemon round trip: in prod the probe alone was p50 60ms, p95 1.1s,
+// p99 5.1s (2026-11-06, gateway spans).
+//
+// A read that answered without proving the directory is there (a per-repo
+// failure it reports in its answer, or no repo to read) returns
+// errDirUnverified: the probe decides, and the caller treats the sentinel as
+// success.
+//
+// The probe never wakes the machine and a failed send is no verdict: read's
+// own send wakes it, and reports that, so one request wakes a machine once.
+//
+// The probe never outlives the call: a read that succeeds cancels it and
+// waits for it to return. The router's send returns as soon as its context is
+// cancelled and tells the daemon to drop the command
+// (TestSendDaemonCommand_CancelReturnsAndCancelsOnTheDaemon in
+// internal/toolexec), so that wait costs no round trip.
+func (s *Service) gitReadOnDisk(ctx context.Context, userID string, worktree *db.Worktree, read func() error) error {
+	if worktree.DeletedAt != nil {
+		return errWorktreeArchived()
+	}
+	probeCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	verdict := make(chan error, 1)
+	go func() { verdict <- s.probeWorktreeDir(probeCtx, userID, worktree) }()
+	err := read()
+	if err == nil {
+		cancel()
+		<-verdict
+		return nil
+	}
+	if v := <-verdict; v != nil {
+		return v
+	}
+	return err
+}
+
+// errDirUnverified is what a gitReadOnDisk read returns when its answer does
+// not prove the worktree directory exists.
+var errDirUnverified = errors.New("the read did not reach the worktree directory")
+
+// probeWorktreeDir is validateWorktreeForGitOps's directory check without the
+// wake: nil when the daemon could not be asked, as well as when it found the
+// directory.
+func (s *Service) probeWorktreeDir(ctx context.Context, userID string, worktree *db.Worktree) error {
+	if s.deps.Router == nil {
+		return nil
+	}
+	payload, err := json.Marshal(map[string]string{"path": worktree.Path})
+	if err != nil {
+		return nil
+	}
+	var raw []byte
+	if daemonID := daemonplacement.WorktreeOwner(worktree); daemonID == "" {
+		raw, err = s.deps.Router.SendDaemonCommand(ctx, userID, "worktree.validate_path", payload, worktreeReadCommandTimeoutMs)
+	} else {
+		raw, err = s.deps.Router.SendDaemonCommandToDaemon(ctx, userID, daemonID, "worktree.validate_path", payload, worktreeReadCommandTimeoutMs)
+	}
+	if err != nil {
+		return nil
+	}
+	var resp validatePathAnswer
+	if json.Unmarshal(raw, &resp) != nil {
+		return nil
+	}
+	return resp.verdict(worktree.Path)
+}
+
+// validatePathAnswer is the daemon's answer to worktree.validate_path.
+type validatePathAnswer struct {
+	Exists bool   `json:"exists"`
+	Error  string `json:"error,omitempty"`
+}
+
+// verdict is the error a git operation on path fails with, or nil when the
+// directory is there.
+func (a validatePathAnswer) verdict(path string) error {
+	if a.Exists {
+		return nil
+	}
+	if a.Error == "not_found" {
+		return svcerr.FailedPrecondition(fmt.Sprintf("worktree directory does not exist: %s; the worktree may need to be recreated", path))
+	}
+	return svcerr.Internal(fmt.Sprintf("cannot access worktree directory: %s", a.Error))
+}
+
+func errWorktreeArchived() error {
+	return svcerr.FailedPrecondition("worktree is archived; unarchive it before performing git operations")
 }
 
 // wakeIfAsleep asks the target machine a cheap question before a write that

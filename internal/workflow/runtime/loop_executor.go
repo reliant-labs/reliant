@@ -230,7 +230,7 @@ func (e *InlineLoopExecutor) WithThreadTracker(tracker *ThreadTracker) *InlineLo
 
 // WithExecContext sets the unified execution context.
 func (e *InlineLoopExecutor) WithExecContext(ctx *ExecutionContext) *InlineLoopExecutor {
-	e.execContext = ctx
+	e.execContext = e.childTracker.ambientMemoryContext(ctx, e.loopStep.Node)
 	return e
 }
 
@@ -854,6 +854,11 @@ func (e *InlineLoopExecutor) execute() (*reliantv1.LoopOutput, error) {
 	// Load sub-workflow definition
 	if err := e.loadSubWorkflow(); err != nil {
 		return nil, fmt.Errorf("failed to load loop sub-workflow: %w", err)
+	}
+	// Listed as a thread an agent reads while this loop runs, so a message
+	// to the run can find it (agent_loop_threads.go).
+	if release := e.registerAgentLoop(); release != nil {
+		defer release()
 	}
 
 	// If the sequential loop has an items expression, resolve it upfront
@@ -1707,20 +1712,21 @@ func (e *InlineLoopExecutor) executeIteration(askUserHandoff *toolBatchHandoff, 
 						}
 
 						if initErr := initChildWorkflow(ChildWorkflowInitOpts{
-							Ctx:              e.ctx,
-							ChatID:           e.chatID,
-							ParentWorkflowID: parentWorkflowID,
-							ChildWorkflowID:  e.workflowID, // Inline workflows use parent's workflow ID
-							ChildThreadID:    childExecCtx.Thread,
-							WorkflowName:     contract.WorkflowIdentity,
-							ThreadTitle:      ptr.StringIfNotEmpty(childExecCtx.ThreadTitle),
-							ThreadMode:       model.NodeThreadMode(evalResult),
-							ForkFromThread:   childExecCtx.ForkedFrom,
-							ParentThread:     iterExecContext.Thread,
-							SpawnedByNodeID:  step.Node.GetId(),
-							LoopIteration:    loopIter,
-							InjectMessage:    injectMsg,
-							Logger:           e.logger,
+							Ctx:                  e.ctx,
+							ChatID:               e.chatID,
+							ParentWorkflowID:     parentWorkflowID,
+							ChildWorkflowID:      e.workflowID, // Inline workflows use parent's workflow ID
+							ChildThreadID:        childExecCtx.Thread,
+							ExcludeAmbientMemory: childExecCtx.ExcludeAmbientMemory || model.NodeThreadConfig(evalResult).GetExcludeAmbientMemory(),
+							WorkflowName:         contract.WorkflowIdentity,
+							ThreadTitle:          ptr.StringIfNotEmpty(childExecCtx.ThreadTitle),
+							ThreadMode:           model.NodeThreadMode(evalResult),
+							ForkFromThread:       childExecCtx.ForkedFrom,
+							ParentThread:         iterExecContext.Thread,
+							SpawnedByNodeID:      step.Node.GetId(),
+							LoopIteration:        loopIter,
+							InjectMessage:        injectMsg,
+							Logger:               e.logger,
 						}); initErr != nil {
 							e.logger.Error("[InlineLoop] Failed to initialize child workflow thread",
 								"stepID", step.Node.GetId(),
@@ -1780,6 +1786,7 @@ func (e *InlineLoopExecutor) executeIteration(askUserHandoff *toolBatchHandoff, 
 				}
 
 				// Store output for edge routing
+				inlineOutput = publishWorkflowNodeOutputs(e.ctx, step.Node, inlineOutput)
 				iterNodeOutputs[step.Node.GetId()] = inlineOutput
 
 				// Execute save_message if configured on the inline workflow node

@@ -1,0 +1,166 @@
+import { describe, expect, it } from "vitest";
+import { ToolCallStatus } from "../../../gen/reliant/v1/chat_pb";
+import {
+  formatTurnWorkHeadline,
+  formatTurnWorkElapsed,
+  formatTurnWorkCounts,
+  summarizeTurnWork,
+  type TurnWorkExecution,
+} from "../turnWorkSummary";
+
+function exec(
+  name: string,
+  extra: Partial<TurnWorkExecution> & { input?: Record<string, unknown> } = {},
+): TurnWorkExecution {
+  const { input, ...rest } = extra;
+  return {
+    call: { id: `${name}-${Math.random()}`, name, input: input ?? {} },
+    result: { is_error: false },
+    ...rest,
+  };
+}
+
+describe("summarizeTurnWork", () => {
+  it("buckets calls by category, splitting web from local search", () => {
+    const s = summarizeTurnWork([
+      exec("view"),
+      exec("view"),
+      exec("grep"),
+      exec("websearch"),
+      exec("fetch"),
+      exec("shell"),
+      exec("edit"),
+      exec("create_plan"),
+      exec("spawn"),
+      exec("mcp__thing__tool"),
+    ]);
+    expect(s.total).toBe(10);
+    expect(s.counts).toEqual({
+      read: 2,
+      searched: 1,
+      web: 2,
+      ran: 1,
+      edited: 1,
+      planned: 1,
+      spawned: 1,
+      other: 1,
+    });
+    expect(s.running).toBe(0);
+    expect(s.failed).toBe(0);
+  });
+
+  it("names the latest finished step when nothing is running, so the live line never blanks", () => {
+    expect(summarizeTurnWork([]).current).toBeUndefined();
+    const s = summarizeTurnWork([
+      exec("view", { input: { file_path: "src/a.ts" } }),
+      exec("view", { input: { file_path: "src/ChatInput.tsx" } }),
+    ]);
+    expect(s.running).toBe(0);
+    expect(s.current).toContain("ChatInput.tsx");
+    expect(s.current).not.toMatch(/^Reading /);
+  });
+
+  it("counts failed from error results and failed status, running from unresolved calls", () => {
+    const s = summarizeTurnWork([
+      exec("shell", { result: { is_error: true } }),
+      exec("edit", { result: undefined, status: "failed" }),
+      exec("view", { result: undefined, status: "executing" }),
+      exec("grep", { result: undefined, call: { id: "g", name: "grep", durableStatus: ToolCallStatus.COMPLETED } }),
+      exec("shell", { result: undefined, status: "cancelled" }),
+    ]);
+    expect(s.failed).toBe(2);
+    expect(s.running).toBe(1);
+  });
+
+  it("labels the latest running call with its live verb and argument", () => {
+    const s = summarizeTurnWork([
+      exec("view", { result: undefined, status: "executing", input: { path: "src/a.ts" } }),
+      exec("view", {
+        result: undefined,
+        status: "executing",
+        input: { path: "src/components/Chat/ChatInput.tsx" },
+      }),
+    ]);
+    expect(s.running).toBe(2);
+    expect(s.current).toMatch(/^Reading /);
+    expect(s.current).toContain("ChatInput.tsx");
+  });
+
+  it("truncates a long label", () => {
+    const s = summarizeTurnWork(
+      [exec("websearch", { result: undefined, status: "executing", input: { query: "x".repeat(200) } })],
+      { maxLabelLength: 20 },
+    );
+    expect(s.current!.length).toBeLessThanOrEqual("Searching the web for ".length + 20);
+    expect(s.current!.endsWith("…")).toBe(true);
+  });
+
+  it("takes a dispatched spawn's status from its child workflow", () => {
+    const spawn = (id: string): TurnWorkExecution => ({
+      call: { id, name: "spawn", childWorkflowId: `wf-${id}` },
+      result: { is_error: false },
+      status: "completed",
+    });
+    const s = summarizeTurnWork([spawn("a"), spawn("b"), spawn("c"), spawn("d")], {
+      spawnStatus: (call) =>
+        ({ "wf-a": "executing", "wf-b": "completed", "wf-c": "failed" })[call.childWorkflowId!],
+    });
+    // d: unknown workflow yet -> running, like ToolExecutionGroup
+    expect(s.spawnsRunning).toBe(2);
+    expect(s.running).toBe(2);
+    expect(s.failed).toBe(1);
+  });
+});
+
+describe("formatTurnWorkHeadline", () => {
+  const base = summarizeTurnWork([]);
+
+  it("leads with the action and keeps parallel-agent activity stable", () => {
+    const s = { ...base, current: "Reading ChatInput.tsx" };
+    expect(formatTurnWorkHeadline(s, { live: true })).toBe("Reading ChatInput.tsx");
+    for (const spawnsRunning of [1, 2, 5]) {
+      const label = `Coordinating ${spawnsRunning} ${spawnsRunning === 1 ? "agent" : "agents"}`;
+      expect(formatTurnWorkHeadline({ ...s, spawnsRunning }, { live: true })).toBe(label);
+      expect(formatTurnWorkHeadline({ ...s, current: "Running tests", spawnsRunning }, { live: true })).toBe(label);
+    }
+    expect(formatTurnWorkHeadline(base, { live: true })).toBe("Thinking");
+  });
+
+  it("done: plain Activity, counts noun-first with zeros omitted", () => {
+    const s = summarizeTurnWork([
+      ...Array.from({ length: 6 }, () => exec("view")),
+      ...Array.from({ length: 3 }, () => exec("shell")),
+      ...Array.from({ length: 3 }, () => exec("edit")),
+    ]);
+    expect(formatTurnWorkHeadline(s, { live: false, elapsedMs: 72_000 })).toBe("Activity");
+    expect(formatTurnWorkCounts(s)).toBe("6 files read · 3 commands · 3 files edited");
+  });
+
+  it("pluralizes each noun", () => {
+    const one = summarizeTurnWork([
+      exec("view"), exec("grep"), exec("websearch"), exec("shell"),
+      exec("edit"), exec("update_plan"), exec("spawn"), exec("mcp__x__y"),
+    ]);
+    expect(formatTurnWorkCounts(one, { messages: 1 })).toBe(
+      "1 file read · 1 search · 1 web lookup · 1 command · 1 file edited · 1 plan update · 1 sub-agent action · 1 other tool · 1 agent message",
+    );
+    const many = summarizeTurnWork([
+      exec("grep"), exec("grep"), exec("websearch"), exec("fetch"),
+      exec("mcp__x__y"), exec("mcp__x__z"), exec("spawn"), exec("spawn"),
+    ]);
+    expect(formatTurnWorkCounts(many, { messages: 4 })).toBe(
+      "2 searches · 2 web lookups · 2 sub-agent actions · 2 other tools · 4 agent messages",
+    );
+    expect(formatTurnWorkCounts(base, { messages: 2 })).toBe("2 agent messages");
+    expect(formatTurnWorkCounts(base)).toBe("");
+  });
+
+  it.each([
+    [null, null], [Number.NaN, null], [Number.POSITIVE_INFINITY, null],
+    [-1, "0:00"], [300, "0:00"], [59_999, "0:59"], [60_000, "1:00"],
+    [72_000, "1:12"], [3_600_000, "1:00:00"], [3_723_000, "1:02:03"],
+  ])("formats elapsed %s as %s independently of the headline", (ms, expected) => {
+    expect(formatTurnWorkElapsed(ms)).toBe(expected);
+    expect(formatTurnWorkHeadline(base, { live: false, elapsedMs: ms })).toBe("Activity");
+  });
+});

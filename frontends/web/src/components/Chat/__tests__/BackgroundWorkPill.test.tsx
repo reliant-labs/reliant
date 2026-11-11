@@ -22,9 +22,12 @@
  *    failure stopped it and nothing else, so it is not a chat-wide banner.
  *    Retry asks the agent's PARENT to resume it; a resumed or dismissed
  *    failure leaves the strip.
+ *  - on a phone the strip lives in the status sheet, and opening that sheet
+ *    shows every agent at once: there it never starts collapsed and offers no
+ *    way to collapse the list.
  */
 
-import { fireEvent, screen, waitFor } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { renderWithQuery } from "../../../test/renderWithQuery";
@@ -58,6 +61,7 @@ import type { BackgroundProcessSchema } from "../../../gen/reliant/v1/background
 import { setTransport } from "../../../lib/connect";
 import { mockTransport } from "../../../lib/test-utils";
 import { BackgroundWorkPill, DISMISSED_FAILED_AGENTS_KEY } from "../BackgroundWorkPill";
+import { ComposerStatusSlot, StatusSlotItem } from "../ComposerStatusSlot";
 import { toast } from "../../../lib/toast-manager";
 
 const originalCancelToolCall = useChatStore.getState().cancelToolCall;
@@ -611,6 +615,62 @@ describe("BackgroundWorkPill", () => {
       const pill = screen.getByTestId("background-work-pill");
       expect(pill).toHaveTextContent("implementer stopped");
       expect(pill).toHaveTextContent("1 agent running");
+    });
+  });
+
+  // On a phone the strip folds into the status slot's one line, and tapping
+  // "N running" opens the sheet. Opening it onto a collapsed list meant a
+  // second tap to see the agents the user had just asked to see, so in the
+  // sheet the list is always shown and there is no collapse toggle at all.
+  describe("in the phone status sheet", () => {
+    function renderInSheet(props: Partial<React.ComponentProps<typeof BackgroundWorkPill>> = {}) {
+      return renderWithQuery(
+        <ComposerStatusSlot
+          layout="compact"
+          upper={null}
+          approvals={null}
+          lower={
+            <StatusSlotItem id="background">
+              <BackgroundWorkPill chatId={CHAT_ID} worktreeId={WORKTREE_ID} {...props} />
+            </StatusSlotItem>
+          }
+        />,
+      );
+    }
+
+    it("opens with every running agent listed, and offers no way to collapse them", () => {
+      useThreadActivityStore.getState().setThreads(CHAT_ID, [
+        thread({ thread: "thread-1", workflow_id: "wf-1", thread_title: "researcher" }),
+        thread({ thread: "thread-2", workflow_id: "wf-2", thread_title: "reviewer" }),
+      ]);
+      const onSelectThread = vi.fn();
+      renderInSheet({ onSelectThread });
+
+      fireEvent.click(screen.getByTestId("status-slot-line-background"));
+      const sheet = screen.getByTestId("status-slot-sheet");
+
+      expect(within(sheet).getByTestId("background-work-spawn-thread-1")).toBeVisible();
+      expect(within(sheet).getByTestId("background-work-spawn-thread-2")).toBeVisible();
+
+      const header = within(sheet).getByTestId("background-work-pill");
+      expect(header.tagName).not.toBe("BUTTON");
+      expect(header).not.toHaveAttribute("aria-expanded");
+      fireEvent.click(header);
+      expect(within(sheet).getByTestId("background-work-spawn-thread-1")).toBeVisible();
+
+      fireEvent.click(within(sheet).getByTestId("background-work-spawn-thread-2"));
+      expect(onSelectThread).toHaveBeenCalledWith("thread-2");
+    });
+
+    it("still collapses inline outside the sheet, where the list would push the transcript", () => {
+      useThreadActivityStore.getState().setThreads(CHAT_ID, [thread({ thread: "thread-1" })]);
+      renderPill();
+
+      const pill = screen.getByTestId("background-work-pill");
+      expect(pill).toHaveAttribute("aria-expanded", "false");
+      expect(screen.queryByTestId("background-work-spawn-thread-1")).toBeNull();
+      fireEvent.click(pill);
+      expect(screen.getByTestId("background-work-spawn-thread-1")).toBeVisible();
     });
   });
 });

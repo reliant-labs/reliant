@@ -14,6 +14,7 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/logging"
 )
@@ -32,7 +33,7 @@ func (s *Service) chatBelongsToUser(ctx context.Context, chatID string) error {
 	if err != nil {
 		return svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}
-	if chat == nil || chat.UserID != userID {
+	if !authz.CanWriteChat(ctx, userID, chat) {
 		return svcerr.NotFound("approval")
 	}
 	return nil
@@ -260,6 +261,14 @@ func denialReasonOr(reason *string, fallback string) string {
 // chat they belong to, how many it resolved and how many it skipped as
 // already resolved.
 //
+// Only a person, or a token granted approvals:decide explicitly, decides an
+// approval (auth.RequireApprovalDecider), or nothing is read or written. This
+// is the authority; the interceptor's scope check in front of it is a first
+// gate. reliant:api is refused, and so is any token bound to a machine, scope
+// or not. Owning the chat is not enough, because an agent's shell holds the
+// owner's CLI login, and an approval it could answer itself — a release-gate
+// waiver, a promotion — would gate nothing (reliant #2123).
+//
 // Every id is checked before anything is written: it must exist, and all of
 // them must be one chat the caller owns. An approval already decided — on
 // another surface, or by its run timing out — is skipped, read again inside
@@ -269,6 +278,14 @@ func denialReasonOr(reason *string, fallback string) string {
 // is what lets a batch approve what is left of itself after one of its
 // approvals expired or was decided elsewhere.
 func (s *Service) resolveApprovals(ctx context.Context, ids []string, d decision) (string, int, int, error) {
+	if userID, ok := auth.GetUserIDFromContext(ctx); !ok || userID == "" {
+		return "", 0, 0, svcerr.Unauthenticated("user ID not found in context")
+	}
+	if err := auth.RequireApprovalDecider(ctx, "decide an approval"); err != nil {
+		logging.WarnContext(ctx, "[Approval] Refused a decision made with a credential that may not decide",
+			"credential", auth.CredentialFromContext(ctx).String(), "approvalIDs", ids)
+		return "", 0, 0, err
+	}
 	var chatID string
 	for _, id := range ids {
 		approval, err := s.deps.Repo.GetApproval(ctx, id)
@@ -335,6 +352,7 @@ func (s *Service) resolveApprovals(ctx context.Context, ids []string, d decision
 			if actionTaken != nil {
 				updateData["action_taken"] = *actionTaken
 			}
+			db.AttributeApprovalUpdate(updateData, approval)
 			updateDataJSON, err := json.Marshal(updateData)
 			if err != nil {
 				return fmt.Errorf("failed to marshal chat_update data: %w", err)

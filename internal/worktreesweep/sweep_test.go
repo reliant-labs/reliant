@@ -195,7 +195,7 @@ func TestSweep_AdoptsUnattributedRows(t *testing.T) {
 
 	e := newEnv(t)
 	wt, path := e.worktree(t, "legacy", true)
-	_, err := e.repo.DB.ExecContext(e.ctx, `UPDATE worktrees SET daemon_id = NULL WHERE id = $1`, wt.ID)
+	_, err := e.repo.DB.DB(e.ctx).ExecContext(e.ctx, `UPDATE worktrees SET daemon_id = NULL WHERE id = $1`, wt.ID)
 	require.NoError(t, err)
 	// With no machine on record the first pass only asks who has the folder
 	// (archived, no fence): never a removal.
@@ -215,7 +215,7 @@ func TestSweep_SkipsOfflineDaemon(t *testing.T) {
 
 	e := newEnv(t)
 	_, path := e.worktree(t, "offline", true)
-	_, err := e.repo.DB.ExecContext(e.ctx, `DELETE FROM daemon_attachment WHERE daemon_id = $1`, e.daemon)
+	_, err := e.repo.DB.DB(e.ctx).ExecContext(e.ctx, `DELETE FROM daemon_attachment WHERE daemon_id = $1`, e.daemon)
 	require.NoError(t, err)
 	require.NoError(t, e.sweeper.Sweep(e.ctx))
 	assert.True(t, exists(path))
@@ -315,7 +315,7 @@ func TestCleanup_OfflineMachineIsRefused(t *testing.T) {
 	wt, path := e.worktree(t, "off", true)
 	require.NoError(t, os.WriteFile(filepath.Join(path, "wip.txt"), []byte("x"), 0o644))
 	require.NoError(t, e.sweeper.Sweep(e.ctx))
-	_, err := e.repo.DB.ExecContext(e.ctx, `DELETE FROM daemon_attachment WHERE daemon_id = $1`, e.daemon)
+	_, err := e.repo.DB.DB(e.ctx).ExecContext(e.ctx, `DELETE FROM daemon_attachment WHERE daemon_id = $1`, e.daemon)
 	require.NoError(t, err)
 	_, _, err = e.sweeper.Cleanup(e.ctx, e.repo, e.userID, e.daemon, []string{wt.ID})
 	assert.ErrorIs(t, err, ErrOffline)

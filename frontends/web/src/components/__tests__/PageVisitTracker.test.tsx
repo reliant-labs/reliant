@@ -41,11 +41,11 @@ import { track } from "@reliantlabs/forge-web-runtime";
 import { PageVisitTracker } from "../PageVisitTracker";
 import { routeTemplate } from "../../lib/pageVisit";
 
-function makeRouter(initial: string) {
+function makeRouter(initial: string, firstVisitProps?: Record<string, string>) {
   const root = createRootRoute({
     component: () => (
       <>
-        <PageVisitTracker />
+        <PageVisitTracker firstVisitProps={firstVisitProps} />
         <Outlet />
       </>
     ),
@@ -90,7 +90,7 @@ describe("PageVisitTracker", () => {
     render(<RouterProvider router={router} />);
 
     await waitFor(() => expect(pageEvents()).toHaveLength(1));
-    expect(pageEvents()[0][1]).toEqual({ page_name: "/project/$projectId" });
+    expect(pageEvents()[0][1]).toEqual({ surface: "reliant", page_name: "/project/$projectId" });
     expect(JSON.stringify(vi.mocked(track).mock.calls)).not.toMatch(
       /9f1c2d3e|token=abc|rcl_claimtoken/,
     );
@@ -100,18 +100,30 @@ describe("PageVisitTracker", () => {
     const router = makeRouter("/");
     render(<RouterProvider router={router} />);
     await waitFor(() => expect(pageEvents()).toHaveLength(1));
-    expect(pageEvents()[0][1]).toEqual({ page_name: "/" });
+    expect(pageEvents()[0][1]).toEqual({ surface: "reliant", page_name: "/" });
 
     await act(() => router.navigate({ to: "/settings" }));
     await waitFor(() => expect(pageEvents()).toHaveLength(2));
-    expect(pageEvents()[1][1]).toEqual({ page_name: "/settings", previous_page: "/" });
+    expect(pageEvents()[1][1]).toEqual({ surface: "reliant", page_name: "/settings", previous_page: "/" });
 
     await act(() => router.navigate({ to: "/project/$projectId", params: { projectId: "abc" } }));
     await waitFor(() => expect(pageEvents()).toHaveLength(3));
     expect(pageEvents()[2][1]).toEqual({
+      surface: "reliant",
       page_name: "/project/$projectId",
       previous_page: "/settings",
     });
+  });
+
+  it("stamps the entry props (the forge shell's landing handoff) on the first visit only", async () => {
+    const router = makeRouter("/", { rid: "visitor_12345678", journey: "forge" });
+    render(<RouterProvider router={router} />);
+    await waitFor(() => expect(pageEvents()).toHaveLength(1));
+    expect(pageEvents()[0][1]).toEqual({ surface: "reliant", rid: "visitor_12345678", journey: "forge", page_name: "/" });
+
+    await act(() => router.navigate({ to: "/settings" }));
+    await waitFor(() => expect(pageEvents()).toHaveLength(2));
+    expect(pageEvents()[1][1]).toEqual({ surface: "reliant", page_name: "/settings", previous_page: "/" });
   });
 
   it("does not count a search-only change as a visit", async () => {

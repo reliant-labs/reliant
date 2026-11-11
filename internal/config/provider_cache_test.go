@@ -2,13 +2,14 @@ package config
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	"github.com/stretchr/testify/require"
 )
@@ -52,7 +53,7 @@ func (s *versionedStore) GetProjectConfigRecord(_ context.Context, projectID str
 	defer s.mu.Unlock()
 	r, ok := s.records[projectID]
 	if !ok {
-		return nil, sql.ErrNoRows
+		return nil, svcerr.NotFound("project config")
 	}
 	return r, nil
 }
@@ -63,7 +64,7 @@ func (s *versionedStore) GetProjectConfigVersion(_ context.Context, projectID st
 	defer s.mu.Unlock()
 	v, ok := s.versions[projectID]
 	if !ok {
-		return "", sql.ErrNoRows
+		return "", svcerr.NotFound("project config")
 	}
 	return v, nil
 }

@@ -201,6 +201,10 @@ type FindReplaceChange struct {
 // Executor types
 // ---------------------------------------------------------------------------
 
+// WritableScopeBoundShell is RunCommandRequest.WritableCheckoutsScope for
+// writable checkouts a workflow bound on an agent's shell tool.
+const WritableScopeBoundShell = "bound_shell"
+
 // RunCommandRequest describes a command to execute.
 type RunCommandRequest struct {
 	// Command is the shell command to run (passed to bash -c).
@@ -229,6 +233,21 @@ type RunCommandRequest struct {
 	// own environment. It is a seatbelt for what Reliant hands out, not a
 	// sandbox: the daemon user's files stay readable.
 	Credentials string `json:"credentials,omitempty"`
+	// WritableCheckouts are the shared project checkouts, or directories
+	// inside one, that a credentials-none command may write, and the
+	// hand-off directories inside the user's cache directory it writes for
+	// real. Such a command otherwise sees every project checkout but its own
+	// read-only, and writes the cache directories privately
+	// (internal/credsandbox). Relative paths are relative to WorkingDir. A
+	// daemon older than the field ignores it, and leaves every checkout
+	// writable as it always did.
+	WritableCheckouts []string `json:"writable_checkouts,omitempty"`
+	// WritableCheckoutsScope says who declared WritableCheckouts: "" a
+	// workflow run node, WritableScopeBoundShell a workflow binding of an
+	// agent's shell (whose commands a model writes), which may name only
+	// hand-off directories in the cache directory. A daemon older than the
+	// field ignores it with WritableCheckouts.
+	WritableCheckoutsScope string `json:"writable_checkouts_scope,omitempty"`
 	// Heavy declares the command heavy — a whole-module build, a test suite,
 	// codegen — whatever its words are, so it queues for one of the machine's
 	// heavy slots like the commands the daemon recognizes by itself (see
@@ -353,7 +372,9 @@ type ProcessInfo struct {
 	ID string `json:"id"`
 	// Command is the command that was executed.
 	Command string `json:"command"`
-	// Status is the process state: "running", "completed", "failed", or "killed".
+	// Status is the process state: "running", "completed", "failed",
+	// "killed", "killed_externally", or "stale" (a record restored after a
+	// daemon restart that lost the process).
 	Status string `json:"status"`
 	// ExitCode is the process exit code (nil if still running).
 	ExitCode *int `json:"exit_code,omitempty"`
@@ -436,18 +457,20 @@ type ProcessStatusRequest struct {
 type ProcessStatusResponse struct {
 	// Processes holds one entry per requested id the daemon is tracking.
 	Processes []ProcessStatusInfo `json:"processes"`
-	// Unknown lists requested ids the daemon has no record of. The registry
-	// is in-memory, so a daemon that restarted has forgotten every process
-	// it started before — and the restart killed them (KillAllRunning on
-	// shutdown), so an unknown id is a process that has ended.
+	// Unknown lists requested ids the daemon has no record of. A daemon
+	// restores the records its predecessor journaled (a process lost in the
+	// restart comes back "stale"), but an older daemon, or one whose journal
+	// was pruned or unwritable, has forgotten them — and the restart killed
+	// them (KillAllRunning on shutdown), so an unknown id is a process that
+	// has ended.
 	Unknown []string `json:"unknown,omitempty"`
 }
 
 // ProcessStatusInfo is one tracked process's lifecycle state.
 type ProcessStatusInfo struct {
 	ID string `json:"id"`
-	// Status is "running", "completed", "failed", "killed" or
-	// "killed_externally".
+	// Status is "running", "completed", "failed", "killed",
+	// "killed_externally" or "stale" (restored after a restart that lost it).
 	Status   string     `json:"status"`
 	ExitCode *int       `json:"exit_code,omitempty"`
 	EndTime  *time.Time `json:"end_time,omitempty"`

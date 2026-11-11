@@ -65,6 +65,7 @@ import {
   ComputeSubscriptionCheckout,
   type ComputePlanOption,
 } from "@/components/Billing/ComputeSubscriptionCheckout";
+import { MachinePlanChange } from "@/components/Billing/MachinePlanChange";
 // The machine list, its derivation, and the uniform facts beneath it — shared
 // with the onboarding compute step so one choice has one presentation.
 import { MachinePricingLine, PlanTiles, commonPlanHours } from "@/components/Billing/PlanTiles";
@@ -82,7 +83,7 @@ import {
   sizeName,
   storageCard,
 } from "@/components/Billing/daemonUsage";
-import { deriveMachineOptions } from "@/components/Billing/machineOptions";
+import { deriveMachineOptions, oneRowPerPlan } from "@/components/Billing/machineOptions";
 import { MACHINE_BURST } from "@/components/Billing/machineSpecs";
 import { LinkIdentityModal } from "@/components/Billing/LinkIdentityModal";
 import { WalletTopupCheckout } from "@/components/Billing/WalletTopupCheckout";
@@ -117,6 +118,7 @@ import { MachinePricingReadinessPanel } from "@/components/Billing/MachinePricin
 import { exactCentsLabel, exactHours } from "@/lib/exact-rational";
 import { useActiveOrg } from "@/hooks/useOrgs";
 import { formatPrice } from "@/components/Billing/priceFormat";
+import { isSafeReturnTo } from "@/lib/returnTo";
 
 /**
  * Overview, plans, usage — and Reliant AI, the managed keys and spend that
@@ -492,7 +494,7 @@ function BackToOrigin({ returnTo }: { returnTo?: string }) {
  * never protocol-relative (`//evil.com`). Undefined for anything else.
  */
 function sameOriginPath(returnTo: string | undefined): string | undefined {
-  return returnTo && returnTo.startsWith("/") && !returnTo.startsWith("//") ? returnTo : undefined;
+  return isSafeReturnTo(returnTo) ? returnTo : undefined;
 }
 
 // ── Shared bits ─────────────────────────────────────────────────────────
@@ -1181,7 +1183,7 @@ function PlansTab() {
    * plan, so a row can be `current`.
    */
   const planOptions: ComputePlanOption[] = useMemo(
-    () => deriveMachineOptions(computePlans, plansQ.data?.daemonPricing),
+    () => oneRowPerPlan(deriveMachineOptions(computePlans, plansQ.data?.daemonPricing)),
     [computePlans, plansQ.data?.daemonPricing],
   );
 
@@ -1262,6 +1264,16 @@ function PlansTab() {
             description="Compute plans are not configured for this environment yet."
           />
         )
+      ) : checkoutPlanId && currentPlanId ? (
+        /* An existing subscriber changes plan rather than buying a second
+           one: an upgrade is charged the prorated difference now, a
+           downgrade waits for the next billing period. The resize and disk
+           modals' "See plans" land here too. */
+        <MachinePlanChange
+          planId={checkoutPlanId}
+          onDone={handleCheckoutDone}
+          onCancel={() => setCheckoutPlanId(null)}
+        />
       ) : checkoutPlanId ? (
         /* The checkout REPLACES the list rather than sitting above it.
         

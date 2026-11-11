@@ -7,7 +7,9 @@ package store
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sort"
 	"time"
@@ -38,7 +40,304 @@ func AppendChatUpdate(ctx context.Context, db orm.Context, chatID string, update
 	if err := CreateChatUpdate(ctx, db, row); err != nil {
 		return core.ChatUpdate{}, err
 	}
+	if err := ApplyChatUpdateHead(ctx, db, row); err != nil {
+		return core.ChatUpdate{}, err
+	}
 	return chatUpdateFromRow(row), nil
+}
+
+// ApplyChatUpdateHead keeps chat_update_heads equal to what SnapshotHeadsSQL
+// would compute from the log, for one just-inserted log row: if its type is a
+// snapshot head, it becomes its key's head unless that key already holds a
+// newer one. It MUST run in the transaction that inserted the row, the one
+// that allocated its sequence (AllocateUpdateSequence advanced the chat's
+// heads_through_seq there, vouching that this write maintains the heads).
+// Every chat_updates insert goes through here: AppendChatUpdate and
+// SaveMessageAtomic. dev-docs/design/chat-update-heads.md has the design.
+func ApplyChatUpdateHead(ctx context.Context, db orm.Context, row *ChatUpdate) error {
+	if !isSnapshotHeadType(row.UpdateType) {
+		return nil
+	}
+	if _, err := db.Exec(ctx, applyChatUpdateHeadSQL,
+		row.ChatID, row.ID, row.SequenceNumber, int32(row.UpdateType), row.EntityID, row.Data, row.CreatedAt,
+	); err != nil {
+		return fmt.Errorf("apply chat update head: %w", err)
+	}
+	return nil
+}
+
+// isSnapshotHeadType is whether an update type can be a snapshot head: every
+// type outside SnapshotHeadsSQL's exclusion list (1, 4, 5, 9, 19, 20) once the
+// re-keyed THREAD and QUESTION are counted in. It only saves the statement for
+// the types that are never heads; chatUpdateHeadKeySQL's filter is the
+// authority, so a type wrongly listed here as a head is harmless, and the
+// differential test (TestChatUpdateHeads_MatchTheLog) catches one wrongly
+// left out.
+func isSnapshotHeadType(t reliantv1.ChatUpdateType) bool {
+	switch t {
+	case reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_MESSAGE,
+		reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_TOOL_CALL,
+		reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_WORKFLOW_STATUS,
+		reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_NODE_EXECUTION,
+		reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_STREAM_FINALIZED,
+		reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_AGENT_MESSAGES_DRAINED:
+		return false
+	}
+	return true
+}
+
+// chatUpdateHeadKeySQL is a chat_updates row's key in chat_update_heads, over
+// the columns update_type, entity_id and data: 'e:' || entity_id for the types
+// SnapshotHeadsSQL's skip scan keys by entity, 'r:' || SnapshotRekeyKeySQL for
+// THREAD and QUESTION, NULL for every type that is no head. The prefixes keep
+// the two halves of SnapshotHeadsSQL apart, as its UNION does: an entity id
+// that equals a re-key key is two heads there, and two here. The type lists
+// are SnapshotHeadsSQL's literals (TestSnapshotHeadsQueryMatchesPartialIndex
+// pins those to the enum).
+const chatUpdateHeadKeySQL = `CASE
+	WHEN update_type IN (3, 18) THEN 'r:' || (` + SnapshotRekeyKeySQL + `)
+	WHEN update_type NOT IN (1, 4, 5, 9, 19, 20) THEN 'e:' || entity_id
+	END`
+
+// chatUpdateHeadUpsertSQL is the tail every write to chat_update_heads ends
+// with: a key's head only ever moves to a higher sequence, so writers and the
+// backfill may interleave in any order and still converge on the newest row.
+const chatUpdateHeadUpsertSQL = `
+	ON CONFLICT (chat_id, head_key) DO UPDATE SET
+		update_id = excluded.update_id,
+		sequence_number = excluded.sequence_number,
+		update_type = excluded.update_type,
+		entity_id = excluded.entity_id,
+		data = excluded.data,
+		created_at = excluded.created_at
+	WHERE excluded.sequence_number > chat_update_heads.sequence_number`
+
+// applyChatUpdateHeadSQL makes one log row its key's head. The row's values
+// are passed rather than read back from chat_updates, which saves an index
+// probe on every head write; the key is still computed by Postgres, from the
+// same values the log row holds, through the same expression. At READ
+// COMMITTED (the writers' level) a concurrent upsert of the same key waits
+// for the row and then judges the WHERE against its committed version, so the
+// higher sequence wins either way.
+const applyChatUpdateHeadSQL = `
+	INSERT INTO chat_update_heads (chat_id, head_key, update_id, sequence_number, update_type, entity_id, data, created_at)
+	SELECT chat_id, head_key, id, sequence_number, update_type, entity_id, data, created_at
+	  FROM (SELECT v.chat_id, v.id, v.sequence_number, v.update_type, v.entity_id, v.data, v.created_at,
+	               (` + chatUpdateHeadKeySQL + `) AS head_key
+	          FROM (VALUES ($1::text, $2::text, $3::bigint, $4::integer, $5::text, $6::text, $7::timestamptz))
+	               AS v(chat_id, id, sequence_number, update_type, entity_id, data, created_at)) r
+	 WHERE head_key IS NOT NULL` + chatUpdateHeadUpsertSQL
+
+// backfillChatUpdateHeadsSQL upserts the heads SnapshotHeadsSQL computes from
+// the log: the backfill's one slow statement, the skip scan through
+// idx_chat_updates_snapshot_entity_heads and idx_chat_updates_snapshot_rekey_heads.
+// Each key appears once in its result (one head per entity, one per re-key
+// key, in separate namespaces), as ON CONFLICT DO UPDATE requires.
+const backfillChatUpdateHeadsSQL = `
+	INSERT INTO chat_update_heads (chat_id, head_key, update_id, sequence_number, update_type, entity_id, data, created_at)
+	SELECT chat_id, head_key, id, sequence_number, update_type, entity_id, data, created_at
+	  FROM (SELECT s.chat_id, s.id, s.sequence_number, s.update_type, s.entity_id, s.data, s.created_at,
+	               (` + chatUpdateHeadKeySQL + `) AS head_key
+	          FROM (` + SnapshotHeadsSQL + `) s) r
+	 WHERE head_key IS NOT NULL` + chatUpdateHeadUpsertSQL
+
+// applyChatUpdateHeadsRangeSQL applies the log rows of ($2, $3] to the heads,
+// the newest per key: what the backfill's last step reads under the counter
+// lock, a range of chat_updates_chat_sequence_key.
+const applyChatUpdateHeadsRangeSQL = `
+	INSERT INTO chat_update_heads (chat_id, head_key, update_id, sequence_number, update_type, entity_id, data, created_at)
+	SELECT DISTINCT ON (head_key) chat_id, head_key, id, sequence_number, update_type, entity_id, data, created_at
+	  FROM (SELECT cu.id, cu.chat_id, cu.sequence_number, cu.update_type, cu.entity_id, cu.data, cu.created_at,
+	               (` + chatUpdateHeadKeySQL + `) AS head_key
+	          FROM chat_updates cu
+	         WHERE cu.chat_id = $1 AND cu.sequence_number > $2 AND cu.sequence_number <= $3) r
+	 WHERE head_key IS NOT NULL
+	 ORDER BY head_key, sequence_number DESC` + chatUpdateHeadUpsertSQL
+
+// lockChatStreamCounterSQL locks a chat's counter row and reads it. Taking the
+// lock waits out every writer that allocated a sequence and has not yet
+// committed (each holds the row from its allocation to its commit), so once it
+// returns, every sequence up to last_assigned_seq is committed or gone.
+const lockChatStreamCounterSQL = `
+	SELECT last_assigned_seq, heads_through_seq FROM update_stream_counters
+	 WHERE stream_kind = 'chat' AND stream_id = $1
+	   FOR UPDATE`
+
+// BackfillChatUpdateHeads makes one chat's heads complete: afterwards
+// chat_update_heads holds what SnapshotHeadsSQL computes from its log, and the
+// counter vouches for it (heads_through_seq = last_assigned_seq). It reports
+// whether it had anything to do; a chat already complete, or with no counter,
+// costs one locked read.
+//
+// Three steps, so the slow one holds no lock a writer needs
+// (dev-docs/design/chat-update-heads.md, "Backfill"):
+//
+//  1. Lock the counter and read L0, then commit: every sequence <= L0 is
+//     committed.
+//  2. With no lock, upsert the heads the log has (backfillChatUpdateHeadsSQL).
+//     It sees every row <= L0. Writers carry on beside it; a writer of this
+//     release upserts its own head, and the upsert is monotone, so their
+//     order does not matter.
+//  3. Lock the counter again and read L1, apply the rows of (L0, L1] (written
+//     meanwhile, by either release), and set heads_through_seq = L1. Holding
+//     the lock, no row above L1 exists.
+//
+// Every log row <= L1 is then reflected. Both steps that lock take the counter
+// row first and head rows after, the writers' order, so they cannot deadlock
+// with a writer. Concurrent backfills of one chat converge the same way.
+// ctx must not carry a transaction: each step is its own.
+func BackfillChatUpdateHeads(ctx context.Context, db orm.Context, chatID string) (bool, error) {
+	if orm.InTx(ctx) {
+		return false, fmt.Errorf("backfill chat update heads: must not run inside a transaction")
+	}
+	var l0, h0 int64
+	found := true
+	if err := db.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
+		err := db.QueryRow(ctx, lockChatStreamCounterSQL, chatID).Scan(&l0, &h0)
+		if errors.Is(err, sql.ErrNoRows) {
+			found = false
+			return nil
+		}
+		return err
+	}); err != nil {
+		return false, fmt.Errorf("backfill chat update heads: read counter: %w", err)
+	}
+	if !found || h0 == l0 {
+		return false, nil
+	}
+
+	if _, err := db.Exec(ctx, backfillChatUpdateHeadsSQL, chatID); err != nil {
+		return false, fmt.Errorf("backfill chat update heads: from the log: %w", err)
+	}
+
+	if err := db.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
+		var l1, h1 int64
+		if err := db.QueryRow(ctx, lockChatStreamCounterSQL, chatID).Scan(&l1, &h1); err != nil {
+			return err
+		}
+		if h1 == l1 {
+			return nil // another backfill finished first
+		}
+		if _, err := db.Exec(ctx, applyChatUpdateHeadsRangeSQL, chatID, l0, l1); err != nil {
+			return err
+		}
+		_, err := db.Exec(ctx, `
+			UPDATE update_stream_counters SET heads_through_seq = last_assigned_seq
+			 WHERE stream_kind = 'chat' AND stream_id = $1`, chatID)
+		return err
+	}); err != nil {
+		return false, fmt.Errorf("backfill chat update heads: catch up: %w", err)
+	}
+	return true, nil
+}
+
+// ChatsWithIncompleteHeads lists, in id order, up to limit chats after
+// afterChatID whose heads the counter does not vouch for: the backfill's work
+// list. It is the state itself, so a backfill that stops resumes where the
+// state says, and a chat the previous release writes to again (a rollback)
+// reappears on it.
+func ChatsWithIncompleteHeads(ctx context.Context, db orm.Context, afterChatID string, limit int) ([]string, error) {
+	rows, err := db.Query(ctx, `
+		SELECT stream_id FROM update_stream_counters
+		 WHERE stream_kind = 'chat' AND stream_id > $1 AND heads_through_seq <> last_assigned_seq
+		 ORDER BY stream_id
+		 LIMIT $2`, afterChatID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var chats []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		chats = append(chats, id)
+	}
+	return chats, rows.Err()
+}
+
+// SnapshotHeadsTableSQL is SnapshotUpdateHeads' statement: the chat's heads
+// from chat_update_heads, but only when its stream counter vouches for them
+// (heads_through_seq = last_assigned_seq: every update the chat has was
+// written by a release that maintains the heads, or applied by the backfill).
+// The first column is that verdict, on every row; an incomplete chat returns
+// one row with NULL heads, and a chat with no counter row returns none. One
+// statement is one snapshot, so the verdict and the heads it vouches for can
+// never straddle a write.
+const SnapshotHeadsTableSQL = `
+	SELECT c.heads_through_seq = c.last_assigned_seq,
+	       h.update_id, h.chat_id, h.sequence_number, h.update_type, h.entity_id, h.data, h.created_at
+	  FROM update_stream_counters c
+	  LEFT JOIN chat_update_heads h
+	         ON h.chat_id = $1 AND c.heads_through_seq = c.last_assigned_seq
+	 WHERE c.stream_kind = 'chat' AND c.stream_id = $1
+	 ORDER BY h.sequence_number`
+
+// Where SnapshotUpdateHeads read a chat's heads from.
+const (
+	HeadsSourceTable       = "heads_table"
+	HeadsSourceLogFallback = "log_fallback"
+)
+
+// SnapshotUpdateHeads is the chat snapshot's update heads, in sequence order:
+// LatestNonMessageUpdatesPerEntity's answer, read from chat_update_heads when
+// the chat's heads are complete and from the log (LatestNonMessageUpdatesPerEntity
+// itself) when they are not — a chat written by the previous release, or not
+// yet backfilled. The source says which.
+func SnapshotUpdateHeads(ctx context.Context, db orm.Context, chatID string) ([]core.ChatUpdate, string, error) {
+	updates, complete, err := chatUpdateHeadsFromTable(ctx, db, chatID)
+	if err != nil {
+		return nil, "", err
+	}
+	if complete {
+		return updates, HeadsSourceTable, nil
+	}
+	updates, err = LatestNonMessageUpdatesPerEntity(ctx, db, chatID)
+	if err != nil {
+		return nil, "", err
+	}
+	return updates, HeadsSourceLogFallback, nil
+}
+
+// chatUpdateHeadsFromTable reads SnapshotHeadsTableSQL: the heads, and whether
+// the counter vouches for them.
+func chatUpdateHeadsFromTable(ctx context.Context, db orm.Context, chatID string) ([]core.ChatUpdate, bool, error) {
+	rows, err := db.Query(ctx, SnapshotHeadsTableSQL, chatID)
+	if err != nil {
+		return nil, false, err
+	}
+	defer rows.Close()
+
+	updates := []core.ChatUpdate{}
+	complete := false
+	for rows.Next() {
+		var (
+			id, rowChat, entity, data sql.NullString
+			seq                       sql.NullInt64
+			typ                       sql.NullInt32
+			createdAt                 sql.NullTime
+		)
+		if err := rows.Scan(&complete, &id, &rowChat, &seq, &typ, &entity, &data, &createdAt); err != nil {
+			return nil, false, err
+		}
+		if !complete || !id.Valid {
+			continue
+		}
+		updates = append(updates, core.ChatUpdate{
+			ID:             id.String,
+			ChatID:         rowChat.String,
+			SequenceNumber: seq.Int64,
+			UpdateType:     reliantv1.ChatUpdateType(typ.Int32),
+			EntityID:       entity.String,
+			Data:           json.RawMessage(data.String),
+			CreatedAt:      createdAt.Time,
+		})
+	}
+	if err := rows.Err(); err != nil {
+		return nil, false, err
+	}
+	return updates, complete, nil
 }
 
 // LatestChatUpdateSequence is the highest sequence number a chat's ledger
@@ -240,6 +539,39 @@ func LatestWorkflowNodeUpdates(ctx context.Context, db orm.Context, chatID, work
 		return []core.ChatUpdate{}, nil
 	}
 	return scanChatUpdates(ctx, db, WorkflowNodeHeadsSQL, chatID, workflowID)
+}
+
+// ErrorUpdatesInRangeSQL is ErrorUpdatesInRange's statement: for each error
+// with an update in [$2, the creation of thread $3's first message at or after
+// seq $4), its newest update INSIDE that range, oldest first. $2 NULL leaves
+// the range open below; no such message leaves it open above. The range is
+// applied before DISTINCT ON on purpose: it is what keeps the read on
+// idx_chat_updates_errors_created. Read through that index.
+const ErrorUpdatesInRangeSQL = `
+		SELECT id, chat_id, sequence_number, update_type, entity_id, data, created_at FROM (
+			SELECT DISTINCT ON (entity_id) id, chat_id, sequence_number, update_type, entity_id, data, created_at
+			  FROM chat_updates
+			 WHERE chat_id = $1 AND update_type = 6
+			   AND ($2::timestamptz IS NULL OR created_at >= $2::timestamptz)
+			   AND created_at < COALESCE(
+					(SELECT m.created_at FROM messages m
+					  WHERE m.thread_id = $3 AND m.seq >= $4
+					  ORDER BY m.seq LIMIT 1),
+					'infinity'::timestamptz)
+			 ORDER BY entity_id, sequence_number DESC
+		) e
+		ORDER BY sequence_number`
+
+// ErrorUpdatesInRange is the errors a page of history holds: raised at or
+// after from (nil: since the chat began) and before the first message of
+// thread at or after beforeSeq, the message the client already shows next.
+// One update per error (a retry series shares one id): its newest attempt
+// inside the range, which is not its newest overall when the series runs on
+// past the range's upper edge. That later attempt lies in history the client
+// already holds, so a caller merging these must never let one replace a newer
+// attempt it has (the web client's applyHistoricalErrors).
+func ErrorUpdatesInRange(ctx context.Context, db orm.Context, chatID string, from *time.Time, thread string, beforeSeq int64) ([]core.ChatUpdate, error) {
+	return scanChatUpdates(ctx, db, ErrorUpdatesInRangeSQL, chatID, from, thread, beforeSeq)
 }
 
 // scanChatUpdates runs a statement selecting chat_updates' columns in table

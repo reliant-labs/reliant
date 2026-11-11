@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"strings"
 	"sync"
@@ -96,7 +97,7 @@ func TestFinish_DiagnosedCheckoutFailuresAreUserErrors(t *testing.T) {
 			if tc.adopt {
 				req.Existing = map[string]ExistingCheckout{"r1": {Path: "/w/demo/feat-1/a", Base: "main"}}
 			}
-			wt, err := Insert(context.Background(), st, req)
+			wt, err := Insert(context.Background(), st, nil, req)
 			require.NoError(t, err)
 
 			err = Finish(context.Background(), st, m, req, wt)
@@ -129,7 +130,7 @@ func TestFinish_UndiagnosedCheckoutFailureIsAServerFault(t *testing.T) {
 	resp := checkoutResponse{Error: "fatal: write error: No space left on device\n"}
 	st, m := &fakeStore{}, &fakeMachine{root: "/w/demo/feat-1", failRepo: "b", failWith: &resp}
 	req := twoRepoReq()
-	wt, err := Insert(context.Background(), st, req)
+	wt, err := Insert(context.Background(), st, nil, req)
 	require.NoError(t, err)
 
 	err = Finish(context.Background(), st, m, req, wt)
@@ -149,7 +150,7 @@ func TestFinish_UserErrorNeverBecomesAnIssue(t *testing.T) {
 	st, m := &fakeStore{}, &fakeMachine{root: "/w/demo/feat-1", failRepo: "b"}
 	req := twoRepoReq()
 	req.BaseBranch = "feat/telemetry-delivery-c2"
-	wt, err := Insert(context.Background(), st, req)
+	wt, err := Insert(context.Background(), st, nil, req)
 	require.NoError(t, err)
 	require.Error(t, Finish(context.Background(), st, m, req, wt))
 
@@ -166,7 +167,7 @@ func TestFinish_UserErrorNeverBecomesAnIssue(t *testing.T) {
 	disk := checkoutResponse{Error: "fatal: write error: No space left on device\n"}
 	st, m = &fakeStore{}, &fakeMachine{root: "/w/demo/feat-2", failRepo: "b", failWith: &disk}
 	req = twoRepoReq()
-	wt, err = Insert(context.Background(), st, req)
+	wt, err = Insert(context.Background(), st, nil, req)
 	require.NoError(t, err)
 	require.Error(t, Finish(context.Background(), st, m, req, wt))
 	assert.NotEmpty(t, errorLines(t, lines), "a server fault on the same path must still be an ERROR")
@@ -185,12 +186,69 @@ func errorLines(t *testing.T, lines *syncBuffer) []map[string]any {
 	return out
 }
 
+// droppedConnection stands in for toolexec's interruption error, which this
+// package cannot import: what it says of itself is all Finish reads.
+type droppedConnection struct{}
+
+func (droppedConnection) Error() string               { return "daemon connection interrupted" }
+func (droppedConnection) ConnectionInterrupted() bool { return true }
+
+// A command whose answer the machine never delivered — too busy to answer in
+// its budget, or its connection dropped under it — is the machine's state.
+// Prod 2026-11-03..06: one saturated cloud machine turned every slow checkout
+// into two ERROR issues ("Failed to create git worktree via daemon", "Worktree
+// creation failed"). It logs at WARN, never ERROR, and the workspace says why
+// it failed instead of "did not finish".
+func TestFinish_MachineThatNeverAnsweredIsAWarningNotAnIssue(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		sendErr error
+		reason  string
+	}{
+		{
+			name: "deadline passed",
+			// The router's shape: its sentinel, wrapped with the transport's text.
+			sendErr: fmt.Errorf("worktree.create: daemon command worktree.create via NATS failed: %w: nats: timeout",
+				svcerr.DeadlineExceeded("the machine did not answer in time")),
+			reason: "checking out b: the machine did not answer in time",
+		},
+		{
+			name:    "connection dropped",
+			sendErr: fmt.Errorf("worktree.create: %w while waiting for command response", droppedConnection{}),
+			reason:  "checking out b: your machine's connection dropped before it answered; try again",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			lines := installProcessLogging(t)
+			st, m := &fakeStore{}, &fakeMachine{root: "/w/demo/feat-1", failRepo: "b", sendErr: tc.sendErr}
+			req := twoRepoReq()
+			wt, err := Insert(context.Background(), st, nil, req)
+			require.NoError(t, err)
+
+			err = Finish(context.Background(), st, m, req, wt)
+			require.Error(t, err)
+
+			assert.Empty(t, errorLines(t, lines), "a machine that did not answer must never be an ERROR")
+			for _, msg := range []string{"Failed to create git worktree via daemon", "Worktree creation failed"} {
+				assert.Equal(t, "WARN", logLine(t, lines, msg)["level"], msg)
+			}
+			row := st.rows[wt.ID]
+			assert.Equal(t, int32(reliantv1.WorktreeStatus_WORKTREE_STATUS_FAILED), row.Status)
+			assert.Equal(t, tc.reason, row.FailureReason, "the user reads what happened to their machine")
+			assert.NotContains(t, row.FailureReason, "nats", "the transport's words stay in the log")
+			deletes := m.cmds("worktree.delete_directory")
+			require.NotEmpty(t, deletes)
+			assert.Equal(t, "/w/demo/feat-1/a", deletes[0].payload["worktree_path"], "the sibling that did check out is still rolled back")
+		})
+	}
+}
+
 func TestInsert_RefusalsAreUserErrors(t *testing.T) {
 	t.Run("invalid branch name", func(t *testing.T) {
 		st := &fakeStore{}
 		req := twoRepoReq()
 		req.Branch = "bad..name"
-		_, err := Insert(context.Background(), st, req)
+		_, err := Insert(context.Background(), st, nil, req)
 		require.Error(t, err)
 		assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
 		assert.Equal(t, svcerr.ClassUser, svcerr.Classify(err))
@@ -201,9 +259,9 @@ func TestInsert_RefusalsAreUserErrors(t *testing.T) {
 	t.Run("name taken", func(t *testing.T) {
 		st := &fakeStore{}
 		req := twoRepoReq()
-		_, err := Insert(context.Background(), st, req)
+		_, err := Insert(context.Background(), st, nil, req)
 		require.NoError(t, err)
-		_, err = Insert(context.Background(), st, req)
+		_, err = Insert(context.Background(), st, nil, req)
 		var taken *NameTakenError
 		require.ErrorAs(t, err, &taken)
 		assert.Equal(t, svcerr.ClassUser, svcerr.Classify(err))
@@ -211,7 +269,7 @@ func TestInsert_RefusalsAreUserErrors(t *testing.T) {
 
 	t.Run("name taken by a concurrent create", func(t *testing.T) {
 		st := &racingStore{fakeStore: &fakeStore{}}
-		_, err := Insert(context.Background(), st, twoRepoReq())
+		_, err := Insert(context.Background(), st, nil, twoRepoReq())
 		var taken *NameTakenError
 		require.ErrorAs(t, err, &taken)
 		assert.ErrorIs(t, err, core.ErrWorktreeNameTaken)
@@ -221,10 +279,10 @@ func TestInsert_RefusalsAreUserErrors(t *testing.T) {
 	t.Run("branch held by another worktree", func(t *testing.T) {
 		st := &fakeStore{}
 		req := twoRepoReq()
-		_, err := Insert(context.Background(), st, req)
+		_, err := Insert(context.Background(), st, nil, req)
 		require.NoError(t, err)
 		req.Name = "other"
-		_, err = Insert(context.Background(), st, req)
+		_, err = Insert(context.Background(), st, nil, req)
 		var held *BranchHeldError
 		require.ErrorAs(t, err, &held)
 		assert.Equal(t, svcerr.ClassUser, svcerr.Classify(err))

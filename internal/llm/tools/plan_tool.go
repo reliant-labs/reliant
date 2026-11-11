@@ -2,14 +2,13 @@
 package tools
 
 import (
-	"database/sql"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -560,7 +559,7 @@ func (u *UpdatePlanTool) Execute(rctx *rctx.ToolContext, params UpdatePlanParams
 	// Writes bind to THIS thread's plan only — an ancestor's is read-only.
 	plan, err := resolvePlanForWrite(rctx.Context, u.repo, threadID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if svcerr.IsNotFound(err) {
 			if inherited, resolveErr := resolvePlanForRead(rctx.Context, u.repo, threadID); resolveErr == nil && inherited.inherited {
 				return NewTextErrorResponse(inheritedPlanWriteRefusal(inherited.ownerThreadID)), nil
 			}
@@ -725,7 +724,7 @@ func (g *GetPlanTool) Execute(rctx *rctx.ToolContext, params GetPlanParams) (Too
 	// the board it was delegated from.
 	resolved, err := resolvePlanForRead(rctx.Context, g.repo, threadID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if svcerr.IsNotFound(err) {
 			return NewTextErrorResponse("No plan found for this thread. Use create_plan to create one."), nil
 		}
 		return NewTextErrorResponse(fmt.Sprintf("Failed to find plan: %v", err)), nil

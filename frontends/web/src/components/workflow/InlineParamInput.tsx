@@ -13,6 +13,7 @@ import { useModels } from "../../store/globalDataStore";
 import type { InputDef } from "../../lib/inputHelpers";
 import { getInputDescription, getInputDefault, getInputEnumValues, getInputMulti, getInputMin, getInputMax } from "../../lib/inputHelpers";
 import type { LucideIcon } from "lucide-react";
+import { AUTO_MODE, isExecutionMode, selectableOptions } from "../../lib/executionMode";
 
 interface InlineParamInputProps {
   name: string;
@@ -163,7 +164,8 @@ interface InlineEnumInputProps {
   displayName: string;
   schema: InputDef;
   value: string;
-  onChange: (value: string) => void;
+  /** `undefined` resets an execution mode to the parameter's default. */
+  onChange: (value: string | undefined) => void;
   disabled?: boolean;
   isStreaming?: boolean;
   className?: string;
@@ -183,8 +185,12 @@ function InlineEnumInput({
 }: InlineEnumInputProps) {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
-  const options = getInputEnumValues(schema) || [];
-  const currentValue = value ?? getInputDefault(schema) ?? options[0] ?? "";
+  const allOptions = getInputEnumValues(schema) || [];
+  const options = selectableOptions(allOptions);
+  const isMode = isExecutionMode(allOptions);
+  const currentValue = value ?? getInputDefault(schema) ?? allOptions[0] ?? "";
+  // An execution mode on a value the menu does not list ("auto") shows "Default" checked.
+  const isDefaultMode = isMode && !options.includes(String(currentValue));
   const canInteract = !isStreaming && !disabled;
 
   // Close dropdown when clicking outside
@@ -204,6 +210,7 @@ function InlineEnumInput({
   // Format option for display
   const formatOption = (opt: unknown) => {
     if (opt === "" || opt === null || opt === undefined) return "Off";
+    if (isMode && opt === AUTO_MODE) return "Default";
     const str = formatValueForDisplay(opt);
     return str.charAt(0).toUpperCase() + str.slice(1);
   };
@@ -248,13 +255,31 @@ function InlineEnumInput({
           )}
         >
           <div className="py-1">
+            {isMode && (
+              // "auto" is not listed, so the way back to the parameter's
+              // default is an explicit entry that drops the override.
+              <button
+                onClick={() => {
+                  onChange(undefined);
+                  setIsOpen(false);
+                }}
+                className={cn(
+                  "w-full flex items-center justify-between gap-2 px-3 py-1.5 text-left text-xs",
+                  "hover:bg-accent transition-colors",
+                  isDefaultMode && "bg-accent"
+                )}
+              >
+                <span>Default</span>
+                {isDefaultMode && <Check className="w-3 h-3 text-primary-ink flex-shrink-0" />}
+              </button>
+            )}
             {options.map((option) => {
               const isSelected = currentValue === option;
               return (
                 <button
                   key={option}
                   onClick={() => {
-                    onChange(option);
+                    onChange(isMode && isSelected ? undefined : option);
                     setIsOpen(false);
                   }}
                   className={cn(

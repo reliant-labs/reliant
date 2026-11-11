@@ -13,6 +13,7 @@ import (
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/cliauth"
 	"github.com/reliant-labs/reliant/internal/tokenauthority"
 )
 
@@ -188,6 +189,9 @@ func TestExchangeToken_ScopeRequests(t *testing.T) {
 		{scopes: []string{"token:write"}, code: connect.CodeInvalidArgument},
 		{scopes: []string{"token:read", "token:write"}, code: connect.CodeInvalidArgument},
 		{scopes: []string{"daemon:connect", "reliant:api", "llm:invoke", "mcp:connector", "proxy:port", "daemon:resume"}, code: connect.CodeInvalidArgument},
+		// The runs:* and triggers:* slices of a person's Reliant API (forge
+		// #1757) act as that person, so a helper never holds them either.
+		{scopes: []string{"runs:start", "runs:read", "runs:control", "triggers:fire", "triggers:manage"}, code: connect.CodeInvalidArgument},
 		{scopes: []string{"deploy:wrIte"}, code: connect.CodeInvalidArgument},
 	} {
 		resp, err := svc.ExchangeToken(context.Background(), exchangeReq(bearer, &reliantv1.ExchangeTokenRequest{
@@ -206,6 +210,43 @@ func TestExchangeToken_ScopeRequests(t *testing.T) {
 		if strings.Join(resp.Msg.GetScopes(), ",") != strings.Join(tc.want, ",") {
 			t.Errorf("scopes %v: granted %v, want %v", tc.scopes, resp.Msg.GetScopes(), tc.want)
 		}
+	}
+}
+
+// TestExchangeableScopes_CoverTheWholeCatalog walks every scope forge defines,
+// not a hand-picked list, so a scope forge adds later is classified here the
+// release it ships in: exchangeable exactly when the CLI sign-in requests it
+// (cliauth.ForgeScopes), and never when it acts as a person
+// (RequiresActingUser — reliant:api, the runs:* and triggers:* slices, …),
+// administers tokens, or manages machines.
+func TestExchangeableScopes_CoverTheWholeCatalog(t *testing.T) {
+	forgeScopes, err := fat.NewSet(cliauth.ForgeScopes())
+	if err != nil {
+		t.Fatalf("ForgeScopes() names an unknown scope: %v", err)
+	}
+	never := fat.SetOf(fat.ScopeTokenRead, fat.ScopeTokenWrite, fat.ScopeDaemonManage)
+	for _, scope := range fat.AllScopes {
+		got, err := requestedExchangeScopes([]string{string(scope)})
+		exchangeable := err == nil && len(got) == 1 && got[0] == scope
+		if exchangeable != forgeScopes.Has(scope) {
+			t.Errorf("%s: exchangeable = %v, but ForgeScopes() has it = %v", scope, exchangeable, forgeScopes.Has(scope))
+		}
+		if exchangeable && (fat.RequiresActingUser(scope) || never.Has(scope)) {
+			t.Errorf("%s is exchangeable, but a helper credential must never hold it", scope)
+		}
+	}
+	// The default (no scopes asked) is the same set, never a wider one.
+	all, err := requestedExchangeScopes(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, scope := range all {
+		if !forgeScopes.Has(scope) {
+			t.Errorf("the default exchange grants %s, which ForgeScopes() does not request", scope)
+		}
+	}
+	if len(all) != len(forgeScopes) {
+		t.Errorf("the default exchange grants %d scopes, ForgeScopes() requests %d", len(all), len(forgeScopes))
 	}
 }
 
@@ -334,5 +375,78 @@ func TestKindForScopes_DaemonWinsWhereverItSits(t *testing.T) {
 	}
 	if got := kindForScopes([]string{"deploy:read", "deploy:write"}); got != reliantv1.TokenKind_TOKEN_KIND_UNSPECIFIED {
 		t.Errorf("an exchanged deploy token is no session kind; got %v", got)
+	}
+}
+
+// wildcardAuthority answers the parent's introspection as the control plane
+// does for a daemon or login credential: the WILDCARD, resolved to the
+// person's org-wide grants only, so a grant bound to one environment is
+// absent from Scopes.
+type wildcardAuthority struct {
+	*recordingMint
+	parentToken string
+	resolved    fat.Set
+	all         bool
+}
+
+func (a wildcardAuthority) Introspect(ctx context.Context, token string) (*fat.Principal, error) {
+	p, err := a.Memory.Introspect(ctx, token)
+	if err != nil || token != a.parentToken {
+		return p, err
+	}
+	shown := *p
+	shown.Scopes, shown.AllScopes = a.resolved, a.all
+	return &shown, nil
+}
+
+// A prod-only release manager's daemon or login credential resolves to
+// org-wide grants, which leave deploy:write and secret:write out. The helper's
+// exchange still NAMES the environment-bindable ones it asks for, because a
+// wildcard's ceiling holds them, and the control plane's MintForUser decides
+// (it keeps one only when the person holds it on some environment). An
+// explicit-list parent hands on only what it resolved to, and a scope that
+// cannot be bound to an environment is never added.
+func TestExchangeToken_WildcardHandsOnEnvironmentBindableScopes(t *testing.T) {
+	resolved := fat.SetOf(fat.ScopeDaemonConnect, fat.ScopeDeployRead, fat.ScopeSecretRead)
+	for _, tc := range []struct {
+		name   string
+		all    bool
+		ask    []string
+		code   connect.Code
+		minted []fat.Scope
+	}{
+		{name: "wildcard: bound secret:write is asked for", all: true,
+			ask: []string{"secret:read", "secret:write"}, minted: []fat.Scope{fat.ScopeSecretRead, fat.ScopeSecretWrite}},
+		{name: "wildcard: db:query too", all: true,
+			ask: []string{"db:query"}, minted: []fat.Scope{fat.ScopeDBQuery}},
+		{name: "wildcard: a scope that cannot be bound is not added", all: true,
+			ask: []string{"domain:write"}, code: connect.CodePermissionDenied},
+		{name: "explicit list: only what it resolved to", all: false,
+			ask: []string{"secret:write"}, code: connect.CodePermissionDenied},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			rec := &recordingMint{Memory: tokenauthority.NewMemory()}
+			bearer := mintSession(t, rec.Memory, "user-1", tokenauthority.MintRequest{Scopes: fullDaemon})
+			svc := newTokenService(t, wildcardAuthority{recordingMint: rec, parentToken: bearer, resolved: resolved, all: tc.all},
+				TokenControlPlane{Issuer: testControlPlane})
+			_, err := svc.ExchangeToken(context.Background(), exchangeReq(bearer, &reliantv1.ExchangeTokenRequest{
+				Audience: testControlPlane, Scopes: tc.ask,
+			}))
+			if tc.code != 0 {
+				if svcerr.Code(err) != tc.code {
+					t.Fatalf("err = %v, want %v", err, tc.code)
+				}
+				if len(rec.asked) != 0 {
+					t.Fatalf("a refused exchange asked the authority for %v", rec.asked)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(rec.asked) != 1 || !reflect.DeepEqual(fat.SetOf(rec.asked[0]...), fat.SetOf(tc.minted...)) {
+				t.Fatalf("asked the authority for %v, want %v", rec.asked, tc.minted)
+			}
+		})
 	}
 }

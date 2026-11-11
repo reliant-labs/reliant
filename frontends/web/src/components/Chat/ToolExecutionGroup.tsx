@@ -1,4 +1,4 @@
-import { useId, useMemo, memo } from "react";
+import { useEffect, useId, useMemo, memo } from "react";
 import { ChevronDown, ChevronRight, ListTree, CheckCircle2, AlertCircle, Loader2, XCircle } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { ToolExecution, durableStatusToDisplayStatus, workflowLifecycleToDisplayStatus, type ToolResultData } from "./ToolExecution";
@@ -9,6 +9,7 @@ import { toolActionVerb } from "../../lib/toolAction";
 import type { ToolCallStatus } from "../../gen/reliant/v1/chat_pb";
 import { useWorkflowExecutions } from "../../hooks/useWorkflowExecutions";
 import { findWorkflowById } from "../../lib/workflowTree";
+import { elidedBlockIdsOf, prefetchContentBlockBodies } from "../../hooks/content-block-bodies";
 
 /**
  * The lead preview shares a single line with the trailing "and N other tools",
@@ -35,6 +36,10 @@ type ToolCallData = {
   durableStatus?: ToolCallStatus;
   /** For a spawn call, the workflow it started (tool_calls.child_workflow_id). */
   childWorkflowId?: string;
+  content_block_id?: string;
+  /** `input` is a skeleton of an elided input (see messageProcessor's ToolCallData). */
+  inputElided?: boolean;
+  inputSize?: number;
 };
 
 interface ToolExecutionGroupProps {
@@ -136,13 +141,13 @@ function ToolExecutionGroupComponent({
     const formatted =
       lead.call.input === undefined
         ? undefined
-        : formatToolParams(rawName, lead.call.input as ToolInput);
+        : formatToolParams(rawName, lead.call.input as ToolInput, { inputSize: lead.call.inputSize });
     const preview = formatted?.summary?.trim();
     // Say what the lead call did ("Edited src/cart/totals.ts"), as its row
     // does; a tool with no plain-words verb keeps its name(preview) form. A
     // shell call's description is already an action ("Run cart tests").
     const leadDone = lead.result !== undefined || lead.status === "completed" || lead.status === "failed";
-    const verb = toolActionVerb(rawName, leadDone ? "done" : "live");
+    const verb = toolActionVerb(rawName, leadDone ? "done" : "live", lead.call.input);
     const isDescribedShell =
       verb !== null && typeof formatted?.structured?.description === "string" && !!preview;
     const head = isDescribedShell
@@ -174,6 +179,14 @@ function ToolExecutionGroupComponent({
     collapseAll: surface !== "desktop",
   });
   const panelId = useId();
+
+  // An open group reads the bodies its rows were sent without in one batch
+  // (see TurnWorkFold).
+  const elidedKey = useMemo(() => elidedBlockIdsOf(executions).join(","), [executions]);
+  useEffect(() => {
+    if (!expanded || !chatId || elidedKey === "") return;
+    prefetchContentBlockBodies(chatId, elidedKey.split(","));
+  }, [expanded, chatId, elidedKey]);
 
   return (
     <div

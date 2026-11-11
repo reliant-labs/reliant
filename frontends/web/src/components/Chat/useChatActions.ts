@@ -17,10 +17,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { useArchiveChat, useChat, useRenameChat, useUnarchiveChat } from "../../hooks/chat-queries";
 import { useMessages } from "../../hooks/message-queries";
-import { fetchFullToolResult } from "../../hooks/tool-result-queries";
+import { fetchFullToolBodies } from "../../hooks/tool-result-queries";
 import * as chatActions from "../../hooks/chat-actions";
-import { loadMainWorktree } from "../../hooks/worktree-actions";
-import { resolveWorktree, type Worktree, getCachedMainWorktree } from "../../hooks/worktree-queries";
+import { resolveMainWorktree, resolveWorktree, type Worktree } from "../../hooks/worktree-queries";
 import { useTerminalStore } from "../../store/terminalStore";
 import { useCapability } from "../../lib/surfaceContext";
 import { toast } from "../../lib/toast-manager";
@@ -100,11 +99,11 @@ export function useChatActions(chatId: string | null, worktreeIdOverride?: strin
         return;
       }
       // Only the recovery items read it, so fetch it (one row) rather than
-      // depend on the store happening to hold it.
+      // depend on the cache happening to hold it. A read, never a selection:
+      // this runs while the chat's own open is still switching workspace.
       if (!resolved.project_id) return;
-      await loadMainWorktree(resolved.project_id);
+      const main = await resolveMainWorktree(resolved.project_id);
       if (cancelled) return;
-      const main = getCachedMainWorktree(resolved.project_id);
       setMainWorktree(main && !main.deleted_at ? main : undefined);
     })();
     return () => {
@@ -214,17 +213,24 @@ async function buildChatMarkdown(
   workspaceName: string | null,
   messages: Message[],
 ): Promise<string> {
-  // Large tool results are held as previews; the export gets them whole.
-  const fullResults = new Map<string, string>();
-  await Promise.all(
-    messages.flatMap((message) =>
-      (message.contentBlocks || [])
-        .filter((block) => block.type === ContentBlockType.TOOL_RESULT && block.truncated && block.toolCallId)
-        .map(async (block) => {
-          fullResults.set(block.toolCallId!, await fetchFullToolResult(chatId, block.toolCallId!));
-        }),
-    ),
-  );
+  // A stub read holds finished calls' inputs as skeletons and their results
+  // as stubs (body_elided), and large results are previews (truncated): the
+  // export gets them whole, in one batch. Elided thinking stays out, as it is
+  // out of the UI.
+  const elidedBlockIds: string[] = [];
+  const truncatedCallIds: string[] = [];
+  for (const message of messages) {
+    for (const block of message.contentBlocks || []) {
+      if (block.type !== ContentBlockType.TOOL_CALL && block.type !== ContentBlockType.TOOL_RESULT) continue;
+      if (block.bodyElided) {
+        if (!block.id) throw new Error("A tool call's details were left out and cannot be read");
+        elidedBlockIds.push(block.id);
+      } else if (block.type === ContentBlockType.TOOL_RESULT && block.truncated && block.toolCallId) {
+        truncatedCallIds.push(block.toolCallId);
+      }
+    }
+  }
+  const { bodies, fullResults } = await fetchFullToolBodies(chatId, { elidedBlockIds, truncatedCallIds });
 
   let markdown = `# ${title || "Chat Export"}\n\n`;
   markdown += `Exported: ${new Date().toLocaleString()}\n`;
@@ -245,17 +251,20 @@ async function buildChatMarkdown(
         markdown += `${block.content}\n\n`;
       } else if (block.type === ContentBlockType.TOOL_CALL) {
         markdown += `**Tool Call:** ${block.toolName}\n\n`;
-        if (block.input) {
+        const input = block.bodyElided && block.id ? bodies[block.id]?.input : block.input;
+        if (input) {
           try {
-            const parsed = JSON.parse(block.input);
+            const parsed = JSON.parse(input);
             markdown += `\`\`\`json\n${JSON.stringify(parsed, null, 2)}\n\`\`\`\n\n`;
           } catch {
-            markdown += `\`\`\`\n${block.input}\n\`\`\`\n\n`;
+            markdown += `\`\`\`\n${input}\n\`\`\`\n\n`;
           }
         }
       } else if (block.type === ContentBlockType.TOOL_RESULT) {
         markdown += `**Tool Result:** ${block.toolName || "Unknown"}\n\n`;
-        const content = (block.toolCallId && fullResults.get(block.toolCallId)) || block.content;
+        const content = block.bodyElided && block.id
+          ? bodies[block.id]?.content
+          : (block.toolCallId && fullResults.get(block.toolCallId)) || block.content;
         if (content) {
           markdown += `${content}\n\n`;
         }

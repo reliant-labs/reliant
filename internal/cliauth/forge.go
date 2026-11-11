@@ -43,7 +43,9 @@ import (
 // when it is the user's org authority that forge lets ride the user's own
 // daemon credential (Grant.Validate with a daemon binding) and it does not act
 // as a session or a personal resource (RequiresActingUser: reliant:api,
-// daemon:connect, llm:invoke, mcp:connector, daemon:resume). That excludes the
+// daemon:connect, llm:invoke, mcp:connector, daemon:resume, and the runs:*,
+// triggers:*, inbox:*, approvals:decide and questions:answer slices of the
+// Reliant API). That excludes the
 // port share (proxy:port) too: forge refuses it on a daemon binding.
 //
 // token:read and token:write are absent from this explicit list. They

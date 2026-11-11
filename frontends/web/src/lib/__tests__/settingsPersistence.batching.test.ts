@@ -21,17 +21,10 @@ const mocks = vi.hoisted(() => ({
   removeFromCache: vi.fn(),
 }));
 
-vi.mock('../../api/client', () => ({
-  api: {
-    settings: {
-      batchUpsertSettings: mocks.batchUpsertSettings,
-      createSetting: mocks.createSetting,
-      updateSetting: mocks.updateSetting,
-      getSetting: mocks.getSetting,
-      deleteSetting: mocks.deleteSetting,
-      listSettings: mocks.listSettings,
-    },
-  },
+vi.mock('../../hooks/settings-queries', () => ({
+  batchUpsertSettings: mocks.batchUpsertSettings,
+  deleteSetting: mocks.deleteSetting,
+  fetchSettings: mocks.listSettings,
 }));
 
 vi.mock('../../api/authProvider', () => ({

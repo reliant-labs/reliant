@@ -244,7 +244,7 @@ describe("commitLaunchPlan — ordering", () => {
     );
 
     expect(deps.createDaemon).toHaveBeenCalledTimes(1);
-    expect(taskNamed(result.tasks, "provision_daemon").status).toBe("complete");
+    expect(taskNamed(result.tasks, "provision_daemon").status).toBe("starting");
   });
 });
 
@@ -280,7 +280,7 @@ describe("commitLaunchPlan — partial failure", () => {
     const result = await commitLaunchPlan(CLOUD_CREDITS_PLAN, deps);
 
     expect(result.status).toBe("partial");
-    expect(taskNamed(result.tasks, "provision_daemon").status).toBe("complete");
+    expect(taskNamed(result.tasks, "provision_daemon").status).toBe("starting");
     expect(taskNamed(result.tasks, "grant_ai_access").status).toBe("failed");
   });
 
@@ -483,6 +483,44 @@ describe("commitLaunchPlan — what each plan actually commits", () => {
     );
   });
 
+  // Prod, 2026-11-04: a user reached checkout uncovered with S1 recorded (the
+  // cheapest tile), redeemed CLOUDCODE20 there, and the commit asked for S1.
+  // A coupon runs only M, so CreateDaemon refused "your plan does not include
+  // daemon size s1" and onboarding ended without a machine. The commit reads
+  // the server's allowance and provisions the machine the coupon pays for.
+  it("provisions the size the server admits when the recorded one is not", async () => {
+    const deps = makeDeps({
+      getComputeEligibility: vi.fn(async () => ({
+        eligible: true,
+        reason: null as string | null,
+        allowedDaemonSizes: ["m"],
+      })),
+    });
+
+    await commitLaunchPlan(
+      { ...CLOUD_CREDITS_PLAN, computePlanId: "plan_compute_s1", computeSettled: true },
+      deps,
+    );
+
+    expect(deps.createDaemon).toHaveBeenCalledWith(expect.objectContaining({ size: 8 }));
+  });
+
+  // A subscriber's allowance includes the size they paid for: it is kept, even
+  // when it is not the first size the server lists.
+  it("keeps a recorded size the server admits", async () => {
+    const deps = makeDeps({
+      getComputeEligibility: vi.fn(async () => ({
+        eligible: true,
+        reason: null as string | null,
+        allowedDaemonSizes: ["s1", "s2", "m", "l"],
+      })),
+    });
+
+    await commitLaunchPlan({ ...CLOUD_CREDITS_PLAN, computePlanId: "plan_compute_l" }, deps);
+
+    expect(deps.createDaemon).toHaveBeenCalledWith(expect.objectContaining({ size: 9 }));
+  });
+
   it("hands the gate the daemon id it should poll", async () => {
     const deps = makeDeps({ createDaemon: vi.fn(async () => "d-fresh") });
     const result = await commitLaunchPlan(CLOUD_CREDITS_PLAN, deps);
@@ -571,7 +609,7 @@ describe("commitLaunchPlan — anonymous account", () => {
     const result = await commitLaunchPlan(CLOUD_CREDITS_PLAN, deps);
 
     expect(deps.createDaemon).toHaveBeenCalledTimes(1);
-    expect(taskNamed(result.tasks, "provision_daemon").status).toBe("complete");
+    expect(taskNamed(result.tasks, "provision_daemon").status).toBe("starting");
   });
 
   it("leaves a signed-in user's cloud commit unchanged", async () => {

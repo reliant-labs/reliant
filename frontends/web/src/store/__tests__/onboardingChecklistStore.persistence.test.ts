@@ -32,9 +32,6 @@ vi.mock("../../lib/settingsPersistence", () => ({
 
 // ─── Everything the module graph drags in ────────────────────────────────────
 
-vi.mock("../../api/client", () => ({
-  api: { settings: { getProviders: vi.fn(async () => []) } },
-}));
 vi.mock("../../hooks/mcp-queries", () => ({
   fetchMcpServers: vi.fn(async () => []),
 }));

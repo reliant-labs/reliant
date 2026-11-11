@@ -13,7 +13,7 @@ import ProgressBar from "../forge-ui/progress_bar";
 import { useOnboardingChecklistStore } from "../../store/onboardingChecklistStore";
 import { useTourStore } from "../../store/tourStore";
 import { useApiKeySetupStore } from "../../store/apiKeySetupStore";
-import { REQUIRED_ITEMS, BONUS_ITEMS, CHECKLIST_ITEMS, ONBOARDING_STEPS } from "./constants";
+import { REQUIRED_ITEMS, BONUS_ITEMS, CHECKLIST_ITEMS } from "./constants";
 import type { ChecklistItem, ChecklistItemId } from "./types";
 import { trackEvent } from "../../lib/analytics";
 import { useTourNavigation } from "./useTourNavigation";
@@ -190,14 +190,12 @@ export function OnboardingChecklist() {
   } = useOnboardingChecklistStore();
 
   const navigate = useNavigate();
-  const { goToStep } = useTourNavigation();
-  // Starting the tour from the checklist: reset any prior tour state and put
-  // the user on the first step via the URL. goToStep handles routing for
-  // workflow-bound steps; the first step is path-agnostic, so it just sets
-  // the search param on whatever route we're currently on.
+  const { openPicker } = useTourNavigation();
+  // Starting the tour from the checklist: reset any prior tour state and open
+  // the journey picker via the URL, on whatever route we're currently on.
   const startTour = () => {
     void useTourStore.getState().resetTourProgress();
-    goToStep(ONBOARDING_STEPS[0].id);
+    openPicker("menu");
   };
   const actionDeps: ItemActionDeps = { navigate, startTour };
 

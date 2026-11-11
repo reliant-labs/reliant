@@ -40,7 +40,7 @@ events:
     black_box: true
     output: {"recheck_found": 0, "other_live_lease": false}
 expect:
-  outcome: completed
+  outcome: failed
   completed: [agent_retry, pick, outcome, issue_labels_failed, issue_comment_failed, release]
   not_reached: [gate_retry, publish, pr]
   node_outputs:

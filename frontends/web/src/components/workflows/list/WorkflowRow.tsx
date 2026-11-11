@@ -105,9 +105,21 @@ const FOLD = {
   narrow: { hide: "@max-[600px]:hidden", show: "hidden @max-[600px]:inline" },
 } as const;
 
-/** The column model. Widths are fixed so every row lines up; Name takes the remainder. */
-export function workflowsColumns() {
-  return [
+/** Whether the Health cell of this row shows something other than a dash. */
+const hasHealth = (row: WorkflowsTableRow) => row.view.health !== undefined;
+/** Whether the Next run cell shows a time rather than a dash. */
+const hasNextRun = (row: WorkflowsTableRow) => Boolean(row.view.nextFireAt) && (row.view.state === "on" || row.view.state === "partly");
+/** Whether the On cell shows a switch or a word rather than nothing. */
+const hasOnValue = (row: WorkflowsTableRow) => Boolean(row.onToggle) || row.view.projectsOn > 1 || row.view.state !== "none";
+
+/**
+ * The column model. Widths are fixed so every row lines up; Name takes the
+ * remainder. Health, Next run and On are left out while no row in `rows` has
+ * a value for them (a new account: every cell would be a dash), and return
+ * as soon as one does.
+ */
+export function workflowsColumns(rows: readonly WorkflowsTableRow[]) {
+  const columns = [
     {
       key: "name",
       header: "Name",
@@ -179,6 +191,11 @@ export function workflowsColumns() {
       render: (_: unknown, row: WorkflowsTableRow) => <ActionsCell row={row} />,
     },
   ];
+  const hidden = new Set<string>();
+  if (!rows.some(hasHealth)) hidden.add("health");
+  if (!rows.some(hasNextRun)) hidden.add("nextRun");
+  if (!rows.some(hasOnValue)) hidden.add("on");
+  return columns.filter((column) => !hidden.has(column.key));
 }
 
 function Dash({ label }: { label: string }) {

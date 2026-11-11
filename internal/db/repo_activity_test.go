@@ -5,12 +5,15 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/reliant-labs/forge/pkg/testkit"
+
+	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 )
 
 // ---------------------------------------------------------------------------
@@ -677,28 +680,58 @@ func TestUserUpdateAllocationWaitsOutAConcurrentCommit(t *testing.T) {
 	repo, rawDB, cleanup := SetupTestDBWithRawDB(t)
 	defer cleanup()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
 	const userID = "contended-user"
-	newUpdate := func(entityID string) *UserUpdate {
-		return &UserUpdate{
+	write := func(ctx context.Context, entityID string) (int64, error) {
+		update := &UserUpdate{
 			UserID:     userID,
 			UpdateType: UserUpdateNotification,
 			EntityType: EntityTypeSystem,
 			EntityID:   entityID,
 			Data:       []byte(`{}`),
 		}
+		err := repo.CreateUserUpdate(ctx, update)
+		return update.SequenceNumber, err
 	}
+	assertAllocationWaitsOutConcurrentCommits(t, rawDB, "user", userID, write)
+}
+
+// The same race on a chat's counter row: every thread, tool call and
+// sub-agent of one chat allocates its chat updates from it.
+func TestChatUpdateAllocationWaitsOutAConcurrentCommit(t *testing.T) {
+	t.Parallel()
+
+	repo, rawDB, cleanup := SetupTestDBWithRawDB(t)
+	defer cleanup()
+
+	const chatID = "contended-chat"
+	createActivityTestChat(t, repo, chatID)
+	write := func(ctx context.Context, entityID string) (int64, error) {
+		if err := repo.CreateChatUpdate(ctx, chatID, reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_MESSAGE, entityID, `{}`); err != nil {
+			return 0, err
+		}
+		return repo.GetLatestUpdateSequence(ctx, chatID)
+	}
+	assertAllocationWaitsOutConcurrentCommits(t, rawDB, "chat", chatID, write)
+}
+
+// assertAllocationWaitsOutConcurrentCommits drives one writer (write) against a
+// rival that holds the (kind, streamID) counter row and commits under it once
+// per writer attempt, and fails unless the writer waited in ONE transaction and
+// took the number after the rival's last commit. write returns the sequence
+// number it was assigned.
+func assertAllocationWaitsOutConcurrentCommits(t *testing.T, rawDB *sql.DB, kind, streamID string, write func(context.Context, string) (int64, error)) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
 
 	// Seed the counter row so every later allocation contends on an existing
 	// row, which is the production steady state.
-	seed := newUpdate("seed")
-	if err := repo.CreateUserUpdate(ctx, seed); err != nil {
-		t.Fatalf("seed CreateUserUpdate: %v", err)
+	seedSeq, err := write(ctx, "seed")
+	if err != nil {
+		t.Fatalf("seed write: %v", err)
 	}
 
-	// holdCounterRow is the rival: another of this user's chats allocating
+	// holdCounterRow is the rival: another writer of this stream allocating
 	// from the same row, left uncommitted until we choose to release it.
 	holdCounterRow := func() *sql.Tx {
 		t.Helper()
@@ -709,7 +742,7 @@ func TestUserUpdateAllocationWaitsOutAConcurrentCommit(t *testing.T) {
 		if _, err := tx.ExecContext(ctx, `
 			UPDATE update_stream_counters
 			SET last_assigned_seq = last_assigned_seq + 1
-			WHERE stream_kind = 'user' AND stream_id = $1`, userID); err != nil {
+			WHERE stream_kind = $1 AND stream_id = $2`, kind, streamID); err != nil {
 			_ = tx.Rollback()
 			t.Fatalf("rival allocation: %v", err)
 		}
@@ -756,8 +789,12 @@ func TestUserUpdateAllocationWaitsOutAConcurrentCommit(t *testing.T) {
 	}
 
 	rival := holdCounterRow()
-	writer := newUpdate("writer")
-	go func() { writerDone <- repo.CreateUserUpdate(ctx, writer) }()
+	var writerSeq int64
+	go func() {
+		seq, err := write(ctx, "writer")
+		writerSeq = seq
+		writerDone <- err
+	}()
 
 	// Commit under the writer once per writer attempt, plus one, so a writer
 	// that retries on every commit exhausts its budget rather than being
@@ -816,8 +853,44 @@ func TestUserUpdateAllocationWaitsOutAConcurrentCommit(t *testing.T) {
 	}
 	// Seed took 1 and each committed rival one more: the writer must observe
 	// the last committed value and take the very next number.
-	if want := seed.SequenceNumber + int64(rivalCommits) + 1; writer.SequenceNumber != want {
+	if want := seedSeq + int64(rivalCommits) + 1; writerSeq != want {
 		t.Fatalf("writer sequence = %d, want %d (the number after the last rival commit's)",
-			writer.SequenceNumber, want)
+			writerSeq, want)
+	}
+}
+
+// A user update for a chat deleted after it was read is refused by the
+// chat_id foreign key. That is a chat with nothing left to announce, not a
+// transaction failure: chatDeletedUnder recognises it, so the announcement
+// and the state-change update say so at DEBUG instead of paging.
+func TestUserUpdateForADeletedChatIsRecognised(t *testing.T) {
+	t.Parallel()
+
+	repo, cleanup := setupTestDB(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	gone := "chat-deleted-under-update"
+	err := repo.CreateUserUpdate(ctx, &UserUpdate{
+		UserID:     "test-user",
+		ChatID:     &gone,
+		UpdateType: UserUpdateChatStateChange,
+		EntityType: EntityTypeChat,
+		EntityID:   gone,
+		Data:       []byte(`{}`),
+	})
+	if err == nil {
+		t.Fatal("CreateUserUpdate for a chat that does not exist succeeded; want the chat_id foreign key to refuse it")
+	}
+	if !chatDeletedUnder(err) {
+		t.Fatalf("chatDeletedUnder(%v) = false; want the chat_id foreign-key violation recognised", err)
+	}
+	var outcome TxOutcome
+	if !errors.As(err, &outcome) {
+		t.Errorf("the refusal is not a TxOutcome, so RunTx logs it as \"Transaction failed\": %v", err)
+	}
+
+	if chatDeletedUnder(errors.New("insert or update on table \"user_updates\" violates foreign key constraint")) {
+		t.Error("chatDeletedUnder matched an error with no constraint: it must read the driver's constraint name, not text")
 	}
 }

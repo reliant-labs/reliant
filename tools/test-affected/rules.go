@@ -53,9 +53,17 @@ var forgeInputs = []string{
 	"**/*_gen.go", "**/*_gen_test.go", "**/*_gen.ts", "**/*_gen_test.ts", "**/*_gen.test.ts",
 	"**/*_gen.json", "**/*_gen.ndjson", "**/*_gen.k",
 	"gen/**", "frontends/web/src/gen/**", "pkg/config/**", "deploy/**",
+	// The public protos are generated into the SDK module too
+	// (buf.gen.sdk-go.yaml), and proto/public-api.txt decides which rpcs get a
+	// client. proto/** above already covers the allowlist; this is the
+	// generated half.
+	"sdk/go/gen/**",
 	".forge/hashes.json", ".forge/scaffolded.json", ".forge/disowned.json",
-	// generate.hooks: controlplane-client.
+	// generate.hooks: controlplane-client, sdk-ts-gen.
 	"proto-vendor/**", "buf.gen.controlplane.yaml", "scripts/proto-generate-atomic.sh",
+	"buf.gen.sdk-ts.yaml", "sdk/ts/src/gen/**",
+	// generate.hooks: sdk-go-gen, sdk-aliases.
+	"buf.gen.sdk-go.yaml", "scripts/sdk-go-gen.sh", "tools/sdkalias/**",
 	"tools/protoc-gen-es/package.json", "tools/protoc-gen-es/package-lock.json",
 	// generate.hooks: the go:generate outputs, the manifest schemas, and the
 	// integration projections' specs, upstream schema and catalog output.
@@ -78,6 +86,7 @@ var forgeHookGenerators = []string{
 	"internal/llm/tools/cmd/toolconfiggen",
 	"internal/integrations/manifest/schema/cmd/schemagen",
 	"tools/integrationgen",
+	"tools/sdkalias",
 }
 
 // forgeHookOf names the forge.yaml hook that runs each generator
@@ -88,6 +97,7 @@ var forgeHookOf = map[string]string{
 	"internal/llm/tools/cmd/toolconfiggen":                "tool-catalog",
 	"internal/integrations/manifest/schema/cmd/schemagen": "manifest-schema",
 	"tools/integrationgen":                                "integrations",
+	"tools/sdkalias":                                      "sdk-aliases",
 }
 
 // forgeInputsExcept are paths under forgeInputs that forge generate neither
@@ -229,6 +239,9 @@ var rules = []rule{
 			"frontends/web/package.json", "frontends/web/pnpm-lock.yaml", "frontends/web/pnpm-workspace.yaml", "frontends/web/.nvmrc",
 			"frontends/web/vite.config.ts", "frontends/web/tsconfig*.json", "frontends/web/tailwind.config.js", "frontends/web/postcss.config.js",
 			"frontends/web/src/test/setup.ts",
+			// frontends/web installs sdk/ts as a workspace member: its manifest is
+			// part of web's lockfile and dependency graph.
+			"sdk/ts/package.json",
 		},
 		full:   []lane{laneWeb},
 		reason: "web build/test configuration or dependencies changed (every vitest file runs through it)",
@@ -246,7 +259,7 @@ var rules = []rule{
 		// lane for it cost three merge-queue gates the whole web suite.
 		id: "global-config",
 		patterns: []string{
-			"buf.yaml", "buf.gen.yaml", "buf.gen.controlplane.yaml",
+			"buf.yaml", "buf.gen.yaml", "buf.gen.controlplane.yaml", "buf.gen.sdk-ts.yaml", "buf.gen.sdk-go.yaml",
 		},
 		full:   []lane{laneForgeGen},
 		reason: "buf's generation configuration changed: the generated code must match it",
@@ -282,9 +295,12 @@ var rules = []rule{
 	{
 		id:       "proto-config",
 		patterns: []string{"proto/**", "proto-vendor/**"},
-		except:   []string{"**/*.proto", "**/*.md"},
-		full:     []lane{laneGo, laneWeb},
-		reason:   "proto tooling configuration changed (it regenerates every client)",
+		// public-api.txt is read by internal/buildmode's tests and regenerates
+		// through buf.gen.sdk-go.yaml's filters; the forge-generate lane judges it, so
+		// it does not force the web suite.
+		except: []string{"**/*.proto", "**/*.md", "proto/public-api.txt"},
+		full:   []lane{laneGo, laneWeb},
+		reason: "proto tooling configuration changed (it regenerates every client)",
 	},
 	{
 		id:       "migrations",
@@ -294,14 +310,50 @@ var rules = []rule{
 		note:     "reaches only DB-backed tests",
 	},
 	{
+		// @reliantlabs/sdk is a workspace member of frontends/web and the web app
+		// compiles it from source (vite and tsc alias it), so a change to it can
+		// change any vitest file; its own tests run in the web lane too
+		// (frontends/web/vite.config.ts test.include).
+		id:       "sdk-ts",
+		patterns: []string{"sdk/ts/**"},
+		full:     []lane{laneWeb},
+		reason:   "@reliantlabs/sdk changed: the web app compiles it from source, and the web lane runs its tests",
+	},
+	{
 		id:       "web-source",
 		patterns: []string{"frontends/web/src/**", "frontends/web/vite-plugin-*.ts", "frontends/web/*.test.ts"},
 		webSrc:   true,
 	},
 	{
 		id:       "web-static",
-		patterns: []string{"frontends/web/index.html", "frontends/web/public/**", "frontends/web/design-sandbox/**"},
+		patterns: []string{"frontends/web/index.html", "frontends/web/demo.html", "frontends/web/public/**", "frontends/web/design-sandbox/**"},
 		note:     "served assets: only tests that name the file run",
+	},
+	{
+		// The forge demo's capture and smoke scripts (run by hand, never by
+		// vitest): the fixtures test reads the capture script's text, a web
+		// module importing one reaches it through the import graph, and the
+		// tests that walk frontends/web/ run as for any web module.
+		// Unclaimed, each edit ran every lane in full (cp#2189: 8 of 60 merge
+		// gates in one day).
+		id:       "web-demo-scripts",
+		patterns: []string{"frontends/web/scripts/demo/**"},
+		webSrc:   true,
+		note:     "the forge demo's scripts: only tests that import or name the file run",
+	},
+	{
+		// sdk/go is its own Go module (go.mod), which the root `go list ./...`
+		// does not see, so no package owns its files. Its generated half is
+		// forge's output (a forge input above), so a change runs
+		// forge-generate; its own tests run as a step in the module (goSteps).
+		// The app does not import it yet; when it does (pinned by version),
+		// a change here reaches the app only through that pin bump.
+		id:       "sdk-go",
+		patterns: []string{"sdk/go/**"},
+		full:     []lane{laneForgeGen},
+		reason:   "the SDK module changed: its generated protos must match proto/, and its own tests run in the module",
+		noGraph:  true,
+		note:     "sdk/go is its own Go module; its tests run with the Go lane",
 	},
 	{
 		id: "web-inert",
@@ -317,8 +369,11 @@ var rules = []rule{
 		id: "data",
 		patterns: []string{
 			"deploy/**", "config/**", "scripts/**", "e2e/**", "docker/**", "assets/**",
-			"generated/**", "examples/**", "gen/forge_descriptor.json", ".forge/**",
-			"bindings_generated.go",
+			// gen/forge_service_catalog.json is forge generate's output, read by
+			// forge (deploy, obs) and by no test: the forge-generate lane judges
+			// it. Unclaimed, it ran every lane in full (cp#2189: 19 of 60).
+			"generated/**", "examples/**", "gen/forge_descriptor.json", "gen/forge_service_catalog.json", ".forge/**",
+			"bindings_generated.go", "proto/public-api.txt",
 		},
 		note: "data a test reads only if its sources name it",
 	},

@@ -4,7 +4,7 @@
 # .air.admin-server.toml:
 #   - per-service tmp dir so api / worker / electron's dist build never
 #     trample each other's binary
-#   - stop_on_error=false + atomic build (go build -o .tmp && mv): a FAILED
+#   - stop_on_error=false + atomic build (scripts/air-build.sh: .tmp && mv): a FAILED
 #     build never touches the running process — Air only swaps on success,
 #     so mid-edit broken trees don't take the api server down
 #   - no buf-generate pre_cmd: codegen on every save is slow and surprising;
@@ -17,9 +17,13 @@ tmp_dir = "tmp/air-api"
 [build]
   bin = "./tmp/air-api/reliant"
   args_bin = ["server", "api"]
-  cmd = "CGO_ENABLED=0 go build -buildvcs=false -o ./tmp/air-api/reliant.tmp ./cmd/reliant && mv ./tmp/air-api/reliant.tmp ./tmp/air-api/reliant"
+  # scripts/air-build.sh builds ./cmd/reliant ONCE per save for every Air
+  # watcher (api, worker and gateway run the same binary), with -trimpath, and
+  # links the result here atomically. A failed build exits non-zero for every
+  # watcher and never replaces this binary.
+  cmd = "scripts/air-build.sh ./cmd/reliant ./tmp/air-api/reliant"
   delay = 1000
-  exclude_dir = ["assets", "tmp", "vendor", "testdata", "frontends", "mobile", "dist", ".claude_plan", "test", "electron", "node_modules", "e2e", ".reliant", "examples", "data", ".git", "scripts", "docs"]
+  exclude_dir = ["assets", "tmp", "vendor", "testdata", "frontends", "web", "mobile", "dist", ".claude_plan", "test", "electron", "node_modules", "e2e", ".reliant", "examples", "data", ".git", "scripts", "docs"]
   exclude_file = []
   exclude_regex = ["_test\\.go$"]
   exclude_unchanged = false

@@ -9,7 +9,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/sdk/client"
 
-	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/workflow/threadcancel"
 )
 
@@ -37,30 +36,15 @@ func (c *stopperTemporalClient) SignalWorkflow(
 	return c.signalErr
 }
 
-// recordingReconciler captures the compare-and-swap attempts.
+// recordingReconciler captures the workflow rows the stopper asked to settle.
 type recordingReconciler struct {
-	attempts []struct {
-		id             string
-		to, expectFrom core.WorkflowStatus
-	}
-	swapOn *core.WorkflowStatus
-	err    error
+	settled []string
+	err     error
 }
 
-func (r *recordingReconciler) CompareAndSwapWorkflowStatus(
-	_ context.Context, id string, newStatus, expectedStatus core.WorkflowStatus,
-) (bool, error) {
-	r.attempts = append(r.attempts, struct {
-		id             string
-		to, expectFrom core.WorkflowStatus
-	}{id, newStatus, expectedStatus})
-	if r.err != nil {
-		return false, r.err
-	}
-	if r.swapOn != nil && *r.swapOn == expectedStatus {
-		return true, nil
-	}
-	return false, nil
+func (r *recordingReconciler) CancelStoppedSpawn(_ context.Context, workflowID string) (bool, error) {
+	r.settled = append(r.settled, workflowID)
+	return r.err == nil, r.err
 }
 
 // The signal must be named "cancel_thread" and carry BOTH ids. The name is
@@ -105,23 +89,32 @@ func TestSpawnStopper_AddressesResolvedWorkflowID(t *testing.T) {
 	require.Equal(t, "restarted-workflow-id", tc.signals[0].workflowID)
 }
 
-// A spawn whose signal was delivered has its workflows row reconciled, so a
-// reload agrees with what was asked for. CAS from ACTIVE first, then PAUSED —
-// an explicit stop overrides a pause.
+// A spawn whose signal was delivered has its workflows row settled, so a
+// reload agrees with what was asked for. Which statuses it moves from, and that
+// its thread ends in the same commit, is CancelStoppedSpawn's
+// (internal/db TestCancelStoppedSpawn).
 func TestSpawnStopper_ReconcilesWorkflowRow(t *testing.T) {
 	t.Parallel()
-	active := core.Active()
-	rec := &recordingReconciler{swapOn: &active}
+	rec := &recordingReconciler{}
 	stopper := NewSpawnStopper(&stopperTemporalClient{}, nil, rec)
 
 	require.NoError(t, stopper.StopSpawn(context.Background(), "chat-1", SpawnRef{
 		ThreadID: "child-thread-1", WorkflowID: "child-wf-1", ToolCallID: "toolu_abc"}))
 
-	require.Len(t, rec.attempts, 1, "the ACTIVE swap succeeded, so PAUSED must not be tried")
-	require.Equal(t, "child-wf-1", rec.attempts[0].id,
-		"the reconcile must CAS the WORKFLOW row id, not the thread id")
-	require.Equal(t, core.Cancelled(), rec.attempts[0].to)
-	require.Equal(t, core.Active(), rec.attempts[0].expectFrom)
+	require.Equal(t, []string{"child-wf-1"}, rec.settled,
+		"the reconcile must settle the WORKFLOW row id, not the thread id")
+}
+
+// A failed settlement is bookkeeping: the spawn is already stopping, so the
+// stop still succeeds.
+func TestSpawnStopper_ReconcileFailure_StillStops(t *testing.T) {
+	t.Parallel()
+	rec := &recordingReconciler{err: errors.New("database unavailable")}
+	stopper := NewSpawnStopper(&stopperTemporalClient{}, nil, rec)
+
+	require.NoError(t, stopper.StopSpawn(context.Background(), "chat-1", SpawnRef{
+		ThreadID: "child-thread-1", WorkflowID: "child-wf-1", ToolCallID: "toolu_abc"}))
+	require.Equal(t, []string{"child-wf-1"}, rec.settled)
 }
 
 // The resumed-spawn case, where the two ids diverge: the signal must name the
@@ -132,8 +125,7 @@ func TestSpawnStopper_ReconcilesWorkflowRow(t *testing.T) {
 func TestSpawnStopper_ResumedSpawn_SignalsThreadButReconcilesWorkflowRow(t *testing.T) {
 	t.Parallel()
 	tc := &stopperTemporalClient{}
-	active := core.Active()
-	rec := &recordingReconciler{swapOn: &active}
+	rec := &recordingReconciler{}
 	stopper := NewSpawnStopper(tc, nil, rec)
 
 	// A resumption keeps the original thread and gets a fresh workflow id
@@ -151,24 +143,8 @@ func TestSpawnStopper_ResumedSpawn_SignalsThreadButReconcilesWorkflowRow(t *test
 		"the signal addresses the loop, which still runs under the original thread id")
 	require.Equal(t, "toolu_resume3", sig.ToolCallID)
 
-	require.Len(t, rec.attempts, 1)
-	require.Equal(t, "wf-for-resumption-3", rec.attempts[0].id,
+	require.Equal(t, []string{"wf-for-resumption-3"}, rec.settled,
 		"the reconcile must target THIS resumption's workflow row, not the thread id")
-	require.Equal(t, core.Cancelled(), rec.attempts[0].to)
-}
-
-func TestSpawnStopper_ReconcileFallsBackToPaused(t *testing.T) {
-	t.Parallel()
-	paused := core.Paused()
-	rec := &recordingReconciler{swapOn: &paused}
-	stopper := NewSpawnStopper(&stopperTemporalClient{}, nil, rec)
-
-	require.NoError(t, stopper.StopSpawn(context.Background(), "chat-1", SpawnRef{
-		ThreadID: "child-thread-1", WorkflowID: "child-wf-1", ToolCallID: "toolu_abc"}))
-
-	require.Len(t, rec.attempts, 2)
-	require.Equal(t, core.Active(), rec.attempts[0].expectFrom)
-	require.Equal(t, core.Paused(), rec.attempts[1].expectFrom)
 }
 
 // An undelivered signal means the spawn is still running, so the error must
@@ -183,7 +159,7 @@ func TestSpawnStopper_SignalFails_DoesNotReconcile(t *testing.T) {
 	err := stopper.StopSpawn(context.Background(), "chat-1", SpawnRef{
 		ThreadID: "child-thread-1", WorkflowID: "child-wf-1", ToolCallID: "toolu_abc"})
 	require.Error(t, err)
-	require.Empty(t, rec.attempts, "a spawn that is still running must not be recorded as cancelled")
+	require.Empty(t, rec.settled, "a spawn that is still running must not be recorded as cancelled")
 }
 
 // No Temporal client is the daemon runtime's situation. It must report that it

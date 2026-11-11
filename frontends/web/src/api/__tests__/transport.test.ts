@@ -64,12 +64,12 @@ beforeEach(() => {
 })
 
 describe('buildInterceptors factory', () => {
-  it('produces an 11-stage authed chain in the documented order', async () => {
+  it('produces a 12-stage authed chain in the documented order', async () => {
     const { buildInterceptors, traceStage } = await import('../transport')
     const chain = buildInterceptors({ withAuth: true })
     // error-normalize → timeout → auth → missing-token → org → daemon-last-seen →
-    // trace → error-log → upgrade → machine-wake → unauth
-    expect(chain).toHaveLength(11)
+    // trace → error-log → upgrade → machine-wake → unauth → request-sent
+    expect(chain).toHaveLength(12)
     // The trace stage (the forge runtime's traceInterceptor) is at its documented position.
     expect(chain[6]).toBe(traceStage)
     // Every entry must be a function (Connect Interceptor shape).
@@ -78,12 +78,12 @@ describe('buildInterceptors factory', () => {
     }
   })
 
-  it('produces a 7-stage unauthed chain that omits auth, missing-token + 401-signout', async () => {
+  it('produces an 8-stage unauthed chain that omits auth, missing-token + 401-signout', async () => {
     const { buildInterceptors } = await import('../transport')
     const authed = buildInterceptors({ withAuth: true })
     const unauthed = buildInterceptors({ withAuth: false })
-    // 11 - 4 (auth, missing-token, org, unauth) = 7
-    expect(unauthed).toHaveLength(7)
+    // 12 - 4 (auth, missing-token, org, unauth) = 8
+    expect(unauthed).toHaveLength(8)
     // The unauthed chain is a subset of the authed chain — every entry in
     // unauthed must also appear in authed at the same relative ordering. If
     // someone reorders authentication into the unauthed path the lengths
@@ -95,8 +95,8 @@ describe('buildInterceptors factory', () => {
 
   it('defaults withAuth to true when no option object is passed', async () => {
     const { buildInterceptors } = await import('../transport')
-    expect(buildInterceptors()).toHaveLength(11)
-    expect(buildInterceptors({})).toHaveLength(11)
+    expect(buildInterceptors()).toHaveLength(12)
+    expect(buildInterceptors({})).toHaveLength(12)
   })
 
   it('swaps exactly one stage (daemon-last-seen for forge-via) in the control-plane chain', async () => {
@@ -109,7 +109,7 @@ describe('buildInterceptors factory', () => {
 })
 
 // x-daemon-last-seen is read only by the reliant api-server. A production
-// build calls both servers cross-origin, and the control-plane admin-server's
+// build calls both servers cross-origin, and the control-plane platform-api's
 // CORS preflight does not allow this header, so attaching it there made the
 // browser block every controlplane.v1 RPC once a machine heartbeated. These
 // run the real chain end to end and look at what reaches the wire.

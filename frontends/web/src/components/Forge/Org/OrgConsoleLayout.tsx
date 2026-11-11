@@ -28,10 +28,13 @@ import { useApps } from "@/hooks/apps-queries";
 import { useAlerts, useObservabilityOrg } from "@/hooks/observability-queries";
 import { useTitleBarChrome } from "@/hooks/useTitleBarChrome";
 import { getParentRouteNavigateOptions } from "@/lib/routeParent";
-import { useAuthStore } from "@/store/authStore";
+import { useConsoleUser } from "@/components/Forge/Console/consoleHost";
+import { useObsNavOpen } from "@/components/Forge/Console/obsNavOpen";
 
 import { ObsQuotaBanner } from "../Observability/ObsStates";
 import { ForgeCloseButton } from "../ForgeHeader";
+import { isForgeShell } from "@/lib/shell";
+import { ForgeMark } from "@/components/ForgeShell/ForgeBrand";
 import { orgPageOf, type OrgPage } from "../Console/paths";
 import { OrgSwitcher } from "@/components/Orgs/OrgSwitcher";
 import { OrgShell } from "./OrgShell";
@@ -68,17 +71,9 @@ function OrgChrome({ search }: { search: Record<string, unknown> }) {
     });
   }, []);
 
-  const authUser = useAuthStore((state) => state.user);
-  const user = authUser
-    ? {
-        name:
-          (authUser.user_metadata?.full_name as string | undefined) ??
-          (authUser.user_metadata?.name as string | undefined) ??
-          authUser.email?.split("@")[0] ??
-          "You",
-        email: authUser.email ?? undefined,
-      }
-    : undefined;
+  const [obsOpen, setObsOpen] = useObsNavOpen();
+
+  const user = useConsoleUser();
 
   const { trafficLightPadding, dragRegionStyle } = useTitleBarChrome({ collapsedPadding: "0px" });
   const onClose = useCallback(() => void navigate(getParentRouteNavigateOptions(pathname)), [navigate, pathname]);
@@ -90,12 +85,21 @@ function OrgChrome({ search }: { search: Record<string, unknown> }) {
       apps={apps}
       alertsFiring={alertsFiring}
       search={search}
+      obsOpen={obsOpen}
+      onObsOpenChange={setObsOpen}
       user={user}
       collapsed={collapsed}
       onToggleCollapsed={toggleCollapsed}
       brand={
         <div className="flex min-w-0 items-center gap-1" style={{ paddingLeft: trafficLightPadding, ...dragRegionStyle }}>
-          <ForgeCloseButton onClose={onClose} />
+          {/* The forge shell has nothing to close back to: its mark leads home. */}
+          {isForgeShell() ? (
+            <a href="/apps" aria-label="Forge by Reliant: all apps" className="rounded-md p-0.5" data-testid="forge-shell-home">
+              <ForgeMark className="h-6 w-6" />
+            </a>
+          ) : (
+            <ForgeCloseButton onClose={onClose} />
+          )}
           <div className="flex h-8 min-w-0 flex-1 items-center gap-2 px-1.5 text-sm font-semibold text-ink">
             <OrgMark />
             <span className="min-w-0 flex-1 truncate">Console</span>

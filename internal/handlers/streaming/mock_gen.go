@@ -19,7 +19,7 @@ import (
 )
 
 // forge:section MockRepository
-// forge:hash=c6dd5b5cda7157369b311e9bc3116ef0cba2f26569838184b4012f6df6d7f1b9
+// forge:hash=310af803e8628d4b714fd7674422b684da30f43a5a47cfbfcbd9556e0e6fafc9
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -29,61 +29,65 @@ import (
 // "MockRepository.<Method>Func not set" error.
 type MockRepository struct {
 	contractkit.Recorder
-	GetChatRowFunc                                 func(context.Context, string) (*db.ChatRow, error)
-	GetTriggerEventByChatFunc                      func(context.Context, core.TriggerEventKind, string) (*core.TriggerEvent, error)
-	GetLatestUpdateSequenceFunc                    func(context.Context, string) (int64, error)
-	GetUpdatesSinceFunc                            func(context.Context, string, int64, int) ([]db.ChatUpdate, error)
-	GetLatestNonMessageUpdatesPerEntityFunc        func(context.Context, string) ([]db.ChatUpdate, error)
-	GetLatestUserUpdateSequenceFunc                func(context.Context, string) (int64, error)
-	GetUserUpdatesSinceFunc                        func(context.Context, string, int64, int) ([]db.UserUpdate, error)
-	ListThreadsByConversationFunc                  func(context.Context, string) ([]*db.Thread, error)
-	CountMessagesInChatFunc                        func(context.Context, string) (int, error)
-	ListRecentTranscriptSiblingMessagesFunc        func(context.Context, string, string, int64, int) ([]*db.Message, error)
-	ListContentBlocksForMessagesFunc               func(context.Context, []string) ([]*db.MessageContentBlock, error)
-	ListLiveToolCallsByChatFunc                    func(context.Context, string) ([]*db.ToolCall, error)
-	SpawnToolCallIDsByChildThreadFunc              func(context.Context, string) (map[string]string, error)
-	GetChatRowWithUserCheckFunc                    func(context.Context, string, string) (*db.ChatRow, error)
-	CreateThreadFunc                               func(context.Context, *db.Thread) (*db.Thread, error)
-	GetThreadFunc                                  func(context.Context, string) (*db.Thread, error)
-	GetThreadWithParentFunc                        func(context.Context, string) (*db.Thread, *string, error)
-	GetRootThreadFunc                              func(context.Context, string) (*db.Thread, error)
-	CreateWorkflowFunc                             func(context.Context, *db.Workflow) error
-	UpdateThreadWorkflowFunc                       func(context.Context, string, string) (*db.Thread, error)
-	CreateContextWindowFunc                        func(context.Context, *db.ContextWindow) (*db.ContextWindow, error)
-	GetContextWindowFunc                           func(context.Context, string) (*db.ContextWindow, error)
-	GetLatestContextWindowFunc                     func(context.Context, string) (*db.ContextWindow, error)
-	GetContextWindowBySequenceFunc                 func(context.Context, string, int) (*db.ContextWindow, error)
-	GetMaxSequenceForThreadFunc                    func(context.Context, string) (int, error)
-	SetCompactionSummaryMessageFunc                func(context.Context, string, string) (*db.ContextWindow, error)
-	GetMessageFunc                                 func(context.Context, string) (*db.Message, error)
-	FindMessageFunc                                func(context.Context, string) (*db.Message, error)
-	GetMessagesByContextWindowFunc                 func(context.Context, string, *int64) ([]*db.Message, error)
-	GetLatestMessageWithTokensInThreadFunc         func(context.Context, string, int) (*db.Message, error)
-	GetLatestMessageInThreadFunc                   func(context.Context, string) (*db.Message, error)
-	CountMessagesByContextWindowFunc               func(context.Context, string) (int, error)
-	CountMessagesByContextWindowUpToSeqFunc        func(context.Context, string, int64) (int, error)
-	ListRecentMessagesInContextWindowBeforeSeqFunc func(context.Context, string, int64, int) ([]*db.Message, error)
-	CreateMessageFunc                              func(context.Context, *db.Message) error
-	DeleteMessageFunc                              func(context.Context, string) error
-	GetMessageByActivityIDFunc                     func(context.Context, string, string) (*db.Message, error)
-	GetMessageByWorkflowAndActivityIDFunc          func(context.Context, string, string, string) (*db.Message, error)
-	GetEffectiveMessageCountFunc                   func(context.Context, string, string) (int, error)
-	AllocateMessageOrderFunc                       func(context.Context, string, string) (int64, int64, error)
-	AllocateContextWindowSequenceFunc              func(context.Context, string) (int, error)
-	GetContextUsageFunc                            func(context.Context, string, string) (*db.ContextUsage, error)
-	CreateContentBlockFunc                         func(context.Context, *db.MessageContentBlock) error
-	ListContentBlocksFunc                          func(context.Context, string) ([]*db.MessageContentBlock, error)
-	ListToolCallsByMessageIDsFunc                  func(context.Context, []string) ([]*db.ToolCall, error)
-	UpsertToolCallFunc                             func(context.Context, *db.ToolCall) error
-	UpsertToolCallResultFunc                       func(context.Context, string, *db.ToolCallResult) error
-	GetAttachmentFunc                              func(context.Context, string) (*db.Attachment, error)
-	GetAttachmentsByIDsFunc                        func(context.Context, []string) ([]*db.Attachment, error)
-	CreateChatUpdateFunc                           func(context.Context, string, reliantv1.ChatUpdateType, string, string) error
-	SaveMessageAtomicFunc                          func(context.Context, db.AtomicMessageWrite) (*db.AtomicMessageResult, error)
-	SeedSeqCounterForForkFunc                      func(context.Context, string, string) error
-	RunTxFunc                                      func(context.Context, orm.TxPolicy, func(ctx context.Context) error) error
-	ListThreadsByIDsFunc                           func(context.Context, []string) ([]*db.Thread, error)
-	ListToolCallsByIDsFunc                         func(context.Context, []string) ([]*db.ToolCall, error)
+	GetChatRowFunc                                           func(context.Context, string) (*db.ChatRow, error)
+	GetTriggerEventByChatFunc                                func(context.Context, core.TriggerEventKind, string) (*core.TriggerEvent, error)
+	GetLatestUpdateSequenceFunc                              func(context.Context, string) (int64, error)
+	GetUpdatesSinceFunc                                      func(context.Context, string, int64, int) ([]db.ChatUpdate, error)
+	GetLatestNonMessageUpdatesPerEntityFunc                  func(context.Context, string) ([]db.ChatUpdate, error)
+	GetLatestUserUpdateSequenceFunc                          func(context.Context, string) (int64, error)
+	GetUserUpdatesSinceFunc                                  func(context.Context, string, int64, int) ([]db.UserUpdate, error)
+	GetProjectFunc                                           func(context.Context, string) (*db.Project, error)
+	GetWorkflowDraftFunc                                     func(context.Context, string) (*db.WorkflowDraft, error)
+	ListThreadsByConversationFunc                            func(context.Context, string) ([]*db.Thread, error)
+	CountMessagesInChatFunc                                  func(context.Context, string) (int, error)
+	ListRecentTranscriptSiblingMessagesFunc                  func(context.Context, string, string, int64, int) ([]*db.Message, error)
+	ListContentBlocksForMessagesFunc                         func(context.Context, []string) ([]*db.MessageContentBlock, error)
+	ListLiveToolCallsByChatFunc                              func(context.Context, string) ([]*db.ToolCall, error)
+	SpawnToolCallIDsByChildThreadFunc                        func(context.Context, string) (map[string]string, error)
+	GetChatRowWithUserCheckFunc                              func(context.Context, string, string) (*db.ChatRow, error)
+	CreateThreadFunc                                         func(context.Context, *db.Thread) (*db.Thread, error)
+	GetThreadFunc                                            func(context.Context, string) (*db.Thread, error)
+	ResolveThreadAmbientMemoryExclusionFunc                  func(context.Context, string, string, bool) (bool, error)
+	GetThreadWithParentFunc                                  func(context.Context, string) (*db.Thread, *string, error)
+	GetRootThreadFunc                                        func(context.Context, string) (*db.Thread, error)
+	SenderTitleFunc                                          func(context.Context, string) *string
+	CreateWorkflowFunc                                       func(context.Context, *db.Workflow) error
+	UpdateThreadWorkflowFunc                                 func(context.Context, string, string) (*db.Thread, error)
+	CreateContextWindowFunc                                  func(context.Context, *db.ContextWindow) (*db.ContextWindow, error)
+	GetContextWindowFunc                                     func(context.Context, string) (*db.ContextWindow, error)
+	GetLatestContextWindowFunc                               func(context.Context, string) (*db.ContextWindow, error)
+	GetContextWindowBySequenceFunc                           func(context.Context, string, int) (*db.ContextWindow, error)
+	GetMaxSequenceForThreadFunc                              func(context.Context, string) (int, error)
+	SetCompactionSummaryMessageFunc                          func(context.Context, string, string) (*db.ContextWindow, error)
+	GetMessageFunc                                           func(context.Context, string) (*db.Message, error)
+	FindMessageFunc                                          func(context.Context, string) (*db.Message, error)
+	GetMessagesByContextWindowFunc                           func(context.Context, string, *int64) ([]*db.Message, error)
+	GetLatestMessageWithTokensInThreadFunc                   func(context.Context, string, int) (*db.Message, error)
+	GetLatestMessageInThreadFunc                             func(context.Context, string) (*db.Message, error)
+	CountMessagesByContextWindowFunc                         func(context.Context, string) (int, error)
+	CountMessagesByContextWindowUpToSeqFunc                  func(context.Context, string, int64) (int, error)
+	ListRecentTranscriptMessagesInContextWindowBeforeSeqFunc func(context.Context, string, int64, int) ([]*db.Message, error)
+	CreateMessageFunc                                        func(context.Context, *db.Message) error
+	DeleteMessageFunc                                        func(context.Context, string) error
+	GetMessageByActivityIDFunc                               func(context.Context, string, string) (*db.Message, error)
+	GetMessageByWorkflowAndActivityIDFunc                    func(context.Context, string, string, string) (*db.Message, error)
+	GetEffectiveMessageCountFunc                             func(context.Context, string, string) (int, error)
+	AllocateMessageOrderFunc                                 func(context.Context, string, string) (int64, int64, error)
+	AllocateContextWindowSequenceFunc                        func(context.Context, string) (int, error)
+	GetContextUsageFunc                                      func(context.Context, string, string) (*db.ContextUsage, error)
+	CreateContentBlockFunc                                   func(context.Context, *db.MessageContentBlock) error
+	ListContentBlocksFunc                                    func(context.Context, string) ([]*db.MessageContentBlock, error)
+	ListToolCallsByMessageIDsFunc                            func(context.Context, []string) ([]*db.ToolCall, error)
+	UpsertToolCallFunc                                       func(context.Context, *db.ToolCall) error
+	UpsertToolCallResultFunc                                 func(context.Context, string, *db.ToolCallResult) error
+	GetAttachmentFunc                                        func(context.Context, string) (*db.Attachment, error)
+	GetAttachmentsByIDsFunc                                  func(context.Context, []string) ([]*db.Attachment, error)
+	CreateChatUpdateFunc                                     func(context.Context, string, reliantv1.ChatUpdateType, string, string) error
+	SaveMessageAtomicFunc                                    func(context.Context, db.AtomicMessageWrite) (*db.AtomicMessageResult, error)
+	SeedSeqCounterForForkFunc                                func(context.Context, string, string) error
+	RunTxFunc                                                func(context.Context, orm.TxPolicy, func(ctx context.Context) error) error
+	ListToolCallsByIDsFunc                                   func(context.Context, []string) ([]*db.ToolCall, error)
+	SenderTitlesFunc                                         func(context.Context, []string) (map[string]string, error)
 }
 
 // GetChatRow records the call and delegates to GetChatRowFunc when set.
@@ -147,6 +151,24 @@ func (m *MockRepository) GetUserUpdatesSince(ctx context.Context, userID string,
 		return m.GetUserUpdatesSinceFunc(ctx, userID, sinceSeq, limit)
 	}
 	return nil, contractkit.MockNotSet("MockRepository", "GetUserUpdatesSince")
+}
+
+// GetProject records the call and delegates to GetProjectFunc when set.
+func (m *MockRepository) GetProject(ctx context.Context, id string) (*db.Project, error) {
+	m.Recorder.Record("GetProject", ctx, id)
+	if m.GetProjectFunc != nil {
+		return m.GetProjectFunc(ctx, id)
+	}
+	return nil, contractkit.MockNotSet("MockRepository", "GetProject")
+}
+
+// GetWorkflowDraft records the call and delegates to GetWorkflowDraftFunc when set.
+func (m *MockRepository) GetWorkflowDraft(ctx context.Context, id string) (*db.WorkflowDraft, error) {
+	m.Recorder.Record("GetWorkflowDraft", ctx, id)
+	if m.GetWorkflowDraftFunc != nil {
+		return m.GetWorkflowDraftFunc(ctx, id)
+	}
+	return nil, contractkit.MockNotSet("MockRepository", "GetWorkflowDraft")
 }
 
 // ListThreadsByConversation records the call and delegates to ListThreadsByConversationFunc when set.
@@ -230,6 +252,15 @@ func (m *MockRepository) GetThread(ctx context.Context, id string) (*db.Thread, 
 	return nil, contractkit.MockNotSet("MockRepository", "GetThread")
 }
 
+// ResolveThreadAmbientMemoryExclusion records the call and delegates to ResolveThreadAmbientMemoryExclusionFunc when set.
+func (m *MockRepository) ResolveThreadAmbientMemoryExclusion(ctx context.Context, chatID string, threadID string, requested bool) (bool, error) {
+	m.Recorder.Record("ResolveThreadAmbientMemoryExclusion", ctx, chatID, threadID, requested)
+	if m.ResolveThreadAmbientMemoryExclusionFunc != nil {
+		return m.ResolveThreadAmbientMemoryExclusionFunc(ctx, chatID, threadID, requested)
+	}
+	return false, contractkit.MockNotSet("MockRepository", "ResolveThreadAmbientMemoryExclusion")
+}
+
 // GetThreadWithParent records the call and delegates to GetThreadWithParentFunc when set.
 func (m *MockRepository) GetThreadWithParent(ctx context.Context, id string) (*db.Thread, *string, error) {
 	m.Recorder.Record("GetThreadWithParent", ctx, id)
@@ -246,6 +277,15 @@ func (m *MockRepository) GetRootThread(ctx context.Context, conversationID strin
 		return m.GetRootThreadFunc(ctx, conversationID)
 	}
 	return nil, contractkit.MockNotSet("MockRepository", "GetRootThread")
+}
+
+// SenderTitle records the call and delegates to SenderTitleFunc when set.
+func (m *MockRepository) SenderTitle(ctx context.Context, threadID string) *string {
+	m.Recorder.Record("SenderTitle", ctx, threadID)
+	if m.SenderTitleFunc != nil {
+		return m.SenderTitleFunc(ctx, threadID)
+	}
+	return nil
 }
 
 // CreateWorkflow records the call and delegates to CreateWorkflowFunc when set.
@@ -383,13 +423,13 @@ func (m *MockRepository) CountMessagesByContextWindowUpToSeq(ctx context.Context
 	return 0, contractkit.MockNotSet("MockRepository", "CountMessagesByContextWindowUpToSeq")
 }
 
-// ListRecentMessagesInContextWindowBeforeSeq records the call and delegates to ListRecentMessagesInContextWindowBeforeSeqFunc when set.
-func (m *MockRepository) ListRecentMessagesInContextWindowBeforeSeq(ctx context.Context, contextWindowID string, beforeSeq int64, limit int) ([]*db.Message, error) {
-	m.Recorder.Record("ListRecentMessagesInContextWindowBeforeSeq", ctx, contextWindowID, beforeSeq, limit)
-	if m.ListRecentMessagesInContextWindowBeforeSeqFunc != nil {
-		return m.ListRecentMessagesInContextWindowBeforeSeqFunc(ctx, contextWindowID, beforeSeq, limit)
+// ListRecentTranscriptMessagesInContextWindowBeforeSeq records the call and delegates to ListRecentTranscriptMessagesInContextWindowBeforeSeqFunc when set.
+func (m *MockRepository) ListRecentTranscriptMessagesInContextWindowBeforeSeq(ctx context.Context, contextWindowID string, beforeSeq int64, limit int) ([]*db.Message, error) {
+	m.Recorder.Record("ListRecentTranscriptMessagesInContextWindowBeforeSeq", ctx, contextWindowID, beforeSeq, limit)
+	if m.ListRecentTranscriptMessagesInContextWindowBeforeSeqFunc != nil {
+		return m.ListRecentTranscriptMessagesInContextWindowBeforeSeqFunc(ctx, contextWindowID, beforeSeq, limit)
 	}
-	return nil, contractkit.MockNotSet("MockRepository", "ListRecentMessagesInContextWindowBeforeSeq")
+	return nil, contractkit.MockNotSet("MockRepository", "ListRecentTranscriptMessagesInContextWindowBeforeSeq")
 }
 
 // CreateMessage records the call and delegates to CreateMessageFunc when set.
@@ -563,15 +603,6 @@ func (m *MockRepository) RunTx(p0 context.Context, policy orm.TxPolicy, f func(c
 	return contractkit.MockNotSet("MockRepository", "RunTx")
 }
 
-// ListThreadsByIDs records the call and delegates to ListThreadsByIDsFunc when set.
-func (m *MockRepository) ListThreadsByIDs(ctx context.Context, ids []string) ([]*db.Thread, error) {
-	m.Recorder.Record("ListThreadsByIDs", ctx, ids)
-	if m.ListThreadsByIDsFunc != nil {
-		return m.ListThreadsByIDsFunc(ctx, ids)
-	}
-	return nil, contractkit.MockNotSet("MockRepository", "ListThreadsByIDs")
-}
-
 // ListToolCallsByIDs records the call and delegates to ListToolCallsByIDsFunc when set.
 func (m *MockRepository) ListToolCallsByIDs(ctx context.Context, toolCallIDs []string) ([]*db.ToolCall, error) {
 	m.Recorder.Record("ListToolCallsByIDs", ctx, toolCallIDs)
@@ -579,6 +610,15 @@ func (m *MockRepository) ListToolCallsByIDs(ctx context.Context, toolCallIDs []s
 		return m.ListToolCallsByIDsFunc(ctx, toolCallIDs)
 	}
 	return nil, contractkit.MockNotSet("MockRepository", "ListToolCallsByIDs")
+}
+
+// SenderTitles records the call and delegates to SenderTitlesFunc when set.
+func (m *MockRepository) SenderTitles(ctx context.Context, threadIDs []string) (map[string]string, error) {
+	m.Recorder.Record("SenderTitles", ctx, threadIDs)
+	if m.SenderTitlesFunc != nil {
+		return m.SenderTitlesFunc(ctx, threadIDs)
+	}
+	return nil, contractkit.MockNotSet("MockRepository", "SenderTitles")
 }
 
 // Compile-time check.

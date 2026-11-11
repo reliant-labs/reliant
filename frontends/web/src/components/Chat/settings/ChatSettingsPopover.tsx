@@ -20,6 +20,7 @@ import {
   getInputUI,
 } from "../../../lib/inputHelpers";
 import type { Preset } from "../../../hooks/preset-queries";
+import { isSelectorHidden, selectableOptions } from "../../../lib/executionMode";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -203,6 +204,7 @@ export function ChatSettingsPopover({
   const modeValue = modeKey ? (values[modeKey] as string) : undefined;
   const modeOptions = modeKey ? getInputEnumValues(inputs![modeKey]) : null;
   const modeDefault = modeKey ? getInputDefault(inputs![modeKey]) : null;
+  const currentMode = modeValue ?? (modeDefault as string) ?? modeOptions?.[0] ?? "";
 
   // Model display info
   const modelDisplay = getModelDisplayLabel(modelValue);
@@ -216,9 +218,16 @@ export function ChatSettingsPopover({
     [modelKey, values, onChange],
   );
 
+  // `undefined` resets the mode: the key leaves `values`, so the workflow's
+  // default (or a preset's mode) applies again.
   const handleModeChange = useCallback(
-    (mode: string) => {
+    (mode: string | undefined) => {
       if (!modeKey) return;
+      if (mode === undefined) {
+        const { [modeKey]: _reset, ...rest } = values;
+        onChange(rest);
+        return;
+      }
       onChange({ ...values, [modeKey]: mode });
     },
     [modeKey, values, onChange],
@@ -317,7 +326,7 @@ export function ChatSettingsPopover({
             )}
 
             {/* Divider before mode */}
-            {modeKey && modeOptions && (
+            {modeKey && modeOptions && !isSelectorHidden(modeOptions) && (
               <>
                 <div className="h-px bg-border/50 mx-0 my-1" />
 
@@ -326,14 +335,25 @@ export function ChatSettingsPopover({
                   Execution Mode
                 </div>
                 <div className="px-4 pb-2.5 flex gap-1.5">
-                  {modeOptions.map((mode) => {
-                    const currentMode =
-                      modeValue ?? (modeDefault as string) ?? modeOptions[0];
+                  {/* "auto" is not listed, so "default" is the explicit way back
+                      to the parameter's default: it drops the override. */}
+                  <button
+                    onClick={() => handleModeChange(undefined)}
+                    className={cn(
+                      "flex-1 px-2.5 py-1.5 rounded-md border text-xs font-medium text-center transition-all capitalize touch:min-h-[44px]",
+                      !selectableOptions(modeOptions).includes(currentMode)
+                        ? "border-primary bg-primary/15 text-primary-ink"
+                        : "border-border bg-transparent text-muted-foreground hover:border-border/80 hover:text-foreground",
+                    )}
+                  >
+                    default
+                  </button>
+                  {selectableOptions(modeOptions).map((mode) => {
                     const isSelected = currentMode === mode;
                     return (
                       <button
                         key={mode}
-                        onClick={() => handleModeChange(mode)}
+                        onClick={() => handleModeChange(isSelected ? undefined : mode)}
                         className={cn(
                           "flex-1 px-2.5 py-1.5 rounded-md border text-xs font-medium text-center transition-all capitalize touch:min-h-[44px]",
                           isSelected

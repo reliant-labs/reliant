@@ -30,6 +30,7 @@ type mockRunResponse struct {
 	stderr      string
 	exitCode    int
 	interrupted bool
+	truncated   bool
 	err         error
 }
 
@@ -39,7 +40,7 @@ func (m *mockRunExecutor) ExecuteCommand(
 	workingDir string,
 	timeoutMs int,
 	env map[string]string,
-) (string, string, int, bool, error) {
+) (CommandResult, error) {
 	m.calls = append(m.calls, mockRunCall{
 		command:    command,
 		workingDir: workingDir,
@@ -52,10 +53,10 @@ func (m *mockRunExecutor) ExecuteCommand(
 		idx = len(m.responses) - 1
 	}
 	if idx < 0 {
-		return "", "", 0, false, nil
+		return CommandResult{}, nil
 	}
 	r := m.responses[idx]
-	return r.stdout, r.stderr, r.exitCode, r.interrupted, r.err
+	return CommandResult{Stdout: r.stdout, Stderr: r.stderr, ExitCode: r.exitCode, Interrupted: r.interrupted, Truncated: r.truncated}, r.err
 }
 
 func TestRunStep_LogFile_WritesOutput(t *testing.T) {

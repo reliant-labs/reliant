@@ -215,3 +215,31 @@ describe("SQL time series: the window asked for and the bucket's calendar", () =
     expect(lastChart().window).toBeUndefined();
   });
 });
+
+describe("SQL rows drawn as bars (display.style: bars)", () => {
+  const bars = (id: string): Panel => ({ ...panel(id), display: { style: "bars" } });
+
+  it("draws a histogram's buckets as upright bars, in the statement's order", () => {
+    const data = result({ columns: ["users"], rows: [row({ chats_in_range: "0" }, [12]), row({ chats_in_range: "1" }, [5]), row({ chats_in_range: "51+" }, [1])] });
+    render(<PanelBody panel={bars("engagement-chats-per-user")} query={ready(data)} />);
+    const chart = screen.getByTestId("obs-panel-bar");
+    expect(chart).toHaveAttribute("data-orientation", "vertical");
+    expect(Array.from(chart.querySelectorAll("[data-group]")).map((li) => li.getAttribute("data-group"))).toEqual(["0", "1", "51+"]);
+    expect(screen.queryByTestId("obs-panel-table")).not.toBeInTheDocument();
+  });
+
+  it("lays long names along the y axis", () => {
+    const data = result({ columns: ["events"], rows: [row({ source: "messages: agent chats (human)" }, [7]), row({ source: "runs: spawned child agents" }, [1])] });
+    render(<PanelBody panel={bars("engagement-human-vs-automated")} query={ready(data)} />);
+    expect(screen.getByTestId("obs-panel-bar")).toHaveAttribute("data-orientation", "horizontal");
+  });
+
+  it("keeps a table without the style, and a single aggregate row as figures", () => {
+    const data = result({ columns: ["users"], rows: [row({ bucket: "1" }, [3])] });
+    const { rerender } = render(<PanelBody panel={panel("plain")} query={ready(data)} />);
+    expect(screen.getByTestId("obs-panel-table")).toBeInTheDocument();
+    rerender(<PanelBody panel={bars("headline")} query={ready(result({ columns: ["users"], rows: [row({}, [3])] }))} />);
+    expect(screen.queryByTestId("obs-panel-bar")).not.toBeInTheDocument();
+    expect(screen.getByTestId("obs-panel-number")).toBeInTheDocument();
+  });
+});

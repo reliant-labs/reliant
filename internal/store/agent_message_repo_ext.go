@@ -66,7 +66,7 @@ import (
 // agentMessageColumns is the column list the passthrough reads scan, in
 // scanAgentMessage's order.
 const agentMessageColumns = `id, chat_id, from_thread_id, to_thread_id, kind, body, tool_call_id,
-    status, created_at, delivered_at, delivered_message_id, attachments, synthesized, subject`
+    status, created_at, delivered_at, delivered_message_id, attachments, synthesized, subject, display_style`
 
 // insertAgentMessageSQL is the insert every enqueue shares; each appends its
 // own conflict clause. attachments is NULL for none (see
@@ -74,8 +74,8 @@ const agentMessageColumns = `id, chat_id, from_thread_id, to_thread_id, kind, bo
 const insertAgentMessageSQL = `
 INSERT INTO agent_messages (
     id, chat_id, from_thread_id, to_thread_id, kind, body, tool_call_id,
-    status, created_at, attachments, synthesized, subject
-) VALUES (?0, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9::jsonb, ?10, ?11)`
+    status, created_at, attachments, synthesized, subject, display_style
+) VALUES (?0, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9::jsonb, ?10, ?11, ?12)`
 
 func agentMessageInsertArgs(msg *core.AgentMessage) ([]any, error) {
 	attachments, err := agentMessageAttachments(msg.Attachments)
@@ -83,7 +83,7 @@ func agentMessageInsertArgs(msg *core.AgentMessage) ([]any, error) {
 		return nil, err
 	}
 	return []any{msg.ID, msg.ChatID, msg.FromThreadID, msg.ToThreadID, msg.Kind, msg.Body, msg.ToolCallID,
-		msg.Status, msg.CreatedAt, attachments, msg.Synthesized, msg.Subject}, nil
+		msg.Status, msg.CreatedAt, attachments, msg.Synthesized, msg.Subject, msg.DisplayStyle}, nil
 }
 
 // EnqueueAgentMessage queues msg.
@@ -439,6 +439,36 @@ func MarkQueuedAgentMessagesUndeliveredForThread(ctx context.Context, db orm.Con
 	return res.RowsAffected()
 }
 
+// markQueuedAgentMessagesUndeliveredForWorkflowSubtreeSQL resolves the
+// mailboxes of every thread owned by a workflow or any of its descendants:
+// the same subtree cascadeTerminalStatusToThreadSubtreeSQL ends.
+const markQueuedAgentMessagesUndeliveredForWorkflowSubtreeSQL = `
+WITH RECURSIVE subtree AS (
+    SELECT ?0::text AS id
+    UNION ALL
+    SELECT c.id FROM workflows c JOIN subtree s ON c.parent_id = s.id
+)
+UPDATE agent_messages AS m
+SET status = ?1::int
+FROM threads t, subtree
+WHERE m.to_thread_id = t.id
+  AND t.workflow_id = subtree.id
+  AND m.status = ?2::int`
+
+// MarkQueuedAgentMessagesUndeliveredForWorkflowSubtree marks every row still
+// queued for a thread of workflowID's subtree undelivered, for a subtree that
+// was told to stop: no loop of it will take another turn to drain them.
+// Guarded on queued, like the per-thread resolve. Returns how many rows it
+// moved.
+func MarkQueuedAgentMessagesUndeliveredForWorkflowSubtree(ctx context.Context, db orm.Context, workflowID string) (int64, error) {
+	res, err := db.Bun().NewRaw(markQueuedAgentMessagesUndeliveredForWorkflowSubtreeSQL,
+		workflowID, core.AgentMessageStatusUndelivered, core.AgentMessageStatusQueued).Exec(ctx)
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
+}
+
 // ListThreadsWithOrphanedAgentMessages returns every thread that is ALREADY
 // terminal but still has queued mailbox rows: the backlog the live path
 // above missed (rows from before it existed, or a process that died between
@@ -478,7 +508,7 @@ func scanAgentMessage(rows *sql.Rows) (*core.AgentMessage, error) {
 	)
 	if err := rows.Scan(&msg.ID, &msg.ChatID, &msg.FromThreadID, &msg.ToThreadID, &msg.Kind, &msg.Body, &msg.ToolCallID,
 		&msg.Status, &msg.CreatedAt, &msg.DeliveredAt, &msg.DeliveredMessageID, &attachments, &msg.Synthesized,
-		&msg.Subject); err != nil {
+		&msg.Subject, &msg.DisplayStyle); err != nil {
 		return nil, err
 	}
 	msg.Attachments = agentMessageAttachmentIDs(attachments)
@@ -501,6 +531,7 @@ func agentMessageFromRow(row *AgentMessage) *core.AgentMessage {
 		DeliveredMessageID: row.DeliveredMessageID,
 		Synthesized:        row.Synthesized,
 		Subject:            row.Subject,
+		DisplayStyle:       row.DisplayStyle,
 	}
 }
 

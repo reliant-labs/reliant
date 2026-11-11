@@ -1,3 +1,4 @@
+// @vitest-environment node
 // Copyright (c) 2025 Reliant Labs
 
 /** The span-tree build ported from HyperDX, and the edge cases it exists for. */

@@ -147,6 +147,7 @@ vi.mock("../../../lib/logger", () => ({ logger: { info: vi.fn(), warn: vi.fn(), 
 vi.mock("sonner", () => ({ toast: { error: vi.fn(), success: vi.fn() } }));
 
 import { NewChatView } from "../NewChatView";
+import { useNewChatMachineStore } from "../../../store/newChatMachineStore";
 
 // DaemonStatus: ACTIVE = 1, PENDING = 4, SUSPENDED = 5.
 const laptop = { daemonId: "d-laptop", hostname: "laptop", status: 1 };
@@ -247,6 +248,30 @@ describe("NewChatView: where the chat runs", () => {
     expect(machineArg()).toEqual({ daemonId: "d-laptop", noMachine: undefined });
   });
 
+  // Add project on gpu-box attached the folder to a project the default
+  // (laptop) already has: the new chat it opens runs on gpu-box, the machine
+  // the user picked, not the default.
+  it("runs on the machine the screen that opened it named, once", async () => {
+    const gpu = { daemonId: "d-gpu", hostname: "gpu-box", status: 1 };
+    daemonState.current = { activeDaemon: laptop, daemons: [laptop, gpu], loading: false };
+    useNewChatMachineStore.getState().offer({ projectId: "p1", daemonId: "d-gpu" });
+    render(<NewChatView tabId="t1" />);
+    await waitFor(() => expect(screen.getByTestId("machine-picker")).toHaveTextContent("gpu-box"));
+    expect(useNewChatMachineStore.getState().pending).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    await waitFor(() => expect(startChat).toHaveBeenCalled());
+    expect(machineArg()).toEqual({ daemonId: "d-gpu", noMachine: undefined });
+  });
+
+  it("ignores a machine named for another project", () => {
+    const gpu = { daemonId: "d-gpu", hostname: "gpu-box", status: 1 };
+    daemonState.current = { activeDaemon: laptop, daemons: [laptop, gpu], loading: false };
+    useNewChatMachineStore.getState().offer({ projectId: "p-other", daemonId: "d-gpu" });
+    render(<NewChatView tabId="t1" />);
+    expect(screen.getByTestId("machine-picker")).toHaveTextContent("laptop");
+    useNewChatMachineStore.setState({ pending: null });
+  });
+
   // The owner's report: with two machines, the page let a chat start in a
   // workspace on one machine while running on the other, whose disk does not
   // have it. Selecting a workspace selects its machine.
@@ -270,6 +295,19 @@ describe("NewChatView: where the chat runs", () => {
       expect((startChat.mock.calls[0] as unknown[])[0]).toBe("w-feature");
       // The server pins the chat to its workspace's machine.
       expect(machineArg()).toEqual({ daemonId: undefined, noMachine: undefined });
+    });
+
+    // The open chat is on the gpu-box branch workspace, and Add project's
+    // folder on the laptop attached to this project: the named laptop wins,
+    // and the branch workspace is left for main, as a pick in the picker does.
+    it("leaves a branch workspace on another machine when the opening screen names a machine", async () => {
+      useNewChatMachineStore.getState().offer({ projectId: "p1", daemonId: "d-laptop" });
+      render(<NewChatView tabId="t1" />);
+      await waitFor(() => expect(screen.getByTestId("machine-picker")).toHaveTextContent("laptop"));
+      fireEvent.click(screen.getByRole("button", { name: "Send" }));
+      await waitFor(() => expect(startChat).toHaveBeenCalled());
+      expect((startChat.mock.calls[0] as unknown[])[0]).toBe("w-main");
+      expect(machineArg()).toEqual({ daemonId: "d-laptop", noMachine: undefined });
     });
 
     it("moves to the main workspace, and offers only that machine's workspaces, when another machine is chosen", async () => {

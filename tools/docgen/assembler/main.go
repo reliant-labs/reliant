@@ -593,7 +593,38 @@ on_failure:
 - **It cannot mask the failure.** The run still ends FAILED. An error inside the handler (or a handler that outlives its 5-minute budget) is logged and recorded, never handled and never recursive; it has no ` + bt + `outputs` + bt + `, ` + bt + `inputs` + bt + ` or nested ` + bt + `on_failure` + bt + `. It can contain actions, ` + bt + `save_message` + bt + `, sub-workflows and agents, but no ` + bt + `approval` + bt + ` or ` + bt + `ask_question` + bt + `: nobody is answering.
 - **Make a failure visible.** A run that ends on a path labelled "blocked", "punted" or "no result" but finishes normally is a success to the platform: it is auto-archived and never reaches the handler. Route those paths to a terminal node with ` + bt + `outcome: failure` + bt + `.
 - **Tell a person once.** The Autopilot pack's ` + bt + `builtin://autopilot-failure-note` + bt + ` posts one comment per pull request head commit (or issue): it searches the thread for its own marker first, posts nothing if the thread cannot be read, and writes as whoever the run acts as.
-- **Test it.** A scenario names the handler's nodes ` + bt + `on_failure.<node>` + bt + ` in ` + bt + `events` + bt + `, ` + bt + `reached` + bt + `, ` + bt + `completed` + bt + ` and ` + bt + `messages` + bt + `, and asserts ` + bt + `expect.on_failure: {ran, node_id, node_path, error_code, attempt, error_contains, handler_failed}` + bt + `.`
+- **Test it.** A scenario names the handler's nodes ` + bt + `on_failure.<node>` + bt + ` in ` + bt + `events` + bt + `, ` + bt + `reached` + bt + `, ` + bt + `completed` + bt + ` and ` + bt + `messages` + bt + `, and asserts ` + bt + `expect.on_failure: {ran, node_id, node_path, error_code, attempt, error_contains, handler_failed}` + bt + `.
+- **Releasing something?** on_failure never runs for a cancelled run. A lease, claim or label the run takes must be released in ` + bt + `finally:` + bt + `, below.
+
+### However a run ends: ` + bt + `finally:` + bt + `
+
+A workflow-level ` + bt + `finally:` + bt + ` is an inline graph, like on_failure, that runs ONCE when a run ENDS: it completed, it failed, or it was cancelled
+(` + bt + `control_run cancel` + bt + `, CancelRun, archiving the chat). It is where a workflow releases what it holds, so nothing stays held until a TTL runs out.
+
+` + "```yaml" + `
+finally:
+  sequence:
+    - id: release
+      type: run
+      condition: "nodes.?lease.sha.orValue('') != ''"
+      timeout: 3m
+      args:
+        command: "scripts/lease.sh release --sha '{{ nodes.lease.sha }}'"
+    - id: note
+      type: save_message
+      condition: "run.status != 'completed'"
+      args:
+        role: assistant
+        display_style: warning
+        content: "Ended {{ run.status }}{{ run.status == 'failed' ? ' at ' + failure.node_id : '' }}; released the lease."
+` + "```" + `
+
+- **It runs when** the run completes, fails (after on_failure), or is cancelled. Not when it pauses (it is coming back) or hands off to a successor run.
+- **` + bt + `run.status` + bt + `** is ` + bt + `'completed'` + bt + `, ` + bt + `'failed'` + bt + ` or ` + bt + `'cancelled'` + bt + `, and exists only inside finally. ` + bt + `failure.*` + bt + ` is declared too, every key present and empty unless ` + bt + `run.status == 'failed'` + bt + `.
+- **On a cancel**, the run's in-flight steps are cancelled first, and a ` + bt + `run` + bt + ` node's command is stopped on its machine. Then finally runs, on its own budget, so its own commands are not cancelled. A run that does not stop within a few seconds of the cancel is hard-terminated without it.
+- **The same rules as on_failure:** guard ` + bt + `nodes.<main node>` + bt + ` reads (a cancel can stop the graph anywhere), no node id shared with the main graph, ` + bt + `finally` + bt + ` is a reserved id, no ` + bt + `outputs` + bt + `, ` + bt + `inputs` + bt + ` or nested handlers, no ` + bt + `approval` + bt + ` or ` + bt + `ask_question` + bt + `, a 5-minute budget, and an error in it is logged and never changes how the run ended. Make its steps idempotent: releasing a lease that is not held must succeed.
+- **A child's finally.** A workflow started by a ` + bt + `workflow:` + bt + ` node with ` + bt + `ref:` + bt + ` runs its own finally when it ends, in its own scope, before the parent's (` + bt + `release.finally.<id>` + bt + `).
+- **Test it.** Name its nodes ` + bt + `finally.<node>` + bt + ` in a scenario and assert ` + bt + `expect.finally: {ran, status, handler_failed}` + bt + `.`
 }
 
 func generateGotchas() string {

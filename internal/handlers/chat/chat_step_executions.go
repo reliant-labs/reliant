@@ -6,6 +6,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/authz"
+	"github.com/reliant-labs/reliant/internal/ptr"
+
 	"connectrpc.com/connect"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
@@ -38,7 +41,7 @@ func (s *Service) ListStepExecutions(
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}
-	if chat.UserID != userID {
+	if !authz.CanReadChat(ctx, userID, chat) {
 		return nil, svcerr.NotFound("chat")
 	}
 
@@ -68,31 +71,22 @@ func stepExecutionRecordToProto(row *db.StepExecution) *reliantv1.StepExecution 
 		WorkflowId:   row.WorkflowID,
 		StepId:       row.StepID,
 		ActivityName: row.ActivityName,
-		OutputJson:   row.OutputJSON.String,
+		OutputJson:   ptr.From(row.OutputJSON),
 		CreatedAt:    row.CreatedAt.Format(time.RFC3339Nano),
-		InputJson:    row.InputJSON.String,
-		ErrorMessage: row.ErrorMessage.String,
-		Attempt:      row.Attempt.Int32,
-		NodePath:     row.NodePath.String,
+		InputJson:    ptr.From(row.InputJSON),
+		ErrorMessage: ptr.From(row.ErrorMessage),
+		Attempt:      ptr.From(row.Attempt),
+		NodePath:     ptr.From(row.NodePath),
+		Success:      row.Success,
+		DurationMs:   row.DurationMs,
+		LoopNodeId:   row.LoopNodeID,
 	}
-	if row.ExitCode.Valid {
-		exitCode := int32(row.ExitCode.Int64)
+	if row.ExitCode != nil {
+		exitCode := int32(*row.ExitCode)
 		execution.ExitCode = &exitCode
 	}
-	if row.Success.Valid {
-		success := row.Success.Bool
-		execution.Success = &success
-	}
-	if row.DurationMs.Valid {
-		durationMs := row.DurationMs.Int64
-		execution.DurationMs = &durationMs
-	}
-	if row.LoopNodeID.Valid {
-		loopNodeID := row.LoopNodeID.String
-		execution.LoopNodeId = &loopNodeID
-	}
-	if row.LoopIteration.Valid {
-		loopIteration := int32(row.LoopIteration.Int64)
+	if row.LoopIteration != nil {
+		loopIteration := int32(*row.LoopIteration)
 		execution.LoopIteration = &loopIteration
 	}
 	return execution

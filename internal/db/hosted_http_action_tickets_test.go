@@ -112,3 +112,33 @@ func TestHostedHTTPActionTicketCurrentAuthority(t *testing.T) {
 		})
 	}
 }
+
+// The access-list path issues tickets with no grant id. The ticket still binds
+// the digest, and a grant id offered at redemption does not match it.
+func TestHostedHTTPActionTicketWithoutGrant(t *testing.T) {
+	repo, ticket := ticketFixture(t)
+	ticket.GrantID = ""
+	ctx := context.Background()
+	ok, err := repo.CreateHostedHTTPActionTicket(ctx, ticket)
+	require.NoError(t, err)
+	require.True(t, ok)
+
+	got, err := repo.RedeemHostedHTTPActionTicket(ctx, ticket.ID, "approved-grant", ticket.RequestSHA256)
+	require.NoError(t, err)
+	require.Nil(t, got, "a grant id cannot redeem a grant-less ticket")
+	got, err = repo.RedeemHostedHTTPActionTicket(ctx, ticket.ID, "", strings.Repeat("b", 64))
+	require.NoError(t, err)
+	require.Nil(t, got, "a different request digest cannot redeem it")
+
+	got, err = repo.RedeemHostedHTTPActionTicket(ctx, ticket.ID, "", ticket.RequestSHA256)
+	require.NoError(t, err)
+	require.NotNil(t, got)
+	require.Equal(t, "test-user", got.OwnerUserID)
+	require.Equal(t, "trader-bot", got.WorkflowName)
+	require.Equal(t, ticket.NodeID, got.NodeID)
+	require.Empty(t, got.GrantID)
+
+	again, err := repo.RedeemHostedHTTPActionTicket(ctx, ticket.ID, "", ticket.RequestSHA256)
+	require.NoError(t, err)
+	require.Nil(t, again, "one use")
+}

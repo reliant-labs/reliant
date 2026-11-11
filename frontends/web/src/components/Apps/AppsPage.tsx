@@ -18,7 +18,9 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
-import { CircleCheck, Plus } from "lucide-react";
+import { ArrowUpRight, CircleCheck, Plus } from "lucide-react";
+import { forgeAppOrigin } from "@/lib/shell";
+import { isElectron } from "@/lib/constants";
 
 import Button from "@/components/forge-ui/button";
 import Card from "@/components/forge-ui/card";
@@ -29,12 +31,13 @@ import { useApps } from "@/hooks/apps-queries";
 import { useAlerts, useObservabilityOrg } from "@/hooks/observability-queries";
 import { useGoToBilling } from "@/hooks/useGoToBilling";
 import { formatAbsoluteTime, formatRelativeTime } from "@/lib/relativeTime";
-import { isDeployed, isLive, primaryLink, type AppEnv, type AppSummary } from "@/services/forge/apps";
+import { isDeployed, isLive, isNeverDeployed, primaryLink, type AppEnv, type AppSummary } from "@/services/forge/apps";
 
 import { consolePath } from "../Forge/Console/paths";
 import { AreaShell } from "../Layout/AreaShell";
 import { envHealth, LiveLink } from "./appParts";
 import { useStartBuildingApp } from "./startBuilding";
+import { RunFromTerminal } from "../ForgeShell/RunFromTerminal";
 
 export function AppsPage() {
   return (
@@ -44,7 +47,14 @@ export function AppsPage() {
   );
 }
 
-function AppsBody() {
+/**
+ * The list itself, without Reliant's area chrome. The forge shell
+ * (lib/shell.ts) mounts it in its own layout as `variant="forge"`: no chat
+ * builds apps there, so the empty state and the header say how to deploy one
+ * from a checkout instead of offering "Build an app".
+ */
+export function AppsBody({ variant = "reliant" }: { variant?: "reliant" | "forge" }) {
+  const forge = variant === "forge";
   const { apps, loading, availability, detail } = useApps();
   const startBuilding = useStartBuildingApp();
   const claimed = useClaimedApp(apps.map((a) => a.name), loading);
@@ -55,7 +65,7 @@ function AppsBody() {
       title="Apps"
       meta={
         loading ? undefined : apps.length === 0 ? (
-          <span>What you build and deploy with Reliant, with the links to open it.</span>
+          <span>{forge ? "What you deploy with forge, with the links to open it." : "What you build and deploy with Reliant, with the links to open it."}</span>
         ) : (
           <span data-testid="apps-counts">
             {apps.length} {apps.length === 1 ? "app" : "apps"}
@@ -63,7 +73,19 @@ function AppsBody() {
           </span>
         )
       }
-      actions={[{ label: "Build an app", onClick: startBuilding, variant: "primary", icon: <Plus className="h-4 w-4" aria-hidden="true" /> }]}
+      actions={
+        forge
+          ? []
+          : [
+              // The same apps in forge's own console (lib/shell.ts), for a user
+              // who wants it without Reliant around it. A website: not offered
+              // inside the desktop app, whose window would navigate away.
+              ...(isElectron()
+                ? []
+                : [{ label: "Open Forge console", href: forgeAppOrigin(), variant: "secondary" as const, icon: <ArrowUpRight className="h-4 w-4" aria-hidden="true" /> }]),
+              { label: "Build an app", onClick: startBuilding, variant: "primary", icon: <Plus className="h-4 w-4" aria-hidden="true" /> },
+            ]
+      }
       className="mb-0"
     />
   );
@@ -74,7 +96,19 @@ function AppsBody() {
       {claimed.name && <ClaimedBanner name={claimed.name} listed={claimed.found} loading={loading} paused={claimed.paused} />}
       <AvailabilityNote availability={availability} detail={detail} />
       {!loading && apps.length === 0 ? (
-        <NoApps onBuild={startBuilding} />
+        forge ? (
+          <RunFromTerminal
+            title="Nothing deployed yet"
+            description="Deploy a forge project from its checkout and it shows up here, with the links to open it, one per environment."
+            commands={[
+              { label: "Sign the forge CLI in to this account", command: "forge login" },
+              { label: "Deploy to production", command: "forge env deploy prod" },
+            ]}
+            testId="apps-empty"
+          />
+        ) : (
+          <NoApps onBuild={startBuilding} />
+        )
       ) : (
         <AppsTable apps={apps} loading={loading} deploysKnown={availability === "available"} highlighted={claimed.name} />
       )}
@@ -174,7 +208,7 @@ function SiteCell({ app, deploysKnown }: { app: AppSummary; deploysKnown: boolea
   if (app.envs.some((env) => env.loading)) {
     return <span className="inline-block h-3 w-40 animate-pulse rounded bg-ink/5 align-middle motion-reduce:animate-none" aria-label="Loading" />;
   }
-  const why = !deploysKnown ? "Unavailable" : isDeployed(app) ? "No public site" : "Not deployed yet";
+  const why = isDeployed(app) ? "No public site" : deploysKnown && isNeverDeployed(app) ? "Not deployed yet" : "Unavailable";
   return (
     <span
       className="text-ink-muted"
@@ -229,15 +263,16 @@ function EnvChip({ env, firing }: { env: AppEnv; firing: number }) {
     );
   }
   const health = envHealth(env.verdict, firing);
-  const facts = [health.label, env.release || "not deployed yet"].join(" · ");
+  const release = env.release || (env.unread ? "release unknown" : "not deployed yet");
+  const facts = [health.label, release].join(" · ");
   return (
     <span title={`${env.name}: ${facts}`} data-testid={`app-env-${env.name}`} data-verdict={env.verdict} data-firing={firing || undefined}>
-      <Status tone={health.tone} label={env.name} size="sm" />
+      <Status tone={health.tone} label={env.name} size="sm" busy={health.busy} />
       {health.alerting ? (
         <span className="ml-1 text-xs text-ink-muted" data-testid={`app-env-${env.name}-alerts`}>
           <span className="sr-only">: </span>
           {health.label}
-          <span className="sr-only"> · {env.release || "not deployed yet"}</span>
+          <span className="sr-only"> · {release}</span>
         </span>
       ) : (
         <span className="sr-only">: {facts}</span>
@@ -247,7 +282,7 @@ function EnvChip({ env, firing }: { env: AppEnv; firing: number }) {
 }
 
 function LastDeployCell({ app, deploysKnown }: { app: AppSummary; deploysKnown: boolean }) {
-  if (!app.lastDeployedAt) return <span>{deploysKnown ? "Never" : "—"}</span>;
+  if (!app.lastDeployedAt) return <span>{deploysKnown && isNeverDeployed(app) ? "Never" : "—"}</span>;
   return (
     <time dateTime={app.lastDeployedAt} title={formatAbsoluteTime(app.lastDeployedAt)} className="tabular-nums">
       {formatRelativeTime(app.lastDeployedAt)}

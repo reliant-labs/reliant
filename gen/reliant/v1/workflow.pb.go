@@ -11,6 +11,7 @@ package reliantv1
 import (
 	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	_ "github.com/reliant-labs/forge/pkg/forgepb"
+	v1 "github.com/reliant-labs/reliant/sdk/go/gen/reliant/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
@@ -120,7 +121,10 @@ type WorkflowListItem struct {
 	AutomationOnly bool `protobuf:"varint,21,opt,name=automation_only,json=automationOnly,proto3" json:"automation_only,omitempty"`
 	// The definition's declared `triggers:` (its WHEN), so a list can show the
 	// ones the caller has not activated yet.
-	Triggers      []*WorkflowTrigger `protobuf:"bytes,22,rep,name=triggers,proto3" json:"triggers,omitempty"`
+	Triggers []*v1.WorkflowTrigger `protobuf:"bytes,22,rep,name=triggers,proto3" json:"triggers,omitempty"`
+	// The definition's declared `permissions:` (Workflow.permissions), so a list
+	// or detail page can say the workflow can decide approvals.
+	Permissions   []string `protobuf:"bytes,23,rep,name=permissions,proto3" json:"permissions,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -281,9 +285,16 @@ func (x *WorkflowListItem) GetAutomationOnly() bool {
 	return false
 }
 
-func (x *WorkflowListItem) GetTriggers() []*WorkflowTrigger {
+func (x *WorkflowListItem) GetTriggers() []*v1.WorkflowTrigger {
 	if x != nil {
 		return x.Triggers
+	}
+	return nil
+}
+
+func (x *WorkflowListItem) GetPermissions() []string {
+	if x != nil {
+		return x.Permissions
 	}
 	return nil
 }
@@ -500,6 +511,12 @@ type ListWorkflowsRequest struct {
 	ProjectId     string                 `protobuf:"bytes,1,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`                    // Required: project ID to list workflows for
 	WorktreeId    *string                `protobuf:"bytes,2,opt,name=worktree_id,json=worktreeId,proto3,oneof" json:"worktree_id,omitempty"`           // Optional: worktree ID for layered config (worktree > project > global)
 	IncludeHidden *bool                  `protobuf:"varint,3,opt,name=include_hidden,json=includeHidden,proto3,oneof" json:"include_hidden,omitempty"` // If true, include items hidden by default (for management UIs)
+	// List only this organization's saved workflows. It must be one the caller is a
+	// live member of (PERMISSION_DENIED otherwise). Saved workflows created before orgs
+	// list under the caller's default org. Unset lists every one the caller
+	// owns, in any org, as before this field existed.
+	// Workflows defined in the repository are listed whatever the org.
+	OrgId         *string `protobuf:"bytes,4,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -553,6 +570,13 @@ func (x *ListWorkflowsRequest) GetIncludeHidden() bool {
 		return *x.IncludeHidden
 	}
 	return false
+}
+
+func (x *ListWorkflowsRequest) GetOrgId() string {
+	if x != nil && x.OrgId != nil {
+		return *x.OrgId
+	}
+	return ""
 }
 
 type ListWorkflowsResponse struct {
@@ -1105,15 +1129,22 @@ type SaveWorkflowRequest struct {
 	ProjectId string                 `protobuf:"bytes,1,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"` // Required: project ID
 	Workflow  *Workflow              `protobuf:"bytes,2,opt,name=workflow,proto3" json:"workflow,omitempty"`                    // Workflow definition to save
 	// Field 3 removed (was publish)
-	Scope           ConfigScope `protobuf:"varint,4,opt,name=scope,proto3,enum=reliant.v1.ConfigScope" json:"scope,omitempty"`                      // Where to save: global, project, or worktree
-	WorktreeId      *string     `protobuf:"bytes,5,opt,name=worktree_id,json=worktreeId,proto3,oneof" json:"worktree_id,omitempty"`                 // Required if scope is worktree
-	ExpectedVersion *int64      `protobuf:"varint,8,opt,name=expected_version,json=expectedVersion,proto3,oneof" json:"expected_version,omitempty"` // OCC: expected version number - fails if workflow was modified since
-	SourcePath      *string     `protobuf:"bytes,9,opt,name=source_path,json=sourcePath,proto3,oneof" json:"source_path,omitempty"`                 // If set, write YAML back to this file (for project workflow edits)
-	DraftId         *string     `protobuf:"bytes,10,opt,name=draft_id,json=draftId,proto3,oneof" json:"draft_id,omitempty"`                         // If provided, update this draft by ID (allows renames)
+	Scope           v1.ConfigScope `protobuf:"varint,4,opt,name=scope,proto3,enum=reliant.v1.ConfigScope" json:"scope,omitempty"`                      // Where to save: global, project, or worktree
+	WorktreeId      *string        `protobuf:"bytes,5,opt,name=worktree_id,json=worktreeId,proto3,oneof" json:"worktree_id,omitempty"`                 // Required if scope is worktree
+	ExpectedVersion *int64         `protobuf:"varint,8,opt,name=expected_version,json=expectedVersion,proto3,oneof" json:"expected_version,omitempty"` // OCC: expected version number - fails if workflow was modified since
+	SourcePath      *string        `protobuf:"bytes,9,opt,name=source_path,json=sourcePath,proto3,oneof" json:"source_path,omitempty"`                 // If set, write YAML back to this file (for project workflow edits)
+	DraftId         *string        `protobuf:"bytes,10,opt,name=draft_id,json=draftId,proto3,oneof" json:"draft_id,omitempty"`                         // If provided, update this draft by ID (allows renames)
 	// Intent. DRAFT stores as-is; COMPLETE validates and rejects on errors;
 	// UNSPECIFIED keeps the current status (new workflows start as drafts), so
 	// re-saving a complete workflow is gated like COMPLETE.
-	Status        WorkflowDraftStatus `protobuf:"varint,11,opt,name=status,proto3,enum=reliant.v1.WorkflowDraftStatus" json:"status,omitempty"`
+	Status WorkflowDraftStatus `protobuf:"varint,11,opt,name=status,proto3,enum=reliant.v1.WorkflowDraftStatus" json:"status,omitempty"`
+	// The organization to act in (control-plane organizations.id); the web
+	// fills it with the active org. It must be one the caller is a live member
+	// of (PERMISSION_DENIED otherwise), and a machine credential may name only
+	// its own org. Unset is the caller's default org.
+	// Applies when the save creates a saved workflow; an existing one keeps
+	// its org.
+	OrgId         *string `protobuf:"bytes,12,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1162,11 +1193,11 @@ func (x *SaveWorkflowRequest) GetWorkflow() *Workflow {
 	return nil
 }
 
-func (x *SaveWorkflowRequest) GetScope() ConfigScope {
+func (x *SaveWorkflowRequest) GetScope() v1.ConfigScope {
 	if x != nil {
 		return x.Scope
 	}
-	return ConfigScope_CONFIG_SCOPE_UNSPECIFIED
+	return v1.ConfigScope(0)
 }
 
 func (x *SaveWorkflowRequest) GetWorktreeId() string {
@@ -1202,6 +1233,13 @@ func (x *SaveWorkflowRequest) GetStatus() WorkflowDraftStatus {
 		return x.Status
 	}
 	return WorkflowDraftStatus_WORKFLOW_DRAFT_STATUS_UNSPECIFIED
+}
+
+func (x *SaveWorkflowRequest) GetOrgId() string {
+	if x != nil && x.OrgId != nil {
+		return *x.OrgId
+	}
+	return ""
 }
 
 type SaveWorkflowResponse struct {
@@ -1325,7 +1363,7 @@ type ImportWorkflowRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	ProjectId     string                 `protobuf:"bytes,1,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`               // Required: project ID
 	YamlContent   []byte                 `protobuf:"bytes,2,opt,name=yaml_content,json=yamlContent,proto3" json:"yaml_content,omitempty"`         // YAML file content
-	Scope         ConfigScope            `protobuf:"varint,3,opt,name=scope,proto3,enum=reliant.v1.ConfigScope" json:"scope,omitempty"`           // Where to import: global, project, or worktree
+	Scope         v1.ConfigScope         `protobuf:"varint,3,opt,name=scope,proto3,enum=reliant.v1.ConfigScope" json:"scope,omitempty"`           // Where to import: global, project, or worktree
 	WorktreeId    *string                `protobuf:"bytes,4,opt,name=worktree_id,json=worktreeId,proto3,oneof" json:"worktree_id,omitempty"`      // Required if scope is worktree
 	Overwrite     bool                   `protobuf:"varint,5,opt,name=overwrite,proto3" json:"overwrite,omitempty"`                               // If true, overwrite existing workflow with same slug
 	Status        WorkflowDraftStatus    `protobuf:"varint,6,opt,name=status,proto3,enum=reliant.v1.WorkflowDraftStatus" json:"status,omitempty"` // Intent; same semantics as SaveWorkflowRequest.status
@@ -1377,11 +1415,11 @@ func (x *ImportWorkflowRequest) GetYamlContent() []byte {
 	return nil
 }
 
-func (x *ImportWorkflowRequest) GetScope() ConfigScope {
+func (x *ImportWorkflowRequest) GetScope() v1.ConfigScope {
 	if x != nil {
 		return x.Scope
 	}
-	return ConfigScope_CONFIG_SCOPE_UNSPECIFIED
+	return v1.ConfigScope(0)
 }
 
 func (x *ImportWorkflowRequest) GetWorktreeId() string {
@@ -1928,7 +1966,12 @@ type CreateWorkflowDraftRequest struct {
 	// What to start from. Empty: a blank workflow (no steps). A builtin ref
 	// ("builtin://agent") copies that built-in's graph, with this draft's own
 	// name and title and an empty description.
-	Template      string `protobuf:"bytes,4,opt,name=template,proto3" json:"template,omitempty"`
+	Template string `protobuf:"bytes,4,opt,name=template,proto3" json:"template,omitempty"`
+	// The organization to act in (control-plane organizations.id); the web
+	// fills it with the active org. It must be one the caller is a live member
+	// of (PERMISSION_DENIED otherwise), and a machine credential may name only
+	// its own org. Unset is the caller's default org.
+	OrgId         *string `protobuf:"bytes,5,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1987,6 +2030,13 @@ func (x *CreateWorkflowDraftRequest) GetTitle() string {
 func (x *CreateWorkflowDraftRequest) GetTemplate() string {
 	if x != nil {
 		return x.Template
+	}
+	return ""
+}
+
+func (x *CreateWorkflowDraftRequest) GetOrgId() string {
+	if x != nil && x.OrgId != nil {
+		return *x.OrgId
 	}
 	return ""
 }
@@ -2224,7 +2274,7 @@ var File_reliant_v1_workflow_proto protoreflect.FileDescriptor
 const file_reliant_v1_workflow_proto_rawDesc = "" +
 	"\n" +
 	"\x19reliant/v1/workflow.proto\x12\n" +
-	"reliant.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\x1a\x17reliant/v1/common.proto\x1a\x18reliant/v1/trigger.proto\x1a\x1creliant/v1/workflow_v2.proto\"\xc5\a\n" +
+	"reliant.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\x1a\x17reliant/v1/common.proto\x1a\x18reliant/v1/trigger.proto\x1a\x1creliant/v1/workflow_v2.proto\"\xe7\a\n" +
 	"\x10WorkflowListItem\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1a\n" +
 	"\bfilename\x18\x02 \x01(\tR\bfilename\x12 \n" +
@@ -2247,7 +2297,8 @@ const file_reliant_v1_workflow_proto_rawDesc = "" +
 	"\x05title\x18\x13 \x01(\tR\x05title\x12#\n" +
 	"\rneeds_machine\x18\x14 \x03(\tR\fneedsMachine\x12'\n" +
 	"\x0fautomation_only\x18\x15 \x01(\bR\x0eautomationOnly\x127\n" +
-	"\btriggers\x18\x16 \x03(\v2\x1b.reliant.v1.WorkflowTriggerR\btriggers\x1aL\n" +
+	"\btriggers\x18\x16 \x03(\v2\x1b.reliant.v1.WorkflowTriggerR\btriggers\x12 \n" +
+	"\vpermissions\x18\x17 \x03(\tR\vpermissions\x1aL\n" +
 	"\vInputsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12'\n" +
 	"\x05value\x18\x02 \x01(\v2\x11.reliant.v1.InputR\x05value:\x028\x01\x1a:\n" +
@@ -2278,15 +2329,17 @@ const file_reliant_v1_workflow_proto_rawDesc = "" +
 	"\x05field\x18\n" +
 	" \x01(\tR\x05field\x12\x16\n" +
 	"\x06detail\x18\v \x01(\tR\x06detail\x12\x12\n" +
-	"\x04path\x18\f \x01(\tR\x04path\"\xb2\x01\n" +
+	"\x04path\x18\f \x01(\tR\x04path\"\xd9\x01\n" +
 	"\x14ListWorkflowsRequest\x12%\n" +
 	"\n" +
 	"project_id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\tprojectId\x12$\n" +
 	"\vworktree_id\x18\x02 \x01(\tH\x00R\n" +
 	"worktreeId\x88\x01\x01\x12*\n" +
-	"\x0einclude_hidden\x18\x03 \x01(\bH\x01R\rincludeHidden\x88\x01\x01B\x0e\n" +
+	"\x0einclude_hidden\x18\x03 \x01(\bH\x01R\rincludeHidden\x88\x01\x01\x12\x1a\n" +
+	"\x06org_id\x18\x04 \x01(\tH\x02R\x05orgId\x88\x01\x01B\x0e\n" +
 	"\f_worktree_idB\x11\n" +
-	"\x0f_include_hidden\"\xb3\x01\n" +
+	"\x0f_include_hiddenB\t\n" +
+	"\a_org_id\"\xb3\x01\n" +
 	"\x15ListWorkflowsResponse\x12:\n" +
 	"\tworkflows\x18\x01 \x03(\v2\x1c.reliant.v1.WorkflowListItemR\tworkflows\x12\x14\n" +
 	"\x05total\x18\x02 \x01(\x05R\x05total\x12H\n" +
@@ -2340,7 +2393,7 @@ const file_reliant_v1_workflow_proto_rawDesc = "" +
 	"\bworkflow\x18\x02 \x01(\v2\x14.reliant.v1.WorkflowR\bworkflow\"e\n" +
 	"\x18ValidateWorkflowResponse\x12\x14\n" +
 	"\x05valid\x18\x01 \x01(\bR\x05valid\x123\n" +
-	"\x06errors\x18\x02 \x03(\v2\x1b.reliant.v1.ValidationErrorR\x06errors\"\xac\x03\n" +
+	"\x06errors\x18\x02 \x03(\v2\x1b.reliant.v1.ValidationErrorR\x06errors\"\xd3\x03\n" +
 	"\x13SaveWorkflowRequest\x12\x1d\n" +
 	"\n" +
 	"project_id\x18\x01 \x01(\tR\tprojectId\x120\n" +
@@ -2353,11 +2406,13 @@ const file_reliant_v1_workflow_proto_rawDesc = "" +
 	"sourcePath\x88\x01\x01\x12\x1e\n" +
 	"\bdraft_id\x18\n" +
 	" \x01(\tH\x03R\adraftId\x88\x01\x01\x127\n" +
-	"\x06status\x18\v \x01(\x0e2\x1f.reliant.v1.WorkflowDraftStatusR\x06statusB\x0e\n" +
+	"\x06status\x18\v \x01(\x0e2\x1f.reliant.v1.WorkflowDraftStatusR\x06status\x12\x1a\n" +
+	"\x06org_id\x18\f \x01(\tH\x04R\x05orgId\x88\x01\x01B\x0e\n" +
 	"\f_worktree_idB\x13\n" +
 	"\x11_expected_versionB\x0e\n" +
 	"\f_source_pathB\v\n" +
-	"\t_draft_id\"\x81\x03\n" +
+	"\t_draft_idB\t\n" +
+	"\a_org_id\"\x81\x03\n" +
 	"\x14SaveWorkflowResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x18\n" +
 	"\amessage\x18\x02 \x01(\tR\amessage\x120\n" +
@@ -2428,13 +2483,15 @@ const file_reliant_v1_workflow_proto_rawDesc = "" +
 	"\amessage\x18\x02 \x01(\tR\amessage\x120\n" +
 	"\bworkflow\x18\x03 \x01(\v2\x14.reliant.v1.WorkflowR\bworkflow\x12\x12\n" +
 	"\x04slug\x18\x04 \x01(\tR\x04slug\x12\x0e\n" +
-	"\x02id\x18\x05 \x01(\tR\x02id\"\xa6\x01\n" +
+	"\x02id\x18\x05 \x01(\tR\x02id\"\xcd\x01\n" +
 	"\x1aCreateWorkflowDraftRequest\x12\x1d\n" +
 	"\n" +
 	"project_id\x18\x01 \x01(\tR\tprojectId\x127\n" +
 	"\x06status\x18\x02 \x01(\x0e2\x1f.reliant.v1.WorkflowDraftStatusR\x06status\x12\x14\n" +
 	"\x05title\x18\x03 \x01(\tR\x05title\x12\x1a\n" +
-	"\btemplate\x18\x04 \x01(\tR\btemplate\"\xaf\x01\n" +
+	"\btemplate\x18\x04 \x01(\tR\btemplate\x12\x1a\n" +
+	"\x06org_id\x18\x05 \x01(\tH\x00R\x05orgId\x88\x01\x01B\t\n" +
+	"\a_org_id\"\xaf\x01\n" +
 	"\x1bCreateWorkflowDraftResponse\x12\x19\n" +
 	"\bdraft_id\x18\x01 \x01(\tR\adraftId\x12\x12\n" +
 	"\x04slug\x18\x02 \x01(\tR\x04slug\x12\x12\n" +
@@ -2533,9 +2590,9 @@ var file_reliant_v1_workflow_proto_goTypes = []any{
 	nil,                                   // 28: reliant.v1.WorkflowListItem.OutputsEntry
 	(*Node)(nil),                          // 29: reliant.v1.Node
 	(*Edge)(nil),                          // 30: reliant.v1.Edge
-	(*WorkflowTrigger)(nil),               // 31: reliant.v1.WorkflowTrigger
+	(*v1.WorkflowTrigger)(nil),            // 31: reliant.v1.WorkflowTrigger
 	(*Workflow)(nil),                      // 32: reliant.v1.Workflow
-	(ConfigScope)(0),                      // 33: reliant.v1.ConfigScope
+	(v1.ConfigScope)(0),                   // 33: reliant.v1.ConfigScope
 	(*Input)(nil),                         // 34: reliant.v1.Input
 }
 var file_reliant_v1_workflow_proto_depIdxs = []int32{
@@ -2608,8 +2665,6 @@ func file_reliant_v1_workflow_proto_init() {
 	if File_reliant_v1_workflow_proto != nil {
 		return
 	}
-	file_reliant_v1_common_proto_init()
-	file_reliant_v1_trigger_proto_init()
 	file_reliant_v1_workflow_v2_proto_init()
 	file_reliant_v1_workflow_proto_msgTypes[0].OneofWrappers = []any{}
 	file_reliant_v1_workflow_proto_msgTypes[3].OneofWrappers = []any{}
@@ -2620,6 +2675,7 @@ func file_reliant_v1_workflow_proto_init() {
 	file_reliant_v1_workflow_proto_msgTypes[14].OneofWrappers = []any{}
 	file_reliant_v1_workflow_proto_msgTypes[16].OneofWrappers = []any{}
 	file_reliant_v1_workflow_proto_msgTypes[20].OneofWrappers = []any{}
+	file_reliant_v1_workflow_proto_msgTypes[22].OneofWrappers = []any{}
 	file_reliant_v1_workflow_proto_msgTypes[24].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{

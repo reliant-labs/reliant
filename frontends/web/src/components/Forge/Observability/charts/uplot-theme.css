@@ -1,0 +1,46 @@
+/*
+ * uPlot's own legend, in the console's type ladder.
+ *
+ * uPlot ships its legend at a fixed 14px in system-ui, centred, with bold
+ * series names (uPlot.min.css). Under a chart whose panel title is text-sm
+ * (13px @md) font-medium, that made the legend LOUDER than the title, in a
+ * different typeface, and the axis labels (12px system-ui on the canvas) as
+ * loud as both. The ladder a chart follows now (UPlotChart.tsx, chartType):
+ *
+ *   panel title   text-sm font-medium text-ink          (the card header)
+ *   legend        text-xs: series names ink, values ink, start-aligned
+ *   axis labels   text-2xs text-ink-muted, the app's font (drawn on the canvas)
+ *
+ * Scoped to `.obs-uplot` (UPlotChart's figure): this is uPlot's generated DOM,
+ * the one place a selector into a third party's markup is the only seam.
+ * Sizes are rem, so they follow the Appearance font-size preference.
+ */
+.obs-uplot .u-legend {
+  margin: 0.5rem 0 0;
+  font-family: inherit;
+  font-size: 0.8125rem;
+  line-height: 1.3rem;
+  text-align: start;
+  color: var(--color-ink);
+}
+
+.obs-uplot .u-legend th {
+  font-weight: 500;
+}
+
+.obs-uplot .u-legend .u-value {
+  font-variant-numeric: tabular-nums;
+}
+
+/* The time column reads the cursor's bucket: a caption, not a series. */
+.obs-uplot .u-legend .u-series:first-child th,
+.obs-uplot .u-legend .u-series:first-child .u-value {
+  font-weight: 400;
+  color: var(--color-ink-muted);
+}
+
+.obs-uplot .u-legend .u-marker {
+  width: 0.75em;
+  height: 0.75em;
+  border-radius: 2px;
+}

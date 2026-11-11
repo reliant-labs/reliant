@@ -12,7 +12,8 @@
  * than a hand-written list, so a fourth provider is covered the moment it is
  * registered.
  */
-import { render, screen, waitFor } from '@testing-library/react'
+import { screen, waitFor } from '@testing-library/react'
+import { renderWithQuery as render } from '@/test/renderWithQuery'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { REDIRECT_OAUTH_PROVIDERS } from '@/lib/oauth-providers'
@@ -40,10 +41,6 @@ vi.mock('@/hooks', () => {
     useOAuthAvailability: () => ({ available: true, loading: false, recheck: vi.fn() }),
   }
 })
-
-vi.mock('../../api/client', () => ({
-  api: { settings: { validateProviderAPIKey: vi.fn(), updateProvider: vi.fn() } },
-}))
 
 vi.mock('../../store/globalDataStore', () => ({
   useGlobalDataStore: { getState: () => ({ refetchModels: vi.fn() }) },
@@ -95,4 +92,21 @@ describe('ApiKeySetupModal redirect-OAuth routing', () => {
       }
     },
   )
+
+  it('shows each provider tile with its own mark', () => {
+    render(<ApiKeySetupModal isOpen onClose={vi.fn()} />)
+    for (const [label, mark] of [
+      ['Claude subscription', 'claude'],
+      ['Codex (ChatGPT)', 'codex'],
+      ['Antigravity', 'antigravity'],
+      ['GitHub Copilot', 'copilot'],
+      ['Anthropic API', 'anthropic'],
+      ['OpenAI', 'openai'],
+      ['Google Gemini', 'gemini'],
+      ['OpenRouter', 'openrouter'],
+    ]) {
+      const tile = screen.getByRole('button', { name: label })
+      expect(tile.querySelector('[data-provider-logo]')).toHaveAttribute('data-provider-logo', mark)
+    }
+  })
 })

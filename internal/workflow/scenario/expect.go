@@ -6,6 +6,7 @@ package scenario
 import (
 	"encoding/json"
 	"fmt"
+	"math/big"
 	"reflect"
 	"sort"
 	"strings"
@@ -149,6 +150,22 @@ func toolResultOutput(event SimulatedEvent) map[string]interface{} {
 	return result
 }
 
+func completedMatchesFailed(expected ExpectedOutcome, got string) bool {
+	return expected == OutcomeCompleted && got == string(OutcomeFailed)
+}
+
+// CompletedOverFailedWarning is the warning for a scenario that expects
+// `outcome: completed` of a run whose graph declared it failed. Empty when the
+// expectation does not have that shape.
+func CompletedOverFailedWarning(expect *Expectation, execution *ExecutionDetails) string {
+	if expect == nil || !completedMatchesFailed(expect.Outcome, execution.Outcome) {
+		return ""
+	}
+	return fmt.Sprintf("expect.outcome is \"completed\" but the run ended at node %q, which declares "+
+		"outcome: failure, so the run FAILED; it still matches for compatibility — assert "+
+		"`outcome: failed` to pin the verdict", execution.OutcomeNode)
+}
+
 // CheckExpectations compares execution results against expectations and returns
 // one message per mismatch (empty means the expectation held).
 //
@@ -160,9 +177,24 @@ func CheckExpectations(expect *Expectation, execution *ExecutionDetails) []strin
 	// Check outcome
 	if expect.Outcome != "" {
 		expectedOutcome := string(expect.Outcome)
-		if execution.Outcome != expectedOutcome {
-			mismatches = append(mismatches,
-				fmt.Sprintf("expected outcome %q but got %q", expectedOutcome, execution.Outcome))
+		// A run that ends at a node declaring `outcome: failure` reports
+		// "failed". Before the runner observed that verdict it reported
+		// "completed", and scenarios written then assert `completed` on such
+		// paths; they keep matching (the run did complete its graph), and
+		// CompletedOverFailedWarning tells their author to assert `failed`.
+		if execution.Outcome != expectedOutcome && !completedMatchesFailed(expect.Outcome, execution.Outcome) {
+			msg := fmt.Sprintf("expected outcome %q but got %q", expectedOutcome, execution.Outcome)
+			// Say why, here: the mismatch line is all a text report prints,
+			// and the cause otherwise appeared only in --json.
+			switch {
+			case execution.Error != nil && execution.Error.Node != "":
+				msg += fmt.Sprintf(" (node %q: %s)", execution.Error.Node, execution.Error.Message)
+			case execution.Error != nil && execution.Error.Message != "":
+				msg += fmt.Sprintf(" (%s)", execution.Error.Message)
+			case execution.OutcomeNode != "":
+				msg += fmt.Sprintf(" (node %q declares outcome: failure)", execution.OutcomeNode)
+			}
+			mismatches = append(mismatches, msg)
 		}
 	}
 
@@ -237,6 +269,7 @@ func CheckExpectations(expect *Expectation, execution *ExecutionDetails) []strin
 
 	mismatches = append(mismatches, checkMessageExpectations(expect.Messages, execution.SavedMessages)...)
 	mismatches = append(mismatches, checkOnFailureExpectation(expect.OnFailure, execution.OnFailure)...)
+	mismatches = append(mismatches, checkFinallyExpectation(expect.Finally, execution.Finally)...)
 
 	// Check workflow-level outputs (dotted paths into structured values)
 	for path, expectedValue := range expect.Outputs {
@@ -247,10 +280,8 @@ func CheckExpectations(expect *Expectation, execution *ExecutionDetails) []strin
 			continue
 		}
 		if !deepEqual(expectedValue, actualValue) {
-			expectedJSON, _ := json.Marshal(expectedValue)
-			actualJSON, _ := json.Marshal(actualValue)
 			mismatches = append(mismatches,
-				fmt.Sprintf("workflow output %q: expected %s but got %s", path, expectedJSON, actualJSON))
+				fmt.Sprintf("workflow output %q: %s", path, valueMismatch(expectedValue, actualValue)))
 		}
 	}
 
@@ -275,10 +306,8 @@ func CheckExpectations(expect *Expectation, execution *ExecutionDetails) []strin
 
 				// Deep compare values
 				if !deepEqual(expectedValue, actualValue) {
-					expectedJSON, _ := json.Marshal(expectedValue)
-					actualJSON, _ := json.Marshal(actualValue)
 					mismatches = append(mismatches,
-						fmt.Sprintf("node %q field %q: expected %s but got %s", nodeID, field, expectedJSON, actualJSON))
+						fmt.Sprintf("node %q field %q: %s", nodeID, field, valueMismatch(expectedValue, actualValue)))
 				}
 			}
 		}
@@ -318,34 +347,153 @@ func outputKeys(outputs map[string]interface{}) []string {
 	return keys
 }
 
-// deepEqual compares two values for equality, handling JSON number type issues
+// deepEqual compares an expected value from scenario YAML with an observed one,
+// at every depth, as JSON values: numbers compare by value (YAML's 1750 is an
+// int, the runtime's is a float64 after CEL or structpb), maps compare key by
+// key (whatever their Go key and element types), and lists element by element
+// (a []map[string]interface{} equals the same []interface{}). Map comparison
+// is exact — every key on both sides — at nested levels; node_outputs and
+// outputs are partial only in which top-level fields they name.
 func deepEqual(expected, actual interface{}) bool {
-	// Handle numeric comparisons (JSON numbers may be float64)
-	if reflect.TypeOf(expected) != reflect.TypeOf(actual) {
-		// Try numeric comparison
-		expNum, expOk := toFloat64(expected)
-		actNum, actOk := toFloat64(actual)
-		if expOk && actOk {
-			return expNum == actNum
+	if expNum, ok := asNumber(expected); ok {
+		actNum, ok := asNumber(actual)
+		return ok && expNum.equal(actNum)
+	}
+	if expMap, ok := asStringKeyedMap(expected); ok {
+		actMap, ok := asStringKeyedMap(actual)
+		if !ok || len(expMap) != len(actMap) {
+			return false
 		}
+		for k, ev := range expMap {
+			av, present := actMap[k]
+			if !present || !deepEqual(ev, av) {
+				return false
+			}
+		}
+		return true
+	}
+	if expList, ok := asSlice(expected); ok {
+		actList, ok := asSlice(actual)
+		if !ok || len(expList) != len(actList) {
+			return false
+		}
+		for i := range expList {
+			if !deepEqual(expList[i], actList[i]) {
+				return false
+			}
+		}
+		return true
 	}
 	return reflect.DeepEqual(expected, actual)
 }
 
-// toFloat64 converts a numeric value to float64
-func toFloat64(v interface{}) (float64, bool) {
+// valueMismatch formats an expected/actual pair for a mismatch message. When
+// the two print as the same JSON — a type difference deepEqual does not
+// forgive, such as the string "1" against the number 1 nested in a list —
+// the Go types are added, so the message never reads "expected X but got X".
+func valueMismatch(expected, actual interface{}) string {
+	expectedJSON, _ := json.Marshal(expected)
+	actualJSON, _ := json.Marshal(actual)
+	msg := fmt.Sprintf("expected %s but got %s", expectedJSON, actualJSON)
+	if string(expectedJSON) == string(actualJSON) {
+		msg += fmt.Sprintf(" (same JSON, different types: expected %T, got %T)", expected, actual)
+	}
+	return msg
+}
+
+// number is a Go numeric value as deepEqual compares it: an integer kind is
+// held exactly (signed and unsigned alike, so uint64 values above 2^63 and
+// int64 values above 2^53 keep every bit), a float as float64.
+type number struct {
+	isInt bool
+	i     *big.Int
+	f     float64
+}
+
+// equal compares two integers exactly, and falls back to float64 only when
+// at least one side is a float — so distinct integers past float64's exact
+// range (2^53) never collapse to the same rounded value.
+func (n number) equal(o number) bool {
+	if n.isInt && o.isInt {
+		return n.i.Cmp(o.i) == 0
+	}
+	return n.float64() == o.float64()
+}
+
+func (n number) float64() float64 {
+	if n.isInt {
+		f, _ := new(big.Float).SetInt(n.i).Float64()
+		return f
+	}
+	return n.f
+}
+
+// asNumber converts any Go numeric value to a number.
+func asNumber(v interface{}) (number, bool) {
 	switch n := v.(type) {
 	case int:
-		return float64(n), true
+		return intNumber(int64(n)), true
+	case int8:
+		return intNumber(int64(n)), true
+	case int16:
+		return intNumber(int64(n)), true
+	case int32:
+		return intNumber(int64(n)), true
 	case int64:
-		return float64(n), true
+		return intNumber(n), true
+	case uint:
+		return uintNumber(uint64(n)), true
+	case uint8:
+		return uintNumber(uint64(n)), true
+	case uint16:
+		return uintNumber(uint64(n)), true
+	case uint32:
+		return uintNumber(uint64(n)), true
+	case uint64:
+		return uintNumber(n), true
 	case float64:
-		return n, true
+		return number{f: n}, true
 	case float32:
-		return float64(n), true
+		return number{f: float64(n)}, true
+	case json.Number:
+		if i, ok := new(big.Int).SetString(string(n), 10); ok {
+			return number{isInt: true, i: i}, true
+		}
+		f, err := n.Float64()
+		return number{f: f}, err == nil
 	default:
-		return 0, false
+		return number{}, false
 	}
+}
+
+func intNumber(i int64) number   { return number{isInt: true, i: big.NewInt(i)} }
+func uintNumber(u uint64) number { return number{isInt: true, i: new(big.Int).SetUint64(u)} }
+
+// checkFinallyExpectation compares an `expect.finally` block with what the
+// run's handler did. A workflow with no handler has nothing observed, which is
+// "did not run".
+func checkFinallyExpectation(want *FinallyExpectation, got *FinallyObserved) []string {
+	if want == nil {
+		return nil
+	}
+	var out []string
+	ran := got != nil && got.Ran
+	if want.Ran != nil && *want.Ran != ran {
+		out = append(out, fmt.Sprintf("expected finally ran=%t but it ran=%t", *want.Ran, ran))
+	}
+	if !ran {
+		if want.Status != "" || want.HandlerFailed != nil {
+			out = append(out, "expected the finally handler to have run, but it did not")
+		}
+		return out
+	}
+	if want.Status != "" && got.Status != want.Status {
+		out = append(out, fmt.Sprintf("expected run.status %q but got %q", want.Status, got.Status))
+	}
+	if want.HandlerFailed != nil && *want.HandlerFailed != (got.HandlerError != "") {
+		out = append(out, fmt.Sprintf("expected the finally handler to have failed=%t but its error was %q", *want.HandlerFailed, got.HandlerError))
+	}
+	return out
 }
 
 // checkOnFailureExpectation compares an `expect.on_failure` block with what the

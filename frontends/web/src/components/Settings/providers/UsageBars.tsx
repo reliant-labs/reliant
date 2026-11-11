@@ -24,7 +24,7 @@ const TEXT: Record<UsageTone, string> = {
 };
 
 /**
- * The one-line form of the bars, for a healthy account's collapsed row: a
+ * The one-line form of the bars, for an account's collapsed row: a
  * short window name, a small meter and the percentage, per window. Renders
  * nothing for an account with no windows (an API key, Reliant credits) — the
  * row says "Per-minute limits only" only when someone opens it.
@@ -127,6 +127,12 @@ export function UsageBars({ account, now, onRefresh, refreshing, refreshNote, co
             </div>
           );
         })
+      )}
+
+      {account.usingCredits && (
+        <p className="text-xs text-muted-foreground" data-testid="usage-using-credits">
+          Plan limit used up · requests are now paid from credits
+        </p>
       )}
 
       {(stale || showRefresh || refreshNote) && (

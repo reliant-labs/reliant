@@ -1,0 +1,295 @@
+// Copyright (c) 2025 Reliant Labs
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { createMemoryHistory, createRootRoute, createRoute, createRouter, Outlet, RouterProvider } from "@tanstack/react-router";
+import { memoryTourStorage, setTourShell, setTourStorage } from "@/components/Onboarding/tourShell";
+import { JourneyTour } from "@/components/Onboarding/JourneyTour";
+import { resetShellForTests } from "@/lib/shell";
+import { DemoTips } from "../tips/DemoTips";
+import { demoSession, resetDemoSessionForTests } from "../demoSession";
+import { DEMO_TIPS, DEMO_TIP_KEYS } from "../tips";
+import { DEMO_TRACE_ID } from "@/components/Onboarding/journeys/forge";
+import { isLegacyDemoTourLink } from "@/components/Onboarding/legacyDemoTour";
+
+function renderDemo(path: string) {
+  const root = createRootRoute({ component: () => <><Outlet /><DemoTips /><JourneyTour /></> });
+  const any = createRoute({ getParentRoute: () => root, path: "$", component: () => <main data-testid="page"><h1>Console page</h1><div data-testid="obs-log-row" /><div data-testid="obs-trace-row" /><div data-testid="obs-alerts-firing" /><div data-testid="obs-issue-iss-orders-deadline" /></main>, validateSearch: (s: Record<string, unknown>) => s });
+  const router = createRouter({ routeTree: root.addChildren([any]), history: createMemoryHistory({ initialEntries: [path] }) });
+  render(<RouterProvider router={router} />);
+  return { router, go: (to: string) => act(async () => { await router.navigate({ href: to }); }) };
+}
+beforeEach(() => { resetShellForTests("demo"); setTourShell("forge"); setTourStorage(memoryTourStorage()); resetDemoSessionForTests(); });
+afterEach(() => { cleanup(); setTourShell(null); resetShellForTests(); });
+
+it("opens a page's tip by itself on its first visit this session, as a single Done card", async () => {
+  const {router} = renderDemo("/forge/p/shop/observability/logs");
+  expect(await screen.findByTestId("tour-callout")).toHaveTextContent(DEMO_TIPS.logs.body);
+  expect(screen.queryByTestId("tour-step-count")).toBeNull();
+  expect(screen.queryByTestId("tour-exit")).toBeNull();
+  expect(screen.getByTestId("tour-next")).toHaveTextContent("Done");
+  expect(screen.getByTestId("tour-callout").querySelector('[data-testid="demo-cta-signup"]')).toBeNull();
+  // No "How it was built" button inside the card: it is a nav row.
+  expect(screen.getByTestId("tour-callout")).not.toHaveTextContent(/How (Forge builds this|it was built)/);
+  expect(screen.queryByTestId("onboarding-nav-bar")).toBeNull();
+  expect((router.state.location.search as {tour?:string}).tour).toBeUndefined();
+  expect(demoSession.hasSeenTip("logs")).toBe(true);
+});
+it("a page already seen this session opens closed, with its ? button", async () => {
+  demoSession.markTipSeen("logs");
+  renderDemo("/forge/p/shop/observability/logs");
+  expect(await screen.findByRole("button", {name:"About Logs"})).toBeInTheDocument();
+  expect(screen.queryByTestId("tour-callout")).toBeNull();
+  fireEvent.click(screen.getByRole("button", {name:"About Logs"}));
+  expect(await screen.findByTestId("tour-callout")).toHaveTextContent(DEMO_TIPS.logs.body);
+});
+it("dismissal holds through same-page filters and rerenders, ? replays without navigation", async () => {
+  const {go,router} = renderDemo("/forge/p/shop/observability/logs");
+  await waitFor(() => fireEvent.click(screen.getByTestId("tour-next")));
+  await waitFor(() => expect(screen.queryByTestId("tour-callout")).toBeNull());
+  await go("/forge/p/shop/observability/logs?severity=error&range=6h");
+  expect(screen.queryByTestId("tour-callout")).toBeNull();
+  fireEvent(document.body, new Event("updated"));
+  expect(screen.queryByTestId("tour-callout")).toBeNull();
+  fireEvent.click(screen.getByRole("button", {name:"About Logs"}));
+  expect(await screen.findByTestId("tour-callout")).toHaveTextContent(DEMO_TIPS.logs.body);
+  expect(router.state.location.pathname).toBe("/forge/p/shop/observability/logs");
+});
+it("each page's tip opens by itself once a session; coming back does not reopen it", async () => {
+  const {go} = renderDemo("/forge/p/shop");
+  expect(await screen.findByTestId("tour-callout")).toHaveTextContent(DEMO_TIPS.overview.body);
+  fireEvent.click(screen.getByTestId("tour-next"));
+  await go("/forge/p/shop/releases");
+  expect(await screen.findByTestId("tour-callout")).toHaveTextContent(DEMO_TIPS.releases.body);
+  await go("/forge/p/shop/observability/logs");
+  expect(await screen.findByTestId("tour-callout")).toHaveTextContent(DEMO_TIPS.logs.body);
+  await go("/forge/p/shop");
+  expect(await screen.findByRole("button", {name:"About Overview"})).toBeInTheDocument();
+  expect(screen.queryByTestId("tour-callout")).toBeNull();
+});
+it.each([
+  ["one release", "/forge/p/shop/releases/v1"],
+  ["one workload", "/forge/p/shop/workloads/prod/api"],
+  ["one environment", "/forge/p/shop/environments/prod"],
+  ["one dashboard", "/forge/p/shop/observability/dashboards/release/latency"],
+  ["an open trace", "/forge/p/shop/observability/traces?trace=abc"],
+  ["an open issue", "/forge/p/shop/observability/errors?issue=iss-1"],
+  ["an open trace on the demo console", "/forge/demo?view=traces&trace=abc"],
+])("never opens by itself on a sub-page (%s), and does not use up its section's tip", async (_name, path) => {
+  renderDemo(path);
+  expect(await screen.findByTestId("demo-page-info")).toBeInTheDocument();
+  expect(screen.queryByTestId("tour-callout")).toBeNull();
+  expect(demoSession.get().seenTips).toEqual([]);
+});
+it("tears the card down when the page changes under it: an item opened inside it, or another page", async () => {
+  const {go} = renderDemo("/forge/p/shop/observability/errors");
+  expect(await screen.findByTestId("tour-callout")).toHaveTextContent(DEMO_TIPS.errors.body);
+  // Opening an issue in the list: same path, a sub-page now.
+  await go("/forge/p/shop/observability/errors?issue=iss-orders-deadline");
+  expect(screen.queryByTestId("tour-callout")).toBeNull();
+  expect(screen.queryByTestId("onboarding-spotlight-ring")).toBeNull();
+  // Back to the list: its tip was seen this session, so it stays closed.
+  await go("/forge/p/shop/observability/errors");
+  expect(await screen.findByRole("button", {name:"About Errors"})).toBeInTheDocument();
+  expect(screen.queryByTestId("tour-callout")).toBeNull();
+  // Another section's first visit replaces nothing: only its own card shows.
+  await go("/forge/p/shop/releases");
+  expect(await screen.findByTestId("tour-callout")).toHaveTextContent(DEMO_TIPS.releases.body);
+  expect(screen.getAllByTestId("tour-callout")).toHaveLength(1);
+});
+it("filters, ranges and tabs are not a new visit: a dismissed tip stays dismissed", async () => {
+  const {go} = renderDemo("/forge/p/shop/observability/traces");
+  await waitFor(() => fireEvent.click(screen.getByTestId("tour-next")));
+  await go("/forge/p/shop/observability/traces?range=6h&errors=true&groupBy=service");
+  expect(screen.queryByTestId("tour-callout")).toBeNull();
+});
+it("a reload in the same session keeps a seen page's tip closed", async () => {
+  renderDemo("/forge/p/shop/observability/errors");
+  await waitFor(() => fireEvent.click(screen.getByTestId("tour-next"))); cleanup();
+  renderDemo("/forge/p/shop/observability/errors");
+  expect(await screen.findByRole("button", {name:"About Errors"})).toBeInTheDocument();
+  expect(screen.queryByTestId("tour-callout")).toBeNull();
+});
+it("drawer hides the callout, then closing it reveals the new page without consuming dismissal", async () => {
+  const {go} = renderDemo("/forge/p/shop"); await screen.findByTestId("tour-callout");
+  const trigger = document.createElement("button"); trigger.setAttribute("aria-controls", "drawer-tips-unique"); trigger.setAttribute("aria-expanded", "true");
+  const drawer = document.createElement("aside"); drawer.id="drawer-tips-unique"; drawer.setAttribute("role", "dialog"); drawer.append(document.createElement("nav")); document.body.append(trigger, drawer);
+  try {
+    act(()=>drawer.setAttribute("aria-modal","true"));
+    await waitFor(()=>expect(screen.queryByTestId("tour-callout")).toBeNull());
+    await go("/forge/p/shop/observability/alerts");
+    expect(screen.queryByTestId("tour-callout")).toBeNull();
+    act(()=>drawer.removeAttribute("aria-modal"));
+    expect(await screen.findByTestId("tour-callout")).toHaveTextContent(DEMO_TIPS.alerts.body);
+    fireEvent.click(screen.getByTestId("tour-next"));
+    act(()=>drawer.setAttribute("aria-modal","true")); act(()=>drawer.removeAttribute("aria-modal"));
+    expect(screen.queryByTestId("tour-callout")).toBeNull();
+  }finally{drawer.remove();trigger.remove();}
+});
+it("explicit guided tour links suppress the automatic page card", async () => {
+  renderDemo("/forge/demo?view=overview&tour=forge:fg-intro");
+  expect(await screen.findByTestId("tour-card")).toHaveTextContent("What is Forge?");
+  expect(screen.queryByTestId("tour-callout")).toBeNull();
+  expect(screen.getByTestId("tour-next")).toHaveTextContent("Next");
+});
+// Old shared links keep working (v1 back-compat, decided 2026-11-08): a
+// trace-less legacy fg-logs link gets the page card, never a guided step that
+// waits on "Click Logs for this trace".
+it("legacy logs tour link opens only logs; Done dismisses without a full-site sequence", async () => {
+  const {router}=renderDemo("/forge/demo?view=logs&tour=forge:fg-logs");
+  expect(await screen.findByTestId("tour-callout")).toHaveTextContent(DEMO_TIPS.logs.body);
+  expect(screen.queryByTestId("tour-card")).toBeNull();
+  expect(screen.getByTestId("tour-next")).toBeEnabled();
+  fireEvent.click(screen.getByTestId("tour-next"));
+  await waitFor(()=>expect(screen.queryByTestId("tour-callout")).toBeNull());
+  expect(router.state.location.pathname).toBe("/forge/demo");
+  expect((router.state.location.search as {view:string}).view).toBe("logs");
+});
+it("only a trace-less link to a trace step is legacy; one that carries its trace, and other steps, stay guided", () => {
+  expect(isLegacyDemoTourLink({ view: "logs", tour: "forge:fg-logs" })).toBe(true);
+  expect(isLegacyDemoTourLink({ view: "traces", tour: "forge:fg-hops" })).toBe(true);
+  expect(isLegacyDemoTourLink({ view: "traces", trace: DEMO_TRACE_ID, tour: "forge:fg-logs" })).toBe(false);
+  expect(isLegacyDemoTourLink({ view: "overview", tour: "forge:fg-intro" })).toBe(false);
+  expect(isLegacyDemoTourLink({ view: "traces", tour: "forge:fg-trace" })).toBe(false);
+  expect(isLegacyDemoTourLink({ view: "logs" })).toBe(false);
+  resetShellForTests("reliant");
+  expect(isLegacyDemoTourLink({ view: "logs", tour: "forge:fg-logs" })).toBe(false);
+});
+it("a logs tour link that carries its trace runs the guided step, not the page card", async () => {
+  renderDemo(`/forge/demo?view=traces&trace=${DEMO_TRACE_ID}&tour=forge:fg-logs`);
+  const callout = await screen.findByTestId("tour-callout");
+  expect(callout).toHaveTextContent("What that request logged");
+  expect(callout).not.toHaveTextContent(DEMO_TIPS.logs.body);
+});
+it("the action row is Take the tour, Install Forge and Sign up, and survives navigation", async()=>{
+  const {go}=renderDemo("/forge/p/shop");
+  const row = await screen.findByTestId("demo-screen-actions");
+  expect(row).toHaveTextContent("Sample app · read-only data");
+  expect(row).toHaveTextContent("Take the tour");
+  expect(row).toHaveTextContent("Install Forge");
+  expect(row.querySelector('[data-testid="demo-cta-signup"]')).not.toBeNull();
+  expect(row).not.toHaveTextContent(/How Forge builds this|How it was built/);
+  // No z-index of its own: a dialog or the tour's modal card always paints over it.
+  expect(row.className).not.toMatch(/\bz-/);
+  await go("/forge/p/shop/observability/logs");
+  expect(screen.getByTestId("demo-screen-actions")).toHaveTextContent("Install Forge");
+});
+it.each(["/forge/p/shop", "/forge/demo?view=overview&tour=forge:fg-intro", "/forge/demo?section=built"])("discloses what the demo records on every entry (%s)", async (path) => {
+  renderDemo(path);
+  const row = await screen.findByTestId("demo-screen-actions");
+  expect(row.querySelector('[data-testid="forge-demo-telemetry-notice"]')).toHaveTextContent(/This demo (records|counts)/);
+  expect(row.querySelector('[data-testid="forge-demo-telemetry-notice"] a')).toHaveTextContent("Privacy");
+  // The legacy yellow banner is not drawn on the demo host: this row replaces it.
+  expect(screen.queryByTestId("forge-demo-banner")).toBeNull();
+});
+it("hides Take the tour while a tour is open", async()=>{
+  renderDemo("/forge/demo?view=overview&tour=forge:fg-intro");
+  const row = await screen.findByTestId("demo-screen-actions");
+  expect(row).not.toHaveTextContent("Take the tour");
+});
+it("keeps a page callout below the screen-action row, which stacks over the tour", async () => {
+  Object.defineProperty(window, "innerWidth", { configurable: true, value: 1440 });
+  Object.defineProperty(window, "innerHeight", { configurable: true, value: 900 });
+  // The page starts under the 52px action row; its target sits at the page's top, so a
+  // card centred beside it would be clamped to the viewport's top edge, under the row.
+  const box = (top: number, left: number, width: number, height: number) => ({ top, left, width, height, right: left + width, bottom: top + height, x: left, y: top, toJSON: () => ({}) }) as DOMRect;
+  const original = Element.prototype.getBoundingClientRect;
+  vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
+    if (this.tagName === "MAIN") return box(52, 260, 1180, 848);
+    if (this.getAttribute("data-testid") === "obs-log-row") return box(60, 260, 300, 28);
+    return original.call(this);
+  });
+  try {
+    renderDemo("/forge/p/shop/observability/logs");
+    // The corner card shows until the target's anchor is found; then the spotlight replaces it.
+    await waitFor(() => expect(screen.getByTestId("tour-callout").getAttribute("data-side")).toBe("right"));
+    expect(parseFloat(screen.getByTestId("tour-callout").style.top)).toBeGreaterThanOrEqual(52 + 16);
+  } finally {
+    vi.restoreAllMocks();
+  }
+});
+it("on a window too short to fit the card below the action row, shrinks the card to stay below the row and on screen", async () => {
+  Object.defineProperty(window, "innerWidth", { configurable: true, value: 1440 });
+  Object.defineProperty(window, "innerHeight", { configurable: true, value: 260 });
+  // The page below the 52px row leaves 208px; the card's natural 240px plus margins
+  // needs 272px, and its target sits near the page's bottom.
+  const box = (top: number, left: number, width: number, height: number) => ({ top, left, width, height, right: left + width, bottom: top + height, x: left, y: top, toJSON: () => ({}) }) as DOMRect;
+  const original = Element.prototype.getBoundingClientRect;
+  vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
+    if (this.tagName === "MAIN") return box(52, 260, 1180, 208);
+    if (this.getAttribute("data-testid") === "obs-log-row") return box(220, 260, 300, 28);
+    if (this.getAttribute("data-testid") === "tour-callout" && this instanceof HTMLElement) {
+      // The card measures at its natural height unless its max-height caps it.
+      const cap = parseFloat(this.style.maxHeight);
+      return box(parseFloat(this.style.top) || 0, parseFloat(this.style.left) || 0, 320, Number.isNaN(cap) ? 240 : Math.min(240, cap));
+    }
+    return original.call(this);
+  });
+  try {
+    renderDemo("/forge/p/shop/observability/logs");
+    await waitFor(() => expect(screen.getByTestId("tour-callout").getAttribute("data-side")).toBe("right"));
+    const card = screen.getByTestId("tour-callout");
+    await waitFor(() => expect(card.style.maxHeight).not.toBe(""));
+    const top = parseFloat(card.style.top);
+    const height = Math.min(240, parseFloat(card.style.maxHeight));
+    expect(top).toBeGreaterThanOrEqual(52 + 16);
+    expect(top + height).toBeLessThanOrEqual(260 - 16);
+    expect(card.style.overflowY).toBe("auto");
+  } finally {
+    vi.restoreAllMocks();
+  }
+});
+describe("a page's anchor that mounts late (a lazy chunk)", () => {
+  const lateAnchor = () => {
+    const anchor = document.createElement("div");
+    anchor.setAttribute("data-testid", "releases-table");
+    const scrollIntoView = vi.fn();
+    anchor.scrollIntoView = scrollIntoView;
+    return { anchor, scrollIntoView };
+  };
+  it("never moves the page for a tip that opened by itself", async () => {
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: 1440 });
+    renderDemo("/forge/p/shop/releases");
+    await screen.findByTestId("tour-callout");
+    const { anchor, scrollIntoView } = lateAnchor();
+    try {
+      act(() => { document.querySelector("main")!.appendChild(anchor); });
+      // Off screen (jsdom measures nothing): the corner card stays, and the page stays put.
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(scrollIntoView).not.toHaveBeenCalled();
+      expect(screen.getByTestId("tour-callout").getAttribute("data-side")).toBeNull();
+    } finally { anchor.remove(); }
+  });
+  it("is scrolled to when the reader asks for the tip with ?", async () => {
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: 1440 });
+    demoSession.markTipSeen("releases");
+    renderDemo("/forge/p/shop/releases");
+    fireEvent.click(await screen.findByRole("button", {name:"About Releases"}));
+    const { anchor, scrollIntoView } = lateAnchor();
+    try {
+      act(() => { document.querySelector("main")!.appendChild(anchor); });
+      await waitFor(() => expect(scrollIntoView).toHaveBeenCalled());
+    } finally { anchor.remove(); }
+  });
+  it("leaves the page where the reader put it once they have scrolled", async () => {
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: 1440 });
+    demoSession.markTipSeen("releases");
+    renderDemo("/forge/p/shop/releases");
+    fireEvent.click(await screen.findByRole("button", {name:"About Releases"}));
+    act(() => { window.dispatchEvent(new Event("wheel")); });
+    const { anchor, scrollIntoView } = lateAnchor();
+    try {
+      act(() => { document.querySelector("main")!.appendChild(anchor); });
+      // The spotlight takes over from the corner card, without scrolling.
+      await waitFor(() => expect(screen.getByTestId("tour-callout").getAttribute("data-side")).not.toBeNull());
+      expect(scrollIntoView).not.toHaveBeenCalled();
+    } finally { anchor.remove(); }
+  });
+});
+it("copy stays concise, plain and names each page as its nav row does",()=>{
+  for(const key of DEMO_TIP_KEYS){expect(DEMO_TIPS[key].body.length,key).toBeLessThan(480);expect(DEMO_TIPS[key].body).not.toMatch(/NATS|transport|where supported|\bforge\b/);}
+  // Two plain sentences, no legal hedging.
+  expect(DEMO_TIPS.alerts.body.split(/(?<=\.)\s/)).toHaveLength(2);
+  for (const [key, label] of Object.entries({ overview: "Overview", rpc: "RPC explorer", graph: "Service graph", traces: "Traces", alerts: "Alerts", dashboards: "Dashboards", releases: "Releases" })) {
+    expect(DEMO_TIPS[key as keyof typeof DEMO_TIPS].title).toBe(label);
+  }
+});

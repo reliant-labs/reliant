@@ -61,9 +61,11 @@ test('Chat options expose canonical agent settings and editable thinking levels'
   await expect(page.getByText('Agent', { exact: true }).first()).toBeVisible();
   await page.getByRole('button', { name: /^All settings/ }).click();
   await expect(page.getByText('Execution Mode', { exact: true })).toBeVisible();
-  for (const mode of ['manual', 'auto', 'plan']) {
+  // "auto" is the mode's default, not a listed choice (#2203).
+  for (const mode of ['manual', 'plan']) {
     await expect(page.getByRole('button', { name: mode, exact: true })).toBeVisible();
   }
+  await expect(page.getByRole('button', { name: 'auto', exact: true })).toHaveCount(0);
   // In the sheet: at a wide container the composer's priority+ row shows its
   // own Preset control beside it.
   await expect(sheet.getByRole('button', { name: /^Preset/ })).toBeVisible();

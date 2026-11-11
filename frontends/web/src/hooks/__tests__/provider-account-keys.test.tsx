@@ -5,11 +5,12 @@
  *
  *  - an account action refetches the mounted list (it is a generated
  *    mutation, invalidating providerAccountServiceKeys.all);
- *  - the imperative single-credential writes (api.settings.updateProvider /
- *    deleteProvider) invalidate the same scope;
+ *  - the imperative single-credential write (addProviderApiKey) invalidates
+ *    the same scope;
  *  - providerAccountServiceKeys.all reaches the chat's account read too.
  */
 
+import { Code, ConnectError } from "@connectrpc/connect";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -23,11 +24,11 @@ import { accountToProto } from "@/test/providerAccountTransport";
 import type { ProviderAccount } from "@/types/providerAccount";
 import {
   addProviderApiKey,
-  disconnectProvider,
   useProviderAccountActions,
   useProviderAccounts,
 } from "../provider-account-queries";
 import { providerAccountServiceKeys } from "../provider-account-service-hooks_gen";
+import { settingsServiceKeys } from "../settings-service-hooks_gen";
 import { useChatAccountUsage } from "../useChatAccountUsage";
 
 function wrapper({ children }: { children: ReactNode }) {
@@ -116,12 +117,32 @@ describe("ProviderAccountService keys", () => {
     await waitFor(() => expect(labels(list.result.current)).toEqual(["alice", "key"]));
   });
 
-  it("disconnecting a provider refetches the list", async () => {
-    const list = renderHook(() => useProviderAccounts(), { wrapper });
-    await waitFor(() => expect(labels(list.result.current)).toEqual(["alice"]));
+  it.each([true, false])("an imperative key write (success=%s) preserves both service refreshes", async (success) => {
+    const listKey = providerAccountServiceKeys.listProviderAccounts({});
+    const chatKey = providerAccountServiceKeys.getChatProviderAccount({ chatId: "chat-1" });
+    const statusesKey = settingsServiceKeys.getProviderStatuses({});
+    for (const key of [listKey, chatKey, statusesKey]) queryClient.setQueryData(key, {});
+    let writes = 0;
+    setTransport(mockTransport({
+      "ProviderAccountService.AddProviderAPIKey": () => {
+        writes++;
+        if (!success) throw new ConnectError("saved before failure", Code.Unavailable);
+        return { created: false };
+      },
+    }));
 
-    await act(() => disconnectProvider("claude"));
-    await waitFor(() => expect(labels(list.result.current)).toEqual([]));
+    if (success) {
+      expect(await addProviderApiKey("anthropic", "sk-ant")).toEqual({ created: false });
+    } else {
+      await expect(addProviderApiKey("anthropic", "sk-ant")).rejects.toThrow("saved before failure");
+    }
+
+    expect(writes).toBe(1);
+    for (const key of [listKey, chatKey, statusesKey]) {
+      expect(queryClient.getQueryState(key)?.isInvalidated).toBe(true);
+    }
+    // Imperative errors remain the caller's, without MutationCache toasts.
+    expect(queryClient.getMutationCache().getAll()).toEqual([]);
   });
 
   it("providerAccountServiceKeys.all reaches the list and the chat's account", async () => {

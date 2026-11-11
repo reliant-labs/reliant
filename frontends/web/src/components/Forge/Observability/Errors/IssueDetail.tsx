@@ -9,7 +9,7 @@
 
 import { useMemo, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, ExternalLink, GitCommitHorizontal, MonitorPlay } from "lucide-react";
+import { ArrowLeft, ExternalLink, GitCommitHorizontal, MonitorPlay, UserRound } from "lucide-react";
 
 import Card from "@/components/forge-ui/card";
 import Button from "@/components/forge-ui/button";
@@ -31,6 +31,7 @@ import { shortCommit } from "../deliveryScope";
 import { formatAgo, formatCount, formatTimestamp, formatWhen } from "../format";
 import type { ObsNavigate } from "../obsSearch";
 import { ObsAsOf, ObsError, ObsLoadingRows } from "../ObsStates";
+import { Place } from "../Place";
 import { SessionName } from "../Sessions/SessionName";
 import { rumScopeOf, sessionLink } from "../Sessions/sessionModel";
 import { StatusBadge, Trend } from "./IssueBits";
@@ -41,6 +42,7 @@ import { IssueTimeline, useOpenChat } from "./IssueTimeline";
 import { chatLabel, latestChatLink, mergeTimelinePages } from "./issueTimelineModel";
 import { IssueTriage } from "./IssueTriage";
 import { linkChatToIssue } from "./linkIssueChat";
+import { ClientSummary } from "../Client";
 
 export function IssueDetail({
   issueId,
@@ -339,6 +341,17 @@ function Section({ title, note }: { title: string; note?: string }) {
   );
 }
 
+/** Who hit the event: a server record's authenticated user, a browser page's reported one. */
+function EventUser({ event }: { event: IssueEvent }) {
+  if (!event.userId) return null;
+  return (
+    <span className="inline-flex items-center gap-1 font-mono text-ink" data-testid="obs-issue-event-user">
+      <UserRound className="h-3 w-3" aria-hidden="true" />
+      {event.userId}
+    </span>
+  );
+}
+
 function TraceLink({ event, onTrace }: { event: IssueEvent; onTrace: (traceId: string, spanId?: string) => void }) {
   if (!event.traceId) return null;
   return (
@@ -361,7 +374,14 @@ function LatestEvent({ event, onTrace, onSession }: { event: IssueEvent; onTrace
         {event.message || "(no message)"}
       </p>
       <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-muted">
-        {event.serviceVersion && <span className="font-mono">{event.serviceVersion}</span>}
+        <EventUser event={event} />
+        <Place geo={event} />
+        <ClientSummary client={event.client} testId="obs-issue-latest-client" />
+        {event.serviceVersion && (
+          <span className="font-mono" title="The build that raised it">
+            {event.serviceVersion}
+          </span>
+        )}
         {event.urlPath && <span className="font-mono">{event.urlPath}</span>}
         <SessionLink event={event} onSession={onSession} />
         <TraceLink event={event} onTrace={onTrace} />
@@ -428,7 +448,14 @@ function RecentEvents({ issueId, onTrace, onSession }: { issueId: string; onTrac
           <li key={`${event.timeMs}-${event.traceId}-${index}`} className="space-y-0.5 px-4 py-2 text-xs" data-testid="obs-issue-event">
             <p className="flex flex-wrap items-center gap-x-3 text-ink-muted">
               <span className="tabular-nums">{formatTimestamp(event.timeMs, now)}</span>
-              {event.serviceVersion && <span className="font-mono">{event.serviceVersion}</span>}
+              <EventUser event={event} />
+              <Place geo={event} />
+              <ClientSummary client={event.client} testId="obs-issue-event-client" />
+              {event.serviceVersion && (
+                <span className="font-mono" title="The build that raised it">
+                  {event.serviceVersion}
+                </span>
+              )}
               <TraceLink event={event} onTrace={onTrace} />
               <SessionLink event={event} onSession={onSession} />
             </p>

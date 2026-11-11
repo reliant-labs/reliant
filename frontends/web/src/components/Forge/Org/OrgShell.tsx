@@ -42,12 +42,15 @@ export interface OrgNavInput {
   alertsFiring?: number;
   /** The current URL search, for the keys every org link carries. */
   search?: Record<string, unknown>;
+  /** Whether Observability is expanded (Console/obsNavOpen.ts); omitted, it starts expanded. */
+  obsOpen?: boolean;
+  onObsOpenChange?: (open: boolean) => void;
 }
 
 const icon = (Icon: typeof Gauge) => <Icon className="h-4 w-4" aria-hidden="true" />;
 
 /** The nav rows for `page` — pure, so the IA is testable without rendering. */
-export function buildOrgNav({ page, apps, alertsFiring = 0, search = {} }: OrgNavInput): { items: SidebarNavItem[] } {
+export function buildOrgNav({ page, apps, alertsFiring = 0, search = {}, obsOpen, onObsOpenChange }: OrgNavInput): { items: SidebarNavItem[] } {
   const carried = carriedOrgSearch(search);
   const href = (target: OrgPage) => withSearch(orgPath(target), carried);
 
@@ -72,6 +75,10 @@ export function buildOrgNav({ page, apps, alertsFiring = 0, search = {} }: OrgNa
         href: href({ kind: "observability" }),
         icon: icon(Gauge),
         active: page.kind === "observability",
+        // As in the app console: expanded until the reader collapses it.
+        defaultExpanded: true,
+        open: obsOpen,
+        onOpenChange: onObsOpenChange,
         children: OBS_NAV_VIEWS.map((view) => ({
           label: OBS_NAV_LABELS[view],
           href: href({ kind: "obs-view", view }),
@@ -119,9 +126,11 @@ export function OrgShell({ brand, brandCollapsed, user, collapsed, onToggleColla
     /*
      * `forge-ui` is REQUIRED, not cosmetic: inside it forge's `accent` token
      * resolves to reliant's primary action colour; outside it, to reliant's
-     * muted hover tint (src/index.css).
+     * muted hover tint (src/index.css). `forge-console` raises the control
+     * edge to 3:1 so filters and toggles read as controls beside the charts
+     * (controlStyles.ts).
      */
-    <div className="forge-ui h-dvh w-full" data-testid="forge-org-shell">
+    <div className="forge-ui forge-console h-dvh w-full" data-testid="forge-org-shell">
       <SidebarLayout
         navLabel="Organization console"
         brand={brand}

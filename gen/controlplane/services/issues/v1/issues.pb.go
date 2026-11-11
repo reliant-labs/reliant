@@ -312,7 +312,13 @@ type IssueScope struct {
 	ProjectId *string `protobuf:"bytes,5,opt,name=project_id,json=projectId,proto3,oneof" json:"project_id,omitempty"`
 	// Control-plane environment ids (deploy_environments.id). Empty = every
 	// environment of the org (of the project, when project_id is set).
-	EnvIds        []string `protobuf:"bytes,6,rep,name=env_ids,json=envIds,proto3" json:"env_ids,omitempty"`
+	EnvIds []string `protobuf:"bytes,6,rep,name=env_ids,json=envIds,proto3" json:"env_ids,omitempty"`
+	// QueryScope.instance_ids: only the issues of these dev instances' events.
+	// The response's instance_scope says it was applied.
+	InstanceIds []string `protobuf:"bytes,9,rep,name=instance_ids,json=instanceIds,proto3" json:"instance_ids,omitempty"`
+	// QueryScope.instance_users: the instances of these people, by email; an
+	// email that names no member matches nothing.
+	InstanceUsers []string `protobuf:"bytes,10,rep,name=instance_users,json=instanceUsers,proto3" json:"instance_users,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -382,6 +388,20 @@ func (x *IssueScope) GetEnvIds() []string {
 	return nil
 }
 
+func (x *IssueScope) GetInstanceIds() []string {
+	if x != nil {
+		return x.InstanceIds
+	}
+	return nil
+}
+
+func (x *IssueScope) GetInstanceUsers() []string {
+	if x != nil {
+		return x.InstanceUsers
+	}
+	return nil
+}
+
 type ListIssuesRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Scope *IssueScope            `protobuf:"bytes,1,opt,name=scope,proto3" json:"scope,omitempty"`
@@ -426,8 +446,22 @@ type ListIssuesRequest struct {
 	// How close in first-seen time issues of one cause must be to share an
 	// incident (Issue.incident_key). Default 600 (ten minutes); max 3600.
 	IncidentWindowSeconds int32 `protobuf:"varint,11,opt,name=incident_window_seconds,json=incidentWindowSeconds,proto3" json:"incident_window_seconds,omitempty"`
-	unknownFields         protoimpl.UnknownFields
-	sizeCache             protoimpl.SizeCache
+	// Only the issues with an event of this user id in the range (IssueEvent.
+	// user_id). At most 500 matching issues are considered.
+	UserId *string `protobuf:"bytes,15,opt,name=user_id,json=userId,proto3,oneof" json:"user_id,omitempty"`
+	// Only the issues with an event of this browser in the range
+	// (IssueEvent.client.browser_name, exact). Browser issues only: with it, no
+	// server issue is listed. At most 500 matching issues are considered.
+	Browser *string `protobuf:"bytes,16,opt,name=browser,proto3,oneof" json:"browser,omitempty"`
+	// Only the issues with an event on this OS in the range
+	// (IssueEvent.client.os_name). Browser issues only, like browser.
+	Os *string `protobuf:"bytes,17,opt,name=os,proto3,oneof" json:"os,omitempty"`
+	// Only the issues with an event of this build in the range
+	// (IssueEvent.service_version): a frontend build for a browser issue, a
+	// backend build for a server issue. At most 500 matching issues per platform.
+	ServiceVersion *string `protobuf:"bytes,18,opt,name=service_version,json=serviceVersion,proto3,oneof" json:"service_version,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *ListIssuesRequest) Reset() {
@@ -558,11 +592,43 @@ func (x *ListIssuesRequest) GetIncidentWindowSeconds() int32 {
 	return 0
 }
 
+func (x *ListIssuesRequest) GetUserId() string {
+	if x != nil && x.UserId != nil {
+		return *x.UserId
+	}
+	return ""
+}
+
+func (x *ListIssuesRequest) GetBrowser() string {
+	if x != nil && x.Browser != nil {
+		return *x.Browser
+	}
+	return ""
+}
+
+func (x *ListIssuesRequest) GetOs() string {
+	if x != nil && x.Os != nil {
+		return *x.Os
+	}
+	return ""
+}
+
+func (x *ListIssuesRequest) GetServiceVersion() string {
+	if x != nil && x.ServiceVersion != nil {
+		return *x.ServiceVersion
+	}
+	return ""
+}
+
 type ListIssuesResponse struct {
 	state  protoimpl.MessageState `protogen:"open.v1"`
 	Issues []*v1.Issue            `protobuf:"bytes,1,rep,name=issues,proto3" json:"issues,omitempty"`
 	// Empty on the last page.
 	NextPageToken string `protobuf:"bytes,2,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
+	// The instance narrowing this answer applied: scope.instance_ids and
+	// instance_users, echoed exactly. Unset when the request named none, or
+	// when this read could not apply it (controlplane.v1.InstanceScope).
+	InstanceScope *v1.InstanceScope `protobuf:"bytes,3,opt,name=instance_scope,json=instanceScope,proto3" json:"instance_scope,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -611,6 +677,13 @@ func (x *ListIssuesResponse) GetNextPageToken() string {
 	return ""
 }
 
+func (x *ListIssuesResponse) GetInstanceScope() *v1.InstanceScope {
+	if x != nil {
+		return x.InstanceScope
+	}
+	return nil
+}
+
 type GetIssueRequest struct {
 	state   protoimpl.MessageState `protogen:"open.v1"`
 	IssueId string                 `protobuf:"bytes,1,opt,name=issue_id,json=issueId,proto3" json:"issue_id,omitempty"`
@@ -619,8 +692,15 @@ type GetIssueRequest struct {
 	TimeRange *IssueTimeRange `protobuf:"bytes,2,opt,name=time_range,json=timeRange,proto3" json:"time_range,omitempty"`
 	// ListIssuesRequest.incident_window_seconds, for the incident this issue lists.
 	IncidentWindowSeconds int32 `protobuf:"varint,3,opt,name=incident_window_seconds,json=incidentWindowSeconds,proto3" json:"incident_window_seconds,omitempty"`
-	unknownFields         protoimpl.UnknownFields
-	sizeCache             protoimpl.SizeCache
+	// Narrow the counts, trend, versions and latest event to these dev
+	// instances' events (IssueScope.instance_ids). The response's
+	// instance_scope says it was applied.
+	InstanceIds []string `protobuf:"bytes,4,rep,name=instance_ids,json=instanceIds,proto3" json:"instance_ids,omitempty"`
+	// IssueScope.instance_users: the instances of these people, by email; an
+	// email that names no member matches nothing.
+	InstanceUsers []string `protobuf:"bytes,5,rep,name=instance_users,json=instanceUsers,proto3" json:"instance_users,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *GetIssueRequest) Reset() {
@@ -674,6 +754,20 @@ func (x *GetIssueRequest) GetIncidentWindowSeconds() int32 {
 	return 0
 }
 
+func (x *GetIssueRequest) GetInstanceIds() []string {
+	if x != nil {
+		return x.InstanceIds
+	}
+	return nil
+}
+
+func (x *GetIssueRequest) GetInstanceUsers() []string {
+	if x != nil {
+		return x.InstanceUsers
+	}
+	return nil
+}
+
 type GetIssueResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Issue *v1.Issue              `protobuf:"bytes,1,opt,name=issue,proto3" json:"issue,omitempty"`
@@ -693,8 +787,12 @@ type GetIssueResponse struct {
 	// cause, first seen close in time, in any service. Empty when it is part of
 	// none.
 	IncidentIssueIds []string `protobuf:"bytes,7,rep,name=incident_issue_ids,json=incidentIssueIds,proto3" json:"incident_issue_ids,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	// The instance narrowing this answer applied: the request's instance_ids
+	// and instance_users, echoed exactly. Unset when the request named none
+	// (controlplane.v1.InstanceScope).
+	InstanceScope *v1.InstanceScope `protobuf:"bytes,8,opt,name=instance_scope,json=instanceScope,proto3" json:"instance_scope,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *GetIssueResponse) Reset() {
@@ -776,6 +874,13 @@ func (x *GetIssueResponse) GetIncidentIssueIds() []string {
 	return nil
 }
 
+func (x *GetIssueResponse) GetInstanceScope() *v1.InstanceScope {
+	if x != nil {
+		return x.InstanceScope
+	}
+	return nil
+}
+
 // IssueEvent is one occurrence of an issue.
 type IssueEvent struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
@@ -787,8 +892,21 @@ type IssueEvent struct {
 	// An allowlisted, bounded subset of the event's attributes. Never a secret.
 	Attributes map[string]string `protobuf:"bytes,6,rep,name=attributes,proto3" json:"attributes,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	// Browser issues only.
-	SessionId     string `protobuf:"bytes,7,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
-	UrlPath       string `protobuf:"bytes,8,opt,name=url_path,json=urlPath,proto3" json:"url_path,omitempty"`
+	SessionId string `protobuf:"bytes,7,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	UrlPath   string `protobuf:"bytes,8,opt,name=url_path,json=urlPath,proto3" json:"url_path,omitempty"`
+	// Who hit it: a server event's user.id (the authenticated caller the record
+	// was logged for), a browser event's userId (the id the page reported).
+	// Empty when the event names none.
+	UserId string `protobuf:"bytes,9,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	// Browser issues only: where the browser was, derived by the platform from
+	// its address at ingest (RumService SessionSummary.country/region/city).
+	Country string `protobuf:"bytes,10,opt,name=country,proto3" json:"country,omitempty"`
+	Region  string `protobuf:"bytes,11,opt,name=region,proto3" json:"region,omitempty"`
+	City    string `protobuf:"bytes,12,opt,name=city,proto3" json:"city,omitempty"`
+	// Browser issues only: which client raised it (browser, OS, device type,
+	// desktop app version; RumService SessionSummary.client). service_version
+	// above is its frontend build (a server event's: its backend build).
+	Client        *v1.ClientContext `protobuf:"bytes,13,opt,name=client,proto3" json:"client,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -877,6 +995,41 @@ func (x *IssueEvent) GetUrlPath() string {
 		return x.UrlPath
 	}
 	return ""
+}
+
+func (x *IssueEvent) GetUserId() string {
+	if x != nil {
+		return x.UserId
+	}
+	return ""
+}
+
+func (x *IssueEvent) GetCountry() string {
+	if x != nil {
+		return x.Country
+	}
+	return ""
+}
+
+func (x *IssueEvent) GetRegion() string {
+	if x != nil {
+		return x.Region
+	}
+	return ""
+}
+
+func (x *IssueEvent) GetCity() string {
+	if x != nil {
+		return x.City
+	}
+	return ""
+}
+
+func (x *IssueEvent) GetClient() *v1.ClientContext {
+	if x != nil {
+		return x.Client
+	}
+	return nil
 }
 
 // IssueFrame is one stack frame. For a browser issue, symbolicated frames are
@@ -1121,8 +1274,22 @@ type ListIssueEventsRequest struct {
 	// Default: from the issue's first to its last event. Max 7 days.
 	TimeRange *IssueTimeRange `protobuf:"bytes,2,opt,name=time_range,json=timeRange,proto3" json:"time_range,omitempty"`
 	// Rows per page. Default 50, max 100.
-	PageSize      int32  `protobuf:"varint,3,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
-	PageToken     string `protobuf:"bytes,4,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
+	PageSize  int32  `protobuf:"varint,3,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
+	PageToken string `protobuf:"bytes,4,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
+	// Only the events of this user id (IssueEvent.user_id).
+	UserId *string `protobuf:"bytes,5,opt,name=user_id,json=userId,proto3,oneof" json:"user_id,omitempty"`
+	// Only the events of this browser and OS (IssueEvent.client.browser_name,
+	// os_name). A server issue's events have no client: either filter lists none.
+	Browser *string `protobuf:"bytes,6,opt,name=browser,proto3,oneof" json:"browser,omitempty"`
+	Os      *string `protobuf:"bytes,7,opt,name=os,proto3,oneof" json:"os,omitempty"`
+	// Only the events of this build (IssueEvent.service_version).
+	ServiceVersion *string `protobuf:"bytes,8,opt,name=service_version,json=serviceVersion,proto3,oneof" json:"service_version,omitempty"`
+	// Only the events of these dev instances (IssueScope.instance_ids). The response's
+	// instance_scope says it was applied.
+	InstanceIds []string `protobuf:"bytes,9,rep,name=instance_ids,json=instanceIds,proto3" json:"instance_ids,omitempty"`
+	// IssueScope.instance_users: the instances of these people, by email; an
+	// email that names no member matches nothing.
+	InstanceUsers []string `protobuf:"bytes,10,rep,name=instance_users,json=instanceUsers,proto3" json:"instance_users,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1185,11 +1352,57 @@ func (x *ListIssueEventsRequest) GetPageToken() string {
 	return ""
 }
 
+func (x *ListIssueEventsRequest) GetUserId() string {
+	if x != nil && x.UserId != nil {
+		return *x.UserId
+	}
+	return ""
+}
+
+func (x *ListIssueEventsRequest) GetBrowser() string {
+	if x != nil && x.Browser != nil {
+		return *x.Browser
+	}
+	return ""
+}
+
+func (x *ListIssueEventsRequest) GetOs() string {
+	if x != nil && x.Os != nil {
+		return *x.Os
+	}
+	return ""
+}
+
+func (x *ListIssueEventsRequest) GetServiceVersion() string {
+	if x != nil && x.ServiceVersion != nil {
+		return *x.ServiceVersion
+	}
+	return ""
+}
+
+func (x *ListIssueEventsRequest) GetInstanceIds() []string {
+	if x != nil {
+		return x.InstanceIds
+	}
+	return nil
+}
+
+func (x *ListIssueEventsRequest) GetInstanceUsers() []string {
+	if x != nil {
+		return x.InstanceUsers
+	}
+	return nil
+}
+
 type ListIssueEventsResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Newest first.
 	Events        []*IssueEvent `protobuf:"bytes,1,rep,name=events,proto3" json:"events,omitempty"`
 	NextPageToken string        `protobuf:"bytes,2,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
+	// The instance narrowing this answer applied: the request's instance_ids
+	// and instance_users, echoed exactly. Unset when the request named none
+	// (controlplane.v1.InstanceScope).
+	InstanceScope *v1.InstanceScope `protobuf:"bytes,3,opt,name=instance_scope,json=instanceScope,proto3" json:"instance_scope,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1236,6 +1449,13 @@ func (x *ListIssueEventsResponse) GetNextPageToken() string {
 		return x.NextPageToken
 	}
 	return ""
+}
+
+func (x *ListIssueEventsResponse) GetInstanceScope() *v1.InstanceScope {
+	if x != nil {
+		return x.InstanceScope
+	}
+	return nil
 }
 
 // IssueResolveIn says when a resolve takes effect, and so which events reopen
@@ -2792,10 +3012,10 @@ var File_services_issues_v1_issues_proto protoreflect.FileDescriptor
 
 const file_services_issues_v1_issues_proto_rawDesc = "" +
 	"\n" +
-	"\x1fservices/issues/v1/issues.proto\x12\x0fcontrolplane.v1\x1a\x1ccontrolplane/v1/issues.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"p\n" +
+	"\x1fservices/issues/v1/issues.proto\x12\x0fcontrolplane.v1\x1a\x1ccontrolplane/v1/client.proto\x1a\x1ccontrolplane/v1/issues.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"p\n" +
 	"\x0eIssueTimeRange\x120\n" +
 	"\x05start\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\x05start\x12,\n" +
-	"\x03end\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x03end\"\xe8\x01\n" +
+	"\x03end\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x03end\"\xb2\x02\n" +
 	"\n" +
 	"IssueScope\x12\x15\n" +
 	"\x06org_id\x18\x01 \x01(\tR\x05orgId\x12\x1a\n" +
@@ -2804,8 +3024,11 @@ const file_services_issues_v1_issues_proto_rawDesc = "" +
 	"time_range\x18\x04 \x01(\v2\x1f.controlplane.v1.IssueTimeRangeR\ttimeRange\x12\"\n" +
 	"\n" +
 	"project_id\x18\x05 \x01(\tH\x00R\tprojectId\x88\x01\x01\x12\x17\n" +
-	"\aenv_ids\x18\x06 \x03(\tR\x06envIdsB\r\n" +
-	"\v_project_idJ\x04\b\x02\x10\x03J\x04\b\a\x10\bR\x06env_idR\afilters\"\xeb\x05\n" +
+	"\aenv_ids\x18\x06 \x03(\tR\x06envIds\x12!\n" +
+	"\finstance_ids\x18\t \x03(\tR\vinstanceIds\x12%\n" +
+	"\x0einstance_users\x18\n" +
+	" \x03(\tR\rinstanceUsersB\r\n" +
+	"\v_project_idJ\x04\b\x02\x10\x03J\x04\b\a\x10\bR\x06env_idR\afilters\"\x9e\a\n" +
 	"\x11ListIssuesRequest\x121\n" +
 	"\x05scope\x18\x01 \x01(\v2\x1b.controlplane.v1.IssueScopeR\x05scope\x128\n" +
 	"\bstatuses\x18\x02 \x03(\x0e2\x1c.controlplane.v1.IssueStatusR\bstatuses\x12?\n" +
@@ -2824,7 +3047,12 @@ const file_services_issues_v1_issues_proto_rawDesc = "" +
 	"\tpage_size\x18\b \x01(\x05R\bpageSize\x12\x1d\n" +
 	"\n" +
 	"page_token\x18\t \x01(\tR\tpageToken\x126\n" +
-	"\x17incident_window_seconds\x18\v \x01(\x05R\x15incidentWindowSecondsB\v\n" +
+	"\x17incident_window_seconds\x18\v \x01(\x05R\x15incidentWindowSeconds\x12\x1c\n" +
+	"\auser_id\x18\x0f \x01(\tH\bR\x06userId\x88\x01\x01\x12\x1d\n" +
+	"\abrowser\x18\x10 \x01(\tH\tR\abrowser\x88\x01\x01\x12\x13\n" +
+	"\x02os\x18\x11 \x01(\tH\n" +
+	"R\x02os\x88\x01\x01\x12,\n" +
+	"\x0fservice_version\x18\x12 \x01(\tH\vR\x0eserviceVersion\x88\x01\x01B\v\n" +
 	"\t_platformB\x15\n" +
 	"\x13_first_seen_releaseB\x15\n" +
 	"\x13_since_promotion_idB\a\n" +
@@ -2832,15 +3060,24 @@ const file_services_issues_v1_issues_proto_rawDesc = "" +
 	"\a_sourceB\v\n" +
 	"\t_assigneeB\r\n" +
 	"\v_unassignedB\x0f\n" +
-	"\r_incident_key\"l\n" +
+	"\r_incident_keyB\n" +
+	"\n" +
+	"\b_user_idB\n" +
+	"\n" +
+	"\b_browserB\x05\n" +
+	"\x03_osB\x12\n" +
+	"\x10_service_version\"\xb3\x01\n" +
 	"\x12ListIssuesResponse\x12.\n" +
 	"\x06issues\x18\x01 \x03(\v2\x16.controlplane.v1.IssueR\x06issues\x12&\n" +
-	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"\xa4\x01\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\x12E\n" +
+	"\x0einstance_scope\x18\x03 \x01(\v2\x1e.controlplane.v1.InstanceScopeR\rinstanceScope\"\xee\x01\n" +
 	"\x0fGetIssueRequest\x12\x19\n" +
 	"\bissue_id\x18\x01 \x01(\tR\aissueId\x12>\n" +
 	"\n" +
 	"time_range\x18\x02 \x01(\v2\x1f.controlplane.v1.IssueTimeRangeR\ttimeRange\x126\n" +
-	"\x17incident_window_seconds\x18\x03 \x01(\x05R\x15incidentWindowSeconds\"\xa6\x03\n" +
+	"\x17incident_window_seconds\x18\x03 \x01(\x05R\x15incidentWindowSeconds\x12!\n" +
+	"\finstance_ids\x18\x04 \x03(\tR\vinstanceIds\x12%\n" +
+	"\x0einstance_users\x18\x05 \x03(\tR\rinstanceUsers\"\xed\x03\n" +
 	"\x10GetIssueResponse\x12,\n" +
 	"\x05issue\x18\x01 \x01(\v2\x16.controlplane.v1.IssueR\x05issue\x12>\n" +
 	"\flatest_event\x18\x02 \x01(\v2\x1b.controlplane.v1.IssueEventR\vlatestEvent\x123\n" +
@@ -2849,7 +3086,8 @@ const file_services_issues_v1_issues_proto_rawDesc = "" +
 	"by_version\x18\x04 \x03(\v2&.controlplane.v1.IssueVersionBreakdownR\tbyVersion\x123\n" +
 	"\x16co_occurring_issue_ids\x18\x05 \x03(\tR\x13coOccurringIssueIds\x12E\n" +
 	"\rfirst_release\x18\x06 \x01(\v2 .controlplane.v1.IssueReleaseRefR\ffirstRelease\x12,\n" +
-	"\x12incident_issue_ids\x18\a \x03(\tR\x10incidentIssueIds\"\x83\x03\n" +
+	"\x12incident_issue_ids\x18\a \x03(\tR\x10incidentIssueIds\x12E\n" +
+	"\x0einstance_scope\x18\b \x01(\v2\x1e.controlplane.v1.InstanceScopeR\rinstanceScope\"\x9a\x04\n" +
 	"\n" +
 	"IssueEvent\x128\n" +
 	"\ttimestamp\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\ttimestamp\x12\x19\n" +
@@ -2862,7 +3100,13 @@ const file_services_issues_v1_issues_proto_rawDesc = "" +
 	"attributes\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\a \x01(\tR\tsessionId\x12\x19\n" +
-	"\burl_path\x18\b \x01(\tR\aurlPath\x1a=\n" +
+	"\burl_path\x18\b \x01(\tR\aurlPath\x12\x17\n" +
+	"\auser_id\x18\t \x01(\tR\x06userId\x12\x18\n" +
+	"\acountry\x18\n" +
+	" \x01(\tR\acountry\x12\x16\n" +
+	"\x06region\x18\v \x01(\tR\x06region\x12\x12\n" +
+	"\x04city\x18\f \x01(\tR\x04city\x126\n" +
+	"\x06client\x18\r \x01(\v2\x1e.controlplane.v1.ClientContextR\x06client\x1a=\n" +
 	"\x0fAttributesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x7f\n" +
@@ -2887,17 +3131,31 @@ const file_services_issues_v1_issues_proto_rawDesc = "" +
 	"git_commit\x18\x02 \x01(\tR\tgitCommit\x12!\n" +
 	"\fcommit_range\x18\x03 \x01(\tR\vcommitRange\x12;\n" +
 	"\vpromoted_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"promotedAt\"\xaf\x01\n" +
+	"promotedAt\"\xac\x03\n" +
 	"\x16ListIssueEventsRequest\x12\x19\n" +
 	"\bissue_id\x18\x01 \x01(\tR\aissueId\x12>\n" +
 	"\n" +
 	"time_range\x18\x02 \x01(\v2\x1f.controlplane.v1.IssueTimeRangeR\ttimeRange\x12\x1b\n" +
 	"\tpage_size\x18\x03 \x01(\x05R\bpageSize\x12\x1d\n" +
 	"\n" +
-	"page_token\x18\x04 \x01(\tR\tpageToken\"v\n" +
+	"page_token\x18\x04 \x01(\tR\tpageToken\x12\x1c\n" +
+	"\auser_id\x18\x05 \x01(\tH\x00R\x06userId\x88\x01\x01\x12\x1d\n" +
+	"\abrowser\x18\x06 \x01(\tH\x01R\abrowser\x88\x01\x01\x12\x13\n" +
+	"\x02os\x18\a \x01(\tH\x02R\x02os\x88\x01\x01\x12,\n" +
+	"\x0fservice_version\x18\b \x01(\tH\x03R\x0eserviceVersion\x88\x01\x01\x12!\n" +
+	"\finstance_ids\x18\t \x03(\tR\vinstanceIds\x12%\n" +
+	"\x0einstance_users\x18\n" +
+	" \x03(\tR\rinstanceUsersB\n" +
+	"\n" +
+	"\b_user_idB\n" +
+	"\n" +
+	"\b_browserB\x05\n" +
+	"\x03_osB\x12\n" +
+	"\x10_service_version\"\xbd\x01\n" +
 	"\x17ListIssueEventsResponse\x123\n" +
 	"\x06events\x18\x01 \x03(\v2\x1b.controlplane.v1.IssueEventR\x06events\x12&\n" +
-	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"a\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\x12E\n" +
+	"\x0einstance_scope\x18\x03 \x01(\v2\x1e.controlplane.v1.InstanceScopeR\rinstanceScope\"a\n" +
 	"\x0eIssueResolveIn\x125\n" +
 	"\x04kind\x18\x01 \x01(\x0e2!.controlplane.v1.IssueResolveKindR\x04kind\x12\x18\n" +
 	"\aversion\x18\x02 \x01(\tR\aversion\"\xdf\x02\n" +
@@ -3106,7 +3364,9 @@ var file_services_issues_v1_issues_proto_goTypes = []any{
 	(v1.IssueStatus)(0),                 // 43: controlplane.v1.IssueStatus
 	(v1.IssuePlatform)(0),               // 44: controlplane.v1.IssuePlatform
 	(*v1.Issue)(nil),                    // 45: controlplane.v1.Issue
-	(*v1.IssueUser)(nil),                // 46: controlplane.v1.IssueUser
+	(*v1.InstanceScope)(nil),            // 46: controlplane.v1.InstanceScope
+	(*v1.ClientContext)(nil),            // 47: controlplane.v1.ClientContext
+	(*v1.IssueUser)(nil),                // 48: controlplane.v1.IssueUser
 }
 var file_services_issues_v1_issues_proto_depIdxs = []int32{
 	42, // 0: controlplane.v1.IssueTimeRange.start:type_name -> google.protobuf.Timestamp
@@ -3117,76 +3377,80 @@ var file_services_issues_v1_issues_proto_depIdxs = []int32{
 	44, // 5: controlplane.v1.ListIssuesRequest.platform:type_name -> controlplane.v1.IssuePlatform
 	0,  // 6: controlplane.v1.ListIssuesRequest.sort:type_name -> controlplane.v1.IssueSort
 	45, // 7: controlplane.v1.ListIssuesResponse.issues:type_name -> controlplane.v1.Issue
-	4,  // 8: controlplane.v1.GetIssueRequest.time_range:type_name -> controlplane.v1.IssueTimeRange
-	45, // 9: controlplane.v1.GetIssueResponse.issue:type_name -> controlplane.v1.Issue
-	10, // 10: controlplane.v1.GetIssueResponse.latest_event:type_name -> controlplane.v1.IssueEvent
-	11, // 11: controlplane.v1.GetIssueResponse.frames:type_name -> controlplane.v1.IssueFrame
-	12, // 12: controlplane.v1.GetIssueResponse.by_version:type_name -> controlplane.v1.IssueVersionBreakdown
-	13, // 13: controlplane.v1.GetIssueResponse.first_release:type_name -> controlplane.v1.IssueReleaseRef
-	42, // 14: controlplane.v1.IssueEvent.timestamp:type_name -> google.protobuf.Timestamp
-	41, // 15: controlplane.v1.IssueEvent.attributes:type_name -> controlplane.v1.IssueEvent.AttributesEntry
-	42, // 16: controlplane.v1.IssueVersionBreakdown.first_seen_at:type_name -> google.protobuf.Timestamp
-	42, // 17: controlplane.v1.IssueVersionBreakdown.last_seen_at:type_name -> google.protobuf.Timestamp
-	42, // 18: controlplane.v1.IssueReleaseRef.promoted_at:type_name -> google.protobuf.Timestamp
-	4,  // 19: controlplane.v1.ListIssueEventsRequest.time_range:type_name -> controlplane.v1.IssueTimeRange
-	10, // 20: controlplane.v1.ListIssueEventsResponse.events:type_name -> controlplane.v1.IssueEvent
-	2,  // 21: controlplane.v1.IssueResolveIn.kind:type_name -> controlplane.v1.IssueResolveKind
-	1,  // 22: controlplane.v1.UpdateIssueStatusRequest.status:type_name -> controlplane.v1.IssueStatusChange
-	16, // 23: controlplane.v1.UpdateIssueStatusRequest.resolve_in:type_name -> controlplane.v1.IssueResolveIn
-	42, // 24: controlplane.v1.UpdateIssueStatusRequest.ignored_until:type_name -> google.protobuf.Timestamp
-	45, // 25: controlplane.v1.UpdateIssueStatusResponse.issue:type_name -> controlplane.v1.Issue
-	46, // 26: controlplane.v1.IssueComment.author:type_name -> controlplane.v1.IssueUser
-	42, // 27: controlplane.v1.IssueComment.created_at:type_name -> google.protobuf.Timestamp
-	42, // 28: controlplane.v1.IssueComment.updated_at:type_name -> google.protobuf.Timestamp
-	19, // 29: controlplane.v1.AddIssueCommentResponse.comment:type_name -> controlplane.v1.IssueComment
-	19, // 30: controlplane.v1.UpdateIssueCommentResponse.comment:type_name -> controlplane.v1.IssueComment
-	45, // 31: controlplane.v1.AssignIssueResponse.issue:type_name -> controlplane.v1.Issue
-	46, // 32: controlplane.v1.IssueChatLink.linked_by:type_name -> controlplane.v1.IssueUser
-	42, // 33: controlplane.v1.IssueChatLink.linked_at:type_name -> google.protobuf.Timestamp
-	29, // 34: controlplane.v1.LinkIssueChatResponse.link:type_name -> controlplane.v1.IssueChatLink
-	46, // 35: controlplane.v1.ListAssignableUsersResponse.users:type_name -> controlplane.v1.IssueUser
-	3,  // 36: controlplane.v1.IssueActor.kind:type_name -> controlplane.v1.IssueActor.Kind
-	43, // 37: controlplane.v1.IssueStatusEntry.from:type_name -> controlplane.v1.IssueStatus
-	43, // 38: controlplane.v1.IssueStatusEntry.to:type_name -> controlplane.v1.IssueStatus
-	42, // 39: controlplane.v1.IssueStatusEntry.ignored_until:type_name -> google.protobuf.Timestamp
-	19, // 40: controlplane.v1.IssueCommentEntry.comment:type_name -> controlplane.v1.IssueComment
-	46, // 41: controlplane.v1.IssueAssignmentEntry.from:type_name -> controlplane.v1.IssueUser
-	46, // 42: controlplane.v1.IssueAssignmentEntry.to:type_name -> controlplane.v1.IssueUser
-	29, // 43: controlplane.v1.IssueChatEntry.link:type_name -> controlplane.v1.IssueChatLink
-	42, // 44: controlplane.v1.IssueTimelineEntry.time:type_name -> google.protobuf.Timestamp
-	34, // 45: controlplane.v1.IssueTimelineEntry.actor:type_name -> controlplane.v1.IssueActor
-	35, // 46: controlplane.v1.IssueTimelineEntry.status:type_name -> controlplane.v1.IssueStatusEntry
-	36, // 47: controlplane.v1.IssueTimelineEntry.comment:type_name -> controlplane.v1.IssueCommentEntry
-	37, // 48: controlplane.v1.IssueTimelineEntry.assignment:type_name -> controlplane.v1.IssueAssignmentEntry
-	38, // 49: controlplane.v1.IssueTimelineEntry.chat:type_name -> controlplane.v1.IssueChatEntry
-	39, // 50: controlplane.v1.ListIssueTimelineResponse.entries:type_name -> controlplane.v1.IssueTimelineEntry
-	6,  // 51: controlplane.v1.IssuesService.ListIssues:input_type -> controlplane.v1.ListIssuesRequest
-	8,  // 52: controlplane.v1.IssuesService.GetIssue:input_type -> controlplane.v1.GetIssueRequest
-	14, // 53: controlplane.v1.IssuesService.ListIssueEvents:input_type -> controlplane.v1.ListIssueEventsRequest
-	17, // 54: controlplane.v1.IssuesService.UpdateIssueStatus:input_type -> controlplane.v1.UpdateIssueStatusRequest
-	20, // 55: controlplane.v1.IssuesService.AddIssueComment:input_type -> controlplane.v1.AddIssueCommentRequest
-	22, // 56: controlplane.v1.IssuesService.UpdateIssueComment:input_type -> controlplane.v1.UpdateIssueCommentRequest
-	24, // 57: controlplane.v1.IssuesService.DeleteIssueComment:input_type -> controlplane.v1.DeleteIssueCommentRequest
-	26, // 58: controlplane.v1.IssuesService.AssignIssue:input_type -> controlplane.v1.AssignIssueRequest
-	28, // 59: controlplane.v1.IssuesService.LinkIssueChat:input_type -> controlplane.v1.LinkIssueChatRequest
-	32, // 60: controlplane.v1.IssuesService.ListAssignableUsers:input_type -> controlplane.v1.ListAssignableUsersRequest
-	31, // 61: controlplane.v1.IssuesService.ListIssueTimeline:input_type -> controlplane.v1.ListIssueTimelineRequest
-	7,  // 62: controlplane.v1.IssuesService.ListIssues:output_type -> controlplane.v1.ListIssuesResponse
-	9,  // 63: controlplane.v1.IssuesService.GetIssue:output_type -> controlplane.v1.GetIssueResponse
-	15, // 64: controlplane.v1.IssuesService.ListIssueEvents:output_type -> controlplane.v1.ListIssueEventsResponse
-	18, // 65: controlplane.v1.IssuesService.UpdateIssueStatus:output_type -> controlplane.v1.UpdateIssueStatusResponse
-	21, // 66: controlplane.v1.IssuesService.AddIssueComment:output_type -> controlplane.v1.AddIssueCommentResponse
-	23, // 67: controlplane.v1.IssuesService.UpdateIssueComment:output_type -> controlplane.v1.UpdateIssueCommentResponse
-	25, // 68: controlplane.v1.IssuesService.DeleteIssueComment:output_type -> controlplane.v1.DeleteIssueCommentResponse
-	27, // 69: controlplane.v1.IssuesService.AssignIssue:output_type -> controlplane.v1.AssignIssueResponse
-	30, // 70: controlplane.v1.IssuesService.LinkIssueChat:output_type -> controlplane.v1.LinkIssueChatResponse
-	33, // 71: controlplane.v1.IssuesService.ListAssignableUsers:output_type -> controlplane.v1.ListAssignableUsersResponse
-	40, // 72: controlplane.v1.IssuesService.ListIssueTimeline:output_type -> controlplane.v1.ListIssueTimelineResponse
-	62, // [62:73] is the sub-list for method output_type
-	51, // [51:62] is the sub-list for method input_type
-	51, // [51:51] is the sub-list for extension type_name
-	51, // [51:51] is the sub-list for extension extendee
-	0,  // [0:51] is the sub-list for field type_name
+	46, // 8: controlplane.v1.ListIssuesResponse.instance_scope:type_name -> controlplane.v1.InstanceScope
+	4,  // 9: controlplane.v1.GetIssueRequest.time_range:type_name -> controlplane.v1.IssueTimeRange
+	45, // 10: controlplane.v1.GetIssueResponse.issue:type_name -> controlplane.v1.Issue
+	10, // 11: controlplane.v1.GetIssueResponse.latest_event:type_name -> controlplane.v1.IssueEvent
+	11, // 12: controlplane.v1.GetIssueResponse.frames:type_name -> controlplane.v1.IssueFrame
+	12, // 13: controlplane.v1.GetIssueResponse.by_version:type_name -> controlplane.v1.IssueVersionBreakdown
+	13, // 14: controlplane.v1.GetIssueResponse.first_release:type_name -> controlplane.v1.IssueReleaseRef
+	46, // 15: controlplane.v1.GetIssueResponse.instance_scope:type_name -> controlplane.v1.InstanceScope
+	42, // 16: controlplane.v1.IssueEvent.timestamp:type_name -> google.protobuf.Timestamp
+	41, // 17: controlplane.v1.IssueEvent.attributes:type_name -> controlplane.v1.IssueEvent.AttributesEntry
+	47, // 18: controlplane.v1.IssueEvent.client:type_name -> controlplane.v1.ClientContext
+	42, // 19: controlplane.v1.IssueVersionBreakdown.first_seen_at:type_name -> google.protobuf.Timestamp
+	42, // 20: controlplane.v1.IssueVersionBreakdown.last_seen_at:type_name -> google.protobuf.Timestamp
+	42, // 21: controlplane.v1.IssueReleaseRef.promoted_at:type_name -> google.protobuf.Timestamp
+	4,  // 22: controlplane.v1.ListIssueEventsRequest.time_range:type_name -> controlplane.v1.IssueTimeRange
+	10, // 23: controlplane.v1.ListIssueEventsResponse.events:type_name -> controlplane.v1.IssueEvent
+	46, // 24: controlplane.v1.ListIssueEventsResponse.instance_scope:type_name -> controlplane.v1.InstanceScope
+	2,  // 25: controlplane.v1.IssueResolveIn.kind:type_name -> controlplane.v1.IssueResolveKind
+	1,  // 26: controlplane.v1.UpdateIssueStatusRequest.status:type_name -> controlplane.v1.IssueStatusChange
+	16, // 27: controlplane.v1.UpdateIssueStatusRequest.resolve_in:type_name -> controlplane.v1.IssueResolveIn
+	42, // 28: controlplane.v1.UpdateIssueStatusRequest.ignored_until:type_name -> google.protobuf.Timestamp
+	45, // 29: controlplane.v1.UpdateIssueStatusResponse.issue:type_name -> controlplane.v1.Issue
+	48, // 30: controlplane.v1.IssueComment.author:type_name -> controlplane.v1.IssueUser
+	42, // 31: controlplane.v1.IssueComment.created_at:type_name -> google.protobuf.Timestamp
+	42, // 32: controlplane.v1.IssueComment.updated_at:type_name -> google.protobuf.Timestamp
+	19, // 33: controlplane.v1.AddIssueCommentResponse.comment:type_name -> controlplane.v1.IssueComment
+	19, // 34: controlplane.v1.UpdateIssueCommentResponse.comment:type_name -> controlplane.v1.IssueComment
+	45, // 35: controlplane.v1.AssignIssueResponse.issue:type_name -> controlplane.v1.Issue
+	48, // 36: controlplane.v1.IssueChatLink.linked_by:type_name -> controlplane.v1.IssueUser
+	42, // 37: controlplane.v1.IssueChatLink.linked_at:type_name -> google.protobuf.Timestamp
+	29, // 38: controlplane.v1.LinkIssueChatResponse.link:type_name -> controlplane.v1.IssueChatLink
+	48, // 39: controlplane.v1.ListAssignableUsersResponse.users:type_name -> controlplane.v1.IssueUser
+	3,  // 40: controlplane.v1.IssueActor.kind:type_name -> controlplane.v1.IssueActor.Kind
+	43, // 41: controlplane.v1.IssueStatusEntry.from:type_name -> controlplane.v1.IssueStatus
+	43, // 42: controlplane.v1.IssueStatusEntry.to:type_name -> controlplane.v1.IssueStatus
+	42, // 43: controlplane.v1.IssueStatusEntry.ignored_until:type_name -> google.protobuf.Timestamp
+	19, // 44: controlplane.v1.IssueCommentEntry.comment:type_name -> controlplane.v1.IssueComment
+	48, // 45: controlplane.v1.IssueAssignmentEntry.from:type_name -> controlplane.v1.IssueUser
+	48, // 46: controlplane.v1.IssueAssignmentEntry.to:type_name -> controlplane.v1.IssueUser
+	29, // 47: controlplane.v1.IssueChatEntry.link:type_name -> controlplane.v1.IssueChatLink
+	42, // 48: controlplane.v1.IssueTimelineEntry.time:type_name -> google.protobuf.Timestamp
+	34, // 49: controlplane.v1.IssueTimelineEntry.actor:type_name -> controlplane.v1.IssueActor
+	35, // 50: controlplane.v1.IssueTimelineEntry.status:type_name -> controlplane.v1.IssueStatusEntry
+	36, // 51: controlplane.v1.IssueTimelineEntry.comment:type_name -> controlplane.v1.IssueCommentEntry
+	37, // 52: controlplane.v1.IssueTimelineEntry.assignment:type_name -> controlplane.v1.IssueAssignmentEntry
+	38, // 53: controlplane.v1.IssueTimelineEntry.chat:type_name -> controlplane.v1.IssueChatEntry
+	39, // 54: controlplane.v1.ListIssueTimelineResponse.entries:type_name -> controlplane.v1.IssueTimelineEntry
+	6,  // 55: controlplane.v1.IssuesService.ListIssues:input_type -> controlplane.v1.ListIssuesRequest
+	8,  // 56: controlplane.v1.IssuesService.GetIssue:input_type -> controlplane.v1.GetIssueRequest
+	14, // 57: controlplane.v1.IssuesService.ListIssueEvents:input_type -> controlplane.v1.ListIssueEventsRequest
+	17, // 58: controlplane.v1.IssuesService.UpdateIssueStatus:input_type -> controlplane.v1.UpdateIssueStatusRequest
+	20, // 59: controlplane.v1.IssuesService.AddIssueComment:input_type -> controlplane.v1.AddIssueCommentRequest
+	22, // 60: controlplane.v1.IssuesService.UpdateIssueComment:input_type -> controlplane.v1.UpdateIssueCommentRequest
+	24, // 61: controlplane.v1.IssuesService.DeleteIssueComment:input_type -> controlplane.v1.DeleteIssueCommentRequest
+	26, // 62: controlplane.v1.IssuesService.AssignIssue:input_type -> controlplane.v1.AssignIssueRequest
+	28, // 63: controlplane.v1.IssuesService.LinkIssueChat:input_type -> controlplane.v1.LinkIssueChatRequest
+	32, // 64: controlplane.v1.IssuesService.ListAssignableUsers:input_type -> controlplane.v1.ListAssignableUsersRequest
+	31, // 65: controlplane.v1.IssuesService.ListIssueTimeline:input_type -> controlplane.v1.ListIssueTimelineRequest
+	7,  // 66: controlplane.v1.IssuesService.ListIssues:output_type -> controlplane.v1.ListIssuesResponse
+	9,  // 67: controlplane.v1.IssuesService.GetIssue:output_type -> controlplane.v1.GetIssueResponse
+	15, // 68: controlplane.v1.IssuesService.ListIssueEvents:output_type -> controlplane.v1.ListIssueEventsResponse
+	18, // 69: controlplane.v1.IssuesService.UpdateIssueStatus:output_type -> controlplane.v1.UpdateIssueStatusResponse
+	21, // 70: controlplane.v1.IssuesService.AddIssueComment:output_type -> controlplane.v1.AddIssueCommentResponse
+	23, // 71: controlplane.v1.IssuesService.UpdateIssueComment:output_type -> controlplane.v1.UpdateIssueCommentResponse
+	25, // 72: controlplane.v1.IssuesService.DeleteIssueComment:output_type -> controlplane.v1.DeleteIssueCommentResponse
+	27, // 73: controlplane.v1.IssuesService.AssignIssue:output_type -> controlplane.v1.AssignIssueResponse
+	30, // 74: controlplane.v1.IssuesService.LinkIssueChat:output_type -> controlplane.v1.LinkIssueChatResponse
+	33, // 75: controlplane.v1.IssuesService.ListAssignableUsers:output_type -> controlplane.v1.ListAssignableUsersResponse
+	40, // 76: controlplane.v1.IssuesService.ListIssueTimeline:output_type -> controlplane.v1.ListIssueTimelineResponse
+	66, // [66:77] is the sub-list for method output_type
+	55, // [55:66] is the sub-list for method input_type
+	55, // [55:55] is the sub-list for extension type_name
+	55, // [55:55] is the sub-list for extension extendee
+	0,  // [0:55] is the sub-list for field type_name
 }
 
 func init() { file_services_issues_v1_issues_proto_init() }
@@ -3196,6 +3460,7 @@ func file_services_issues_v1_issues_proto_init() {
 	}
 	file_services_issues_v1_issues_proto_msgTypes[1].OneofWrappers = []any{}
 	file_services_issues_v1_issues_proto_msgTypes[2].OneofWrappers = []any{}
+	file_services_issues_v1_issues_proto_msgTypes[10].OneofWrappers = []any{}
 	file_services_issues_v1_issues_proto_msgTypes[13].OneofWrappers = []any{}
 	file_services_issues_v1_issues_proto_msgTypes[28].OneofWrappers = []any{}
 	file_services_issues_v1_issues_proto_msgTypes[35].OneofWrappers = []any{

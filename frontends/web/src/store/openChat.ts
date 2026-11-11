@@ -19,6 +19,7 @@ import { useChatStore } from "./chatStore";
 import { useProjectStore } from "./projectStore";
 import { useWorkspaceStateStore } from "./workspaceStateStore";
 import { useWorktreeStore } from "./worktreeStore";
+import { useNewChatMachineStore } from "./newChatMachineStore";
 
 
 /**
@@ -45,11 +46,17 @@ export function newChatTargetProjectId(): string | null {
 /**
  * Show the new-chat view, in `projectId` (default: newChatTargetProjectId)
  * and the workspace `worktreeId` (default: the open chat's, when it is in that
- * project; else the project's main workspace).
+ * project; else the project's main workspace). `daemonId` names the machine
+ * the chat should run on (newChatMachineStore); without it the view picks.
  */
-export async function openNewChat(target: { projectId?: string | null; worktreeId?: string | null } = {}): Promise<void> {
+export async function openNewChat(
+  target: { projectId?: string | null; worktreeId?: string | null; daemonId?: string | null } = {},
+): Promise<void> {
   const isLatest = beginWorkspaceOpen();
   const projectId = target.projectId ?? newChatTargetProjectId();
+  if (projectId && target.daemonId) {
+    useNewChatMachineStore.getState().offer({ projectId, daemonId: target.daemonId });
+  }
   const projectStore = useProjectStore.getState();
   let contextProjectId = projectStore.currentProject?.id;
   const activeChatId = useChatStore.getState().activeChatId;

@@ -124,10 +124,11 @@ const saveMessageAtomicSQL = `
 WITH
 ` + messageOrderCTEs + `,
 upd AS (
-    INSERT INTO update_stream_counters (stream_kind, stream_id, last_assigned_seq)
-    VALUES ('chat', $2, 1)
+    INSERT INTO update_stream_counters (stream_kind, stream_id, last_assigned_seq, heads_through_seq)
+    VALUES ('chat', $2, 1, 1)
     ON CONFLICT (stream_kind, stream_id) DO UPDATE
-    SET last_assigned_seq = update_stream_counters.last_assigned_seq + 1
+    SET last_assigned_seq = update_stream_counters.last_assigned_seq + 1,
+        heads_through_seq = ` + advanceHeadsThroughSQL + `
     RETURNING last_assigned_seq
 ),
 msg AS (
@@ -254,6 +255,11 @@ func SaveMessageAtomic(ctx context.Context, db orm.Context, w AtomicMessageWrite
 		}
 		if err := CreateChatUpdate(txCtx, db, update); err != nil {
 			return fmt.Errorf("failed to create chat_update: %w", err)
+		}
+		// saveMessageAtomicSQL advanced the chat's heads watermark with the
+		// sequence, so the head (if this type is one) is applied here too.
+		if err := ApplyChatUpdateHead(txCtx, db, update); err != nil {
+			return err
 		}
 		result.ChatUpdate = core.ChatUpdate{
 			ID:             update.ID,

@@ -1,0 +1,229 @@
+---
+title: "Escape hatches"
+description: "How to change what forge renders, build or deploy things forge never compiled, and turn parts of forge off, without fighting the generator"
+---
+
+Forge is opinionated about the common path and deliberately not a wall around it. Every default can be overridden, every generated file has an owned file beside it, and the deploy side has a hatch for each way a real project differs from the scaffold: a field forge does not model, a Dockerfile you already have, a service written in another language, an app that exists before forge does. This page goes from the smallest hatch to the largest. Reach for the earliest one that works, because each step down the page gives up more of what forge does for you.
+
+Every snippet here was rendered with `forge env render` on a scratch project, so the behaviour described is what forge printed. The one rule that holds throughout: **change the input, never the output.** Generated files are overwritten on the next `forge generate`, and a hand-edited render is overwritten on the next deploy.
+
+## Change one field: `overrides`
+
+If a field of a rendered object is wrong for your environment and forge has no property for it, name the object and the field in `Bundle.overrides`. Forge renders its own object and then patches it.
+
+```python
+output = forge.render(forge.Bundle {
+    project = "acme"
+    workloads = [...]
+    overrides = {
+        "Deployment/billing" = {spec.replicas = 5}
+    }
+})
+```
+
+The key is `Kind/name`, with an optional namespace (`Deployment/demo-prod/billing`) and an optional cluster (`Deployment/billing@gke_acme_prod`) when the short form is ambiguous. Forge refuses an ambiguous key and tells you which qualifier to add. `forge env render` prints what applied:
+
+```text
+[render]   overrides applied: 1
+[render]     Deployment/billing                   → Deployment/demo-prod/billing@gke_acme_us-central1_prod
+```
+
+Read that line. A partial key is legitimate in a single-namespace environment, but the resolved object on the right is what you should check against what you pictured.
+
+Built-in kinds merge as strategic merge patches, so naming one container in a pod template patches that container and leaves the sidecars and the rest of your container alone. A custom resource uses a plain JSON merge patch, which replaces lists wholesale, so restate the whole list there. Setting a field to `None` deletes it. An override that does not resolve fails the render with no manifests, because a silently ignored override would deploy an environment that quietly lacks the change. It also cannot rename or retarget an object: `metadata.name` and `apiVersion` are off limits.
+
+Overrides apply to what you render, so the shape, the release and the bundle all carry the patched object. They do not work on a hosted workload, because the platform renders those objects, not your environment. Set the field on the workload declaration, or bind the workload to a cluster you run.
+
+Before reaching for an override, check whether the field is a property of `fw.Workload` already. Replicas, resources, probes, env, ports, `strategy`, `priorityClassName`, `storageGiB`, sidecars, volumes and tolerations are, and declaring them there is better because the check that "a hosted workload may not set this" then runs for you.
+
+## Add objects forge does not render
+
+Anything that is not a workload goes in the bundle, and there are three ways to put it there. All three are placed the same way: on a cluster and namespace you choose, stamped `forge.dev/workload: <name>` so `--target <name>` selects them, and visible to `forge env render` and `forge env shape`.
+
+```python
+manifests = [forge.Manifests {
+    name = "extra"                  # its own --target
+    objects = [{
+        apiVersion = "v1"
+        kind = "ConfigMap"
+        metadata = {name = "extra", namespace = "demo-prod"}
+        data = {note = "hand-written"}
+    }]
+}]
+```
+
+That renders the ConfigMap with forge's ownership labels added and `forge.dev/workload: extra` on it. Use `forge.Manifests` for a CRD, a ClusterIssuer or a DaemonSet.
+
+For an application that already ships a Helm chart, set `delivery = "bundle"` on a `forge.HelmChart`. Forge runs `helm template --skip-crds` at build time and ships the output inside the release. The default, `delivery = "bootstrap"`, is for platform charts such as cert-manager, which are installed with `forge env deploy <env> --target <name>` and kept out of the bundle so that a reconciler's prune can never delete their CRDs.
+
+```python
+helm_charts = [forge.HelmChart {
+    name = "shop"
+    repo = "https://charts.acme.dev"
+    chart = "shop"
+    version = "1.4.2"               # always pinned
+    namespace = "shop"
+    values = {replicas = 3}
+    delivery = "bundle"
+}]
+```
+
+For anything that prints YAML, such as `kustomize build` or jsonnet, use `forge.Generated`:
+
+```python
+generated = [forge.Generated {
+    name = "edge"
+    command = ["kustomize", "build", "deploy/edge"]     # argv, not a shell string
+}]
+```
+
+Its stdout is parsed as multi-document YAML, and a non-zero exit, unparsable output or an object without `apiVersion` and `kind` fails the render naming the generator. The command must be deterministic: the bundle's digest is its identity, so a timestamp or random value would cut a new bundle on every build.
+
+A hosted environment accepts none of these. The control plane admits only workloads, managed databases and static sites there, so a bundled chart or a `Generated` is refused at render. Bind the workload that needs raw objects to a cluster you run.
+
+## Deploy code forge never compiled
+
+A workload's `build` says how its artifact is produced, and the field is optional. Everything forge does after the build, the ledger, plans, promotion by digest, the rendered Deployment with its hardening and probes, is the same whatever produced the image. So forge deploys code in any language.
+
+There are four ways to declare it. Pick by what you already have.
+
+<Tabs>
+  <Tab title="An existing image">
+    Name the image and declare no `build`. Forge builds nothing and deploys what is there.
+
+    ```python
+    _cache = fw.Workload {
+        name = "cache"
+        kind = "service"
+        image = "docker.io/library/redis:7"
+        ports = [fw.Port {name = "redis", port = 6379}]
+    }
+    ```
+
+    Every image on a cluster or compose workload must name its registry host, because there is no environment registry to complete a bare name from. A third-party image with ports gets a TCP probe on its first port, since forge cannot know it serves `/readyz`.
+
+    On Reliant hosting, write the image the same way, registry host included. The platform pulls only from its own registry, so when a deploy cuts a release forge copies the image into your organization's registry path and the release pins the copy by digest (see below).
+  </Tab>
+  <Tab title="Your own Dockerfile">
+    `forge.DockerBuild` runs `docker build` for any language.
+
+    ```python
+    _billing = fw.Workload {
+        name = "billing"
+        kind = "service"
+        image = "ghcr.io/acme/billing"
+        build = forge.DockerBuild {
+            dockerfile = "services/billing/Dockerfile"
+            context = "services/billing"
+        }
+        ports = [fw.Port {name = "http", port = 8000, expose = True}]
+    }
+    ```
+
+    `dockerfile` is always relative to the project root. `context` is the directory docker sends as `.`. Set it when the Dockerfile was written to run from its own directory, because otherwise an unprefixed `COPY package.json ./` fails with `failed to compute cache key`. For files outside the project tree, such as a sibling checkout, declare named contexts in `forge.yaml` under `docker.build_contexts` and consume them with `COPY --from=<name>`.
+  </Tab>
+  <Tab title="Any command">
+    `forge.ShellBuild` runs a command with `sh -c`, byte for byte. The command owns the whole build and the push.
+
+    ```python
+    _legacy = fw.Workload {
+        name = "legacy"
+        kind = "service"
+        image = "ghcr.io/acme/legacy"
+        build = forge.ShellBuild {
+            cwd = "../legacy"
+            cmd = "make image push"
+        }
+        ports = [fw.Port {name = "http", port = 9000}]
+    }
+    ```
+
+    Forge substitutes nothing into `cmd` and exports no variables of its own, so every `$VAR` belongs to the shell. After a successful run it captures the pushed image's digest, so a later deploy pins the same bytes. To build one image from another, `built_images = {BASE = "runtime"}` builds the named workload first and hands the command the exact `repo@sha256:…` it pushed, so a child image can never be built on a stale parent. A `cmd` of `"true"` suppresses forge's default Go build for a workload whose artifact is built elsewhere.
+  </Tab>
+  <Tab title="A prebuilt binary">
+    The scaffolded `GoBuild` is the default for Go, with `cmd`, `goos`, `goarch`, `ldflags`, `tags` and `flags`. For a binary built some other way, use a `ShellBuild` that produces and pushes an image, or a `DockerBuild` whose Dockerfile does only `COPY` of the binary. A workload bound to `forge.BuildOnly {}` builds and ships an artifact, such as a CLI, that no environment runs.
+  </Tab>
+</Tabs>
+
+What a non-forge workload gives up is whatever relies on forge knowing the binary. A service forge did not build gets no default `/readyz` and `/healthz` probes unless you declare `probes`, and `GOMEMLIMIT` is derived only for `GoBuild` workloads (set `go_memory_limit_percent` for others). It does not read forge's typed config unless you project environment variables into it yourself, and its logs and traces appear in [Observability](/forge/observability) only if it exports OpenTelemetry. Its deploy, its plan, its release and its rollout wait are forge's, and are identical.
+
+On Reliant hosting, every image a workload runs comes from the platform's registry, under your organization's path, `registry.reliantapi.com/<org>/<project>/`. Forge puts it there in each case:
+
+| What the hosted workload declares | What forge does |
+|---|---|
+| A `build` and a bare image (`image = "billing"`) | Builds it and pushes it to `<org path>/billing`. This is the form to use for your own code, in any language. |
+| No `build` and a full third-party image (`image = "docker.io/traefik/whoami:v1.10.3"`) | When the deploy cuts a release, copies the image registry to registry to `<org path>/traefik/whoami` and pins the copy by digest. The digest is the upstream one, and every platform of a multi-architecture image comes along. |
+| No `build` and a bare image (`image = "worker:v2"`) | Expects the image to have been pushed to `<org path>/worker` already, for example by your CI, and pins its digest at the cut. |
+| A `build` and an image that names another registry | Refused at `forge env render`: forge would push its build somewhere the platform does not pull from. Drop the registry host. |
+
+A third-party image must include its registry host (`docker.io/traefik/whoami`, not `traefik/whoami`), because a bare name means your own registry path. A private source image is read with the credentials `docker login` stored for its registry. Wrapping an image in a one-line `FROM` Dockerfile with a `forge.DockerBuild` also works, but is only needed when you want to change the image.
+
+A non-forge app reads its credentials from environment variables, so deliver each one in the workload's `env`, for example `env = {JWT_SECRET = forge.ManagedSecret {name = "JWT_SECRET"}}`, and set the value with `forge secret set --env <env> JWT_SECRET`. `config_secrets` delivers nothing by itself: it selects which credentials forge's generated config projection puts in a forge Go service's `env`. A name in `config_secrets` that the workload's `env` does not deliver fails the render, so an app never starts silently on a fallback value.
+
+<Note>
+`forge.RemoteBuild` is in the schema as a way to build from a pinned git source on a hosted build service, but this forge cannot submit one yet, and the build refuses it with an explanation. Do not rely on it.
+</Note>
+
+## Opt a workload back into service links
+
+Kubernetes injects an environment variable for every Service in a namespace into every pod (`<NAME>_SERVICE_HOST`, `<NAME>_PORT=tcp://…`). Forge renders `enableServiceLinks: false` on every pod it produces, because those names collide with typed configuration: a Service called `temporal` injects `TEMPORAL_PORT`, which an integer port field then fails to parse. Use DNS names or explicit environment variables instead.
+
+If a legacy workload really reads the injected names, opt that one workload back in. This works on a cluster you run, not on hosting:
+
+```python
+_cache = fw.Workload {
+    name = "cache"
+    kind = "service"
+    image = "docker.io/library/redis:7"
+    enableServiceLinks = True
+}
+```
+
+The render for that workload shows `enableServiceLinks: true`, and every other pod in the same render still shows `false`.
+
+## Change who owns a file
+
+The generated-versus-yours split is explicit, and you can move a file across it.
+
+| You want to | Do this |
+|---|---|
+| Customise something forge writes once | Edit it. Files such as `deploy/kcl/<env>/main.k`, `handlers_crud.go` and `internal/app/providers.go` are yours from birth and forge never rewrites them. |
+| Take over a file forge regenerates | `forge project disown <path> --reason "<why>"`. It is one-way: forge stops writing that file. A hand edit to a generated file otherwise stops the next `forge generate` instead of being silently undone. |
+| Bring back a scaffolded file you deleted | `forge project rescaffold <path>`. |
+| Opt `compose.go` out of reconciliation entirely | `forge project disown internal/app/compose.go`. |
+| Adopt an existing server one service at a time | Put `// forge:unmanaged` above the proto `service` while its handlers still live elsewhere. Forge still generates the code but scaffolds no handlers for it. Delete the marker to adopt it. |
+
+`forge project scaffolded` lists what forge has written once and which of those are absent.
+
+## Adopt an app that already exists
+
+A Vite or Next.js app becomes a forge project without moving a file:
+
+```bash
+cd my-site                      # the app's root: package.json plus vite.config or next.config
+forge project new --in-place --kind site --name my-site
+```
+
+That writes `forge.yaml` (with no Go module, since a site has none) and `deploy/kcl/{dev,staging,prod}/main.k`, each declaring the app at the project root and binding it to its dev server in `dev` and to hosted static hosting in `staging` and `prod`. Your own files are untouched and `.gitignore` is merged. Build-time keys such as `VITE_*` and `NEXT_PUBLIC_*` become `env_vars` on the frontend, baked in per release; values that must change without a rebuild belong in `runtime_config`, which the platform writes into `config.js` after each deploy. [Hosting on Reliant](/forge/hosting) covers what static hosting serves.
+
+A server that already has its own protos and handlers adopts in place, one service per pull request, with `// forge:unmanaged`. Agents can run `forge skill load migration` for that path.
+
+## Turn features off
+
+Forge derives its subsystems from what is in the repository: `.proto` files turn on codegen, `db/migrations/` turns on migrations and the ORM, a frontend turns on the frontend tooling, a `forge.Gateway` in `deploy/kcl` turns on ingress, `internal/operators/<name>/` turns on operators. When a derived default is wrong for your project, pin it in `forge.yaml`:
+
+```yaml
+features:
+  observability: false
+  hot_reload: false
+```
+
+The keys are `codegen`, `migrations`, `ci`, `build`, `contracts`, `frontend`, `observability`, `hot_reload`, `deploy`, `ingress` and `operators`. A pinned feature stays pinned: no later change to the tree turns it back on. The ORM has no key. A project with a hand-written data layer opts out by putting `//forge:no-orm: <reason>` in the doc comment of its `internal/db` package, and one table opts out with `COMMENT ON TABLE t IS 'forge:no-entity'`. `forge project features` prints what is on and why.
+
+Observability has its own switch for the local stack. Setting `_observability = False` in `deploy/kcl/dev/main.k` starts no container and exports no endpoint, and processes run as they did before. Pointing `_destination` at your own OTLP endpoint swaps the local ClickStack for a small forwarder instead.
+
+Leaving hosting is the same kind of edit. Rebind a workload from `_hosted(...)` to `_on_cluster(...)`, or drop `control_plane`, the managed database and `forge.HostedSecrets` and use `forge.ExternalSecrets {}`, and forge deploys the same releases and plans to your infrastructure. [Environments](/forge/deploy/environments) covers rebinding.
+
+## Related topics
+
+[What gets deployed](/forge/deploy/what-gets-deployed) shows what an override or a raw manifest lands in. [Self-hosted delivery](/forge/deploy/self-hosted-delivery) covers delivering to a cluster you run. Agents can run `forge skill load deploy/overrides`, `deploy/byo-yaml` and `deploy/build-contexts` for the full reference.

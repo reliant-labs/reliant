@@ -22,6 +22,9 @@ import {
   Terminal,
   Workflow,
   ArrowLeft,
+  Check,
+  ListCollapse,
+  FolderInput,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { useChat } from "../../hooks/chat-queries";
@@ -34,7 +37,9 @@ import { useThreads, ThreadTabs } from "./thread-views";
 import { ChildRunsStrip } from "../runs/ChildRunsStrip";
 import type { WorkflowExecution } from "./ExecutionSidebar/types";
 import { useChatActions } from "./useChatActions";
+import { MoveChatToProjectDialog } from "./MoveChatToProjectDialog";
 import { useThreadNavigation } from "./useThreadNavigation";
+import { setChatThreadMode, useChatThreadMode } from "./thread-views/useChatThreadMode";
 
 interface ChatHeaderProps {
   chatId: string | null;
@@ -79,6 +84,8 @@ export function ChatHeader({
   const messagesQuery = useMessages(chatId || undefined);
   const messages = messagesQuery.data?.messages ?? [];
   const actions = useChatActions(chatId, propWorktreeId);
+  const { mode: threadMode } = useChatThreadMode();
+  const isSimplified = threadMode === "simplified";
 
   // Get threads from messages with workflow metadata for better names. ThreadTabs
   // filters spawn-origin threads at the render boundary; keep the full list here
@@ -97,6 +104,7 @@ export function ChatHeader({
   const contextUsageByThread = useContextUsageByThread(chatId || "");
 
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isMoveOpen, setIsMoveOpen] = useState(false);
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [editedTitle, setEditedTitle] = useState("");
   const menuRef = useRef<HTMLDivElement>(null);
@@ -258,6 +266,19 @@ export function ChatHeader({
                         </button>
                       )}
 
+                      <button
+                        onClick={() => {
+                          setChatThreadMode(isSimplified ? "detailed" : "simplified");
+                          setIsMenuOpen(false);
+                        }}
+                        aria-pressed={isSimplified}
+                        className="w-full px-3 py-2 text-left text-sm hover:bg-accent flex items-center gap-2"
+                      >
+                        <ListCollapse className="h-4 w-4" />
+                        <span className="flex-1">Simplified view</span>
+                        {isSimplified && <Check className="h-4 w-4 text-primary-ink" aria-hidden />}
+                      </button>
+
                       {actions.openTerminal && (
                         <button
                           onClick={runAndClose(actions.openTerminal)}
@@ -277,6 +298,17 @@ export function ChatHeader({
                         />
                       )}
                       
+                      <button
+                        onClick={() => {
+                          setIsMoveOpen(true);
+                          setIsMenuOpen(false);
+                        }}
+                        className="w-full px-3 py-2 text-left text-sm hover:bg-accent flex items-center gap-2"
+                      >
+                        <FolderInput className="h-4 w-4" />
+                        Move to project…
+                      </button>
+
                       <button
                         onClick={runAndClose(actions.exportChat)}
                         className="w-full px-3 py-2 text-left text-sm hover:bg-accent flex items-center gap-2"
@@ -347,6 +379,9 @@ export function ChatHeader({
           </div>
         </div>
       </div>
+      {!isNewChat && chatId && (
+        <MoveChatToProjectDialog chatId={chatId} open={isMoveOpen} onClose={() => setIsMoveOpen(false)} />
+      )}
     </div>
   );
 }

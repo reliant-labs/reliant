@@ -14,6 +14,13 @@ const consentSchema = z.object({
   accepted: z.boolean().refine(Boolean, "Accept the usage billing policy to continue."),
 });
 
+/**
+ * The budget a new agreement starts from: $50 a month, the same default the
+ * control plane applies when a checkout names none (control-plane
+ * DefaultHostingSpendCapCents). The user can change it before consenting.
+ */
+export const DEFAULT_HOSTING_BUDGET = "50.00";
+
 export interface UsageBillingCardProps {
   enabled: boolean;
   policyVersion: string;
@@ -35,7 +42,7 @@ export interface UsageBillingCardProps {
 export function UsageBillingCard(props: UsageBillingCardProps) {
   const fieldId = useId();
   const { register, handleSubmit, formState: { errors } } = useForm<z.infer<typeof consentSchema>>({
-    resolver: zodResolver(consentSchema), defaultValues: { budget: props.agreement?.status === "pending" ? (Number(props.agreement.infraBudgetCents) / 100).toFixed(2) : "", accepted: false },
+    resolver: zodResolver(consentSchema), defaultValues: { budget: props.agreement?.status === "pending" ? (Number(props.agreement.infraBudgetCents) / 100).toFixed(2) : DEFAULT_HOSTING_BUDGET, accepted: false },
   });
   const active = props.agreement?.status === "active";
   const pending = props.agreement?.status === "pending";

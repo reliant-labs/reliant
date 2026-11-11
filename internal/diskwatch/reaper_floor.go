@@ -63,8 +63,8 @@ const (
 	// EmergencyFreeFloor is the free space on the volume holding the Go cache
 	// below which a trim by a forge without the floor is allowed anyway: a
 	// full disk fails every build, which is worse than one retryable build.
-	// It is far below the pressure thresholds (2 GiB, or 90% full with under
-	// 20 GiB free) on purpose: pressure alone is the normal state of this
+	// It is far below the pressure thresholds (2 GiB, 85% full, or under
+	// 50 GiB free) on purpose: pressure alone is the normal state of this
 	// machine and must not defeat the guard. Scaled down to an eighth of a
 	// volume smaller than 8 GiB.
 	EmergencyFreeFloor = GiB
@@ -103,6 +103,12 @@ const (
 	verdictTrimmed             floorVerdict = "trimmed"
 	verdictSkippedStaleForge   floorVerdict = "skipped_stale_forge"
 	verdictEmergencyStaleForge floorVerdict = "emergency_stale_forge"
+
+	// The go_work_dirs pass's verdicts: it removed dead work directories,
+	// found none proven dead, or could prove nothing (no /proc).
+	verdictReclaimed   floorVerdict = "reclaimed"
+	verdictNothingDead floorVerdict = "nothing_proven_dead"
+	verdictUnproven    floorVerdict = "unproven"
 )
 
 // floorDecision is what the guard decided for one pass.
@@ -194,6 +200,9 @@ type trimAuditRecord struct {
 	ExitCode            int              `json:"exit_code,omitempty"`
 	RecordFresh         bool             `json:"record_fresh"`
 	Caches              []trimAuditCache `json:"caches,omitempty"`
+	// WorkDirs is the go_work_dirs pass (gowork.go): killed builds' work
+	// directories, removed once proven dead.
+	WorkDirs *workDirAudit `json:"work_dirs,omitempty"`
 }
 
 type trimAuditCache struct {

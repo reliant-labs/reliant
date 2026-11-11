@@ -3,7 +3,6 @@ package triggers
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
 	"time"
@@ -12,9 +11,11 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"google.golang.org/protobuf/types/known/structpb"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/launch"
+	"github.com/reliant-labs/reliant/internal/ptr"
 	"github.com/reliant-labs/reliant/internal/triggers/triggerspec"
 )
 
@@ -193,7 +194,7 @@ func (f *Firer) Fire(ctx context.Context, req FireRequest) (*FireOutput, error) 
 	if trigger.NoMachine || trigger.MachinePoolID != "" {
 		// nothing to look up: a pool-bound trigger is placed at launch
 	} else if _, err := f.repo.GetDaemon(ctx, trigger.DaemonID); err != nil {
-		if !errors.Is(err, sql.ErrNoRows) {
+		if !svcerr.IsNotFound(err) {
 			return nil, fmt.Errorf("load daemon %s: %w", trigger.DaemonID, err)
 		}
 		const detail = "trigger's daemon no longer exists; edit the trigger to choose another"
@@ -462,16 +463,18 @@ func (f *Firer) buildSpec(ctx context.Context, trigger *core.Trigger, sched *Sch
 
 	return launch.Spec{
 		OwnerUserID: trigger.UserID,
-		ProjectID:   trigger.ProjectID,
-		WorktreeID:  trigger.WorktreeID,
-		NewChatID:   uuid.NewSHA1(chatIDNamespace, []byte(req.FireWorkflowID)).String(),
-		Title:       &title,
-		Workflow:    trigger.Workflow,
-		DaemonID:    trigger.DaemonID,
-		NoMachine:   trigger.NoMachine,
-		Presets:     trigger.Presets,
-		Params:      params,
-		Messages:    messages,
+		// Every chat a trigger launches belongs to the trigger's org.
+		OrgID:      ptr.From(trigger.OrgID),
+		ProjectID:  trigger.ProjectID,
+		WorktreeID: trigger.WorktreeID,
+		NewChatID:  uuid.NewSHA1(chatIDNamespace, []byte(req.FireWorkflowID)).String(),
+		Title:      &title,
+		Workflow:   trigger.Workflow,
+		DaemonID:   trigger.DaemonID,
+		NoMachine:  trigger.NoMachine,
+		Presets:    trigger.Presets,
+		Params:     params,
+		Messages:   messages,
 
 		Unattended:     true,
 		ActingIdentity: trigger.ActingIdentity,

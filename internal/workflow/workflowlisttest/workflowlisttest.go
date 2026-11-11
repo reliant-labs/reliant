@@ -12,7 +12,6 @@ package workflowlisttest
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"sync"
@@ -21,6 +20,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -122,7 +122,7 @@ func (r *Repo) GetProject(_ context.Context, id string) (*db.Project, error) {
 func (r *Repo) GetProjectWorkflowsJSON(_ context.Context, projectID string) (*string, error) {
 	r.Count("GetProjectWorkflowsJSON")
 	if r.Project == nil || r.Project.ID != projectID {
-		return nil, sql.ErrNoRows
+		return nil, svcerr.NotFound("project config")
 	}
 	return r.projectWorkflows, nil
 }

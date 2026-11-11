@@ -11,6 +11,7 @@ package reliantv1
 import (
 	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	_ "github.com/reliant-labs/forge/pkg/forgepb"
+	v1 "github.com/reliant-labs/reliant/sdk/go/gen/reliant/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
@@ -286,7 +287,7 @@ type MCPServer struct {
 	PromptsEnabled   bool                   `protobuf:"varint,9,opt,name=prompts_enabled,json=promptsEnabled,proto3" json:"prompts_enabled,omitempty"`
 	LastError        *string                `protobuf:"bytes,10,opt,name=last_error,json=lastError,proto3,oneof" json:"last_error,omitempty"`
 	Enabled          bool                   `protobuf:"varint,11,opt,name=enabled,proto3" json:"enabled,omitempty"`
-	Scope            ConfigScope            `protobuf:"varint,12,opt,name=scope,proto3,enum=reliant.v1.ConfigScope" json:"scope,omitempty"`
+	Scope            v1.ConfigScope         `protobuf:"varint,12,opt,name=scope,proto3,enum=reliant.v1.ConfigScope" json:"scope,omitempty"`
 	unknownFields    protoimpl.UnknownFields
 	sizeCache        protoimpl.SizeCache
 }
@@ -398,11 +399,11 @@ func (x *MCPServer) GetEnabled() bool {
 	return false
 }
 
-func (x *MCPServer) GetScope() ConfigScope {
+func (x *MCPServer) GetScope() v1.ConfigScope {
 	if x != nil {
 		return x.Scope
 	}
-	return ConfigScope_CONFIG_SCOPE_UNSPECIFIED
+	return v1.ConfigScope(0)
 }
 
 // ConfigField represents a configuration field that needs user input
@@ -933,7 +934,7 @@ type InstallServerRequest struct {
 	Name      string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
 	Config    *MCPServerConfig       `protobuf:"bytes,3,opt,name=config,proto3" json:"config,omitempty"`
 	// scope determines where the config is saved (global, project, or project_local)
-	Scope         ConfigScope `protobuf:"varint,4,opt,name=scope,proto3,enum=reliant.v1.ConfigScope" json:"scope,omitempty"`
+	Scope         v1.ConfigScope `protobuf:"varint,4,opt,name=scope,proto3,enum=reliant.v1.ConfigScope" json:"scope,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -989,11 +990,11 @@ func (x *InstallServerRequest) GetConfig() *MCPServerConfig {
 	return nil
 }
 
-func (x *InstallServerRequest) GetScope() ConfigScope {
+func (x *InstallServerRequest) GetScope() v1.ConfigScope {
 	if x != nil {
 		return x.Scope
 	}
-	return ConfigScope_CONFIG_SCOPE_UNSPECIFIED
+	return v1.ConfigScope(0)
 }
 
 type InstallServerResponse struct {
@@ -1620,7 +1621,7 @@ type MoveServerScopeRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	ProjectId     string                 `protobuf:"bytes,1,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
 	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
-	Scope         ConfigScope            `protobuf:"varint,3,opt,name=scope,proto3,enum=reliant.v1.ConfigScope" json:"scope,omitempty"`
+	Scope         v1.ConfigScope         `protobuf:"varint,3,opt,name=scope,proto3,enum=reliant.v1.ConfigScope" json:"scope,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1669,11 +1670,11 @@ func (x *MoveServerScopeRequest) GetName() string {
 	return ""
 }
 
-func (x *MoveServerScopeRequest) GetScope() ConfigScope {
+func (x *MoveServerScopeRequest) GetScope() v1.ConfigScope {
 	if x != nil {
 		return x.Scope
 	}
-	return ConfigScope_CONFIG_SCOPE_UNSPECIFIED
+	return v1.ConfigScope(0)
 }
 
 type MoveServerScopeResponse struct {
@@ -1681,7 +1682,7 @@ type MoveServerScopeResponse struct {
 	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
 	Message       string                 `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
 	Name          string                 `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`
-	Scope         ConfigScope            `protobuf:"varint,4,opt,name=scope,proto3,enum=reliant.v1.ConfigScope" json:"scope,omitempty"`
+	Scope         v1.ConfigScope         `protobuf:"varint,4,opt,name=scope,proto3,enum=reliant.v1.ConfigScope" json:"scope,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1737,11 +1738,11 @@ func (x *MoveServerScopeResponse) GetName() string {
 	return ""
 }
 
-func (x *MoveServerScopeResponse) GetScope() ConfigScope {
+func (x *MoveServerScopeResponse) GetScope() v1.ConfigScope {
 	if x != nil {
 		return x.Scope
 	}
-	return ConfigScope_CONFIG_SCOPE_UNSPECIFIED
+	return v1.ConfigScope(0)
 }
 
 var File_reliant_v1_mcp_proto protoreflect.FileDescriptor
@@ -1984,7 +1985,7 @@ var file_reliant_v1_mcp_proto_goTypes = []any{
 	(*MoveServerScopeResponse)(nil),    // 26: reliant.v1.MoveServerScopeResponse
 	nil,                                // 27: reliant.v1.MCPServerConfig.HeadersEntry
 	nil,                                // 28: reliant.v1.UpdateServerConfigRequest.EnvEntry
-	(ConfigScope)(0),                   // 29: reliant.v1.ConfigScope
+	(v1.ConfigScope)(0),                // 29: reliant.v1.ConfigScope
 }
 var file_reliant_v1_mcp_proto_depIdxs = []int32{
 	27, // 0: reliant.v1.MCPServerConfig.headers:type_name -> reliant.v1.MCPServerConfig.HeadersEntry
@@ -2035,7 +2036,6 @@ func file_reliant_v1_mcp_proto_init() {
 	if File_reliant_v1_mcp_proto != nil {
 		return
 	}
-	file_reliant_v1_common_proto_init()
 	file_reliant_v1_mcp_proto_msgTypes[0].OneofWrappers = []any{}
 	file_reliant_v1_mcp_proto_msgTypes[3].OneofWrappers = []any{}
 	file_reliant_v1_mcp_proto_msgTypes[4].OneofWrappers = []any{}

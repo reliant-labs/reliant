@@ -3,6 +3,7 @@ syntax = "proto3";
 package controlplane.v1;
 
 import "buf/validate/validate.proto";
+import "controlplane/v1/client.proto";
 import "forge/v1/forge.proto";
 import "google/protobuf/timestamp.proto";
 
@@ -179,6 +180,24 @@ message RumScope {
   // Control-plane environment ids (deploy_environments.id). Empty = every
   // environment of the org (of the project, when project_id is set).
   repeated string env_ids = 6 [(buf.validate.field).repeated.max_items = 50];
+  // QueryScope.instance_ids: only the sessions of these dev instances (the
+  // sessions their browser spans carry). A session can outlive the instance
+  // that began it, so no answer is the instance's alone: a summary and a
+  // recording are the whole session's, and a timeline's errors are selected
+  // by session (a narrowed timeline omits them). No RumService response sets
+  // instance_scope.
+  repeated string instance_ids = 9 [
+    (buf.validate.field).repeated.max_items = 50,
+    (buf.validate.field).repeated.items.string.min_len = 1,
+    (buf.validate.field).repeated.items.string.max_len = 128
+  ];
+  // QueryScope.instance_users: the instances of these people, by email; an
+  // email that names no member matches nothing.
+  repeated string instance_users = 10 [
+    (buf.validate.field).repeated.max_items = 50,
+    (buf.validate.field).repeated.items.string.min_len = 1,
+    (buf.validate.field).repeated.items.string.max_len = 320
+  ];
 }
 
 // SessionSummary is one browser session.
@@ -202,6 +221,26 @@ message SessionSummary {
   int64 errors = 12;
   // Whether a replay was recorded. GetSessionReplay serves it.
   bool has_replay = 13;
+  // Where the browser was: derived by the platform at ingest from the address
+  // it connected from (DB-IP City Lite), never reported by the page. An ISO
+  // 3166-1 alpha-2 country, and the English names of the region and city.
+  // Empty when unknown.
+  string country = 14;
+  string region = 15;
+  string city = 16;
+  // The browser's IP address. Empty unless the platform is configured to keep
+  // it; by default it derives the location above and drops the address.
+  string client_address = 17;
+  // Which client the session ran in (browser, OS, device type, desktop app,
+  // viewport). Empty for a session stored before the platform recorded it.
+  ClientContext client = 18;
+  // The forge release the session's frontend build shipped in (e.g.
+  // v1.7.92-rc.1): the release that first carried service_version, from the
+  // deploy ledger. A build id is content-derived, so a later release that
+  // re-binds the same build serves the same bytes. Empty when no release
+  // carries the build: a frontend built outside the release (a bucket or
+  // Firebase site, a desktop app) has none.
+  string release = 19;
 }
 
 message ListSessionsRequest {
@@ -221,6 +260,14 @@ message ListSessionsRequest {
   ];
   // next_page_token from the previous page; valid only with the same filters.
   string page_token = 7 [(buf.validate.field).string.max_len = 512];
+  // Only sessions of this browser (ClientContext.browser_name, exact).
+  optional string browser = 8 [(buf.validate.field).string.max_len = 64];
+  // Only sessions on this OS (ClientContext.os_name, exact).
+  optional string os = 9 [(buf.validate.field).string.max_len = 64];
+  // Only sessions on this device type: desktop, mobile, tablet or bot.
+  optional string device_type = 10 [(buf.validate.field).string.max_len = 16];
+  // Only sessions of this frontend build (SessionSummary.service_version).
+  optional string frontend_version = 11 [(buf.validate.field).string.max_len = 256];
 }
 
 message ListSessionsResponse {
@@ -228,6 +275,10 @@ message ListSessionsResponse {
   repeated SessionSummary sessions = 1;
   // Empty on the last page.
   string next_page_token = 2;
+  // Never set: the sessions listed are those with the instances' activity,
+  // but each summary aggregates its whole session, which can span instances
+  // (controlplane.v1.InstanceScope).
+  controlplane.v1.InstanceScope instance_scope = 3;
 }
 
 message GetSessionRequest {
@@ -241,6 +292,9 @@ message GetSessionRequest {
 
 message GetSessionResponse {
   SessionSummary session = 1;
+  // Never set: the summary aggregates the whole session, which can span
+  // instances (controlplane.v1.InstanceScope).
+  controlplane.v1.InstanceScope instance_scope = 2;
 }
 
 // SessionTimelineKind is what a timeline entry is.
@@ -318,6 +372,11 @@ message GetSessionTimelineResponse {
   repeated SessionTimelineEntry entries = 1;
   // Empty on the last page.
   string next_page_token = 2;
+  // Never set: narrowed, the span entries are the instances' own, but the
+  // timeline's errors can only be selected by session, so a narrowed timeline
+  // omits them and is not the instances' whole timeline
+  // (controlplane.v1.InstanceScope).
+  controlplane.v1.InstanceScope instance_scope = 3;
 }
 
 message GetSessionReplayRequest {
@@ -361,4 +420,7 @@ message GetSessionReplayResponse {
   // later returns the events recorded since: how a session still being recorded
   // is followed.
   string resume_token = 3;
+  // Never set: the recording is the whole session's, which can span
+  // instances (controlplane.v1.InstanceScope).
+  controlplane.v1.InstanceScope instance_scope = 4;
 }

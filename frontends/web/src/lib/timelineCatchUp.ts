@@ -58,7 +58,16 @@ export function isTimelineCatchingUp({
   return true;
 }
 
-/** Catch-up shorter than this shows nothing: a cached switch is instant. */
-export const CATCH_UP_SHOW_DELAY_MS = 180;
-/** Once shown, the overlay stays at least this long, so it never flickers. */
-export const CATCH_UP_MIN_VISIBLE_MS = 300;
+/**
+ * Catch-up shorter than this shows nothing. In prod (2026-11-10) the opens
+ * that showed the overlay at 180ms caught up at a p50 of 328ms: an overlay
+ * for those is a flash, not information.
+ */
+export const CATCH_UP_SHOW_DELAY_MS = 400;
+/**
+ * How long a lifted overlay takes to fade out. The timeline under it is
+ * usable from the render it caught up in: the overlay never holds it. (A
+ * 300ms minimum-visible hold did, and was ~190ms of every open that showed
+ * it: they caught up at p50 328ms and became usable at p50 517ms.)
+ */
+export const CATCH_UP_EXIT_MS = 150;

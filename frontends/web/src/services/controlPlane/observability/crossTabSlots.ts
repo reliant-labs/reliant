@@ -3,12 +3,12 @@
 /**
  * The read slots EVERY tab of this browser shares.
  *
- * control-plane caps a console user at six observability reads in flight
- * (obsratelimit.DefaultMaxInFlight, per user and org) and refuses the seventh
- * with `in_flight_limit` after two seconds. readScheduler keeps one page under
+ * control-plane caps a console user at SERVER_READ_CAP observability reads in
+ * flight (obsratelimit.DefaultMaxInFlight, per user and org) and refuses the
+ * next with `in_flight_limit` after a short wait. readScheduler keeps one page under
  * that cap, but a page is not a user: on 2026-11-01 the owner had nine console
  * tabs open — six dashboards opened at once — each running its own four reads,
- * and admin-server refused 28 of them in two minutes. Nothing bypassed a page's
+ * and platform-api refused 28 of them in two minutes. Nothing bypassed a page's
  * queue; the other tabs were simply other queues.
  *
  * So a read takes one of OBS_READ_CONCURRENCY named Web Locks before it goes
@@ -47,6 +47,37 @@ export interface SlotGate {
 
 const NOT_FREE: unique symbol = Symbol("not-free");
 
+/**
+ * `work`, or the abort's reason as soon as `signal` fires, whichever is first.
+ * A lock is held until its callback's promise settles, and a cancelled read
+ * (its tile unmounted, the page left) must hand its browser-wide slot to the
+ * next tab's read at once, not when its fetch finally gives up.
+ */
+function untilAborted<T>(work: Promise<T>, signal: AbortSignal | undefined): Promise<T> {
+  if (!signal) return work;
+  if (signal.aborted) {
+    work.catch(() => {});
+    return Promise.reject(signal.reason);
+  }
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () => {
+      work.catch(() => {});
+      reject(signal.reason);
+    };
+    signal.addEventListener("abort", onAbort, { once: true });
+    work.then(
+      (value) => {
+        signal.removeEventListener("abort", onAbort);
+        resolve(value);
+      },
+      (error: unknown) => {
+        signal.removeEventListener("abort", onAbort);
+        reject(error);
+      }
+    );
+  });
+}
+
 /** The gate over `slots` named locks of `locks`. */
 export function lockSlotGate(locks: LockRequester, slots: number): SlotGate {
   const count = Math.max(1, slots);
@@ -59,7 +90,7 @@ export function lockSlotGate(locks: LockRequester, slots: number): SlotGate {
       const start = next++ % count;
       for (let i = 0; i < count; i++) {
         const name = OBS_READ_LOCK_PREFIX + ((start + i) % count);
-        const outcome = await locks.request<T | typeof NOT_FREE>(name, { ifAvailable: true }, (lock) => (lock ? task() : NOT_FREE));
+        const outcome = await locks.request<T | typeof NOT_FREE>(name, { ifAvailable: true }, (lock) => (lock ? untilAborted(task(), signal) : NOT_FREE));
         if (outcome !== NOT_FREE) return outcome;
       }
       // Every slot is held: wait in line for one. A lock's waiters are served
@@ -67,7 +98,7 @@ export function lockSlotGate(locks: LockRequester, slots: number): SlotGate {
       try {
         return await locks.request<T>(OBS_READ_LOCK_PREFIX + start, { signal }, () => {
           if (signal?.aborted) throw signal.reason;
-          return task();
+          return untilAborted(task(), signal);
         });
       } catch (error) {
         // An abort while waiting surfaces as the caller's own reason, not the lock manager's AbortError.

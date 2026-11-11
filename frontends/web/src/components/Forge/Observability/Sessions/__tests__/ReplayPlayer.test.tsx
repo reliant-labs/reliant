@@ -20,6 +20,7 @@ import { renderWithApi } from "../../__tests__/obsTestUtils";
 import { ReplayPlayer, type ReplayerCtor, type ReplayPlayerProps } from "../ReplayPlayer";
 import { FakeReplayer } from "./fakeReplayer";
 import { isReplayKnownUnplayable, resetReplayVerdictsForTests } from "../sessionModel";
+import { NO_CLIENT } from "@/services/controlPlane/observability/client";
 
 vi.mock("uplot", async () => (await import("../../__tests__/obsMocks")).obsMocks.uplot());
 vi.mock("@tanstack/react-virtual", async () => (await import("../../__tests__/obsMocks")).obsMocks.virtual());
@@ -41,6 +42,12 @@ const SESSION: SessionSummary = {
   interactions: 4,
   errors: 1,
   hasReplay: true,
+  country: "",
+  region: "",
+  city: "",
+  clientAddress: "",
+  client: NO_CLIENT,
+  release: "",
 };
 
 const meta = (at: number): RrwebEvent => ({ type: 4, timestamp: T + at, data: { href: "https://shop.example/", width: 1280, height: 720 } });

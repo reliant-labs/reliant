@@ -3,7 +3,7 @@ package store_test
 
 import (
 	"context"
-	"database/sql"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -32,7 +32,7 @@ func TestListRunNodeExecutions(t *testing.T) {
 		t.Fatalf("got %d rows, want 4 graph attempts", len(rows))
 	}
 	for _, row := range rows {
-		if row.WorkflowID == "wf-other" || row.InputJSON.Valid || strings.Contains(row.OutputJSON.String, "tokens") || strings.Contains(row.OutputJSON.String, "answer") {
+		if row.WorkflowID == "wf-other" || row.InputJSON != nil || strings.Contains(fromPtr(row.OutputJSON), "tokens") || strings.Contains(fromPtr(row.OutputJSON), "answer") {
 			t.Fatalf("unwanted data: %+v", row)
 		}
 	}
@@ -63,15 +63,15 @@ func TestRunDiagnosticsBoundsBeforeJSONAndPreservesSkip(t *testing.T) {
 	}
 	foundSkip := false
 	for _, row := range rows {
-		if len(row.OutputJSON.String) > 16384 {
-			t.Fatalf("unbounded fetch: %d", len(row.OutputJSON.String))
+		if len(fromPtr(row.OutputJSON)) > 16384 {
+			t.Fatalf("unbounded fetch: %d", len(fromPtr(row.OutputJSON)))
 		}
 		if row.ID == "bounded-2" {
-			foundSkip = strings.Contains(row.OutputJSON.String, `"skipped" : true`)
+			foundSkip = strings.Contains(fromPtr(row.OutputJSON), `"skipped" : true`)
 		}
 		if row.ID == "bounded-0" || row.ID == "bounded-1" {
-			if row.OutputJSON.String != `{"_diagnostic_omitted":true}` {
-				t.Fatalf("unsafe output: %s", row.OutputJSON.String)
+			if fromPtr(row.OutputJSON) != `{"_diagnostic_omitted":true}` {
+				t.Fatalf("unsafe output: %s", fromPtr(row.OutputJSON))
 			}
 		}
 	}
@@ -107,8 +107,8 @@ func TestRunDiagnosticsBoundsBeforeJSONAndPreservesSkip(t *testing.T) {
 	total := 0
 	omitted := 0
 	for _, row := range rows {
-		total += len(row.OutputJSON.String) + len(row.ErrorMessage.String)
-		if strings.Contains(row.OutputJSON.String, "_diagnostic_omitted") {
+		total += len(fromPtr(row.OutputJSON)) + len(fromPtr(row.ErrorMessage))
+		if strings.Contains(fromPtr(row.OutputJSON), "_diagnostic_omitted") {
 			omitted++
 		}
 	}
@@ -156,23 +156,29 @@ func seedSteps(t *testing.T, env *storetest.Env) {
 	for i, s := range seeds {
 		exec := &core.StepExecution{
 			ID: s.id, WorkflowID: s.workflow, StepID: s.step, ActivityName: s.activity,
-			OutputJSON: sql.NullString{String: s.output, Valid: true},
-			ExitCode:   sql.NullInt64{Int64: int64(i), Valid: i%2 == 0},
-			Success:    sql.NullBool{Bool: i%3 == 0, Valid: i != 4},
-			DurationMs: sql.NullInt64{Int64: 10 * int64(i), Valid: true},
+			OutputJSON: nstr(s.output),
+			DurationMs: nint(10 * int64(i)),
 			CreatedAt:  l2Base.Add(time.Duration(i) * time.Second),
-			InputJSON:  sql.NullString{String: fmt.Sprintf(`{"i":%d}`, i), Valid: i != 1},
-			Attempt:    sql.NullInt32{Int32: 1, Valid: true},
+			Attempt:    ptr(int32(1)),
+		}
+		if i%2 == 0 {
+			exec.ExitCode = nint(int64(i))
+		}
+		if i != 4 {
+			exec.Success = nbool(i%3 == 0)
+		}
+		if i != 1 {
+			exec.InputJSON = nstr(fmt.Sprintf(`{"i":%d}`, i))
 		}
 		if s.nodePath != "" {
-			exec.NodePath = sql.NullString{String: s.nodePath, Valid: true}
+			exec.NodePath = nstr(s.nodePath)
 		}
 		if s.loopNode != "" {
-			exec.LoopNodeID = sql.NullString{String: s.loopNode, Valid: true}
-			exec.LoopIteration = sql.NullInt64{Int64: s.loopIteration, Valid: true}
+			exec.LoopNodeID = nstr(s.loopNode)
+			exec.LoopIteration = nint(s.loopIteration)
 		}
 		if i == 3 {
-			exec.ErrorMessage = sql.NullString{String: "boom", Valid: true}
+			exec.ErrorMessage = nstr("boom")
 		}
 		if err := store.InsertStepExecution(ctx, env.ORM, exec); err != nil {
 			t.Fatalf("seed step %s: %v", s.id, err)
@@ -188,9 +194,22 @@ func stepIDs[T any](rows []T, id func(T) string) []string {
 	return out
 }
 
-func nstr(s string) sql.NullString { return sql.NullString{String: s, Valid: s != ""} }
-func nint(i int64) sql.NullInt64   { return sql.NullInt64{Int64: i, Valid: true} }
-func nbool(b bool) sql.NullBool    { return sql.NullBool{Bool: b, Valid: true} }
+// nstr is nil for "", the way an unset nullable text column reads back.
+func nstr(s string) *string {
+	if s == "" {
+		return nil
+	}
+	return &s
+}
+func nint(i int64) *int64 { return &i }
+func nbool(b bool) *bool  { return &b }
+func fromPtr[T any](p *T) T {
+	var zero T
+	if p == nil {
+		return zero
+	}
+	return *p
+}
 
 func TestLoadStepExecution(t *testing.T) {
 	env := storetest.New(t)
@@ -202,24 +221,24 @@ func TestLoadStepExecution(t *testing.T) {
 		// A plain step: every nullable column set.
 		"s1": {ID: "s1", WorkflowID: "wf-s1", StepID: "agent", ActivityName: "RunAgent", OutputJSON: nstr(`{"answer":1}`),
 			ExitCode: nint(0), Success: nbool(true), DurationMs: nint(0), CreatedAt: at(0),
-			InputJSON: nstr(`{"i":0}`), Attempt: sql.NullInt32{Int32: 1, Valid: true}, NodePath: nstr("agent")},
+			InputJSON: nstr(`{"i":0}`), Attempt: ptr(int32(1)), NodePath: nstr("agent")},
 		// A save step: saved_message_id comes from the output, not from the writer; no exit code,
 		// failed, no input and no node path.
 		"s2": {ID: "s2", WorkflowID: "wf-s1", StepID: "agent-save", ActivityName: "SaveMessage", OutputJSON: nstr(`{"message_id":"msg-1"}`),
 			Success: nbool(false), DurationMs: nint(10), CreatedAt: at(1), SavedMessageID: nstr("msg-1"),
-			Attempt: sql.NullInt32{Int32: 1, Valid: true}},
+			Attempt: ptr(int32(1))},
 		// A failed loop step: error message, loop scope, and no exit code.
 		"s4": {ID: "s4", WorkflowID: "wf-s2", StepID: "loop_body", ActivityName: "Shell", OutputJSON: nstr(`{"exit":0}`),
 			Success: nbool(true), DurationMs: nint(30), CreatedAt: at(3), LoopNodeID: nstr("loop"), LoopIteration: nint(1),
-			InputJSON: nstr(`{"i":3}`), ErrorMessage: nstr("boom"), Attempt: sql.NullInt32{Int32: 1, Valid: true}, NodePath: nstr("loop.body")},
+			InputJSON: nstr(`{"i":3}`), ErrorMessage: nstr("boom"), Attempt: ptr(int32(1)), NodePath: nstr("loop.body")},
 		// Success unknown (NULL), and a loop save.
 		"s5": {ID: "s5", WorkflowID: "wf-s2", StepID: "loop_body-save", ActivityName: "SaveMessage", OutputJSON: nstr(`{"message_id":"msg-2"}`),
 			ExitCode: nint(4), DurationMs: nint(40), CreatedAt: at(4), LoopNodeID: nstr("loop"), LoopIteration: nint(1),
-			SavedMessageID: nstr("msg-2"), InputJSON: nstr(`{"i":4}`), Attempt: sql.NullInt32{Int32: 1, Valid: true}},
+			SavedMessageID: nstr("msg-2"), InputJSON: nstr(`{"i":4}`), Attempt: ptr(int32(1))},
 		// Output that is not JSON is stored as given, and saves nothing.
 		"s7": {ID: "s7", WorkflowID: "wf-s1", StepID: "agent", ActivityName: "RunAgent", OutputJSON: nstr("not json"),
 			ExitCode: nint(6), Success: nbool(true), DurationMs: nint(60), CreatedAt: at(6),
-			InputJSON: nstr(`{"i":6}`), Attempt: sql.NullInt32{Int32: 1, Valid: true}, NodePath: nstr("agent")},
+			InputJSON: nstr(`{"i":6}`), Attempt: ptr(int32(1)), NodePath: nstr("agent")},
 	}
 	for id, w := range want {
 		got, err := store.LoadStepExecution(ctx, env.ORM, id)
@@ -238,7 +257,7 @@ func TestLoadStepExecution(t *testing.T) {
 	if err := store.InsertStepExecution(ctx, env.ORM, forged); err != nil {
 		t.Fatal(err)
 	}
-	if got, _ := store.LoadStepExecution(ctx, env.ORM, "forged"); got.SavedMessageID != nstr("real") {
+	if got, _ := store.LoadStepExecution(ctx, env.ORM, "forged"); fromPtr(got.SavedMessageID) != "real" {
 		t.Fatalf("saved_message_id = %+v, want the one derived from the output", got.SavedMessageID)
 	}
 	// A "-save" step whose output has no message id, or is not an object, saves nothing.
@@ -247,7 +266,7 @@ func TestLoadStepExecution(t *testing.T) {
 			OutputJSON: nstr(out), CreatedAt: at(21)}); err != nil {
 			t.Fatalf("insert %s: %v", id, err)
 		}
-		if got, _ := store.LoadStepExecution(ctx, env.ORM, id); got.SavedMessageID.Valid {
+		if got, _ := store.LoadStepExecution(ctx, env.ORM, id); got.SavedMessageID != nil {
 			t.Fatalf("%s saved %+v, want no message", id, got.SavedMessageID)
 		}
 	}
@@ -278,7 +297,7 @@ func TestStepExecutionLists(t *testing.T) {
 	}
 	// The list carries the whole row, not just the key.
 	byStep, _ := store.ListWorkflowStepExecutions(ctx, env.ORM, "wf-s1")
-	if byStep[3].OutputJSON != nstr("not json") || byStep[3].InputJSON != nstr(`{"i":6}`) || byStep[0].NodePath != nstr("agent") {
+	if fromPtr(byStep[3].OutputJSON) != "not json" || fromPtr(byStep[3].InputJSON) != `{"i":6}` || fromPtr(byStep[0].NodePath) != "agent" {
 		t.Fatalf("listed rows lost columns: %+v", byStep)
 	}
 }
@@ -324,7 +343,7 @@ func TestStepExecutionRecordsForChat(t *testing.T) {
 	}
 	// A record carries the output that the chat views withhold for internal activities.
 	got, _ := store.ListStepExecutionRecordsForChat(ctx, env.ORM, "chat-steps", "agent.agent_loop.call_llm", 1)
-	if len(got) != 1 || got[0].ID != "s3" || got[0].OutputJSON != nstr(`{"tokens":3}`) || got[0].InputJSON != nstr(`{"i":2}`) {
+	if len(got) != 1 || got[0].ID != "s3" || fromPtr(got[0].OutputJSON) != `{"tokens":3}` || fromPtr(got[0].InputJSON) != `{"i":2}` {
 		t.Fatalf("record of the LLM call = %+v, want its output and input", got)
 	}
 
@@ -354,7 +373,7 @@ func TestChatStepExecutionViews(t *testing.T) {
 	ctx := context.Background()
 	seedSteps(t, env)
 	at := func(i int) time.Time { return l2Base.Add(time.Duration(i) * time.Second) }
-	chatStep := func(id, wf, step, activity string, i int, exit sql.NullInt64, success sql.NullBool, loop string, iter int64, saved, output string) *core.ChatStepExecution {
+	chatStep := func(id, wf, step, activity string, i int, exit *int64, success *bool, loop string, iter int64, saved, output string) *core.ChatStepExecution {
 		c := &core.ChatStepExecution{ID: id, WorkflowID: wf, StepID: step, ActivityName: activity, ExitCode: exit, Success: success,
 			DurationMs: nint(10 * int64(i)), CreatedAt: at(i), SavedMessageID: nstr(saved), OutputJSON: output}
 		if loop != "" {
@@ -362,8 +381,8 @@ func TestChatStepExecutionViews(t *testing.T) {
 		}
 		return c
 	}
-	none := sql.NullInt64{}
-	unknown := sql.NullBool{}
+	var none *int64
+	var unknown *bool
 
 	// The FULL view: every step of both workflows of the chat, by workflow and
 	// time, with the output only for user-facing activities. Empty means withheld.
@@ -531,10 +550,54 @@ VALUES($1,'wf-s1','stopped','SaveMessage',$2,1,now() + $3 * interval '1 second')
 	if newest == nil || older == nil {
 		t.Fatalf("save_message node rows missing: %v", rows)
 	}
-	if newest.Success.Bool || newest.ErrorMessage.String != store.DeclaredFailureError || !strings.Contains(newest.OutputJSON.String, "why stopped-2") {
+	if fromPtr(newest.Success) || fromPtr(newest.ErrorMessage) != store.DeclaredFailureError || !strings.Contains(fromPtr(newest.OutputJSON), "why stopped-2") {
 		t.Fatalf("newest attempt: %+v", newest)
 	}
-	if !older.Success.Bool || older.ErrorMessage.Valid || strings.Contains(older.OutputJSON.String, "message_id") {
+	if !fromPtr(older.Success) || older.ErrorMessage != nil || strings.Contains(fromPtr(older.OutputJSON), "message_id") {
 		t.Fatalf("older attempt must be untouched and keep only the projection: %+v", older)
+	}
+}
+
+// A NUL in a step's output is written by encoding/json as the escape \u0000,
+// which jsonb refuses (SQLSTATE 22P05). step_executions casts output_json to
+// jsonb in its generated saved_message_id column, so in prod a SaveMessage
+// step whose tool output held a NUL failed its INSERT and lost its history.
+// The row is stored with U+FFFD in the NUL's place, the message id is still
+// derived, and an escaped backslash followed by "u0000" (text, not a NUL)
+// survives as written.
+func TestInsertStepExecutionStoresEscapedNUL(t *testing.T) {
+	env := storetest.New(t)
+	ctx := context.Background()
+	out, err := json.Marshal(map[string]any{"message_id": "m-nul", "message": map[string]any{"text": "a\x00b"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	literal := `{"message_id":"m-lit","note":"C:\\u0000dir"}`
+	for id, body := range map[string]string{"nul": string(out), "literal": literal} {
+		if err := store.InsertStepExecution(ctx, env.ORM, &core.StepExecution{ID: id, WorkflowID: "wf-nul", StepID: "execute_tools-save",
+			ActivityName: "SaveMessage", OutputJSON: nstr(body), InputJSON: nstr(body), ErrorMessage: nstr("bad\x00byte"), CreatedAt: time.Now()}); err != nil {
+			t.Fatalf("insert %s: %v", id, err)
+		}
+	}
+	got, err := store.LoadStepExecution(ctx, env.ORM, "nul")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fromPtr(got.SavedMessageID) != "m-nul" {
+		t.Fatalf("saved_message_id = %v, want m-nul", got.SavedMessageID)
+	}
+	var decoded struct{ Message struct{ Text string } }
+	if err := json.Unmarshal([]byte(fromPtr(got.OutputJSON)), &decoded); err != nil || decoded.Message.Text != "a\uFFFDb" {
+		t.Fatalf("output_json = %q (%v), want the NUL stored as U+FFFD", fromPtr(got.OutputJSON), err)
+	}
+	if fromPtr(got.ErrorMessage) != "bad\uFFFDbyte" {
+		t.Fatalf("error_message = %q, want the NUL stored as U+FFFD", fromPtr(got.ErrorMessage))
+	}
+	got, err = store.LoadStepExecution(ctx, env.ORM, "literal")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fromPtr(got.OutputJSON) != literal || fromPtr(got.InputJSON) != literal || fromPtr(got.SavedMessageID) != "m-lit" {
+		t.Fatalf("an escaped backslash before u0000 was rewritten: output %q input %q saved %v", fromPtr(got.OutputJSON), fromPtr(got.InputJSON), got.SavedMessageID)
 	}
 }

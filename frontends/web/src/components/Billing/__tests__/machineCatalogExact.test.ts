@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { create } from "@bufbuild/protobuf";
 import { expect, it } from "vitest";
 import { PlanSchema, PlanTier } from "@/gen/controlplane/controlplane/v1/shared_pb";

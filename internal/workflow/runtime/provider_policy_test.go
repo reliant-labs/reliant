@@ -247,6 +247,60 @@ func TestParseSpawnToolInput_Providers(t *testing.T) {
 	}
 }
 
+// Models often send a nested object argument JSON-encoded as a string
+// (reliant #2392): `providers` decodes to the object the string holds.
+func TestParseSpawnToolInput_StringifiedProviders(t *testing.T) {
+	t.Parallel()
+	object := `{"prefer":["codex"],"on_limit":"wait"}`
+	once, err := json.Marshal(object)
+	require.NoError(t, err)
+	twice, err := json.Marshal(string(once))
+	require.NoError(t, err)
+
+	for name, providers := range map[string]string{
+		"encoded once":  string(once),
+		"encoded twice": string(twice),
+	} {
+		got, err := parseSpawnToolInput(`{"preset":"coder","prompt":"go","providers":` + providers + `}`)
+		require.NoError(t, err, name)
+		require.NotNil(t, got.providers, name)
+		assert.Equal(t, []string{"codex"}, got.providers.Prefer, name)
+		assert.Equal(t, "wait", got.providers.OnLimit, name)
+		assert.True(t, got.providersFromString, name)
+		assert.Error(t, got.strictProvidersErr, "what a build before the fix answered: %s", name)
+	}
+
+	t.Run("a blank string is the argument left out", func(t *testing.T) {
+		got, err := parseSpawnToolInput(`{"preset":"coder","prompt":"go","providers":"  "}`)
+		require.NoError(t, err)
+		assert.Nil(t, got.providers)
+		assert.True(t, got.providersFromString)
+	})
+	t.Run("an object argument is not marked stringified", func(t *testing.T) {
+		got, err := parseSpawnToolInput(`{"preset":"coder","prompt":"go","providers":` + object + `}`)
+		require.NoError(t, err)
+		assert.False(t, got.providersFromString)
+	})
+	t.Run("the decoded object is still validated", func(t *testing.T) {
+		for name, inner := range map[string]string{
+			"unknown key":      `{"prefr":["codex"]}`,
+			"unknown provider": `{"prefer":["chatgpt"]}`,
+		} {
+			encoded, err := json.Marshal(inner)
+			require.NoError(t, err)
+			_, err = parseSpawnToolInput(`{"prompt":"go","providers":` + string(encoded) + `}`)
+			assert.Error(t, err, name)
+		}
+	})
+	t.Run("a string that holds no object is refused", func(t *testing.T) {
+		for _, providers := range []string{`"codex"`, `"[\"codex\"]"`, `"{not json"`} {
+			got, err := parseSpawnToolInput(`{"prompt":"go","providers":` + providers + `}`)
+			assert.Error(t, err, providers)
+			assert.False(t, got.providersFromString, providers)
+		}
+	})
+}
+
 type ProviderPolicySuite struct {
 	suite.Suite
 	temporaltest.WorkflowTestSuite

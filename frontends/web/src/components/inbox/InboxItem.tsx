@@ -35,7 +35,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { Code, ConnectError } from "@connectrpc/connect";
-import { AlertTriangle, CalendarX, CheckCircle2, ChevronDown, HardDrive, HelpCircle, MonitorPause, PauseCircle, Settings2, Shield, X } from "lucide-react";
+import { AlertTriangle, CalendarX, CheckCircle2, ChevronDown, FolderX, HardDrive, HelpCircle, MonitorPause, PauseCircle, Settings2, Shield, X } from "lucide-react";
 import { toast } from "sonner";
 
 import {
@@ -44,7 +44,7 @@ import {
   type InboxItem as InboxItemData,
   type InboxStorage as InboxStorageData,
 } from "@/gen/reliant/v1/inbox_pb";
-import { useApprove, useBatchApprove, useBatchDeny, useDeny } from "@/hooks/approval-service-hooks_gen";
+import { useInboxApprovalActions } from "@/hooks/approval-queries";
 import { answerQuestion } from "@/hooks/question-queries";
 import { inboxServiceKeys } from "@/hooks/inbox-service-hooks_gen";
 import { removeInboxItems } from "@/hooks/inbox-queries";
@@ -71,6 +71,7 @@ import { askUserQuestionItems } from "../Chat/askUserUtils";
 import { formatBytes } from "@/lib/formatBytes";
 import { consumerSummary, heavyRefused, pressuredVolume, reclaimSummary, volumeUsage } from "@/lib/machineDisk";
 import { isUnownedStorage, StorageAction, totalHeldBytes } from "./StorageAction";
+import { reclaimDetail, WorktreeReclaimAction } from "./WorktreeReclaimAction";
 import { RecoveryAction } from "./RecoveryAction";
 
 /** How long "Already handled" shows before the row leaves. */
@@ -321,8 +322,7 @@ export function InboxApprovalBatch({ items, showProject, onDismissRow, onDismiss
   const [busy, setBusy] = useState(false);
   const [confirming, setConfirming] = useState<ApprovalBatchPlan<BatchMember> | null>(null);
   const queryClient = useQueryClient();
-  const approve = useBatchApprove();
-  const deny = useBatchDeny();
+  const decide = useInboxApprovalActions();
   const first = items[0]!;
   const plan = useMemo(
     () =>
@@ -353,8 +353,8 @@ export function InboxApprovalBatch({ items, showProject, onDismissRow, onDismiss
     setBusy(true);
     try {
       const requestIds = members.map((m) => m.id);
-      if (verb === "approve") await approve.mutateAsync({ requestIds });
-      else await deny.mutateAsync({ requestIds });
+      if (verb === "approve") await decide.approveMany(requestIds);
+      else await decide.denyMany(requestIds);
       removeInboxItems(
         members.map((m) => m.itemId),
         queryClient,
@@ -474,6 +474,8 @@ function KindIcon({ kind }: { kind: InboxItemKind }) {
       return <HardDrive className={className} aria-label="Saved workspace recovery" />;
     case InboxItemKind.STORAGE:
       return <HardDrive className={cn(className, "text-warning-ink")} aria-label="Storage" />;
+    case InboxItemKind.WORKTREE_RECLAIM:
+      return <FolderX className={cn(className, "text-warning-ink")} aria-label="Worktrees proposed for removal" />;
     default:
       return <CheckCircle2 className={className} aria-hidden="true" />;
   }
@@ -489,6 +491,9 @@ export function subjectName(item: InboxItemData): string {
   }
   if (item.payload.case === "automationDefinitionBroken") {
     return item.payload.value.definition?.path || item.workflowName || "Workflow definition";
+  }
+  if (item.payload.case === "worktreeReclaim") {
+    return `${machineName(item.payload.value.daemonName, item.payload.value.daemonId)} worktrees`;
   }
   return item.chatTitle || item.triggerName || "Untitled run";
 }
@@ -638,6 +643,10 @@ function rowDetail(item: InboxItemData): { node: ReactNode; title: string } | nu
     case "storage": {
       const text = storageDetail(payload.value);
       return text ? { node: text, title: text } : null;
+    }
+    case "worktreeReclaim": {
+      const text = reclaimDetail(payload.value);
+      return { node: text, title: text };
     }
     case "automationNeedsSetup": {
       const text = payload.value.issues.map((issue) => sentenceCase(issue.message)).join(" · ");
@@ -826,6 +835,10 @@ function InlineAction({ item, expanded, onToggle }: InlineActionProps) {
       return (
         <StorageAction storage={payload.value} label={machineName(payload.value.daemonName, payload.value.daemonId)} />
       );
+    case "worktreeReclaim":
+      return (
+        <WorktreeReclaimAction item={payload.value} label={machineName(payload.value.daemonName, payload.value.daemonId)} />
+      );
     case "automationRunPaused":
       return item.chatId ? (
         <RunLink chatId={item.chatId} className={actionButtonClass}>
@@ -890,13 +903,12 @@ function ApprovalRowAction({
 }) {
   const [busy, setBusy] = useState(false);
   const queryClient = useQueryClient();
-  const approve = useApprove();
-  const deny = useDeny();
+  const decide = useInboxApprovalActions();
   const act = async (verb: "approve" | "deny") => {
     setBusy(true);
     try {
-      if (verb === "approve") await approve.mutateAsync({ requestId: approvalId });
-      else await deny.mutateAsync({ requestId: approvalId });
+      if (verb === "approve") await decide.approve(approvalId);
+      else await decide.deny(approvalId);
       removeInboxItems([itemId], queryClient);
     } catch (error) {
       onFailure(verb)(error);

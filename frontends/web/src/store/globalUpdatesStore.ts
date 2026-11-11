@@ -27,6 +27,7 @@ import { useChatNavigationStore } from "./chatNavigationStore";
 import { patchBackgroundProcessPorts, upsertBackgroundProcess, type BackgroundProcess } from "../hooks/background-queries";
 import { upsertPackageProcess } from "../hooks/package-queries";
 import { logger } from "../lib/logger";
+import { failChatOpen } from "../lib/chatOpenInteraction";
 import { heartbeatOomKills, type ProcessOomKills } from "../lib/machineMemory";
 import { getEventBus } from "../lib/events";
 import { queryClient } from "../lib/query-client";
@@ -567,7 +568,10 @@ function createChatStream(get: StoreGet, set: StoreSet): ChatStreamingService {
       onChatContextUsage: (chatId, contextUsage) => get().handleChatContextUsage(chatId, contextUsage),
       onUserUpdates: (updates) => get().handleChatStreamUserUpdates(updates),
       onStatusChange: (status) => get().handleChatStreamStatusChange(status),
-      onError: (error) => logger.warn(`${LOG_PREFIX} Chat stream error: ${error}`),
+      onError: (error) => {
+        logger.warn(`${LOG_PREFIX} Chat stream error: ${error}`);
+        failChatOpen(get().chatStream?.getChatId(), "stream_error");
+      },
       // Delta resume: chatStore owns each chat's cached state, so it owns the
       // cursor describing it and decides whether a reopen may replay.
       onChatCursorRelease: (chatId, sequence) =>
@@ -577,6 +581,7 @@ function createChatStream(get: StoreGet, set: StoreSet): ChatStreamingService {
       onChatSyncPending: (chatId) =>
         useChatStore.getState().setChatSyncPending(chatId),
       onChatSubscriptionRejected: (chatId) => {
+        failChatOpen(chatId, "rejected");
         if (get().subscribedChatId === chatId) set({ subscribedChatId: null });
       },
     },
@@ -983,6 +988,9 @@ function handleChatConfigChanged(update: UserUpdate) {
     active_daemon_id?: string;
     no_machine?: boolean;
     selection?: SelectionPayload;
+    // MoveChatToProject: the chat moved to project_id, onto its main checkout.
+    project_id?: string;
+    worktree_id?: string;
     updated_at: string;
   };
 
@@ -1019,9 +1027,23 @@ function handleChatConfigChanged(update: UserUpdate) {
   if (data.active_daemon_id !== undefined) {
     patch.activeDaemonId = data.active_daemon_id || undefined;
   }
+  const moved = !!data.project_id;
+  if (data.project_id) {
+    patch.projectId = data.project_id;
+  }
+  if (data.worktree_id) {
+    patch.worktreeId = data.worktree_id;
+    // The workspace summary named the old project's workspace; the refetch
+    // below brings the new one.
+    patch.worktree = undefined;
+  }
   // applyChatPatch also updates the Zustand map — ChatInput preset restore
   // reads workflowName/selectedPresets from the Zustand map, not React Query.
   applyChatPatch(projectId, chat_id, patch);
+  // A moved chat leaves one project's list and joins another's.
+  if (moved) {
+    streamInvalidation.invalidate(chatKeys.lists());
+  }
 }
 
 function handleChatCreated(update: UserUpdate) {

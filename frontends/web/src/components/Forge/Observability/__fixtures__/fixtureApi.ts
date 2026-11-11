@@ -23,7 +23,8 @@ import { createIssuesFixture, type IssuesFixtureOptions } from "./fixtureIssues"
 import { createSessionsFixture, type SessionsFixtureOptions } from "./fixtureSessions";
 
 import type { ObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
-import { fixtureGraph, fixtureCatalog } from "./fixtureGraph";
+import type { DashboardDatabase, DatabasePanelResult, QueryDatabasePanelInput } from "@/services/controlPlane/observability/appDatabaseApi";
+import { fixtureGraph, fixtureCatalog, fixtureShopGraph } from "./fixtureGraph";
 import type {
   AttributeValueCount,
   Dashboard,
@@ -50,6 +51,8 @@ import type {
   Trace,
   TraceSummary,
 } from "@/services/controlPlane/observability/types";
+import { NO_CLIENT } from "@/services/controlPlane/observability/client";
+import { FIXTURE_CLIENTS } from "./fixtureSessions";
 
 export const FIXTURE_ORG = "org-fixture";
 export const FIXTURE_PROJECT = "shop";
@@ -146,7 +149,48 @@ function health(name: string, window: TimeWindow, base: number, errorShare: numb
   };
 }
 
-function logs(window: TimeWindow, count: number): LogRecord[] {
+/**
+ * What the CreateOrder trace (FIXTURE_TRACE_ID, fixtureTrace) logged: one line
+ * per step of the story its waterfall tells, on the span that logged it, so
+ * "Logs for this trace" reads that request across both services.
+ */
+const TRACE_LOGS: { spanId: string; at: number; severity: Severity; severityText: string; service: string; body: string }[] = [
+  { spanId: "a1", at: 0.5, severity: "info", severityText: "INFO", service: "api", body: "CreateOrder started" },
+  { spanId: "c1", at: 70.3, severity: "warn", severityText: "WARN", service: "api", body: "payments Charge attempt 1 failed, retrying" },
+  { spanId: "c2", at: 146.7, severity: "error", severityText: "ERROR", service: "api", body: "payments Charge failed: context deadline exceeded" },
+  { spanId: "d1", at: 181.0, severity: "info", severityText: "INFO", service: "worker", body: "orders.created processed, inventory updated" },
+];
+
+/** With `crossService` (the demo console): inventory's own line, on the hop fixtureTrace adds (e1–e3). */
+const CROSS_SERVICE_TRACE_LOGS: typeof TRACE_LOGS = [
+  { spanId: "e2", at: 174.5, severity: "info", severityText: "INFO", service: "inventory", body: "reserved 2 items for order ord_7Q2K" },
+];
+
+function traceLogs(window: TimeWindow, crossService = false): LogRecord[] {
+  // fixtureTrace starts the trace a minute before the window's end.
+  const t0 = window.endMs - 60_000;
+  return (crossService ? [...TRACE_LOGS, ...CROSS_SERVICE_TRACE_LOGS] : TRACE_LOGS).map((line) => ({
+    id: `fixture:trace-${line.spanId}`,
+    timeMs: t0 + line.at,
+    severity: line.severity,
+    severityText: line.severityText,
+    service: line.service,
+    body: line.body,
+    traceId: FIXTURE_TRACE_ID,
+    spanId: line.spanId,
+    attributes: { "rpc.method": "CreateOrder", procedure: `/${PROCEDURE("CreateOrder")}`, "http.status_code": line.severity === "error" ? "503" : "200" },
+    resource: { "service.name": line.service, "k8s.pod.name": `${line.service}-7d9f8c-x0`, "deployment.environment.name": "prod" },
+    source: "",
+    operatorData: false,
+  }));
+}
+
+/** The log lines of a window, newest first: generated traffic, plus what the toured trace logged. */
+function logs(window: TimeWindow, count: number, crossService = false): LogRecord[] {
+  return [...generatedLogs(window, count), ...traceLogs(window, crossService)].sort((a, b) => b.timeMs - a.timeMs);
+}
+
+function generatedLogs(window: TimeWindow, count: number): LogRecord[] {
   const random = rng(7);
   const levels: [Severity, string][] = [
     ["info", "INFO"],
@@ -174,7 +218,8 @@ function logs(window: TimeWindow, count: number): LogRecord[] {
       severityText,
       service,
       body: messages[pick],
-      traceId: traced ? (i === 0 ? FIXTURE_TRACE_ID : `${(i * 2654435761).toString(16).padStart(8, "0")}b34da6a3ce929d0e0e4736`.slice(0, 32)) : "",
+      // Never FIXTURE_TRACE_ID: that trace's lines are traceLogs', which match its spans.
+      traceId: traced ? `${((i + 1) * 2654435761).toString(16).padStart(10, "0")}b34da6a3ce929d0e0e4736` : "",
       spanId: traced ? `00f067aa0ba902b${i % 10}` : "",
       attributes: { "rpc.method": RPCS[i % RPCS.length], procedure: `/${PROCEDURE(RPCS[i % RPCS.length])}`, "http.status_code": severity === "error" ? "503" : "200" },
       resource: { "service.name": service, "k8s.pod.name": `${service}-7d9f8c-x${i % 3}`, "deployment.environment.name": "prod" },
@@ -184,31 +229,70 @@ function logs(window: TimeWindow, count: number): LogRecord[] {
   });
 }
 
-function traceSummaries(window: TimeWindow, count: number): TraceSummary[] {
+function traceSummaries(window: TimeWindow, count: number, crossService = false): TraceSummary[] {
   const random = rng(11);
   return Array.from({ length: count }, (_, i) => {
     const rpc = RPCS[i % RPCS.length];
-    const failed = i % 9 === 4;
+    // Trace 0 is the one the forge journey opens: its detail has two failed spans, so it is listed as failing.
+    const failed = i === 0 || i % 9 === 4;
     // The root span's own duration; every fifth trace has async work that outlives it.
     const root = Math.round((rpc === "ListOrders" ? 180 : 40) * (0.5 + random() * 2) * 100) / 100;
     return {
       traceId: i === 0 ? FIXTURE_TRACE_ID : `${(i * 40503).toString(16).padStart(6, "0")}77b34da6a3ce929d0e0e47${(i % 100).toString().padStart(2, "0")}`.slice(0, 32),
-      rootService: "api",
+      // A browser started every other trace: its root is the browser's span.
+      rootService: i % 2 === 0 ? "shop-web" : "api",
       rootOperation: PROCEDURE(rpc),
       startMs: window.endMs - (i + 1) * 9_000,
       durationMs: root + (i % 5 === 0 ? 120 : 0),
       rootDurationMs: root,
-      spanCount: 4 + (i % 5),
+      spanCount: i === 0 && crossService ? FIXTURE_CROSS_SERVICE_SPAN_COUNT : 4 + (i % 5),
       errorCount: failed ? 1 : 0,
-      services: ["api", "worker"],
+      // With crossService, trace 0's detail also crosses into inventory (fixtureTrace e1–e3).
+      services: i === 0 && crossService ? ["api", "worker", "inventory"] : ["api", "worker"],
+      userId: i % 4 === 3 ? "" : `u_${8812 + (i % 3)}`,
+      sessionId: i % 2 === 0 ? `sess-${(i * 7919 + 4099).toString(16).padStart(6, "0")}` : "",
+      ...(i % 2 === 0 ? { country: "DE", region: "Land Berlin", city: "Berlin" } : { country: "", region: "", city: "" }),
+      // A browser started every other trace: its client and the build that made the call.
+      client: i % 2 === 0 ? FIXTURE_CLIENTS[(i / 2) % FIXTURE_CLIENTS.length] : NO_CLIENT,
+      frontendVersion: i % 2 === 0 ? (i % 4 === 0 ? "v1.8.3" : "1.8.16") : "",
+      // Trace 0 ran on v1.8.3 everywhere, as its spans and the issue it belongs to say.
+      backendBuilds:
+        i === 0
+          ? [
+              { service: "api", version: "v1.8.3" },
+              { service: "worker", version: "v1.8.3" },
+              ...(crossService ? [{ service: "inventory", version: "v1.8.3" }] : []),
+            ]
+          : [
+              { service: "api", version: i % 6 === 0 ? "v1.7.91" : "v1.7.92" },
+              { service: "worker", version: "v1.7.92" },
+            ],
       source: "",
       operatorData: false,
     };
   });
 }
 
-/** One trace: an rpc that calls the database twice and enqueues work a worker picks up, with one failed span. */
-export function fixtureTrace(traceId: string, now: number): Trace {
+/** How many spans fixtureTrace has with `crossService`: its summary (trace 0) says the same. */
+export const FIXTURE_CROSS_SERVICE_SPAN_COUNT = 14;
+
+/**
+ * One trace: an rpc that calls the database twice and enqueues work a worker
+ * picks up, with one failed span.
+ *
+ * With `crossService` (the demo console, createFixtureApi's option of the same
+ * name) it also carries the instrumentation forge generates between and
+ * within services, which the demo's fg-hops / fg-inside steps point at:
+ *
+ *   a2      api        the generated per-method decorator (`orders.CreateOrder`)
+ *   d3 → e1            the worker's Connect client → inventory's server span:
+ *                      the trace crossed a service over HTTP headers
+ *   e2, e3  inventory  its method decorator and its `UPDATE stock`
+ *
+ * Without it the trace is exactly what it was, span for span: the waterfall
+ * tests pin its rows.
+ */
+export function fixtureTrace(traceId: string, now: number, { crossService = false }: { crossService?: boolean } = {}): Trace {
   const t0 = now - 60_000;
   const span = (spanId: string, parentSpanId: string, name: string, service: string, start: number, duration: number, extra: Partial<Span> = {}): Span => ({
     spanId,
@@ -221,7 +305,8 @@ export function fixtureTrace(traceId: string, now: number): Trace {
     status: "ok",
     statusMessage: "",
     attributes: { "rpc.system": "connect_rpc" },
-    resource: { "service.name": service, "service.version": "v1.7.15" },
+    // v1.8.3: the release the trace's issue (iss-orders-deadline) is new in.
+    resource: { "service.name": service, "service.version": "v1.8.3" },
     events: [],
     source: "",
     operatorData: false,
@@ -244,8 +329,22 @@ export function fixtureTrace(traceId: string, now: number): Trace {
       span("b4", "a1", "nats publish orders.created", "api", 150.0, 0.8, { kind: "producer" }),
       span("d1", "b4", "orders.created process", "worker", 152.3, 28.7, { kind: "consumer" }),
       span("d2", "d1", "UPDATE inventory", "worker", 155.0, 21.4, { attributes: { "db.system": "postgresql", "db.operation": "UPDATE" } }),
+      ...(crossService ? crossServiceSpans(span) : []),
     ],
   };
+}
+
+/** fixtureTrace's `crossService` spans (journeys/forge.tsx fg-hops, fg-inside). */
+function crossServiceSpans(span: (spanId: string, parentSpanId: string, name: string, service: string, start: number, duration: number, extra?: Partial<Span>) => Span): Span[] {
+  return [
+    span("a2", "a1", "orders.CreateOrder", "api", 1.0, 180.6, { kind: "internal", attributes: { "forge.method.id": "orders.v1.OrdersService/CreateOrder" } }),
+    span("d3", "d1", "inventory.v1.InventoryService/Reserve", "worker", 156.0, 19.6, { kind: "client", attributes: { "rpc.system": "connect_rpc", "rpc.service": "inventory.v1.InventoryService", "rpc.method": "Reserve" } }),
+    span("e1", "d3", "inventory.v1.InventoryService/Reserve", "inventory", 156.8, 18.2, { kind: "server", attributes: { "rpc.system": "connect_rpc", "rpc.method": "Reserve", "http.status_code": "200" } }),
+    span("e2", "e1", "inventory.Reserve", "inventory", 157.0, 17.7, { kind: "internal", attributes: { "forge.method.id": "inventory.v1.InventoryService/Reserve" } }),
+    span("e3", "e2", "UPDATE stock", "inventory", 157.5, 16.7, {
+      attributes: { "db.system": "postgresql", "db.operation": "UPDATE", "db.query.text": "UPDATE stock SET reserved = reserved + ? WHERE sku = ? AND available >= ?" },
+    }),
+  ];
 }
 
 function rpcPanels(rpc: string): Panel[] {
@@ -427,6 +526,58 @@ export function fixtureDayGrainedDashboard(): Dashboard {
 }
 
 /**
+ * forge's generated Product usage shape: sections with headings, headline
+ * figures that open beside their change (defaultCompare) with a trendSql
+ * sparkline each, palette colours, and retention as a heatmap. Opt-in
+ * (`dashboardsHeadline`).
+ */
+export function fixtureHeadlineDashboard(): Dashboard {
+  const figure = (id: string, title: string, color: string): Dashboard["panels"][number] => ({
+    id,
+    section: "glance",
+    title,
+    kind: "sql",
+    signal: "",
+    series: [],
+    sql: `SELECT uniqExact(UserId) AS "${title}" FROM product_events WHERE Timestamp >= {from:DateTime64(9)} AND Timestamp < {to:DateTime64(9)}`,
+    trendSql: `SELECT toDate(Timestamp) AS day, uniqExact(UserId) AS "${title}" FROM product_events WHERE Timestamp >= {from:DateTime64(9)} AND Timestamp < {to:DateTime64(9)} GROUP BY day ORDER BY day`,
+    unit: "count",
+    display: { color },
+    width: 6,
+    height: 4,
+  });
+  return {
+    id: "usage",
+    title: "shop: product usage",
+    filters: [],
+    annotations: [],
+    defaultRange: "7d",
+    defaultCompare: "period",
+    sections: [
+      { id: "glance", title: "At a glance", description: "The headline figures, each beside its change against the previous period." },
+      { id: "retention", title: "Retention", description: "Whether people come back." },
+    ],
+    panels: [
+      {
+        id: "weekly-retention",
+        section: "retention",
+        title: "Weekly retention by cohort",
+        kind: "sql",
+        signal: "",
+        series: [],
+        sql: "SELECT concat(toString(cohort), ' · ', toString(count()), ' users') AS \"Cohort (week of)\", 0.5 AS \"W1\" FROM cohorts GROUP BY cohort ORDER BY cohort",
+        unit: "percent",
+        display: { style: "heatmap", color: "violet" },
+        width: 24,
+        height: 10,
+      },
+      figure("dau", "Daily active users", "blue"),
+      figure("wau", "Weekly active users", "cyan"),
+    ],
+  };
+}
+
+/**
  * A sql panel answered the way control-plane answers it: a Date first column is
  * one point per UTC calendar day whose start falls in the window (its time is
  * that date's midnight UTC), tagged as UTC days; a {step} statement is one
@@ -435,6 +586,26 @@ export function fixtureDayGrainedDashboard(): Dashboard {
 function fixtureSqlPanel(panel: Panel, window: TimeWindow): PanelResult {
   const base = { kind: "sql", unit: panel.unit ?? "", truncated: false, columns: [] as string[], rows: [] as PanelResult["rows"], ...NO_BROWSER_ROWS, ...NO_METRIC_EXTRAS, window };
   const DAY = 86_400_000;
+  // One row of figures (no GROUP BY), named by its alias: 42 today, 36 the period before.
+  if (!/GROUP BY/i.test(panel.sql ?? "")) {
+    const alias = /AS "([^"]+)"/.exec(panel.sql ?? "")?.[1] ?? "value";
+    const earlier = window.endMs < Date.now() - DAY;
+    return { ...base, stepSeconds: 0, series: [], columns: [alias], rows: [{ group: {}, values: [earlier ? 36 : 42] }] };
+  }
+  // A retention table: a row per weekly cohort, its size in its name, a share per later week.
+  if (/cohort/.test(panel.sql ?? "")) {
+    return {
+      ...base,
+      stepSeconds: 0,
+      series: [],
+      columns: ["W1", "W2", "W3"],
+      rows: [
+        { group: { "Cohort (week of)": "2026-10-05 · 40 users" }, values: [0.5, 0.25, 0.1] },
+        { group: { "Cohort (week of)": "2026-10-12 · 32 users" }, values: [0.4, 0.2, null] },
+        { group: { "Cohort (week of)": "2026-10-19 · 12 users" }, values: [0.3, null, null] },
+      ],
+    };
+  }
   if (/toDate\(/.test(panel.sql ?? "")) {
     const first = Math.floor(window.startMs / DAY) * DAY;
     const days: number[] = [];
@@ -443,6 +614,11 @@ function fixtureSqlPanel(panel: Panel, window: TimeWindow): PanelResult {
     const failed = [0, 0, 1, 3439, 5479, 17, 2];
     const at = (i: number, from: number[]) => from[from.length - days.length + i] ?? from[0]!;
     const timestamps = days.map((d) => d / 1000);
+    // A figure's trend: one line, named by the figure's alias.
+    const alias = /AS "([^"]+)"/.exec(panel.sql ?? "")?.[1];
+    if (alias) {
+      return { ...base, stepSeconds: 3600, bucketSeconds: 86_400, bucketTimezone: "UTC", series: [{ label: alias, group: {}, timestamps, values: days.map((_, i) => 30 + ((i * 5) % 13)), value: null }] };
+    }
     return {
       ...base,
       stepSeconds: 3600,
@@ -619,7 +795,17 @@ export function fixturePanel(
     return { ...base, series: [], ...fixtureBrowserPanel(panel, window, services) };
   }
 
-  if (panel.kind === "table") {
+  // A latency heatmap: most events fast, a slow tail that thickens mid-window.
+  if (panel.kind === "heatmap") {
+    const step = Math.max(60, Math.round((window.endMs - window.startMs) / 1000 / 30));
+    const bounds = [0, 5, 10, 25, 50, 100, 250, 500, 1000];
+    const heatmap = Array.from({ length: 30 }, (_, t) =>
+      bounds.slice(0, -1).map((low, b) => ({ timeSec: Math.round(window.startMs / 1000) + t * step, low, high: bounds[b + 1]!, count: Math.round(400 / (b + 1) ** 1.6 + (b > 4 && t > 12 && t < 20 ? 30 : 0)) }))
+    ).flat();
+    return { ...base, series: [], stepSeconds: step, heatmap, window };
+  }
+  // A bar panel is answered as a table is: one row per group, the largest first.
+  if (panel.kind === "table" || panel.kind === "bar") {
     return {
       ...base,
       series: [],
@@ -940,6 +1126,10 @@ export interface FixtureOptions extends AlertingFixtureOptions, DeliveryFixtureO
   /** An environment that has sent nothing. */
   empty?: boolean;
   graphUnknown?: boolean;
+  /** "shop": the demo's service graph (fixtureShopGraph), the app the journey's trace crosses. Default: the graph tests' fixtureGraph. */
+  graph?: "shop";
+  /** The toured trace crosses into inventory (fixtureTrace's `crossService`), with its log line and summary to match. The demo console's. */
+  crossService?: boolean;
   /** DEV-only negative cases for catalog review regressions. */
   graphReview?: "retained-denied" | "retained-unavailable" | "rpc-201" | "artifacts-21" | "unsupported";
   /** Called for each RPC, with its request — tests assert on what was asked. */
@@ -967,7 +1157,7 @@ export function createFixtureApi(options: FixtureOptions = {}): ObservabilityApi
   const delivery = createDeliveryFixture(options, call);
   return {
     currentOrgId: async () => FIXTURE_ORG,
-    getServiceGraph: (req) => call("GetServiceGraph", req, () => fixtureGraph(options.empty, options.graphUnknown)),
+    getServiceGraph: (req) => call("GetServiceGraph", req, () => (options.graph === "shop" ? fixtureShopGraph(req.window) : fixtureGraph(options.empty, options.graphUnknown))),
     getServiceGraphCatalog: (req) => call("GetServiceGraphCatalog", req, () => {
       catalogCalls++;
       if (options.graphReview === "unsupported") throw new ConnectError("unknown procedure", Code.Unimplemented);
@@ -993,18 +1183,22 @@ export function createFixtureApi(options: FixtureOptions = {}): ObservabilityApi
         const make = (scale: number, seed: number, group: Record<string, string>) => [
           { ...health("api", req.window, 42 * scale, 0.012 / scale, 3 + seed, 86 / scale), group },
           { ...health("worker", req.window, 6 * scale, 0.004, 5 + seed, 240), group },
+          // The demo's sample app: the inventory service the toured trace crosses into.
+          ...(options.crossService ? [{ ...health("inventory", req.window, 6 * scale, 0.001, 2 + seed, 21), group }] : []),
         ];
         const all = groupBy.length
           ? fixtureGroups(groupBy, req).flatMap((group, index) => make(1 / (index + 1), index * 7, group))
           : make(1, 0, {});
         const services = req.services?.length ? all.filter((s) => req.services!.includes(s.name)) : all;
+        // A Reliant daemon's operator row; the demo's sample app has no daemon.
         const daemon: ServiceHealth = { ...health("reliant-daemon", req.window, 0, 0, 9, 0), requestCount: 0, requestRate: 0, errorLogCount: 3, source: "daemon", operatorData: true };
-        return { services: req.services?.length || groupBy.length ? services : [...services, daemon], trendStepSeconds };
+        const withDaemon = !(req.services?.length || groupBy.length) && !options.crossService;
+        return { services: withDaemon ? [...services, daemon] : services, trendStepSeconds };
       }),
     searchLogs: (req) =>
       call("SearchLogs", req, () => {
         if (options.empty) return { records: [], nextCursor: "" };
-        let records = logs(req.window, 60);
+        let records = logs(req.window, 60, options.crossService);
         if (req.services.length) records = records.filter((r) => req.services.includes(r.service));
         if (req.severities.length) records = records.filter((r) => req.severities.includes(r.severity));
         if (req.traceId) records = records.filter((r) => r.traceId === req.traceId);
@@ -1014,10 +1208,16 @@ export function createFixtureApi(options: FixtureOptions = {}): ObservabilityApi
     listTraces: (req) =>
       call("ListTraces", req, () => {
         if (options.empty) return { traces: [], nextCursor: "", red: null, redGroups: [] };
-        let traces = traceSummaries(req.window, 40);
+        let traces = traceSummaries(req.window, 40, options.crossService);
         if (req.rootSpanName) traces = traces.filter((t) => t.rootOperation.includes(req.rootSpanName));
         if (req.errorsOnly) traces = traces.filter((t) => t.errorCount > 0);
         if (req.minDurationMs) traces = traces.filter((t) => t.durationMs >= req.minDurationMs);
+        if (req.userId) traces = traces.filter((t) => t.userId === req.userId);
+        if (req.sessionId) traces = traces.filter((t) => t.sessionId === req.sessionId);
+        if (req.browser) traces = traces.filter((t) => t.client.browserName === req.browser);
+        if (req.os) traces = traces.filter((t) => t.client.osName === req.os);
+        if (req.frontendVersion) traces = traces.filter((t) => t.frontendVersion === req.frontendVersion);
+        if (req.backendVersion) traces = traces.filter((t) => t.backendBuilds.some((b) => b.version === req.backendVersion));
         const durations = traces.map((t) => t.durationMs).sort((a, b) => a - b);
         const at = (p: number) => durations[Math.min(durations.length - 1, Math.floor(p * durations.length))] ?? 0;
         const errors = traces.filter((t) => t.errorCount > 0).length;
@@ -1038,7 +1238,7 @@ export function createFixtureApi(options: FixtureOptions = {}): ObservabilityApi
           }));
         return { traces: traces.slice(0, req.limit), nextCursor: "", red, redGroups };
       }),
-    getTrace: (req) => call("GetTrace", req, () => fixtureTrace(req.traceId, req.window.endMs)),
+    getTrace: (req) => call("GetTrace", req, () => fixtureTrace(req.traceId, req.window.endMs, { crossService: options.crossService })),
     queryPanel: (req) =>
       call("QueryPanel", req, () => {
         const { panel } = req;
@@ -1094,5 +1294,92 @@ export function createFixtureApi(options: FixtureOptions = {}): ObservabilityApi
         return { workloads: req.services?.length ? all.filter((w) => req.services!.includes(w.workload)) : all, truncated: false, jobs: fixtureJobs(req, req.window.endMs), jobsTruncated: false };
       }),
     getWorkload: (req) => call("GetWorkload", req, () => fixtureWorkloadDetail(req, req.workload, req.container, req.window)),
+    queryDatabasePanel: (req) => call("QueryDatabasePanel", req, () => fixtureDatabasePanel(req)),
+    listDashboardDatabases: (environmentId) => call("ListDashboardDatabases", { environmentId }, () => (options.empty ? [] : FIXTURE_DATABASES)),
   };
+}
+
+/** The environment's one dashboards-enabled database, with what its dashboard role may read. */
+export const FIXTURE_DATABASES: DashboardDatabase[] = [
+  {
+    name: "app",
+    rowCap: 1000,
+    timeoutMs: 5000,
+    replica: "ro",
+    tablesError: "",
+    tables: [
+      {
+        schema: "public",
+        name: "users",
+        columns: [
+          { name: "id", type: "bigint" },
+          { name: "email", type: "text" },
+          { name: "plan", type: "text" },
+          { name: "created_at", type: "timestamp with time zone" },
+        ],
+      },
+      {
+        schema: "public",
+        name: "orders",
+        columns: [
+          { name: "id", type: "bigint" },
+          { name: "user_id", type: "bigint" },
+          { name: "state", type: "text" },
+          { name: "total_cents", type: "bigint" },
+          { name: "created_at", type: "timestamp with time zone" },
+        ],
+      },
+    ],
+  },
+];
+
+/**
+ * A postgres panel answered the way control-plane answers it: the dbquery
+ * guard's refusal for anything but a read (InvalidArgument, its own words), a
+ * series per value column when the panel names a time column, one figure
+ * otherwise.
+ */
+function fixtureDatabasePanel(req: QueryDatabasePanelInput): DatabasePanelResult {
+  const sql = req.query.sql.trim();
+  const leader = (sql.match(/^[A-Za-z]+/)?.[0] ?? "").toUpperCase();
+  if (!["SELECT", "WITH", "TABLE", "VALUES"].includes(leader)) {
+    throw new ConnectError(`dbquery: refused (statement_not_read_only): the statement starts with ${leader || "nothing"}; a dashboard query may only SELECT, WITH, TABLE or VALUES`, Code.InvalidArgument);
+  }
+  if (/\$[4-9]/.test(sql)) throw new ConnectError("the statement references $4; a postgres panel binds only $1 (from), $2 (to) and $3 (step)", Code.InvalidArgument);
+  const base = {
+    kind: "postgres",
+    unit: "",
+    truncated: false,
+    truncatedBy: "",
+    columns: [] as string[],
+    rows: [] as PanelResult["rows"],
+    series: [] as PanelResult["series"],
+    ...NO_BROWSER_ROWS,
+    ...NO_METRIC_EXTRAS,
+    window: req.window,
+    database: req.query.database || "app",
+    replica: "ro",
+    servedFrom: "db",
+    durationMs: 12,
+  };
+  if (req.query.draw === "line" || req.query.time) {
+    const step = Math.max(60, Math.round((req.window.endMs - req.window.startMs) / 1000 / 24));
+    const timestamps = Array.from({ length: 24 }, (_, i) => Math.round(req.window.startMs / 1000) + i * step);
+    const values = req.query.values?.length ? req.query.values : ["signups"];
+    return {
+      ...base,
+      stepSeconds: step,
+      bucketSeconds: step,
+      series: values.map((label, n) => ({ label, group: {}, timestamps, values: timestamps.map((_, i) => 12 + n * 5 + ((i * 5) % 9)), value: null })),
+    };
+  }
+  if (req.query.draw === "table" || req.query.draw === "bar") {
+    return {
+      ...base,
+      stepSeconds: 0,
+      columns: ["orders"],
+      rows: ["paid", "pending", "refunded"].map((state, i) => ({ group: { state }, values: [420 / (i + 1)] })),
+    };
+  }
+  return { ...base, stepSeconds: 0, columns: ["tables"], rows: [{ group: {}, values: [14] }] };
 }

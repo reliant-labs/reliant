@@ -9,9 +9,13 @@ lerna-debug.log*
 
 node_modules
 dist
+dist-demo
+dist-demo.*
 dist-ssr
 *.local
 data/
+# The forge demo's recorded fixtures (scripts/demo/capture-forge-scaffold.sh) are committed.
+!src/components/Forge/Demo/howBuilt/data/
 
 # Environment files
 .env
