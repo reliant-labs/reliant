@@ -170,7 +170,9 @@ func TestSandbox_ARunDirectoryReplacedBeforeTheInitStartsRefusesTheCommand(t *te
 	cmd.Dir = t.TempDir()
 	cmd.Env = []string{"PATH=/usr/bin:/bin"}
 	require.Empty(t, Apply(cmd, selfPath(t), Plan{}))
-	runDir := cmd.ExtraFiles[len(cmd.ExtraFiles)-3].Name()
+	// Apply appends the run directory, its parent, the spec pipe and the
+	// liveness pipe, in that order.
+	runDir := cmd.ExtraFiles[len(cmd.ExtraFiles)-4].Name()
 	require.NoError(t, os.Rename(runDir, runDir+".moved"))
 	require.NoError(t, os.Mkdir(runDir, 0o700))
 	require.NoError(t, os.WriteFile(filepath.Join(runDir, "keep"), []byte("theirs"), 0o600))
