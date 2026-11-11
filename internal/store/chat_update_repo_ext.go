@@ -122,7 +122,8 @@ const chatUpdateHeadUpsertSQL = `
 const applyChatUpdateHeadSQL = `
 	INSERT INTO chat_update_heads (chat_id, head_key, update_id, sequence_number, update_type, entity_id, data, created_at)
 	SELECT chat_id, head_key, id, sequence_number, update_type, entity_id, data, created_at
-	  FROM (SELECT v.*, (` + chatUpdateHeadKeySQL + `) AS head_key
+	  FROM (SELECT v.chat_id, v.id, v.sequence_number, v.update_type, v.entity_id, v.data, v.created_at,
+	               (` + chatUpdateHeadKeySQL + `) AS head_key
 	          FROM (VALUES ($1::text, $2::text, $3::bigint, $4::integer, $5::text, $6::text, $7::timestamptz))
 	               AS v(chat_id, id, sequence_number, update_type, entity_id, data, created_at)) r
 	 WHERE head_key IS NOT NULL` + chatUpdateHeadUpsertSQL
@@ -135,7 +136,8 @@ const applyChatUpdateHeadSQL = `
 const backfillChatUpdateHeadsSQL = `
 	INSERT INTO chat_update_heads (chat_id, head_key, update_id, sequence_number, update_type, entity_id, data, created_at)
 	SELECT chat_id, head_key, id, sequence_number, update_type, entity_id, data, created_at
-	  FROM (SELECT s.*, (` + chatUpdateHeadKeySQL + `) AS head_key
+	  FROM (SELECT s.chat_id, s.id, s.sequence_number, s.update_type, s.entity_id, s.data, s.created_at,
+	               (` + chatUpdateHeadKeySQL + `) AS head_key
 	          FROM (` + SnapshotHeadsSQL + `) s) r
 	 WHERE head_key IS NOT NULL` + chatUpdateHeadUpsertSQL
 
