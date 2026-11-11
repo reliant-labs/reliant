@@ -147,9 +147,28 @@ describe("OrgSwitcher", () => {
     await waitFor(() => expect(getActiveOrgId()).toBe("org-b"));
     expect(localStorage.getItem("reliant.activeOrg.alice")).toBe("org-b");
     await waitFor(() => expect(queryClient.getQueryData(["forge", "cloud-envs", "app"])).toBeUndefined());
-    // A chat is the user's, not an org's: it survives the switch.
+    // The binding drops only the org-scoped roots; the product's lists are
+    // its onSwitch's to reset (followActiveOrg), which this harness omits.
     expect(queryClient.getQueryData(["chats", "list"])).toEqual(["a chat"]);
     expect(screen.getByTestId("org-switcher-name")).toHaveTextContent("Side Project");
+  });
+
+  it("tells the product app about a switch, once, and not about the first load", async () => {
+    listMyOrganizations.mockResolvedValue({ orgs: [ACME, SIDE], defaultOrgId: "org-a" });
+    const onSwitch = vi.fn();
+    const { queryClient } = renderWithQuery(
+      <>
+        <ActiveOrgBinding onSwitch={onSwitch} />
+        <OrgSwitcher />
+      </>,
+    );
+    await waitFor(() => expect(getActiveOrgId()).toBe("org-a"));
+    expect(onSwitch).not.toHaveBeenCalled();
+
+    await userEvent.click(await screen.findByTestId("org-switcher"));
+    await userEvent.click(await screen.findByRole("menuitemradio", { name: /Side Project/ }));
+    await waitFor(() => expect(onSwitch).toHaveBeenCalledTimes(1));
+    expect(onSwitch).toHaveBeenCalledWith("org-b", queryClient);
   });
 
   it("restores the person's own choice on the next visit", async () => {

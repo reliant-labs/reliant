@@ -407,4 +407,9 @@ export interface UserUpdate {
   entity_id: string;
   data: Record<string, unknown>;
   created_at: string;
+  /**
+   * The org the update is about (UserUpdateData.org_id); absent for one about
+   * nothing of an org, or from a server that predates the field.
+   */
+  org_id?: string;
 }
