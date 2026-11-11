@@ -34,6 +34,8 @@ type fakeRepo struct {
 	// subjects are the users' GitHub ids as the access refresher recorded
 	// them, by user id.
 	subjects map[string]fakeSubject
+	// pauses counts the pauses PauseTrigger wrote.
+	pauses int
 }
 
 type fakeSubject struct {

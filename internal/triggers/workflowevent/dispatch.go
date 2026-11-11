@@ -81,6 +81,15 @@ type Dispatcher struct {
 	filter    FilterFunc
 	workflows triggers.WorkflowResolver
 	now       func() time.Time
+	pause     *triggers.AutoPause
+}
+
+// WithAutoPause lets the dispatcher pause a trigger whose creator left its
+// org (triggers.AutoPause). Without it, each such match is recorded as
+// failed.
+func (d *Dispatcher) WithAutoPause(p *triggers.AutoPause) *Dispatcher {
+	d.pause = p
+	return d
 }
 
 // NewDispatcher builds a dispatcher. filter nil uses EvaluateFilter.
@@ -243,6 +252,15 @@ func (d *Dispatcher) fire(ctx context.Context, trigger *core.Trigger, spec Spec,
 		launchSpec.CatalogPin = recorded.CatalogPin
 		return d.launch(ctx, trigger, ev, chain, recorded, launchEv, launchSpec)
 	}
+	// A creator who left the trigger's org: the first firing to find out
+	// records the failure and pauses the trigger (triggers.Firer.Fire).
+	left, err := triggers.CreatorLeftOrg(ctx, trigger)
+	if err != nil {
+		return nil, err
+	}
+	if left {
+		return d.refuseCreatorLeftOrg(ctx, trigger, ev, chain, nil)
+	}
 	// Which definition this firing resolves rides on its event row; a broken
 	// one refuses it before any guard or filter (triggers.Firer.Fire).
 	def, err := triggers.DefinitionOf(ctx, d.workflows, trigger)
@@ -338,12 +356,26 @@ func (d *Dispatcher) launch(ctx context.Context, trigger *core.Trigger, ev *core
 		return out, nil
 	}
 
+	if launch.OwnerLeftOrg(launchErr) {
+		return d.refuseCreatorLeftOrg(ctx, trigger, ev, chain, def)
+	}
 	var validation *launch.ValidationError
 	if errors.As(launchErr, &validation) || errors.Is(launchErr, launch.ErrNotFound) {
 		// Retrying cannot fix a spec that can never launch; record why.
 		return d.record(ctx, trigger, ev, chain, def, core.TriggerEventFailed, launchErr.Error())
 	}
 	return nil, fmt.Errorf("launch trigger %s for run event %s: %w", trigger.ID, ev.ID, launchErr)
+}
+
+// refuseCreatorLeftOrg records a firing whose trigger's creator has left its
+// org, pausing the trigger (triggers.AutoPause.Refuse). A pause that could
+// not be written is retried, recording nothing.
+func (d *Dispatcher) refuseCreatorLeftOrg(ctx context.Context, trigger *core.Trigger, ev *core.RunEvent, chain lineage.Lineage, def *core.TriggerEventDefinition) (*Result, error) {
+	outcome, detail, err := d.pause.Refuse(ctx, trigger)
+	if err != nil {
+		return nil, err
+	}
+	return d.record(ctx, trigger, ev, chain, def, outcome, detail)
 }
 
 // dedupeKey identifies one (trigger, run event) firing.

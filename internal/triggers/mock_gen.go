@@ -211,6 +211,32 @@ func (m *MockEventRepo) ListStalePendingTriggerEvents(ctx context.Context, older
 // Compile-time check.
 var _ EventRepo = (*MockEventRepo)(nil)
 
+// forge:section MockTriggerPauser
+// forge:hash=fd9eabb4219efd412efe711a09d5c08624f1dd2d40aa2a34d81c46d438d21a68
+
+// MockTriggerPauser is a test mock for the TriggerPauser interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockTriggerPauser.<Method>Func not set" error.
+type MockTriggerPauser struct {
+	contractkit.Recorder
+	PauseTriggerFunc func(context.Context, string, string) (bool, error)
+}
+
+// PauseTrigger records the call and delegates to PauseTriggerFunc when set.
+func (m *MockTriggerPauser) PauseTrigger(ctx context.Context, id string, reason string) (bool, error) {
+	m.Recorder.Record("PauseTrigger", ctx, id, reason)
+	if m.PauseTriggerFunc != nil {
+		return m.PauseTriggerFunc(ctx, id, reason)
+	}
+	return false, contractkit.MockNotSet("MockTriggerPauser", "PauseTrigger")
+}
+
+// Compile-time check.
+var _ TriggerPauser = (*MockTriggerPauser)(nil)
+
 // forge:section MockLauncher
 // forge:hash=9aa6fa5eaf57db8938a2013141c4c2a41723a04b51ae99ccc9583da798de64db
 
