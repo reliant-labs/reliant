@@ -144,7 +144,7 @@ func TestUnrecordedOriginFailsClosed(t *testing.T) {
 	// Archived runs stay out of the Archived tab too.
 	require.NoError(t, repo.UpdateChatState(ctx, "old-"+string(core.TriggerEventKindSchedule), ChatStateArchived, ""))
 	require.NoError(t, repo.UpdateChatState(ctx, "old-"+string(core.TriggerEventKindChatStart), ChatStateArchived, ""))
-	archived, err := repo.ListArchivedChats(ctx, "test-user")
+	archived, err := repo.ListArchivedChats(ctx, "test-user", nil)
 	require.NoError(t, err)
 	archivedIDs := map[string]bool{}
 	for _, a := range archived {
