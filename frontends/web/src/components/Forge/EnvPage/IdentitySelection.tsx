@@ -32,7 +32,7 @@ export function IdentityUserLink({ envId, user }: { envId: string; user: Identit
   const console = useContext(ForgeConsoleContext);
   const env = console?.roster.envs.find((e) => e.live?.id === envId);
   if (!identityDataLinksEnabled() || !console || !env || !validIdentityId(user.userId)) return null;
-  return <Link href={console.href({ kind: "environment", env: env.name }, { tab: "identity", user: user.userId })} className="text-xs text-primary-ink hover:underline">Open identity</Link>;
+  return <Link href={console.href({ kind: "users" }, { env: env.name, user: user.userId })} className="text-xs text-primary-ink hover:underline">Open identity</Link>;
 }
 export function IdentityAppDataLink({ envId, user }: { envId: string; user: IdentityUser }) {
   const console = useContext(ForgeConsoleContext);

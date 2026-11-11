@@ -22,6 +22,7 @@ import { IdentityApiProvider, type IdentityApi } from "@/services/controlPlane/i
 import type { IdentityStatus, IdentityUsersPage } from "@/services/controlPlane/identity/api";
 import type { LiveEnv } from "@/services/forge/live";
 
+import { ObsReadOnlyProvider } from "../../Observability/obsReadOnly";
 import { IdentityTab } from "../IdentityTab";
 
 const toasts = vi.hoisted(() => ({ success: vi.fn(), warning: vi.fn(), error: vi.fn(), info: vi.fn() }));
@@ -299,8 +300,42 @@ describe("IdentityTab", () => {
   it("explains an environment that declares no identity", async () => {
     const api = fakeApi({ getStatus: vi.fn(async () => status({ hasInstance: false })) });
     renderTab(api);
-    expect(await screen.findByTestId("identity-none")).toHaveTextContent("forge.ManagedIdentity");
+    const none = await screen.findByTestId("identity-none");
+    expect(none).toHaveTextContent("forge.ManagedIdentity");
+    // Designed, not blank: what it gives you, the one line that declares it, and where to read more.
+    expect(within(none).getByTestId("identity-none-points").querySelectorAll("li")).toHaveLength(4);
+    expect(within(none).getByTestId("identity-none-declaration")).toHaveTextContent("identity = forge.ManagedIdentity {}");
+    expect(within(none).getByText("deploy/kcl/prod/main.k")).toBeInTheDocument();
+    expect(within(none).getByRole("link", { name: /How hosted environments sign users in/ })).toHaveAttribute("href", expect.stringContaining("docs.reliantlabs.io"));
     expect(api.listUsers).not.toHaveBeenCalled();
+  });
+
+  it("lays the page out people first, with the sign-in service and export beside them", async () => {
+    renderTab(fakeApi(), { layout: "page" });
+    await screen.findByTestId("identity-user-u-alice");
+    const panels = [...screen.getByTestId("identity-tab").querySelectorAll("[data-testid='identity-users-panel'], [data-testid='identity-status'], [data-testid='identity-export']")];
+    expect(panels.map((panel) => panel.getAttribute("data-testid"))).toEqual(["identity-users-panel", "identity-status", "identity-export"]);
+  });
+
+  it("shows the verbs disabled, with the reason, in a read-only console", async () => {
+    const api = fakeApi();
+    render(
+      <QueryClientProvider client={createTestQueryClient()}>
+        <IdentityApiProvider api={api}>
+          <ObsReadOnlyProvider value={{ readOnly: true, reason: "Read-only demo" }}>
+            <IdentityTab envName="prod" lifecycle="deployed" live={LIVE} liveLoading={false} envNameById={() => undefined} layout="page" />
+          </ObsReadOnlyProvider>
+        </IdentityApiProvider>
+      </QueryClientProvider>
+    );
+    const alice = await screen.findByTestId("identity-user-u-alice");
+    for (const name of ["Roles", "Lock", "End sessions", "Delete"]) {
+      const button = within(alice).getByRole("button", { name });
+      expect(button).toBeDisabled();
+      expect(button).toHaveAttribute("title", "Read-only demo");
+    }
+    expect(within(screen.getByTestId("identity-invite")).getByRole("button", { name: /Send invitation/ })).toBeDisabled();
+    expect(api.lockUser).not.toHaveBeenCalled();
   });
 
   it("shows the reconciler's reason when the declaration was refused", async () => {

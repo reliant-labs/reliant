@@ -46,6 +46,7 @@ import { toast } from "@/lib/toast-manager";
 import { cn } from "@/lib/utils";
 
 import { formatAgo } from "../Observability/format";
+import { useObsReadOnly } from "../Observability/obsReadOnly";
 import { Panel } from "./EnvTabPanels";
 import { IdentityPasswordCodeDialog, type IssuedCode } from "./IdentityPasswordCodeDialog";
 
@@ -112,6 +113,9 @@ function IdentityUsersBody({
   // "unknown" (a server that predates the field) keeps offering email: it is
   // what that server does.
   const canEmail = status.mailDelivery !== "none";
+  // The demo console (and any read-only host) shows the verbs, disabled, with why.
+  const { readOnly, reason } = useObsReadOnly();
+  const lockedReason = readOnly ? (reason ?? "Read-only") : undefined;
 
   const [state, setState] = useState<IdentityUserFilter["state"]>(undefined);
   const filter = useMemo(() => ({ query, state }), [query, state]);
@@ -233,6 +237,7 @@ function IdentityUsersBody({
             reportsSignIns={reportsSignIns}
             busy={reset.isPending || resetLink.isPending || unlock.isPending}
             canEmail={canEmail}
+            lockedReason={lockedReason}
             onReset={() =>
               reset.mutate(user, { onSuccess: done(`Emailed ${user.email} a password reset link`), onError: failed("Couldn't send the reset") })
             }
@@ -305,7 +310,7 @@ function IdentityUsersBody({
       </Panel>
 
       {canManage && serving && (
-        <InvitePanel orgId={orgId} envId={envId} envName={envName} roles={roles} canEmail={canEmail} onIssued={setIssued} />
+        <InvitePanel orgId={orgId} envId={envId} envName={envName} roles={roles} canEmail={canEmail} onIssued={setIssued} lockedReason={lockedReason} />
       )}
 
       <IdentityPasswordCodeDialog issued={issued} onClose={closeIssued} />
@@ -356,6 +361,7 @@ function UserRow({
   reportsSignIns,
   busy,
   canEmail,
+  lockedReason,
   onReset,
   onResetLink,
   onUnlock,
@@ -372,6 +378,8 @@ function UserRow({
   reportsSignIns: boolean;
   busy: boolean;
   canEmail: boolean;
+  /** Why every verb is off (a read-only console), when it is. */
+  lockedReason?: string;
   onReset: () => void;
   onResetLink: () => void;
   onUnlock: () => void;
@@ -417,11 +425,11 @@ function UserRow({
         </div>
         {canManage && (
           <div className="flex flex-wrap items-center gap-1" data-testid="identity-user-actions">
-            <Button variant="ghost" size="xs" onClick={onEdit} aria-expanded={editing}>
+            <Button variant="ghost" size="xs" onClick={onEdit} aria-expanded={editing} disabled={!!lockedReason} title={lockedReason}>
               Roles
             </Button>
             {canEmail && (
-              <Button variant="ghost" size="xs" onClick={onReset} disabled={busy} title="Emails them a link to set a new password">
+              <Button variant="ghost" size="xs" onClick={onReset} disabled={busy || !!lockedReason} title={lockedReason ?? "Emails them a link to set a new password"}>
                 Email reset
               </Button>
             )}
@@ -429,22 +437,22 @@ function UserRow({
               variant="ghost"
               size="xs"
               onClick={onResetLink}
-              disabled={busy}
+              disabled={busy || !!lockedReason}
               leftIcon={<Link2 className="h-3 w-3" />}
-              title="A one-time link to set their password, for you to hand over"
+              title={lockedReason ?? "A one-time link to set their password, for you to hand over"}
             >
               Get reset link
             </Button>
             {user.state === "locked" ? (
-              <Button variant="ghost" size="xs" onClick={onUnlock} disabled={busy}>
+              <Button variant="ghost" size="xs" onClick={onUnlock} disabled={busy || !!lockedReason} title={lockedReason}>
                 Unlock
               </Button>
             ) : (
-              <Button variant="ghost" size="xs" onClick={() => onConfirm("lock")}>
+              <Button variant="ghost" size="xs" onClick={() => onConfirm("lock")} disabled={!!lockedReason} title={lockedReason}>
                 Lock
               </Button>
             )}
-            <Button variant="ghost" size="xs" onClick={() => onConfirm("revoke")}>
+            <Button variant="ghost" size="xs" onClick={() => onConfirm("revoke")} disabled={!!lockedReason} title={lockedReason}>
               End sessions
             </Button>
             <Button
@@ -452,8 +460,8 @@ function UserRow({
               size="xs"
               className="text-danger-ink!"
               onClick={() => onConfirm("delete")}
-              disabled={holdsDeclared}
-              title={holdsDeclared ? `Holds a declared role (${DECLARED_ROLE_NOTE}); the next reconcile would recreate them` : undefined}
+              disabled={holdsDeclared || !!lockedReason}
+              title={lockedReason ?? (holdsDeclared ? `Holds a declared role (${DECLARED_ROLE_NOTE}); the next reconcile would recreate them` : undefined)}
             >
               Delete
             </Button>
@@ -581,6 +589,7 @@ function InvitePanel({
   roles,
   canEmail,
   onIssued,
+  lockedReason,
 }: {
   orgId: string;
   envId: string;
@@ -588,6 +597,7 @@ function InvitePanel({
   roles: IdentityRole[];
   canEmail: boolean;
   onIssued: (issued: IssuedCode) => void;
+  lockedReason?: string;
 }) {
   const [email, setEmail] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -688,7 +698,8 @@ function InvitePanel({
             type="submit"
             size="sm"
             loading={invite.isPending}
-            disabled={!valid}
+            disabled={!valid || !!lockedReason}
+            title={lockedReason}
             leftIcon={returnCode ? <Link2 className="h-3.5 w-3.5" /> : <MailPlus className="h-3.5 w-3.5" />}
           >
             {returnCode ? "Invite and get link" : "Send invitation"}

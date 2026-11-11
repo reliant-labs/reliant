@@ -8,7 +8,7 @@ import { identityDataLinksEnabled, type IdentityTarget } from "./identityLinks-m
 
 export function IdentityRowLink({ env, target }: { env: { id: string; name: string }; target: IdentityTarget }) {
   const console = useContext(ForgeConsoleContext);
-  return console && identityDataLinksEnabled() ? <AvailableIdentityLink env={env} target={target} href={(search) => console.href({ kind: "environment", env: env.name }, { tab: "identity", ...search })} /> : null;
+  return console && identityDataLinksEnabled() ? <AvailableIdentityLink env={env} target={target} href={(search) => console.href({ kind: "users" }, { env: env.name, ...search })} /> : null;
 }
 function AvailableIdentityLink({ env, target, href }: { env: { id: string; name: string }; target: IdentityTarget; href: (target: IdentityTarget) => string }) {
   const org = useIdentityOrg();
@@ -16,5 +16,5 @@ function AvailableIdentityLink({ env, target, href }: { env: { id: string; name:
   // Status is scoped to the actual environment, not its identity's owner or a
   // previously selected environment. Errors/refusals never produce a link.
   if (status.error || !status.data?.hasInstance) return null;
-  return <Link href={href(target)} className="inline-flex text-xs text-primary-ink hover:underline" data-testid="data-open-identity">Open in Identity</Link>;
+  return <Link href={href(target)} className="inline-flex text-xs text-primary-ink hover:underline" data-testid="data-open-identity">Open in Users</Link>;
 }
