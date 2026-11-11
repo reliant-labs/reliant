@@ -454,6 +454,8 @@ export interface PanelDisplay {
   color?: string;
   /** Palette keys by series name: a series label, a sql value column, or a group value. Unnamed series take the rest of the palette. */
   colors?: Record<string, string>;
+  /** number and sql panels: draw each figure in full (1,284), never abbreviated (1.3k). */
+  exact?: boolean;
 }
 
 /**

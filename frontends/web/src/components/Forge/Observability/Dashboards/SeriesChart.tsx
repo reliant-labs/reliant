@@ -16,6 +16,7 @@ import type React from "react";
 import { useMemo, useState } from "react";
 
 import type { Panel, PanelResult, Unit } from "@/services/controlPlane/observability/types";
+import { spanMs } from "@/services/controlPlane/observability/window";
 
 import { UPlotChart, type ChartBand, type ChartSeries } from "../charts/UPlotChart";
 import {
@@ -137,9 +138,13 @@ export function TimeSeriesChart({ panel, data, unit, keys, compare, bands, onDri
     return [...main, ...compared];
   }, [drawn, drawOther, otherValues, otherErrorValues, rest.length, restErrors.length, previous, compareLabel, offsetSec, timestamps]);
 
+  // The panel's minStep IS its bucket (a weekly statement groups by toMonday):
+  // the server can only infer one from the first column's type, and a Date
+  // reads as a day whatever the statement grouped it by.
+  const bucketSeconds = panelBucketSeconds(panel, data);
   const calendar = useMemo(
-    () => (data.bucketTimezone === "UTC" ? { timezone: "UTC" as const, bucketSeconds: data.bucketSeconds } : undefined),
-    [data.bucketTimezone, data.bucketSeconds]
+    () => (data.bucketTimezone === "UTC" ? { timezone: "UTC" as const, bucketSeconds } : undefined),
+    [data.bucketTimezone, bucketSeconds]
   );
   const windowSec = useMemo(() => data.window && { startSec: data.window.startMs / 1000, endSec: data.window.endMs / 1000 }, [data.window]);
 
@@ -220,4 +225,10 @@ function bucketTime(sec: number, calendar?: { timezone: "UTC" }): string {
   const date = new Date(sec * 1000);
   if (calendar) return date.toLocaleDateString(undefined, { month: "short", day: "numeric", timeZone: "UTC" });
   return date.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+}
+
+/** A panel's bucket in seconds: its declared minStep, else what the server reported. */
+export function panelBucketSeconds(panel: Pick<Panel, "minStep">, data: Pick<PanelResult, "bucketSeconds">): number | undefined {
+  const declared = spanMs(panel.minStep);
+  return declared !== undefined ? declared / 1000 : data.bucketSeconds;
 }

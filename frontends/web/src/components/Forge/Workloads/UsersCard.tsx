@@ -33,7 +33,7 @@ import { UPlotChart } from "../Observability/charts/UPlotChart";
 import { describeChange } from "../Observability/Dashboards/PanelBody";
 import { groupOf } from "../Observability/Dashboards/dashboardGroups";
 import { CHART_PALETTE } from "../Observability/Dashboards/seriesModel";
-import { formatCount } from "../Observability/format";
+import { formatCount, formatFigure } from "../Observability/format";
 import { Panel } from "../Releases/releaseParts";
 
 /** The Overview panels the card reads, by forge's ids. */
@@ -93,15 +93,17 @@ export function UsersCard({ scope, project, range, usersHref, dashboardHref }: U
   if (!a.now && !n.now && !total) return null;
 
   const dau = daily.data?.series.find((s) => Object.keys(s.group).length === 0);
-  const rows: { label: string; value: { now: number | null; before: number | null }; testId: string }[] = [
-    { label: "Active", value: a, testId: "overview-users-active" },
-    { label: "New", value: n, testId: "overview-users-new" },
-    { label: "Returning", value: r, testId: "overview-users-returning" },
+  // A figure the spec marks exact (display.exact: the account and user counts) is drawn in full, as the Users page states it.
+  const exactOf = (panel: SpecPanel | undefined) => !!panel?.display?.exact;
+  const rows: { label: string; value: { now: number | null; before: number | null }; exact: boolean; testId: string }[] = [
+    { label: "Active", value: a, exact: exactOf(panels.active), testId: "overview-users-active" },
+    { label: "New", value: n, exact: exactOf(panels.fresh), testId: "overview-users-new" },
+    { label: "Returning", value: r, exact: exactOf(panels.returning), testId: "overview-users-returning" },
   ];
   return (
     <Panel
       title="Users"
-      meta={total !== null ? `${formatCount(total)} ${total === 1 ? "account" : "accounts"}` : undefined}
+      meta={total !== null ? `${formatFigure(total, "count", exactOf(panels.accounts))} ${total === 1 ? "account" : "accounts"}` : undefined}
       actions={
         usersHref ? (
           <Link href={usersHref} className="no-color inline-flex h-7 items-center gap-1 rounded-md px-2 text-xs text-ink-muted hover:bg-ink/5 hover:text-ink" data-testid="overview-users-link">
@@ -117,11 +119,11 @@ export function UsersCard({ scope, project, range, usersHref, dashboardHref }: U
         <p className="mb-2 text-2xs uppercase tracking-wide text-ink-muted">Last 7 days</p>
         <dl className="grid grid-cols-3 gap-3">
           {rows.map((row) => {
-            const change = describeChange(row.value.now, row.value.before, "count", "previous 7 days");
+            const change = describeChange(row.value.now, row.value.before, "count", "previous 7 days", row.exact);
             return (
               <div key={row.label} className="min-w-0" data-testid={row.testId}>
                 <dt className="text-xs text-ink-muted">{row.label}</dt>
-                <dd className="text-lg font-semibold tabular-nums text-ink">{row.value.now === null ? "—" : formatCount(row.value.now)}</dd>
+                <dd className="text-lg font-semibold tabular-nums text-ink">{row.value.now === null ? "—" : formatFigure(row.value.now, "count", row.exact)}</dd>
                 {change && (
                   <dd className="truncate text-2xs tabular-nums text-ink-muted" title={change}>
                     {change.replace(/ vs previous 7 days$/, "")}

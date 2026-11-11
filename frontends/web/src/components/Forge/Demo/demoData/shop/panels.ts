@@ -33,6 +33,7 @@ import {
 import { shopDatabase } from "./database";
 import { shopMetricPanel } from "./metrics";
 import { productAnalyticsPanel, shopCommerce } from "./productAnalytics";
+import { shopReleasesSqlPanel } from "./releases";
 import type { PanelKeys } from "./shopApi";
 
 const BLANK: Omit<PanelResult, "kind" | "unit"> = {
@@ -410,6 +411,10 @@ export function shopPanels(now: number): Pick<ObservabilityApi, PanelKeys> {
       // The built-in product analytics dashboards' sql panels, by panel id.
       const analytics = productAnalyticsPanel(req, now);
       if (analytics) return analytics;
+      if (panel.kind === "sql") {
+        const answered = shopReleasesSqlPanel(panel, req, now, { kind: panel.kind, unit: panel.unit ?? "", ...BLANK, window: req.window });
+        if (answered) return answered;
+      }
       if (panel.kind === "issues" || panel.kind === "sessions" || panel.kind === "search" || panel.kind === "sql" || panel.kind === "text") {
         // The browser kinds are read from issues/sessions by the views; search from SearchLogs.
         return { kind: panel.kind, unit: panel.unit ?? "", ...BLANK, window: req.window };

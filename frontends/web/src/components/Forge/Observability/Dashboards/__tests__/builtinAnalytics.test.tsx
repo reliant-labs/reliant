@@ -16,7 +16,7 @@ import type { Panel, PanelResult } from "@/services/controlPlane/observability/t
 import { countryFlag, isCountryCode } from "../../geo";
 import { groupIndex } from "../dashboardGroups";
 import { formatPercent as funnelPercent } from "../FunnelChart";
-import { countryColumn, funnelUnit, PanelBody } from "../PanelBody";
+import { countryColumn, describeChange, funnelUnit, PanelBody } from "../PanelBody";
 import { sqlPreviousFigures } from "../viewerModel";
 
 vi.mock("../../charts/UPlotChart", () => ({ UPlotChart: () => null }));
@@ -66,6 +66,19 @@ describe("forge's built-in product dashboards", () => {
     expect(funnelUnit("Visitors")).toBe("visitors");
     expect(funnelUnit("Count")).toBe("entrants");
     expect(funnelUnit(undefined)).toBe("entrants");
+  });
+
+  it("draw an exact figure in full, and an ordinary one compactly", () => {
+    const { unmount } = render(<PanelBody panel={sqlPanel({ unit: "count", display: { exact: true } })} query={{ data: figures(["Accounts"], [12_840]), isLoading: false, error: null }} />);
+    expect(screen.getByText("12,840")).toBeTruthy();
+    unmount();
+    render(<PanelBody panel={sqlPanel({ unit: "count" })} query={{ data: figures(["Accounts"], [12_840]), isLoading: false, error: null }} />);
+    expect(screen.getByText("12.8k")).toBeTruthy();
+  });
+
+  it("keep an exact figure's change in full when the previous period was zero", () => {
+    expect(describeChange(1_284, 0, "count", "previous 7 days", true)).toBe("▲ 1,284 vs previous 7 days");
+    expect(describeChange(1_284, 0, "count", "previous 7 days")).toBe("▲ 1.3k vs previous 7 days");
   });
 
   it("render the Overview's 7-day figures with their change, and a countries table with flags and names", () => {
