@@ -63,8 +63,10 @@ func usageDashboard(t *testing.T) dashspec.Dashboard {
 }
 
 // tableRef matches every table a statement reads: the name after FROM or
-// JOIN, unless it opens a subquery.
-var tableRef = regexp.MustCompile(`(?i)\b(?:FROM|JOIN)\s+([^\s(]+)`)
+// JOIN, unless it opens a subquery. Group 1 is set for ClickHouse's ARRAY JOIN
+// (and LEFT ARRAY JOIN), which unfolds an array of the rows already read
+// (`ARRAY JOIN range(7) AS offset`) and reads no table, so it is skipped.
+var tableRef = regexp.MustCompile(`(?i)\b(ARRAY\s+)?(?:FROM|JOIN)\s+([^\s(]+)`)
 
 // The two predicates every product_events read must carry: the viewer's
 // environment restriction and the dashboard's service filter. Each matches
@@ -103,8 +105,11 @@ func TestUsageDashboardReadsOnlyScopedProductEvents(t *testing.T) {
 			}
 			reads := 0
 			for _, m := range tableRef.FindAllStringSubmatch(p.SQL, -1) {
-				if m[1] != "product_events" {
-					t.Errorf("reads table %q; a product-usage panel reads only the unqualified product_events of the org's own database", m[1])
+				if m[1] != "" {
+					continue // ARRAY JOIN: no table
+				}
+				if m[2] != "product_events" {
+					t.Errorf("reads table %q; a product-usage panel reads only the unqualified product_events of the org's own database", m[2])
 					continue
 				}
 				reads++
