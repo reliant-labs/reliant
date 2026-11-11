@@ -40,7 +40,10 @@ var chatUpdatesWriteSQL = regexp.MustCompile(
 // they write it with.
 var chatUpdatesWriters = map[string][]string{
 	// AppendChatUpdate: inserts the row, then ApplyChatUpdateHead.
-	"internal/store/chat_update_repo_ext.go": {"CreateChatUpdate"},
+	// CompactChatUpdatesSQL (ledger retention): deletes only rows a newer row
+	// of the same (type, entity) or node supersedes, never the chat's newest,
+	// so every row a head points at stays (ledger_retention_heads_test.go).
+	"internal/store/chat_update_repo_ext.go": {"CreateChatUpdate", "DELETE FROM chat_updates"},
 	// SaveMessageAtomic: inserts the row, then ApplyChatUpdateHead.
 	"internal/store/save_message_atomic.go": {"CreateChatUpdate"},
 	// The account purge deletes the user's chat_update_heads beside it.
