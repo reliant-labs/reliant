@@ -69,9 +69,11 @@ func TestWriteTool_ConcurrentModification_StillErrors(t *testing.T) {
 
 	// Agent reads the file (awareness recorded)...
 	recordFileAwareness(chatID, thread, testFile)
-	// ...then someone else modifies it AFTER our awareness timestamp.
-	time.Sleep(10 * time.Millisecond)
+	// ...then someone else modifies it AFTER our awareness timestamp (stamped
+	// explicitly: the filesystem's coarse clock alone may not order them).
 	require.NoError(t, os.WriteFile(testFile, []byte("v2 external\n"), 0644))
+	later := time.Now().Add(time.Minute)
+	require.NoError(t, os.Chtimes(testFile, later, later))
 
 	tool := &writeTool{}
 	ctx := newTestToolContext(t, tempDir, chatID, thread)
