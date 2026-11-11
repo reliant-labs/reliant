@@ -17,7 +17,10 @@
  *                     Custom (dashboardGroups.ts): collapsible, with counts.
  *                     A row names its Forge workload; where it came from
  *                     (source, release, file) is secondary, in a tooltip.
- *     Templates       the gallery to start from (and a blank dashboard).
+ *     Templates       the gallery to start from (and a blank dashboard). The
+ *                     standard dashboards every project gets are not here:
+ *                     they are built-ins, listed in their groups, read-only
+ *                     with "Save as copy".
  *
  * Searching or narrowing opens the list. "New dashboard" offers a blank one,
  * a template, or a forge dashboard file to import. Authoring needs the admin
@@ -54,7 +57,7 @@ import { appLabel, type ObsEnvironment } from "../obsPlace";
 import { OBS_TOPICS, ObsError } from "../ObsStates";
 import { DashboardHeader } from "./DashboardHeader";
 import { DASHBOARD_GROUPS, GROUP_ABOUT, GROUP_LABELS, groupIndex, groupOf, workloadOf, type DashboardGroup } from "./dashboardGroups";
-import { filterIndex, NAV_STARRED, ownerOf, ownersOf, SOURCE_LABELS, starredOf, type SourceFilter } from "./dashboardModel";
+import { filterIndex, galleryTemplates, isStandardBuiltin, NAV_STARRED, ownerOf, ownersOf, SOURCE_LABELS, starredOf, type SourceFilter } from "./dashboardModel";
 import { DashboardsHub, type DashboardsHubHrefs } from "./DashboardsHub";
 import { NewDashboardDialog, SaveCopyDialog, envScopeOf } from "./dialogs";
 import { PanelBody } from "./PanelBody";
@@ -260,7 +263,7 @@ export function DashboardsList({ project, env, environments, search, onSearch, h
             </button>
             {templates.isLoading
               ? [0, 1, 2].map((i) => <div key={i} className="h-24 animate-pulse rounded-lg border border-border bg-surface motion-reduce:animate-none" />)
-              : (templates.data ?? []).map((template) => (
+              : galleryTemplates(templates.data ?? [], all).map((template) => (
                   <button
                     key={template.ref.key}
                     type="button"
@@ -571,7 +574,7 @@ function NameCell({ d }: { d: DashboardSummary }) {
             <Tag key={tag}>{tag}</Tag>
           ))}
         </span>
-      ) : d.source === "builtin" && d.viewKind !== "llm-usage" ? (
+      ) : d.source === "builtin" && d.viewKind !== "llm-usage" && !isStandardBuiltin(d) ? (
         // LLM usage is the caller's own: it needs no billing permission.
         <span className="text-xs text-ink-muted">Requires cost-read permission, not billing management.</span>
       ) : d.description ? (
@@ -594,6 +597,7 @@ function SourceCell({ d, environments }: { d: DashboardSummary; environments: re
 
 /** The tooltip's words: which release shipped it and from where, or who saved it and for which environments. */
 function originOf(d: DashboardSummary, environments: readonly ObsEnvironment[]): string {
+  if (isStandardBuiltin(d)) return "Built in for every project, over this project's data. Read-only here; save a copy to change it.";
   if (d.source === "builtin") return "Organization accounting from canonical billing sources.";
   if (d.release) {
     const shipped = d.release.releaseVersion ? `Shipped in ${d.release.releaseVersion}` : "Shipped in a release";
