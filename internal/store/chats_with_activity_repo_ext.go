@@ -147,6 +147,13 @@ func SearchChats(ctx context.Context, db orm.Context, f core.ChatSearchFilters) 
 	if f.State != nil {
 		q = q.Where("chats_with_activity.state = ?", *f.State)
 	}
+	if f.Org != nil {
+		if f.Org.IncludeUnassigned {
+			q = q.Where("(chats_with_activity.org_id = ? OR chats_with_activity.org_id IS NULL)", f.Org.OrgID)
+		} else {
+			q = q.Where("chats_with_activity.org_id = ?", f.Org.OrgID)
+		}
+	}
 	q = q.Where("(chats_with_activity.title LIKE ? OR mcb.content LIKE ?)", pattern, pattern).
 		OrderExpr("chats_with_activity.last_active DESC")
 	if f.Limit > 0 {
@@ -172,6 +179,9 @@ func SearchChats(ctx context.Context, db orm.Context, f core.ChatSearchFilters) 
 // automation archives its own runs once they succeed; those are history in
 // Runs (ListRuns with include_archived), not chats the user put away.
 //
+// ?1 narrows it to one org ("" lists every org), and ?2 also lists the chats
+// with no org yet, as core.OrgScope decides: one statement text either way.
+//
 // The view's columns are named, never c.*: migrations re-create this view
 // with new columns, and a star prepared before one fails after it
 // (columns.go).
@@ -186,17 +196,22 @@ LEFT JOIN projects p ON c.project_id = p.id
 WHERE c.state = 3
   AND c.user_id = ?0
   AND c.list_in_sidebar
+  AND (?1 = '' OR c.org_id = ?1 OR (?2 AND c.org_id IS NULL))
 ORDER BY c.updated_at DESC`
 
 // ListArchivedChats lists the user's archived chats, most recently updated
-// first.
-func ListArchivedChats(ctx context.Context, db orm.Context, userID string) ([]*core.ArchivedChatInfo, error) {
+// first: those of org's organization, or every one when org is nil.
+func ListArchivedChats(ctx context.Context, db orm.Context, userID string, org *core.OrgScope) ([]*core.ArchivedChatInfo, error) {
+	orgID, unassigned := "", false
+	if org != nil {
+		orgID, unassigned = org.OrgID, org.IncludeUnassigned
+	}
 	var rows []struct {
 		ChatsWithActivity
 		WorktreeName      *string    `bun:"worktree_name"`
 		WorktreeDeletedAt *time.Time `bun:"worktree_deleted_at"`
 	}
-	if err := db.Bun().NewRaw(listArchivedChatsSQL, userID).Scan(ctx, &rows); err != nil {
+	if err := db.Bun().NewRaw(listArchivedChatsSQL, userID, orgID, unassigned).Scan(ctx, &rows); err != nil {
 		return nil, fmt.Errorf("failed to list archived chats: %w", err)
 	}
 	items := make([]*core.ArchivedChatInfo, len(rows))

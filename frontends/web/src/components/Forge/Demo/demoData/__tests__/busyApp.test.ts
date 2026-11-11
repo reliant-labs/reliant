@@ -169,3 +169,24 @@ describe("shop's busy app", () => {
     expect(seen.size).toBe(BUSY_SERVICES.length * DEMO_PROFILE_TYPES.length);
   });
 });
+
+// The tour's "One request, end to end" step tells the visitor to open the
+// toured trace "at the top" of the traces view, which renders only the rows on
+// screen (about 20 on a desktop). Generated traffic follows the time of day, so
+// this must hold at every hour, not only at NOW (RC-04): with the trace a minute
+// old it ranked 13th to 46th, and journey-forge.spec.ts failed from 05:00Z on.
+describe("the toured trace", () => {
+  it("is in the traces view's first ten rows at every hour of the day", async () => {
+    for (let h = 0; h < 24; h++) {
+      const at = Date.UTC(2026, 10, 11, h, 7, 0);
+      for (const envIds of [[], ["env-prod"]]) {
+        // The last five minutes: only what started after the toured trace can rank above it,
+        // and an hour-long window per hour of the day made this test slow under load.
+        const res = await createBusyApp(at).listTraces(traces({ startMs: at - 5 * 60_000, endMs: at }, { envIds, limit: 100 }));
+        const rank = res.traces.findIndex((t) => t.traceId === TOURED);
+        expect(rank, `at ${h}:07 UTC in ${JSON.stringify(envIds)}`).toBeGreaterThanOrEqual(0);
+        expect(rank, `at ${h}:07 UTC in ${JSON.stringify(envIds)}`).toBeLessThan(10);
+      }
+    }
+  });
+});

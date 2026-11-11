@@ -20,6 +20,7 @@ import { RunService } from "@/gen/reliant/v1/run_pb";
 import { TriggerService } from "@/gen/reliant/v1/trigger_pb";
 import { WorkflowService } from "@/gen/reliant/v1/workflow_pb";
 import { DaemonService } from "@/gen/controlplane/services/daemon/v1/daemon_pb";
+import { InboxService } from "@/gen/reliant/v1/inbox_pb";
 
 const state = vi.hoisted(() => ({ controlPlaneUrl: "https://admin.example.test" }));
 
@@ -202,7 +203,10 @@ describe("orgInterceptor", () => {
     await connectClient(TriggerService).listTriggers({});
     await connectClient(TriggerService).createTrigger({});
     await connectClient(RunService).listRuns({});
-    expect(bodies).toHaveLength(11);
+    await connectClient(ChatService).listArchivedChats({});
+    await connectClient(ChatService).searchChats({ query: "needle" });
+    await connectClient(InboxService).listInbox({});
+    expect(bodies).toHaveLength(14);
     for (const b of bodies) expect(b.body.orgId, b.url).toBe("org-b");
   });
 

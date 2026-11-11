@@ -2,7 +2,7 @@ module github.com/reliant-labs/reliant
 
 go 1.27.0
 
-toolchain go1.27.3
+toolchain go1.27.4
 
 require (
 	buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go v1.36.12-20260825204119-511051f7f437.2
@@ -40,7 +40,7 @@ require (
 	github.com/prometheus/client_golang v1.25.0
 	github.com/prometheus/client_model v0.6.3
 	github.com/reliant-labs/forge v1.3.1-0.20261109191431-de8e6d23783c
-	github.com/reliant-labs/reliant/sdk/go v0.0.0-20261110200307-c2b771726d45
+	github.com/reliant-labs/reliant/sdk/go v0.0.0-20261111050524-eb0f298e594a
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.1.0

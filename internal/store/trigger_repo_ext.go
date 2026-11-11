@@ -196,7 +196,13 @@ func ReplaceTrigger(ctx context.Context, db orm.Context, t *core.Trigger) error 
 	if err != nil {
 		return err
 	}
-	if err := writeTrigger(ctx, db, row, "definition", triggerDefinitionColumns...); err != nil {
+	columns := triggerDefinitionColumns
+	if t.Enabled {
+		// Enabling a trigger the system paused clears why it was paused; a
+		// definition that stays disabled keeps the reason it has.
+		columns = append(append([]string(nil), columns...), TriggerFieldPausedReason)
+	}
+	if err := writeTrigger(ctx, db, row, "definition", columns...); err != nil {
 		return err
 	}
 	if t.OrgID == nil {
@@ -218,9 +224,17 @@ func RemoveTrigger(ctx context.Context, db orm.Context, id string) error {
 }
 
 // SetTriggerEnabled turns a trigger on or off, or returns
-// core.ErrTriggerNotFound.
+// core.ErrTriggerNotFound. Either way it clears paused_reason: a person
+// pausing or resuming it is the reason now.
 func SetTriggerEnabled(ctx context.Context, db orm.Context, id string, enabled bool) error {
-	return writeTrigger(ctx, db, &Trigger{ID: id, Enabled: &enabled}, "enabled", TriggerFieldEnabled)
+	return writeTrigger(ctx, db, &Trigger{ID: id, Enabled: &enabled}, "enabled", TriggerFieldEnabled, TriggerFieldPausedReason)
+}
+
+// PauseTrigger turns a trigger off with the reason the system paused it
+// (core.TriggerPaused*), or returns core.ErrTriggerNotFound.
+func PauseTrigger(ctx context.Context, db orm.Context, id, reason string) error {
+	enabled := false
+	return writeTrigger(ctx, db, &Trigger{ID: id, Enabled: &enabled, PausedReason: &reason}, "paused", TriggerFieldEnabled, TriggerFieldPausedReason)
 }
 
 // SetTriggerWebhookTokenHash rotates a webhook trigger's token hash. The hash
@@ -433,6 +447,10 @@ func triggerFromCore(t *core.Trigger) (*Trigger, error) {
 		poolID := t.MachinePoolID
 		row.MachinePoolID = &poolID
 	}
+	if !t.Enabled && t.PausedReason != "" {
+		reason := t.PausedReason
+		row.PausedReason = &reason
+	}
 	return row, nil
 }
 
@@ -477,6 +495,11 @@ func triggerToCore(row *Trigger) (*core.Trigger, error) {
 	}
 	if row.MachinePoolID != nil {
 		t.MachinePoolID = *row.MachinePoolID
+	}
+	// A reason the previous release left on a trigger it re-enabled (it
+	// does not know the column) means nothing.
+	if row.PausedReason != nil && !t.Enabled {
+		t.PausedReason = *row.PausedReason
 	}
 	return t, nil
 }

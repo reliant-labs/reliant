@@ -55,11 +55,11 @@ vi.mock('@/lib/githubCredentialSync', () => ({
   githubCredentialSync: { syncProviderTokenFromSession },
 }))
 
-const setUser = vi.fn()
-const setSession = vi.fn()
+const installIdentity = vi.fn(async () => true)
 
 vi.mock('@/store/authStore', () => ({
-  useAuthStore: () => ({ setUser, setSession }),
+  useAuthStore: () => ({ installIdentity }),
+  identityActionMark: () => 7,
 }))
 
 vi.mock('@/lib/logger', () => ({
@@ -111,8 +111,9 @@ describe('OAuthCallback — email confirmation link', () => {
 
     // The reported symptom was returning still-anonymous and hitting the same
     // modal. Setting the verified session is what breaks that loop.
-    await waitFor(() => expect(setUser).toHaveBeenCalledWith(LINKED.user))
-    expect(setSession).toHaveBeenCalledWith(LINKED.session)
+    await waitFor(() =>
+      expect(installIdentity).toHaveBeenCalledWith(LINKED.user, LINKED.session, 7),
+    )
   })
 
   it('lands the user back on the onboarding URL they left, not the app root', async () => {
@@ -161,7 +162,7 @@ describe('OAuthCallback — email confirmation link', () => {
     // Rendered through describeAuthError, so an expired token becomes an
     // instruction ("send yourself a new one") rather than a bare status.
     expect(await findByText(/expired/i)).toBeInTheDocument()
-    expect(setSession).not.toHaveBeenCalled()
+    expect(installIdentity).not.toHaveBeenCalled()
   })
 })
 
@@ -182,7 +183,7 @@ describe('OAuthCallback — a stale PKCE code degrades to an instruction', () =>
 
     expect(await findByText(/6-digit code/i)).toBeInTheDocument()
     expect(queryByText(/pkce_code_verifier_not_found/i)).not.toBeInTheDocument()
-    expect(setSession).not.toHaveBeenCalled()
+    expect(installIdentity).not.toHaveBeenCalled()
   })
 })
 
@@ -232,8 +233,7 @@ describe('OAuthCallback — credential disclosure protection', () => {
     expect(await findByText(/start sign-in again/i)).toBeInTheDocument()
     assertNoDisclosure(container)
     expect(logger.error).toHaveBeenCalledWith('[OAuthCallback] Error from provider', { stage: 'provider_callback', code: 'server_error', category: 'authentication_failed' })
-    expect(setUser).not.toHaveBeenCalled()
-    expect(setSession).not.toHaveBeenCalled()
+    expect(installIdentity).not.toHaveBeenCalled()
     expect(exchangeCodeForSessionMock).not.toHaveBeenCalled()
   })
 
@@ -250,7 +250,7 @@ describe('OAuthCallback — credential disclosure protection', () => {
     const { container, findByRole } = render(<OAuthCallback />)
     fireEvent.click(await findByRole('button', { name: 'Continue' }))
     expect(mockNavigate).toHaveBeenCalledWith({ href: '/claim' })
-    expect(setSession).not.toHaveBeenCalled()
+    expect(installIdentity).not.toHaveBeenCalled()
     assertNoDisclosure(container)
   })
 
@@ -259,7 +259,7 @@ describe('OAuthCallback — credential disclosure protection', () => {
     captureOAuthCallbackCredentials()
     mockSearch = { returnTo: ONBOARDING_URL }
     const { container } = render(<OAuthCallback />)
-    await waitFor(() => expect(setSession).toHaveBeenCalledWith(LINKED.session))
+    await waitFor(() => expect(installIdentity).toHaveBeenCalledWith(LINKED.user, LINKED.session, 7))
     expect(exchangeCodeForSessionMock).toHaveBeenCalledWith(secret)
     expect(mockNavigate).toHaveBeenCalledWith({ href: ONBOARDING_URL })
     assertNoDisclosure(container)
@@ -286,14 +286,14 @@ describe('OAuthCallback — credential disclosure protection', () => {
     expect(visible).not.toMatch(/FAKE_FIRST|FAKE_SECOND/)
     expect(exchangeCodeForSessionMock).not.toHaveBeenCalled()
     expect(verifyOtpMock).not.toHaveBeenCalled()
-    expect(setSession).not.toHaveBeenCalled()
+    expect(installIdentity).not.toHaveBeenCalled()
   })
 
   it('consumes a captured code only once under StrictMode and recovers after a true remount', async () => {
     window.history.replaceState(null, '', `/auth/callback?code=${encodeURIComponent(secret)}`)
     captureOAuthCallbackCredentials()
     const mounted = render(<StrictMode><OAuthCallback /></StrictMode>)
-    await waitFor(() => expect(setSession).toHaveBeenCalledWith(LINKED.session))
+    await waitFor(() => expect(installIdentity).toHaveBeenCalledWith(LINKED.user, LINKED.session, 7))
     expect(exchangeCodeForSessionMock).toHaveBeenCalledTimes(1)
     mounted.unmount()
     const reloaded = render(<OAuthCallback />)
@@ -315,7 +315,7 @@ describe('OAuthCallback — credential disclosure protection', () => {
     const { container, findByText } = render(<OAuthCallback />)
     await findByText(/Please (start sign-in again|request a new one)/i)
     assertNoDisclosure(container)
-    expect(setSession).not.toHaveBeenCalled()
+    expect(installIdentity).not.toHaveBeenCalled()
   })
 })
 

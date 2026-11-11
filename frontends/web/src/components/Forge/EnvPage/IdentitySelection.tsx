@@ -28,16 +28,15 @@ function EnabledIdentitySelection({ orgId, envId, serving }: SelectionProps) {
     {!serving ? <p className="text-xs text-ink-muted">Identity is not ready.</p> : failed ? <p role="alert" className="text-xs text-danger-ink">Could not open this identity in this environment. The server refused the lookup or the user is unavailable.</p> : pending ? <p className="text-xs text-ink-muted">Loading identity…</p> : selected ? <><p className="text-sm text-ink">{selected.email}</p><p className="font-mono text-xs text-ink-muted">{selected.userId}</p><IdentityAppDataLink envId={envId} user={selected} /></> : <p className="text-xs text-ink-muted">No unique exact identity found. Use the filtered list below to select a user; substring matches are not identities.</p>}
   </section>;
 }
-export function IdentityUserLink({ envId, user }: { envId: string; user: IdentityUser }) {
-  const console = useContext(ForgeConsoleContext);
-  const env = console?.roster.envs.find((e) => e.live?.id === envId);
-  if (!identityDataLinksEnabled() || !console || !env || !validIdentityId(user.userId)) return null;
-  return <Link href={console.href({ kind: "environment", env: env.name }, { tab: "identity", user: user.userId })} className="text-xs text-primary-ink hover:underline">Open identity</Link>;
-}
-export function IdentityAppDataLink({ envId, user }: { envId: string; user: IdentityUser }) {
+/** Where this person's rows in the app's own database open (Data, filtered to their subject); null when no link can be made. */
+export function useIdentityAppDataHref(envId: string, user: IdentityUser): string | null {
   const console = useContext(ForgeConsoleContext);
   const env = console?.roster.envs.find((e) => e.live?.id === envId);
   if (!identityDataLinksEnabled() || !console || !env || !validIdentityId(user.userId)) return null;
   const subject = JSON.stringify({ environmentId: envId, userId: user.userId, email: validIdentityEmail(user.email) ? user.email : "" });
-  return <Link href={console.href({ kind: "data" }, { env: env.name, subject })} className="text-xs text-primary-ink hover:underline">App data</Link>;
+  return console.href({ kind: "data" }, { env: env.name, subject });
+}
+export function IdentityAppDataLink({ envId, user }: { envId: string; user: IdentityUser }) {
+  const href = useIdentityAppDataHref(envId, user);
+  return href ? <Link href={href} className="text-xs text-primary-ink hover:underline">App data</Link> : null;
 }

@@ -303,9 +303,29 @@
  * not in @theme: a var() inside a custom property resolves where it is
  * declared, and --muted-foreground is inherited unchanged below this scope.
  * Its vocabulary is components/Forge/controlStyles.ts.
+ *
+ * THE CONSOLE'S TEXT RAMP. The console is dense: placeholders, inactive
+ * segments, column headers and the metadata line under a metric or a row
+ * are all `ink-muted`, at 12-13px, over near-black panels. At reliant's
+ * --muted-foreground (63% in dark) that measured 6.8-7.4:1 — AA, but it read
+ * as dim (owner review, 2026-11-11), and `ink-subtle` (muted at 72% alpha)
+ * fell to 3.0:1 in light, below AA. So inside the console:
+ *
+ *   ink-muted    --muted-foreground pulled a quarter of the way toward
+ *                --foreground (srgb mix): brighter in dark, darker in light,
+ *                in every scheme, without a per-scheme value. 7-9:1.
+ *   ink-subtle   --muted-foreground itself: the old muted rung, which every
+ *                scheme already holds at 4.5:1 (mutedForegroundContrast).
+ *   border-strong muted ink at 90%: 4.2:1 or more against the page and the
+ *                card in light (it was 3.3-4.0), 5-6:1 in dark.
+ *
+ * Pinned by components/Settings/__tests__/consoleControlEdge.test.ts, which
+ * reads these three declarations and every scheme's tokens.
  */
 .forge-console {
-  --color-border-strong: hsl(var(--muted-foreground) / 0.8);
+  --color-border-strong: hsl(var(--muted-foreground) / 0.9);
+  --color-ink-muted: color-mix(in srgb, hsl(var(--muted-foreground)) 75%, hsl(var(--foreground)));
+  --color-ink-subtle: hsl(var(--muted-foreground));
 }
 
 /* Animations */

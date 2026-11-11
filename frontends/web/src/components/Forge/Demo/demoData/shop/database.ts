@@ -48,7 +48,8 @@ export function shopDatabase(env: string, now: number): ShopDatabase {
   const customers: Row[] = Array.from({ length: customerCount }, (_, i) => {
     const story = DEMO_CUSTOMERS[i];
     const first = FIRST[i % FIRST.length];
-    const last = LAST[(i * 7) % LAST.length];
+    // Shifted once per pass through FIRST, so prod's 60 customers are 60 different people (and emails).
+    const last = LAST[(i * 7 + Math.floor(i / FIRST.length)) % LAST.length];
     return {
       id: story?.id ?? `cus_${Math.floor(hash01(i, 1) * 0xffffff).toString(16).padStart(6, "0")}`,
       email: story?.email ?? `${first.toLowerCase().normalize("NFD").replace(/[^a-z]/g, "")}.${last.toLowerCase()}@example.com`,

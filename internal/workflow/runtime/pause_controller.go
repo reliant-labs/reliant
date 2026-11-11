@@ -97,6 +97,12 @@ type PauseController struct {
 	// machine, and in tests.
 	MachineWake *machineResumeWaker
 
+	// CapacitySlot is the run's workflow-capacity slot (capacity_slot.go): a
+	// provider wait gives it back, and the next step takes it again first.
+	// One per run, shared by every thread. nil for a run that was not
+	// trigger-launched, for on_failure handlers, and in tests.
+	CapacitySlot *capacitySlot
+
 	// GaveUp is the error the run must end with because an unattended
 	// self-pause outlived its self-resume ladder (pauseCoordinator.GaveUp),
 	// or nil. nil func when not wired (tests, on_failure handlers).

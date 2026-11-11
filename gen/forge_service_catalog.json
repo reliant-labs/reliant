@@ -5325,7 +5325,13 @@
               "IsOptional": false
             }
           ],
-          "ListArchivedChatsRequest": null,
+          "ListArchivedChatsRequest": [
+            {
+              "Name": "org_id",
+              "ProtoType": "string",
+              "IsOptional": true
+            }
+          ],
           "ListArchivedChatsResponse": [
             {
               "Name": "chats",
@@ -5742,6 +5748,11 @@
             {
               "Name": "limit",
               "ProtoType": "int32",
+              "IsOptional": true
+            },
+            {
+              "Name": "org_id",
+              "ProtoType": "string",
               "IsOptional": true
             }
           ],
@@ -6968,7 +6979,13 @@
               "repeated": true
             }
           ],
-          "reliant.v1.ListArchivedChatsRequest": [],
+          "reliant.v1.ListArchivedChatsRequest": [
+            {
+              "name": "org_id",
+              "kind": "string",
+              "optional": true
+            }
+          ],
           "reliant.v1.ListArchivedChatsResponse": [
             {
               "name": "chats",
@@ -7534,6 +7551,11 @@
             {
               "name": "limit",
               "kind": "int32",
+              "optional": true
+            },
+            {
+              "name": "org_id",
+              "kind": "string",
               "optional": true
             }
           ],
@@ -15289,6 +15311,11 @@
               "Name": "project_id",
               "ProtoType": "string",
               "IsOptional": true
+            },
+            {
+              "Name": "org_id",
+              "ProtoType": "string",
+              "IsOptional": true
             }
           ],
           "ListInboxResponse": [
@@ -15885,6 +15912,11 @@
             },
             {
               "name": "project_id",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "org_id",
               "kind": "string",
               "optional": true
             }
@@ -47910,6 +47942,19 @@
       ],
       "providers": [
         "TokenAuthority"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Inbox",
+      "field": "Orgs",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/inbox.OrgResolver",
+      "methods": [],
+      "candidates": [
+        "OrgResolver"
+      ],
+      "providers": [
+        "OrgResolver"
       ],
       "resolution": "composition_expression"
     },

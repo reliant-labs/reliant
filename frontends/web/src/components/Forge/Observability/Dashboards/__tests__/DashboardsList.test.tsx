@@ -13,7 +13,7 @@ import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { Code, ConnectError } from "@connectrpc/connect";
+import { Code } from "@connectrpc/connect";
 
 import type { DashboardRef } from "@/services/controlPlane/observability/dashboardTypes";
 
@@ -23,25 +23,12 @@ import { DashboardsList, type DashboardsSearch } from "../DashboardsList";
 
 vi.mock("uplot", async () => (await import("../../__tests__/obsMocks")).obsMocks.uplot());
 
-const hrefs = {
-  dashboard: (ref: DashboardRef) => `/d/${ref.kind}/${ref.key}`,
-  hub: {
-    alerts: "/alerts",
-    releases: "/releases",
-    errors: "/errors",
-    release: (version: string) => `/releases/${version}`,
-    workload: (name: string, env: string | null) => `/workloads/${env ?? "all"}/${name}`,
-    logs: (service: string) => `/logs?service=${service}`,
-  },
-};
+const hrefs = { dashboard: (ref: DashboardRef) => `/d/${ref.kind}/${ref.key}` };
 
-type Api = ReturnType<typeof createFixtureApi>;
-
-function renderList(options: FixtureOptions = {}, env = "prod", initial: DashboardsSearch = { view: "all" }, patch?: (api: Api) => void) {
+function renderList(options: FixtureOptions = {}, env = "prod", initial: DashboardsSearch = {}) {
   const onCall = vi.fn();
   const navigateTo = vi.fn();
   const api = createFixtureApi({ ...options, onCall });
-  patch?.(api);
   function Stateful() {
     const [search, setSearch] = useState<DashboardsSearch>(initial);
     return (
@@ -69,14 +56,11 @@ describe("Dashboards", () => {
       lastViewedAtMs: null, panelCount: 0, previewPanels: [], release: null, workspace: null, category: "organization",
     }] });
     renderWithApi(api, <DashboardsList project={FIXTURE_PROJECT} env="all" environments={[]} search={{}} onSearch={vi.fn()} hrefs={hrefs} navigateTo={vi.fn()} />);
-    // The Overview lands first; with nothing deployed it says so, and the built-in has its own row
-    // above the project's groups (not repeated in Platform).
-    expect(await screen.findByTestId("hub-health-undeployed")).toHaveTextContent("after the first deploy");
-    const builtins = screen.getByTestId("hub-builtin");
+    // The built-in is its own first section, not repeated in Platform.
+    const builtins = await screen.findByTestId("dashboards-group-builtin");
     expect(within(builtins).getByRole("link", { name: /Organization costs/ })).toHaveAttribute("href", "/d/builtin/org-costs");
-    expect(within(builtins).getByTestId("hub-builtin-org-costs")).toHaveTextContent("Canonical current-period accounting");
-    expect(within(screen.getByTestId("hub-group-platform")).queryByRole("link", { name: "Organization costs" })).toBeNull();
-    expect(screen.getByTestId("hub-group-platform-count")).toHaveTextContent("0");
+    expect(within(builtins).getByText("Requires cost-read permission")).toBeInTheDocument();
+    expect(screen.queryByTestId("dashboards-group-platform")).not.toBeInTheDocument();
     expect(screen.queryByTestId("dashboards-empty")).not.toBeInTheDocument();
   });
 
@@ -85,18 +69,19 @@ describe("Dashboards", () => {
     const starred = await screen.findByTestId("dashboards-starred");
     expect(onCall).toHaveBeenCalledWith("ListDashboards", expect.objectContaining({ projectId: FIXTURE_PROJECT, envId: "env-prod" }));
     expect(within(starred).getAllByRole("link").map((a) => a.textContent)).toEqual(["shop: overview", "Frontend · web", "Checkout latency"]);
-    // A starred card draws its headline panels through QueryPanel.
-    await waitFor(() => expect(onCall).toHaveBeenCalledWith("QueryPanel", expect.objectContaining({ panel: expect.objectContaining({ id: "p95" }) })));
+    // Stars are one row of chips: no panel previews, so the page runs no panel query.
+    expect(onCall).not.toHaveBeenCalledWith("QueryPanel", expect.anything());
 
     const sections = screen.getAllByTestId(/^dashboards-group-[a-z]+$/).map((el) => el.dataset.testid!.replace("dashboards-group-", ""));
-    expect(sections).toEqual(["overview", "services", "jobs", "product", "platform", "releases", "custom"]);
+    expect(sections).toEqual(["builtin", "overview", "services", "jobs", "product", "platform", "releases", "custom"]);
     const titles = (group: string) => within(screen.getByTestId(`dashboards-group-${group}`)).getAllByRole("row").slice(1).map((r) => r.querySelector("a")?.getAttribute("aria-label"));
     expect(titles("services")).toEqual(["shop: orders service", "shop: api service"]);
     expect(titles("jobs")).toEqual(["shop: jobs"]);
-    // The client's own LLM usage built-in is a product dashboard too.
-    expect(titles("product")).toEqual(["LLM usage", "Checkout funnel", "Frontend · web", "Billing funnel"]);
+    // The client's own LLM usage built-in leads, in Built-in; not repeated in Product.
+    expect(titles("builtin")).toEqual(["LLM usage"]);
+    expect(titles("product")).toEqual(["Checkout funnel", "Frontend · web", "Billing funnel"]);
     expect(titles("platform")).toEqual(["shop: workloads", "Daemon fleet"]);
-    expect(screen.getByTestId("dashboards-group-product-count")).toHaveTextContent("4");
+    expect(screen.getByTestId("dashboards-group-product-count")).toHaveTextContent("3");
 
     // A row names its Forge workload; where it came from is secondary, the release in its tooltip.
     const services = screen.getByTestId("dashboards-group-services");
@@ -115,9 +100,10 @@ describe("Dashboards", () => {
     expect(toggle).toHaveAttribute("aria-expanded", "true");
     await user.click(toggle);
     expect(toggle).toHaveAttribute("aria-expanded", "false");
-    expect(screen.queryByRole("table", { name: "Services dashboards" })).not.toBeInTheDocument();
+    const services = screen.getByTestId("dashboards-group-services");
+    expect(within(services).queryByRole("link")).not.toBeInTheDocument();
     await user.click(toggle);
-    expect(screen.getByRole("table", { name: "Services dashboards" })).toBeInTheDocument();
+    expect(within(services).getAllByRole("link")).toHaveLength(2);
   });
 
   it("searches across every group, unfolding what it finds, and narrows by group, source and owner", async () => {
@@ -154,8 +140,9 @@ describe("Dashboards", () => {
     expect(titles("jobs")).toEqual(["shop: jobs"]);
     expect(titles("platform")).toEqual(["shop: workloads"]);
     expect(titles("custom")).toEqual(["Checkout funnel", "Frontend · web", "Checkout latency", "Daemon fleet", "Billing funnel"]);
-    // Only the client's own built-in names its group; the server's rows do not.
-    expect(titles("product")).toEqual(["LLM usage"]);
+    // The client's own built-in is in Built-in, whatever the server says.
+    expect(titles("builtin")).toEqual(["LLM usage"]);
+    expect(screen.queryByTestId("dashboards-group-product")).not.toBeInTheDocument();
   });
 
   it("stars and unstars at once, for the caller, and pins the star at the top", async () => {
@@ -220,99 +207,34 @@ describe("Dashboards", () => {
   });
 });
 
-describe("Dashboards › Overview hub", () => {
-  it("lands on the Overview: health, failing jobs, releases, issues and a card per group", async () => {
-    const { onCall } = renderList({}, "prod", {});
-    expect(await screen.findByTestId("dashboards-hub")).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "Overview" })).toHaveAttribute("aria-selected", "true");
-    expect(screen.getByTestId("dashboards")).toHaveAttribute("data-view", "overview");
-    // The project Overview's strip and process table, over the same reads.
-    expect(screen.getByTestId("observability-strip")).toBeInTheDocument();
-    await waitFor(() => expect(onCall).toHaveBeenCalledWith("GetServiceOverview", expect.objectContaining({ projectId: FIXTURE_PROJECT, envIds: ["env-prod"] })));
-    // Only the job whose latest run failed: nightly-report failed, then recovered.
-    const jobs = await screen.findByTestId("hub-jobs-failing");
-    expect(within(jobs).getAllByRole("link").map((a) => [a.textContent, a.getAttribute("href")])).toEqual([["search-reindex", "/workloads/prod/search-reindex"]]);
-    expect(within(screen.getByTestId("hub-jobs")).getByRole("link", { name: "Open shop: jobs" })).toHaveAttribute("href", "/d/release/jobs");
-    expect(await within(screen.getByTestId("hub-releases")).findByTestId("hub-releases-list")).toBeInTheDocument();
-    expect(await screen.findByTestId("hub-issues-count")).toBeInTheDocument();
-    expect(within(screen.getByTestId("hub-issues")).getByRole("link", { name: "Open the inbox" })).toHaveAttribute("href", "/errors");
-    // Every group has a card, with its count and its first dashboards.
-    expect(screen.getByTestId("hub-group-services-count")).toHaveTextContent("2");
-    expect(within(screen.getByTestId("hub-group-overview")).getByRole("link", { name: "shop: overview" })).toHaveAttribute("href", "/d/release/overview");
-    expect(within(screen.getByTestId("hub-starred")).getAllByRole("link").map((a) => a.textContent)).toEqual(["shop: overview", "Frontend · web", "Checkout latency"]);
-    expect(within(screen.getByTestId("hub-recent")).getAllByRole("link")[0]).toHaveTextContent("Checkout latency");
+describe("Dashboards is the dashboard browser, not a second Overview", () => {
+  it("lands on the list, with no tabs and no health panels", async () => {
+    const { onCall } = renderList();
+    expect(await screen.findByTestId("dashboards-list")).toBeInTheDocument();
+    expect(screen.queryByRole("tab")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("observability-strip")).not.toBeInTheDocument();
+    // Health is the project Overview's: this page asks for none of it.
+    for (const rpc of ["GetServiceOverview", "ListWorkloads", "ListIssues", "ListReleases"]) {
+      expect(onCall).not.toHaveBeenCalledWith(rpc, expect.anything());
+    }
   });
 
-  it("opens the list narrowed to a group from its card, and back to the Overview from the tab", async () => {
-    const user = userEvent.setup();
-    renderList({}, "prod", {});
-    await user.click(await screen.findByTestId("hub-group-services-open"));
-    expect(screen.getByRole("tab", { name: /All dashboards/ })).toHaveAttribute("aria-selected", "true");
-    expect(screen.getAllByTestId(/^dashboards-group-[a-z]+$/).map((el) => el.dataset.testid)).toEqual(["dashboards-group-services"]);
-    expect(screen.getByTestId("dashboards-chip-group")).toHaveTextContent("Group: Services");
-    await user.click(screen.getByRole("tab", { name: "Overview" }));
-    expect(await screen.findByTestId("dashboards-hub")).toBeInTheDocument();
+  it("works for a young app with two dashboards: no section for an empty group", async () => {
+    renderList({ dashboardsFew: true });
+    await screen.findByTestId("dashboards-list");
+    expect(screen.getAllByTestId(/^dashboards-group-[a-z]+$/).map((el) => el.dataset.testid)).toEqual(["dashboards-group-builtin", "dashboards-group-overview", "dashboards-group-services"]);
+    expect(screen.queryByText("None yet")).not.toBeInTheDocument();
   });
 
-  it("opens the whole list from its card, and the template gallery from New dashboard", async () => {
+  it("opens the template gallery from New dashboard", async () => {
     // jsdom does not lay out, so it has no scrollIntoView.
     const scrolled = vi.fn();
     Element.prototype.scrollIntoView = scrolled;
     const user = userEvent.setup();
-    renderList({}, "prod", {});
-    await screen.findByTestId("dashboards-hub");
-    expect(screen.queryByTestId("dashboards-templates")).not.toBeInTheDocument();
-    await user.click(screen.getByTestId("hub-open-all"));
-    expect(screen.getAllByTestId(/^dashboards-group-[a-z]+$/)).toHaveLength(7);
-    await user.click(screen.getByRole("tab", { name: "Overview" }));
+    renderList();
     await user.click(await screen.findByTestId("dashboards-new"));
     await user.click(screen.getByTestId("dashboards-new-template"));
-    expect(await screen.findByTestId("dashboards-templates")).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: /All dashboards/ })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByTestId("dashboards-templates")).toBeInTheDocument();
     expect(scrolled).toHaveBeenCalledWith({ block: "start", behavior: "smooth" });
-  });
-
-  it("opens the list when a search is typed", async () => {
-    renderList({}, "prod", { q: "jobs" });
-    expect(await screen.findByTestId("dashboards-group-jobs")).toBeInTheDocument();
-    expect(screen.queryByTestId("dashboards-hub")).not.toBeInTheDocument();
-  });
-
-  it("works for a young app with two dashboards", async () => {
-    renderList({ dashboardsFew: true }, "prod", {});
-    await screen.findByTestId("dashboards-hub");
-    expect(screen.getByTestId("hub-group-overview-count")).toHaveTextContent("1");
-    expect(screen.getByTestId("hub-group-services-count")).toHaveTextContent("1");
-    expect(within(screen.getByTestId("hub-group-jobs")).getByText("None yet")).toBeInTheDocument();
-    expect(screen.queryByTestId("hub-group-jobs-open")).not.toBeInTheDocument();
-    // No jobs dashboard to open: the card still lists the failing job, with nowhere else to send the reader.
-    expect(await screen.findByTestId("hub-jobs-failing")).toBeInTheDocument();
-    expect(within(screen.getByTestId("hub-jobs")).queryByRole("link", { name: /^Open/ })).not.toBeInTheDocument();
-    expect(screen.queryByTestId("hub-recent")).not.toBeInTheDocument();
-  });
-
-  it("keeps the health on an app with no dashboards, and explains how to get some", async () => {
-    renderList({ dashboardsEmpty: true }, "prod", {});
-    await screen.findByTestId("dashboards-hub");
-    expect(screen.getByTestId("observability-strip")).toBeInTheDocument();
-    expect(screen.getByTestId("dashboards-empty")).toHaveTextContent("Dashboards ship with your releases");
-    expect(screen.queryByTestId("hub-groups")).not.toBeInTheDocument();
-  });
-
-  it("says when a source cannot answer, instead of showing a zero", async () => {
-    renderList({}, "prod", {}, (api) => {
-      api.listIssues = vi.fn().mockRejectedValue(new ConnectError("no", Code.PermissionDenied));
-      api.listWorkloads = vi.fn().mockRejectedValue(new ConnectError("not set up", Code.FailedPrecondition));
-    });
-    await screen.findByTestId("dashboards-hub");
-    expect(await within(screen.getByTestId("hub-issues")).findByTestId("hub-unavailable")).toHaveTextContent("You do not have access to issues here.");
-    expect(await within(screen.getByTestId("hub-jobs")).findByTestId("hub-unavailable")).toHaveTextContent("Job runs need observability set up for this app.");
-    expect(screen.queryByTestId("hub-issues-count")).not.toBeInTheDocument();
-  });
-
-  it("says an unrecorded environment has no health, rather than asking for it", async () => {
-    const { onCall } = renderList({}, "nowhere", {});
-    expect(await screen.findByTestId("hub-health-unrecorded")).toHaveTextContent("recorded no deploy of nowhere");
-    expect(onCall).not.toHaveBeenCalledWith("GetServiceOverview", expect.anything());
   });
 });

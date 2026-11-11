@@ -1104,6 +1104,7 @@ func (g *Graph) newInbox() (*inbox.Service, error) {
 		Config:  g.Cfg,
 		Repo:    g.Database(),
 		Sweeper: g.WorktreeSweep(),
+		Orgs:    g.OrgResolver(),
 	})
 }
 

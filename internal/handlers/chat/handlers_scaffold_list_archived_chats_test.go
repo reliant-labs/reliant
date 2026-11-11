@@ -13,6 +13,7 @@ import (
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	chat "github.com/reliant-labs/reliant/internal/handlers/chat"
 	"github.com/reliant-labs/reliant/internal/ptr"
 )
@@ -21,7 +22,7 @@ func TestListArchivedChats_Generated(t *testing.T) {
 	t.Parallel()
 
 	repo := newChatRepo()
-	repo.ListArchivedChatsFunc = func(_ context.Context, userID string) ([]*db.ArchivedChatInfo, error) {
+	repo.ListArchivedChatsFunc = func(_ context.Context, userID string, _ *core.OrgScope) ([]*db.ArchivedChatInfo, error) {
 		if userID != "test-user" {
 			return nil, errors.New("store unavailable")
 		}

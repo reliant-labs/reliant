@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { Interceptor } from '@connectrpc/connect'
+import { createContextValues, type Interceptor } from '@connectrpc/connect'
 
 const mocks = vi.hoisted(() => ({
   getSession: vi.fn(),
@@ -59,6 +59,8 @@ async function headersOnTheWire(): Promise<Headers> {
     service: { typeName: 'reliant.v1.SettingsService' },
     header: new Headers(),
     signal: new AbortController().signal,
+    // Every real Connect request carries context values; the org stage reads them.
+    contextValues: createContextValues(),
     message: {},
   } as unknown as Parameters<Next>[0])
   if (!sent) throw new Error('the chain never reached the wire')

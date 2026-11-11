@@ -219,6 +219,7 @@ function renderAt(initialEntry: string) {
     dashboard: probe("dashboard"),
     storage: probe("storage"),
     data: probe("data"),
+    users: probe("users"),
     environments: probe("environments"),
     environment: probe("environment"),
     secrets: probe("secrets"),

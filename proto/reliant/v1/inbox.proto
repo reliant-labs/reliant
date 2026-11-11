@@ -156,6 +156,14 @@ message ListInboxRequest {
   // Only items of this project. Unset lists every project. The counts follow
   // the same scope.
   optional string project_id = 2;
+  // Only items of this organization: those about its chats, projects and
+  // automations. It must be one the caller is a live member of
+  // (PERMISSION_DENIED otherwise). Items about something created before orgs
+  // list under the caller's default org; a machine's storage and worktree
+  // items belong to no org and list in every one. Unset lists every item,
+  // in any org, as before this field existed. The counts follow the same
+  // scope.
+  optional string org_id = 3;
 }
 
 message ListInboxResponse {

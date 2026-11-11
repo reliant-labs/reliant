@@ -41,7 +41,42 @@ const (
 	DefaultReclaimGrace = 24 * time.Hour
 
 	markTimeoutMs int32 = 120_000
+
+	// guardReclaimQuiet and guardReclaimGrace replace the quiet and grace
+	// periods for a worktree whose machine's disk guard is acting this pass
+	// (guardedFor: the machine's last disk report carries a guard episode).
+	// Space is needed now, so a mark is placed after an hour of quiet and
+	// stands an hour (owner decision, 2026-11-11). Every other check of a
+	// reclaim still applies: the tombstone must still stand, nothing may
+	// have used it since the mark, no chat may have done anything in it,
+	// its work must still be landed or idle, and a daemon that does not
+	// report tombstones never has anything reclaimed.
+	guardReclaimQuiet = time.Hour
+	guardReclaimGrace = time.Hour
 )
+
+// markQuietFor and markGraceFor are wt's quiet and grace periods this pass:
+// the short ones while its machine's disk guard acts. Both are read on every
+// pass, never stored with the mark, so a mark placed under pressure that
+// clears before its hour is up waits the full grace period again (counted
+// from the mark): the later deadline, which is the safer one: nobody is
+// short of space any more, and whoever works there keeps the day the
+// tombstone's notice would otherwise have cut short. The notice's time was
+// set under pressure and so is the earlier of the two: it never tells anyone
+// they have longer than they do.
+func (s *Sweeper) markQuietFor(wt *core.Worktree) time.Duration {
+	if s.guardedFor(wt) {
+		return min(s.marks.quiet, guardReclaimQuiet)
+	}
+	return s.marks.quiet
+}
+
+func (s *Sweeper) markGraceFor(wt *core.Worktree) time.Duration {
+	if s.guardedFor(wt) {
+		return min(s.marks.grace, guardReclaimGrace)
+	}
+	return s.marks.grace
+}
 
 // MarkStore records reclaim marks.
 type MarkStore interface {
@@ -106,7 +141,7 @@ func (s *Sweeper) advanceMark(ctx context.Context, userID, daemonID string, wt *
 		s.cancelMark(ctx, userID, daemonID, wt, projectPath, why)
 		return
 	}
-	if s.now().Before(meta.ReclaimMarkedAt.Add(m.grace)) {
+	if s.now().Before(meta.ReclaimMarkedAt.Add(s.markGraceFor(wt))) {
 		return
 	}
 	if s.auto == nil || s.auto.mode != AutoArchiveOn {
@@ -163,7 +198,7 @@ func (s *Sweeper) markContradicted(ctx context.Context, wt *core.Worktree, meta 
 // tombstone removed again.
 func (s *Sweeper) placeMark(ctx context.Context, userID, daemonID string, wt *core.Worktree, projectPath, reason string) {
 	m := s.marks
-	quietSince := s.now().Add(-m.quiet)
+	quietSince := s.now().Add(-s.markQuietFor(wt))
 	acts, err := m.store.WorktreeRunActivities(ctx, []string{wt.ID})
 	if err != nil {
 		return
@@ -175,7 +210,7 @@ func (s *Sweeper) placeMark(ctx context.Context, userID, daemonID string, wt *co
 	if !ok {
 		return
 	}
-	mark := worktreereclaim.ReclaimMark{ID: uuid.NewString(), ReclaimAt: s.now().Add(m.grace).UTC()}
+	mark := worktreereclaim.ReclaimMark{ID: uuid.NewString(), ReclaimAt: s.now().Add(s.markGraceFor(wt)).UTC()}
 	// Probed as a reconcile probes it, so the use stamp in the answer (the
 	// baseline) is measured the way every later one is.
 	w.Mark, w.ProbeLanded = &mark, s.reclaimsLanded()

@@ -46,7 +46,7 @@ type Repository interface {
 	// The chat with its activity-derived fields, for a handler that reads one.
 	GetChatWithUserCheck(ctx context.Context, id, userID string) (*db.Chat, error)
 	SearchChats(ctx context.Context, filters db.ChatSearchFilters) ([]*db.Chat, error)
-	ListArchivedChats(ctx context.Context, userID string) ([]*db.ArchivedChatInfo, error)
+	ListArchivedChats(ctx context.Context, userID string, org *core.OrgScope) ([]*db.ArchivedChatInfo, error)
 	DeleteChat(ctx context.Context, id string) error
 	UpdateChatState(ctx context.Context, chatID string, state db.ChatState, reason string) error
 	UpdateChatUnread(ctx context.Context, chatID string, unread bool, reason string) error

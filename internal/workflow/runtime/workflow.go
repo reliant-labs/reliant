@@ -110,6 +110,10 @@ type ResumeInput struct {
 	// its background spawns, not about to take a turn, so the successor waits
 	// on the relaunched spawns before its first iteration.
 	AwaitSpawnsFirst bool `json:"await_spawns_first,omitempty"`
+	// CapacityParked: the predecessor had given its workflow-capacity slot
+	// back while it waited on a provider (capacity_slot.go), so the successor
+	// takes it again before its first step. Carried by continue-as-new only.
+	CapacityParked bool `json:"capacity_parked,omitempty"`
 	// ToolGrants are the predecessor's load_tool grants, per thread, so a tool
 	// an agent loaded before the boundary is still offered after it. Filled by
 	// a continue-as-new handoff (the in-memory record) and by the coarse
@@ -474,6 +478,9 @@ type ChildWorkflowTracker struct {
 	// runEnding is set once the run has left its graph and is ending: a
 	// stopped agent is no longer resumed in it, but by its successor.
 	runEnding bool
+	// capacitySlot is the run's workflow-capacity slot (capacity_slot.go),
+	// read by a continue-as-new handoff so a parked slot stays parked.
+	capacitySlot *capacitySlot
 }
 
 // detachedSpawnRecord is one live background spawn, tracked from the moment
@@ -1580,6 +1587,11 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 	checkPause := pauser.CheckPause
 	requestPause := pauser.RequestPause
 	usageLimitWaiter := newUsageLimitWaiter(pauser, childTracker, input.ChatID, workflowID, input.WorkflowName)
+	// The run's workflow-capacity slot, given back while it waits on a
+	// provider (capacity_slot.go). nil unless trigger-launched.
+	capacitySlot := newCapacitySlot(ctx, input.Trigger, input.Resume != nil && input.Resume.CapacityParked)
+	pauser.slot = capacitySlot
+	childTracker.capacitySlot = capacitySlot
 	childTracker.chatProvider, _ = input.Inputs[InputKeyProviderSwitch].(string)
 	childTracker.rootThread = thread
 	childTracker.rootInputs = input.Inputs
@@ -1709,6 +1721,7 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 			UsageLimit:         usageLimitWaiter,
 			RepeatedToolErrors: repeatedToolErrors,
 			MachineWake:        machineWake,
+			CapacitySlot:       capacitySlot,
 			GaveUp:             pauser.GaveUp,
 			Cancelled:          func() bool { return cancelledThreads[thread] },
 			ResetCancelled: func() {
@@ -1764,6 +1777,7 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 		UsageLimit:         usageLimitWaiter,
 		RepeatedToolErrors: repeatedToolErrors,
 		MachineWake:        machineWake,
+		CapacitySlot:       capacitySlot,
 		GaveUp:             pauser.GaveUp,
 	}
 
