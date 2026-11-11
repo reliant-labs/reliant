@@ -5,6 +5,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -224,5 +225,104 @@ func TestTombstone_EveryCheckoutMustCarryTheSameMark(t *testing.T) {
 	}
 	if got := tombstoneMark(nil); got != "" {
 		t.Fatalf("no checkouts: %q", got)
+	}
+}
+
+// age makes everything in w's workspace and its checkouts' git
+// administration look last touched at t: file and directory times, and an
+// emptied reflog (whose time is then its file's).
+func age(t *testing.T, w Worktree, at time.Time) {
+	t.Helper()
+	roots := []string{w.Path}
+	for _, c := range shallowCheckouts(w.Path, w.Checkouts) {
+		if admin := adminDir(c); admin != "" {
+			if err := os.WriteFile(filepath.Join(admin, "logs", "HEAD"), nil, 0o644); err != nil {
+				t.Fatal(err)
+			}
+			roots = append(roots, admin)
+		}
+	}
+	for _, root := range roots {
+		var dirs []string
+		err := filepath.Walk(root, func(p string, info os.FileInfo, err error) error {
+			if err != nil {
+				return err
+			}
+			if info.IsDir() {
+				dirs = append(dirs, p)
+				return nil
+			}
+			return os.Chtimes(p, at, at)
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		for i := len(dirs) - 1; i >= 0; i-- {
+			if err := os.Chtimes(dirs[i], at, at); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+}
+
+// The daemon's own tombstone writes are never use. On the real clock, with
+// a real idle floor and an archive fence of now: a workspace untouched for
+// two hours, marked, then archived under its mark, is removed. Before the
+// writes kept their directories' times, the mark answer reported "used just
+// now", and the removal held it as recently active and as used after its
+// archive, so a marked multi-repo workspace was never reclaimed.
+func TestTombstone_TheDaemonsOwnWritesAreNotUse(t *testing.T) {
+	t.Parallel()
+	heavyUnderShort(t, "a marked worktree archived and removed on the real clock (~40 git processes)")
+	f := newFixture(t)
+	f.r.IdleFloor = time.Hour
+	w := f.workspace("own-writes", "feat/own-writes")
+	quiet := time.Now().Add(-2 * time.Hour).Truncate(time.Second)
+	age(t, w, quiet)
+
+	w.Mark, w.ProbeLanded = &ReclaimMark{ID: "m-1", ReclaimAt: time.Now()}, true
+	res := f.active(w)
+	if res.Tombstone == nil || res.Tombstone.MarkID != "m-1" || !res.Landed {
+		t.Fatalf("mark: %+v", res)
+	}
+	if res.LastUse == nil || res.LastUse.After(quiet.Add(time.Second)) {
+		t.Fatalf("the mark's own writes reported as use: LastUse %v, workspace quiet since %v", res.LastUse, quiet)
+	}
+	if fi, err := os.Stat(w.Path); err != nil || !fi.ModTime().Equal(quiet) {
+		t.Fatalf("the workspace root's time moved: %v (%v)", fi.ModTime(), err)
+	}
+
+	// A re-check of the mark sees the same quiet.
+	w.Mark = nil
+	if res = f.active(w); res.LastUse == nil || res.LastUse.After(quiet.Add(time.Second)) {
+		t.Fatalf("re-check: LastUse %v", res.LastUse)
+	}
+
+	archived := w
+	archived.State, archived.ProbeLanded = StateArchived, false
+	archived.Fence, archived.ReclaimMark = strconv.FormatInt(time.Now().UnixNano(), 10), "m-1"
+	if res := f.one(archived); res.Outcome != OutcomeRemoved {
+		t.Fatalf("archived under its mark, untouched since: got %+v, want removed", res)
+	}
+}
+
+// Unmarking does not restart the quiet clock either.
+func TestTombstone_UnmarkIsNotUse(t *testing.T) {
+	t.Parallel()
+	heavyUnderShort(t, "a linked worktree marked and unmarked (~20 git processes)")
+	f := newFixture(t)
+	w := f.workspace("unmarked", "feat/unmarked")
+	w.Mark = &ReclaimMark{ID: "m-1", ReclaimAt: time.Now()}
+	f.active(w)
+	quiet := time.Now().Add(-2 * time.Hour).Truncate(time.Second)
+	age(t, w, quiet)
+
+	w.Mark, w.Unmark = nil, "m-1"
+	res := f.active(w)
+	if res.Tombstone == nil || res.Tombstone.MarkID != "" {
+		t.Fatalf("unmark: %+v", res)
+	}
+	if res.LastUse == nil || res.LastUse.After(quiet.Add(time.Second)) {
+		t.Fatalf("unmarking reported as use: LastUse %v, quiet since %v", res.LastUse, quiet)
 	}
 }
