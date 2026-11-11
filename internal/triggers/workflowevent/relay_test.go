@@ -76,13 +76,15 @@ func TestRelay_AFailedStartLeavesTheEventForALaterPass(t *testing.T) {
 	starter := &recordingStarter{down: true}
 	relay := NewRelay(f.repo, starter, "test-queue")
 	relay.Lease = time.Millisecond
+	clock := time.Now()
+	relay.now = func() time.Time { return clock }
 
 	handed, err := relay.RelayOnce(ctx)
 	require.Error(t, err)
 	assert.Zero(t, handed)
 
 	starter.down = false
-	time.Sleep(5 * time.Millisecond) // let the lease lapse
+	clock = clock.Add(time.Minute) // the lease has lapsed
 	handed, err = relay.RelayOnce(ctx)
 	require.NoError(t, err)
 	assert.Equal(t, 1, handed, "the event must survive a failed handoff")

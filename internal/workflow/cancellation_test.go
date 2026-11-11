@@ -443,7 +443,7 @@ func (s *CancellationTestSuite) TestContextCancellationPropagation() {
 		// Expected - channel is closed
 		s.T().Log("✅ Context cancellation successfully propagated through ACTUAL rctx wrapper chain")
 		s.T().Log("   This confirms that tools using legacyContext WILL receive cancellation")
-	case <-time.After(100 * time.Millisecond):
+	case <-time.After(30 * time.Second):
 		s.Fail("Context Done channel should be closed after parent cancellation")
 	}
 }

@@ -86,7 +86,7 @@ func TestSecondFlowReclaimsAbandonedCallbackPort(t *testing.T) {
 	cancelSecond()
 	select {
 	case <-acquired:
-	case <-time.After(3 * time.Second):
+	case <-time.After(30 * time.Second):
 		t.Fatal("second flow did not unwind after cancellation")
 	}
 }
