@@ -47,7 +47,7 @@ function dump(chatId: string, label: string) {
   const s = useChatStore.getState();
   const slice = s.streamingMessages[chatId];
   const states = s.toolCallStates[chatId];
-  // eslint-disable-next-line no-console
+   
   console.log(`### ${label}`, JSON.stringify({
     placeholders: slice
       ? Object.entries(slice).map(([k, m]) => ({

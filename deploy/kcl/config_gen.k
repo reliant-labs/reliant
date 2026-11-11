@@ -10,7 +10,7 @@ schema ConfigSecretRef:
     key: str
 
 # forge:section schema ApiServerConfig
-# forge:hash=4571597940e62df5f8963843f1909ef1917e3ad19760ace4c47ba699cc6b7043
+# forge:hash=2436be0828f8cff3d1e25640d5f1de6893aeb1112b3f44cbdface399a16e5bfa
 schema ApiServerConfig:
     # JWT public key PEM for token validation
     jwt_public_key: str = ""
@@ -38,6 +38,8 @@ schema ApiServerConfig:
     auth_api_key: ConfigSecretRef = ConfigSecretRef { name = "reliant-secrets", key = "auth_api_key" }
     # A JWT without an email_verified claim carries no email
     require_email_verified_claim: bool = False
+    # Bearer secret of the Supabase auth-event triggers; set, serves /_forge/auth/hooks/supabase
+    supabase_auth_hook_secret: ConfigSecretRef = ConfigSecretRef { name = "reliant-secrets", key = "supabase_auth_hook_secret" }
     # Public URL of the control plane that issues this deployment's tokens
     authorization_server: str = ""
     # Comma-separated OAuth issuers whose tokens the connector endpoint accepts
@@ -95,8 +97,9 @@ schema ApiServerConfig:
 # every pod. Declare what a workload reads in its `config_secrets` instead.
 API_SERVER_CONFIG_SENSITIVE_ENV: [str] = [
     # forge:section API_SERVER_CONFIG_SENSITIVE_ENV (root)
-    # forge:hash=84163d763e8e025e6fd0e9de106e8e68119f5b395b9132e67f5bbbadc005b62b
+    # forge:hash=f72a3cbc6e55bfbd2f31f25770721dd6e3e0ce8b8046abf8e776485209da5a18
     "AUTH_API_KEY"
+    "SUPABASE_AUTH_HOOK_SECRET"
 
     # forge:section API_SERVER_CONFIG_SENSITIVE_ENV (end)
     # forge:hash=8ea73d2286a6708297bf10d47a81617b7bddefcf6bba01feff1a3e226b625c0c
@@ -109,8 +112,9 @@ API_SERVER_CONFIG_SENSITIVE_ENV: [str] = [
 # credential only some environments own).
 API_SERVER_CONFIG_OPTIONAL_SECRET_ENV: [str] = [
     # forge:section API_SERVER_CONFIG_OPTIONAL_SECRET_ENV (root)
-    # forge:hash=a39f8213be9877edc6b9307e7a46cda5324c5988005f261085ba6dbb7249512d
+    # forge:hash=640893f05f10685a18c90216124ac7fcf02adb644dbc7d652d4690fef17c8d9d
     "AUTH_API_KEY"
+    "SUPABASE_AUTH_HOOK_SECRET"
 
     # forge:section API_SERVER_CONFIG_OPTIONAL_SECRET_ENV (end)
     # forge:hash=f410d2798fb65112d6c1515a8851e7e3c7f6ab3582b35449807ca345e76546b0
@@ -133,8 +137,9 @@ API_SERVER_CONFIG_OPTIONAL_SECRET_ENV: [str] = [
 apiServerConfigEnvMap = lambda c: ApiServerConfig, config_secrets: [str] -> {str: str | forge.SecretRef} {
     _sensitive: {str: forge.SecretRef} = {
         # forge:section apiServerConfigEnvMap secrets (root)
-        # forge:hash=0e5c56f094d751de6dd141c1241c8a9514479c81aaadfde435dbd475aa3e41ef
+        # forge:hash=0de7863116862112148c2e8c1b2004c8452648e238c33b0f1fb3cb283901454f
         "AUTH_API_KEY" = forge.SecretRef {name = c.auth_api_key.name, key = c.auth_api_key.key, store_key = "AUTH_API_KEY", optional = True}
+        "SUPABASE_AUTH_HOOK_SECRET" = forge.SecretRef {name = c.supabase_auth_hook_secret.name, key = c.supabase_auth_hook_secret.key, store_key = "SUPABASE_AUTH_HOOK_SECRET", optional = True}
 
         # forge:section apiServerConfigEnvMap secrets (end)
         # forge:hash=add08dc6538db633b1424010eeb6a904807bb9167e2470e110b9e6d2fa9e6177
@@ -1672,7 +1677,7 @@ workerConfigEnvMap = lambda c: WorkerConfig, config_secrets: [str] -> {str: str 
 }
 
 # forge:section process-selector ReliantProcess
-# forge:hash=1f092c6212c02229b5201d057568f44b870ec8954b001adf2849ee9226c9f008
+# forge:hash=19d5fdede437b4c2bd160b5a8a64c841096260360030e92e9aef19a3d70db5cb
 # The `reliant` binary binds a config per subcommand, so a workload's env is the
 # binary's root config PLUS the config of the subcommand its process runs.
 # ReliantProcess carries the instances (config.k declares one); reliantProcessEnvMap
@@ -1792,7 +1797,7 @@ ROOTS: {str: Root} = {
     "api" = Root {
         args = ["server", "api"]
         env = ["RELIANT_LOG_LEVEL", "LOG_FORMAT", "RELIANT_ENV", "RELIANT_STORAGE_REAPER", "RELIANT_STORAGE_REAPER_INTERVAL", "RELIANT_STORAGE_REAPER_PRESSURE_INTERVAL", "FORGE_STORAGE_POLICY", "RELIANT_STORAGE_REAPER_GOCACHE_INTERVAL", "RELIANT_TRANSCRIPT_TOOL_BODY_STUBS", "RELIANT_WORKTREE_RECLAIM", "RELIANT_WORKTREE_RECLAIM_ROOTS", "RELIANT_WORKTREE_RECLAIM_CLEAN_IDLE", "RELIANT_WORKTREE_RECLAIM_APPROVAL_IDLE", "JWT_PUBLIC_KEY", "JWT_PUBLIC_KEY_FILE", "RELIANT_JWKS_URL", "ALLOWED_EMAIL_DOMAINS", "RELIANT_DISABLE_FORGE_API", "GRPC_PORT", "HEALTH_PORT", "PPROF_PORT", "BIND_ADDRESS", "CORS_ALLOWED_ORIGINS", "AUTH_MODE", "AUTH_REQUIRE_EMAIL_VERIFIED_CLAIM", "RELIANT_AUTHORIZATION_SERVER", "MCP_OAUTH_ISSUERS", "MAX_UPLOAD_SIZE", "RELIANT_WORKTREE_AUTO_ARCHIVE", "RELIANT_WORKTREE_LANDED_IDLE", "RELIANT_WORKTREE_RECLAIM_QUIET", "RELIANT_WORKTREE_RECLAIM_GRACE", "RELIANT_WORKTREE_LIVE_SHED_IDLE", "RELIANT_AUTH_URL", "RELIANT_AUTH_KEY", "RELIANT_PAYLOAD_BLOB_GC_HORIZON", "PRE_STOP_DELAY", "SHUTDOWN_TIMEOUT", "LIVENESS_PATHS", "READINESS_PATHS", "DATABASE_DRIVER", "RELIANT_DB_MAX_OPEN_CONNS", "RELIANT_DB_MAX_IDLE_CONNS", "DB_CONNECT_TIMEOUT", "RELIANT_DB_SCHEMA_WAIT_SECONDS", "RELIANT_CONTROL_PLANE_URL", "NATS_USER", "TEMPORAL_HOST", "TEMPORAL_PORT", "TEMPORAL_NAMESPACE", "TLS_CERT_FILE", "TLS_KEY_FILE", "DISABLE_TLS", "DATA_DIR", "STREAMING_DRIVER", "PUBLIC_URL", "RELIANT_GITHUB_APP_SLUG", "RELIANT_GITHUB_BOT_USER_ID", "RELIANT_GITHUB_BOT_LOGIN", "OTEL_EXPORTER_OTLP_ENDPOINT", "OTEL_ENABLED", "PROMETHEUS_ENABLED", "ENVIRONMENT", "RELIANT_ANALYTICS_DISABLED", "RELIANT_API_BASE_URL", "VERTEXAI_PROJECT", "VERTEXAI_LOCATION", "RELIANT_LLM_STREAM_IDLE_TIMEOUT", "RELIANT_LLM_STREAM_CONTENT_STALL_TIMEOUT", "RELIANT_LLM_STREAM_PROGRESS_TIMEOUT", "RELIANT_LLM_STREAM_MID_BLOCK_STALL_TIMEOUT", "RELIANT_DEBUG_OPENAI_RESPONSES_INPUT", "RELIANT_DEBUG_OPENAI_TOOL_SCHEMAS", "PROXY_HOST", "WORKSPACE_BASE_DOMAIN", "WORKSPACE_URL_SCHEME", "WORKSPACE_URL_PORT", "RELIANT_ALLOW_PRIVATE_EGRESS"]
-        secrets = ["AUTH_API_KEY", "DATABASE_URL", "DATABASE_DIRECT_URL", "INTERNAL_SERVICE_SECRET", "NATS_URL", "NATS_PASSWORD", "RELIANT_VAULT_KEY", "RELIANT_SLACK_SIGNING_SECRET", "RELIANT_GITHUB_WEBHOOK_SECRET", "RELIANT_TEST_INTEGRATION_SECRET"]
+        secrets = ["AUTH_API_KEY", "SUPABASE_AUTH_HOOK_SECRET", "DATABASE_URL", "DATABASE_DIRECT_URL", "INTERNAL_SERVICE_SECRET", "NATS_URL", "NATS_PASSWORD", "RELIANT_VAULT_KEY", "RELIANT_SLACK_SIGNING_SECRET", "RELIANT_GITHUB_WEBHOOK_SECRET", "RELIANT_TEST_INTEGRATION_SECRET"]
         required_secrets = ["DATABASE_URL", "NATS_URL"]
         families = [RootFamily {prefix = "RELIANT_OAUTH_", suffix = "_CLIENT_ID"}, RootFamily {prefix = "RELIANT_OAUTH_", suffix = "_CLIENT_SECRET", sensitive = True}]
     }

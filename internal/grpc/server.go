@@ -10,10 +10,12 @@ import (
 	"slices"
 
 	"github.com/go-chi/cors"
+	"github.com/reliant-labs/forge/pkg/authhooks"
 	"github.com/reliant-labs/forge/pkg/oauth2"
 	"github.com/reliant-labs/forge/pkg/serverkit"
 
 	"github.com/reliant-labs/reliant/internal/accesstokenclient"
+	"github.com/reliant-labs/reliant/internal/analytics"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/cliauth"
 	"github.com/reliant-labs/reliant/internal/connections"
@@ -31,8 +33,8 @@ import (
 // APIHTTPRoutes are the plain-HTTP routes the API listener serves beside the
 // Connect services (the user-audience route set): the terminal websocket,
 // attachment bytes, the connection OAuth broker's callbacks, the inbound
-// trigger receivers, the connector MCP endpoint, CLI login discovery and
-// /health. They are outside the chain: each authenticates itself (a user
+// trigger receivers, the Supabase auth-event hook, the connector MCP
+// endpoint, CLI login discovery and /health. They are outside the chain: each authenticates itself (a user
 // token, a connector credential, a trigger's own token or a provider
 // signature) or is public.
 //
@@ -86,6 +88,11 @@ type APIHTTPRoutesDeps struct {
 	// HostedHTTPRedeem is the internally authenticated controller ticket route.
 	// Optional on deployments without hosted execution; no public auth fallback.
 	HostedHTTPRedeem http.Handler
+	// SupabaseAuthHook receives the Supabase project's auth events (sign-ups
+	// and credential sign-ins, from deploy/supabase/forge_auth_events.sql's
+	// triggers) at authhooks.Path("supabase"). nil, when no hook secret is
+	// configured, serves no route.
+	SupabaseAuthHook http.Handler
 }
 
 // APIHTTPRoutesStore is what the routes read from the database. The routes
@@ -129,6 +136,11 @@ func NewAPIHTTPRoutes(deps APIHTTPRoutesDeps) (*APIHTTPRoutes, error) {
 	deps.Inbound.Register(handle)
 	if deps.HostedHTTPRedeem != nil {
 		handle("/internal/hosted-http/redeem", deps.HostedHTTPRedeem)
+	}
+	// Supabase's auth-event triggers post here through pg_net, authenticated
+	// by the hook's own bearer secret: the auth database holds no user token.
+	if deps.SupabaseAuthHook != nil {
+		handle(authhooks.Path(analytics.AuthProvider), deps.SupabaseAuthHook)
 	}
 
 	// Connector MCP endpoint: third-party MCP clients (ChatGPT, Claude, and

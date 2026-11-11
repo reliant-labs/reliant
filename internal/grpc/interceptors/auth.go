@@ -77,6 +77,46 @@ func (t *sessionTracker) cleanup() {
 	}
 }
 
+// maxHeartbeatUsersPerDay bounds the users the sign-in heartbeat remembers
+// per UTC day; past it the memory starts again (a user may then be recorded
+// twice that day, which the console's distinct counts absorb).
+const maxHeartbeatUsersPerDay = 100_000
+
+// signInHeartbeat remembers who this process recorded a daily sign-in for:
+// forge's auth_signed_in {kind: resumed}, at most once per user per UTC day,
+// which counts a user with a long-lived Supabase session as active.
+type signInHeartbeat struct {
+	mu   sync.Mutex
+	day  string
+	seen map[string]struct{}
+	now  func() time.Time
+}
+
+func newSignInHeartbeat() *signInHeartbeat { return &signInHeartbeat{now: time.Now} }
+
+// first reports whether userID has not been recorded today, and remembers it.
+func (h *signInHeartbeat) first(userID string) bool {
+	day := h.now().UTC().Format(time.DateOnly)
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.day != day || h.seen == nil || len(h.seen) >= maxHeartbeatUsersPerDay {
+		h.day, h.seen = day, make(map[string]struct{})
+	}
+	if _, ok := h.seen[userID]; ok {
+		return false
+	}
+	h.seen[userID] = struct{}{}
+	return true
+}
+
+// countsAsSignedIn reports whether claims are a person signed in through the
+// identity provider: a session JWT, not an anonymous Supabase session, an
+// access token or the self-host shared key (software holds those).
+func countsAsSignedIn(claims *auth.JWTClaims) bool {
+	return claims != nil && claims.Sub != "" && !claims.IsAnonymous &&
+		claims.Credential == auth.CredentialSession
+}
+
 // AuthInterceptor provides authentication for gRPC requests. A session JWT (or
 // the self-host API key) goes to the configured validator; an `rlat_` access
 // token goes to the token authority, must carry reliant:api or a runs/triggers
@@ -86,6 +126,7 @@ type AuthInterceptor struct {
 	validator      auth.TokenValidator
 	accessTokens   auth.AccessTokenIntrospector // optional; nil disables access-token auth
 	sessionTracker *sessionTracker
+	heartbeat      *signInHeartbeat
 	// publicProcedures are the procedures this interceptor lets through with
 	// no credentials: middleware.UnauthenticatedProcedures in the server.
 	publicProcedures map[string]struct{}
@@ -123,6 +164,7 @@ func NewAuthInterceptor(settings auth.Settings, publicProcedures map[string]stru
 		return &AuthInterceptor{
 			validator:        validator,
 			sessionTracker:   newSessionTracker(),
+			heartbeat:        newSignInHeartbeat(),
 			publicProcedures: publicProcedures,
 		}, nil
 
@@ -148,6 +190,7 @@ func NewAuthInterceptor(settings auth.Settings, publicProcedures map[string]stru
 		return &AuthInterceptor{
 			validator:        validator,
 			sessionTracker:   newSessionTracker(),
+			heartbeat:        newSignInHeartbeat(),
 			publicProcedures: publicProcedures,
 		}, nil
 	}
@@ -282,24 +325,34 @@ func (i *AuthInterceptor) AuthenticateHTTP(r *http.Request) (string, error) {
 	return userID, nil
 }
 
-// trackSession handles analytics session tracking for authenticated users
+// trackSession handles analytics session tracking for authenticated users:
+// session_start on the first request after 30 idle minutes, and, once per
+// user per UTC day, the sign-in heartbeat (forge's auth_signed_in {kind:
+// resumed, provider: supabase}) for a person signed in through Supabase. The
+// user's analytics consent is read only when one of them is due, and an
+// opted-out user records neither.
 func (i *AuthInterceptor) trackSession(ctx context.Context, claims *auth.JWTClaims) {
 	if claims == nil {
 		return
 	}
 
 	// Track session if new (first request in 30 minutes)
-	if i.sessionTracker.isNewSession(claims.Sub) {
-		i.sessionTracker.updateSession(claims.Sub)
-		// ForUser reads the user's consent, so only on a new session.
-		analytics.ForUser(ctx, claims.Sub).TrackSessionStart()
-	} else {
-		// Just update the last seen time without logging event
-		i.sessionTracker.updateSession(claims.Sub)
+	newSession := i.sessionTracker.isNewSession(claims.Sub)
+	i.sessionTracker.updateSession(claims.Sub)
+	heartbeat := countsAsSignedIn(claims) && i.heartbeat != nil && i.heartbeat.first(claims.Sub)
+	if !newSession && !heartbeat {
+		return
+	}
+	// ForUser reads the user's consent, so only when an event is due.
+	tracker := analytics.ForUser(ctx, claims.Sub)
+	if newSession {
+		tracker.TrackSessionStart()
+	}
+	if heartbeat {
+		tracker.TrackAuthSignedIn()
 	}
 }
 
-// WrapUnary implements connect.Interceptor for unary RPCs
 func (i *AuthInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
 	return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
 		procedure := req.Spec().Procedure

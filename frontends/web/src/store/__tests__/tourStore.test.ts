@@ -9,7 +9,7 @@
  * These tests intentionally do NOT exercise live settings RPCs; we mock the
  * persistence layer so the store's set/get logic can be tested in isolation.
  */
-/* eslint-disable @typescript-eslint/no-explicit-any */
+ 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("../../lib/settingsPersistence", () => ({

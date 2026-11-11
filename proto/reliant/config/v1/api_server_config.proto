@@ -141,6 +141,18 @@ message ApiServerConfig {
     env_var: "AUTH_REQUIRE_EMAIL_VERIFIED_CLAIM"
     description: "A JWT without an email_verified claim carries no email"
   }];
+  // The bearer secret the Supabase project's auth-event triggers send
+  // (deploy/supabase/forge_auth_events.sql, stored in its Vault as
+  // forge_auth_hook_secret). Set, the API serves
+  // POST /_forge/auth/hooks/supabase (forge/pkg/authhooks), which records
+  // sign-ups and credential sign-ins as the standard auth events. Unset, the
+  // route does not exist.
+  string supabase_auth_hook_secret = 85 [(forge.v1.config) = {
+    env_var: "SUPABASE_AUTH_HOOK_SECRET"
+    sensitive: true
+    optional: true
+    description: "Bearer secret of the Supabase auth-event triggers; set, serves /_forge/auth/hooks/supabase"
+  }];
 
   // The PUBLIC base URL of the control plane that issues this deployment's
   // tokens: the issuer TokenService names, published as RFC 8414 metadata so

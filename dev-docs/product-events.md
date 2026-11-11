@@ -121,6 +121,16 @@ boot (localStorage `reliant.landing_attribution`, 7 days, until telemetry starts
 (`enableAttribution({search})`), only with analytics consent.
 `lib/__tests__/landingAttributionHandoff.test.ts` pins it through the real runtime.
 
+## Auth events (forge's standard vocabulary)
+
+`auth_signed_up`, `auth_signed_in` and `auth_signed_out`, with
+`product.provider = supabase`, are forge's standard auth events: the ones the
+console's Users card and dashboards count users from. They come from the
+browser adapter, the API server's daily sign-in heartbeat and the Supabase
+trigger hook, all skipping anonymous sessions and honouring the analytics
+opt-out. How each is wired, and the one-time Supabase setup:
+`dev-docs/supabase-auth-events.md`.
+
 ## Who a failure belongs to
 
 A server's errors name the user of the request that failed, not the last user

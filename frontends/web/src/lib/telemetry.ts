@@ -24,6 +24,8 @@
  */
 
 import { disableTelemetry, setTelemetryUser } from "@reliantlabs/forge-web-runtime";
+import { supabaseAuthTelemetryListener } from "@reliantlabs/forge-web-runtime/auth/supabase";
+import type { Session } from "@supabase/supabase-js";
 import {
   enableAttribution,
   initBrowserTelemetry,
@@ -442,15 +444,44 @@ function safeStorage(
  * the renderer's user.
  */
 export function setTelemetryUserId(user: { id: string } | null): void {
-  if (!isDev) {
-    try {
-      void window.electronAPI?.setTelemetryUser?.(user ? user.id : null)?.catch(() => {});
-    } catch {
-      // Best-effort.
-    }
-  }
+  forwardUserToElectron(user);
   if (!clickstackEnabled()) return;
   setTelemetryUser(user ? user.id : null);
+}
+
+function forwardUserToElectron(user: { id: string } | null): void {
+  if (isDev) return;
+  try {
+    void window.electronAPI?.setTelemetryUser?.(user ? user.id : null)?.catch(() => {});
+  } catch {
+    // Best-effort.
+  }
+}
+
+// forge's Supabase adapter: identifyUser for a signed-in session (the id on
+// spans and replays, and the daily auth_signed_in {kind: resumed}), and
+// auth_signed_out on SIGNED_OUT, each with provider "supabase". It skips
+// anonymous sessions, which are not signed-in users.
+const supabaseAuthTelemetry = supabaseAuthTelemetryListener();
+
+/**
+ * Report a Supabase auth change (onAuthStateChange's event and session) to
+ * telemetry. An anonymous session is nobody: no id is attached, here or in
+ * the Electron main process, and it is never counted as a signed-in user (the
+ * API server's daily heartbeat skips it too). The standard auth events are
+ * product events, so they follow the analytics switch; with it off, only the
+ * id is attached, for error correlation, as before.
+ */
+export function reportAuthChange(event: string, session: Session | null): void {
+  const user =
+    session?.user && session.user.is_anonymous !== true ? { id: session.user.id } : null;
+  if (isDev || !privacyConsent().analyticsEnabled) {
+    setTelemetryUserId(user);
+    return;
+  }
+  forwardUserToElectron(user);
+  if (!clickstackEnabled()) return;
+  supabaseAuthTelemetry(event, session);
 }
 
 /**

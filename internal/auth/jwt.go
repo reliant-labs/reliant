@@ -65,6 +65,10 @@ type JWTClaims struct {
 	// server adds it to the tokens it issues third-party clients; a session
 	// from signing in to the app has none.
 	ClientID string `json:"client_id,omitempty"`
+	// IsAnonymous is Supabase's is_anonymous claim: a session from
+	// signInAnonymously, before the visitor upgrades to a real account. It
+	// is not a signed-in user, so the sign-in heartbeat skips it.
+	IsAnonymous bool `json:"is_anonymous,omitempty"`
 	// Credential is the kind of credential these claims were verified from,
 	// set by the validator that verified them — never read from the token.
 	Credential Credential `json:"-"`
