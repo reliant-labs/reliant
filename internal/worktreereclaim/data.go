@@ -126,7 +126,9 @@ func (d *dataWalk) visit(rel string) {
 		return
 	}
 	d.seen[key] = true
-	if rebuildablePath(rel) {
+	// The reclaim tombstone is the daemon's own, and goes with the
+	// checkout it marks (tombstone.go).
+	if rebuildablePath(rel) || key == tombstoneRel {
 		return
 	}
 	full := filepath.Join(d.checkout, filepath.FromSlash(rel))
