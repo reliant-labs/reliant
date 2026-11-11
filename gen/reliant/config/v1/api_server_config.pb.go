@@ -71,6 +71,13 @@ type ApiServerConfig struct {
 	// variable, and its KCL hands both processes one value. Turn it on only
 	// once the Supabase custom access-token hook is live on the project.
 	RequireEmailVerifiedClaim bool `protobuf:"varint,32,opt,name=require_email_verified_claim,json=requireEmailVerifiedClaim,proto3" json:"require_email_verified_claim,omitempty"`
+	// The bearer secret the Supabase project's auth-event triggers send
+	// (deploy/supabase/forge_auth_events.sql, stored in its Vault as
+	// forge_auth_hook_secret). Set, the API serves
+	// POST /_forge/auth/hooks/supabase (forge/pkg/authhooks), which records
+	// sign-ups and credential sign-ins as the standard auth events. Unset, the
+	// route does not exist.
+	SupabaseAuthHookSecret string `protobuf:"bytes,85,opt,name=supabase_auth_hook_secret,json=supabaseAuthHookSecret,proto3" json:"supabase_auth_hook_secret,omitempty"`
 	// The PUBLIC base URL of the control plane that issues this deployment's
 	// tokens: the issuer TokenService names, published as RFC 8414 metadata so
 	// `reliant auth login --server <this API>` can find where to log in. Not
@@ -266,6 +273,13 @@ func (x *ApiServerConfig) GetRequireEmailVerifiedClaim() bool {
 	return false
 }
 
+func (x *ApiServerConfig) GetSupabaseAuthHookSecret() string {
+	if x != nil {
+		return x.SupabaseAuthHookSecret
+	}
+	return ""
+}
+
 func (x *ApiServerConfig) GetAuthorizationServer() string {
 	if x != nil {
 		return x.AuthorizationServer
@@ -375,7 +389,7 @@ var File_reliant_config_v1_api_server_config_proto protoreflect.FileDescriptor
 
 const file_reliant_config_v1_api_server_config_proto_rawDesc = "" +
 	"\n" +
-	")reliant/config/v1/api_server_config.proto\x12\x11reliant.config.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\x1a\x1egoogle/protobuf/duration.proto\"\x93$\n" +
+	")reliant/config/v1/api_server_config.proto\x12\x11reliant.config.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\x1a\x1egoogle/protobuf/duration.proto\"\xd0%\n" +
 	"\x0fApiServerConfig\x12s\n" +
 	"\x0ejwt_public_key\x18\x01 \x01(\tBM\x82\xce\x18I\n" +
 	"\x0eJWT_PUBLIC_KEY\x12\x0ejwt-public-key*'JWT public key PEM for token validationR\fjwtPublicKey\x12~\n" +
@@ -407,7 +421,9 @@ const file_reliant_config_v1_api_server_config_proto_rawDesc = "" +
 	"\fAUTH_API_KEY*&Shared bearer key for AUTH_MODE=apikey0\x01P\x01R\n" +
 	"authApiKey\x12\xa0\x01\n" +
 	"\x1crequire_email_verified_claim\x18  \x01(\bB_\x82\xce\x18[\n" +
-	"!AUTH_REQUIRE_EMAIL_VERIFIED_CLAIM*6A JWT without an email_verified claim carries no emailR\x19requireEmailVerifiedClaim\x12\x9b\x01\n" +
+	"!AUTH_REQUIRE_EMAIL_VERIFIED_CLAIM*6A JWT without an email_verified claim carries no emailR\x19requireEmailVerifiedClaim\x12\xba\x01\n" +
+	"\x19supabase_auth_hook_secret\x18U \x01(\tB\x7f\x82\xce\x18{\n" +
+	"\x19SUPABASE_AUTH_HOOK_SECRET*ZBearer secret of the Supabase auth-event triggers; set, serves /_forge/auth/hooks/supabase0\x01P\x01R\x16supabaseAuthHookSecret\x12\x9b\x01\n" +
 	"\x14authorization_server\x18! \x01(\tBh\x82\xce\x18d\n" +
 	"\x1cRELIANT_AUTHORIZATION_SERVER*DPublic URL of the control plane that issues this deployment's tokensR\x13authorizationServer\x12\x8e\x01\n" +
 	"\x11mcp_oauth_issuers\x18\" \x03(\tBb\x82\xce\x18^\n" +

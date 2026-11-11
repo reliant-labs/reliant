@@ -79,6 +79,7 @@ RELIANT_WORKTREE_RECLAIM_QUIET kind=google.protobuf.Duration flag="" default="24
 RELIANT_WORKTREE_RECLAIM_ROOTS kind=string flag="" default="" required=false optional=false sensitive=false allowed=[] aliases=[]
 SHUTDOWN_TIMEOUT kind=google.protobuf.Duration flag="" default="30s" required=false optional=false sensitive=false allowed=[] aliases=[]
 STREAMING_DRIVER kind=string flag="streaming-driver" default="nats" required=false optional=false sensitive=false allowed=[nats] aliases=[]
+SUPABASE_AUTH_HOOK_SECRET kind=string flag="" default="" required=false optional=true sensitive=true allowed=[] aliases=[]
 TEMPORAL_HOST kind=string flag="temporal-host" default="localhost" required=false optional=false sensitive=false allowed=[] aliases=[]
 TEMPORAL_NAMESPACE kind=string flag="temporal-namespace" default="reliant" required=false optional=false sensitive=false allowed=[] aliases=[]
 TEMPORAL_PORT kind=int32 flag="temporal-port" default="7233" required=false optional=false sensitive=false allowed=[] aliases=[]

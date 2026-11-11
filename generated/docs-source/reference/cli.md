@@ -52,6 +52,9 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant forge agent skill search`](#reliant-forge-agent-skill-search) | Search skills across all scopes by keyword (path/name=3, desc/body=1) |
 | [`reliant forge api`](#reliant-forge-api) | Inspect and exercise Connect RPC endpoints over plain HTTP+JSON |
 | [`reliant forge api curl`](#reliant-forge-api-curl) | Print a copy-pasteable curl command for a Connect RPC method |
+| [`reliant forge auth`](#reliant-forge-auth) | Auth-provider helpers: the inbound auth-event hooks for Supabase, Clerk and Auth0 |
+| [`reliant forge auth hooks`](#reliant-forge-auth-hooks) | Inbound auth-event hooks: the provider reports sign-ups and sign-ins to /_forge/auth/hooks/<provider> |
+| [`reliant forge auth hooks sql`](#reliant-forge-auth-hooks-sql) | Print the provider-side SQL of a hook (supabase): triggers that post sign-ups and sign-ins through pg_net |
 | [`reliant forge build`](#reliant-forge-build) | Compile the project's binaries and frontends locally (never publishes) |
 | [`reliant forge build receipt`](#reliant-forge-build-receipt) | Emit a typed receipt for actual exported build inputs |
 | [`reliant forge ci`](#reliant-forge-ci) | CI helper commands — verify, scan, and validate in CI pipelines |
@@ -321,6 +324,7 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant forge obs status`](#reliant-forge-obs-status) | What is wrong right now? Services, open issues, alerts, telemetry and the release in force |
 | [`reliant forge obs trace`](#reliant-forge-obs-trace) | One trace as a tree, with its errors and logs |
 | [`reliant forge obs traces`](#reliant-forge-obs-traces) | Find traces: the slowest, the failing, by route |
+| [`reliant forge obs users`](#reliant-forge-obs-users) | Users of the app: active, new and returning, from its product events |
 | [`reliant forge obs workloads`](#reliant-forge-obs-workloads) | Restarts, crash loops, last termination reasons and failing jobs, per workload |
 | [`reliant forge package`](#reliant-forge-package) | Manage internal packages |
 | [`reliant forge package new`](#reliant-forge-package-new) | Create a new internal package with contract interface |
@@ -1199,6 +1203,7 @@ reliant forge
 |---------|-------------|
 | [`agent`](#reliant-forge-agent) | For coding agents: skills, the MCP server, and filing a forge bug |
 | [`api`](#reliant-forge-api) | Inspect and exercise Connect RPC endpoints over plain HTTP+JSON |
+| [`auth`](#reliant-forge-auth) | Auth-provider helpers: the inbound auth-event hooks for Supabase, Clerk and Auth0 |
 | [`build`](#reliant-forge-build) | Compile the project's binaries and frontends locally (never publishes) |
 | [`ci`](#reliant-forge-ci) | CI helper commands — verify, scan, and validate in CI pipelines |
 | [`cloud`](#reliant-forge-cloud) | Talk to the hosted control plane an environment declares |
@@ -1519,6 +1524,85 @@ reliant forge api curl <service.method> [flags]
 | `--body` | `string` | - | Request body JSON (default: zero-value skeleton from proto fields) |
 | `--host` | `string` | `localhost` | Host name to embed in the URL |
 | `--port` | `int` | `0` | Port the app listens on (default 8080; set per-env in deploy/kcl) |
+
+---
+
+### reliant forge auth
+
+Auth-provider helpers: the inbound auth-event hooks for Supabase, Clerk and Auth0
+
+```
+reliant forge auth [flags]
+```
+
+**Subcommands:**
+
+| Command | Description |
+|---------|-------------|
+| [`hooks`](#reliant-forge-auth-hooks) | Inbound auth-event hooks: the provider reports sign-ups and sign-ins to /_forge/auth/hooks/<provider> |
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+
+---
+
+#### reliant forge auth hooks
+
+Inbound auth-event hooks: the provider reports sign-ups and sign-ins to /_forge/auth/hooks/<provider>
+
+An app on Supabase, Clerk or Auth0 reports sign-ups and sign-ins from the
+provider itself: the provider posts to a handler from forge/pkg/authhooks
+that the app mounts on its own mux (conventionally at
+/_forge/auth/hooks/<provider>), which records them as the standard auth
+events (auth_signed_up, auth_signed_in).
+
+Supabase needs SQL on its side (triggers through pg_net); print it with
+`forge auth hooks sql supabase`. Clerk (a Svix webhook) and Auth0 (a
+Log Stream) are configured in their dashboards. The observability/product-events/auth-events
+skill has every provider's steps.
+
+```
+reliant forge auth hooks [flags]
+```
+
+**Subcommands:**
+
+| Command | Description |
+|---------|-------------|
+| [`sql`](#reliant-forge-auth-hooks-sql) | Print the provider-side SQL of a hook (supabase): triggers that post sign-ups and sign-ins through pg_net |
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+
+---
+
+#### reliant forge auth hooks sql
+
+Print the provider-side SQL of a hook (supabase): triggers that post sign-ups and sign-ins through pg_net
+
+Print the SQL that makes a Supabase project's auth database report sign-ups
+and sign-ins to the app's /_forge/auth/hooks/supabase endpoint. It is
+idempotent, asynchronous (pg_net, after commit) and never blocks or fails
+auth; its header says how to set the Vault secrets, install, verify and
+remove it. Commit it beside your other Supabase SQL:
+
+  forge auth hooks sql supabase > deploy/supabase/forge_auth_events.sql
+
+```
+reliant forge auth hooks sql <provider> [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 
 ---
 
@@ -2588,9 +2672,9 @@ Manage the identity an environment declares in KCL, using its control plane.
 Reads (status, users) need identity:read; every verb that changes a user
 (invite, set-roles, reset, lock, unlock, delete, revoke-sessions) and export
 need identity:manage and an org admin. Under Reliant, or after forge login, nothing
-extra is needed: when the control plane answers that the credential lacks one of
-those scopes, forge trades it for the scope on demand (an hour, and only while
-the person behind the session holds the grant), as deploy does for deploy:read.
+extra is needed: forge trades the credential for the scope a verb needs before
+calling it (an hour, and only while the person behind the session holds the
+grant), as obs does for obs:read.
 A --token or the token env var is used exactly as given and must carry the scope.
 The organization is resolved from the authenticated server, not a token claim or
 a flag. The environment must already exist in this project.
@@ -4221,7 +4305,10 @@ Examples:
 CHECK declared 'forge:closed-set <set>' whose value list differs from the set:
 the CHECK replaced whole with the set's values, the declaration re-issued, and
 the compatibility line (a widening is backward-compatible, a narrowing breaks
-rollback). The name defaults to <constraint>_closed_set.
+rollback). A widening adds the CHECK NOT VALID, so its ACCESS EXCLUSIVE lock is
+never held for a scan of the table, and writes a second migration,
+<name>_validate, that validates the existing rows under a lock that blocks
+neither reads nor writes. The name defaults to <constraint>_closed_set.
 
 ```
 reliant forge db migration new [name] [flags]
@@ -4359,6 +4446,8 @@ carries ok, exit_code and error like every other forge --json verb, plus
 schema "forge.db.query/v1", scope, columns[{name,pg_type}], rows, row_count,
 truncated, truncated_by, cells_truncated, duration_ms, bytes and audit{id,
 sql_sha256}: a hosted query's adds replica, a local one's record (the file).
+The table's footer says when a cap cut the result; csv keeps stdout pure and
+says it on stderr.
 
 Exit codes: 0 rows returned; 1 the statement or the request is wrong (refused
 by the guard or the read-only transaction, a SQL error, a permission error, a
@@ -9381,7 +9470,13 @@ platform registry:
   <registry>/<org>/<project>/<frontend>-sourcemaps:<build id>
 
 and otherwise they are kept in .forge/sourcemaps/<env>/<frontend>/<build id>/
-and nothing is uploaded. The artifact format is documented in
+and nothing is uploaded. <project> is --project, or forge.yaml's name: name the
+project of the env the bundle reports its errors into, which is where they are
+looked up. <org> is --org, or the organization the credential acts for, which
+forge asks the control plane. A registry-only credential (a token carrying only
+sourcemaps:write) cannot ask, because the control plane refuses it on every
+RPC, so a CI job holding one names the org with --org. The artifact format is
+documented in
 internal/deploytarget/sourcemaps_oci.go.
 
 THE BUILD ID must be the version the bundle reports to telemetry
@@ -9400,6 +9495,7 @@ not a no-op.
 Examples:
   forge frontend sourcemaps push web/dist --frontend desktop --build-id 3f9c0e1a2b4d --env prod
   forge frontend sourcemaps push web/dist --frontend desktop --build-id "$VERSION" --env prod --dry-run
+  forge frontend sourcemaps push web/dist --frontend desktop --build-id "$VERSION" --env prod --org "$ORG_ID"
 
 ```
 reliant forge frontend sourcemaps push <dist> [flags]
@@ -9415,7 +9511,8 @@ reliant forge frontend sourcemaps push <dist> [flags]
 | `--dry-run` | `bool` | - | Extract and report; push and keep nothing |
 | `--env` | `string` | - | The env whose control plane and observability decide where the maps go (required) |
 | `--frontend` | `string` | - | The frontend the maps belong to (required) |
-| `--project` | `string` | - | The forge project the frontend belongs to (default: forge.yaml's name) |
+| `--org` | `string` | - | The organization to file under, used as given instead of asking the control plane (a sourcemaps:write credential cannot ask) |
+| `--project` | `string` | - | The forge project the frontend belongs to: its maps are filed under this project's registry subtree (default: forge.yaml's name) |
 
 ---
 
@@ -11182,6 +11279,7 @@ reliant forge obs [flags]
 | [`status`](#reliant-forge-obs-status) | What is wrong right now? Services, open issues, alerts, telemetry and the release in force |
 | [`trace`](#reliant-forge-obs-trace) | One trace as a tree, with its errors and logs |
 | [`traces`](#reliant-forge-obs-traces) | Find traces: the slowest, the failing, by route |
+| [`users`](#reliant-forge-obs-users) | Users of the app: active, new and returning, from its product events |
 | [`workloads`](#reliant-forge-obs-workloads) | Restarts, crash loops, last termination reasons and failing jobs, per workload |
 
 **Flags:**
@@ -11387,13 +11485,16 @@ JSON schema forge.obs.check/v1. --fields takes dotted paths of:
   findings.ref
   findings.service
   findings.threshold
+  findings.unattributed
   findings.value
   firing_alerts
   new_issues
   not_evaluated
   query_mode
   reason
+  reason_code
   regressed_issues
+  rollout_incomplete
   scope
   scope.backend
   scope.env
@@ -11412,6 +11513,7 @@ JSON schema forge.obs.check/v1. --fields takes dotted paths of:
   statements.sql
   subject
   subject.git_commit
+  subject.live_at
   subject.previous_release
   subject.promoted_at
   subject.promotion_id
@@ -11422,7 +11524,9 @@ JSON schema forge.obs.check/v1. --fields takes dotted paths of:
   thresholds.source
   thresholds.value
   verdict
+  version_share
   waited
+  window_not_live
   windows
   windows.after
   windows.after.from
@@ -11830,7 +11934,10 @@ range known, the last 20) that touched the files the error was raised from,
 read from this checkout with git. A hosted env also shows who it is assigned to,
 the incident it belongs to (the other issues with the same cause, first seen
 close together: related_count and incident_key), and the newest
---timeline-limit timeline entries, oldest first. [env] defaults to dev.
+--timeline-limit timeline entries, oldest first. An issue that groups bug
+reports (forge report-bug, an agent's report_bug) shows the body of each report
+its latest event and --events carry: id, severity, title, summary, expected,
+actual and evidence. [env] defaults to dev.
 
   cli forge obs issue ISS-7f3a prod
   cli forge obs issue sfp1-0123456789abcdef dev --events 10
@@ -11843,6 +11950,16 @@ close together: related_count and incident_key), and the newest
 Triage needs a hosted env: a local issue is a query over logs and has no state.
 
 JSON schema forge.obs.issue/v1. --fields takes dotted paths of:
+  bug_reports
+  bug_reports.actual
+  bug_reports.evidence
+  bug_reports.expected
+  bug_reports.id
+  bug_reports.product
+  bug_reports.severity
+  bug_reports.summary
+  bug_reports.time
+  bug_reports.title
   by_version
   by_version.affected
   by_version.affected_unit
@@ -12047,6 +12164,16 @@ The write sends the row version it read, so a change made since is refused
 retried: read the issue again, then decide.
 
 JSON schema forge.obs.issue/v1. --fields takes dotted paths of:
+  bug_reports
+  bug_reports.actual
+  bug_reports.evidence
+  bug_reports.expected
+  bug_reports.id
+  bug_reports.product
+  bug_reports.severity
+  bug_reports.summary
+  bug_reports.time
+  bug_reports.title
   by_version
   by_version.affected
   by_version.affected_unit
@@ -12219,6 +12346,16 @@ The document carries the stored comment (comment.id, comment.created_at). A
 credential that acts for no person cannot comment.
 
 JSON schema forge.obs.issue/v1. --fields takes dotted paths of:
+  bug_reports
+  bug_reports.actual
+  bug_reports.evidence
+  bug_reports.expected
+  bug_reports.id
+  bug_reports.product
+  bug_reports.severity
+  bug_reports.summary
+  bug_reports.time
+  bug_reports.title
   by_version
   by_version.affected
   by_version.affected_unit
@@ -12387,6 +12524,16 @@ The write sends the row version it read, so a change made since is refused
 ("re-read and retry", exit 1) instead of overwriting it.
 
 JSON schema forge.obs.issue/v1. --fields takes dotted paths of:
+  bug_reports
+  bug_reports.actual
+  bug_reports.evidence
+  bug_reports.expected
+  bug_reports.id
+  bug_reports.product
+  bug_reports.severity
+  bug_reports.summary
+  bug_reports.time
+  bug_reports.title
   by_version
   by_version.affected
   by_version.affected_unit
@@ -12556,6 +12703,16 @@ The write sends the row version it read, so a change made since is refused
 ("re-read and retry", exit 1) instead of overwriting it.
 
 JSON schema forge.obs.issue/v1. --fields takes dotted paths of:
+  bug_reports
+  bug_reports.actual
+  bug_reports.evidence
+  bug_reports.expected
+  bug_reports.id
+  bug_reports.product
+  bug_reports.severity
+  bug_reports.summary
+  bug_reports.time
+  bug_reports.title
   by_version
   by_version.affected
   by_version.affected_unit
@@ -12725,6 +12882,16 @@ The write sends the row version it read, so a change made since is refused
 ("re-read and retry", exit 1) instead of overwriting it.
 
 JSON schema forge.obs.issue/v1. --fields takes dotted paths of:
+  bug_reports
+  bug_reports.actual
+  bug_reports.evidence
+  bug_reports.expected
+  bug_reports.id
+  bug_reports.product
+  bug_reports.severity
+  bug_reports.summary
+  bug_reports.time
+  bug_reports.title
   by_version
   by_version.affected
   by_version.affected_unit
@@ -13637,6 +13804,11 @@ dashboards/*.json; kinds line, number, table, bar, heatmap, sql) flattened to a
 table. Panels over the hosted platform's own tables (issues, sessions, funnel)
 need the control plane.
 
+--sql returns the result rows as selected: every column, in SELECT order, for
+any column types. On a hosted env whose control plane predates that, a SELECT
+with a date or time column exits 2 when the answer may have been folded into
+series (rows would be lost); select the time column as toString(...) there.
+
 Raw SQL is counted: the JSON document says "query_mode": "raw", and with
 FORGE_OBS_DEBUG=1 the statement's shape (literals removed) is logged to stderr.
 
@@ -14215,6 +14387,94 @@ reliant forge obs traces [env] [flags]
 | `--service` | `stringArray` | `[]` | only this service.name (repeatable) |
 | `--since` | `duration` | `1h0m0s` | how far back to read (ignored with --from) |
 | `--slow` | `bool` | - | slowest first |
+| `--to` | `string` | - | range end, RFC 3339 (default now) |
+| `--user` | `string` | - | read every dev instance of one `user` (the reliant.instance.user the gateway stamps; the control plane resolves an email) |
+
+---
+
+#### reliant forge obs users
+
+Users of the app: active, new and returning, from its product events
+
+Count the env's users over the range (--since, default 7d, at most 90d) and the
+range of the same length before it: active (any event a signed-in user caused,
+the auth middleware's daily sign-in included), new (signed up, or first seen in
+the 90 days before the end of the range when the env reports no sign-ups) and
+returning (active, not new). [env] defaults to dev.
+
+  cli forge obs users prod
+  cli forge obs users prod --series 30 --json
+  cli forge obs users prod --seen-total
+
+The counts are the console's Users card's: one statement (pkg/obsquery) over the
+control plane's per-org product_events table. A local ClickStack has no such
+table, so a local env answers "could not look". One user's sessions:
+`cli forge obs sessions <env> --user <id>`.
+
+JSON schema forge.obs.users/v1. --fields takes dotted paths of:
+  envs
+  envs.clients
+  envs.current
+  envs.current.active
+  envs.current.new
+  envs.current.returning
+  envs.days
+  envs.days.active
+  envs.days.day
+  envs.days.new
+  envs.days.returning
+  envs.env_id
+  envs.first_event_at
+  envs.new_rule
+  envs.previous
+  envs.previous.active
+  envs.previous.new
+  envs.previous.returning
+  envs.retention_days
+  envs.seen_total
+  query_mode
+  scope
+  scope.backend
+  scope.env
+  scope.env_id
+  scope.from
+  scope.instance
+  scope.instance.id
+  scope.instance.label
+  scope.instance.user
+  scope.services
+  scope.to
+  statements
+  statements.params.*
+  statements.purpose
+  statements.sql
+  suggested
+Always kept: schema, ok, exit_code, error, truncated, omitted, next_page_token.
+
+
+```
+reliant forge obs users [env] [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--all-instances` | `bool` | - | read every dev instance of the env, not only this checkout's |
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--backend` | `string` | - | local | cloud (default: from the env's declaration) |
+| `--explain` | `bool` | - | print the compiled SQL and its parameters instead of running it (a starting point for obs query --sql) |
+| `--fields` | `string` | - | with --json: keep only these comma-separated dotted fields (the head is always kept) |
+| `--filter` | `stringArray` | `[]` | attribute predicate key=value or key!=value (repeatable): an allowlisted key, or any attribute as span.attr.<k> (traces), log.attr.<k> (logs) or resource.attr.<k> |
+| `--from` | `string` | - | range start, RFC 3339 |
+| `--instance` | `string` | - | read this dev `instance` of a hosted-dev env: its id (scope.instance.id, the control plane's) or its label (alice/fix-login, or the branch alone) as forge env up recorded it on this machine (default: this checkout's) |
+| `--json` | `bool` | - | print one JSON document on stdout (see the schema below; progress goes to stderr) |
+| `--limit` | `int` | `0` | most items to return |
+| `--print-sql` | `bool` | - | alias of --explain |
+| `--seen-total` | `bool` | - | also count every user still retained (reads the whole retention) |
+| `--series` | `int` | `0` | also count each UTC day of the last N days (0-90) |
+| `--service` | `stringArray` | `[]` | only this service.name (repeatable) |
+| `--since` | `duration` | `168h0m0s` | how far back to read (ignored with --from) |
 | `--to` | `string` | - | range end, RFC 3339 (default now) |
 | `--user` | `string` | - | read every dev instance of one `user` (the reliant.instance.user the gateway stamps; the control plane resolves an email) |
 
@@ -15320,7 +15580,7 @@ reliant forge project new [project-name] --mod [module-path] [flags]
 | `--routes` | `stringSlice` | `[]` | CRUD route allowlist for every --frontend; none generates no CRUD pages |
 | `--service` | `stringSlice` | `[]` | Name(s) of initial Go services (repeatable or comma-separated). Name services after domain entities (item, order), not the binary. Omit to scaffold zero services and add them later via 'forge scaffold service <entity>' |
 | `--skip-tools` | `bool` | - | Skip auto-installing protoc-gen-go / protoc-gen-connect-go (run 'forge tools install' later) |
-| `--verbose`, `-v` | `bool` | - | Print the raw output behind a step forge summarizes in one line (e.g. git's explanation when the initial commit is skipped for want of a git identity) |
+| `--verbose`, `-v` | `bool` | - | Stream every step's raw output — the package manager's install, the bootstrap generate, go mod tidy, git — instead of one line per step with the output kept in .forge/logs/project-new.log (also: git's explanation when the initial commit is skipped for want of a git identity) |
 | `--verify` | `bool` | - | Compile the scaffold before returning: the bootstrap generate then ends with its go build check and a render of every deploy env (adds ~1s warm, ~40s on a cold build cache, and saturates the CPU while it runs). Off by default: the scaffold is deterministic and forge's own e2e corpus compiles it, and your first go build or forge generate pays for the same compile |
 
 ---
@@ -18570,7 +18830,13 @@ platform registry:
   <registry>/<org>/<project>/<frontend>-sourcemaps:<build id>
 
 and otherwise they are kept in .forge/sourcemaps/<env>/<frontend>/<build id>/
-and nothing is uploaded. The artifact format is documented in
+and nothing is uploaded. <project> is --project, or forge.yaml's name: name the
+project of the env the bundle reports its errors into, which is where they are
+looked up. <org> is --org, or the organization the credential acts for, which
+forge asks the control plane. A registry-only credential (a token carrying only
+sourcemaps:write) cannot ask, because the control plane refuses it on every
+RPC, so a CI job holding one names the org with --org. The artifact format is
+documented in
 internal/deploytarget/sourcemaps_oci.go.
 
 THE BUILD ID must be the version the bundle reports to telemetry
@@ -18589,6 +18855,7 @@ not a no-op.
 Examples:
   forge frontend sourcemaps push web/dist --frontend desktop --build-id 3f9c0e1a2b4d --env prod
   forge frontend sourcemaps push web/dist --frontend desktop --build-id "$VERSION" --env prod --dry-run
+  forge frontend sourcemaps push web/dist --frontend desktop --build-id "$VERSION" --env prod --org "$ORG_ID"
 
 ```
 reliant forge ui sourcemaps push <dist> [flags]
@@ -18604,7 +18871,8 @@ reliant forge ui sourcemaps push <dist> [flags]
 | `--dry-run` | `bool` | - | Extract and report; push and keep nothing |
 | `--env` | `string` | - | The env whose control plane and observability decide where the maps go (required) |
 | `--frontend` | `string` | - | The frontend the maps belong to (required) |
-| `--project` | `string` | - | The forge project the frontend belongs to (default: forge.yaml's name) |
+| `--org` | `string` | - | The organization to file under, used as given instead of asking the control plane (a sourcemaps:write credential cannot ask) |
+| `--project` | `string` | - | The forge project the frontend belongs to: its maps are filed under this project's registry subtree (default: forge.yaml's name) |
 
 ---
 

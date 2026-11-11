@@ -57,7 +57,7 @@ vi.mock('@/lib/constants', async (importOriginal) => ({
   getIsDev: () => false,
 }))
 
-vi.mock('@/lib/telemetry', () => ({ setTelemetryUserId: vi.fn() }))
+vi.mock('@/lib/telemetry', () => ({ setTelemetryUserId: vi.fn(), reportAuthChange: vi.fn() }))
 
 type TestWindow = Omit<Window, 'electronAPI'> & { electronAPI?: unknown }
 

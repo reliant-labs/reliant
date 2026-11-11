@@ -3,7 +3,7 @@ import type { User, Session, AuthChangeEvent } from '@supabase/supabase-js'
 import { supabase, setAuthStorageUnreadableHandler } from '@/lib/supabase'
 import { logger } from '@/lib/logger'
 import { getAppURL } from '@/lib/constants'
-import { setTelemetryUserId } from '@/lib/telemetry'
+import { reportAuthChange, setTelemetryUserId } from '@/lib/telemetry'
 import { trackEvent } from '@/lib/analytics'
 import { queryClient } from '@/lib/query-client'
 import { setSessionOwner } from '@/lib/auth/sessionOwner'
@@ -1132,13 +1132,19 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       // identity (signed out, or another user signed in on another host
       // sharing the session cookie) clears the previous user's state first,
       // and installs nothing if that fails: see adoptIdentity.
-      supabase.auth.onAuthStateChange(async (_event: AuthChangeEvent, session: Session | null) => {
+      supabase.auth.onAuthStateChange(async (event: AuthChangeEvent, session: Session | null) => {
         observedEvents++
         observedIdentity = { user: session?.user ?? null, session }
-        if (!(await adoptIdentity(set, session?.user ?? null, session))) return
+        if (!(await adoptIdentity(set, session?.user ?? null, session))) {
+          // Refused (the previous user's state could not be cleared): the page
+          // stays signed out. A sign-out still happened, so it is reported.
+          if (event === 'SIGNED_OUT') reportAuthChange(event, null)
+          return
+        }
 
-        // Attach the user to telemetry for error correlation
-        setTelemetryUserId(session?.user ? { id: session.user.id } : null)
+        // Attach the user to telemetry, and report the change as forge's
+        // standard auth events (anonymous sessions excluded): lib/telemetry.
+        reportAuthChange(event, session)
 
         // provider_token is deliberately not persisted here: this listener
         // also fires on every token refresh and tab focus, when the provider

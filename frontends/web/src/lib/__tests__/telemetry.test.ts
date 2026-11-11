@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { Session } from "@supabase/supabase-js";
 import { setRuntimeConfig } from "@/test/runtimeConfig";
 
 // The option matrix is pinned through the real initTelemetry(): what reaches
@@ -32,6 +33,7 @@ const runtime = vi.hoisted(() => ({
   setTelemetryUser: vi.fn(),
   reportException: vi.fn(() => true),
   setGlobalAttributes: vi.fn(),
+  supabaseAuth: vi.fn(),
 }));
 
 vi.mock("@reliantlabs/forge-web-runtime", () => ({
@@ -42,6 +44,9 @@ vi.mock("@reliantlabs/forge-web-runtime", () => ({
 vi.mock("@reliantlabs/forge-web-runtime/telemetry", () => ({
   initBrowserTelemetry: runtime.initBrowserTelemetry,
   enableAttribution: runtime.enableAttribution,
+}));
+vi.mock("@reliantlabs/forge-web-runtime/auth/supabase", () => ({
+  supabaseAuthTelemetryListener: () => runtime.supabaseAuth,
 }));
 vi.mock("@hyperdx/browser", () => ({
   default: { setGlobalAttributes: runtime.setGlobalAttributes },
@@ -66,6 +71,7 @@ import {
   demoReplayRate,
   initTelemetry,
   replaySampleRate,
+  reportAuthChange,
   reportErrorToTelemetry,
   resetTelemetryForTests,
   setReloadForTests,
@@ -449,6 +455,47 @@ describe("user and error reporting", () => {
     setTelemetryUserId({ id: "u-1" });
     setTelemetryUserId(null);
     expect(setTelemetryUser.mock.calls).toEqual([["u-1"], [null]]);
+  });
+
+  describe("reportAuthChange", () => {
+    const session = (id: string, isAnonymous = false) =>
+      ({ access_token: "t", user: { id, is_anonymous: isAnonymous } }) as unknown as Session;
+
+    afterEach(() => {
+      privacy.state.analyticsEnabled = true;
+      delete (window as { electronAPI?: unknown }).electronAPI;
+    });
+
+    it("hands the change to forge's Supabase adapter, and the id to Electron", () => {
+      const setTelemetryUser = vi.fn(async () => {});
+      (window as { electronAPI?: unknown }).electronAPI = { setTelemetryUser };
+      const s = session("u-1");
+      reportAuthChange("SIGNED_IN", s);
+      reportAuthChange("SIGNED_OUT", null);
+      expect(runtime.supabaseAuth.mock.calls).toEqual([
+        ["SIGNED_IN", s],
+        ["SIGNED_OUT", null],
+      ]);
+      expect(setTelemetryUser.mock.calls).toEqual([["u-1"], [null]]);
+    });
+
+    it("never names an anonymous session as a user", () => {
+      const setTelemetryUser = vi.fn(async () => {});
+      (window as { electronAPI?: unknown }).electronAPI = { setTelemetryUser };
+      reportAuthChange("INITIAL_SESSION", session("anon-1", true));
+      expect(setTelemetryUser.mock.calls).toEqual([[null]]);
+      // The adapter skips it too (forge's own test pins that).
+      privacy.state.analyticsEnabled = false;
+      reportAuthChange("INITIAL_SESSION", session("anon-1", true));
+      expect(runtime.setTelemetryUser).toHaveBeenLastCalledWith(null);
+    });
+
+    it("with analytics off, attaches the id for errors and sends no auth event", () => {
+      privacy.state.analyticsEnabled = false;
+      reportAuthChange("SIGNED_IN", session("u-2"));
+      expect(runtime.setTelemetryUser).toHaveBeenCalledWith("u-2");
+      expect(runtime.supabaseAuth).not.toHaveBeenCalled();
+    });
   });
 
   it("reports a boundary-caught error with its component stack", () => {

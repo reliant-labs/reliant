@@ -113,6 +113,9 @@ type APISettings struct {
 	// PayloadGCHorizon is how long an unreferenced Temporal payload blob is
 	// kept (RELIANT_PAYLOAD_BLOB_GC_HORIZON).
 	PayloadGCHorizon time.Duration
+	// SupabaseAuthHookSecret is the bearer the Supabase project's auth-event
+	// triggers send (SUPABASE_AUTH_HOOK_SECRET); empty serves no hook route.
+	SupabaseAuthHookSecret string
 }
 
 // APISettingsDeps is the api-server's command config.
@@ -152,6 +155,8 @@ func NewAPISettings(d APISettingsDeps) (*APISettings, error) {
 		WorktreeReclaimQuiet: api.GetWorktreeReclaimQuiet().AsDuration(),
 		WorktreeReclaimGrace: api.GetWorktreeReclaimGrace().AsDuration(),
 		PayloadGCHorizon:     api.GetPayloadBlobGcHorizon().AsDuration(),
+
+		SupabaseAuthHookSecret: strings.TrimSpace(api.GetSupabaseAuthHookSecret()),
 	}
 	logging.Info("Starting Reliant API server (stateless)",
 		"grpc_port", api.GetGrpcPort(),
@@ -218,7 +223,8 @@ type HTTPRoutesDeps struct {
 
 // NewHTTPRoutes is the API's plain-HTTP routes (grpcserver.APIHTTPRoutes):
 // the terminal websocket, attachment bytes, the OAuth broker's callbacks, the
-// inbound-trigger receivers, the connector MCP endpoint (PUBLIC_URL is where
+// inbound-trigger receivers, the Supabase auth-event hook (when
+// SUPABASE_AUTH_HOOK_SECRET is set), the connector MCP endpoint (PUBLIC_URL is where
 // a user points a third-party MCP client; MCP_OAUTH_ISSUERS the authorization
 // servers whose tokens it accepts), CLI login discovery and the JSON /health
 // the web client reads the auth mode from.
@@ -239,6 +245,7 @@ func NewHTTPRoutes(d HTTPRoutesDeps) (*grpcserver.APIHTTPRoutes, error) {
 		AuthorizationServer: d.Settings.AuthorizationServer,
 		ControlPlaneURL:     cp.URL,
 		HostedHTTPRedeem:    grpcserver.NewHostedHTTPRedeemHandler(d.DB, cp.InternalServiceSecret),
+		SupabaseAuthHook:    grpcserver.NewSupabaseAuthHook(d.Settings.SupabaseAuthHookSecret),
 	})
 }
 
