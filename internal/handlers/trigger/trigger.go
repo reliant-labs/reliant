@@ -410,6 +410,9 @@ func (s *Service) SetTriggerEnabled(
 		return nil, triggerDBError("set trigger enabled", err)
 	}
 	trigger.Enabled = req.Msg.Enabled
+	// A person pausing or resuming it is the reason now (the write cleared
+	// paused_reason too).
+	trigger.PausedReason = ""
 
 	// A pushed trigger needs nothing converged — the receivers read
 	// `enabled` off the row for every event — but a polled one pauses its

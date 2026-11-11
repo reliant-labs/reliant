@@ -322,12 +322,13 @@ func NewWorker(cfg *Config) (*Worker, *v2.ActivityRegistry, error) {
 		if w, ok := cfg.DaemonRouter.(toolexec.RunWaker); ok {
 			pools = pools.WithWaker(poolMemberWaker{w: w})
 		}
+		pause := triggerAutoPause(cfg)
 		w.RegisterActivityWithOptions(
-			triggers.NewFirer(cfg.Database, cfg.TriggerLauncher).WithWorkflows(declarations).WithCapacityDescriptions(cfg.TemporalClient).WithCapacityWake(cfg.TemporalClient, cfg.taskQueueName()).WithPlacer(pools).Fire,
+			triggers.NewFirer(cfg.Database, cfg.TriggerLauncher).WithWorkflows(declarations).WithCapacityDescriptions(cfg.TemporalClient).WithCapacityWake(cfg.TemporalClient, cfg.taskQueueName()).WithPlacer(pools).WithAutoPause(pause).Fire,
 			activity.RegisterOptions{Name: triggers.FireActivityName},
 		)
 		w.RegisterActivityWithOptions(
-			triggers.NewEventFirer(cfg.Database, cfg.TriggerLauncher).WithWorkflows(declarations).WithCapacityDescriptions(cfg.TemporalClient).WithCapacityWake(cfg.TemporalClient, cfg.taskQueueName()).WithPlacer(pools).Fire,
+			triggers.NewEventFirer(cfg.Database, cfg.TriggerLauncher).WithWorkflows(declarations).WithCapacityDescriptions(cfg.TemporalClient).WithCapacityWake(cfg.TemporalClient, cfg.taskQueueName()).WithPlacer(pools).WithAutoPause(pause).Fire,
 			activity.RegisterOptions{Name: triggers.EventFireActivityName},
 		)
 	} else {
@@ -340,7 +341,7 @@ func NewWorker(cfg *Config) (*Worker, *v2.ActivityRegistry, error) {
 		Name: workflowevent.DispatchWorkflowName,
 	})
 	if cfg.TriggerLauncher != nil {
-		dispatcher := workflowevent.NewDispatcher(cfg.Database, cfg.TriggerLauncher, nil).WithWorkflows(declarations)
+		dispatcher := workflowevent.NewDispatcher(cfg.Database, cfg.TriggerLauncher, nil).WithWorkflows(declarations).WithAutoPause(triggerAutoPause(cfg))
 		w.RegisterActivityWithOptions(
 			workflowevent.NewActivity(cfg.Database, dispatcher).Dispatch,
 			activity.RegisterOptions{Name: workflowevent.DispatchActivityName},
@@ -451,6 +452,19 @@ func chatOwners(cfg *Config) *telemetry.ChatOwnerCache {
 		}
 		return chat.UserID, nil
 	}, time.Hour, 10000)
+}
+
+// triggerAutoPause pauses a trigger whose creator left its org, and its
+// Temporal schedule when the worker has a client (triggers.AutoPause).
+func triggerAutoPause(cfg *Config) *triggers.AutoPause {
+	if cfg.Database == nil {
+		return nil
+	}
+	var schedules triggers.ScheduleClient
+	if cfg.TemporalClient != nil {
+		schedules = cfg.TemporalClient.ScheduleClient()
+	}
+	return triggers.NewAutoPause(cfg.Database, schedules)
 }
 
 // TaskQueueName returns the task queue name that would be used by a worker with the given config.
