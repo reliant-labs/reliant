@@ -351,8 +351,15 @@ type Result struct {
 	Landed bool `json:"landed,omitempty"`
 	// RecoverableIdle reports a complete clean, pushed/merged, unused checkout
 	// whose files (including caches) have all been quiet for the requested floor.
-	RecoverableIdle bool   `json:"recoverable_idle,omitempty"`
-	Error           string `json:"error,omitempty"`
+	RecoverableIdle bool `json:"recoverable_idle,omitempty"`
+	// LastUse (an ACTIVE worktree) is the last time this daemon saw the
+	// workspace used: a tool call or command that named a path inside it or
+	// ran in it (UseLog), or a file written in it. It covers what the server
+	// cannot see from its rows: an agent whose chat is bound elsewhere working
+	// here by absolute path. The server counts it as activity before it
+	// archives the row. Absent when nothing was seen.
+	LastUse *time.Time `json:"last_use,omitempty"`
+	Error   string     `json:"error,omitempty"`
 }
 
 // Request is the payload of worktree.reconcile and worktree.snapshot_remove.

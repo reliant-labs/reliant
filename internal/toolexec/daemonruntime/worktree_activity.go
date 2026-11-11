@@ -389,6 +389,9 @@ func selfAdmittedCommand(name string) bool {
 // unknown and refused conservatively during the short finalization window
 // only. Exec and terminals are scoped to where they run by their handlers.
 func beginRecoveryCommand(name string, payload []byte) (func(), error) {
+	if usesPathsCommand(name) {
+		noteWorktreeUse(string(payload))
+	}
 	if recoveryLifecycleCommand(name) || selfAdmittedCommand(name) {
 		return func() {}, nil
 	}
