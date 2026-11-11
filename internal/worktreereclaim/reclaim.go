@@ -471,6 +471,21 @@ func (r *Reclaimer) settle(ctx context.Context, w Worktree, confirmed bool) Resu
 	if confirmed {
 		return r.confirmedPhase(ctx, w)
 	}
+	if w.ReclaimMark != "" {
+		// Archived under a reclaim mark: removed only while its tombstone
+		// stands, in both phases (tombstone.go).
+		checkouts := shallowCheckouts(w.Path, w.Checkouts)
+		if got := tombstoneMark(checkouts); got != w.ReclaimMark {
+			return held(w, ReasonMarked, "the reclaim tombstone was removed or replaced; the worktree is kept")
+		}
+		// The memory line is the daemon's own; left at the workspace root it
+		// would be a loose file that whole retirement preserves by holding.
+		if !rootIsCheckout(w.Path, checkouts) {
+			if err := removeMemoryLine(filepath.Join(w.Path, memoryFile), w.ReclaimMark); err != nil {
+				return held(w, ReasonUnverified, "could not remove the reclaim notice from reliant.md: "+err.Error())
+			}
+		}
+	}
 	return r.autoPhase(ctx, w)
 }
 
@@ -1111,6 +1126,7 @@ func (r *Reclaimer) lockActive(ctx context.Context, w Worktree) Result {
 			res.Outcome, res.Error = OutcomeError, relDetail(w.Path, c, err.Error())
 		}
 	}
+	r.applyMark(ctx, w, checkouts, &res)
 	if res.Outcome == OutcomeLocked && w.ProbeRecoverableAfterSeconds > 0 && w.Retire == "" && !w.KeepFiles && len(checkouts) > 0 {
 		if r.recoverableIdle(ctx, w, time.Duration(w.ProbeRecoverableAfterSeconds)*time.Second) {
 			res.RecoverableIdle = true
