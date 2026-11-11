@@ -114,6 +114,13 @@ func seedUser(t *testing.T, rawDB *sql.DB, userID string) {
 	exec(`INSERT INTO thread_provider_accounts (thread_id, provider, account_id, assigned_at, reason)
 	      VALUES ($1,'claude',$2,$3,'initial')`, id("thread"), id("pacct"), now)
 
+	// The update ledger and the snapshot heads materialized from it: both are
+	// keyed by chat with no foreign key, so nothing cascades them away.
+	exec(`INSERT INTO chat_updates (id, chat_id, sequence_number, update_type, entity_id, data, created_at)
+	      VALUES ($1,$2,1,2,$3,'{}',$4)`, id("chat")+"-1", id("chat"), id("appr"), now)
+	exec(`INSERT INTO chat_update_heads (chat_id, head_key, update_id, sequence_number, update_type, entity_id, data, created_at)
+	      VALUES ($1,'e:'||$2,$3,1,2,$2,'{}',$4)`, id("chat"), id("appr"), id("chat")+"-1", now)
+
 	exec(`INSERT INTO settings (id, user_id, key, value, value_type, created_at, updated_at)
 	      VALUES ($1,$2,'theme','dark','string',$3,$3)`, id("set"), userID, now)
 
@@ -151,6 +158,11 @@ var ownershipCount = map[string]string{
 	              JOIN chats c ON c.id = th.chat_id WHERE c.user_id = $1`,
 	"tool_calls": `SELECT COUNT(*) FROM tool_calls tc
 	                 JOIN chats c ON c.id = tc.chat_id WHERE c.user_id = $1`,
+	// The chat ids seedUser writes (chat-<user>): these rows outlive their
+	// chat row if the purge forgets them, so they are counted by id, not by
+	// a join the chat's own deletion would empty.
+	"chat_updates":      `SELECT COUNT(*) FROM chat_updates WHERE chat_id = 'chat-' || $1`,
+	"chat_update_heads": `SELECT COUNT(*) FROM chat_update_heads WHERE chat_id = 'chat-' || $1`,
 }
 
 func countRows(t *testing.T, rawDB *sql.DB, table, userID string) int {
@@ -192,6 +204,7 @@ func TestPurge_RemovesEverythingForUser(t *testing.T) {
 		"projects", "chats", "worktrees", "settings", "llm_call_usage", "llm_call_usage_daily",
 		"user_app_sessions", "messages", "threads", "tool_calls",
 		"provider_account_limits", "thread_provider_accounts",
+		"chat_updates", "chat_update_heads",
 	}, credentialTables...) {
 		if n := countRows(t, rawDB, table, userID); n != 0 {
 			t.Errorf("%s: %d rows survived the purge, want 0", table, n)
@@ -327,7 +340,7 @@ func TestPurge_LeavesOtherUsersIntact(t *testing.T) {
 
 	for _, table := range append([]string{
 		"projects", "chats", "worktrees", "settings", "user_app_sessions",
-		"messages", "threads", "tool_calls",
+		"messages", "threads", "tool_calls", "chat_updates", "chat_update_heads",
 	}, credentialTables...) {
 		if n := countRows(t, rawDB, table, victim); n != 0 {
 			t.Errorf("%s: victim left %d rows, want 0", table, n)

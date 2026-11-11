@@ -118,6 +118,7 @@ func UserUpdatesSince(ctx context.Context, db orm.Context, userID string, sinceS
 			EntityID:       row.EntityID,
 			Data:           json.RawMessage(row.Data),
 			CreatedAt:      row.CreatedAt,
+			OrgID:          row.OrgID,
 		}
 	}
 	return updates, nil

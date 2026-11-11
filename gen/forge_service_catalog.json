@@ -23,6 +23,7 @@
         "Background",
         "Catalog",
         "Chat",
+        "ChatUpdateHeadsBackfill",
         "ChatUpdateHub",
         "Connection",
         "Connector",
@@ -46,6 +47,7 @@
         "Message",
         "ModelEndpoint",
         "NATSConn",
+        "OrgResolver",
         "PackageCommands",
         "PauseService",
         "PayloadGC",
@@ -389,6 +391,7 @@
         "JetStream",
         "ManagedReconciler",
         "NATSConn",
+        "OrgResolver",
         "Pprof",
         "StateDerivation",
         "TLSFiles",
@@ -431,6 +434,7 @@
         "DebugServer",
         "IntegrationSettings",
         "NATSConn",
+        "OrgResolver",
         "PauseService",
         "PayloadStore",
         "ProcessRuntime",
@@ -443,6 +447,7 @@
         "StreamingHub",
         "TemporalClient",
         "TemporalWorker",
+        "TokenAuthority",
         "TriggerPollers",
         "UserUpdateHub",
         "Vault",
@@ -5383,6 +5388,11 @@
               "Name": "limit",
               "ProtoType": "int32",
               "IsOptional": true
+            },
+            {
+              "Name": "org_id",
+              "ProtoType": "string",
+              "IsOptional": true
             }
           ],
           "ListChatsResponse": [
@@ -5977,6 +5987,11 @@
               "Name": "client_message_id",
               "ProtoType": "string",
               "IsOptional": true
+            },
+            {
+              "Name": "org_id",
+              "ProtoType": "string",
+              "IsOptional": true
             }
           ],
           "StartChatResponse": [
@@ -6436,6 +6451,11 @@
               "name": "origin",
               "kind": "enum",
               "type_name": "reliant.v1.ChatOrigin"
+            },
+            {
+              "name": "org_id",
+              "kind": "string",
+              "optional": true
             }
           ],
           "reliant.v1.ChatErrorUpdate": [
@@ -7010,6 +7030,11 @@
             {
               "name": "limit",
               "kind": "int32",
+              "optional": true
+            },
+            {
+              "name": "org_id",
+              "kind": "string",
               "optional": true
             }
           ],
@@ -7740,6 +7765,11 @@
             },
             {
               "name": "client_message_id",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "org_id",
               "kind": "string",
               "optional": true
             }
@@ -15678,6 +15708,12 @@
               "kind": "message",
               "type_name": "reliant.v1.InboxWorktreeReclaim",
               "oneof": "payload"
+            },
+            {
+              "name": "worktree_marked",
+              "kind": "message",
+              "type_name": "reliant.v1.InboxWorktreeMarked",
+              "oneof": "payload"
             }
           ],
           "reliant.v1.InboxQuestion": [
@@ -15760,6 +15796,52 @@
             {
               "name": "daemon_name",
               "kind": "string"
+            }
+          ],
+          "reliant.v1.InboxWorktreeMarked": [
+            {
+              "name": "worktree_id",
+              "kind": "string"
+            },
+            {
+              "name": "name",
+              "kind": "string"
+            },
+            {
+              "name": "path",
+              "kind": "string"
+            },
+            {
+              "name": "branch",
+              "kind": "string"
+            },
+            {
+              "name": "daemon_id",
+              "kind": "string"
+            },
+            {
+              "name": "daemon_name",
+              "kind": "string"
+            },
+            {
+              "name": "mark_id",
+              "kind": "string"
+            },
+            {
+              "name": "marked_at",
+              "kind": "string"
+            },
+            {
+              "name": "reclaim_at",
+              "kind": "string"
+            },
+            {
+              "name": "reason",
+              "kind": "string"
+            },
+            {
+              "name": "approved",
+              "kind": "bool"
             }
           ],
           "reliant.v1.InboxWorktreeReclaim": [
@@ -16116,6 +16198,7 @@
           "reliant.v1.InboxRefusedAutomation": "reliant/v1/inbox.proto",
           "reliant.v1.InboxStorage": "reliant/v1/inbox.proto",
           "reliant.v1.InboxWaitingForMachine": "reliant/v1/inbox.proto",
+          "reliant.v1.InboxWorktreeMarked": "reliant/v1/inbox.proto",
           "reliant.v1.InboxWorktreeReclaim": "reliant/v1/inbox.proto",
           "reliant.v1.ListInboxRequest": "reliant/v1/inbox.proto",
           "reliant.v1.ListInboxResponse": "reliant/v1/inbox.proto",
@@ -16157,7 +16240,8 @@
             "INBOX_ITEM_KIND_RECOVERY",
             "INBOX_ITEM_KIND_AUTOMATION_RUN_PAUSED",
             "INBOX_ITEM_KIND_AUTOMATION_DEFINITION_BROKEN",
-            "INBOX_ITEM_KIND_WORKTREE_RECLAIM"
+            "INBOX_ITEM_KIND_WORKTREE_RECLAIM",
+            "INBOX_ITEM_KIND_WORKTREE_MARKED"
           ],
           "reliant.v1.TriggerHealthStatus": [
             "TRIGGER_HEALTH_STATUS_UNSPECIFIED",
@@ -16197,7 +16281,8 @@
             9,
             10,
             11,
-            12
+            12,
+            13
           ],
           "reliant.v1.TriggerHealthStatus": [
             0,
@@ -21715,6 +21800,11 @@
               "Name": "path",
               "ProtoType": "string",
               "IsOptional": true
+            },
+            {
+              "Name": "org_id",
+              "ProtoType": "string",
+              "IsOptional": true
             }
           ],
           "CreateProjectFromRepoResponse": [
@@ -21764,6 +21854,11 @@
             },
             {
               "Name": "daemon_id",
+              "ProtoType": "string",
+              "IsOptional": true
+            },
+            {
+              "Name": "org_id",
               "ProtoType": "string",
               "IsOptional": true
             }
@@ -22158,6 +22253,11 @@
               "Name": "offset",
               "ProtoType": "int32",
               "IsOptional": false
+            },
+            {
+              "Name": "org_id",
+              "ProtoType": "string",
+              "IsOptional": true
             }
           ],
           "ListProjectsResponse": [
@@ -22430,6 +22530,11 @@
               "name": "path",
               "kind": "string",
               "optional": true
+            },
+            {
+              "name": "org_id",
+              "kind": "string",
+              "optional": true
             }
           ],
           "reliant.v1.CreateProjectFromRepoResponse": [
@@ -22473,6 +22578,11 @@
             },
             {
               "name": "daemon_id",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "org_id",
               "kind": "string",
               "optional": true
             }
@@ -22904,6 +23014,11 @@
             {
               "name": "offset",
               "kind": "int32"
+            },
+            {
+              "name": "org_id",
+              "kind": "string",
+              "optional": true
             }
           ],
           "reliant.v1.ListProjectsResponse": [
@@ -23015,6 +23130,11 @@
             },
             {
               "name": "forge_project_name",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "org_id",
               "kind": "string",
               "optional": true
             }
@@ -25195,6 +25315,11 @@
               "Name": "include_unlaunched_events",
               "ProtoType": "bool",
               "IsOptional": true
+            },
+            {
+              "Name": "org_id",
+              "ProtoType": "string",
+              "IsOptional": true
             }
           ],
           "ListRunsResponse": [
@@ -25516,6 +25641,11 @@
             {
               "name": "include_unlaunched_events",
               "kind": "bool",
+              "optional": true
+            },
+            {
+              "name": "org_id",
+              "kind": "string",
               "optional": true
             }
           ],
@@ -36535,6 +36665,11 @@
               "ProtoType": "message",
               "IsOptional": false,
               "MessageType": "reliant.v1.TriggerDefinition"
+            },
+            {
+              "Name": "org_id",
+              "ProtoType": "string",
+              "IsOptional": true
             }
           ],
           "CreateTriggerResponse": [
@@ -36815,6 +36950,11 @@
               "Name": "project_id",
               "ProtoType": "string",
               "IsOptional": true
+            },
+            {
+              "Name": "org_id",
+              "ProtoType": "string",
+              "IsOptional": true
             }
           ],
           "ListTriggersResponse": [
@@ -36977,6 +37117,11 @@
               "name": "trigger",
               "kind": "message",
               "type_name": "reliant.v1.TriggerDefinition"
+            },
+            {
+              "name": "org_id",
+              "kind": "string",
+              "optional": true
             }
           ],
           "reliant.v1.CreateTriggerResponse": [
@@ -37272,6 +37417,11 @@
           "reliant.v1.ListTriggersRequest": [
             {
               "name": "project_id",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "org_id",
               "kind": "string",
               "optional": true
             }
@@ -37617,6 +37767,11 @@
               "name": "definition_source",
               "kind": "message",
               "type_name": "reliant.v1.TriggerDefinitionSource"
+            },
+            {
+              "name": "org_id",
+              "kind": "string",
+              "optional": true
             }
           ],
           "reliant.v1.TriggerChange": [
@@ -39132,6 +39287,11 @@
               "Name": "template",
               "ProtoType": "string",
               "IsOptional": false
+            },
+            {
+              "Name": "org_id",
+              "ProtoType": "string",
+              "IsOptional": true
             }
           ],
           "CreateWorkflowDraftResponse": [
@@ -39412,6 +39572,11 @@
               "Name": "include_hidden",
               "ProtoType": "bool",
               "IsOptional": true
+            },
+            {
+              "Name": "org_id",
+              "ProtoType": "string",
+              "IsOptional": true
             }
           ],
           "ListWorkflowsResponse": [
@@ -39474,6 +39639,11 @@
               "Name": "status",
               "ProtoType": "enum",
               "IsOptional": false
+            },
+            {
+              "Name": "org_id",
+              "ProtoType": "string",
+              "IsOptional": true
             }
           ],
           "SaveWorkflowResponse": [
@@ -39849,6 +40019,10 @@
             {
               "name": "exclude_ambient_memory",
               "kind": "bool"
+            },
+            {
+              "name": "exclude_skill_catalog",
+              "kind": "bool"
             }
           ],
           "reliant.v1.CallLLMMessageInput": [
@@ -40040,6 +40214,11 @@
             {
               "name": "template",
               "kind": "string"
+            },
+            {
+              "name": "org_id",
+              "kind": "string",
+              "optional": true
             }
           ],
           "reliant.v1.CreateWorkflowDraftResponse": [
@@ -40829,6 +41008,11 @@
               "name": "include_hidden",
               "kind": "bool",
               "optional": true
+            },
+            {
+              "name": "org_id",
+              "kind": "string",
+              "optional": true
             }
           ],
           "reliant.v1.ListWorkflowsResponse": [
@@ -41555,6 +41739,11 @@
               "name": "status",
               "kind": "enum",
               "type_name": "reliant.v1.WorkflowDraftStatus"
+            },
+            {
+              "name": "org_id",
+              "kind": "string",
+              "optional": true
             }
           ],
           "reliant.v1.SaveWorkflowResponse": [
@@ -42746,6 +42935,18 @@
             },
             {
               "name": "reason",
+              "kind": "string"
+            },
+            {
+              "name": "removal",
+              "kind": "string"
+            },
+            {
+              "name": "removal_reason",
+              "kind": "string"
+            },
+            {
+              "name": "removal_detail",
               "kind": "string"
             }
           ]
@@ -45942,6 +46143,18 @@
       "implementation_candidates": []
     },
     {
+      "id": "ChatUpdateHeadsBackfill",
+      "name": "ChatUpdateHeadsBackfill",
+      "kind": "provider",
+      "type": "*github.com/reliant-labs/reliant/internal/app.ChatUpdateHeadsBackfill",
+      "source": {
+        "path": "internal/app/providers_api.go",
+        "symbol": "NewChatUpdateHeadsBackfill"
+      },
+      "methods": [],
+      "implementation_candidates": []
+    },
+    {
       "id": "ChatUpdateHub",
       "name": "ChatUpdateHub",
       "kind": "provider",
@@ -46357,6 +46570,18 @@
       "source": {
         "path": "internal/app/providers.go",
         "symbol": "NewNATSConn"
+      },
+      "methods": [],
+      "implementation_candidates": []
+    },
+    {
+      "id": "OrgResolver",
+      "name": "OrgResolver",
+      "kind": "provider",
+      "type": "*github.com/reliant-labs/reliant/internal/orgs.Resolver",
+      "source": {
+        "path": "internal/app/providers.go",
+        "symbol": "NewOrgResolver"
       },
       "methods": [],
       "implementation_candidates": []
@@ -47380,6 +47605,19 @@
     },
     {
       "consumer": "Chat",
+      "field": "Orgs",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/chat.OrgResolver",
+      "methods": [],
+      "candidates": [
+        "OrgResolver"
+      ],
+      "providers": [
+        "OrgResolver"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Chat",
       "field": "Pause",
       "interface": "github.com/reliant-labs/reliant/internal/runs.PauseController",
       "methods": [],
@@ -47778,6 +48016,19 @@
       "resolution": "unresolved"
     },
     {
+      "consumer": "OrgResolver",
+      "field": "Authority",
+      "interface": "github.com/reliant-labs/reliant/internal/tokenauthority.Authority",
+      "methods": [],
+      "candidates": [
+        "TokenAuthority"
+      ],
+      "providers": [
+        "TokenAuthority"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
       "consumer": "PackageCommands",
       "field": "Repo",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/package_commands.Repository",
@@ -47838,6 +48089,19 @@
       "candidates": [],
       "providers": [],
       "resolution": "unresolved"
+    },
+    {
+      "consumer": "Project",
+      "field": "Orgs",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/project.OrgResolver",
+      "methods": [],
+      "candidates": [
+        "OrgResolver"
+      ],
+      "providers": [
+        "OrgResolver"
+      ],
+      "resolution": "composition_expression"
     },
     {
       "consumer": "Project",
@@ -47996,6 +48260,19 @@
       ],
       "providers": [
         "Chat"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Run",
+      "field": "Orgs",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/run.OrgResolver",
+      "methods": [],
+      "candidates": [
+        "OrgResolver"
+      ],
+      "providers": [
+        "OrgResolver"
       ],
       "resolution": "composition_expression"
     },
@@ -48418,6 +48695,19 @@
     },
     {
       "consumer": "Trigger",
+      "field": "Orgs",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/trigger.OrgResolver",
+      "methods": [],
+      "candidates": [
+        "OrgResolver"
+      ],
+      "providers": [
+        "OrgResolver"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Trigger",
       "field": "Repo",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/trigger.Repository",
       "methods": [],
@@ -48562,6 +48852,19 @@
       ],
       "providers": [
         "Trigger"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Workflow",
+      "field": "Orgs",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/workflow.OrgResolver",
+      "methods": [],
+      "candidates": [
+        "OrgResolver"
+      ],
+      "providers": [
+        "OrgResolver"
       ],
       "resolution": "composition_expression"
     },

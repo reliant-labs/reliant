@@ -208,6 +208,10 @@
   --color-ink: hsl(var(--foreground));
   --color-ink-muted: hsl(var(--muted-foreground));
   --color-ink-subtle: hsl(var(--muted-foreground) / 0.72);
+  /* Focus — the app's one focus ring (web-styling: "Focus: one recipe"). The
+     installed inputs and filter bar draw `ring-ring` so a forge field focuses
+     exactly like every other control; reliant's config declares the same. */
+  --color-ring: hsl(var(--ring));
   /* Accent — resolves through --forge-accent-src; scoped, see above. */
   --color-accent: hsl(var(--forge-accent-src));
   --color-accent-hover: hsl(var(--forge-accent-src) / 0.85);
@@ -333,20 +337,36 @@
     to { opacity: 1; transform: translateY(0); }
   }
 
-  /* The chat timeline's catch-up overlay fades in rather than popping; with
-     reduced motion it simply appears (the blur itself never animates). */
+  /* The chat timeline's catch-up overlay fades in rather than popping, and
+     out over the caught-up timeline (lib/timelineCatchUp CATCH_UP_EXIT_MS);
+     with reduced motion it simply appears and disappears (the blur itself
+     never animates). */
   @keyframes timelineCatchUpIn {
     from { opacity: 0; }
     to { opacity: 1; }
+  }
+
+  @keyframes timelineCatchUpOut {
+    from { opacity: 1; }
+    to { opacity: 0; }
   }
 
   .timeline-catchup-in {
     animation: timelineCatchUpIn 150ms ease-out;
   }
 
+  .timeline-catchup-out {
+    animation: timelineCatchUpOut 150ms ease-in forwards;
+  }
+
   @media (prefers-reduced-motion: reduce) {
     .timeline-catchup-in {
       animation: none;
+    }
+
+    .timeline-catchup-out {
+      animation: none;
+      opacity: 0;
     }
   }
 

@@ -101,6 +101,11 @@ type JournalLine struct {
 	Trigger string    `json:"trigger,omitempty"`
 	SweepEntry
 	DaemonVersion string `json:"daemon_version,omitempty"`
+	// ApprovedBy and CommandID name the Inbox approval a command's pass
+	// acted on (worktree.reclaim_approve): the audit record of who approved
+	// removing it.
+	ApprovedBy string `json:"approved_by,omitempty"`
+	CommandID  string `json:"command_id,omitempty"`
 }
 
 // appendJournal appends lines to the journal, rotating it first when it has

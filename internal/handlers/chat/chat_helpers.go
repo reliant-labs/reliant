@@ -156,6 +156,7 @@ func chatToProto(c *db.Chat) *reliantv1.Chat {
 		UserId:          c.UserID,
 		Title:           c.Title,
 		ProjectId:       c.ProjectID,
+		OrgId:           c.OrgID,
 		State:           c.State,
 		CreatedAt:       c.CreatedAt.Format(time.RFC3339),
 		UpdatedAt:       c.UpdatedAt.Format(time.RFC3339),

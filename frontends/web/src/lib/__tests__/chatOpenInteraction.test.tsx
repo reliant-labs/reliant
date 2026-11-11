@@ -8,6 +8,7 @@ import {
   markChatOpen,
   noteChatOpenSync,
   resetChatOpen,
+  routeChatOpen,
   useChatOpenEnd,
   type ChatOpenReadiness,
 } from "../chatOpenInteraction";
@@ -81,6 +82,8 @@ describe("chat.open interaction", () => {
       "chat.overlay_shown": false,
       // Open times are compared by how the transcript sent its tool bodies.
       "chat.tool_bodies": TRANSCRIPT_TOOL_BODIES,
+      // A click (chatStore.selectChat) unless the caller says otherwise.
+      "chat.open.entry": "switch",
     });
     expect(lastOpen().ended).toBe(false);
   });
@@ -120,6 +123,71 @@ describe("chat.open interaction", () => {
       "chat.open.error": "rejected",
     });
     expect(lastOpen().status).toBe(SpanStatusCode.ERROR);
+  });
+});
+
+describe("routeChatOpen", () => {
+  it("starts an open for the chat a navigation lands on, with its entry", () => {
+    routeChatOpen(undefined, "c1", "mobile_route", { "chat.cached": false });
+
+    expect(chatOpens()).toHaveLength(1);
+    expect(lastOpen().attributes).toMatchObject({
+      "chat.id": "c1",
+      "chat.open.entry": "mobile_route",
+      "chat.cached": false,
+    });
+  });
+
+  it("ends the open of the chat being left as superseded", () => {
+    routeChatOpen(undefined, "c1", "deep_link");
+
+    routeChatOpen("c1", undefined, "mobile_route");
+
+    expect(chatOpens()).toHaveLength(1);
+    expect(lastOpen().ended).toBe(true);
+    expect(lastOpen().attributes["interaction.outcome"]).toBe("superseded");
+  });
+
+  it("does not start a second open beside the one selectChat started", () => {
+    beginChatOpen("c1");
+
+    routeChatOpen(undefined, "c1", "mobile_route");
+
+    expect(chatOpens()).toHaveLength(1);
+    expect(lastOpen().attributes["chat.open.entry"]).toBe("switch");
+    expect(lastOpen().ended).toBe(false);
+  });
+
+  it("starts nothing for a navigation that stays on the same chat", () => {
+    routeChatOpen("c1", "c1", "mobile_route");
+
+    expect(chatOpens()).toHaveLength(0);
+  });
+
+  it("starts a new open for a chat whose last open already ended", () => {
+    routeChatOpen(undefined, "c1", "mobile_route");
+    failChatOpen("c1", "rejected");
+
+    routeChatOpen(undefined, "c1", "mobile_route");
+
+    expect(chatOpens()).toHaveLength(2);
+    expect(lastOpen().ended).toBe(false);
+  });
+
+  it("is armed by the screen, then ends on its readiness like any open", () => {
+    routeChatOpen(undefined, "c1", "deep_link");
+    renderEnd("c1", idle);
+    paint();
+    expect(lastOpen().ended).toBe(false);
+
+    act(() => armChatOpen("c1"));
+    paint();
+
+    expect(lastOpen().ended).toBe(true);
+    expect(lastOpen().attributes).toMatchObject({
+      "interaction.outcome": "ok",
+      "chat.open.entry": "deep_link",
+    });
   });
 });
 

@@ -34,21 +34,27 @@ import (
 type daemonOnTheWire struct{ daemonID string }
 
 func (d daemonOnTheWire) SendDaemonCommandToDaemon(ctx context.Context, _, daemonID, command string, payload []byte, _ int32) ([]byte, error) {
-	if daemonID != d.daemonID || command != WorktreeReclaimDecideCommand {
-		return nil, fmt.Errorf("unexpected command %q to %q", command, daemonID)
+	if daemonID != d.daemonID {
+		return nil, fmt.Errorf("unexpected machine %q", daemonID)
 	}
-	return handleWorktreeReclaimDecide(ctx, payload)
+	switch command {
+	case WorktreeReclaimDecideCommand:
+		return handleWorktreeReclaimDecide(ctx, payload)
+	case WorktreeReclaimApproveCommand:
+		return handleWorktreeReclaimApprove(ctx, payload)
+	}
+	return nil, fmt.Errorf("unexpected command %q", command)
 }
 
 // The whole Inbox path, end to end: the machine sweep proposes an idle
 // worktree with uncommitted work, the heartbeat carries the proposal and the
-// gateway stores it, the Inbox lists it on the machine's item, the person
-// approves it there, and the decision reaches the daemon bound to the state
-// they saw. The daemon's own pass does not act on it: nothing proves an
-// approval in approvals.json is a person's (SweepOptions.ApprovalsVerified),
-// so the worktree stays, proposed as approved. The same recorded approval is
-// what a verified caller would act on, capture first.
-func TestInboxApprovalReachesTheDaemonWhichRecordsItAndDeletesNothing(t *testing.T) {
+// gateway stores it, and the Inbox lists it on the machine's item. An
+// approval written straight into approvals.json (anything running as the
+// user can) deletes nothing. The person approves it in the Inbox; the server
+// records the decision and sends worktree.reclaim_approve, and the daemon
+// removes exactly that worktree, its work captured into a local ref first,
+// recording who approved it. Sending the approval again does nothing again.
+func TestInboxApprovalIsTheOnlyApprovalTheDaemonActsOn(t *testing.T) {
 	testkit.Slow(t, "creates real git checkouts and a database, and sweeps them")
 	f := newEnsureFixture(t, "")
 	commitIn(t, f.root, "committed.txt")
@@ -69,6 +75,12 @@ func TestInboxApprovalReachesTheDaemonWhichRecordsItAndDeletesNothing(t *testing
 	r := worktreereclaim.NewReclaimer(root)
 	r.Acquire = func(context.Context, []string) (worktreereclaim.RecoveryLease, error) { return sweepTestLease{}, nil }
 	r.PRMerged, r.FetchBase = nil, nil
+	// Process inspection reads every process of this user on the machine,
+	// and fails closed on one it cannot read (another test binary, another
+	// agent): that is worktreereclaim's to test, with its own stubs. Here it
+	// is stubbed, so this test's assertions run on any host.
+	r.ProcessUse = func(context.Context, []string) error { return nil }
+	r.Cwds = func(context.Context) ([]string, error) { return nil, nil }
 	// One fixed clock for the whole test. The checkout's activity (mtimes,
 	// reflog) is what git wrote while building the fixture, so the clock is
 	// pinned once, after that: every sweep runs at the same instant, ten
@@ -147,7 +159,40 @@ func TestInboxApprovalReachesTheDaemonWhichRecordsItAndDeletesNothing(t *testing
 		t.Fatalf("shown proposal %+v, want the workspace undecided", shown)
 	}
 
-	// The person approves it as shown.
+	// An approval written into approvals.json, as any process running as
+	// the user could, is not authority: a pass deletes nothing for it.
+	if _, err := worktreereclaim.RecordDecisions(ctx, state, worktreereclaim.DecisionApprove, []string{shown.Key}, "agent"); err != nil {
+		t.Fatal(err)
+	}
+	for _, approvedOnly := range []bool{false, true} {
+		opts.ApprovedOnly = approvedOnly
+		for _, e := range r.SweepMachine(ctx, opts).Entries {
+			if e.Path == f.root && (e.Outcome != worktreereclaim.OutcomeAwaiting || !strings.Contains(e.Detail, "did not come from the server")) {
+				t.Fatalf("pass on a forged approval: %+v, want awaiting, not acted on", e)
+			}
+		}
+	}
+	opts.ApprovedOnly = false
+	if _, err := os.Stat(filepath.Join(f.root, ".git")); err != nil {
+		t.Fatalf("a forged approval removed the checkout: %v", err)
+	}
+	if _, ok := worktreereclaim.LatestCapture(ctx, f.project, f.worktreeID, f.root); ok {
+		t.Fatal("a forged approval captured the checkout")
+	}
+
+	// The daemon's side of the approve command: its sweep configuration, this
+	// reclaimer, and the removal run inline so its outcome can be read.
+	setReclaimSweepConfig(worktreereclaim.SweepConfig{Mode: worktreereclaim.SweepOn, Roots: opts.Roots})
+	prevReclaimer, prevStart := approvalReclaimer, startApprovalRun
+	runs := 0
+	approvalReclaimer = func() (*worktreereclaim.Reclaimer, error) { return r, nil }
+	startApprovalRun = func(run func()) { runs++; run() }
+	t.Cleanup(func() {
+		approvalReclaimer, startApprovalRun = prevReclaimer, prevStart
+		setReclaimSweepConfig(worktreereclaim.SweepConfig{Mode: worktreereclaim.SweepOff})
+	})
+
+	// The person approves it in the Inbox.
 	decider, err := worktree_reclaim.New(worktree_reclaim.Deps{Logger: logger, Config: config.Defaults(), Repo: repo, Sender: daemonOnTheWire{daemonID: daemonID}})
 	if err != nil {
 		t.Fatal(err)
@@ -159,58 +204,38 @@ func TestInboxApprovalReachesTheDaemonWhichRecordsItAndDeletesNothing(t *testing
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res := decided.Msg.Results; len(res) != 1 || !res[0].Recorded {
-		t.Fatalf("results %+v, want the approval recorded", res)
+	if res := decided.Msg.Results; len(res) != 1 || !res[0].Recorded || res[0].Removal != "removing" || runs != 1 {
+		t.Fatalf("results %+v after %d runs, want the approval recorded and its removal started once", res, runs)
 	}
-	if !worktreereclaim.PendingApprovals(state, time.Time{}) {
-		t.Fatal("no approval pending for the daemon to act on")
+	results, err := worktreereclaim.ApprovalCommandResults(state)
+	if err != nil || len(results) != 1 {
+		t.Fatalf("command results %+v, %v", results, err)
 	}
-	if got := worktreeReclaimProposals(worktreereclaim.SweepOn); got == nil || got.Proposals[0].Decision != "approve" {
-		t.Fatalf("next heartbeat %+v, want the proposal approved", got)
-	}
-
-	// The daemon's next pass, as the daemon runs it, deletes nothing: the
-	// approval is reported as not verified, and nothing is captured.
-	var entry worktreereclaim.SweepEntry
-	for _, e := range r.SweepMachine(ctx, opts).Entries {
-		if e.Path == f.root {
-			entry = e
-		}
-	}
-	if entry.Outcome != worktreereclaim.OutcomeAwaiting || !strings.Contains(entry.Detail, "nothing verifies the approval") {
-		t.Fatalf("daemon pass entry %+v, want the approved workspace held as not verified", entry)
-	}
-	if _, err := os.Stat(filepath.Join(f.root, ".git")); err != nil {
-		t.Fatalf("the daemon's pass removed the checkout: %v", err)
-	}
-	if _, ok := worktreereclaim.LatestCapture(ctx, f.project, f.worktreeID, f.root); ok {
-		t.Fatal("the daemon's pass captured an approval it does not act on")
-	}
-	if got := worktreeReclaimProposals(worktreereclaim.SweepOn); got == nil || len(got.Proposals) != 1 || got.Proposals[0].Decision != "approve" {
-		t.Fatalf("heartbeat after the pass %+v, want the proposal still listed as approved", got)
-	}
-
-	// A caller that could verify the approval acts on exactly this one:
-	// captured into a local ref, then removed.
-	opts.ApprovedOnly, opts.ApprovalsVerified = true, true
-	pass := r.SweepMachine(ctx, opts)
-	if len(pass.Entries) == 1 && pass.Entries[0].Reason == worktreereclaim.ReasonInUse && strings.Contains(pass.Entries[0].Detail, "cwd unreadable") {
-		// The host, not the code: a process whose cwd this user cannot read
-		// (an undumpable one) might be inside the checkout, so the sweep
-		// holds it, as it must.
-		t.Skipf("host has a process whose cwd is unreadable, so the verified pass holds every worktree: %s", pass.Entries[0].Detail)
-	}
-	if len(pass.Entries) != 1 || pass.Entries[0].Outcome != worktreereclaim.OutcomeReclaimed {
-		t.Fatalf("verified pass %+v, want the workspace reclaimed", pass.Entries)
+	done := results[0]
+	if done.Status != worktreereclaim.ApprovalReclaimed || done.ApprovedBy != "inbox:"+userID || done.CaptureRef == "" ||
+		done.CommandID == "" || done.IssuedAt.IsZero() {
+		t.Fatalf("command result %+v, want reclaimed, approved by the person, with its capture", done)
 	}
 	if _, err := os.Stat(filepath.Join(f.root, ".git")); !os.IsNotExist(err) {
 		t.Fatalf("the checkout is still there: %v", err)
 	}
 	capture, ok := worktreereclaim.LatestCapture(ctx, f.project, f.worktreeID, f.root)
-	if !ok || capture.Ref == "" || capture.Clean {
-		t.Fatalf("capture %+v (found %t), want a ref holding the uncommitted edit", capture, ok)
+	if !ok || capture.Ref != done.CaptureRef || capture.Clean {
+		t.Fatalf("capture %+v (found %t), want %s holding the uncommitted edit", capture, ok, done.CaptureRef)
 	}
 	if got := rcGit(t, f.project, "rev-parse", "--verify", capture.Ref); got == "" {
 		t.Fatalf("capture ref %s does not resolve", capture.Ref)
+	}
+
+	// The same approve command again (a retried delivery: the id and issue
+	// time the server sent) is answered from the record and removes nothing
+	// again.
+	again, err := handleWorktreeReclaimApprove(ctx, []byte(fmt.Sprintf(`{"approvals":[{"key":%q,"fingerprint":%q,"path":%q}],"approved_by":"inbox:%s","command_id":%q,"issued_at_ms":%d}`,
+		shown.Key, shown.Fingerprint, shown.Path, userID, done.CommandID, done.IssuedAt.UnixMilli())))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(again), `"status":"reclaimed"`) || !strings.Contains(string(again), `"replayed":true`) || runs != 1 {
+		t.Fatalf("replayed command answered %s after %d runs, want the reclaimed answer and no new run", again, runs)
 	}
 }

@@ -115,6 +115,7 @@ func allPendingProposals(stateDir string) (ProposalSet, error) {
 	}
 	approvals, _ := readApprovals(dir)
 	notes, _ := readNotes(dir)
+	commands, _ := readApprovalCommands(dir)
 	set := ProposalSet{Mode: rep.Mode, FinishedAt: rep.FinishedAt}
 	for _, e := range rep.Entries {
 		if e.Class != ClassNeedsApproval || !pendingOutcome(e.Outcome) || e.Fingerprint == "" {
@@ -123,6 +124,22 @@ func allPendingProposals(stateDir string) (ProposalSet, error) {
 		p := Proposal{SweepEntry: e}
 		if d, ok := approvals.find(e.Key, e.Fingerprint); ok {
 			p.Decision = d.Decision
+		}
+		// An approval the machine refused to carry out is asked about
+		// again, with why: the person decides afresh, knowing.
+		c, ok := commands.find(e.Key, e.Fingerprint)
+		if ok && c.Status == ApprovalAccepted && time.Since(c.At) > approvalStaleAfter {
+			// Its removal never reported (the daemon stopped mid-way): the
+			// command never acts again, so the person is asked again.
+			c.Status, c.Reason, c.Detail = ApprovalRefused, "interrupted", "the machine stopped before it finished; approve it again"
+		}
+		if ok && c.Status == ApprovalRefused && p.Decision == DecisionApprove {
+			p.Decision = ""
+			if !strings.HasPrefix(p.Detail, "Your approval was not carried out") {
+				// The report was not amended (no pass reached it): say why
+				// from the command's own record.
+				p.Detail = refusedDetail(c.Reason, c.Detail)
+			}
 		}
 		if n, ok := notes.find(e.Key, e.Fingerprint); ok {
 			p.Note, p.NoteAt = n.Text, n.At
