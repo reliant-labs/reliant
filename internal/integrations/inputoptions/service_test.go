@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"sync"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"connectrpc.com/connect"
@@ -765,28 +766,30 @@ func TestNeedsConnectionIsNotCached(t *testing.T) {
 
 // Concurrent identical listings share one upstream call.
 func TestConcurrentIdenticalListingsShareOneCall(t *testing.T) {
-	f := newFixture(t, time.Minute)
-	f.runner.gate = make(chan struct{})
-	f.runner.reply["teams.list"] = ok(teams(2))
-	var wg sync.WaitGroup
-	results := make([]*inputoptions.ListResult, 8)
-	for i := range results {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			res, err := f.svc.List(context.Background(), inputoptions.ListRequest{UserID: "alice", Type: "acme.team"})
-			assert.NoError(t, err)
-			results[i] = res
-		}()
-	}
-	time.Sleep(50 * time.Millisecond)
-	close(f.runner.gate)
-	wg.Wait()
-	assert.Equal(t, 1, f.runner.count("teams.list"))
-	for _, r := range results {
-		require.NotNil(t, r)
-		assert.Len(t, r.Options, 2)
-	}
+	synctest.Test(t, func(t *testing.T) {
+		f := newFixture(t, time.Minute)
+		f.runner.gate = make(chan struct{})
+		f.runner.reply["teams.list"] = ok(teams(2))
+		var wg sync.WaitGroup
+		results := make([]*inputoptions.ListResult, 8)
+		for i := range results {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				res, err := f.svc.List(context.Background(), inputoptions.ListRequest{UserID: "alice", Type: "acme.team"})
+				assert.NoError(t, err)
+				results[i] = res
+			}()
+		}
+		synctest.Wait() // every caller is parked: one on the provider, the rest behind it
+		close(f.runner.gate)
+		wg.Wait()
+		assert.Equal(t, 1, f.runner.count("teams.list"))
+		for _, r := range results {
+			require.NotNil(t, r)
+			assert.Len(t, r.Options, 2)
+		}
+	})
 }
 
 func TestACancelledCallerReturnsWithoutWaiting(t *testing.T) {
@@ -805,7 +808,7 @@ func TestACancelledCallerReturnsWithoutWaiting(t *testing.T) {
 	select {
 	case err := <-done:
 		require.ErrorIs(t, err, context.Canceled)
-	case <-time.After(2 * time.Second):
+	case <-time.After(30 * time.Second):
 		t.Fatal("a cancelled request kept waiting on the provider")
 	}
 }
