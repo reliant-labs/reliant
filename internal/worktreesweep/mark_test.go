@@ -42,6 +42,7 @@ type tombDaemon struct {
 	use       map[string]time.Time // worktree -> daemon's last-use stamp
 	noTombs   bool                 // a daemon that predates tombstones
 	notLanded bool
+	skew      time.Duration // how far the daemon's clock runs behind
 	cmds      []string
 	archived  []worktreereclaim.Worktree // archived requests, as sent
 }
@@ -76,7 +77,7 @@ func (d *tombDaemon) SendDaemonCommandToDaemon(_ context.Context, _, _, cmd stri
 		case worktreereclaim.MarkCommand:
 			if w.Mark != nil && !d.noTombs {
 				d.marks[w.ID] = w.Mark.ID
-				d.use[w.ID] = d.clock.now() // placing it writes files
+				d.use[w.ID] = d.clock.now().Add(-d.skew) // placing it writes files
 			}
 		case worktreereclaim.UnmarkCommand:
 			if w.Unmark == "*" || d.marks[w.ID] == w.Unmark {
@@ -300,4 +301,24 @@ func TestMark_TheTombstoneItselfIsNotUse(t *testing.T) {
 		require.True(t, e.meta().Marked(), "the mark's own writes cancelled it")
 	}
 	assert.True(t, e.store.activity["wt"].LastActive.Before(*e.meta().ReclaimMarkedAt), "nor recorded as use")
+}
+
+func TestMark_UseIsJudgedOnTheDaemonsOwnClock(t *testing.T) {
+	t.Parallel()
+	// The daemon's clock runs two hours behind the database's: its stamp of
+	// a use an hour after the mark reads as an hour BEFORE the mark on the
+	// row, and only the comparison with its own baseline sees it.
+	e := newMarkEnv(t, AutoArchiveOn, 25*time.Hour)
+	e.daemon.skew = 2 * time.Hour
+	e.pass(t, 0)
+	require.True(t, e.meta().Marked())
+
+	e.clock.advance(time.Hour)
+	e.daemon.mu.Lock()
+	e.daemon.use["wt"] = e.clock.now().Add(-e.daemon.skew)
+	e.daemon.mu.Unlock()
+	e.pass(t, landedRecheck+time.Minute)
+	assert.False(t, e.meta().Marked(), "used after the mark, by the daemon's own clock")
+	e.pass(t, 30*time.Hour)
+	assert.Empty(t, e.store.archived)
 }
