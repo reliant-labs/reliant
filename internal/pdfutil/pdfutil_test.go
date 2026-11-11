@@ -4,6 +4,8 @@ package pdfutil
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -116,5 +118,42 @@ func TestExtractPagesOutOfRange(t *testing.T) {
 	data := buildMinimalPDF(3)
 	if _, err := ExtractPages(data, "50-60"); err == nil {
 		t.Fatal("expected error for out-of-range page selection")
+	}
+}
+
+// The temporal worker runs with HOME=/ on a read-only root filesystem, where
+// pdfcpu's on-disk default config cannot be created; pdfcpu panicked there
+// ("config problem: mkdir /.config: read-only file system"). pdfutil must
+// neither need nor write that directory.
+func TestPDFOperationsNeedNoWritableConfigDir(t *testing.T) {
+	// A config dir under a regular file cannot be created, even by root.
+	blocker := filepath.Join(t.TempDir(), "not-a-dir")
+	if err := os.WriteFile(blocker, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(blocker, "config"))
+	t.Setenv("HOME", filepath.Join(blocker, "home"))
+
+	data := buildMinimalPDF(3)
+	if n, err := PageCount(data); err != nil || n != 3 {
+		t.Fatalf("PageCount with an unwritable config dir = %d, %v; want 3, nil", n, err)
+	}
+	if _, err := ExtractPages(data, "2"); err != nil {
+		t.Fatalf("ExtractPages with an unwritable config dir: %v", err)
+	}
+}
+
+func TestPDFOperationsWriteNoConfigDir(t *testing.T) {
+	cfg := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", cfg)
+	if _, err := PageCount(buildMinimalPDF(1)); err != nil {
+		t.Fatal(err)
+	}
+	entries, err := os.ReadDir(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 0 {
+		t.Fatalf("pdfutil wrote %v into the user config dir; it must write nothing", entries)
 	}
 }
