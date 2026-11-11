@@ -39,14 +39,18 @@ afterEach(() => {
 });
 
 function renderStaging() {
+  renderEnv("staging");
+}
+
+function renderEnv(name: "staging" | "prod") {
   render(
     <QueryClientProvider client={createTestQueryClient()}>
       <ObservabilityApiProvider api={createWorkloadsFixtureApi()}>
         <EnvPromotions
           project={DEMO_PROJECT}
-          env={{ id: "env-staging", name: "staging" }}
-          releaseHref={(version) => `/releases/${version}?env=staging`}
-          releasesHref="/releases?env=staging"
+          env={{ id: `env-${name}`, name }}
+          releaseHref={(version) => `/releases/${version}?env=${name}`}
+          releasesHref={`/releases?env=${name}`}
         />
       </ObservabilityApiProvider>
     </QueryClientProvider>
@@ -57,7 +61,7 @@ function renderStaging() {
 const tags = (row: HTMLElement) => [...row.querySelectorAll("span")].map((el) => el.textContent ?? "");
 
 describe("EnvPromotions on the demo's staging ledger", () => {
-  it("renders every kind of row: healthy, a whole-release rollback, a scoped canary that regressed, a mixed rollback + redeploy, and unknown health", async () => {
+  it("renders every kind of row: healthy, a whole-release rollback, a scoped canary, a mixed rollback + redeploy, and unknown health", async () => {
     renderStaging();
     await waitFor(() => expect(screen.getAllByTestId("env-promotion-row")).toHaveLength(PROMOTIONS_SHOWN));
     // Rollbacks are judged once the release list (cut order) has loaded.
@@ -70,7 +74,10 @@ describe("EnvPromotions on the demo's staging ledger", () => {
     expect(rows[0]).toHaveTextContent("jon");
     expect(rows[0]).toHaveTextContent("health: healthy");
     expect(rows[0]).toHaveTextContent("replaced v1.8.2 · promoted from dev");
-    expect(within(rows[0]!).getByTestId("env-promotion-artifacts")).toHaveTextContent(/sha256:/);
+    // The demo's promotions apply a bundle: its digest is the one on screen,
+    // and the artifacts it pinned are counted beside it.
+    expect(rows[0]).toHaveTextContent(/bundle sha256:/);
+    expect(within(rows[0]!).getByTestId("env-promotion-artifacts")).toHaveTextContent(/\d+ artifacts pinned/);
 
     // The mixed row: api back from v1.8.3, the storefront the same release again.
     const mixed = rows[1]!;
@@ -83,10 +90,11 @@ describe("EnvPromotions on the demo's staging ledger", () => {
     expect(rows[2]).toHaveTextContent("scoped: shop-web");
     expect(rows[2]).toHaveTextContent("health: unknown");
 
-    // The canary: scoped to the api, forward, and it regressed.
+    // The canary: scoped to the api, forward. It passed its check: the demo's
+    // one regression is prod's v1.8.3, the incident (below).
     expect(rows[3]).toHaveTextContent("scoped: api");
     expect(rows[3]).not.toHaveAttribute("data-rollback");
-    expect(rows[3]).toHaveTextContent("health: regressed");
+    expect(rows[3]).toHaveTextContent("health: healthy");
 
     // CI's re-apply: a whole-release redeploy, no health check.
     expect(rows[5]).toHaveTextContent("github-actions");
@@ -101,6 +109,14 @@ describe("EnvPromotions on the demo's staging ledger", () => {
     expect(rollback).toHaveTextContent("rolled back from v1.8.2");
     expect(rollback).toHaveTextContent("held a lock on orders");
     expect(within(rollback).getByRole("link", { name: "v1.8.1" })).toHaveAttribute("href", "/releases/v1.8.1?env=staging");
+  });
+
+  it("shows the incident as prod's regressed promotion", async () => {
+    renderEnv("prod");
+    await waitFor(() => expect(screen.getAllByTestId("env-promotion-row").length).toBeGreaterThan(0));
+    const [newest] = screen.getAllByTestId("env-promotion-row");
+    expect(newest).toHaveAttribute("data-version", "v1.8.3");
+    expect(newest).toHaveTextContent("health: regressed");
   });
 
   it("lists ten and shows the rest on request", async () => {
