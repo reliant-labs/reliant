@@ -393,7 +393,8 @@ func TestMark_UnderDiskPressureEveryOtherCheckStands(t *testing.T) {
 			e.store.activity["wt"] = core.WorktreeRunActivity{LastActive: e.clock.now()}
 			e.store.mu.Unlock()
 		},
-		"new work does not land": func(e *markEnv) { e.daemon.notLanded = true },
+		"new work does not land":                             func(e *markEnv) { e.daemon.notLanded = true },
+		"its daemon is downgraded to one without tombstones": func(e *markEnv) { e.daemon.noTombs = true },
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
