@@ -99,32 +99,50 @@ func TestUsageDashboardReadsOnlyScopedProductEvents(t *testing.T) {
 		t.Errorf("the %q dashboard's filters are %v; want env and service, which the console binds to {env_ids} and {services}", usageDashboardID, filters)
 	}
 	for _, p := range d.Panels {
-		t.Run(p.ID, func(t *testing.T) {
-			if p.Kind != dashspec.KindSQL {
-				t.Fatalf("kind = %s; the product-usage panels are sql panels", p.Kind)
-			}
-			reads := 0
-			for _, m := range tableRef.FindAllStringSubmatch(p.SQL, -1) {
-				if m[1] != "" {
-					continue // ARRAY JOIN: no table
+		if p.Kind != dashspec.KindSQL {
+			t.Errorf("%s: kind = %s; the product-usage panels are sql panels", p.ID, p.Kind)
+			continue
+		}
+		for _, st := range panelStatements(p) {
+			t.Run(st.name, func(t *testing.T) {
+				reads := 0
+				for _, m := range tableRef.FindAllStringSubmatch(st.sql, -1) {
+					if m[1] != "" {
+						continue // ARRAY JOIN: no table
+					}
+					if m[2] != "product_events" {
+						t.Errorf("reads table %q; a product-usage panel reads only the unqualified product_events of the org's own database", m[2])
+						continue
+					}
+					reads++
 				}
-				if m[2] != "product_events" {
-					t.Errorf("reads table %q; a product-usage panel reads only the unqualified product_events of the org's own database", m[2])
-					continue
+				if reads == 0 {
+					t.Fatalf("reads no product_events:\n%s", st.sql)
 				}
-				reads++
-			}
-			if reads == 0 {
-				t.Fatalf("reads no product_events:\n%s", p.SQL)
-			}
-			if n := strings.Count(p.SQL, envPredicate); n != reads {
-				t.Errorf("%d reads of product_events, %d narrowed by the environment scope %s:\n%s", reads, n, envPredicate, p.SQL)
-			}
-			if n := strings.Count(p.SQL, servicePredicate); n != reads {
-				t.Errorf("%d reads of product_events, %d narrowed by the service filter %s:\n%s", reads, n, servicePredicate, p.SQL)
-			}
-		})
+				if n := strings.Count(st.sql, envPredicate); n != reads {
+					t.Errorf("%d reads of product_events, %d narrowed by the environment scope %s:\n%s", reads, n, envPredicate, st.sql)
+				}
+				if n := strings.Count(st.sql, servicePredicate); n != reads {
+					t.Errorf("%d reads of product_events, %d narrowed by the service filter %s:\n%s", reads, n, servicePredicate, st.sql)
+				}
+			})
+		}
 	}
+}
+
+// panelStatement is one statement a sql panel runs: its SQL, or its trendSql
+// (the sparkline's second SELECT, run under the same scope).
+type panelStatement struct{ name, sql string }
+
+// panelStatements are every statement a sql panel runs: the panel's own, and
+// its trend when it declares one. Both read the org's data, so both are held
+// to the same contract.
+func panelStatements(p dashspec.Panel) []panelStatement {
+	out := []panelStatement{{p.ID, p.SQL}}
+	if p.TrendSQL != "" {
+		out = append(out, panelStatement{p.ID + "/trend", p.TrendSQL})
+	}
+	return out
 }
 
 // TestUsageDashboardBindsTheViewersScope compiles every shipped panel with
@@ -168,30 +186,32 @@ func TestUsageDashboardBindsTheViewersScope(t *testing.T) {
 			envIDs: "['env-a']", services: "['api']",
 		},
 	}
-	for _, p := range d.Panels {
-		for name, c := range cases {
-			t.Run(p.ID+"/"+name, func(t *testing.T) {
-				stmt, err := obsquery.SQLPanel{Scope: c.scope, SQL: p.SQL, StepSeconds: 3600}.Compile()
-				if err != nil {
-					t.Fatalf("compile: %v", err)
-				}
-				if stmt.SQL != p.SQL {
-					t.Errorf("the compiled statement differs from the shipped one: nothing may be spliced into it")
-				}
-				if got := stmt.Params[dashspec.SQLParamEnvIDs]; got != c.envIDs {
-					t.Errorf("env_ids = %s; want %s", got, c.envIDs)
-				}
-				if got := stmt.Params[dashspec.SQLParamServices]; got != c.services {
-					t.Errorf("services = %s; want %s", got, c.services)
+	for _, panel := range d.Panels {
+		for _, p := range panelStatements(panel) {
+			for name, c := range cases {
+				t.Run(p.name+"/"+name, func(t *testing.T) {
+					stmt, err := obsquery.SQLPanel{Scope: c.scope, SQL: p.sql, StepSeconds: 3600}.Compile()
+					if err != nil {
+						t.Fatalf("compile: %v", err)
+					}
+					if stmt.SQL != p.sql {
+						t.Errorf("the compiled statement differs from the shipped one: nothing may be spliced into it")
+					}
+					if got := stmt.Params[dashspec.SQLParamEnvIDs]; got != c.envIDs {
+						t.Errorf("env_ids = %s; want %s", got, c.envIDs)
+					}
+					if got := stmt.Params[dashspec.SQLParamServices]; got != c.services {
+						t.Errorf("services = %s; want %s", got, c.services)
+					}
+				})
+			}
+			t.Run(p.name+"/server database", func(t *testing.T) {
+				s := org(nil)
+				s.Database = obsquery.LocalDatabase
+				if _, err := (obsquery.SQLPanel{Scope: s, SQL: p.sql, StepSeconds: 3600}).Compile(); err == nil {
+					t.Errorf("a hosted scope naming the server's %q database compiles; it must be refused", obsquery.LocalDatabase)
 				}
 			})
 		}
-		t.Run(p.ID+"/server database", func(t *testing.T) {
-			s := org(nil)
-			s.Database = obsquery.LocalDatabase
-			if _, err := (obsquery.SQLPanel{Scope: s, SQL: p.SQL, StepSeconds: 3600}).Compile(); err == nil {
-				t.Errorf("a hosted scope naming the server's %q database compiles; it must be refused", obsquery.LocalDatabase)
-			}
-		})
 	}
 }
