@@ -197,6 +197,33 @@ message ApiServerConfig {
     (buf.validate.field).duration.gte = {}
   ];
 
+  // Reclaim in two phases (worktreesweep mark.go): a worktree whose work has
+  // landed, or that is complete, clean and idle, is first MARKED once nothing
+  // has happened in it for worktree_reclaim_quiet: its machine places a
+  // tombstone in it (.reliant/RECLAIM_PENDING and a line in the workspace's
+  // reliant.md) and nothing is archived. It is reclaimed no sooner than
+  // worktree_reclaim_grace after the mark, only if the tombstone still stands
+  // and nothing has happened in it since; any use, or deleting the
+  // tombstone, cancels the mark. Both are floored at 24h: a shorter value is
+  // raised to it. Follows worktree_auto_archive (dry-run marks, never
+  // reclaims).
+  google.protobuf.Duration worktree_reclaim_quiet = 83 [
+    (forge.v1.config) = {
+      env_var: "RELIANT_WORKTREE_RECLAIM_QUIET"
+      default_value: "24h"
+      description: "How long a worktree must be quiet before it is marked for reclaim (floor 24h)"
+    },
+    (buf.validate.field).duration.gte = {}
+  ];
+  google.protobuf.Duration worktree_reclaim_grace = 84 [
+    (forge.v1.config) = {
+      env_var: "RELIANT_WORKTREE_RECLAIM_GRACE"
+      default_value: "24h"
+      description: "How long a reclaim mark stands before the worktree is reclaimed (floor 24h)"
+    },
+    (buf.validate.field).duration.gte = {}
+  ];
+
   // Idle floor for whole recoverable-worktree retirement. Requires clean
   // pushed/merged work, no live chat/thread execution, no process use and no
   // fresh files (including caches). Dirty/unique/uncertain trees retain every

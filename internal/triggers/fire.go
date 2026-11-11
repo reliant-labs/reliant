@@ -13,6 +13,7 @@ import (
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/launch"
 	"github.com/reliant-labs/reliant/internal/ptr"
@@ -39,6 +40,14 @@ type Firer struct {
 	capacity  capacityDescriptions
 	wake      *capacityWake
 	pools     Placer
+	pause     *AutoPause
+}
+
+// WithAutoPause lets the firer pause a trigger whose creator left its org
+// (AutoPause). Without it, each such fire is recorded as failed.
+func (f *Firer) WithAutoPause(p *AutoPause) *Firer {
+	f.pause = p
+	return f
 }
 
 // WithCapacityWake lets a capped launch fire the next waiting event of its
@@ -118,6 +127,22 @@ func (f *Firer) Fire(ctx context.Context, req FireRequest) (*FireOutput, error) 
 		return nil, fmt.Errorf("load trigger %s: %w", req.TriggerID, err)
 	}
 
+	// Every run executes as the trigger's creator, so once they have left
+	// its org no fire can launch: the first fire to find out records the
+	// failure and pauses the trigger. Asked before the definition is read,
+	// since what they no longer reach (a saved workflow of the org) would
+	// otherwise fail the fire as broken, every time. A paused trigger's
+	// unattended fire skips below; a membership outage retries.
+	if !resuming && (trigger.Enabled || req.Manual) {
+		left, err := CreatorLeftOrg(ctx, trigger)
+		if err != nil {
+			return nil, err
+		}
+		if left {
+			return f.refuseCreatorLeftOrg(ctx, fireRecord{trigger: trigger, req: req}, authz.ErrNotOrgMember)
+		}
+	}
+
 	// A pool-bound trigger reads everything below from its pool's agreed
 	// catalog, the one its run is placed on.
 	bound, catalog, wait, err := bindPoolCatalog(ctx, f.pools, trigger)
@@ -185,7 +210,7 @@ func (f *Firer) Fire(ctx context.Context, req FireRequest) (*FireOutput, error) 
 	// not for an explicit request. A resumed fire already passed both.
 	enforcePolicy := !req.Manual && !resuming
 	if enforcePolicy && !trigger.Enabled {
-		return f.recordSkip(ctx, rec, "trigger is disabled")
+		return f.recordSkip(ctx, rec, pausedDetail(trigger))
 	}
 
 	// Never fall back to another daemon: the trigger named this one, and the
@@ -298,6 +323,11 @@ func (f *Firer) Fire(ctx context.Context, req FireRequest) (*FireOutput, error) 
 		return out, nil
 	}
 
+	if launch.OwnerLeftOrg(launchErr) {
+		// The launcher's own check found the creator gone (the project's
+		// org, which a trigger written before orgs does not carry itself).
+		return f.refuseCreatorLeftOrg(ctx, rec, launchErr)
+	}
 	var validation *launch.ValidationError
 	if errors.As(launchErr, &validation) || errors.Is(launchErr, launch.ErrNotFound) {
 		// The spec can never launch as written — a workflow that no longer
@@ -593,6 +623,20 @@ func (f *Firer) failPermanently(ctx context.Context, rec fireRecord, detail stri
 		return nil, err
 	}
 	return nil, nonRetryable(detail, cause)
+}
+
+// refuseCreatorLeftOrg ends a fire whose trigger's creator has left its org:
+// the trigger is paused (AutoPause.Refuse) and the fire recorded, without
+// retries. A pause that could not be written is retried, recording nothing.
+func (f *Firer) refuseCreatorLeftOrg(ctx context.Context, rec fireRecord, cause error) (*FireOutput, error) {
+	outcome, detail, err := f.pause.Refuse(ctx, rec.trigger)
+	if err != nil {
+		return nil, err
+	}
+	if outcome == core.TriggerEventSkipped {
+		return f.recordSkip(ctx, rec, detail)
+	}
+	return f.failPermanently(ctx, rec, detail, cause)
 }
 
 func outputFromEvent(ev *core.TriggerEvent) *FireOutput {

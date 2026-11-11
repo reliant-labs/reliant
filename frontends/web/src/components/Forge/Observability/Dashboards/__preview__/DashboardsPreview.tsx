@@ -10,8 +10,8 @@
  * DashboardService) — unauthenticated, no backend — so every state can be
  * looked at in every colour scheme and screenshotted. All state is in the URL:
  *
- *   /forge-dashboards-preview                                  Dashboards (the Overview hub)
- *   /forge-dashboards-preview?view=all&group=services          the grouped list
+ *   /forge-dashboards-preview                                  Dashboards (the grouped list)
+ *   /forge-dashboards-preview?group=services                   narrowed to one group
  *   /forge-dashboards-preview?page=dashboard&dash=workspace/checkout-latency
  *   …&dash=release/frontend-web   (funnel, issues, sessions)    …&dash=release/overview
  *   …&compare=period|release  &range=24h  &service=api  &tv=1  &version=2
@@ -284,19 +284,9 @@ export default function DashboardsPreview() {
               project={FIXTURE_PROJECT}
               env={env}
               environments={FIXTURE_ENVS}
-              search={{ view: search.view, q: search.q, group: search.group, source: search.source, owner: search.owner }}
+              search={{ q: search.q, group: search.group, source: search.source, owner: search.owner }}
               onSearch={(next) => go(next)}
-              hrefs={{
-                dashboard: dashboardHref,
-                hub: {
-                  alerts: hrefs.alerts,
-                  releases: hrefs.releases,
-                  errors: withSearch("/forge-observability-preview", { view: "errors" }),
-                  release: hrefs.release,
-                  workload: (name: string) => hrefs.workload(name),
-                  logs: (service: string) => hrefs.logs({ service, severity: "error,fatal" }),
-                },
-              }}
+              hrefs={{ dashboard: dashboardHref }}
               navigateTo={navigateTo}
             />
           ) : (

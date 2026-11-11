@@ -3277,9 +3277,14 @@ type SearchChatsRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// The project to search. Empty searches every project the caller owns; each
 	// result carries its project_id.
-	ProjectId     string `protobuf:"bytes,1,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
-	Query         string `protobuf:"bytes,2,opt,name=query,proto3" json:"query,omitempty"` // Search query
-	Limit         *int32 `protobuf:"varint,3,opt,name=limit,proto3,oneof" json:"limit,omitempty"`
+	ProjectId string `protobuf:"bytes,1,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
+	Query     string `protobuf:"bytes,2,opt,name=query,proto3" json:"query,omitempty"` // Search query
+	Limit     *int32 `protobuf:"varint,3,opt,name=limit,proto3,oneof" json:"limit,omitempty"`
+	// Search only this organization's chats. It must be one the caller is a
+	// live member of (PERMISSION_DENIED otherwise). Chats created before orgs
+	// are searched with the caller's default org. Unset searches every chat
+	// the caller owns, in any org, as before this field existed.
+	OrgId         *string `protobuf:"bytes,4,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3333,6 +3338,13 @@ func (x *SearchChatsRequest) GetLimit() int32 {
 		return *x.Limit
 	}
 	return 0
+}
+
+func (x *SearchChatsRequest) GetOrgId() string {
+	if x != nil && x.OrgId != nil {
+		return *x.OrgId
+	}
+	return ""
 }
 
 // SearchChatsResponse returns matching chats
@@ -3394,7 +3406,12 @@ func (x *SearchChatsResponse) GetTotal() int32 {
 // automation archives its runs once they finish successfully — is not listed
 // here; it stays browsable in Runs (RunService.ListRuns, include_archived).
 type ListArchivedChatsRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// List only this organization's archived chats. It must be one the caller
+	// is a live member of (PERMISSION_DENIED otherwise). Chats created before
+	// orgs list under the caller's default org. Unset lists every archived chat
+	// the caller owns, in any org, as before this field existed.
+	OrgId         *string `protobuf:"bytes,1,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3427,6 +3444,13 @@ func (x *ListArchivedChatsRequest) ProtoReflect() protoreflect.Message {
 // Deprecated: Use ListArchivedChatsRequest.ProtoReflect.Descriptor instead.
 func (*ListArchivedChatsRequest) Descriptor() ([]byte, []int) {
 	return file_reliant_v1_chat_proto_rawDescGZIP(), []int{28}
+}
+
+func (x *ListArchivedChatsRequest) GetOrgId() string {
+	if x != nil && x.OrgId != nil {
+		return *x.OrgId
+	}
+	return ""
 }
 
 // ListArchivedChatsResponse returns archived chats with worktree info
@@ -8075,17 +8099,21 @@ const file_reliant_v1_chat_proto_rawDesc = "" +
 	"\x12DeleteChatResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x18\n" +
 	"\amessage\x18\x02 \x01(\tR\amessage\x12/\n" +
-	"\x13permanently_deleted\x18\x03 \x01(\bR\x12permanentlyDeleted\"n\n" +
+	"\x13permanently_deleted\x18\x03 \x01(\bR\x12permanentlyDeleted\"\x95\x01\n" +
 	"\x12SearchChatsRequest\x12\x1d\n" +
 	"\n" +
 	"project_id\x18\x01 \x01(\tR\tprojectId\x12\x14\n" +
 	"\x05query\x18\x02 \x01(\tR\x05query\x12\x19\n" +
-	"\x05limit\x18\x03 \x01(\x05H\x00R\x05limit\x88\x01\x01B\b\n" +
-	"\x06_limit\"S\n" +
+	"\x05limit\x18\x03 \x01(\x05H\x00R\x05limit\x88\x01\x01\x12\x1a\n" +
+	"\x06org_id\x18\x04 \x01(\tH\x01R\x05orgId\x88\x01\x01B\b\n" +
+	"\x06_limitB\t\n" +
+	"\a_org_id\"S\n" +
 	"\x13SearchChatsResponse\x12&\n" +
 	"\x05chats\x18\x01 \x03(\v2\x10.reliant.v1.ChatR\x05chats\x12\x14\n" +
-	"\x05total\x18\x02 \x01(\x05R\x05total\"\x1a\n" +
-	"\x18ListArchivedChatsRequest\"a\n" +
+	"\x05total\x18\x02 \x01(\x05R\x05total\"A\n" +
+	"\x18ListArchivedChatsRequest\x12\x1a\n" +
+	"\x06org_id\x18\x01 \x01(\tH\x00R\x05orgId\x88\x01\x01B\t\n" +
+	"\a_org_id\"a\n" +
 	"\x19ListArchivedChatsResponse\x12.\n" +
 	"\x05chats\x18\x01 \x03(\v2\x18.reliant.v1.ArchivedChatR\x05chats\x12\x14\n" +
 	"\x05total\x18\x02 \x01(\x05R\x05total\"\xad\x06\n" +
@@ -8968,6 +8996,7 @@ func file_reliant_v1_chat_proto_init() {
 	file_reliant_v1_chat_proto_msgTypes[14].OneofWrappers = []any{}
 	file_reliant_v1_chat_proto_msgTypes[18].OneofWrappers = []any{}
 	file_reliant_v1_chat_proto_msgTypes[26].OneofWrappers = []any{}
+	file_reliant_v1_chat_proto_msgTypes[28].OneofWrappers = []any{}
 	file_reliant_v1_chat_proto_msgTypes[30].OneofWrappers = []any{}
 	file_reliant_v1_chat_proto_msgTypes[31].OneofWrappers = []any{}
 	file_reliant_v1_chat_proto_msgTypes[32].OneofWrappers = []any{}

@@ -31,6 +31,22 @@ func (r *Repo) NoteWorktreeUse(ctx context.Context, id string, at time.Time) err
 	return store.NoteWorktreeUse(ctx, r.ORM(), id, at)
 }
 
+// MarkWorktreeForReclaim records a reclaim mark (store.MarkWorktreeForReclaim).
+func (r *Repo) MarkWorktreeForReclaim(ctx context.Context, id, markID string, quietSince time.Time, use *time.Time, reason string) (bool, error) {
+	return store.MarkWorktreeForReclaim(ctx, r.ORM(), id, markID, quietSince, use, reason)
+}
+
+// ClearWorktreeMark cancels a reclaim mark (store.ClearWorktreeMark).
+func (r *Repo) ClearWorktreeMark(ctx context.Context, id, markID string) (bool, error) {
+	return store.ClearWorktreeMark(ctx, r.ORM(), id, markID)
+}
+
+// ArchiveMarkedWorktree reclaims a worktree under its reclaim mark
+// (store.ArchiveMarkedWorktree).
+func (r *Repo) ArchiveMarkedWorktree(ctx context.Context, id, markID string) (bool, error) {
+	return store.ArchiveMarkedWorktree(ctx, r.ORM(), id, markID)
+}
+
 // ArchiveLandedWorktree archives a landed worktree that has been quiet since
 // quietSince, leaving its chats live (store.ArchiveLandedWorktree).
 func (r *Repo) ArchiveLandedWorktree(ctx context.Context, id string, quietSince time.Time) (bool, error) {

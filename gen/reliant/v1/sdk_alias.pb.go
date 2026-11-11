@@ -178,11 +178,13 @@ type (
 	InboxItem_Recovery                       = sdk.InboxItem_Recovery
 	InboxItem_Storage                        = sdk.InboxItem_Storage
 	InboxItem_WaitingForMachine              = sdk.InboxItem_WaitingForMachine
+	InboxItem_WorktreeMarked                 = sdk.InboxItem_WorktreeMarked
 	InboxItem_WorktreeReclaim                = sdk.InboxItem_WorktreeReclaim
 	InboxQuestion                            = sdk.InboxQuestion
 	InboxRefusedAutomation                   = sdk.InboxRefusedAutomation
 	InboxStorage                             = sdk.InboxStorage
 	InboxWaitingForMachine                   = sdk.InboxWaitingForMachine
+	InboxWorktreeMarked                      = sdk.InboxWorktreeMarked
 	InboxWorktreeReclaim                     = sdk.InboxWorktreeReclaim
 	IndexedPreset                            = sdk.IndexedPreset
 	IndexedScenario                          = sdk.IndexedScenario
@@ -194,6 +196,8 @@ type (
 	InterruptRunResponse                     = sdk.InterruptRunResponse
 	InterruptThreadRequest                   = sdk.InterruptThreadRequest
 	InterruptThreadResponse                  = sdk.InterruptThreadResponse
+	KeepMarkedWorktreeRequest                = sdk.KeepMarkedWorktreeRequest
+	KeepMarkedWorktreeResponse               = sdk.KeepMarkedWorktreeResponse
 	LastRunPerWorkflowRequest                = sdk.LastRunPerWorkflowRequest
 	LastRunPerWorkflowResponse               = sdk.LastRunPerWorkflowResponse
 	ListApprovalsByChatRequest               = sdk.ListApprovalsByChatRequest
@@ -277,6 +281,8 @@ type (
 	QuestionInfo                             = sdk.QuestionInfo
 	QuestionStatus                           = sdk.QuestionStatus
 	QueuedAgentMessage                       = sdk.QueuedAgentMessage
+	ReclaimMarkedWorktreeNowRequest          = sdk.ReclaimMarkedWorktreeNowRequest
+	ReclaimMarkedWorktreeNowResponse         = sdk.ReclaimMarkedWorktreeNowResponse
 	RecoveryInboxItem                        = sdk.RecoveryInboxItem
 	RecoveryType                             = sdk.RecoveryType
 	RecreateWorktreeRequest                  = sdk.RecreateWorktreeRequest
@@ -539,6 +545,7 @@ const (
 	InboxItemKind_INBOX_ITEM_KIND_STORAGE                                      = sdk.InboxItemKind_INBOX_ITEM_KIND_STORAGE
 	InboxItemKind_INBOX_ITEM_KIND_UNSPECIFIED                                  = sdk.InboxItemKind_INBOX_ITEM_KIND_UNSPECIFIED
 	InboxItemKind_INBOX_ITEM_KIND_WAITING_FOR_MACHINE                          = sdk.InboxItemKind_INBOX_ITEM_KIND_WAITING_FOR_MACHINE
+	InboxItemKind_INBOX_ITEM_KIND_WORKTREE_MARKED                              = sdk.InboxItemKind_INBOX_ITEM_KIND_WORKTREE_MARKED
 	InboxItemKind_INBOX_ITEM_KIND_WORKTREE_RECLAIM                             = sdk.InboxItemKind_INBOX_ITEM_KIND_WORKTREE_RECLAIM
 	MessageRole_MESSAGE_ROLE_ASSISTANT                                         = sdk.MessageRole_MESSAGE_ROLE_ASSISTANT
 	MessageRole_MESSAGE_ROLE_SYSTEM                                            = sdk.MessageRole_MESSAGE_ROLE_SYSTEM
