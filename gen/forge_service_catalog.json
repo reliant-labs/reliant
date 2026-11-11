@@ -37772,6 +37772,10 @@
               "name": "org_id",
               "kind": "string",
               "optional": true
+            },
+            {
+              "name": "paused_reason",
+              "kind": "string"
             }
           ],
           "reliant.v1.TriggerChange": [
