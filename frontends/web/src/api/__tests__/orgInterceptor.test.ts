@@ -135,7 +135,7 @@ describe("orgInterceptor", () => {
       });
     }));
     const { updateMemberPermissions } = await import("@/services/controlPlane/memberPermissions");
-    const pending = updateMemberPermissions("shared-user", ["deploy:read", "deploy:write"], "org-a");
+    const pending = updateMemberPermissions("shared-user", ["deploy:read", "deploy:write"], "org-a", []);
     await vi.waitFor(() => expect(getToken).toHaveBeenCalledOnce());
     chooseActiveOrg("org-b");
     release("old-token");
