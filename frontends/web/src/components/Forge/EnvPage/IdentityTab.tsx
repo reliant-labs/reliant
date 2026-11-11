@@ -588,7 +588,7 @@ function ExportPanel({ orgId, envId, status: s }: { orgId: string; envId: string
     ) : (
       <div className="space-y-2" data-testid="identity-export-on-demand">
         <p>
-          Exports every user of this sign-in service — password hashes included, in a form Zitadel can import — and gives you
+          Exports every user of this sign-in service — password hashes included, in a standard identity export format — and gives you
           a download link that works for a few minutes for whoever holds it. Exporting again within 15 minutes returns the
           same export.
         </p>
