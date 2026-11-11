@@ -72,6 +72,10 @@ type Reclaimer struct {
 	Acquire func(context.Context, []string) (RecoveryLease, error)
 	// ProcessUse checks executables, open and mapped files, not only cwd.
 	ProcessUse func(ctx context.Context, paths []string) error
+	// ArchiveClockSkew widens the use-after-archive veto by this much before
+	// the archive time: the fence is the database's clock, file and reflog
+	// times are this machine's. NewReclaimer sets DefaultArchiveClockSkew.
+	ArchiveClockSkew time.Duration
 	// DisposalCheckEvery paces the admission and process check while a parked
 	// checkout is unlinked; zero means DefaultDisposalCheckEvery.
 	DisposalCheckEvery time.Duration
@@ -111,7 +115,7 @@ type cachedSize struct {
 
 // NewReclaimer returns a Reclaimer rooted at root.
 func NewReclaimer(root string) *Reclaimer {
-	return &Reclaimer{Root: root, Cwds: ProcessCwds, IdleFloor: DefaultIdleFloor, Budget: DefaultBudget,
+	return &Reclaimer{Root: root, Cwds: ProcessCwds, IdleFloor: DefaultIdleFloor, Budget: DefaultBudget, ArchiveClockSkew: DefaultArchiveClockSkew,
 		PRMerged: GitHubPRMerged, FetchBase: FetchBaseBranch, ProcessUse: CheckProcessUse}
 }
 
@@ -695,13 +699,17 @@ func (r *Reclaimer) autoRemove(ctx context.Context, w Worktree) Result {
 	if checkouts == nil {
 		return held(w, ReasonStale, "nothing is claimed for removal")
 	}
-	if r.IdleFloor > 0 {
+	archivedAt, hasArchiveTime := r.useCountsAfter(w)
+	if r.IdleFloor > 0 || hasArchiveTime {
 		last, err := idleSince(ctx, w.Path, checkouts)
 		if err != nil {
 			return held(w, ReasonUnverified, "could not determine quiet time: "+err.Error())
 		}
-		if age := r.now().Sub(last); age < r.IdleFloor {
+		if age := r.now().Sub(last); r.IdleFloor > 0 && age < r.IdleFloor {
 			return held(w, ReasonRecentlyActive, fmt.Sprintf("touched %s ago", age.Round(time.Minute)))
+		}
+		if hasArchiveTime && last.After(archivedAt) {
+			return held(w, ReasonUsedAfterArchive, usedAfterArchive(last, archivedAt))
 		}
 	}
 	// A fresh process list, immediately before removal.
