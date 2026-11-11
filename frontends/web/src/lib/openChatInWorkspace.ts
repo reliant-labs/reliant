@@ -20,6 +20,7 @@
  */
 
 import type { Chat } from "../api/client";
+import type { ChatOpenEntry } from "./chatOpenInteraction";
 import { useChatNavigationStore } from "../store/chatNavigationStore";
 import { useChatStore } from "../store/chatStore";
 import { useProjectStore } from "../store/projectStore";
@@ -44,6 +45,8 @@ export interface OpenChatOptions {
   navigate?: boolean;
   /** Continue an intent that began before resolving the chat (notifications). */
   isCurrent?: () => boolean;
+  /** Where the open came from, for its chat.open interaction (default "switch"). */
+  openEntry?: ChatOpenEntry;
 }
 
 // Identity alone is insufficient when A is opened again before an older A
@@ -81,7 +84,7 @@ export async function openChatInWorkspace(
   let projectId = useProjectStore.getState().currentProject?.id;
   // Selection starts the chat stream immediately, even while its project row
   // is loading. Persistence waits for the matching project/workspace below.
-  useChatStore.getState().selectChat(chat, { deferPersist: true });
+  useChatStore.getState().selectChat(chat, { deferPersist: true, openEntry: options.openEntry });
 
   // Pass the fence into the switch too: it must recheck after its own import,
   // BEFORE it writes viewer, navigation or workspace routing state.

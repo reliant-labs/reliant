@@ -22,21 +22,21 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { HardDrive, ShieldCheck } from "lucide-react";
+import { ShieldCheck } from "lucide-react";
 
 import Button from "@/components/forge-ui/button";
 import Card from "@/components/forge-ui/card";
 import type { StorageBucket } from "@/services/controlPlane/storageBrowser/storageBrowserApi";
 
-import { useQueryClient } from "@tanstack/react-query";
 import { AccessReasonDialog } from "../AuditedAccess/AccessReasonDialog";
-import { getReaderSession, isCurrentReader, useReaderSession, subscribeReaderSession } from "../AuditedAccess/readerSession";
+import { isCurrentReader, useReaderSession } from "../AuditedAccess/readerSession";
+import { useReaderCacheCleanup } from "../AuditedAccess/useReaderCacheCleanup";
 import { isDenied, needsConfirmation, type AccessConfirmation } from "../AuditedAccess/accessSession-model";
 import { BucketSelector, StoragePolicyTag } from "./BucketSelector";
 import { ObjectListing } from "./ObjectListing";
 import { ObjectPane } from "./ObjectPane";
 import { clearStorageAccess, readStorageAccess, writeStorageAccess } from "./storageAccess-model";
-import { StorageDenied, StorageError, StorageLoading, StorageNote } from "./StorageStates";
+import { StorageDenied, StorageError, StorageLoading, StorageNoBuckets, StorageNote } from "./StorageStates";
 import { isBucketName, objectOf, patchStorageSearch, prefixOf, type StorageSearch } from "./storageUrl-model";
 import { useBrowsableBuckets } from "./useStorageBrowser";
 
@@ -63,13 +63,7 @@ const navigateTo = (url: string) => window.location.assign(url);
 
 export function StorageBrowser(props: StorageBrowserProps) {
   const reader = useReaderSession();
-  const client = useQueryClient();
-  useEffect(() => subscribeReaderSession(() => {
-    // Cancel and remove old content even when this client is not the app singleton.
-    const oldReader = (query: { queryKey: readonly unknown[] }) => query.queryKey[0] === "storage-browser" && query.queryKey[2] !== getReaderSession().epoch;
-    void client.cancelQueries({ predicate: oldReader });
-    client.removeQueries({ predicate: oldReader });
-  }), [client]);
+  useReaderCacheCleanup("storage-browser");
   if (!reader.principalId) return <StorageNote testId="storage-reader-required" title="Sign in to browse storage"><p>Storage reads need an authenticated reader.</p></StorageNote>;
   return <ReaderStorageBrowser key={`${reader.epoch}:${props.env.id}`} {...props} />;
 }
@@ -91,12 +85,12 @@ function ReaderStorageBrowser({ env, search, onNavigate, href, onDownloadUrl = n
     }
   }, [listed.data, selected, search, onNavigate]);
 
-  const [access, setAccess] = useState<AccessConfirmation | null>(() => readStorageAccess(env.id));
+  const [access, setAccess] = useState<AccessConfirmation | null>(() => readStorageAccess(env.id, reader));
   const [asking, setAsking] = useState(false);
   const [confirmationRequired, setConfirmationRequired] = useState(false);
   const confirmationLost = useCallback(() => {
     if (!isCurrentReader(reader)) return;
-    clearStorageAccess(env.id);
+    clearStorageAccess(env.id, reader);
     setAccess(null);
     setConfirmationRequired(true);
     setAsking(true);
@@ -132,16 +126,9 @@ function ReaderStorageBrowser({ env, search, onNavigate, href, onDownloadUrl = n
       </Card>
     );
   }
-  if (buckets.length === 0) {
-    return (
-      <StorageNote testId="storage-no-buckets" icon={<HardDrive className="h-4 w-4" />} title={`${env.name} has no buckets`}>
-        <p>
-          The browser shows the buckets an environment declares: each <code className="font-mono text-ink">forge.Bucket</code> in its last
-          recorded release. {env.name}&apos;s declares none.
-        </p>
-      </StorageNote>
-    );
-  }
+  // Only now is "none" known: the list was read and came back empty. With no
+  // bucket there is nothing to read, so an audited environment asks no reason.
+  if (buckets.length === 0) return <StorageNoBuckets env={env.name} />;
 
   const objectKey = objectOf(search);
   // Wait for the URL correction before starting reads: a missing bucket's
@@ -178,7 +165,7 @@ function ReaderStorageBrowser({ env, search, onNavigate, href, onDownloadUrl = n
           initialReason={access?.reason ?? ""}
           onConfirm={(reason) => {
             if (!isCurrentReader(reader)) return;
-            setAccess(writeStorageAccess(env.id, reason));
+            setAccess(writeStorageAccess(env.id, reason, reader));
             setAsking(false);
           }}
           onCancel={() => setAsking(false)}

@@ -55,6 +55,7 @@ import { AutomationActivityPill } from "./AutomationActivityPill";
 import { InboxNavItem } from "../inbox/InboxNavItem";
 import { SidebarApps } from "../Apps/SidebarApps";
 import { OrgSwitcher } from "../Orgs/OrgSwitcher";
+import { SidebarUpdateButton } from "./SidebarUpdateButton";
 import type { RunsSearch } from "../../routeSchemas";
 import { isForgeUIEnabled } from "../../lib/forgeFeature";
 import { useMarkUnread } from "../../hooks/message-queries";
@@ -2317,11 +2318,17 @@ function SidebarComponent({
         <AutomationActivityPill listedChatIds={listedChatIds} onOpenRuns={onOpenRuns} />
         {/* Renders nothing for a person with one org. */}
         <OrgSwitcher />
-        <SidebarNavButton
-          icon={<Settings className="h-4 w-4" />}
-          label="Settings"
-          onClick={onNavigateToSettings}
-        />
+        <div className="flex items-center gap-1">
+          <div className="min-w-0 flex-1">
+            <SidebarNavButton
+              icon={<Settings className="h-4 w-4" />}
+              label="Settings"
+              onClick={onNavigateToSettings}
+            />
+          </div>
+          {/* Renders nothing unless the desktop app has an update waiting. */}
+          <SidebarUpdateButton />
+        </div>
       </div>
 
       {/* One context menu for every row; its items follow the row. */}

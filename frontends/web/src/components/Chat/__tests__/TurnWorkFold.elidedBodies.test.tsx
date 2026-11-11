@@ -22,6 +22,7 @@ vi.mock("../SystemNotificationMessage", () => ({ SystemNotificationMessage: () =
 const results = vi.hoisted(() => ({ value: {} as ToolResultsByCallId }));
 vi.mock("../../../store/chatStoreHooks", () => ({
   useActiveChatId: () => "chat-1",
+  useChatIdOrActive: (chatId?: string | null) => chatId || "chat-1",
   useChat: () => ({ worktreeId: "worktree-1" }),
   useToolResultsByCallId: () => results.value,
   useToolCallStates: () => new Map(),

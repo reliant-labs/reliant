@@ -2,6 +2,7 @@
 
 import { useMemo } from "react";
 import { useAttributeValues } from "@/hooks/observability-queries";
+import { cn } from "@/lib/utils";
 import type { Dashboard, DashboardFilter, ObsScope } from "@/services/controlPlane/observability/types";
 import type { RangePreset } from "@/services/controlPlane/observability/window";
 import { attributeLabel } from "../attributes";
@@ -9,6 +10,9 @@ import { attributeKey, breakdownFields, toggledHidden, viewerFilterValue } from 
 import type { DashboardSearch } from "./dashboardModel";
 import { marksReleases } from "./dashboardModel";
 import { BUTTON_SMALL, Menu, VariableSelect } from "./parts";
+
+/** The menu triggers stand beside the selects: the same 32px field height. */
+const TRIGGER = cn(BUTTON_SMALL, "h-8 text-sm");
 
 /** Viewing a dashboard never writes its saved definition. */
 export function ViewerControls({ dashboard, scope, range, search, onSearch }: {
@@ -28,7 +32,7 @@ export function ViewerControls({ dashboard, scope, range, search, onSearch }: {
       {fields.length > 0 && <VariableSelect id="dashboard-breakdown" label="breakdown" value={search.breakdown ?? ""}
         options={[{ value: "", label: "Saved grouping" }, { value: "none", label: "None" }, ...fields.map((field) => ({ value: field, label: attributeKey(field) === "service.name" ? "Process (service.name)" : attributeLabel(attributeKey(field)) }))]}
         onChange={(value) => onSearch({ breakdown: value || undefined })} />}
-      {!!dashboard.sections?.length && <Menu label="Sections" trigger="Sections" align="left" triggerClassName={BUTTON_SMALL} testId="dashboard-sections"
+      {!!dashboard.sections?.length && <Menu label="Sections" trigger="Sections" align="left" triggerClassName={TRIGGER} testId="dashboard-sections"
         entries={dashboard.sections.map((section) => ({ label: section.title, multiple: true, checked: !search.hiddenSections?.includes(section.id),
           onSelect: () => onSearch({ hiddenSections: toggledHidden(search.hiddenSections, section.id) }),
         }))} />}
@@ -43,7 +47,7 @@ export function ViewerControls({ dashboard, scope, range, search, onSearch }: {
           onChange={(event) => onSearch({ alerts: event.target.checked ? undefined : false })} />
         Alert bands
       </label>
-      <Menu label="Metrics" trigger="Metrics" align="left" triggerClassName={BUTTON_SMALL} testId="dashboard-metrics"
+      <Menu label="Metrics" trigger="Metrics" align="left" triggerClassName={TRIGGER} testId="dashboard-metrics"
         entries={dashboard.panels.map((panel) => ({
           label: panel.title,
           multiple: true,

@@ -190,8 +190,11 @@ var backgroundCommands = map[string]bool{
 
 	// Automatic preservation/verification/reclamation is housekeeping, not
 	// evidence of a human or agent actively using the machine.
-	"git.recovery_publish":       true,
-	"git.recovery_verify":        true,
+	"git.recovery_publish": true,
+	"git.recovery_verify":  true,
+	// The server settling a remove/reclone it is no longer waiting on: a
+	// read (plus a tombstone), never work anyone asked for.
+	"git.teardown_status":        true,
 	"worktree.recovery_observe":  true,
 	"worktree.recovery_capture":  true,
 	"worktree.recovery_finalize": true,
@@ -259,6 +262,10 @@ var backgroundCommands = map[string]bool{
 	"terminal.list":   true,
 	"terminal.resize": true,
 
+	// worktree.reclaim_decide carries an Inbox decision about the machine
+	// sweep's proposals; it only records the decision. reclaim_approve
+	// carries an Inbox approval, and removes the approved worktree after it
+	// answers, as the sweep itself would.
 	// worktree.reconcile, snapshot_remove and delete_branch are sent by the
 	// worktree sweeper on its own schedule. discover_repos backs the
 	// sidebar's background discovery of worktrees made outside Reliant,
@@ -274,9 +281,15 @@ var backgroundCommands = map[string]bool{
 	"worktree.git_commits":        true,
 	"worktree.git_status":         true,
 	"worktree.import_validate":    true,
+	"worktree.reclaim_decide":     true,
+	"worktree.reclaim_approve":    true,
 	"worktree.reconcile":          true,
-	"worktree.snapshot_remove":    true,
-	"worktree.validate_path":      true,
+	// remove_failed_create is sent when a machine connects, to clear the
+	// checkouts of creates whose answer was lost (reliant #2413), and
+	// before a create retries a branch such a checkout holds.
+	"worktree.remove_failed_create": true,
+	"worktree.snapshot_remove":      true,
+	"worktree.validate_path":        true,
 }
 
 // IsTerminalReport reports whether terminal input consists only of the

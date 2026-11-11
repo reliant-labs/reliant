@@ -21,7 +21,6 @@ import { Check, Copy, ExternalLink, Globe, Plus } from "lucide-react";
 
 import Button from "@/components/forge-ui/button";
 import Tag from "@/components/forge-ui/tag";
-import { cn } from "@/lib/utils";
 import type { Frontend } from "@/services/forge/frontends";
 
 import { DOCS, GettingStarted } from "../GettingStarted";
@@ -84,16 +83,22 @@ function UrlLine({ url, host, testId }: { url: string; host: string; testId: str
   );
 }
 
+/**
+ * One site, one row: who it is (name, kind, health), where it is live (the
+ * address, the generated one beside a custom headline, its other domains),
+ * and on the right its release and the way to its domains. On a desktop that
+ * is one line; on a phone the three groups wrap under one another.
+ */
 function FrontendRow({ frontend, showEnv, domainsHref }: { frontend: Frontend; showEnv: boolean; domainsHref: string }) {
   const { domains } = frontend;
   return (
     <li
-      className="space-y-2 border-b border-border/60 px-4 py-3 last:border-0"
+      className="flex flex-wrap items-center gap-x-4 gap-y-1.5 border-b border-border/60 px-4 py-2.5 last:border-0"
       data-testid={`frontend-${frontend.env}-${frontend.name}`}
       data-verdict={frontend.verdict}
     >
-      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-        <span className="text-sm font-medium text-ink">{frontend.name}</span>
+      <div className="flex min-w-0 items-center gap-2">
+        <span className="truncate text-sm font-medium text-ink">{frontend.name}</span>
         <Tag title="Built once, uploaded to Reliant's static hosting and served from a CDN. No compute.">Static site</Tag>
         {showEnv && <span className="text-xs text-ink-muted">{frontend.env}</span>}
         {frontend.stopped ? (
@@ -103,55 +108,61 @@ function FrontendRow({ frontend, showEnv, domainsHref }: { frontend: Frontend; s
         ) : (
           <VerdictChip verdict={frontend.verdict} testId="frontend-verdict" />
         )}
-        {frontend.release && (
-          <span className="ml-auto text-xs text-ink-muted" title={frontend.release} data-testid="frontend-release">
-            {shortVersion(frontend.release)}
+      </div>
+
+      <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
+        {frontend.url ? (
+          <>
+            <UrlLine url={frontend.url} host={frontend.host} testId="frontend-url" />
+            {frontend.platformUrl && frontend.platformUrl !== frontend.url && (
+              <span className="flex min-w-0 items-center gap-1.5 text-xs text-ink-muted" data-testid="frontend-platform-url">
+                also at
+                <a
+                  href={frontend.platformUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  title={`Open ${frontend.platformUrl}`}
+                  className="no-color truncate font-mono text-ink-muted underline-offset-2 hover:text-ink hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  {frontend.platformHost}
+                </a>
+              </span>
+            )}
+          </>
+        ) : (
+          <p className="text-xs text-ink-muted" data-testid="frontend-url-pending">
+            No address yet. The platform allocates one on this site&apos;s first deploy, and it appears here.
+          </p>
+        )}
+        {domains !== null && (
+          <span className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-xs" data-testid="frontend-domains">
+            {/* The domain the headline opens is not repeated here. */}
+            {domains.filter((domain) => domain.hostname !== frontend.host).map((domain) => (
+              <span key={domain.hostname} className="flex min-w-0 items-center gap-1.5" data-testid={`frontend-domain-${domain.hostname}`}>
+                {domain.url ? (
+                  <UrlLine url={domain.url} host={domain.hostname} testId="frontend-domain-url" />
+                ) : (
+                  <span className="truncate font-mono text-sm text-ink-muted">{domain.hostname}</span>
+                )}
+                <DomainStateBadge state={domain.state} />
+              </span>
+            ))}
+            {domains.length === 0 && (
+              <span className="text-ink-muted" data-testid="frontend-no-domain">
+                Serves on its generated address.
+              </span>
+            )}
           </span>
         )}
       </div>
 
-      {frontend.url ? (
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-          <UrlLine url={frontend.url} host={frontend.host} testId="frontend-url" />
-          {frontend.platformUrl && frontend.platformUrl !== frontend.url && (
-            <span className="flex min-w-0 items-center gap-1.5 text-xs text-ink-muted" data-testid="frontend-platform-url">
-              also at
-              <a
-                href={frontend.platformUrl}
-                target="_blank"
-                rel="noreferrer"
-                title={`Open ${frontend.platformUrl}`}
-                className="no-color truncate font-mono text-ink-muted underline-offset-2 hover:text-ink hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              >
-                {frontend.platformHost}
-              </a>
-            </span>
-          )}
-        </div>
-      ) : (
-        <p className="text-xs text-ink-muted" data-testid="frontend-url-pending">
-          No address yet. The platform allocates one on this site&apos;s first deploy, and it appears here.
-        </p>
-      )}
-
-      {domains !== null && (
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs" data-testid="frontend-domains">
-          {/* The domain the headline opens is not repeated here. */}
-          {domains.filter((domain) => domain.hostname !== frontend.host).map((domain) => (
-            <span key={domain.hostname} className="flex min-w-0 items-center gap-1.5" data-testid={`frontend-domain-${domain.hostname}`}>
-              {domain.url ? (
-                <UrlLine url={domain.url} host={domain.hostname} testId="frontend-domain-url" />
-              ) : (
-                <span className="truncate font-mono text-sm text-ink-muted">{domain.hostname}</span>
-              )}
-              <DomainStateBadge state={domain.state} />
-            </span>
-          ))}
-          {domains.length === 0 && (
-            <span className="text-ink-muted" data-testid="frontend-no-domain">
-              Serves on its generated address.
-            </span>
-          )}
+      <div className="ml-auto flex shrink-0 items-center gap-2">
+        {frontend.release && (
+          <span className="text-xs tabular-nums text-ink-muted" title={frontend.release} data-testid="frontend-release">
+            {shortVersion(frontend.release)}
+          </span>
+        )}
+        {domains !== null && (
           <Button
             href={domainsHref}
             variant="ghost"
@@ -161,8 +172,8 @@ function FrontendRow({ frontend, showEnv, domainsHref }: { frontend: Frontend; s
           >
             {domains.length === 0 ? "Add a domain" : "Manage domains"}
           </Button>
-        </div>
-      )}
+        )}
+      </div>
     </li>
   );
 }
@@ -179,7 +190,7 @@ export function FrontendList({
   domainsHref: string;
 }) {
   return (
-    <ul className={cn("overflow-hidden")} aria-label="Frontends" data-testid="frontend-list">
+    <ul aria-label="Frontends" data-testid="frontend-list">
       {frontends.map((frontend) => (
         <FrontendRow key={`${frontend.env}/${frontend.name}`} frontend={frontend} showEnv={showEnv} domainsHref={domainsHref} />
       ))}

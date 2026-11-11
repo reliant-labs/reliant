@@ -18,6 +18,7 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/checkoutstate"
 	"github.com/reliant-labs/reliant/internal/daemonerr"
 	"github.com/reliant-labs/reliant/internal/daemonplacement"
@@ -305,7 +306,7 @@ func (c terminalWSConfig) isMainCheckout(ctx context.Context, worktreeID string)
 // named.
 func (c terminalWSConfig) placeOnCheckout(ctx context.Context, router toolexec.DaemonRouter, userID, projectID string, p *terminalPlacement) error {
 	project, err := c.checkouts.GetProject(ctx, projectID)
-	if err != nil || project == nil || project.UserID != userID {
+	if err != nil || !authz.CanWriteProject(ctx, userID, project) {
 		return daemonplacement.ErrForeignWorkspace
 	}
 	machines, _ := router.(daemonplacement.Machines)
@@ -355,7 +356,7 @@ type ownMachines struct {
 
 func (o ownMachines) GetDaemon(ctx context.Context, id string) (*db.Daemon, error) {
 	d, err := o.r.GetDaemon(ctx, id)
-	if err != nil || d == nil || d.UserID != o.userID {
+	if err != nil || !authz.CanWriteMachine(ctx, o.userID, d) {
 		return nil, err
 	}
 	return d, nil

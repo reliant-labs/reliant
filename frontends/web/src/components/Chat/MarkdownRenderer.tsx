@@ -28,6 +28,15 @@ interface MarkdownImageProps {
   setImageErrors: (errors: Set<string>) => void;
 }
 
+// One highlighter for every message. react-markdown builds its processor on
+// each render, which runs a plugin's attacher each time, and rehype-highlight's
+// attacher builds a lowlight and registers its ~37 grammars: ~16ms per
+// rendered message, paid again by every re-render (a chat switch renders a
+// screenful of them). The transformer it returns holds no per-document state,
+// so one can serve them all.
+const highlightTransformer = rehypeHighlight();
+const sharedRehypeHighlight = () => highlightTransformer;
+
 const IMAGE_URL_PATTERN = /\bhttps?:\/\/[^\s<>]+?\.(?:jpg|jpeg|png|gif|webp|svg|bmp|ico)(?:\?[^\s<>]*)?\b/gi;
 
 function convertPlainImageUrlsToMarkdown(content: string): string {
@@ -357,7 +366,7 @@ export function MarkdownRenderer({
   // Skip expensive syntax highlighting during streaming for better performance
   // Only use basic GFM rendering, add highlighting when streaming completes
   const rehypePlugins = useMemo(() => {
-    return isStreaming ? [] : [rehypeHighlight];
+    return isStreaming ? [] : [sharedRehypeHighlight];
   }, [isStreaming]);
 
   return (

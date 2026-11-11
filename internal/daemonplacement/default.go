@@ -7,6 +7,7 @@ import (
 	"fmt"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
+	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/toolexec"
@@ -124,7 +125,7 @@ func userInstalls(ctx context.Context, repo Installs, userID, projectID string) 
 		if err != nil && !svcerr.IsNotFound(err) {
 			return nil, fmt.Errorf("load daemon %s: %w", row.DaemonID, err)
 		}
-		if err != nil || daemon == nil || daemon.UserID != userID {
+		if err != nil || !authz.CanWriteMachine(ctx, userID, daemon) {
 			continue
 		}
 		out = append(out, row)

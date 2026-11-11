@@ -54,25 +54,41 @@ runs:
     # the ~14 GB a hosted runner has free: the first merge-gate run on CI
     # failed every phase with "disk quota exceeded". The runner image ships
     # .NET, Android, GHC, Boost and CodeQL, none of which this repo uses;
-    # removing them frees ~30 GB in seconds. First, so nothing installed
-    # below can be in the way.
+    # removing them frees ~30 GB. First, so nothing installed below can be in
+    # the way.
+    #
+    # ONLY WHEN THE DISK NEEDS IT. The ubuntu-26.04 runners have a 145 GB root
+    # with 88 GB free before anything is deleted (every merge-queue and
+    # release-gate run of 2026-11-09/10), twice what the gates ran in after the
+    # deletion on the old ~14 GB-free image (~44 GB). There the rm took ~110s
+    # of each release-gate part's setup for space nobody used, so it now runs
+    # only when less than FREE_DISK_MIN_GB is free.
     - name: Free runner disk
       if: inputs.free-disk == 'true'
       shell: bash
+      env:
+        FREE_DISK_MIN_GB: "45"
       run: |
         df -h / | tail -1
+        avail=$(df -BG --output=avail / | tail -1 | tr -dc '0-9')
+        if [ "${avail:-0}" -ge "${FREE_DISK_MIN_GB}" ]; then echo "${avail} GB free (>= ${FREE_DISK_MIN_GB}): nothing to delete"; exit 0; fi
         sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup \
           /usr/local/share/boost /opt/hostedtoolcache/CodeQL || true
         df -h / | tail -1
     # The same deletion without waiting for it: ~100s of rm, most of it the
     # Android SDK's small files, while the caches below restore. Output goes
     # to /dev/null so the step does not wait on the pipe; the runner reaps the
-    # process when the job ends.
+    # process when the job ends. Skipped on a roomy disk, as above: it would
+    # only compete with the cache extraction for the disk.
     - name: Free runner disk (background)
       if: inputs.free-disk == 'background'
       shell: bash
+      env:
+        FREE_DISK_MIN_GB: "45"
       run: |
         df -h / | tail -1
+        avail=$(df -BG --output=avail / | tail -1 | tr -dc '0-9')
+        if [ "${avail:-0}" -ge "${FREE_DISK_MIN_GB}" ]; then echo "${avail} GB free (>= ${FREE_DISK_MIN_GB}): nothing to delete"; exit 0; fi
         sudo sh -c 'rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup /usr/local/share/boost /opt/hostedtoolcache/CodeQL' >/dev/null 2>&1 </dev/null &
 
     # TOOL BINARIES (Task, ripgrep, buf) ARE CACHED PER TOOL AND VERSION, AND A

@@ -134,21 +134,3 @@ func (s *Service) ListCommands(ctx context.Context, rootDir string) (*CommandLis
 
 	return response, nil
 }
-
-// DetectedPackageTypes returns which package types exist in a directory
-func (s *Service) DetectedPackageTypes(ctx context.Context, dir string) ([]PackageType, error) {
-	s.adaptersMu.RLock()
-	defer s.adaptersMu.RUnlock()
-
-	var types []PackageType
-	for _, adapter := range s.adapters {
-		detected, err := adapter.Detect(ctx, dir)
-		if err != nil {
-			continue
-		}
-		if detected {
-			types = append(types, adapter.Type())
-		}
-	}
-	return types, nil
-}

@@ -2,9 +2,12 @@
 package workersetup
 
 import (
+	"context"
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/authz"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/version"
 )
 
@@ -120,5 +123,26 @@ func TestWorkerOptionsBuildIDIsTheBinaryVersion(t *testing.T) {
 	}
 	if opts.UseBuildIDForVersioning {
 		t.Error("UseBuildIDForVersioning is set; the BuildID only labels the build")
+	}
+}
+
+type membershipOnlyAcme struct{}
+
+func (membershipOnlyAcme) IsMember(_ context.Context, _, orgID string) (bool, bool, error) {
+	return orgID == "acme", true, nil
+}
+
+// Every activity's context derives from BackgroundActivityContext, so it
+// carries the worker's membership for authz.
+func TestWorkerOptionsCarryMembershipToActivities(t *testing.T) {
+	acme, globex := "acme", "globex"
+	ctx := workerOptions(&Config{Membership: membershipOnlyAcme{}}, nil, 3).BackgroundActivityContext
+	if !authz.CanWriteChat(ctx, "u", &core.Chat{UserID: "u", OrgID: &acme}) ||
+		authz.CanWriteChat(ctx, "u", &core.Chat{UserID: "u", OrgID: &globex}) {
+		t.Fatal("the activity context does not decide with the worker's membership")
+	}
+	noOrgs := workerOptions(&Config{}, nil, 3).BackgroundActivityContext
+	if !authz.CanWriteChat(noOrgs, "u", &core.Chat{UserID: "u", OrgID: &globex}) {
+		t.Fatal("with no membership configured the worker has no orgs: owner-only")
 	}
 }

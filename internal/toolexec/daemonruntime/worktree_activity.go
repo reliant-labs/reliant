@@ -389,10 +389,22 @@ func selfAdmittedCommand(name string) bool {
 // unknown and refused conservatively during the short finalization window
 // only. Exec and terminals are scoped to where they run by their handlers.
 func beginRecoveryCommand(name string, payload []byte) (func(), error) {
+	if usesPathsCommand(name) {
+		noteWorktreeUse(string(payload))
+	}
 	if recoveryLifecycleCommand(name) || selfAdmittedCommand(name) {
 		return func() {}, nil
 	}
 	var paths []string
+	if name == WorktreeReclaimDecideCommand || name == WorktreeReclaimApproveCommand {
+		// It writes only the reclaim's own state (approvals.json), never a
+		// worktree: scoped there, it never waits on a reclaim in progress.
+		// The approve command's removal runs after it answers, under a
+		// recovery lease of its own (Reclaimer.Acquire), like any pass.
+		if dir, err := reclaimStateDir(); err == nil {
+			paths = []string{dir}
+		}
+	}
 	if strings.HasPrefix(name, "fs.") {
 		var req struct {
 			Path        string `json:"path"`

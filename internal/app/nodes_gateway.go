@@ -21,6 +21,7 @@ import (
 	grpcserver "github.com/reliant-labs/reliant/internal/grpc"
 	"github.com/reliant-labs/reliant/internal/handlers/tools_daemon"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/orgs"
 	"github.com/reliant-labs/reliant/internal/servergateway"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/pkg/config"
@@ -67,6 +68,8 @@ type DaemonListenerDeps struct {
 	Chain   *grpcserver.DaemonChain
 	Routes  *DaemonRoutes
 	Logger  *slog.Logger
+	// Membership decides org resources (authz); the org resolver.
+	Membership *orgs.Resolver
 }
 
 // NewDaemonListener is the address daemons dial (TOOLS_DAEMON_PORT on
@@ -81,6 +84,7 @@ func NewDaemonListener(d DaemonListenerDeps) (*grpcserver.DaemonListener, error)
 		Chain:       d.Chain,
 		Routes:      d.Routes,
 		Logger:      d.Logger,
+		Membership:  d.Membership,
 	})
 }
 
@@ -330,6 +334,38 @@ func NewActivitySubscriber(d ActivitySubscriberDeps) (*ActivitySubscriber, error
 // Close unsubscribes.
 func (a *ActivitySubscriber) Close(context.Context) error {
 	a.s.Stop()
+	return nil
+}
+
+// DisconnectSubscriber is the control plane's disconnect command, received:
+// when a daemon's credential is revoked or its operator leaves the org, the
+// control plane publishes daemonwire.SubjectDisconnectCommand, every gateway
+// replica hears it, and the one holding the daemon's established stream ends
+// it (servergateway.DisconnectCommandSubscriber).
+type DisconnectSubscriber struct {
+	s *servergateway.DisconnectCommandSubscriber
+}
+
+// DisconnectSubscriberDeps is the connection it subscribes on and the service
+// whose streams it ends.
+type DisconnectSubscriberDeps struct {
+	NATS        *NATSConn
+	ToolsDaemon *tools_daemon.Service
+}
+
+// NewDisconnectSubscriber builds and starts the subscriber.
+func NewDisconnectSubscriber(d DisconnectSubscriberDeps) (*DisconnectSubscriber, error) {
+	s := servergateway.NewDisconnectCommandSubscriber(d.ToolsDaemon)
+	if err := s.Start(d.NATS.Conn); err != nil {
+		return nil, fmt.Errorf("failed to start daemon disconnect command subscriber: %w", err)
+	}
+	logging.Info("Daemon disconnect command subscriber started", "subject", daemonwire.SubjectDisconnectCommand)
+	return &DisconnectSubscriber{s: s}, nil
+}
+
+// Close unsubscribes.
+func (d *DisconnectSubscriber) Close(context.Context) error {
+	d.s.Stop()
 	return nil
 }
 

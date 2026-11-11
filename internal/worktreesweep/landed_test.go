@@ -204,3 +204,49 @@ func TestLanded_LiveRowsAreAskedEveryHalfHour(t *testing.T) {
 	require.NoError(t, s.Sweep(context.Background()))
 	assert.Len(t, sender.requests, asked)
 }
+
+// landedUsedAt is a daemon that answers landed and saw the workspace used at
+// used: an agent working in it by path, from a chat bound elsewhere.
+func landedUsedAt(used time.Time) func(w worktreereclaim.Worktree) worktreereclaim.Result {
+	return func(w worktreereclaim.Worktree) worktreereclaim.Result {
+		return worktreereclaim.Result{ID: w.ID, Outcome: worktreereclaim.OutcomeLocked, Landed: w.ProbeLanded, LastUse: &used}
+	}
+}
+
+func TestLanded_PathUseTheDaemonSawKeepsItLive(t *testing.T) {
+	t.Parallel()
+	// 2026-11-10: the rows were quiet for hours; the daemon saw the agent
+	// working in it 10 minutes ago.
+	used := time.Now().Add(-10 * time.Minute)
+	store, _, s := landedEnv(t, AutoArchiveOn, landedUsedAt(used))
+	store.activity["wt"] = quietFor(4 * time.Hour)
+
+	require.NoError(t, s.Sweep(context.Background()))
+	assert.Empty(t, store.archived, "used 10 minutes ago, by path")
+	assert.WithinDuration(t, used, store.used["wt"], time.Millisecond, "the use is recorded on the row")
+	assert.WithinDuration(t, used, store.activity["wt"].LastActive, time.Millisecond)
+
+	// Quiet since that use for longer than the landed idle: archived.
+	s.now = func() time.Time { return time.Now().Add(DefaultLandedIdle + landedRecheck + time.Minute) }
+	require.NoError(t, s.Sweep(context.Background()))
+	assert.Equal(t, []string{"wt"}, store.archived)
+}
+
+func TestLanded_UnrecordableUseFailsClosed(t *testing.T) {
+	t.Parallel()
+	store, _, s := landedEnv(t, AutoArchiveOn, landedUsedAt(time.Now().Add(-time.Minute)))
+	store.activity["wt"] = quietFor(4 * time.Hour)
+	store.useErr = errors.New("database unavailable")
+
+	require.NoError(t, s.Sweep(context.Background()))
+	assert.Empty(t, store.archived, "use the row cannot be made to show is never overruled by its old quiet")
+}
+
+func TestLanded_OldUseChangesNothing(t *testing.T) {
+	t.Parallel()
+	store, _, s := landedEnv(t, AutoArchiveOn, landedUsedAt(time.Now().Add(-5*time.Hour)))
+	store.activity["wt"] = quietFor(4 * time.Hour)
+
+	require.NoError(t, s.Sweep(context.Background()))
+	assert.Equal(t, []string{"wt"}, store.archived, "use older than the quiet period does not hold it")
+}

@@ -39,27 +39,30 @@ function deferred<T>() {
 }
 
 describe("the Overview's tiles", () => {
-  it("a workload read that times out costs only its own tiles: Process health and the releases stay", async () => {
+  it("a workload read that times out costs only its own tiles: the telemetry rows and the releases stay", async () => {
     const base = createWorkloadsFixtureApi();
     renderOverview({ obs: { ...base, listWorkloads: async () => Promise.reject(timeout()) } });
 
     await waitFor(() => expect(screen.getByTestId("overview-services-error")).toBeInTheDocument());
     expect(within(screen.getByTestId("overview-services-error")).getByText("That query took too long")).toBeInTheDocument();
     expect(screen.getByTestId("overview-jobs-error")).toBeInTheDocument();
-    // Process health is its own read: it is drawn, with its rows, not hidden behind the workload failure.
-    const processes = await screen.findByTestId("observability-services");
-    await waitFor(() => expect(within(processes).getAllByRole("row").length).toBeGreaterThan(1));
-    expect(screen.queryByTestId("process-health-error")).toBeNull();
+    // The telemetry is its own read: what sends requests is still listed, with its figures, under the error.
+    await waitFor(() => expect(within(screen.getByTestId("overview-services-table")).getAllByRole("listitem").length).toBeGreaterThan(0));
+    const listed = within(screen.getByTestId("overview-services-table")).getAllByRole("listitem");
+    expect(listed.every((row) => row.dataset.kind === "process")).toBe(true);
+    // Never "No workload data": the workloads were not read.
+    expect(screen.getByTestId("overview-services-table")).not.toHaveTextContent("No workload data");
+    expect(screen.queryByTestId("overview-services-red-error")).toBeNull();
     // The filters and the release rail are still there.
     expect(screen.getByTestId("overview-toolbar")).toBeInTheDocument();
     expect(screen.getByTestId("overview-recent-releases")).toBeInTheDocument();
   });
 
-  it("a service overview that times out costs only Process health", async () => {
+  it("a service overview that times out costs only the request figures", async () => {
     const base = createWorkloadsFixtureApi();
     renderOverview({ obs: { ...base, getServiceOverview: async () => Promise.reject(timeout()) } });
 
-    await waitFor(() => expect(screen.getByTestId("process-health-error")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByTestId("overview-services-red-error")).toBeInTheDocument(), { timeout: 5000 });
     expect(screen.getByTestId("overview")).toHaveAttribute("data-state", "ready");
     expect(within(screen.getByTestId("overview-services-table")).getAllByRole("listitem").length).toBeGreaterThan(0);
     expect(screen.queryByTestId("overview-services-error")).toBeNull();
@@ -85,15 +88,14 @@ describe("the Overview's tiles", () => {
       },
     });
     await waitFor(() => expect(screen.getByTestId("overview-services-error")).toBeInTheDocument());
-    const processes = screen.getByTestId("observability-services");
-    await waitFor(() => expect(within(processes).getAllByRole("row").length).toBeGreaterThan(1));
+    await waitFor(() => expect(within(screen.getByTestId("overview-services-table")).getAllByRole("listitem").length).toBeGreaterThan(0));
     const overviewCalls = calls.filter((c) => c === "GetServiceOverview").length;
 
     await userEvent.click(within(screen.getByTestId("overview-services-error")).getByTestId("obs-retry"));
 
-    // While the retry runs, Process health keeps its rows.
+    // While the retry runs, the telemetry rows stay.
     await waitFor(() => expect(workloadCalls).toBe(2));
-    expect(within(screen.getByTestId("observability-services")).getAllByRole("row").length).toBeGreaterThan(1);
+    expect(within(screen.getByTestId("overview-services-table")).getAllByRole("listitem").length).toBeGreaterThan(0);
     second.resolve({} as ListWorkloadsResult);
     await waitFor(() => expect(screen.getByTestId("overview")).toHaveAttribute("data-state", "ready"));
     expect(within(screen.getByTestId("overview-services-table")).getAllByRole("listitem").length).toBeGreaterThan(0);

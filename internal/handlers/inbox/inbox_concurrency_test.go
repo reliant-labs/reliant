@@ -48,7 +48,10 @@ func (r *inflightRepo) enter(ctx context.Context, hold time.Duration) {
 func newInflightRepo(hold time.Duration) *inflightRepo {
 	r := &inflightRepo{MockRepository: &MockRepository{}}
 	m := r.MockRepository
-	trg := &core.Trigger{ID: "trg-1", Enabled: true, ProjectID: "p1", Name: "nightly"}
+	trg := &core.Trigger{ID: "trg-1", UserID: "user-1", Enabled: true, ProjectID: "p1", Name: "nightly"}
+	m.GetProjectFunc = func(_ context.Context, id string) (*db.Project, error) {
+		return &db.Project{ID: id, UserID: "user-1"}, nil
+	}
 	m.ListInboxPendingFunc = func(ctx context.Context, _ string) ([]*core.InboxPending, error) {
 		r.enter(ctx, hold)
 		return nil, nil

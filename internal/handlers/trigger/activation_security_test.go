@@ -132,6 +132,13 @@ func (r *approvalBarrierRepo) CreateTrigger(ctx context.Context, tr *core.Trigge
 	r.once.Do(func() { close(r.atWrite); <-r.release })
 	return r.Repository.CreateTrigger(ctx, tr)
 }
+
+// CreateTriggerInOrg is the write an activation makes since triggers belong
+// to an org (#2537).
+func (r *approvalBarrierRepo) CreateTriggerInOrg(ctx context.Context, tr *core.Trigger, reads ...db.OrgRead) error {
+	r.once.Do(func() { close(r.atWrite); <-r.release })
+	return r.Repository.CreateTriggerInOrg(ctx, tr, reads...)
+}
 func TestAgentActivationAtomicDependencyMutation(t *testing.T) {
 	testkit.Slow(t, "DB-backed transactional approval barrier")
 	e, p := securityActivation(t)

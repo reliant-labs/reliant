@@ -20,8 +20,14 @@ option go_package = "github.com/reliant-labs/control-plane/gen/services/dashboar
 //   - WORKSPACE dashboards are authored in the console: saved in place,
 //     versioned (author, message, history, restore), starred and viewed per
 //     user. PromoteDashboardToCode turns one into the file a repo would hold.
-//   - TEMPLATES (source TEMPLATE) are a built-in gallery to start from:
-//     SaveAsCopy instantiates one.
+//   - BUILT-INS (source BUILTIN) are defined by the platform and need no
+//     release: the organization views (typed billing views, view_kind set),
+//     and the standard dashboards EVERY project gets (overview, service
+//     health, frontend, product usage, releases, workloads; category
+//     "standard"), which read the project's live data. Read-only; SaveAsCopy
+//     forks a project built-in into the workspace.
+//   - TEMPLATES (source TEMPLATE) are a gallery to start from: SaveAsCopy
+//     instantiates one.
 //
 // THE SPEC IS FORGE'S, NOT THIS API'S. `spec` is one forge.dashboards/v1
 // dashboard object (id, title, description, filters, annotations, panels), the
@@ -49,13 +55,21 @@ service DashboardService {
   option (forge.v1.service) = {
     name: "DashboardService"
     version: "1.0.0"
-    description: "Native dashboards: release dashboards (read-only), versioned workspace dashboards, stars, templates"
+    description: "Native dashboards: built-ins and release dashboards (read-only), versioned workspace dashboards, stars, templates"
   };
 
-  // ListDashboards is the merged index: release dashboards (with the release
-  // that shipped them), then workspace dashboards (author, version, edited),
-  // each marked `starred` and carrying `last_viewed_at` for the caller. Filter
-  // by source, owner, environment and free text; every filter is optional.
+  // ListDashboards is the merged index: built-ins (the organization views in an
+  // org-wide list; a project's standard dashboards in a project's list), release
+  // dashboards (with the release that shipped them), then workspace dashboards
+  // (author, version, edited), each marked `starred` and carrying
+  // `last_viewed_at` for the caller. Filter by source, owner, environment and
+  // free text; every filter is optional.
+  //
+  // A project's standard built-ins are listed when project_id names a project.
+  // A release dashboard of the same id replaces one (it is the project's own,
+  // specialized version). One over data the project definitely has none of is
+  // not listed: product usage needs product events, frontend needs browser
+  // telemetry; when that cannot be told, it is listed.
   rpc ListDashboards(ListDashboardsRequest) returns (ListDashboardsResponse) {
     option (forge.v1.method) = {
       auth_required: true
@@ -65,7 +79,8 @@ service DashboardService {
 
   // GetDashboard returns one dashboard's spec: a release dashboard (optionally
   // as shipped in an earlier release), a workspace dashboard (optionally an
-  // older version), or a template.
+  // older version), a project built-in, or a template. An organization view
+  // has no spec: only its summary is returned.
   rpc GetDashboard(GetDashboardRequest) returns (GetDashboardResponse) {
     option (forge.v1.method) = {
       auth_required: true
@@ -96,8 +111,9 @@ service DashboardService {
     };
   }
 
-  // SaveAsCopy forks a release dashboard, a template or another workspace
-  // dashboard into a NEW workspace dashboard (version 1, forked_from set).
+  // SaveAsCopy forks a release dashboard, a project built-in, a template or
+  // another workspace dashboard into a NEW workspace dashboard (version 1,
+  // forked_from set).
   rpc SaveAsCopy(SaveAsCopyRequest) returns (SaveAsCopyResponse) {
     option (forge.v1.method) = {
       auth_required: true
@@ -191,10 +207,10 @@ service DashboardService {
     };
   }
 
-  // ListDashboardTemplates is the gallery: templates derived from what forge
-  // generates (service RED, workloads, releases, frontend) and, for the
-  // platform's own org, the platform's selfmon dashboards. SaveAsCopy
-  // instantiates one.
+  // ListDashboardTemplates is the gallery: for the platform's own org, the
+  // platform's selfmon dashboards; for any other org it is empty. The
+  // dashboards derived from what forge generates are not templates: every
+  // project lists them as built-ins. SaveAsCopy instantiates a template.
   rpc ListDashboardTemplates(ListDashboardTemplatesRequest) returns (ListDashboardTemplatesResponse) {
     option (forge.v1.method) = {
       auth_required: true
@@ -236,9 +252,12 @@ enum DashboardSource {
   DASHBOARD_SOURCE_REPO = 2;
   // Authored in the console. Editable.
   DASHBOARD_SOURCE_WORKSPACE = 3;
-  // A built-in starting point. Read-only; SaveAsCopy instantiates it.
+  // A gallery starting point. Read-only; SaveAsCopy instantiates it.
   DASHBOARD_SOURCE_TEMPLATE = 4;
-  // Server-owned view, discovered without release or workspace copy.
+  // Defined by the platform, discovered without a release or a workspace
+  // copy. Read-only. Either an organization view (view_kind set, no spec) or
+  // one of the standard dashboards every project gets (category "standard",
+  // ref.project_id the project, a spec over the project's data).
   DASHBOARD_SOURCE_BUILTIN = 5;
 }
 
@@ -257,10 +276,12 @@ message DashboardRef {
     defined_only: true
     not_in: [0]
   }];
-  // The forge project ("" = project-less). Ignored for a template.
+  // The forge project ("" = project-less). Ignored for a template. A
+  // project built-in names its project; an organization view has none.
   string project_id = 2 [(buf.validate.field).string.max_len = 128];
   // A release dashboard's id (the spec's own id, e.g. "service-admin-server"),
-  // a workspace dashboard's slug, a template's id.
+  // a workspace dashboard's slug, a template's id, a built-in's id (a project
+  // built-in: overview, service-red, frontend, usage, releases, workloads).
   string key = 3 [(buf.validate.field).string = {
     min_len: 1
     max_len: 200
@@ -289,8 +310,8 @@ message DashboardWorkspaceInfo {
   DashboardUser updated_by = 3;
   google.protobuf.Timestamp created_at = 4;
   google.protobuf.Timestamp updated_at = 5;
-  // "release:<id>", "template:<id>" or "workspace:<slug>"; empty when started
-  // blank.
+  // "release:<id>", "builtin:<id>", "template:<id>" or "workspace:<slug>";
+  // empty when started blank.
   string forked_from = 6;
   // Set once the promote-to-code pull request exists (not wired yet).
   string promoted_pr_url = 7;
@@ -318,7 +339,9 @@ message DashboardSummary {
   DashboardReleaseInfo release = 10;
   // Set for a workspace dashboard.
   DashboardWorkspaceInfo workspace = 11;
-  // Templates: "generated" (derived from what forge generates) or "platform".
+  // Templates: "platform" ("generated" from a server that still listed the
+  // standard dashboards as templates). Built-ins: "billing" (an organization
+  // view) or "standard" (a project's standard dashboard).
   string category = 12;
   // ORGANIZATION_COSTS calls BillingService.GetOrganizationCostSummary.
   // ORGANIZATION_USAGE and ORGANIZATION_BILLING call
@@ -436,10 +459,11 @@ message SaveAsCopyRequest {
     (buf.validate.field).required = true,
     (buf.validate.field).string.min_len = 1
   ];
-  // What to fork: a release dashboard, a template or a workspace dashboard.
+  // What to fork: a release dashboard, a project built-in, a template or a
+  // workspace dashboard.
   DashboardRef from = 2 [(buf.validate.field).required = true];
   // The project the copy belongs to ("" = project-less). Unset = the source's
-  // project (a template has none).
+  // project (a project built-in's is its ref's; a template has none).
   optional string project_id = 3 [(buf.validate.field).string.max_len = 128];
   // Empty = derived from the source's key, made unique with a numeric suffix.
   string slug = 4 [(buf.validate.field).string.pattern = "^$|^[a-z0-9][a-z0-9-]{0,62}$"];

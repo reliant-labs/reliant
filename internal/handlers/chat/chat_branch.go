@@ -14,6 +14,7 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/daemonplacement"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -65,7 +66,7 @@ func (s *Service) BranchChat(
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get source chat"))
 	}
-	if sourceChat.UserID != userID {
+	if !authz.CanWriteChat(ctx, userID, sourceChat) {
 		return nil, svcerr.NotFound("message")
 	}
 
@@ -155,7 +156,7 @@ func (s *Service) BranchChat(
 	// use the requesting chat's worktree as the default instead of the message's original chat's worktree.
 	if req.Msg.ChatId != "" && req.Msg.ChatId != sourceChatID {
 		requestingChat, err := s.deps.Repo.GetChat(ctx, req.Msg.ChatId)
-		if err == nil && requestingChat.UserID == userID {
+		if err == nil && authz.CanWriteChat(ctx, userID, requestingChat) {
 			worktreeID = requestingChat.WorktreeID
 			fromChat = requestingChat
 		}
@@ -223,8 +224,10 @@ func (s *Service) BranchChat(
 	// NOTE: Context inheritance is now handled via workflow fork (see below)
 	// The Chat struct no longer has BranchedFromChatID, BranchedAtOrdinal, ParentContextSequence
 	branchChat := &db.Chat{
-		ID:           branchChatID,
-		UserID:       sourceChat.UserID,
+		ID:     branchChatID,
+		UserID: sourceChat.UserID,
+		// A branch is the source chat's conversation continued: same org.
+		OrgID:        sourceChat.OrgID,
 		Title:        title,
 		ProjectID:    sourceChat.ProjectID,
 		WorktreeID:   worktreeID,
@@ -712,7 +715,7 @@ func (s *Service) ListBranches(
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}
-	if chat.UserID != userID {
+	if !authz.CanReadChat(ctx, userID, chat) {
 		return nil, svcerr.NotFound("chat")
 	}
 

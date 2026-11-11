@@ -72,6 +72,17 @@ type Reclaimer struct {
 	Acquire func(context.Context, []string) (RecoveryLease, error)
 	// ProcessUse checks executables, open and mapped files, not only cwd.
 	ProcessUse func(ctx context.Context, paths []string) error
+	// ArchiveClockSkew widens the use-after-archive veto by this much before
+	// the archive time: the fence is the database's clock, file and reflog
+	// times are this machine's. NewReclaimer sets DefaultArchiveClockSkew.
+	ArchiveClockSkew time.Duration
+	// Use is the daemon's record of work that named a path in a workspace,
+	// reported with every active answer (Result.LastUse). Nil reports only
+	// what the files themselves show.
+	Use *UseLog
+	// DisposalCheckEvery paces the admission and process check while a parked
+	// checkout is unlinked; zero means DefaultDisposalCheckEvery.
+	DisposalCheckEvery time.Duration
 	// Now is the clock; nil means time.Now.
 	Now func() time.Time
 	// PRMerged and FetchBase are the network checks behind "its work was merged"
@@ -86,6 +97,10 @@ type Reclaimer struct {
 	// OnRepair receives every repair report that changed something or found
 	// damage; the daemon logs it. Nil discards them.
 	OnRepair func(RepairReport)
+
+	// verifyHook runs on a parked checkout just before the machine sweep
+	// verifies it against its capture (tests).
+	verifyHook func(parked string)
 
 	mu       sync.Mutex
 	netCache map[string]netEntry
@@ -104,7 +119,7 @@ type cachedSize struct {
 
 // NewReclaimer returns a Reclaimer rooted at root.
 func NewReclaimer(root string) *Reclaimer {
-	return &Reclaimer{Root: root, Cwds: ProcessCwds, IdleFloor: DefaultIdleFloor, Budget: DefaultBudget,
+	return &Reclaimer{Root: root, Cwds: ProcessCwds, IdleFloor: DefaultIdleFloor, Budget: DefaultBudget, ArchiveClockSkew: DefaultArchiveClockSkew,
 		PRMerged: GitHubPRMerged, FetchBase: FetchBaseBranch, ProcessUse: CheckProcessUse}
 }
 
@@ -428,8 +443,12 @@ func (r *Reclaimer) settle(ctx context.Context, w Worktree, confirmed bool) Resu
 	r.ensureRepaired(ctx, w)
 
 	// A row with checkouts parked under .reclaim is never "gone": the files
-	// exist, in quarantine, still locked. Say so before anything else.
+	// exist, in quarantine, still locked. Say so before anything else, unless
+	// they are this archive's own retirement, stopped part-way: that resumes.
 	if parked := r.quarantined(w.ID); len(parked) > 0 && w.State == StateArchived {
+		if !confirmed && !w.KeepFiles && r.resumable(w, parked) {
+			return r.resumeRetirement(ctx, w, parked)
+		}
 		return r.heldQuarantined(w, parked, "")
 	}
 	if _, err := os.Lstat(w.Path); os.IsNotExist(err) {
@@ -684,13 +703,17 @@ func (r *Reclaimer) autoRemove(ctx context.Context, w Worktree) Result {
 	if checkouts == nil {
 		return held(w, ReasonStale, "nothing is claimed for removal")
 	}
-	if r.IdleFloor > 0 {
+	archivedAt, hasArchiveTime := r.useCountsAfter(w)
+	if r.IdleFloor > 0 || hasArchiveTime {
 		last, err := idleSince(ctx, w.Path, checkouts)
 		if err != nil {
 			return held(w, ReasonUnverified, "could not determine quiet time: "+err.Error())
 		}
-		if age := r.now().Sub(last); age < r.IdleFloor {
+		if age := r.now().Sub(last); r.IdleFloor > 0 && age < r.IdleFloor {
 			return held(w, ReasonRecentlyActive, fmt.Sprintf("touched %s ago", age.Round(time.Minute)))
+		}
+		if hasArchiveTime && last.After(archivedAt) {
+			return held(w, ReasonUsedAfterArchive, usedAfterArchive(last, archivedAt))
 		}
 	}
 	// A fresh process list, immediately before removal.
@@ -1096,6 +1119,7 @@ func (r *Reclaimer) lockActive(ctx context.Context, w Worktree) Result {
 	if res.Outcome == OutcomeLocked && w.ProbeLanded && w.Retire == "" && len(checkouts) > 0 {
 		r.probeLanded(ctx, w, &res)
 	}
+	r.reportUse(ctx, w, checkouts, &res)
 	// A landed or recoverable row is about to be retired whole; shedding it
 	// first would only spend the request.
 	if res.Outcome == OutcomeLocked && !res.Landed && !res.RecoverableIdle && w.ShedAfterSeconds > 0 && len(checkouts) > 0 {
@@ -1114,6 +1138,24 @@ func (r *Reclaimer) lockActive(ctx context.Context, w Worktree) Result {
 		}
 	}
 	return res
+}
+
+// reportUse sets res.LastUse to the latest use of the workspace this daemon
+// can name: work that named a path in it (r.Use), and the workspace's and
+// its checkouts' own stamps (idleSince: directory, HEAD and reflog times). A
+// landed probe has already raised it to the newest file in each checkout.
+func (r *Reclaimer) reportUse(ctx context.Context, w Worktree, checkouts []string, res *Result) {
+	last := r.Use.LastUse(w.Path)
+	if t, err := idleSince(ctx, w.Path, checkouts); err == nil && t.After(last) {
+		last = t
+	}
+	if res.LastUse != nil && res.LastUse.After(last) {
+		last = *res.LastUse
+	}
+	if !last.IsZero() {
+		last = last.UTC()
+		res.LastUse = &last
+	}
 }
 
 // probeAnswer is what finished concluded.

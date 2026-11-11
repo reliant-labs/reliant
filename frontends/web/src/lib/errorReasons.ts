@@ -123,6 +123,45 @@ export const ERROR_REASONS = [
   "claimable_upgrade_required",
   /** CompleteClaim (FailedPrecondition): the caller already has their one free static site; choose which stays live. */
   "claimable_free_site_choice_required",
+  // ── control-plane: org members (OrganizationService; docs/design/orgs-and-members.md §2.14) ──
+  /** A machine credential called a person-only rpc. */
+  "human_only",
+  /** The caller's role in the org is below admin. */
+  "admin_required",
+  /** The target or the assigned role is owner, and the caller is not one. */
+  "owner_required",
+  /** Assigning admin or owner without holding that role's whole permission set. */
+  "grant_ceiling",
+  /** The accepting person's verified email is not the invited one; the invitation stays pending. */
+  "invite_email_mismatch",
+  /** No verified email on the session (anonymous, or not yet verified). */
+  "email_unverified",
+  /** The org is an unclaimed no-signup deploy's. */
+  "org_unclaimed",
+  /** Leaving, removing or demoting would leave the org with no owner. */
+  "last_owner",
+  /** The invitee (or the accepting person) is already a member. */
+  "already_member",
+  /** The invitation is past its expiry. */
+  "invitation_expired",
+  /** An admin revoked the invitation. */
+  "invitation_revoked",
+  /** The invitation was already accepted. */
+  "invitation_not_pending",
+  /** The same address was re-invited inside the last minute. */
+  "invite_resend_too_soon",
+  /** RemoveMember on the caller: leaving is LeaveOrganization. */
+  "cannot_remove_self",
+  /** Every seat is taken (members plus pending invitations, or members at accept). */
+  "seat_limit_reached",
+  /** The caller owns as many orgs as one person may. */
+  "owned_org_limit",
+  /** The org holds as many pending invitations as it may. */
+  "pending_invite_limit",
+  /** The caller sent too many invitations in the last hour. */
+  "invite_rate_limited",
+  /** CreateOrganization: the slug is taken. */
+  "slug_taken",
 ] as const;
 
 export type ErrorReason = (typeof ERROR_REASONS)[number];

@@ -1367,6 +1367,30 @@ type worktreeRecreateResponse struct {
 	// RestoredFromQuarantine names checkouts that were parked and moved back
 	// instead of being recreated.
 	RestoredFromQuarantine []string `json:"restored_from_quarantine,omitempty"`
+	// CaptureApplied names the checkouts (by rel) whose reclaim capture was
+	// put back; CaptureNote says so, and names any capture that could not be.
+	CaptureApplied []string `json:"capture_applied,omitempty"`
+	CaptureNote    string   `json:"capture_note,omitempty"`
+}
+
+func relName(rel string) string {
+	if rel == "" {
+		return "the checkout"
+	}
+	return rel
+}
+
+// captureNote is RestoredWork for the chat's notice: what came back from
+// the reclaim captures, and what is kept on a ref because it could not.
+func captureNote(applied, kept []string) string {
+	var parts []string
+	if len(applied) > 0 {
+		parts = append(parts, "the work "+strings.Join(applied, ", ")+" held when it was reclaimed (uncommitted and staged changes, untracked files) was put back from its capture")
+	}
+	if len(kept) > 0 {
+		parts = append(parts, "the work of "+strings.Join(kept, "; ")+" was NOT put back; restore it with `reliant worktree restore <ref> --repo <repo> --to <dir>`")
+	}
+	return strings.Join(parts, "; ")
 }
 
 func handleWorktreeRecreate(ctx context.Context, payload []byte) ([]byte, error) {
@@ -1479,6 +1503,33 @@ func recreateWorktree(ctx context.Context, req worktreeRecreateRequest) worktree
 		}
 	}
 
+	// A checkout the machine sweep reclaimed while its chat was idle gets its
+	// capture back first: everything it held then, staged and unstaged apart
+	// (worktreereclaim.ApplyCapture). The newest capture of exactly this path
+	// is applied, once; it is then moved to refs/reliant/restored/.
+	fromCapture := map[int]bool{}
+	if req.WorktreeID != "" {
+		var applied, kept []string
+		for i, repo := range repos {
+			if created[i] == "" {
+				continue
+			}
+			info, ok := worktreereclaim.LatestCapture(ctx, repo.RepoPath, req.WorktreeID, created[i])
+			if !ok {
+				continue
+			}
+			fromCapture[i] = true
+			if err := worktreereclaim.ApplyCapture(ctx, created[i], info); err != nil {
+				kept = append(kept, fmt.Sprintf("%s (kept at %s in %s: %v)", relName(repo.Rel), info.Ref, repo.RepoPath, err))
+				logging.WarnContext(ctx, "worktree recreated but its reclaim capture was not applied", "ref", info.Ref, "error", err)
+				continue
+			}
+			resp.CaptureApplied = append(resp.CaptureApplied, repo.Rel)
+			applied = append(applied, relName(repo.Rel))
+		}
+		resp.CaptureNote = captureNote(applied, kept)
+	}
+
 	// Put back the work each checkout had. Applied per checkout, from that
 	// checkout's own repository, and reported honestly: the refs are only safe
 	// to forget once EVERY one of them was re-applied.
@@ -1486,7 +1537,7 @@ func recreateWorktree(ctx context.Context, req worktreeRecreateRequest) worktree
 	anySnapshot := false
 	if req.WorktreeID != "" {
 		for i, repo := range repos {
-			if created[i] == "" {
+			if created[i] == "" || fromCapture[i] {
 				continue
 			}
 			ref := worktreereclaim.LatestSnapshot(ctx, repo.RepoPath, req.WorktreeID, snapshotRefsFor(req.WorktreeID, repo, req.SnapshotRefs))
@@ -2830,6 +2881,7 @@ func sharedWorktreeReclaimer() (*worktreereclaim.Reclaimer, error) {
 			return AcquireWorktreeRecovery(ctx, paths)
 		}
 		r.OnRepair = logRepairReport
+		r.Use = sharedWorktreeUse()
 		worktreeReclaimers[root] = r
 		// Checkouts parked by a clean-up that a crash interrupted go back to
 		// their paths before anything else looks at this root.

@@ -8,9 +8,10 @@
  *  - a side (spawn) thread: its history is a thread-scoped read, and until
  *    it lands the timeline still shows the previous thread.
  *
- * It waits before appearing, so a cached switch shows nothing, and once up it
- * holds long enough not to flicker. A caught-up timeline — streaming or not —
- * never shows it.
+ * It waits before appearing, so a quick catch-up shows nothing, and it never
+ * holds a caught-up timeline: the render that catches up makes the timeline
+ * usable, and the overlay only fades out over it. A caught-up timeline —
+ * streaming or not — never shows it.
  *
  * Driven through the real signals: chatStore.chatSyncPendingId, and the real
  * thread-messages query against the app's query client with only the network
@@ -34,9 +35,11 @@ import {
   messageKeys,
 } from "../../../hooks/message-queries";
 import {
-  CATCH_UP_MIN_VISIBLE_MS,
+  CATCH_UP_EXIT_MS,
   CATCH_UP_SHOW_DELAY_MS,
 } from "../../../lib/timelineCatchUp";
+import { armChatOpen, beginChatOpen, resetChatOpen } from "../../../lib/chatOpenInteraction";
+import { installRecordingTracer } from "../../../test/recordingTracer";
 
 const { listMessagesMock, scrollTimelineToBottom } = vi.hoisted(() => ({
   listMessagesMock: vi.fn(),
@@ -256,36 +259,52 @@ describe("ChatPresenter timeline catch-up overlay — opening a chat", () => {
     expect(overlay()).not.toHaveClass("backdrop-blur-xs");
   });
 
-  it("lifts once caught up, after holding long enough not to flicker, and lands at the bottom", async () => {
+  it("lifts the render it caught up in, fades out over the usable timeline, and lands at the bottom", async () => {
     setChatSyncPending(true);
     setup();
     await advance(CATCH_UP_SHOW_DELAY_MS);
     expect(overlay()).toBeInTheDocument();
 
     setChatSyncPending(false);
-    await advance(CATCH_UP_MIN_VISIBLE_MS - 50);
-    expect(overlay()).toBeInTheDocument();
-
-    await advance(50);
-    expect(overlay()).not.toBeInTheDocument();
+    // No hold: the timeline is usable at once, under an overlay that only fades.
+    expect(overlay()).toHaveAttribute("data-leaving", "true");
+    expect(overlay()).toHaveClass("pointer-events-none");
     expect(frame()).not.toHaveAttribute("aria-busy");
     expect(screen.getByTestId("timeline").closest("[inert]")).toBeNull();
     expect(status()).toBeEmptyDOMElement();
     expect(scrollTimelineToBottom).toHaveBeenCalledTimes(1);
+
+    await advance(CATCH_UP_EXIT_MS);
+    expect(overlay()).not.toBeInTheDocument();
+    expect(scrollTimelineToBottom).toHaveBeenCalledTimes(1);
   });
 
-  it("stays up without a gap when catch-up resumes during the hold", async () => {
+  it("lifts even when it caught up just after appearing", async () => {
+    setChatSyncPending(true);
+    setup();
+    await advance(CATCH_UP_SHOW_DELAY_MS);
+
+    await advance(10);
+    setChatSyncPending(false);
+
+    expect(screen.getByTestId("timeline").closest("[inert]")).toBeNull();
+    expect(frame()).not.toHaveAttribute("aria-busy");
+  });
+
+  it("comes straight back, without a gap, when catch-up resumes while it fades", async () => {
     setChatSyncPending(true);
     setup();
     await advance(CATCH_UP_SHOW_DELAY_MS);
 
     setChatSyncPending(false);
-    await advance(100);
+    await advance(CATCH_UP_EXIT_MS - 50);
     setChatSyncPending(true);
-    await advance(1000);
 
     expect(overlay()).toBeInTheDocument();
-    expect(scrollTimelineToBottom).not.toHaveBeenCalled();
+    expect(overlay()).not.toHaveAttribute("data-leaving");
+    expect(frame()).toHaveAttribute("aria-busy", "true");
+    await advance(1000);
+    expect(overlay()).toBeInTheDocument();
   });
 
   it("never appears while a caught-up chat streams", async () => {
@@ -300,6 +319,34 @@ describe("ChatPresenter timeline catch-up overlay — opening a chat", () => {
     expect(overlay()).not.toBeInTheDocument();
     expect(frame()).not.toHaveAttribute("aria-busy");
     expect(scrollTimelineToBottom).not.toHaveBeenCalled();
+  });
+});
+
+describe("ChatPresenter timeline catch-up overlay — the chat.open it ends", () => {
+  it("ends the open on the paint after catch-up, not after the overlay's fade", async () => {
+    const tracer = installRecordingTracer();
+    try {
+      beginChatOpen(CHAT);
+      armChatOpen(CHAT);
+      setChatSyncPending(true);
+      setup();
+      await advance(CATCH_UP_SHOW_DELAY_MS);
+
+      setChatSyncPending(false);
+      await advance(50); // the paint after the commit that caught up
+
+      const open = tracer.spans.find((s) => s.name === "chat.open");
+      expect(open?.ended).toBe(true);
+      expect(open?.attributes).toMatchObject({
+        "interaction.outcome": "ok",
+        "chat.overlay_shown": true,
+      });
+      // Usable while the overlay is still fading out over it.
+      expect(overlay()).toHaveAttribute("data-leaving", "true");
+    } finally {
+      act(() => resetChatOpen());
+      tracer.uninstall();
+    }
   });
 });
 
@@ -326,7 +373,7 @@ describe("ChatPresenter timeline catch-up overlay — opening a spawn thread", (
     await act(async () => {
       response.resolve(page([threadMessage(SPAWN, "s1"), threadMessage(SPAWN, "s2")]));
     });
-    await advance(CATCH_UP_MIN_VISIBLE_MS);
+    await advance(CATCH_UP_EXIT_MS);
 
     expect(overlay()).not.toBeInTheDocument();
     expect(frame()).not.toHaveAttribute("aria-busy");
@@ -415,7 +462,7 @@ describe("ChatPresenter timeline catch-up overlay — opening a spawn thread", (
     await act(async () => {
       response.resolve(page([threadMessage(SPAWN, "s1")]));
     });
-    await advance(CATCH_UP_MIN_VISIBLE_MS);
+    await advance(CATCH_UP_EXIT_MS);
     expect(overlay()).not.toBeInTheDocument();
     expect(shownIds()).toBe("s1");
   });

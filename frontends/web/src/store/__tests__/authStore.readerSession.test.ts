@@ -2,6 +2,8 @@ import { beforeEach, expect, it, vi } from "vitest";
 import { act, fireEvent, screen } from "@testing-library/react";
 import { renderBrowser, PROD, callsOf } from "@/components/Forge/Storage/__tests__/storageTestUtils";
 import { createStorageFixtureApi } from "@/components/Forge/Storage/__fixtures__/fixtureStorageApi";
+import { renderBrowser as renderDataBrowser } from "@/components/Forge/Data/__tests__/dataTestUtils";
+import { createDataFixtureApi } from "@/components/Forge/Data/__fixtures__/fixtureDataApi";
 vi.mock("@tanstack/react-router", async (original) => ({ ...(await original<typeof import("@tanstack/react-router")>()), useNavigate: () => vi.fn() }));
 import type { Session, User } from "@supabase/supabase-js";
 const auth = vi.hoisted(() => ({ setSession: vi.fn(), callback: undefined as undefined | ((event: string, session: Session | null) => void) }));
@@ -75,6 +77,34 @@ it.each(["signOut", "adoptSession", "authEvent"])("real auth boundary resets mou
   fireEvent.click(screen.getByTestId("storage-access-confirm"));
   await screen.findByTestId("storage-preview-text");
   expect(callsOf(api, "listObjects").at(-1)).toMatchObject({ openBucket: true, access: { reason: "B reason", confirmEnvId: PROD.id } });
+});
+
+it.each(["signOut", "adoptSession", "authEvent"])("real auth boundary resets mounted Data for %s", async (path) => {
+  if (path === "authEvent") await useAuthStore.getState().initialize();
+  useAuthStore.setState({ user: user("A"), session: { user: user("A"), access_token: "A-token" } as Session });
+  const api = createDataFixtureApi({ onlyShop: true });
+  renderDataBrowser(api, { db: "shop", table: "public.users" }, PROD);
+  await screen.findByRole("dialog");
+  fireEvent.change(screen.getByTestId("data-access-reason"), { target: { value: "A reason" } });
+  fireEvent.click(screen.getByTestId("data-access-confirm"));
+  await screen.findAllByTestId("data-row");
+  const previous = api.calls.filter((call) => call.method === "browseTable").length;
+  await act(async () => {
+    if (path === "signOut") {
+      await useAuthStore.getState().signOut();
+      useAuthStore.setState({ user: user("B"), session: { user: user("B"), access_token: "B-token" } as Session });
+    } else if (path === "adoptSession") {
+      auth.setSession.mockResolvedValue({ data: { user: user("B"), session: { user: user("B"), access_token: "B-token" } }, error: null });
+      await useAuthStore.getState().adoptSession({ accessToken: "B-token", refreshToken: "B-refresh" });
+    } else auth.callback!("SIGNED_IN", { user: user("B") } as Session);
+  });
+  await screen.findByRole("dialog");
+  expect(screen.queryAllByTestId("data-row")).toHaveLength(0);
+  expect(api.calls.filter((call) => call.method === "browseTable")).toHaveLength(previous);
+  fireEvent.change(screen.getByTestId("data-access-reason"), { target: { value: "B reason" } });
+  fireEvent.click(screen.getByTestId("data-access-confirm"));
+  await screen.findAllByTestId("data-row");
+  expect(api.calls.filter((call) => call.method === "browseTable").at(-1)?.req).toMatchObject({ access: { reason: "B reason", confirmEnvId: PROD.id } });
 });
 
 it("handles auth-event replacement, same-user token refresh, anonymous refusal and API-key replacement", async () => {

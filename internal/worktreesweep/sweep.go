@@ -1125,6 +1125,8 @@ func (s *Sweeper) apply(ctx context.Context, userID, daemonID string, seen *core
 		return
 	}
 	if wt.DeletedAt == nil {
+		// Before anything decides on the row's quiet: the daemon saw it used.
+		useRecorded := s.noteUse(ctx, wt, r.LastUse)
 		if r.Outcome == worktreereclaim.OutcomeProbeInconclusive {
 			// Locked, but whether it is finished is unknown. LockedAt is not
 			// stamped (that is a 24h silence) and the row is not marked
@@ -1157,6 +1159,9 @@ func (s *Sweeper) apply(ctx context.Context, userID, daemonID string, seen *core
 				"worktreeID", wt.ID, "bytes", r.StrippedBytes, "paths", r.Stripped)
 		}
 		switch {
+		case !useRecorded:
+			// Use the row does not show yet: never archive on a quiet that
+			// the daemon just contradicted.
 		case r.Landed:
 			s.reclaimLanded(ctx, userID, wt)
 		case r.RecoverableIdle:
@@ -1192,6 +1197,33 @@ func (s *Sweeper) apply(ctx context.Context, userID, daemonID string, seen *core
 		s.recordHold(ctx, wt, r.Reason, r.Detail, r.SizeBytes, r.SnapshotRefs)
 		s.recordStripped(ctx, wt, r)
 	}
+}
+
+// UseStore records the use a daemon saw of a live worktree.
+type UseStore interface {
+	// NoteWorktreeUse raises the row's last_active to at (never past the
+	// database's now, never lower).
+	NoteWorktreeUse(ctx context.Context, id string, at time.Time) error
+}
+
+// noteUse records the last use the daemon saw of a live worktree
+// (Result.LastUse) as the row's last_active, which every quiet check reads
+// (WorktreeRunActivities, ArchiveLandedWorktree): an agent working in it by
+// path, with its chat bound elsewhere, is activity no row shows. A failure
+// to record it fails closed: the row is not archived this pass.
+func (s *Sweeper) noteUse(ctx context.Context, wt *core.Worktree, at *time.Time) bool {
+	if at == nil || !at.After(wt.LastActive) {
+		return true
+	}
+	store, ok := s.store.(UseStore)
+	if !ok {
+		return true
+	}
+	if err := store.NoteWorktreeUse(ctx, wt.ID, *at); err != nil {
+		logging.WarnContext(ctx, "[WorktreeSweep] could not record worktree use", "worktreeID", wt.ID, "error", err)
+		return false
+	}
+	return true
 }
 
 // recordAbsent records that daemonID, asked about an archived row with no
