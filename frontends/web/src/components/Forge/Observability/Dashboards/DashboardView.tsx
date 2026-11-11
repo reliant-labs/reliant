@@ -113,13 +113,15 @@ import { PanelErrorBoundary } from "./PanelErrorBoundary";
 import { BUTTON_PRIMARY, BUTTON_SECONDARY, BUTTON_SMALL, ICON_BUTTON, INK_LINK, Menu, PointMenu, Segmented, SourceTag, StarButton, VariableSelect, type MenuEntry } from "./parts";
 import { useObsReadOnly } from "../obsReadOnly";
 import { DataPanelBody, type PanelDataContext } from "./DataPanel";
+import type { DeliveryPanelContext } from "./DeliveryPanels";
 import { browseParams } from "./dataPanelModel";
 import type { DataSearch } from "../../Data/dataUrl-model";
 
 export interface DashboardHrefs extends ExploreHrefs {
   data?: (search: DataSearch) => string;
   list: string;
-  release: (version: string) => string;
+  /** A release's page; `extra` is its search (`{ tab: "health", in: "prod" }`). */
+  release: (version: string, extra?: Record<string, unknown>) => string;
   trace: (traceId: string) => string;
   /** One browser session (a sessions panel's row). Absent: rows are not links. */
   session?: (sessionId: string) => string;
@@ -404,6 +406,7 @@ export function DashboardView({ project, dashRef, env: consoleEnv, environments:
               env: { id: envId, name: env }, href: hrefs.data,
               params: browseParams(spec, search, browseWindow),
             } : undefined}
+            delivery={{ scope: platform || orgScoped ? null : delivery, environments, range, releaseHref: hrefs.release }}
             range={range}
             services={viewerQuery(spec, panel, search).services}
             refreshEvery={refreshEvery}
@@ -1103,6 +1106,7 @@ function DashboardPanelCard({
   queryPanel,
   scope,
   dataContext,
+  delivery,
   range: rangeOfCard,
   services,
   refreshEvery,
@@ -1118,6 +1122,8 @@ function DashboardPanelCard({
   queryPanel: Panel;
   scope: ObsScope | null;
   dataContext?: PanelDataContext;
+  /** What a delivery-kind panel (release_health, promotions, delivery) reads. */
+  delivery?: DeliveryPanelContext;
   range: RangePreset;
   services: string[];
   refreshEvery: number | false;
@@ -1241,6 +1247,7 @@ function DashboardPanelCard({
       <div ref={bodyRef} className="px-4 pb-4 pt-2">
         <DataPanelBody
           context={near ? dataContext : undefined}
+          delivery={near ? delivery : undefined}
           panel={queryPanel}
           query={query}
           compare={comparable && offsetSec ? { query: compareQuery, label: target.mode === "release" ? target.label : "previous period", offsetSec } : undefined}

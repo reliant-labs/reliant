@@ -15,10 +15,12 @@ import { DataGrid } from "../../Data/DataGrid";
 import { patchSearch, type DataSearch } from "../../Data/dataUrl-model";
 import { useBrowsableDatabases, useDescribeDatabase } from "../../Data/useDataBrowser";
 import { browseSearch, linkablePanel, panelDataTarget, resultRecord } from "./dataPanelModel";
+import { DeliveryPanelBody, isDeliveryKind, type DeliveryPanelContext } from "./DeliveryPanels";
 import { PanelBody, type PanelBodyProps } from "./PanelBody";
 
-export function DataPanelBody({ context, ...props }: PanelBodyProps & { context?: PanelDataContext }) {
+export function DataPanelBody({ context, delivery, ...props }: PanelBodyProps & { context?: PanelDataContext; delivery?: DeliveryPanelContext }) {
   if (props.panel.kind === "browse") return <BrowsePanel panel={props.panel} context={context} />;
+  if (isDeliveryKind(props.panel.kind)) return <DeliveryPanelBody kind={props.panel.kind} limit={props.panel.limit} context={delivery} />;
   const link = props.panel.link;
   if (!link || !linkablePanel(props.panel)) return <PanelBody {...props} />;
   if (typeof link.database !== "string" || typeof link.table !== "string") return <PanelBody {...props} links={{ ...props.links, dataRowHref: () => null }} />;

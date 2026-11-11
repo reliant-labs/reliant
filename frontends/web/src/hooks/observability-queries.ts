@@ -830,6 +830,40 @@ export function useReleaseHealths(
   return byEnv;
 }
 
+/**
+ * GetReleaseHealth for each environment's CURRENT promotion (no promotion id:
+ * the server judges the env's running release against the one it replaced),
+ * by environment id: a Releases dashboard's release_health panel. Polled
+ * while a verdict's after window is still open, like useReleaseHealth.
+ */
+export function useCurrentReleaseHealths(
+  scope: DeliveryScope | null,
+  envIds: readonly string[],
+  windowMs: number
+): Map<string, { data?: ReleaseHealth; isLoading: boolean; error: unknown }> {
+  const api = useObsReadApi();
+  const results = useQueries({
+    queries: envIds.map((envId) => {
+      const one: DeliveryScope = { orgId: scope?.orgId ?? "", projectId: scope?.projectId, envIds: [envId] };
+      return {
+        queryKey: [...deliveryKeys.all(one), "health", "current", windowMs] as const,
+        queryFn: ({ signal }: { signal: AbortSignal }) => api.getReleaseHealth({ ...one, windowMs }, { signal }),
+        enabled: !!scope?.orgId,
+        staleTime: 30_000,
+        refetchInterval: (query: { state: { data?: ReleaseHealth } }) => (query.state.data && !query.state.data.afterComplete ? 60_000 : false),
+        retry: releaseHealthRetry,
+        retryDelay: obsRetryDelay,
+      };
+    }),
+  });
+  const byEnv = new Map<string, { data?: ReleaseHealth; isLoading: boolean; error: unknown }>();
+  envIds.forEach((envId, index) => {
+    const result = results[index];
+    byEnv.set(envId, { data: result?.data, isLoading: !!result?.isLoading, error: result?.error ?? null });
+  });
+  return byEnv;
+}
+
 // ── Issues (IssuesService) ────────────────────────────────────────────────────
 
 export interface IssueFilters {

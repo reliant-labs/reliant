@@ -288,9 +288,17 @@ function timelineOf(seed: Seed, now: number): IssueTimelineEntry[] {
 }
 
 /** Release health for one promotion of the ledger: prod's v1.8.3 fails on the incident; every other promotion passes. */
+/** Each issue's environment and first sighting: what "New issues by release" counts. */
+export function shopIssueFirstSeen(now: number): { envId: string; firstSeenMs: number; firstVersion: string }[] {
+  return seeds(now).map(({ envId, firstSeenMs, firstVersion }) => ({ envId, firstSeenMs, firstVersion }));
+}
+
+/** GetReleaseHealth over shop's ledger. No promotion id judges the environment's running release, as the server does. */
 export function shopReleaseHealth(now: number, envId: string, promotionId: string, widthMs: number): ReleaseHealth {
   const ledger = demoLedger(now);
-  const promotion = ledger.find((p) => p.promotionId === promotionId && p.envId === envId);
+  const promotion = promotionId
+    ? ledger.find((p) => p.promotionId === promotionId && p.envId === envId)
+    : ledger.filter((p) => p.envId === envId && !p.targets.length).at(-1);
   if (!promotion) throw new ConnectError("promotion not found", Code.NotFound);
   const same = ledger.filter((p) => p.envId === envId && !p.targets.length);
   const previous = same.filter((p) => p.atMs < promotion.atMs).at(-1) ?? null;

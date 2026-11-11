@@ -4,7 +4,9 @@
  * shop's dashboards: the ones its release bundle carries (forge's generated
  * overview, OrdersService, workloads and releases dashboards, the built-in
  * Users, Product and Acquisition dashboards — forge-dashboards.json, as forge
- * #2075's pkg/obsbuiltin builds them for shop — and the two
+ * #2075's pkg/obsbuiltin and #2111's Releases builder make them for shop;
+ * regenerate it with scripts/demo/regen-forge-dashboards.sh, whose header
+ * names the exact forge refs and command — and the two
  * the repo declares: the checkout funnel and the storefront), plus two the
  * team built in the console. Every author is the cast or CI. The `shop`
  * database answers Postgres panels.
