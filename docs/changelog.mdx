@@ -13,6 +13,30 @@ Regenerate with: task generate:docs:changelog
 
 Track what's new in each Reliant release.
 
+<Update label="v1.16.0" description="November 11, 2026">
+### 3 new features, 1 fix and 4 other changes
+
+Every pull request merged since v1.15.0, grouped by its conventional-commit type.
+
+#### Added
+
+- **retention: compact chat update logs and prune finished runs' internal steps** [#2536](https://github.com/reliant-labs/reliant/pull/2536)
+- **console: forge's built-in product dashboards in the demo, and a Users card on the Overview** [#2597](https://github.com/reliant-labs/reliant/pull/2597)
+- **inbox: keep or reclaim now a worktree marked to be reclaimed** [#2584](https://github.com/reliant-labs/reliant/pull/2584)
+
+#### Changed
+
+- **handlers, streaming, daemonstate, …: wait on events, not the wall clock** [#2616](https://github.com/reliant-labs/reliant/pull/2616)
+- **toolexec: wait on events, not the wall clock** [#2614](https://github.com/reliant-labs/reliant/pull/2614)
+- **llm, daemonruntime: wait on events, not the wall clock** [#2615](https://github.com/reliant-labs/reliant/pull/2615)
+- **workflow, triggers, auth, …: wait on events, not the wall clock** [#2617](https://github.com/reliant-labs/reliant/pull/2617)
+
+#### Fixed
+
+- **gateway: re-subscribe NATS subscriptions the broker refused, with capped backoff** [#2618](https://github.com/reliant-labs/reliant/pull/2618)
+
+</Update>
+
 <Update label="v1.15.0" description="November 11, 2026">
 ### 21 new features, 14 fixes and 11 other changes
 
