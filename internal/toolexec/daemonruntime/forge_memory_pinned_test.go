@@ -107,6 +107,64 @@ func TestForgeMemory_APinnedProjectGetsThePinnedForgesGuide(t *testing.T) {
 	assert.Len(t, f.runs, 2, "a changed forge.yaml reused the old guide")
 }
 
+// The guide describes the project as it is (its deploy envs, its own test
+// commands, its unmanaged services, its migration tool), so changing any of
+// those renders it again; editing what it does not read reuses the cached one,
+// across a restart too.
+func TestForgeMemory_APinnedGuideIsRenderedAgainWhenWhatItDescribesChanges(t *testing.T) {
+	f := useFakePinnedForges(t)
+	dir := forgeDir(t, "app", "v1.0.4")
+	writeRepoFile(t, dir, "Taskfile.yml", "version: '3'\ntasks:\n  build: {cmds: [go build ./...]}\n")
+	protoDir := filepath.Join(dir, "proto", "services", "billing", "v1")
+	const proto = "syntax = \"proto3\";\n\n// Billing charges customers.\nservice BillingService {\n  rpc Charge(ChargeRequest) returns (ChargeResponse);\n}\n\nmessage ChargeRequest {}\n"
+	writeRepoFile(t, protoDir, "billing.proto", proto)
+	writeRepoFile(t, filepath.Join(dir, "deploy", "kcl", "dev"), "main.k", "")
+	writeRepoFile(t, filepath.Join(dir, "internal", "billing"), "charge.go", "package billing\n")
+
+	render := func() { _ = projectMemoryWithForgeFramework(dir, nil) }
+	render()
+	steps := []struct {
+		what     string
+		edit     func()
+		rerender bool
+	}{
+		{"a Taskfile edit (the test command)", func() {
+			writeRepoFile(t, dir, "Taskfile.yml", "version: '3'\ntasks:\n  test: {cmds: [go test ./...]}\n")
+		}, true},
+		{"a new deploy env", func() { writeRepoFile(t, filepath.Join(dir, "deploy", "kcl", "staging"), "main.k", "") }, true},
+		{"deploy/kcl/workloads.k", func() { writeRepoFile(t, filepath.Join(dir, "deploy", "kcl"), "workloads.k", "") }, true},
+		{"a Makefile", func() { writeRepoFile(t, dir, "Makefile", "test:\n\tgo test ./...\n") }, true},
+		{"a migration tool's marker", func() { writeRepoFile(t, filepath.Join(dir, "prisma"), "schema.prisma", "") }, true},
+		{"monitoring: in forge.yaml", func() {
+			writeRepoFile(t, dir, "forge.yaml", "name: app\nmodule_path: example.com/app\nforge_version: v1.0.4\nmonitoring: true\n")
+		}, true},
+		{"a // forge:unmanaged service", func() {
+			writeRepoFile(t, protoDir, "billing.proto", strings.Replace(proto, "// Billing charges customers.\n", "// Billing charges customers.\n// forge:unmanaged\n", 1))
+		}, true},
+		{"a message edit in a proto", func() {
+			writeRepoFile(t, protoDir, "billing.proto", strings.Replace(proto, "// Billing charges customers.\n", "// Billing charges customers.\n// forge:unmanaged\n", 1)+"message ChargeResponse { string id = 1; }\n")
+		}, false},
+		{"a source package the guide does not read", func() { writeRepoFile(t, filepath.Join(dir, "internal", "refunds"), "refund.go", "package refunds\n") }, false},
+	}
+	for _, s := range steps {
+		before := len(f.runs)
+		s.edit()
+		render()
+		if s.rerender {
+			assert.Len(t, f.runs, before+1, "%s reused the stale guide", s.what)
+		} else {
+			assert.Len(t, f.runs, before, "%s rendered the guide again", s.what)
+		}
+	}
+
+	// A new process with the same disk cache renders nothing new.
+	before := len(f.runs)
+	f.restart(f.deps.Resolve, f.deps.Run, f.deps.CacheDir())
+	protoDecls.Clear()
+	render()
+	assert.Len(t, f.runs, before, "a restart rendered an unchanged project's guide again")
+}
+
 // No pin: the forge compiled into reliant renders it, as before.
 func TestForgeMemory_AnUnpinnedProjectGetsTheEmbeddedGuide(t *testing.T) {
 	f := useFakePinnedForges(t)
