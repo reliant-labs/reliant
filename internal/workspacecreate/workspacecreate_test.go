@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"sync"
 	"testing"
@@ -91,9 +92,25 @@ func (f *fakeMachine) cmds(name string) []sent {
 type fakeStore struct {
 	rows      map[string]db.Worktree
 	updateErr error
+	// teardown, when pending, refuses CreateWorktree as the repo does.
+	teardown *db.CheckoutTeardown
+}
+
+func (s *fakeStore) SettleCheckoutTeardown(_ context.Context, id, state, detail string) (*db.CheckoutTeardown, error) {
+	if s.teardown == nil || s.teardown.ID != id {
+		return nil, fmt.Errorf("no teardown %s", id)
+	}
+	if s.teardown.State == db.CheckoutTeardownPending {
+		s.teardown.State, s.teardown.Detail = state, detail
+	}
+	out := *s.teardown
+	return &out, nil
 }
 
 func (s *fakeStore) CreateWorktree(_ context.Context, w *db.Worktree) error {
+	if s.teardown != nil && s.teardown.State == db.CheckoutTeardownPending {
+		return &db.CheckoutTeardownPendingError{Teardown: s.teardown}
+	}
 	if s.rows == nil {
 		s.rows = map[string]db.Worktree{}
 	}
@@ -159,7 +176,7 @@ func TestInsertThenFinishSuccess(t *testing.T) {
 	req := twoRepoReq()
 	req.CopyPaths = []string{".env"}
 
-	wt, err := Insert(context.Background(), st, req)
+	wt, err := Insert(context.Background(), st, nil, req)
 	require.NoError(t, err)
 	assert.Equal(t, int32(reliantv1.WorktreeStatus_WORKTREE_STATUS_CREATING), st.rows[wt.ID].Status)
 	assert.Equal(t, "d1", *wt.DaemonID)
@@ -186,7 +203,7 @@ func TestInsertThenFinishSuccess(t *testing.T) {
 func TestInsertDefaultsBranch(t *testing.T) {
 	req := twoRepoReq()
 	req.Branch = ""
-	wt, err := Insert(context.Background(), &fakeStore{}, req)
+	wt, err := Insert(context.Background(), &fakeStore{}, nil, req)
 	require.NoError(t, err)
 	assert.Contains(t, wt.Branch, "worktree/feat-")
 }
@@ -194,7 +211,7 @@ func TestInsertDefaultsBranch(t *testing.T) {
 func TestFinishRepoFailureRollsBackEverything(t *testing.T) {
 	st, m := &fakeStore{}, &fakeMachine{root: "/w/demo/feat-1", failRepo: "b"}
 	req := twoRepoReq()
-	wt, _ := Insert(context.Background(), st, req)
+	wt, _ := Insert(context.Background(), st, nil, req)
 
 	err := Finish(context.Background(), st, m, req, wt)
 	require.Error(t, err)
@@ -215,7 +232,7 @@ func TestFinishForceDelegatesWithoutPrevalidationCleanup(t *testing.T) {
 	st, m := &fakeStore{}, &fakeMachine{root: "/w/r"}
 	req := twoRepoReq()
 	req.Force = true
-	wt, _ := Insert(context.Background(), st, req)
+	wt, _ := Insert(context.Background(), st, nil, req)
 	require.NoError(t, Finish(context.Background(), st, m, req, wt))
 	require.Empty(t, m.cmds("worktree.force_cleanup"), "cleanup before daemon validation can destroy stale-head work")
 	creates := m.cmds("worktree.create")
@@ -230,7 +247,7 @@ func TestFinishCopyFailureIsNonFatal(t *testing.T) {
 	req := twoRepoReq()
 	req.CopyPaths = []string{".env"}
 	req.CopySource = "/src/ws"
-	wt, _ := Insert(context.Background(), st, req)
+	wt, _ := Insert(context.Background(), st, nil, req)
 	require.NoError(t, Finish(context.Background(), st, m, req, wt))
 	assert.Equal(t, int32(reliantv1.WorktreeStatus_WORKTREE_STATUS_ACTIVE), st.rows[wt.ID].Status)
 	assert.Equal(t, "/src/ws", m.cmds("worktree.copy_paths")[0].payload["source_root"])
@@ -241,7 +258,7 @@ func TestFinishPerRepoBaseOverride(t *testing.T) {
 	req := twoRepoReq()
 	req.BaseBranch = "develop"
 	req.BaseBranches = map[string]string{"r2": "master"}
-	wt, _ := Insert(context.Background(), st, req)
+	wt, _ := Insert(context.Background(), st, nil, req)
 	require.NoError(t, Finish(context.Background(), st, m, req, wt))
 	got := map[string]any{}
 	for _, c := range m.cmds("worktree.create") {
@@ -253,7 +270,7 @@ func TestFinishPerRepoBaseOverride(t *testing.T) {
 func TestFinishRecordFailureRollsBack(t *testing.T) {
 	st, m := &fakeStore{}, &fakeMachine{root: "/w/r"}
 	req := twoRepoReq()
-	wt, _ := Insert(context.Background(), st, req)
+	wt, _ := Insert(context.Background(), st, nil, req)
 	st.updateErr = errors.New("db down")
 	err := Finish(context.Background(), st, m, req, wt)
 	require.Error(t, err)
@@ -267,7 +284,7 @@ func TestFinishWithoutTheOwnersCheckoutFailsTheRow(t *testing.T) {
 	st, m := &fakeStore{}, &fakeMachine{root: "/home/.reliant/worktrees/demo/feat-1234abcd"}
 	req := twoRepoReq()
 	req.Checkout = ""
-	wt, err := Insert(context.Background(), st, req)
+	wt, err := Insert(context.Background(), st, nil, req)
 	if err != nil {
 		t.Fatal(err)
 	}

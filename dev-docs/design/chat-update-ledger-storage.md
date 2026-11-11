@@ -120,11 +120,16 @@ its internal ones after 30 days.
   the write rate. At 10x today's traffic this is still small; at 100x the
   delete-then-vacuum churn becomes the cost, which is what 1b fixes.
 
-#### 1b. Later, if needed: a heads table plus a partitioned log
+#### 1b. Later, if needed: a partitioned log on top of the heads table
 
-Split the two jobs. A `chat_update_heads` table holds the newest update per
-reader key, upserted in the same transaction as the log row; the snapshot
-reads it directly (one row per key, no skip scans). `chat_updates` becomes a
+The heads table half has landed (#2569, `dev-docs/design/chat-update-heads.md`).
+`chat_update_heads` holds the snapshot's newest update per key. It is upserted
+in the same transaction as the log row, and the snapshot reads it directly
+while falling back to the log for chats it cannot vouch for. Compaction keeps
+every log row that the fallback and the table's backfill read. Dropping those
+rows from the log as well is tier 2 in that document's "Retention of
+`chat_updates`", and it waits for the fallback to be retired. What remains of
+1b is the partitioned log: `chat_updates` becomes a
 pure replay buffer, range-partitioned by day or week, and retention is `DROP
 TABLE` of an old partition: no deletes, no dead tuples, no vacuum, and the
 space is free at once. The costs: an upsert per update on a hot row (HOT

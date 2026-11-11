@@ -193,9 +193,46 @@ message OrgMemberGrants {
   // role is the membership role, for display only. Authority comes from
   // scopes; a role is no longer consulted by any permission check.
   string role = 3;
-  // scopes are the permissions held, from the same vocabulary as a token's
-  // (forge/pkg/accesstoken).
+  // scopes are the permissions held ORG-WIDE, from the same vocabulary as a
+  // token's (forge/pkg/accesstoken).
   repeated string scopes = 4;
+  // environment_grants are the permissions held for ONE environment only
+  // (docs/design/orgs-and-members.md §4), one entry per environment with any.
+  // What the member may do on an environment is scopes ∪ that environment's
+  // entry. Empty for a member with no environment-bound grant, and always
+  // empty from a server older than per-environment grants.
+  repeated EnvironmentGrants environment_grants = 5;
+}
+
+// EnvironmentGrants is a set of permissions bound to one environment.
+message EnvironmentGrants {
+  // environment_id is a deploy environment of the org (DeployService).
+  string environment_id = 1;
+  // scopes may name only the permissions that can be bound to an
+  // environment: ListOrgMemberGrantsResponse.environment_scopes.
+  repeated string scopes = 2;
+}
+
+// GrantEnvironment is one environment a permission may be bound to: a column
+// of the people × environments matrix.
+message GrantEnvironment {
+  string id = 1;
+  string name = 2;
+  // protected mirrors the environment's protection flag (secret writes need
+  // a step-up), for display.
+  bool protected = 3;
+  // grantable is what the CALLER may grant on this environment: what they
+  // hold org-wide or bound to it, limited to environment_scopes.
+  repeated string grantable = 4;
+}
+
+// EnvironmentGrantSet is the COMPLETE set of a member's environment-bound
+// grants. Its presence on an update is what says "replace them"; see
+// UpdateOrgMemberGrantsRequest.environment_grants.
+message EnvironmentGrantSet {
+  // One entry per environment; an environment absent here holds no bound
+  // grant afterwards. An environment may appear at most once.
+  repeated EnvironmentGrants environments = 1;
 }
 
 message ListOrgMemberGrantsRequest {
@@ -209,8 +246,14 @@ message ListOrgMemberGrantsResponse {
   repeated OrgMemberGrants members = 1;
   // grantable is what the CALLER may hand out — their own permission set. The
   // UI renders anything outside it as disabled rather than letting a member
-  // attempt an edit the server will refuse.
+  // attempt an edit the server will refuse. These are ORG-WIDE grants.
   repeated string grantable = 2;
+  // environments are the org's live environments, by name, each with what
+  // the caller may grant on it.
+  repeated GrantEnvironment environments = 3;
+  // environment_scopes are the permissions that may be bound to one
+  // environment (orggrants.EnvScopes); any other permission is org-wide only.
+  repeated string environment_scopes = 4;
 }
 
 message UpdateOrgMemberGrantsRequest {
@@ -223,6 +266,15 @@ message UpdateOrgMemberGrantsRequest {
   // org. A person must be a member of it; a machine credential may name only
   // its own org.
   optional string org_id = 3;
+  // environment_grants, when SET, replaces the member's environment-bound
+  // grants with exactly this set, in the same transaction as scopes. When
+  // UNSET (every client older than per-environment grants), environment-bound
+  // grants are left exactly as they are, so an old client editing org-wide
+  // permissions never erases them.
+  //
+  // CLIPPED TO THE CALLER per environment: a permission bound to environment
+  // E may be granted only by someone holding it org-wide or bound to E.
+  EnvironmentGrantSet environment_grants = 4;
 }
 
 message UpdateOrgMemberGrantsResponse {

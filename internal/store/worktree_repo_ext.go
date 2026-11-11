@@ -140,6 +140,30 @@ func GetLiveWorktreeByName(ctx context.Context, db orm.Context, projectID, name 
 	})
 }
 
+// ListFailedWorktreesForDaemon returns the FAILED workspaces, archived ones
+// included, created on daemonID since `since` that hold no path and whose
+// leftover checkouts are not yet known to be gone (cleanup_metadata
+// directory_deleted), newest first, at most limit. A create whose answer was
+// lost leaves its finished checkout behind under such a row (reliant #2413);
+// the daemon is asked to remove it when it next connects.
+func ListFailedWorktreesForDaemon(ctx context.Context, db orm.Context, daemonID string, since time.Time, limit int) ([]*core.Worktree, error) {
+	var rows []*Worktree
+	err := db.Bun().NewSelect().Model(&rows).
+		Where("worktrees.daemon_id = ?", daemonID).
+		Where("worktrees.status = ?", reliantv1.WorktreeStatus_WORKTREE_STATUS_FAILED).
+		Where("worktrees.is_main = false").
+		Where("worktrees.path = ''").
+		Where("worktrees.created_at >= ?", since).
+		Where(cleanupMetadataPending).
+		OrderExpr("worktrees.created_at DESC").
+		Limit(int64(limit)).
+		Scan(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list failed worktrees for daemon: %w", err)
+	}
+	return worktreesToCore(rows), nil
+}
+
 // ListWorktreesByBranch returns every worktree, archived included, recorded
 // against a branch: an archived row's checkout or branch may outlive the
 // archive.
@@ -634,13 +658,25 @@ func encodeCleanupMetadata(m *core.CleanupMetadata) (*string, error) {
 	return &s, nil
 }
 
+// providerWaitSQL is the predicate on provider_backoff pb for a thread parked
+// on a provider wait: waiting_since is set until the wait clears
+// (clearProviderBackoff). A run held on a usage limit is waiting, not over,
+// whatever its workflow row says (a sub-agent that stopped on the limit is
+// resumed by the next message), so a worktree it works in is in use until the
+// wait's resume time. A marker a dead run left behind stops counting at that
+// time, and from then on only ages the worktree's last activity.
+const providerWaitSQL = `pb.waiting_since IS NOT NULL`
+
 // worktreeRunActivitySQL is what the chats working in each worktree say
 // about it (core.WorktreeRunActivity). A chat works in a worktree when it is
 // bound to it or one of its threads is (a sub-agent spawned into it). A run
 // counts while it is pending, active, or paused awaiting a resume — the same
-// "live" the recovery admission triggers use. The last activity is the
-// latest of the worktree's own stamps and, for each such chat, its
-// last_active and its runs' start and stop times. GREATEST skips NULLs.
+// "live" the recovery admission triggers use — or while one of its threads
+// is parked on a provider wait (a usage limit, a rate-limit backoff) whose
+// resume time has not passed, whatever its run's state (providerWaitSQL).
+// The last activity is the latest of the worktree's own stamps and, for each
+// such chat, its last_active, its runs' start and stop times, and the start
+// and resume time of each wait it holds. GREATEST skips NULLs.
 const worktreeRunActivitySQL = `
 WITH bound AS (
     SELECT c.id AS chat_id, c.worktree_id FROM chats c WHERE c.worktree_id IN (?0)
@@ -648,10 +684,14 @@ WITH bound AS (
     SELECT t.chat_id, t.worktree_id FROM threads t WHERE t.worktree_id IN (?0)
 ), per_chat AS (
     SELECT b.worktree_id,
-        EXISTS (SELECT 1 FROM workflows f WHERE f.chat_id = b.chat_id
-            AND (f.state IN (1, 2) OR (f.state = 3 AND f.stop_reason = 3))) AS running,
+        (EXISTS (SELECT 1 FROM workflows f WHERE f.chat_id = b.chat_id
+            AND (f.state IN (1, 2) OR (f.state = 3 AND f.stop_reason = 3)))
+         OR EXISTS (SELECT 1 FROM provider_backoff pb WHERE pb.chat_id = b.chat_id
+            AND ` + providerWaitSQL + ` AND pb.resume_at >= NOW())) AS running,
         GREATEST(c.last_active, (SELECT max(GREATEST(f.created_at, f.completed_at, f.worker_started_at, f.worker_stopped_at))
-            FROM workflows f WHERE f.chat_id = b.chat_id)) AS last_active
+            FROM workflows f WHERE f.chat_id = b.chat_id),
+            (SELECT max(GREATEST(pb.waiting_since, pb.resume_at)) FROM provider_backoff pb
+            WHERE pb.chat_id = b.chat_id AND ` + providerWaitSQL + `)) AS last_active
     FROM bound b JOIN chats c ON c.id = b.chat_id
 )
 SELECT w.id AS worktree_id,
@@ -680,6 +720,27 @@ func WorktreeRunActivities(ctx context.Context, db orm.Context, ids []string) (m
 		out[r.WorktreeID] = core.WorktreeRunActivity{Running: r.Running, LastActive: r.LastActive}
 	}
 	return out, nil
+}
+
+// NoteWorktreeUse raises a live worktree's last_active to at, the last time
+// its daemon saw it used (worktreereclaim.Result.LastUse): a tool call that
+// named a path inside it, a command run in it, a file written in it. That use
+// has no chat bound to the worktree to show it, and last_active is part of
+// every quiet check (worktreeRunActivitySQL). A time ahead of the database's
+// clock is taken as now, so a daemon whose clock runs fast cannot push the
+// worktree's quiet period into the future. It never lowers last_active, and
+// leaves archived rows alone, and a row a recovery is finalizing (its
+// admission trigger refuses a last_active change; the recovery's own
+// activity fence is what settles that row). Raising last_active also bumps
+// the row's activity_generation (recovery_worktree_admission).
+func NoteWorktreeUse(ctx context.Context, db orm.Context, id string, at time.Time) error {
+	_, err := db.Bun().NewRaw(`UPDATE worktrees SET last_active = LEAST(?1::timestamptz, NOW())
+WHERE id = ?0 AND deleted_at IS NULL AND recovery_finalizing_id IS NULL
+  AND last_active < LEAST(?1::timestamptz, NOW())`, id, at.UTC()).Exec(ctx)
+	if err != nil {
+		return fmt.Errorf("note worktree use: %w", err)
+	}
+	return nil
 }
 
 // ArchiveLandedWorktree archives a live worktree whose work has landed, but

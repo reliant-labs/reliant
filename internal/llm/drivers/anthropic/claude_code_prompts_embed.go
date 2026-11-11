@@ -51,6 +51,7 @@ var ccOutputOpus55 string // output block, opus-5.5 variant (2.1.280)
 // sends on the wire.
 const (
 	apiModelFable51 = "claude-fable-5-1"
+	apiModelFable52 = "claude-fable-5-2"
 	apiModelOpus55  = "claude-opus-5-5"
 )
 
@@ -175,6 +176,11 @@ var claudeCodeProfiles = map[string]claudeCodeProfile{
 	"claude-opus-5": profileLean204,
 	apiModelFable51: profileFable51,
 	apiModelOpus55:  profileOpus55,
+	// fable-5.2's only capture (.dev/claude/fable-5.2.*) is a claude-desktop
+	// 2.1.321 thread continuation: it carries no identity/agent/output blocks
+	// and no tools, so it cannot supply a 2.1.321 profile. fable-5.2 rides the
+	// newest complete fingerprint, 2.1.280, the same way opus-5 rides 2.1.204.
+	apiModelFable52: profileOpus55,
 }
 
 // claudeCodeProfileFor returns the fingerprint for the given api_model.

@@ -35,6 +35,7 @@ import {
   useCreateApiKeyConnection,
   type AuthMethod,
   type Connection,
+  type ConnectionParam,
 } from "../../../hooks/connection-queries";
 import { useCatalogEntry } from "../../../hooks/catalog-queries";
 import { ConnectionOAuthCancelled, connectWithOAuth, connectsThroughSystemBrowser } from "../../../lib/connection-oauth";
@@ -42,8 +43,10 @@ import { IntegrationIcon } from "../palette/IntegrationIcon";
 import { getIsDev } from "../../../lib/constants";
 
 export interface ConnectIntegrationTarget {
-  /** Any catalog ref of the integration; its entry carries the connection methods. */
-  ref: string;
+  /** Any catalog ref of the integration; its entry carries the connection methods. Omit when `connection` is given. */
+  ref?: string;
+  /** The methods and params already in hand (ConnectionService.ListIntegrations), so no catalog entry is fetched. */
+  connection?: { methods: AuthMethod[]; params: ConnectionParam[] };
   integrationId: string;
   displayName: string;
   icon?: string;
@@ -98,9 +101,10 @@ function ConnectBody({
   onConnected,
   redirectAfter,
 }: Omit<ConnectIntegrationDialogProps, "target"> & { target: ConnectIntegrationTarget }) {
-  const entryQuery = useCatalogEntry(target.ref);
-  const methods = (entryQuery.data?.connection.methods ?? []).filter((m) => m.kind !== "none");
-  const params = entryQuery.data?.connection.params ?? [];
+  const entryQuery = useCatalogEntry(target.connection ? undefined : target.ref);
+  const connectionInfo = target.connection ?? entryQuery.data?.connection;
+  const methods = (connectionInfo?.methods ?? []).filter((m) => m.kind !== "none");
+  const params = connectionInfo?.params ?? [];
   const [chosen, setChosen] = useState<AuthMethod["kind"] | null>(null);
   const active = methods.find((m) => m.kind === chosen) ?? methods.find((m) => m.available);
   const [name, setName] = useState("");

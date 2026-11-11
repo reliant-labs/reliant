@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/automationcred"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -167,7 +168,7 @@ func (m *machineController) ActivationMachine(ctx context.Context, chatID string
 // ownership too; this keeps the refusal ahead of any credential choice.
 func (m *machineController) owned(ctx context.Context, userID, daemonID string) error {
 	d, err := m.repo.GetDaemon(ctx, daemonID)
-	if err != nil || d == nil || d.UserID != userID {
+	if err != nil || !authz.CanWriteMachine(ctx, userID, d) {
 		return fmt.Errorf("machine %s is not one of the user's machines", daemonID)
 	}
 	return nil

@@ -68,6 +68,11 @@ type Service interface {
 	RevokeResource(ctx context.Context, resource fat.Resource) (int64, error)
 	// RevokeEphemeral revokes a user's ephemeral tokens (session end).
 	RevokeEphemeral(ctx context.Context, userID string) (int64, error)
+	// ResolveOrgMembership asks whether userID is a live member of orgID or,
+	// with orgID "", which org is their default. Every negative is
+	// Member=false; an error is never a negative. A control plane that
+	// predates the rpc answers ErrUnsupported.
+	ResolveOrgMembership(ctx context.Context, userID, orgID string) (OrgMembership, error)
 }
 
 // Introspector is what a validator needs. *Client and *CachedIntrospector

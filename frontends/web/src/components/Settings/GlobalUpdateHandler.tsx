@@ -1,108 +1,37 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { UpdateModal } from "./UpdateModal";
-
-interface UpdateStatus {
-  type: 'checking' | 'available' | 'not-available' | 'downloaded' | 'download-progress' | 'error';
-  version?: string;
-  progress?: {
-    percent: number;
-    transferred: number;
-    total: number;
-    bytesPerSecond: number;
-  };
-  error?: string;
-  releaseNotes?: string;
-}
+import { connectAppUpdates, useAppUpdateStore } from "../../store/appUpdateStore";
 
 /**
- * Global component that listens for update events and shows the update modal
- * This ensures the modal appears even when the user isn't on the Settings page
+ * Connects the desktop updater to the app and renders the one update dialog.
+ * Mounted at the app root so the dialog opens on every route. What opens it:
+ * the sidebar's update button, Settings → About, the app menu's "Check for
+ * Updates…", and a download the user started finishing. A background check
+ * that finds an update only lights up the sidebar button; it does not
+ * interrupt.
  */
 export function GlobalUpdateHandler() {
-  const [updateStatus, setUpdateStatus] = useState<UpdateStatus | null>(null);
-  const [showUpdateModal, setShowUpdateModal] = useState(false);
-  const [isDownloading, setIsDownloading] = useState(false);
-  const [isInstalling, setIsInstalling] = useState(false);
+  const status = useAppUpdateStore((s) => s.status);
+  const dialogOpen = useAppUpdateStore((s) => s.dialogOpen);
+  const isDownloading = useAppUpdateStore((s) => s.isDownloading);
+  const isInstalling = useAppUpdateStore((s) => s.isInstalling);
+  const closeDialog = useAppUpdateStore((s) => s.closeDialog);
+  const downloadUpdate = useAppUpdateStore((s) => s.downloadUpdate);
+  const installUpdate = useAppUpdateStore((s) => s.installUpdate);
 
-  useEffect(() => {
-    // Only setup in Electron
-    if (!window.electronAPI) {
-      return;
-    }
+  useEffect(() => connectAppUpdates(), []);
 
-    // Listen for update status events from main process
-    const cleanup = window.electronAPI.onUpdateStatus((status: UpdateStatus) => {
-      setUpdateStatus(status);
-
-      // Automatically show modal when update is available, downloading, or downloaded
-      if (status.type === 'available' || status.type === 'download-progress' || status.type === 'downloaded') {
-        setShowUpdateModal(true);
-      }
-
-      // Track download state
-      if (status.type === 'download-progress') {
-        setIsDownloading(true);
-      } else if (status.type === 'downloaded' || status.type === 'error') {
-        setIsDownloading(false);
-      }
-    });
-
-    return cleanup;
-  }, []);
-
-  const handleDownloadUpdate = async () => {
-    if (!window.electronAPI) return;
-
-    setIsDownloading(true);
-    try {
-      const result = await window.electronAPI.downloadUpdate();
-      if (result.error) {
-        setUpdateStatus({ type: 'error', error: result.error });
-        setIsDownloading(false);
-      }
-    } catch (error) {
-      console.error('Error downloading update:', error);
-      setUpdateStatus({
-        type: 'error',
-        error: error instanceof Error ? error.message : 'Unknown error'
-      });
-      setIsDownloading(false);
-    }
-  };
-
-  const handleInstallUpdate = async () => {
-    if (!window.electronAPI) return;
-
-    setIsInstalling(true);
-    try {
-      const result = await window.electronAPI.installUpdate();
-      if (result.error) {
-        setUpdateStatus({ type: 'error', error: result.error });
-        setIsInstalling(false);
-      }
-      // If successful, the app will restart so we don't need to reset isInstalling
-    } catch (error) {
-      console.error('Error installing update:', error);
-      setUpdateStatus({
-        type: 'error',
-        error: error instanceof Error ? error.message : 'Unknown error'
-      });
-      setIsInstalling(false);
-    }
-  };
-
-  // Don't render anything if no update status or not in Electron
-  if (!window.electronAPI || !updateStatus) {
+  if (!window.electronAPI || !status) {
     return null;
   }
 
   return (
     <UpdateModal
-      isOpen={showUpdateModal}
-      onClose={() => setShowUpdateModal(false)}
-      updateStatus={updateStatus}
-      onDownload={handleDownloadUpdate}
-      onInstall={handleInstallUpdate}
+      isOpen={dialogOpen}
+      onClose={closeDialog}
+      updateStatus={status}
+      onDownload={() => void downloadUpdate()}
+      onInstall={() => void installUpdate()}
       isDownloading={isDownloading}
       isInstalling={isInstalling}
     />

@@ -22,6 +22,7 @@ import { Check, Copy, Pause, Play, RotateCcw, SkipForward } from "lucide-react";
 import Button from "@/components/forge-ui/button";
 import { cn } from "@/lib/utils";
 
+import { shortForgeVersion } from "./forgeVersion";
 import { promptOf, type CastStep, type ScaffoldCast } from "./fixtures";
 import { delayToNext, eventCount, finalReplay, formatSeconds, initialReplay, isComplete, outputOf, replayReducer, SPEEDS, type ReplayState } from "./replay";
 
@@ -55,6 +56,8 @@ export function TerminalReplay({ cast, autoPlay = true, className }: TerminalRep
   const root = useRef<HTMLDivElement>(null);
   const screen = useRef<HTMLDivElement>(null);
   const done = isComplete(cast, state);
+  // Before the first Play: the run's outline and a play button, never an empty screen.
+  const poster = !played && !state.playing && state.step === 0 && state.shown === 0;
 
   // Once, when it first comes into view. A pause or a scroll away and back never restarts it.
   useEffect(() => {
@@ -145,14 +148,52 @@ export function TerminalReplay({ cast, autoPlay = true, className }: TerminalRep
         className="h-80 overflow-y-auto bg-[var(--code-bg)] px-3 py-2 font-mono text-xs leading-relaxed text-[var(--code-fg)]"
         data-testid="replay-screen"
       >
-        {cast.steps.slice(0, state.step + 1).map((step, index) => (
-          <ReplayStep key={index} index={index} step={step} shown={index < state.step ? eventCount(step) : state.shown} />
-        ))}
+        {poster ? (
+          <Poster
+            cast={cast}
+            onPlay={() => {
+              setPlayed(true);
+              dispatch({ type: "play" });
+            }}
+          />
+        ) : (
+          cast.steps.slice(0, state.step + 1).map((step, index) => (
+            <ReplayStep key={index} index={index} step={step} shown={index < state.step ? eventCount(step) : state.shown} />
+          ))
+        )}
         {done && <p className="mt-2 text-ink-muted">{`${promptOf(cast.steps[cast.steps.length - 1].cwd)}`}</p>}
       </div>
       <p className="border-t border-border bg-surface-muted px-3 py-1.5 text-xs text-ink-muted">
-        Recorded with forge {cast.forge_version}. The output is as forge printed it; long waits play shorter.
+        Recorded with <span title={`forge ${cast.forge_version}`}>forge {shortForgeVersion(cast.forge_version)}</span>, output as printed.
       </p>
+    </div>
+  );
+}
+
+/** The first screen: what the run does, step by step, with how long each really took. */
+function Poster({ cast, onPlay }: { cast: ScaffoldCast; onPlay: () => void }) {
+  return (
+    <div className="relative flex min-h-full flex-col" data-testid="replay-poster">
+      <ol className="space-y-1.5 opacity-80">
+        {cast.steps.map((step, index) =>
+          step.kind === "command" ? (
+            <li key={index} className="flex gap-2">
+              <span className="min-w-0 flex-1 whitespace-pre-wrap break-words">
+                <span className="text-ink-muted">{promptOf(step.cwd)}</span>
+                <span className="font-semibold">{step.command}</span>
+              </span>
+              <span className="shrink-0 text-ink-muted">{formatSeconds(step.real_seconds)}</span>
+            </li>
+          ) : (
+            <li key={index} className="text-ink-muted"># You write {step.path}</li>
+          )
+        )}
+      </ol>
+      <div className="mt-auto flex justify-center pt-6">
+        <Button variant="primary" size="lg" className="font-sans" leftIcon={<Play />} onClick={onPlay} data-testid="replay-poster-play">
+          Play the recording
+        </Button>
+      </div>
     </div>
   );
 }
@@ -174,7 +215,8 @@ function ReplayStep({ step, shown, index }: { step: CastStep; shown: number; ind
   return (
     <div className="mt-1" data-testid={`replay-step-${index}`} data-kind="command">
       <div className="flex items-center gap-2">
-        <span className="min-w-0 flex-1 whitespace-pre-wrap break-all">
+        {/* Wrap between words, never inside one ("--servi / ce" on a phone). */}
+        <span className="min-w-0 flex-1 whitespace-pre-wrap break-words">
           <span className="text-ink-muted">{promptOf(step.cwd)}</span>
           <span className="font-semibold" data-testid="replay-command">
             {step.command}

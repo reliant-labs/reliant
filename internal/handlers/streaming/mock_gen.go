@@ -19,7 +19,7 @@ import (
 )
 
 // forge:section MockRepository
-// forge:hash=ef5db49b8a2bfa7eee9e902bc3d45ab9eb73b93d48b3428460e3e65a81ce5ab1
+// forge:hash=ce52d4b37411e8e0041726a0b560a7864c4cb9f6bc9564295e386b145f185479
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -37,6 +37,8 @@ type MockRepository struct {
 	GetLatestNonMessageUpdatesPerEntityFunc                  func(context.Context, string) ([]db.ChatUpdate, error)
 	GetLatestUserUpdateSequenceFunc                          func(context.Context, string) (int64, error)
 	GetUserUpdatesSinceFunc                                  func(context.Context, string, int64, int) ([]db.UserUpdate, error)
+	GetProjectFunc                                           func(context.Context, string) (*db.Project, error)
+	GetWorkflowDraftFunc                                     func(context.Context, string) (*db.WorkflowDraft, error)
 	ListThreadsByConversationFunc                            func(context.Context, string) ([]*db.Thread, error)
 	CountMessagesInChatFunc                                  func(context.Context, string) (int, error)
 	ListRecentTranscriptSiblingMessagesFunc                  func(context.Context, string, string, int64, int) ([]*db.Message, error)
@@ -159,6 +161,24 @@ func (m *MockRepository) GetUserUpdatesSince(ctx context.Context, userID string,
 		return m.GetUserUpdatesSinceFunc(ctx, userID, sinceSeq, limit)
 	}
 	return nil, contractkit.MockNotSet("MockRepository", "GetUserUpdatesSince")
+}
+
+// GetProject records the call and delegates to GetProjectFunc when set.
+func (m *MockRepository) GetProject(ctx context.Context, id string) (*db.Project, error) {
+	m.Recorder.Record("GetProject", ctx, id)
+	if m.GetProjectFunc != nil {
+		return m.GetProjectFunc(ctx, id)
+	}
+	return nil, contractkit.MockNotSet("MockRepository", "GetProject")
+}
+
+// GetWorkflowDraft records the call and delegates to GetWorkflowDraftFunc when set.
+func (m *MockRepository) GetWorkflowDraft(ctx context.Context, id string) (*db.WorkflowDraft, error) {
+	m.Recorder.Record("GetWorkflowDraft", ctx, id)
+	if m.GetWorkflowDraftFunc != nil {
+		return m.GetWorkflowDraftFunc(ctx, id)
+	}
+	return nil, contractkit.MockNotSet("MockRepository", "GetWorkflowDraft")
 }
 
 // ListThreadsByConversation records the call and delegates to ListThreadsByConversationFunc when set.

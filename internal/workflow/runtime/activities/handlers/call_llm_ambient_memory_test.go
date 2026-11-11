@@ -115,19 +115,28 @@ func TestCallLLM_ExcludeAmbientMemoryOutgoingHTTP(t *testing.T) {
 			}))
 			defer srv.Close()
 			driver := openai.NewClient(llm.DriverOptions{Model: models.Model{ID: "gpt-4o", APIModel: "gpt-4o"}, ApiKey: "test-only", BaseURL: srv.URL, MaxTokens: 100})
-			cfg := &cfgpkg.Config{GlobalMemoryMD: ambientGlobalCanary, ProjectMemoryMD: ambientProjectCanary, RepoMemories: map[string]string{"private-repo": ambientRepoCanary}, DaemonRuntimeType: "kata"}
+			cfg := &cfgpkg.Config{GlobalMemoryMD: ambientGlobalCanary, ProjectMemoryMD: ambientProjectCanary, RepoMemories: map[string]string{"private-repo": ambientRepoCanary}, DaemonRuntimeType: "kata",
+				Skills: []cfgpkg.StoredSkill{{Name: privateSkillPath, SkillPath: privateSkillPath, Description: skillCatalogCanary, Body: skillBodyCanary}},
+			}
 			handler := NewCallLLMActivity(h.Repo(), nil, nil, ambientConfigProvider{cfg}, func(context.Context, string, models.Preferences, ...llm.DriverOption) (llm.Driver, error) {
 				return driver, nil
 			}, nil)
 			input := callLLMInput(chat.ID, chat.ID, "mock-model")
 			input.Node.GetCallLlm().ExcludeAmbientMemory = excluded
+			input.Node.GetCallLlm().ExcludeSkillCatalog = excluded
 			input.Node.GetCallLlm().ToolsConfig = emptyAmbientTools()
 			var out CallLLMOutput
 			require.NoError(t, h.ExecuteActivity(handler.Execute, input, &out))
 			select {
 			case body := <-bodies:
 				require.Contains(t, body, approvedBriefCanary)
-				for _, canary := range []string{ambientGlobalCanary, ambientProjectCanary, ambientRepoCanary} {
+				require.NotContains(t, body, skillBodyCanary)
+				var request struct {
+					Tools []json.RawMessage `json:"tools"`
+				}
+				require.NoError(t, json.Unmarshal([]byte(body), &request))
+				require.Empty(t, request.Tools)
+				for _, canary := range []string{ambientGlobalCanary, ambientProjectCanary, ambientRepoCanary, privateSkillPath, skillCatalogCanary} {
 					if excluded {
 						require.NotContains(t, body, canary)
 					} else {

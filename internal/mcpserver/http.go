@@ -16,6 +16,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/connectorgrant"
 )
 
@@ -323,7 +324,7 @@ func (a *connectorAuth) grantForCredential(ctx context.Context, token string) (*
 	if err != nil {
 		return nil, err
 	}
-	if grant.UserID != p.ActingUserID {
+	if !authz.CanAccessPersonal(p.ActingUserID, grant.UserID) {
 		return nil, connectorgrant.ErrNotFound
 	}
 	return grant, nil

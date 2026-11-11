@@ -69,6 +69,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/handlers/usage"
 	workflowhandler "github.com/reliant-labs/reliant/internal/handlers/workflow"
 	"github.com/reliant-labs/reliant/internal/handlers/worktree"
+	"github.com/reliant-labs/reliant/internal/handlers/worktree_reclaim"
 	"github.com/reliant-labs/reliant/internal/integrations/ghaccess"
 	"github.com/reliant-labs/reliant/internal/integrations/inputoptions"
 	"github.com/reliant-labs/reliant/internal/integrations/webhook"
@@ -84,6 +85,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm/keyvalidate"
 	"github.com/reliant-labs/reliant/internal/llm/providerusage"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
+	"github.com/reliant-labs/reliant/internal/orgs"
 	"github.com/reliant-labs/reliant/internal/queueddelivery"
 	"github.com/reliant-labs/reliant/internal/runs"
 	"github.com/reliant-labs/reliant/internal/servergateway"
@@ -139,6 +141,12 @@ func (g *Graph) newTokenAuthority() (tokenauthority.Authority, error) {
 	})
 }
 
+func (g *Graph) newOrgResolver() (*orgs.Resolver, error) {
+	return NewOrgResolver(OrgResolverDeps{
+		Authority: g.TokenAuthority(),
+	})
+}
+
 func (g *Graph) newTLSFiles() (*TLSFiles, error) {
 	return NewTLSFiles(TLSFilesDeps{
 		TLS:     g.ServerProcessConfig.GetTls(),
@@ -184,6 +192,8 @@ func (g *Graph) newDaemonListener() (*grpcserver.DaemonListener, error) {
 		Chain:   g.DaemonChain(),
 		Routes:  g.DaemonRoutes(),
 		Logger:  g.Log,
+		// Every request's context carries membership (authz).
+		Membership: g.OrgResolver(),
 	})
 }
 
@@ -240,6 +250,13 @@ func (g *Graph) newConnectionListeners() (*ConnectionListeners, error) {
 
 func (g *Graph) newActivitySubscriber() (*ActivitySubscriber, error) {
 	return NewActivitySubscriber(ActivitySubscriberDeps{
+		NATS:        g.NATSConn(),
+		ToolsDaemon: g.ToolsDaemon(),
+	})
+}
+
+func (g *Graph) newDisconnectSubscriber() (*DisconnectSubscriber, error) {
+	return NewDisconnectSubscriber(DisconnectSubscriberDeps{
 		NATS:        g.NATSConn(),
 		ToolsDaemon: g.ToolsDaemon(),
 	})
@@ -556,6 +573,8 @@ func (g *Graph) newTemporalWorker() (*workersetup.Worker, error) {
 		WorkflowTaskPollers: g.WorkerConfig.GetWorkflowTaskPollers(),
 		Worker:              g.WorkerConfig,
 		NATS:                g.NATSConn(),
+		// Every activity's context carries membership (authz).
+		Membership: g.OrgResolver(),
 	})
 }
 
@@ -648,6 +667,8 @@ func (g *Graph) newAPIListener() (*grpcserver.APIListener, error) {
 		Routes: g.UserRoutes(),
 		HTTP:   g.HTTPRoutes(),
 		Logger: g.Log,
+		// Every request's context carries membership (authz).
+		Membership: g.OrgResolver(),
 	})
 }
 
@@ -894,6 +915,7 @@ func (g *Graph) newUserRoutes() (*UserRoutes, error) {
 		Logger:          g.Log,
 		Options:         apiMountOptions(g.ApiServerConfig.GetDisableForgeApi()),
 		Usage:           g.Usage(),
+		WorktreeReclaim: g.WorktreeReclaim(),
 	})
 }
 
@@ -978,6 +1000,7 @@ func (g *Graph) newChat() (*chat.Service, error) {
 		Pause:       g.PauseService(),
 		Router:      g.APIDaemonRouter().NATSDaemonRouter,
 		LocalModels: local.NewRepoDirectory(g.Database()),
+		Orgs:        g.OrgResolver(),
 	})
 }
 
@@ -990,6 +1013,7 @@ func (g *Graph) newRun() (*run.Service, error) {
 		Config: g.Cfg,
 		Repo:   g.Database(),
 		Chats:  g.Chat(),
+		Orgs:   g.OrgResolver(),
 	})
 }
 
@@ -1017,6 +1041,7 @@ func (g *Graph) newTrigger() (*trigger.Service, error) {
 		Options:      optionsChecker{svc: g.InputOptions()},
 		Alerting:     alertingProvisioner(g.TriggerAlerting()),
 		Drafter:      automationDrafter(g.TemporalClient().Client, v2workflow.SharedTaskQueue),
+		Orgs:         g.OrgResolver(),
 	})
 }
 
@@ -1167,6 +1192,7 @@ func (g *Graph) newProject() (*project.Service, error) {
 		Repo:         g.Database(),
 		Router:       g.APIDaemonRouter().NATSDaemonRouter,
 		ControlPlane: hostedControlPlane(g.ServerProcessConfig.GetControlPlane()),
+		Orgs:         g.OrgResolver(),
 	})
 }
 
@@ -1307,6 +1333,7 @@ func (g *Graph) newWorkflow() (*workflowhandler.Service, error) {
 		Repo:        g.Database(),
 		Router:      g.APIDaemonRouter().NATSDaemonRouter,
 		Automations: g.Trigger(),
+		Orgs:        g.OrgResolver(),
 	})
 }
 
@@ -1317,5 +1344,22 @@ func (g *Graph) newUsage() (*usage.Service, error) {
 		Config: g.Cfg,
 		Store:  g.Database(),
 		Now:    nil, // optional — no provider
+	})
+}
+
+// newWorktreeReclaim constructs the worktree-reclaim handler (internal/handlers/worktree_reclaim).
+func (g *Graph) newWorktreeReclaim() (*worktree_reclaim.Service, error) {
+	return worktree_reclaim.New(worktree_reclaim.Deps{
+		Logger: g.Log,
+		Config: g.Cfg,
+		Repo:   g.Database(),
+		Sender: g.APIDaemonRouter().NATSDaemonRouter,
+	})
+}
+
+// newChatUpdateHeadsBackfill constructs the ChatUpdateHeadsBackfill provider (NewChatUpdateHeadsBackfill, internal/app/providers_api.go).
+func (g *Graph) newChatUpdateHeadsBackfill() (*ChatUpdateHeadsBackfill, error) {
+	return NewChatUpdateHeadsBackfill(ChatUpdateHeadsBackfillDeps{
+		DB: g.Database(),
 	})
 }

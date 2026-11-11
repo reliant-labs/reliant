@@ -110,8 +110,10 @@ export const ACTIVE_ORG_STORAGE_PREFIX = KEY_PREFIX;
 
 /**
  * Query-key roots whose answers depend on the active org. A switch resets
- * these (not the whole cache: chats, projects and files are the user's, not
- * an org's). A new control-plane query family joins this list.
+ * these (not the whole cache). A new control-plane query family joins this
+ * list. The product's own org-scoped reads (the chat list, projects, saved
+ * workflows, triggers, runs) are reset by the product app's onSwitch,
+ * components/Orgs/followActiveOrg.ts, which a shell without them omits.
  */
 export const ORG_SCOPED_QUERY_ROOTS: readonly string[] = [
   "observability",

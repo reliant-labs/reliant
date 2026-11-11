@@ -31,7 +31,7 @@ import { orgPlaceOf, type ObsEnvironment } from "../obsPlace";
 import type { ObsSearch } from "../obsSearch";
 import type { ObsTopic } from "../ObsStates";
 import { useDeclaredEnvironments } from "../useDeclaredEnvironments";
-import { compareParam, isDashboardPageKind, rangeParam, refreshParam, type DashboardSearch } from "./dashboardModel";
+import { builtinPageRef, compareParam, isDashboardPageKind, isStandardBuiltinRef, rangeParam, refreshParam, type DashboardSearch } from "./dashboardModel";
 import { DashboardsList, type DashboardsSearch } from "./DashboardsList";
 import { DashboardView, type DashboardHrefs } from "./DashboardView";
 
@@ -191,7 +191,7 @@ export function DashboardPage() {
   const hrefs = useObservabilityHrefs();
   const navigateTo = useNavigateTo();
   const dashRef = useMemo<DashboardRef | null>(
-    () => (isDashboardPageKind(kind) ? { kind, projectId: kind === "builtin" ? "" : forgeProject, key } : null),
+    () => (!isDashboardPageKind(kind) ? null : kind === "builtin" ? builtinPageRef(key, forgeProject) : { kind, projectId: forgeProject, key }),
     [kind, forgeProject, key]
   );
   const search: DashboardSearch = {
@@ -214,8 +214,9 @@ export function DashboardPage() {
     orgEnvs: Array.isArray(raw.orgEnvs) ? raw.orgEnvs.filter((name): name is string => typeof name === "string") : undefined,
   };
   if (!dashRef) return null;
-  // Organization accounting is discoverable without a deployed environment.
-  if (dashRef.kind === "builtin") return <DashboardView key={`builtin/${key}`} project={forgeProject} dashRef={dashRef} env={env} environments={environments} orgEnvironments={orgEnvironments.environments} orgEnvironmentsLoading={orgEnvironments.loading} orgEnvironmentsError={orgEnvironments.error} onRetryOrgEnvironments={orgEnvironments.retry} search={search} onSearch={onSearch} onEnvChange={setEnv} hrefs={hrefs} navigateTo={navigateTo} />;
+  // Organization accounting is discoverable without a deployed environment. A
+  // project's standard built-ins read its environments, like any dashboard.
+  if (dashRef.kind === "builtin" && !isStandardBuiltinRef(dashRef)) return <DashboardView key={`builtin/${key}`} project={forgeProject} dashRef={dashRef} env={env} environments={environments} orgEnvironments={orgEnvironments.environments} orgEnvironmentsLoading={orgEnvironments.loading} orgEnvironmentsError={orgEnvironments.error} onRetryOrgEnvironments={orgEnvironments.retry} search={search} onSearch={onSearch} onEnvChange={setEnv} hrefs={hrefs} navigateTo={navigateTo} />;
   return (
     <RosterGate testId="console-dashboard" topic="dashboards">
       <DashboardView

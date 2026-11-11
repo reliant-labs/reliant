@@ -50,6 +50,7 @@ import { pinnedPromptFirstLine, usePinnedPromptForm } from "./pinnedPromptForm";
 import { useChatThreadMode } from "./useChatThreadMode";
 import {
   buildSimplifiedTimeline,
+  createFoldKeys,
   createSegmentReader,
   type MessageSlice,
   type WorkItem,
@@ -960,14 +961,18 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
     () => createSurfacedPredicate(toolResultsByCallId, approvals),
     [toolResultsByCallId, approvals],
   );
+  // Fold keys outlive each rebuild, so a scroll-back page that brings the
+  // older half of the run at the top does not rename its fold (FoldKeys).
+  const foldKeys = useMemo(() => createFoldKeys(), []);
   const timelineItems = useMemo((): TimelineItem[] => {
     if (!simplified) return detailedTimelineItems;
     return buildSimplifiedTimeline(detailedTimelineItems, {
       segmentsOf: segmentReader,
       workflowOf: (item) => item.workflow,
       isSurfaced,
+      foldKeys,
     }) as TimelineItem[];
-  }, [simplified, detailedTimelineItems, segmentReader, isSurfaced]);
+  }, [simplified, detailedTimelineItems, segmentReader, isSurfaced, foldKeys]);
 
   // The fold still being worked on: the last row, while streaming. Its own
   // surfaced content renders inside it, so anything after it — the agent's

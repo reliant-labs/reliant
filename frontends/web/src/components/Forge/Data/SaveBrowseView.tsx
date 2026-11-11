@@ -6,7 +6,8 @@ import { useObservabilityOrg } from "@/hooks/observability-queries";
 import { useDashboard, useDashboardIndex, useDashboardMutation } from "@/hooks/dashboard-queries";
 import type { Dashboard } from "@/services/controlPlane/observability/types";
 import { useForgeConsole } from "../Console/consoleContext";
-import { CONTROL_FIELD } from "../controlStyles";
+import { cn } from "@/lib/utils";
+import { FIELD } from "../controlStyles";
 import { useObsReadOnly } from "../Observability/obsReadOnly";
 import { browseViewOf } from "../Observability/Dashboards/dataPanelModel";
 import type { DataSearch } from "./dataUrl-model";
@@ -42,13 +43,13 @@ export function SaveBrowseView({ search, environmentId }: { search: DataSearch; 
     {open && <section className="space-y-2 rounded-lg border border-border bg-surface-sunken p-3" aria-label="Save Data view">
       <p className="text-xs text-ink-muted">Adds this table, filters, columns and sort to a workspace dashboard. Pagination and row selection are not saved.</p>
       <label className="block text-xs text-ink">Dashboard
-        <select className={CONTROL_FIELD} value={key} onChange={(event) => setKey(event.target.value)}>
+        <select className={cn(FIELD, "mt-1 block w-full")} value={key} onChange={(event) => setKey(event.target.value)}>
           <option value="">Choose a workspace dashboard</option>
           {choices.map((item) => <option key={item.ref.key} value={item.ref.key}>{item.title}</option>)}
         </select>
       </label>
       {!choices.length && <p className="text-xs text-ink-muted">Create a workspace dashboard first, or save a release dashboard as a copy.</p>}
-      <label className="block text-xs text-ink">Panel title<input className={CONTROL_FIELD} value={title} placeholder={search.table} onChange={(event) => setTitle(event.target.value)} /></label>
+      <label className="block text-xs text-ink">Panel title<input className={cn(FIELD, "mt-1 block w-full")} value={title} placeholder={search.table} onChange={(event) => setTitle(event.target.value)} /></label>
       {(!!error || !!doc.error) && <p role="alert" className="text-xs text-danger-ink">{error ?? "Could not load dashboard"}</p>}
       <div className="flex items-center gap-2">
         <Button size="sm" variant="primary" loading={save.isPending} disabled={!doc.data?.canWrite || save.isPending} onClick={submit}>Save view</Button>

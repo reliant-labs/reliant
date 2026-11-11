@@ -25,13 +25,14 @@ const (
 // ReliantConfig is the reliant binary's root config: the surface every
 // reliant process reads.
 type ReliantConfig struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Log           *LogConfig             `protobuf:"bytes,1,opt,name=log,proto3" json:"log,omitempty"`
-	Runtime       *RuntimeConfig         `protobuf:"bytes,2,opt,name=runtime,proto3" json:"runtime,omitempty"`
-	StorageReaper *StorageReaperConfig   `protobuf:"bytes,3,opt,name=storage_reaper,json=storageReaper,proto3" json:"storage_reaper,omitempty"`
-	Transcript    *TranscriptConfig      `protobuf:"bytes,4,opt,name=transcript,proto3" json:"transcript,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	Log             *LogConfig             `protobuf:"bytes,1,opt,name=log,proto3" json:"log,omitempty"`
+	Runtime         *RuntimeConfig         `protobuf:"bytes,2,opt,name=runtime,proto3" json:"runtime,omitempty"`
+	StorageReaper   *StorageReaperConfig   `protobuf:"bytes,3,opt,name=storage_reaper,json=storageReaper,proto3" json:"storage_reaper,omitempty"`
+	Transcript      *TranscriptConfig      `protobuf:"bytes,4,opt,name=transcript,proto3" json:"transcript,omitempty"`
+	WorktreeReclaim *WorktreeReclaimConfig `protobuf:"bytes,5,opt,name=worktree_reclaim,json=worktreeReclaim,proto3" json:"worktree_reclaim,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *ReliantConfig) Reset() {
@@ -88,6 +89,13 @@ func (x *ReliantConfig) GetStorageReaper() *StorageReaperConfig {
 func (x *ReliantConfig) GetTranscript() *TranscriptConfig {
 	if x != nil {
 		return x.Transcript
+	}
+	return nil
+}
+
+func (x *ReliantConfig) GetWorktreeReclaim() *WorktreeReclaimConfig {
+	if x != nil {
+		return x.WorktreeReclaim
 	}
 	return nil
 }
@@ -358,18 +366,108 @@ func (x *StorageReaperConfig) GetGocacheInterval() string {
 	return ""
 }
 
+// WorktreeReclaimConfig is the daemon's machine-wide worktree reclaim
+// (internal/worktreereclaim/sweep.go): every linked git worktree on the
+// machine, whether Reliant made it or an agent ran `git worktree add`, is
+// captured into a local ref of its own repository
+// (refs/reliant/reclaimed/...) before it is deleted. It rides the storage
+// reaper's schedule and single-flight (RELIANT_STORAGE_REAPER), so it runs
+// only where that does. Durations are Go durations; a value the daemon cannot
+// use is named in a warning and replaced by its default.
+type WorktreeReclaimConfig struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// off never runs it. dry-run records what it would reclaim, and the bytes,
+	// in ~/.reliant/reclaim/report.json and its journal, captures and deletes
+	// nothing, and leaves forge's worktree reaper running as before. on
+	// reclaims clean, pushed, idle worktrees after capturing them, proposes
+	// the rest for a person's approval, and replaces forge's worktree reaper.
+	Mode string `protobuf:"bytes,1,opt,name=mode,proto3" json:"mode,omitempty"`
+	// Where discovery looks for repositories besides the ones it knows:
+	// comma-separated path[:depth] entries. Unset: the worktree root (depth
+	// 4), the temp dir, the user cache dir and $HOME (depth 3 each).
+	Roots string `protobuf:"bytes,2,opt,name=roots,proto3" json:"roots,omitempty"`
+	// How long a clean worktree whose HEAD is on a remote must have had no
+	// commit and no file change before it is reclaimed without asking.
+	CleanIdle string `protobuf:"bytes,3,opt,name=clean_idle,json=cleanIdle,proto3" json:"clean_idle,omitempty"`
+	// How long a worktree with uncommitted, unpushed or reflog-only work must
+	// have had no commit and no file change before it is proposed for a
+	// person's approval. It is never reclaimed without one.
+	ApprovalIdle  string `protobuf:"bytes,4,opt,name=approval_idle,json=approvalIdle,proto3" json:"approval_idle,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *WorktreeReclaimConfig) Reset() {
+	*x = WorktreeReclaimConfig{}
+	mi := &file_reliant_config_v1_config_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WorktreeReclaimConfig) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WorktreeReclaimConfig) ProtoMessage() {}
+
+func (x *WorktreeReclaimConfig) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_config_v1_config_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WorktreeReclaimConfig.ProtoReflect.Descriptor instead.
+func (*WorktreeReclaimConfig) Descriptor() ([]byte, []int) {
+	return file_reliant_config_v1_config_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *WorktreeReclaimConfig) GetMode() string {
+	if x != nil {
+		return x.Mode
+	}
+	return ""
+}
+
+func (x *WorktreeReclaimConfig) GetRoots() string {
+	if x != nil {
+		return x.Roots
+	}
+	return ""
+}
+
+func (x *WorktreeReclaimConfig) GetCleanIdle() string {
+	if x != nil {
+		return x.CleanIdle
+	}
+	return ""
+}
+
+func (x *WorktreeReclaimConfig) GetApprovalIdle() string {
+	if x != nil {
+		return x.ApprovalIdle
+	}
+	return ""
+}
+
 var File_reliant_config_v1_config_proto protoreflect.FileDescriptor
 
 const file_reliant_config_v1_config_proto_rawDesc = "" +
 	"\n" +
-	"\x1ereliant/config/v1/config.proto\x12\x11reliant.config.v1\x1a\x14forge/v1/forge.proto\"\x9e\x02\n" +
+	"\x1ereliant/config/v1/config.proto\x12\x11reliant.config.v1\x1a\x14forge/v1/forge.proto\"\xf3\x02\n" +
 	"\rReliantConfig\x12.\n" +
 	"\x03log\x18\x01 \x01(\v2\x1c.reliant.config.v1.LogConfigR\x03log\x12:\n" +
 	"\aruntime\x18\x02 \x01(\v2 .reliant.config.v1.RuntimeConfigR\aruntime\x12M\n" +
 	"\x0estorage_reaper\x18\x03 \x01(\v2&.reliant.config.v1.StorageReaperConfigR\rstorageReaper\x12C\n" +
 	"\n" +
 	"transcript\x18\x04 \x01(\v2#.reliant.config.v1.TranscriptConfigR\n" +
-	"transcript:\r\xca\xc1\x18\t\n" +
+	"transcript\x12S\n" +
+	"\x10worktree_reclaim\x18\x05 \x01(\v2(.reliant.config.v1.WorktreeReclaimConfigR\x0fworktreeReclaim:\r\xca\xc1\x18\t\n" +
 	"\areliant\"\xe8\x01\n" +
 	"\x10TranscriptConfig\x12\xd3\x01\n" +
 	"\x0ftool_body_stubs\x18\x01 \x01(\tB\xaa\x01\x82\xce\x18\xa5\x01\n" +
@@ -397,7 +495,17 @@ const file_reliant_config_v1_config_proto_rawDesc = "" +
 	"\x14FORGE_STORAGE_POLICY*QForge machine storage policy file (default: <user config dir>/forge/storage.json)R\n" +
 	"policyPath\x12\xc9\x01\n" +
 	"\x10gocache_interval\x18\x05 \x01(\tB\x9d\x01\x82\xce\x18\x98\x01\n" +
-	"'RELIANT_STORAGE_REAPER_GOCACHE_INTERVAL\x1a\x0310m*hInterval of the Go-cache trim between full storage reaper passes (Go duration, minimum 2m; off disables)R\x0fgocacheIntervalB@Z>github.com/reliant-labs/reliant/gen/reliant/config/v1;configv1b\x06proto3"
+	"'RELIANT_STORAGE_REAPER_GOCACHE_INTERVAL\x1a\x0310m*hInterval of the Go-cache trim between full storage reaper passes (Go duration, minimum 2m; off disables)R\x0fgocacheInterval\"\xef\x05\n" +
+	"\x15WorktreeReclaimConfig\x12\xa8\x01\n" +
+	"\x04mode\x18\x01 \x01(\tB\x93\x01\x82\xce\x18\x8e\x01\n" +
+	"\x18RELIANT_WORKTREE_RECLAIM\x1a\adry-run*WMachine-wide worktree reclaim: off, dry-run (report only) or on (capture, then reclaim)J\x03offJ\adry-runJ\x02onR\x04mode\x12\xc8\x01\n" +
+	"\x05roots\x18\x02 \x01(\tB\xb1\x01\x82\xce\x18\xac\x01\n" +
+	"\x1eRELIANT_WORKTREE_RECLAIM_ROOTS*\x89\x01Directories the worktree reclaim walks for repositories, comma-separated path[:depth] (default: worktree root, temp, cache and home dirs)R\x05roots\x12\xa0\x01\n" +
+	"\n" +
+	"clean_idle\x18\x03 \x01(\tB\x80\x01\x82\xce\x18|\n" +
+	"#RELIANT_WORKTREE_RECLAIM_CLEAN_IDLE\x1a\x0324h*PIdle time before a clean, pushed worktree is reclaimed (Go duration, minimum 1h)R\tcleanIdle\x12\xbc\x01\n" +
+	"\rapproval_idle\x18\x04 \x01(\tB\x96\x01\x82\xce\x18\x91\x01\n" +
+	"&RELIANT_WORKTREE_RECLAIM_APPROVAL_IDLE\x1a\x04120h*aIdle time before a worktree with unsaved work is proposed for approval (Go duration, minimum 24h)R\fapprovalIdleB@Z>github.com/reliant-labs/reliant/gen/reliant/config/v1;configv1b\x06proto3"
 
 var (
 	file_reliant_config_v1_config_proto_rawDescOnce sync.Once
@@ -411,24 +519,26 @@ func file_reliant_config_v1_config_proto_rawDescGZIP() []byte {
 	return file_reliant_config_v1_config_proto_rawDescData
 }
 
-var file_reliant_config_v1_config_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
+var file_reliant_config_v1_config_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
 var file_reliant_config_v1_config_proto_goTypes = []any{
-	(*ReliantConfig)(nil),       // 0: reliant.config.v1.ReliantConfig
-	(*TranscriptConfig)(nil),    // 1: reliant.config.v1.TranscriptConfig
-	(*RuntimeConfig)(nil),       // 2: reliant.config.v1.RuntimeConfig
-	(*LogConfig)(nil),           // 3: reliant.config.v1.LogConfig
-	(*StorageReaperConfig)(nil), // 4: reliant.config.v1.StorageReaperConfig
+	(*ReliantConfig)(nil),         // 0: reliant.config.v1.ReliantConfig
+	(*TranscriptConfig)(nil),      // 1: reliant.config.v1.TranscriptConfig
+	(*RuntimeConfig)(nil),         // 2: reliant.config.v1.RuntimeConfig
+	(*LogConfig)(nil),             // 3: reliant.config.v1.LogConfig
+	(*StorageReaperConfig)(nil),   // 4: reliant.config.v1.StorageReaperConfig
+	(*WorktreeReclaimConfig)(nil), // 5: reliant.config.v1.WorktreeReclaimConfig
 }
 var file_reliant_config_v1_config_proto_depIdxs = []int32{
 	3, // 0: reliant.config.v1.ReliantConfig.log:type_name -> reliant.config.v1.LogConfig
 	2, // 1: reliant.config.v1.ReliantConfig.runtime:type_name -> reliant.config.v1.RuntimeConfig
 	4, // 2: reliant.config.v1.ReliantConfig.storage_reaper:type_name -> reliant.config.v1.StorageReaperConfig
 	1, // 3: reliant.config.v1.ReliantConfig.transcript:type_name -> reliant.config.v1.TranscriptConfig
-	4, // [4:4] is the sub-list for method output_type
-	4, // [4:4] is the sub-list for method input_type
-	4, // [4:4] is the sub-list for extension type_name
-	4, // [4:4] is the sub-list for extension extendee
-	0, // [0:4] is the sub-list for field type_name
+	5, // 4: reliant.config.v1.ReliantConfig.worktree_reclaim:type_name -> reliant.config.v1.WorktreeReclaimConfig
+	5, // [5:5] is the sub-list for method output_type
+	5, // [5:5] is the sub-list for method input_type
+	5, // [5:5] is the sub-list for extension type_name
+	5, // [5:5] is the sub-list for extension extendee
+	0, // [0:5] is the sub-list for field type_name
 }
 
 func init() { file_reliant_config_v1_config_proto_init() }
@@ -442,7 +552,7 @@ func file_reliant_config_v1_config_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_reliant_config_v1_config_proto_rawDesc), len(file_reliant_config_v1_config_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   5,
+			NumMessages:   6,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

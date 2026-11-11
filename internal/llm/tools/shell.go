@@ -876,10 +876,11 @@ func shouldRunInBackground(command string) bool {
 
 // ChatIDEnv names the chat a shell command runs for. Every command a chat runs
 // carries it, so what the command makes can say whose it is: a pull request
-// opened from the shell embeds `<!-- reliant-chat: $RELIANT_CHAT_ID -->`
-// (github__pr_create adds the marker itself), and automations that react to
-// the pull request later (control-plane's pr-fix) hand their news to that
-// chat before starting anyone else.
+// opened from the shell with `gh pr create` gets
+// `<!-- reliant-chat: $RELIANT_CHAT_ID -->` in its body from the daemon's gh
+// shim (internal/ghshim; github__pr_create adds the marker itself), and
+// automations that react to the pull request later (control-plane's pr-fix)
+// hand their news to that chat before starting anyone else.
 const ChatIDEnv = "RELIANT_CHAT_ID"
 
 // withChatEnv is the request env with ChatIDEnv set to chatID, unless the

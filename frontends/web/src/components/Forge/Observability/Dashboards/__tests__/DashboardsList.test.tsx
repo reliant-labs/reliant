@@ -69,10 +69,14 @@ describe("Dashboards", () => {
       lastViewedAtMs: null, panelCount: 0, previewPanels: [], release: null, workspace: null, category: "organization",
     }] });
     renderWithApi(api, <DashboardsList project={FIXTURE_PROJECT} env="all" environments={[]} search={{}} onSearch={vi.fn()} hrefs={hrefs} navigateTo={vi.fn()} />);
-    // The Overview lands first; with nothing deployed it says so, and the built-in sits in Platform.
+    // The Overview lands first; with nothing deployed it says so, and the built-in has its own row
+    // above the project's groups (not repeated in Platform).
     expect(await screen.findByTestId("hub-health-undeployed")).toHaveTextContent("after the first deploy");
-    const platform = screen.getByTestId("hub-group-platform");
-    expect(within(platform).getByRole("link", { name: "Organization costs" })).toHaveAttribute("href", "/d/builtin/org-costs");
+    const builtins = screen.getByTestId("hub-builtin");
+    expect(within(builtins).getByRole("link", { name: /Organization costs/ })).toHaveAttribute("href", "/d/builtin/org-costs");
+    expect(within(builtins).getByTestId("hub-builtin-org-costs")).toHaveTextContent("Canonical current-period accounting");
+    expect(within(screen.getByTestId("hub-group-platform")).queryByRole("link", { name: "Organization costs" })).toBeNull();
+    expect(screen.getByTestId("hub-group-platform-count")).toHaveTextContent("0");
     expect(screen.queryByTestId("dashboards-empty")).not.toBeInTheDocument();
   });
 

@@ -46,6 +46,13 @@ const (
 	// Type: map[string]any
 	CELFailure CELNamespace = "failure"
 
+	// CELRun provides how the run ended, to the nodes of a workflow's finally
+	// handler and to nothing else: the namespace exists only where the
+	// runtime injected RunInputKey.
+	// Usage: run.status ('completed' | 'failed' | 'cancelled')
+	// Type: map[string]any
+	CELRun CELNamespace = "run"
+
 	// CELWorkflow provides workflow metadata and environment context.
 	// Usage: workflow.id, workflow.name, workflow.path, workflow.branch
 	// Type: model.WorkflowContext (statically typed - known fields)
@@ -78,6 +85,7 @@ func AllNamespaces() []CELNamespace {
 		CELInputs,
 		CELTrigger,
 		CELFailure,
+		CELRun,
 		CELWorkflow,
 		CELNodes,
 		CELIter,
@@ -131,6 +139,9 @@ func (c *EdgeEvalContext) Activation() map[string]interface{} {
 		if f := failureFromInputs(c.Inputs); f != nil {
 			m[string(CELFailure)] = f
 		}
+		if r := runFromInputs(c.Inputs); r != nil {
+			m[string(CELRun)] = r
+		}
 	}
 	if c.Workflow != nil {
 		m[string(CELWorkflow)] = c.Workflow
@@ -180,6 +191,9 @@ func (c *LoopEvalContext) Activation() map[string]interface{} {
 		}
 		if f := failureFromInputs(c.Inputs); f != nil {
 			m[string(CELFailure)] = f
+		}
+		if r := runFromInputs(c.Inputs); r != nil {
+			m[string(CELRun)] = r
 		}
 	}
 	if c.Nodes != nil {
@@ -232,6 +246,9 @@ func (c *PostActivityContext) Activation() map[string]interface{} {
 		if f := failureFromInputs(c.Inputs); f != nil {
 			m[string(CELFailure)] = f
 		}
+		if r := runFromInputs(c.Inputs); r != nil {
+			m[string(CELRun)] = r
+		}
 	}
 	if c.Workflow != nil {
 		m[string(CELWorkflow)] = c.Workflow
@@ -274,6 +291,9 @@ func (c *NodeResolutionContext) Activation() map[string]interface{} {
 		}
 		if f := failureFromInputs(c.Inputs); f != nil {
 			m[string(CELFailure)] = f
+		}
+		if r := runFromInputs(c.Inputs); r != nil {
+			m[string(CELRun)] = r
 		}
 	}
 	if c.Nodes != nil {
@@ -403,11 +423,26 @@ func failureFromInputs(inputs map[string]interface{}) map[string]interface{} {
 	return failure
 }
 
-// withFailure appends `failure` to a context's namespaces when its inputs
-// carry a failure.
+// RunInputKey is the reserved workflow-input key under which the runtime
+// carries how a run ended, to its finally handler. Like FailureInputKey, every
+// typed context with Inputs exposes it as the `run` namespace, declared only
+// when the key is present.
+const RunInputKey = "__run"
+
+func runFromInputs(inputs map[string]interface{}) map[string]interface{} {
+	run, _ := inputs[RunInputKey].(map[string]interface{})
+	return run
+}
+
+// withFailure appends the terminal-handler namespaces to a context's: `failure`
+// when its inputs carry a failure, `run` when they carry a run ending.
 func withFailure(fixed []CELNamespace, inputs map[string]interface{}) []CELNamespace {
-	if failureFromInputs(inputs) == nil {
-		return fixed
+	out := fixed
+	if failureFromInputs(inputs) != nil {
+		out = append(out[:len(out):len(out)], CELFailure)
 	}
-	return append(fixed[:len(fixed):len(fixed)], CELFailure)
+	if runFromInputs(inputs) != nil {
+		out = append(out[:len(out):len(out)], CELRun)
+	}
+	return out
 }

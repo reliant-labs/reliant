@@ -80,6 +80,7 @@ var generatedNodeBindingsByType = map[string]generatedNodeBinding{
 			"compaction_threshold":   {},
 			"continue_turn":          {},
 			"exclude_ambient_memory": {},
+			"exclude_skill_catalog":  {},
 			"max_tokens":             {},
 			"messages":               {},
 			"model":                  {},

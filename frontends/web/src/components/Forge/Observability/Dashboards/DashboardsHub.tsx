@@ -9,8 +9,24 @@
  *   process health    per service: rate, errors, p95 (ProcessHealth)
  *   groups            one card per dashboard group, with its count and its
  *                     first dashboards; "View all" opens the list narrowed
- *   rail              open issues, failing jobs, recent releases, starred
- *                     and recently viewed dashboards
+ *   rail              open issues, failing jobs and recent releases: one
+ *                     card, a section each, so a short answer ("5 open")
+ *                     costs a line rather than a card of its own
+ *   shelf             starred and recently viewed dashboards, side by side
+ *                     in one card
+ *   built-in          the dashboards Reliant hosts for every app (source
+ *                     `builtin`: costs, usage, and the Overview, Users,
+ *                     Product, Acquisition and Cost views as they ship), one
+ *                     row of up to five cards with an icon and a line each,
+ *                     above the project's own. Shown only when there is one:
+ *                     no placeholder for a view that does not exist yet.
+ *   groups            the project's dashboards (forge's per-service ones and
+ *                     what the repo and the workspace declare), by group
+ *
+ * Every group card has the same shape and height: its name and count (the
+ * header opens the list narrowed to it), one line of what it holds, and room
+ * for two dashboards and "and N more", so the grid reads as a grid rather than
+ * a skyline.
  *
  * Composed in the UI from the RPCs the console already reads (ListDashboards,
  * GetServiceOverview, QueryPanel, ListWorkloads, ListAlerts, ListReleases,
@@ -19,7 +35,7 @@
  */
 
 import { useMemo, type ReactNode } from "react";
-import { ArrowRight, Star } from "lucide-react";
+import { ArrowRight, Gauge, LayoutDashboard, Megaphone, ShoppingBag, Star, Users, Wallet, type LucideIcon } from "lucide-react";
 
 import Card from "@/components/forge-ui/card";
 import Link from "@/components/forge-ui/link";
@@ -103,7 +119,9 @@ export function DashboardsHub({ project, env, environments, environmentsUnread =
   const envIdSet = useMemo(() => new Set(environments.map((candidate) => candidate.id)), [environments]);
   const projectAlerts = useMemo(() => (alerts.data ?? []).filter((alert) => envIdSet.has(alert.envId)), [alerts.data, envIdSet]);
   const envNameOf = (id: string) => environments.find((candidate) => candidate.id === id)?.name;
-  const groups = useMemo(() => groupIndex(dashboards), [dashboards]);
+  // Built-ins have their own row above the groups, so the group cards are the project's own dashboards.
+  const builtins = useMemo(() => dashboards.filter((d) => d.source === "builtin"), [dashboards]);
+  const groups = useMemo(() => groupIndex(dashboards.filter((d) => d.source !== "builtin")), [dashboards]);
   const starred = starredOf(dashboards);
   const recent = recentOf(dashboards);
   const jobsDashboard = groups.find((g) => g.group === "jobs")?.dashboards[0];
@@ -137,7 +155,7 @@ export function DashboardsHub({ project, env, environments, environmentsUnread =
                 logsHref={hrefs.logs}
               />
             </div>
-            <div className="min-w-0 space-y-4">
+            <Card padding="none" className="min-w-0 divide-y divide-border" data-testid="hub-rail">
               <RailCard title="Open issues" testId="hub-issues" href={hrefs.errors} linkLabel="Open the inbox">
                 {issues.isLoading ? (
                   <Pending />
@@ -158,37 +176,45 @@ export function DashboardsHub({ project, env, environments, environmentsUnread =
               <RailCard title="Recent releases" testId="hub-releases" href={hrefs.releases} linkLabel="All releases">
                 <RecentReleases query={releases} releaseHref={hrefs.release} showEnv={all} />
               </RailCard>
-            </div>
+            </Card>
           </div>
         </>
       )}
 
       {empty ?? (
         <>
-          <div className={cn("grid grid-cols-1 gap-4", recent.length > 0 && "md:grid-cols-2")}>
+          <Card
+            padding="none"
+            className={cn("grid min-w-0 grid-cols-1 divide-y divide-border", recent.length > 0 && "md:grid-cols-2 md:divide-x md:divide-y-0")}
+            data-testid="hub-shelf"
+          >
             <ShelfCard title="Starred" testId="hub-starred" icon={<Star className="h-3.5 w-3.5" aria-hidden="true" />} dashboards={starred} href={hrefs.dashboard} none="Star a dashboard to pin it here and in the nav." />
             {recent.length > 0 && <ShelfCard title="Recently viewed" testId="hub-recent" dashboards={recent} href={hrefs.dashboard} none="" />}
-          </div>
+          </Card>
+          {builtins.length > 0 && <BuiltinRow dashboards={builtins} href={hrefs.dashboard} />}
           <section aria-labelledby="hub-groups-heading" className="space-y-3">
             <h2 id="hub-groups-heading" className="text-sm font-medium text-ink">
-              Dashboards by group
+              {builtins.length > 0 ? "Your dashboards" : "Dashboards by group"}
+              {builtins.length > 0 && <span className="ml-2 text-xs font-normal text-ink-muted">Generated per service, and declared in your repo or workspace</span>}
             </h2>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4" data-testid="hub-groups">
+            <div className="grid auto-rows-fr grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4" data-testid="hub-groups">
               {groups.map(({ group, dashboards: members }) => (
                 <GroupCard key={group} group={group} members={members} href={hrefs.dashboard} onOpen={() => onOpenGroup(group)} />
               ))}
               <button
                 type="button"
                 onClick={onOpenAll}
-                className="flex min-h-24 flex-col items-start justify-between gap-2 rounded-lg border border-dashed border-border px-4 py-3 text-left transition-colors hover:border-ink-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="flex min-w-0 flex-col items-start gap-0.5 rounded-lg border border-dashed border-border-strong px-4 py-3 text-left transition-colors hover:border-ink-muted hover:bg-ink/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 data-testid="hub-open-all"
               >
-                <span className="text-sm font-medium text-ink">All dashboards</span>
-                <span className="text-xs text-ink-muted">Search every group by name, workload or tag</span>
-                <span className="flex items-center gap-1 text-xs text-ink-muted">
-                  Browse {dashboards.length}
-                  <ArrowRight className="h-3 w-3" aria-hidden="true" />
+                <span className="flex w-full items-center justify-between gap-2 text-sm font-medium text-ink">
+                  All dashboards
+                  <span className="flex items-center gap-1 text-xs font-normal tabular-nums text-ink-muted">
+                    {dashboards.length}
+                    <ArrowRight className="h-3 w-3" aria-hidden="true" />
+                  </span>
                 </span>
+                <span className="text-xs text-ink-muted">Search every group by name, workload or tag.</span>
               </button>
             </div>
           </section>
@@ -200,10 +226,11 @@ export function DashboardsHub({ project, env, environments, environmentsUnread =
 
 // ── Pieces ──────────────────────────────────────────────────────────────────
 
+/** One section of the rail card: a title, its way out, and a line or a short list. */
 function RailCard({ title, testId, href, linkLabel, children }: { title: string; testId: string; href?: string; linkLabel?: string; children: ReactNode }) {
   return (
-    <Card padding="none" className="min-w-0" data-testid={testId}>
-      <div className="flex items-center justify-between gap-3 px-4 pt-3">
+    <section className="min-w-0 px-4 py-3" data-testid={testId}>
+      <div className="flex items-center justify-between gap-3">
         <h3 className="text-sm font-medium text-ink">{title}</h3>
         {href && linkLabel && (
           <Link href={href} className={cn(INK_LINK, "text-xs")}>
@@ -211,8 +238,8 @@ function RailCard({ title, testId, href, linkLabel, children }: { title: string;
           </Link>
         )}
       </div>
-      <div className="px-4 pb-3 pt-2 text-sm">{children}</div>
-    </Card>
+      <div className="pt-1.5 text-sm">{children}</div>
+    </section>
   );
 }
 
@@ -357,23 +384,102 @@ function RecentReleases({
   );
 }
 
+/** The icon a built-in dashboard is drawn with, from what its key or view says it is about. */
+function builtinIcon(d: DashboardSummary): LucideIcon {
+  const about = `${d.ref.key} ${d.viewKind ?? ""}`.toLowerCase();
+  if (/cost|billing|spend/.test(about)) return Wallet;
+  if (/user|identity|auth/.test(about)) return Users;
+  if (/gtm|acquisition|growth|marketing/.test(about)) return Megaphone;
+  if (/product|funnel/.test(about)) return ShoppingBag;
+  if (/llm|model|usage/.test(about)) return Gauge;
+  return LayoutDashboard;
+}
+
+/** Built-in dashboards: one row of same-sized cards, an icon, a title and one line of what it shows. */
+function BuiltinRow({ dashboards, href }: { dashboards: DashboardSummary[]; href: (ref: DashboardRef) => string }) {
+  return (
+    <section aria-labelledby="hub-builtin-heading" className="space-y-3" data-testid="hub-builtin">
+      <h2 id="hub-builtin-heading" className="text-sm font-medium text-ink">
+        Built-in
+        <span className="ml-2 text-xs font-normal text-ink-muted">Hosted by Reliant for every app</span>
+      </h2>
+      <ul className="grid auto-rows-fr grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+        {dashboards.map((d) => {
+          const Icon = builtinIcon(d);
+          const target = href(d.ref);
+          const body = (
+            <>
+              <span className="flex min-w-0 items-center gap-2">
+                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-border text-ink-muted">
+                  <Icon className="h-3.5 w-3.5" aria-hidden="true" />
+                </span>
+                <span className="truncate text-sm font-medium text-ink">{d.title}</span>
+              </span>
+              {d.description && <span className="mt-1 line-clamp-2 text-xs text-ink-muted">{d.description}</span>}
+            </>
+          );
+          return (
+            <li key={`${d.ref.kind}/${d.ref.key}`} className="min-w-0" data-testid={`hub-builtin-${d.ref.key}`}>
+              {target ? (
+                <Link
+                  href={target}
+                  className="no-color flex h-full min-w-0 flex-col rounded-lg border border-border bg-surface px-3 py-2.5 transition-colors hover:border-ink-muted hover:bg-ink/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  {body}
+                </Link>
+              ) : (
+                <div className="flex h-full min-w-0 flex-col rounded-lg border border-border bg-surface px-3 py-2.5">{body}</div>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    </section>
+  );
+}
+
+/** Dashboards a group card lists before "N more". */
+const GROUP_SHOWN = 2;
+
 function GroupCard({ group, members, href, onOpen }: { group: DashboardGroup; members: DashboardSummary[]; href: (ref: DashboardRef) => string; onOpen: () => void }) {
   const count = members.length;
+  const title = (
+    <>
+      <span className="truncate text-sm font-medium text-ink">{GROUP_LABELS[group]}</span>
+      <span className="flex shrink-0 items-center gap-1 text-xs tabular-nums text-ink-muted" data-testid={`hub-group-${group}-count`}>
+        {count}
+        {count > 0 && <ArrowRight className="h-3 w-3" aria-hidden="true" />}
+      </span>
+    </>
+  );
   return (
-    <Card padding="none" className={cn("flex min-w-0 flex-col", count === 0 && "opacity-75")} data-testid={`hub-group-${group}`}>
-      <div className="flex items-baseline justify-between gap-2 px-4 pt-3">
-        <h3 className="text-sm font-medium text-ink">{GROUP_LABELS[group]}</h3>
-        <span className="text-xs tabular-nums text-ink-muted" data-testid={`hub-group-${group}-count`}>
-          {count}
-        </span>
-      </div>
-      <p className="px-4 text-xs text-ink-muted">{GROUP_ABOUT[group]}</p>
-      <ul className="flex-1 space-y-1 px-4 pb-2 pt-2 text-sm">
+    <Card padding="none" className={cn("flex min-w-0 flex-col px-4 py-3", count === 0 && "opacity-75")} data-testid={`hub-group-${group}`}>
+      <h3 className="min-w-0">
+        {count > 0 ? (
+          // The header opens the list narrowed to this group: the card's one way to "everything in it".
+          <button
+            type="button"
+            onClick={onOpen}
+            title={`View all ${count} in ${GROUP_LABELS[group]}`}
+            className="-mx-1 flex w-[calc(100%+0.5rem)] min-w-0 items-center justify-between gap-2 rounded px-1 text-left hover:bg-ink/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            data-testid={`hub-group-${group}-open`}
+          >
+            {title}
+          </button>
+        ) : (
+          <span className="flex min-w-0 items-center justify-between gap-2">{title}</span>
+        )}
+      </h3>
+      <p className="truncate text-xs text-ink-muted" title={GROUP_ABOUT[group]}>
+        {GROUP_ABOUT[group]}
+      </p>
+      {/* Room for three lines (two dashboards and "and N more") whatever the group holds, so every card is one height. */}
+      <ul className="mt-2 min-h-[4rem] space-y-1 text-sm">
         {count === 0 ? (
           <li className="text-ink-muted">None yet</li>
         ) : (
-          members.slice(0, 3).map((d) => (
-            <li key={`${d.ref.kind}/${d.ref.key}`} className="truncate">
+          members.slice(0, GROUP_SHOWN).map((d) => (
+            <li key={`${d.ref.kind}/${d.ref.key}`} className="truncate leading-5">
               {href(d.ref) ? (
                 <Link href={href(d.ref)} className={INK_LINK}>
                   {d.title}
@@ -384,35 +490,28 @@ function GroupCard({ group, members, href, onOpen }: { group: DashboardGroup; me
             </li>
           ))
         )}
+        {count > GROUP_SHOWN && (
+          <li className="text-xs leading-5 text-ink-muted">and {count - GROUP_SHOWN} more</li>
+        )}
       </ul>
-      {count > 0 && (
-        <button
-          type="button"
-          onClick={onOpen}
-          className="flex items-center gap-1 border-t border-border px-4 py-2 text-left text-xs text-ink-muted transition-colors hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          data-testid={`hub-group-${group}-open`}
-        >
-          View all {count} in {GROUP_LABELS[group]}
-          <ArrowRight className="h-3 w-3" aria-hidden="true" />
-        </button>
-      )}
     </Card>
   );
 }
 
+/** One column of the shelf card: a title and up to HUB_ROWS dashboards, one line each. */
 function ShelfCard({ title, testId, icon, dashboards, href, none }: { title: string; testId: string; icon?: ReactNode; dashboards: DashboardSummary[]; href: (ref: DashboardRef) => string; none: string }) {
   return (
-    <Card padding="none" className="min-w-0" data-testid={testId}>
-      <div className="flex items-center gap-1.5 px-4 pt-3 text-ink">
+    <section className="min-w-0 px-4 py-3" data-testid={testId}>
+      <div className="flex items-center gap-1.5 text-ink">
         {icon}
         <h3 className="text-sm font-medium">{title}</h3>
       </div>
-      <ul className="space-y-1 px-4 pb-3 pt-2 text-sm">
+      <ul className="space-y-1 pt-1.5 text-sm">
         {dashboards.length === 0 ? (
           <li className="text-xs text-ink-muted">{none}</li>
         ) : (
           dashboards.slice(0, HUB_ROWS).map((d) => (
-            <li key={`${d.ref.kind}/${d.ref.key}`} className="flex min-w-0 items-center justify-between gap-2">
+            <li key={`${d.ref.kind}/${d.ref.key}`} className="flex min-w-0 items-center justify-between gap-2 leading-5">
               {href(d.ref) ? (
                 <Link href={href(d.ref)} className={cn(INK_LINK, "truncate")}>
                   {d.title}
@@ -425,6 +524,6 @@ function ShelfCard({ title, testId, icon, dashboards, href, none }: { title: str
           ))
         )}
       </ul>
-    </Card>
+    </section>
   );
 }

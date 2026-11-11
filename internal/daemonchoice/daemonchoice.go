@@ -11,6 +11,7 @@ import (
 	"context"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
+	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -32,7 +33,7 @@ type Reader interface {
 // installed somewhere, the daemon must be one that has it.
 func Validate(ctx context.Context, repo Reader, userID, projectID, daemonID string) error {
 	daemon, err := repo.GetDaemon(ctx, daemonID)
-	if err != nil || daemon == nil || daemon.UserID != userID {
+	if err != nil || !authz.CanWriteMachine(ctx, userID, daemon) {
 		return svcerr.ToConnect(svcerr.NotFound("daemon"))
 	}
 
