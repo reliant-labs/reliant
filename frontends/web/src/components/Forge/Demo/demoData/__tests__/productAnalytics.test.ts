@@ -101,6 +101,28 @@ describe.each(WHEN)("the product analytics dashboards, %s", (_when, at) => {
     expect(figure(await read("overview", "accounts", week, ["env-prod"]))).toBe(demoAudienceTotals("env-prod").accounts);
   });
 
+  it.each([180, 365])("counts users whole over a %i-day window, older than the default 100 days of activity", async (days) => {
+    const window = { startMs: NOW - days * DAY, endMs: NOW };
+    const people = DEMO_ENV_IDS.flatMap((env) => demoAudience(env));
+    // Every account's last session is its last sign-in, so active in the window is exactly a last sign-in in it.
+    const active = people.filter((a) => a.lastSignInAtMs !== null && a.lastSignInAtMs >= window.startMs).length;
+    const fresh = people.filter((a) => a.lastSignInAtMs !== null && a.createdAtMs >= window.startMs).length;
+    // The audience has sign-ups older than 100 days, so a cut at the default history would undercount.
+    const old = people.filter((a) => a.lastSignInAtMs !== null && a.createdAtMs >= window.startMs && a.createdAtMs < NOW - 100 * DAY);
+    expect(old.length).toBeGreaterThan(0);
+
+    expect(figure(await read("users", "active", window))).toBe(active);
+    expect(figure(await read("users", "new", window))).toBe(fresh);
+    expect(figure(await read("users", "returning", window))).toBe(active - fresh);
+    // An old sign-up's sign-up session is there: its day's active users count it.
+    const { sessions } = demoActivity("env-prod", NOW, window.startMs);
+    const prodOld = demoAudience("env-prod").find((a) => a.lastSignInAtMs !== null && a.createdAtMs >= window.startMs && a.createdAtMs < NOW - 100 * DAY);
+    if (prodOld) expect(sessions.some((s) => s.signUp && s.start === prodOld.createdAtMs)).toBe(true);
+    // A wider history only adds older sessions: the default one's are all still there, unchanged.
+    const defaultFirst = Math.floor(NOW / DAY) * DAY - 99 * DAY;
+    expect(sessions.filter((s) => s.start >= defaultFirst)).toEqual(demoActivity("env-prod", NOW).sessions);
+  });
+
   it("splits sign-ups the same way everywhere: by channel, method, country and device, all equal to new (rule 2)", async () => {
     const fresh = figure(await read("users", "new", week));
     expect(fresh).toBeGreaterThan(0);
