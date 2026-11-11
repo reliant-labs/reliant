@@ -94,6 +94,13 @@ export const DEMO_TIPS: Record<DemoTipKey, DemoTip> = {
     command: "forge obs changes prod --since 6h",
     target: tid("activity-stream-feed"),
   },
+  users: {
+    title: "Users",
+    body: "See who can sign in to your app in each environment: their state, their roles and when they last signed in. Reliant runs the sign-in service, so there is no auth server to host.",
+    help: "Your agent can declare roles in the environment's configuration and check the sign-in service is ready after a deploy.",
+    command: "forge env status prod",
+    target: tid("identity-users-panel"),
+  },
   dashboards: {
     title: "Dashboards",
     body: "Spot changes in traffic, failures and response times before they become bigger problems. Open a dashboard to compare services or releases over time.",

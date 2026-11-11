@@ -43,3 +43,9 @@ func (r *Repo) ReleaseTriggerCapacityExecution(ctx context.Context, e store.Trig
 func (r *Repo) ReleaseClosedTriggerCapacityExecution(ctx context.Context, e store.TriggerCapacityExecution) error {
 	return store.ReleaseClosedTriggerCapacityExecution(ctx, r.ORM(), e)
 }
+func (r *Repo) ParkTriggerCapacity(ctx context.Context, slot store.TriggerCapacitySlot) (bool, error) {
+	return store.ParkTriggerCapacity(ctx, r.ORM(), slot)
+}
+func (r *Repo) ResumeTriggerCapacity(ctx context.Context, slot store.TriggerCapacitySlot) (bool, bool, error) {
+	return store.ResumeTriggerCapacity(ctx, r.ORM(), slot)
+}

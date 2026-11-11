@@ -29,6 +29,10 @@ type Deps struct {
 	// unavailable.
 	// forge:optional-dep
 	Sweeper Sweeper
+	// Orgs scopes ListInbox to a named org (org_id). nil (or a nil
+	// *orgs.Resolver) is a deployment with no orgs: org_id is ignored.
+	// forge:optional-dep
+	Orgs OrgResolver
 }
 
 // validateDeps returns an error if any required Deps field is nil. The

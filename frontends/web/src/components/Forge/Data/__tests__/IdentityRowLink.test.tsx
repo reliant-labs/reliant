@@ -21,8 +21,8 @@ it("contains optional links without a status probe", () => {
 it("uses actual scoped environment and exact subject, not an owner or a remembered environment", () => {
  show();
  expect(s.status).toHaveBeenCalledWith("org", "prod-id");
- expect(href).toHaveBeenCalledWith({ kind: "environment", env: "prod" }, { tab: "identity", user: "a&b/'\"" });
- expect(screen.getByRole("link", { name: "Open in Identity" })).toBeInTheDocument();
+ expect(href).toHaveBeenCalledWith({ kind: "users" }, { env: "prod", user: "a&b/'\"" });
+ expect(screen.getByRole("link", { name: "Open in Users" })).toBeInTheDocument();
 });
 it("never emits a link when identity is not declared", () => {
  s.data = { hasInstance: false }; show();

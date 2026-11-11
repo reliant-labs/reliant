@@ -835,6 +835,18 @@ export const forgeConsoleEnvSearchSchema = z.object({
   q: identitySubjectParam,
 });
 
+/**
+ * /forge/p/$project/users — who can sign in to the scoped environment. `user`
+ * (an identity subject) opens one person and `q` searches by email, exactly
+ * as the environment page's Identity tab reads them, so a link written for
+ * either opens the same person.
+ */
+export const forgeConsoleUsersSearchSchema = z.object({
+  env: envScopeParam,
+  user: identitySubjectParam.refine((v) => v === undefined || v.length <= 128).catch(undefined),
+  q: identitySubjectParam,
+});
+
 /** The retired /forge/env/$env: read only to redirect (Console/paths.ts legacyEnvTarget). */
 export const forgeLegacyEnvSearchSchema = z.object({
   project: z.string().optional(),

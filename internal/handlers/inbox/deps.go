@@ -10,8 +10,14 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/launch"
+	"github.com/reliant-labs/reliant/internal/orgs"
 	"github.com/reliant-labs/reliant/internal/worktreesweep"
 )
+
+// OrgResolver answers ListInbox's org question. *orgs.Resolver is one.
+type OrgResolver interface {
+	ListScope(ctx context.Context, userID, requested string, stamp orgs.Backfill) (*core.OrgScope, error)
+}
 
 // Repository is the slice of *db.Repo the inbox handlers use. It
 // includes worktreesweep.StorageStore because the storage view and the
@@ -24,6 +30,10 @@ type Repository interface {
 	// WorkflowResolver reads an activation's workflow, to tell which
 	// automations still need setting up.
 	launch.WorkflowResolver
+
+	// AssignUnassignedOrg stamps the caller's rows that have no org with
+	// their default org (the lazy backfill, orgs.ListScope).
+	AssignUnassignedOrg(ctx context.Context, userID, orgID string) error
 
 	ListInboxPending(ctx context.Context, userID string) ([]*core.InboxPending, error)
 	ListDismissedInboxItemIDs(ctx context.Context, userID string, itemIDs []string) (map[string]bool, error)

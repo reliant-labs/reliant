@@ -55,6 +55,7 @@ import {
   SecretsPage,
 } from "../Console/ConsolePages";
 import { DataPage } from "../Data/DataPage";
+import { UsersPage } from "../Users/UsersPage";
 import { ReleasePage, ReleasesPage } from "../Releases/ReleasesPages";
 import { StoragePage } from "../Storage/StoragePage";
 import { OverviewPage, WorkloadPage } from "../Workloads/WorkloadPages";
@@ -442,6 +443,7 @@ function buildRouter(path: string) {
     dashboard: DashboardPage,
     storage: StoragePage,
     data: DataPage,
+    users: UsersPage,
     environments: EnvironmentsPage,
     environment: ForgeEnvPage,
     secrets: SecretsPage,
