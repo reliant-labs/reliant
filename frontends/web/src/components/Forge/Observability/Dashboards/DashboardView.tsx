@@ -1159,6 +1159,8 @@ function DashboardPanelCard({
   const trendQuery = usePanelQuery(scope, range, trendPanel ?? queryPanel, services, [], {
     refetchInterval: refreshEvery,
     enabled: !!trendPanel && near && drawsSqlFigures(queryPanel, rawQuery.data),
+    // Labelled like the figure's own read (Forge-Panel: <dashboard>/<panel>.trend), so query_log names the sparkline's statement too.
+    dashboardId,
   });
   const span = spanOf(panel);
   const offsetSec = target.mode === "release" || target.mode === "period" ? Math.round(target.offsetMs / 1000) : 0;

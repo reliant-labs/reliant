@@ -36,6 +36,21 @@ export function countryName(code: string): string {
   }
 }
 
+/** The flag emoji of an ISO 3166-1 alpha-2 code ("DE" → 🇩🇪); "" for anything else. */
+export function countryFlag(code: string): string {
+  if (!/^[A-Za-z]{2}$/.test(code)) return "";
+  return String.fromCodePoint(...[...code.toUpperCase()].map((c) => 0x1f1e6 + c.charCodeAt(0) - 65));
+}
+
+/**
+ * Whether a value is a country code a reader would rather see named: two
+ * letters the reader's locale knows as a region. "Unattributed", "" and an
+ * unknown code are not.
+ */
+export function isCountryCode(code: string): boolean {
+  return /^[A-Za-z]{2}$/.test(code) && countryName(code) !== code && countryName(code) !== code.toUpperCase();
+}
+
 /** "Berlin, Germany" — the most specific place known, with its country. Empty when unknown. */
 export function placeLabel(geo: GeoFields): string {
   const country = countryName(geo.country);

@@ -63,6 +63,7 @@ import type { Panel, PanelResult, Unit } from "@/services/controlPlane/observabi
 import { cn } from "@/lib/utils";
 
 import { attributeLabel } from "../attributes";
+import { countryFlag, countryName, isCountryCode } from "../geo";
 import { UPlotChart, type ChartBand } from "../charts/UPlotChart";
 import { formatAgo, formatCount, formatDuration, formatPercent, formatValue } from "../format";
 import { groupLabel } from "../obsFilters";
@@ -73,7 +74,7 @@ import { HeatmapChart } from "./HeatmapChart";
 import { pointOf, TimeSeriesChart, type DrillTarget } from "./SeriesChart";
 import { CHART_PALETTE, DANGER_PALETTE, intentOf, namedToken, seriesKey, seriesLabel, tokenColor } from "./seriesModel";
 import { SqlHeatmap } from "./SqlHeatmap";
-import { sqlAggregate } from "./viewerModel";
+import { sqlAggregate, sqlPreviousFigures } from "./viewerModel";
 import { TextPanel } from "./TextPanel";
 
 export type { DrillTarget } from "./SeriesChart";
@@ -239,18 +240,21 @@ export function PanelBody({ panel, query, compare, trend, groupBy, bands, links,
   ) : null;
 
   switch (kind) {
-    case "number":
+    case "number": {
+      // A figure the statement returns beside its own previous period ("Previous 7 days") is drawn as one figure and its change.
+      const inRow = statement ? sqlPreviousFigures(data) : null;
       return (
         <NumberFigures
           panel={panel}
-          data={statement ? sqlFigures(data, trend?.data) : data}
+          data={statement ? sqlFigures(inRow?.current ?? data, trend?.data) : data}
           unit={unit}
           keys={keys}
-          compare={statement && compare?.query.data ? sqlFigures(compare.query.data) : compare?.query.data}
-          compareLabel={compare?.label}
+          compare={inRow ? sqlFigures(inRow.previous) : statement && compare?.query.data ? sqlFigures(compare.query.data) : compare?.query.data}
+          compareLabel={inRow ? inRow.label : compare?.label}
           compact={compact}
         />
       );
+    }
     case "table":
       return (
         <>
@@ -261,7 +265,7 @@ export function PanelBody({ panel, query, compare, trend, groupBy, bands, links,
     case "funnel":
       return <FunnelChart steps={data.funnelSteps} compact={compact} />;
     case "sql-funnel":
-      return <FunnelChart steps={sqlFunnel ?? []} compact={compact} label={data.columns[0] ?? "journeys"} />;
+      return <FunnelChart steps={sqlFunnel ?? []} compact={compact} label={funnelUnit(data.columns[0])} />;
     case "sql-heatmap":
       return (
         <>
@@ -592,6 +596,7 @@ function PanelTable({
         render: (_, { row }) => {
           const href = fieldIndex === 0 && !compact ? dataRowHref?.(row) : null;
           const label = row.group[field] || "—";
+          if (!href && countryColumn(field) && isCountryCode(row.group[field] ?? "")) return <CountryCell code={row.group[field]!} muted={fieldIndex > 0} />;
           return href ? <Link href={href} className="text-xs text-primary-ink">{label}</Link>
             : <span className={cn("text-xs", fieldIndex > 0 && "text-ink-muted")}>{label}</span>;
         },
@@ -634,6 +639,30 @@ function PanelTable({
       />
     </div>
   );
+}
+
+/** A column of ISO 3166 country codes (a sql panel's "Country", a group-by on geo.country.iso_code): drawn with a flag and a name. */
+export function countryColumn(field: string): boolean {
+  return /(^|[._ ])country([._ ]?(code|iso_code))?$/i.test(field.trim());
+}
+
+function CountryCell({ code, muted }: { code: string; muted: boolean }) {
+  return (
+    <span className={cn("inline-flex min-w-0 items-center gap-1.5 text-xs", muted && "text-ink-muted")} title={code.toUpperCase()} data-testid="obs-panel-country">
+      <span aria-hidden="true">{countryFlag(code)}</span>
+      <span className="truncate">{countryName(code)}</span>
+    </span>
+  );
+}
+
+/**
+ * What a sql funnel's steps count, for its headline ("of 15,402 visitors
+ * finished"): its count column, lowercased, unless that is only a generic
+ * "Count", which says nothing a reader can use.
+ */
+export function funnelUnit(column: string | undefined): string {
+  const name = (column ?? "").trim().toLowerCase();
+  return !name || name === "count" || name === "n" || name === "value" ? "entrants" : name;
 }
 
 /** A search panel lists rows; the Logs and Traces explorers do that. */

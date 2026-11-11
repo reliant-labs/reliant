@@ -123,6 +123,14 @@ describe("stackValues", () => {
     // The gap in `a` contributes nothing to the total, and `b`'s gap leaves c alone at its own height.
     expect(stacked[3]).toEqual([111, 122, 130, 104]);
   });
+
+  it("stacks negative values down from zero, apart from the positive ones", () => {
+    // A lifecycle week: new and retained above the axis, churned below it.
+    const stacked = stackValues([series("new", [20, 30]), series("retained", [400, 410]), series("churned", [-50, -60]), series("resurrected", [15, 10])]);
+    expect(stacked[1]).toEqual([420, 440]);
+    expect(stacked[2]).toEqual([-50, -60]);
+    expect(stacked[3]).toEqual([435, 450]);
+  });
 });
 
 describe("area", () => {
