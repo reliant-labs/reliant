@@ -11,6 +11,7 @@
 import { Code, ConnectError } from "@connectrpc/connect";
 
 import type { ObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
+import type { FrontendReplayList } from "@/services/controlPlane/observability/frontendReplayApi";
 import type { ReplayPage, RrwebEvent, SessionSummary, TimelineEntry } from "@/services/controlPlane/observability/rumTypes";
 
 import { failedIncidentRequests } from "../busyApp";
@@ -187,6 +188,14 @@ export function shopSessions(now: number): Pick<ObservabilityApi, SessionKeys> {
     },
     getSession: async (req) => strip(find(req.sessionId)),
     getSessionTimeline: async (req) => ({ entries: timelineOf(find(req.sessionId)), nextPageToken: "" }),
+    // shop-web records replay in both environments its sessions come from.
+    listFrontendReplay: async (req): Promise<FrontendReplayList> => {
+      const envs = ([["env-staging", "staging"], ["env-prod", "prod"]] as const).filter(([id]) => !req.envIds.length || req.envIds.includes(id));
+      return {
+        frontends: envs.map(([envId, envName]) => ({ envId, envName, frontend: DEMO_FRONTEND, state: "on", source: "live", sampleRate: 1 })),
+        unavailableEnvIds: [],
+      };
+    },
     getSessionReplay: async (req): Promise<ReplayPage> => {
       const session = find(req.sessionId);
       const live = session.sessionId === DEMO_LIVE_SESSION;
