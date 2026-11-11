@@ -1,0 +1,221 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: forge
+    app.kubernetes.io/name: manager
+    app.kubernetes.io/part-of: demo
+    forge.dev/env: prod
+  name: manager
+  namespace: demo-prod
+spec:
+  progressDeadlineSeconds: 600
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: manager
+  strategy:
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 25%
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/managed-by: forge
+        app.kubernetes.io/name: manager
+        app.kubernetes.io/part-of: demo
+        forge.dev/env: prod
+    spec:
+      automountServiceAccountToken: true
+      containers:
+      - env:
+        - name: LEADER_ELECTION
+          value: "true"
+        image: ghcr.io/acme/demo:v1.2.3
+        imagePullPolicy: IfNotPresent
+        name: manager
+        ports:
+        - containerPort: 8080
+          name: metrics
+          protocol: TCP
+        resources:
+          limits:
+            cpu: 250m
+            memory: 1Gi
+          requests:
+            cpu: 250m
+            memory: 1Gi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+          runAsGroup: 65532
+          runAsNonRoot: true
+          runAsUser: 65532
+        volumeMounts:
+        - mountPath: /tmp
+          name: tmp
+      enableServiceLinks: false
+      securityContext:
+        runAsGroup: 65532
+        runAsNonRoot: true
+        runAsUser: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      serviceAccountName: manager
+      terminationGracePeriodSeconds: 40
+      volumes:
+      - emptyDir: {}
+        name: tmp
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: forge
+    app.kubernetes.io/name: manager
+    app.kubernetes.io/part-of: demo
+    forge.dev/env: prod
+  name: manager
+  namespace: demo-prod
+spec:
+  ports:
+  - name: metrics
+    port: 8080
+    protocol: TCP
+    targetPort: 8080
+  selector:
+    app.kubernetes.io/name: manager
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  annotations:
+    iam.gke.io/gcp-service-account: manager@p.iam.gserviceaccount.com
+  labels:
+    app.kubernetes.io/managed-by: forge
+    app.kubernetes.io/name: manager
+    app.kubernetes.io/part-of: demo
+    forge.dev/env: prod
+  name: manager
+  namespace: demo-prod
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: forge
+    app.kubernetes.io/name: manager
+    app.kubernetes.io/part-of: demo
+    forge.dev/env: prod
+  name: manager-role
+  namespace: demo-prod
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  - secrets
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - coordination.k8s.io
+  resources:
+  - leases
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: forge
+    app.kubernetes.io/name: manager
+    app.kubernetes.io/part-of: demo
+    forge.dev/env: prod
+  name: manager-rolebinding
+  namespace: demo-prod
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: manager-role
+subjects:
+- kind: ServiceAccount
+  name: manager
+  namespace: demo-prod
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: forge
+    app.kubernetes.io/name: manager
+    app.kubernetes.io/part-of: demo
+    forge.dev/env: prod
+  name: manager-demo-prod-clusterrole
+rules:
+- apiGroups:
+  - example.com
+  resources:
+  - widgets
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+- apiGroups:
+  - example.com
+  resources:
+  - widgets/status
+  verbs:
+  - get
+  - update
+  - patch
+- apiGroups:
+  - example.com
+  resources:
+  - widgets/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - example.com
+  resources:
+  - widgets
+  verbs:
+  - get
+  - list
+  - watch
+  - update
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: forge
+    app.kubernetes.io/name: manager
+    app.kubernetes.io/part-of: demo
+    forge.dev/env: prod
+  name: manager-demo-prod-clusterrolebinding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: manager-demo-prod-clusterrole
+subjects:
+- kind: ServiceAccount
+  name: manager
+  namespace: demo-prod
