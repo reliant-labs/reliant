@@ -78,6 +78,16 @@ enum OrganizationUsageGroupBy {
   ORGANIZATION_USAGE_GROUP_BY_ENV = 2;
   // managed_llm splits by model. Every other category keeps an empty group_key.
   ORGANIZATION_USAGE_GROUP_BY_MODEL = 3;
+  // Hosted categories split by deployment: group_key is the deployment id,
+  // group_label "<environment>/<deployment name>", and the point carries
+  // deployment_name, tier and environment_id. Usage with no deployment has an
+  // empty group_key and one point per environment. Categories with no
+  // deployment attribution keep an empty group_key.
+  ORGANIZATION_USAGE_GROUP_BY_DEPLOYMENT = 4;
+  // Hosted categories split by the environment's project (hosted_projects
+  // name): group_key and group_label are the project name, empty for usage of
+  // no project. Categories with no environment keep an empty group_key.
+  ORGANIZATION_USAGE_GROUP_BY_PROJECT = 5;
 }
 
 message ListOrganizationUsageRequest {
@@ -88,6 +98,13 @@ message ListOrganizationUsageRequest {
   google.protobuf.Timestamp end = 3;
   optional OrganizationUsageGranularity granularity = 4 [(buf.validate.field).enum.defined_only = true];
   optional OrganizationUsageGroupBy group_by = 5 [(buf.validate.field).enum.defined_only = true];
+  // Narrows the history to one project (its hosted_projects name): only the
+  // hosted usage of that project's environments, and only its deployments in
+  // the inventory. Managed LLM, dev boxes and observability are metered per
+  // organization and are left out, which the hosted_infrastructure coverage
+  // entry says. Unset or empty reads the whole organization. An unknown
+  // project is NOT_FOUND.
+  optional string project_id = 6;
 }
 
 // History of one organization's usage and spend, one point per
@@ -144,6 +161,12 @@ message OrganizationUsagePoint {
   // Their usage is not in list_equivalent_usd_nanos, so when this is non-empty
   // that amount is a LOWER BOUND, not the full list equivalent.
   repeated string unpriced_dimensions = 9;
+  // group_by DEPLOYMENT only: the deployment's name and tier (backend,
+  // database, static), absent for usage with no deployment, and the
+  // environment the point's usage ran in.
+  optional string deployment_name = 10;
+  optional string tier = 11;
+  optional string environment_id = 12;
 }
 
 message OrganizationUsageQuantity {

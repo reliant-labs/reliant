@@ -334,8 +334,17 @@ type GetDeployCapabilitiesResponse struct {
 	// "object-summaries"). forge sends a hosted bundle only the parts named here;
 	// a server that names none gets the document every older decoder knew.
 	BundleDocumentFeatures []string `protobuf:"bytes,4,rep,name=bundle_document_features,json=bundleDocumentFeatures,proto3" json:"bundle_document_features,omitempty"`
-	unknownFields          protoimpl.UnknownFields
-	sizeCache              protoimpl.SizeCache
+	// Snapshot semantics this server implements beyond the intent seals
+	// immutable_snapshot_seals names. forge attaches a snapshot to a bundle only
+	// when the feature that makes the server keep it is named here:
+	//   "evidence-seal": RecordDeployBundle accepts a schema-v2 bundle carrying
+	//   a complete snapshot for a release cut WITHOUT snapshot intents (a plain
+	//   `forge env deploy`), records an evidence seal on that bundle, and the
+	//   promotion that ships the bundle freezes the snapshot (snapshot,
+	//   snapshot_digest, bundle_id, bundle_digest on DeployPromotion).
+	SnapshotFeatures []string `protobuf:"bytes,5,rep,name=snapshot_features,json=snapshotFeatures,proto3" json:"snapshot_features,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *GetDeployCapabilitiesResponse) Reset() {
@@ -392,6 +401,13 @@ func (x *GetDeployCapabilitiesResponse) GetFrozenPromotionBundles() bool {
 func (x *GetDeployCapabilitiesResponse) GetBundleDocumentFeatures() []string {
 	if x != nil {
 		return x.BundleDocumentFeatures
+	}
+	return nil
+}
+
+func (x *GetDeployCapabilitiesResponse) GetSnapshotFeatures() []string {
+	if x != nil {
+		return x.SnapshotFeatures
 	}
 	return nil
 }
@@ -8916,12 +8932,13 @@ const file_services_deploy_v1_deploy_proto_rawDesc = "" +
 	"\x1fservices/deploy/v1/deploy.proto\x12\x0fcontrolplane.v1\x1a\x1ccontrolplane/v1/deploy.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"E\n" +
 	"\x1cGetDeployCapabilitiesRequest\x12\x1a\n" +
 	"\x06org_id\x18\x01 \x01(\tH\x00R\x05orgId\x88\x01\x01B\t\n" +
-	"\a_org_id\"\x87\x02\n" +
+	"\a_org_id\"\xb4\x02\n" +
 	"\x1dGetDeployCapabilitiesResponse\x128\n" +
 	"\x18snapshot_schema_versions\x18\x01 \x03(\tR\x16snapshotSchemaVersions\x128\n" +
 	"\x18immutable_snapshot_seals\x18\x02 \x01(\bR\x16immutableSnapshotSeals\x128\n" +
 	"\x18frozen_promotion_bundles\x18\x03 \x01(\bR\x16frozenPromotionBundles\x128\n" +
-	"\x18bundle_document_features\x18\x04 \x03(\tR\x16bundleDocumentFeatures\"\x8f\x01\n" +
+	"\x18bundle_document_features\x18\x04 \x03(\tR\x16bundleDocumentFeatures\x12+\n" +
+	"\x11snapshot_features\x18\x05 \x03(\tR\x10snapshotFeatures\"\x8f\x01\n" +
 	"\x1bResolveHostedProjectRequest\x12\x1d\n" +
 	"\n" +
 	"project_id\x18\x01 \x01(\tR\tprojectId\x12\x12\n" +

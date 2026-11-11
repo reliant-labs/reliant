@@ -928,6 +928,15 @@ message GetDeployCapabilitiesResponse {
   // "object-summaries"). forge sends a hosted bundle only the parts named here;
   // a server that names none gets the document every older decoder knew.
   repeated string bundle_document_features = 4;
+  // Snapshot semantics this server implements beyond the intent seals
+  // immutable_snapshot_seals names. forge attaches a snapshot to a bundle only
+  // when the feature that makes the server keep it is named here:
+  //   "evidence-seal": RecordDeployBundle accepts a schema-v2 bundle carrying
+  //   a complete snapshot for a release cut WITHOUT snapshot intents (a plain
+  //   `forge env deploy`), records an evidence seal on that bundle, and the
+  //   promotion that ships the bundle freezes the snapshot (snapshot,
+  //   snapshot_digest, bundle_id, bundle_digest on DeployPromotion).
+  repeated string snapshot_features = 5;
 }
 
 message ResolveHostedProjectRequest {

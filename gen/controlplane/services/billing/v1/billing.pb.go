@@ -91,6 +91,16 @@ const (
 	OrganizationUsageGroupBy_ORGANIZATION_USAGE_GROUP_BY_ENV OrganizationUsageGroupBy = 2
 	// managed_llm splits by model. Every other category keeps an empty group_key.
 	OrganizationUsageGroupBy_ORGANIZATION_USAGE_GROUP_BY_MODEL OrganizationUsageGroupBy = 3
+	// Hosted categories split by deployment: group_key is the deployment id,
+	// group_label "<environment>/<deployment name>", and the point carries
+	// deployment_name, tier and environment_id. Usage with no deployment has an
+	// empty group_key and one point per environment. Categories with no
+	// deployment attribution keep an empty group_key.
+	OrganizationUsageGroupBy_ORGANIZATION_USAGE_GROUP_BY_DEPLOYMENT OrganizationUsageGroupBy = 4
+	// Hosted categories split by the environment's project (hosted_projects
+	// name): group_key and group_label are the project name, empty for usage of
+	// no project. Categories with no environment keep an empty group_key.
+	OrganizationUsageGroupBy_ORGANIZATION_USAGE_GROUP_BY_PROJECT OrganizationUsageGroupBy = 5
 )
 
 // Enum value maps for OrganizationUsageGroupBy.
@@ -100,12 +110,16 @@ var (
 		1: "ORGANIZATION_USAGE_GROUP_BY_CATEGORY",
 		2: "ORGANIZATION_USAGE_GROUP_BY_ENV",
 		3: "ORGANIZATION_USAGE_GROUP_BY_MODEL",
+		4: "ORGANIZATION_USAGE_GROUP_BY_DEPLOYMENT",
+		5: "ORGANIZATION_USAGE_GROUP_BY_PROJECT",
 	}
 	OrganizationUsageGroupBy_value = map[string]int32{
 		"ORGANIZATION_USAGE_GROUP_BY_UNSPECIFIED": 0,
 		"ORGANIZATION_USAGE_GROUP_BY_CATEGORY":    1,
 		"ORGANIZATION_USAGE_GROUP_BY_ENV":         2,
 		"ORGANIZATION_USAGE_GROUP_BY_MODEL":       3,
+		"ORGANIZATION_USAGE_GROUP_BY_DEPLOYMENT":  4,
+		"ORGANIZATION_USAGE_GROUP_BY_PROJECT":     5,
 	}
 )
 
@@ -715,9 +729,16 @@ type ListOrganizationUsageRequest struct {
 	// Inclusive, UTC. Truncated down to the start of its granularity bucket.
 	Start *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=start,proto3" json:"start,omitempty"`
 	// Exclusive, UTC. Rounded up to a bucket boundary. end - start <= 400 days.
-	End           *timestamppb.Timestamp        `protobuf:"bytes,3,opt,name=end,proto3" json:"end,omitempty"`
-	Granularity   *OrganizationUsageGranularity `protobuf:"varint,4,opt,name=granularity,proto3,enum=controlplane.v1.OrganizationUsageGranularity,oneof" json:"granularity,omitempty"`
-	GroupBy       *OrganizationUsageGroupBy     `protobuf:"varint,5,opt,name=group_by,json=groupBy,proto3,enum=controlplane.v1.OrganizationUsageGroupBy,oneof" json:"group_by,omitempty"`
+	End         *timestamppb.Timestamp        `protobuf:"bytes,3,opt,name=end,proto3" json:"end,omitempty"`
+	Granularity *OrganizationUsageGranularity `protobuf:"varint,4,opt,name=granularity,proto3,enum=controlplane.v1.OrganizationUsageGranularity,oneof" json:"granularity,omitempty"`
+	GroupBy     *OrganizationUsageGroupBy     `protobuf:"varint,5,opt,name=group_by,json=groupBy,proto3,enum=controlplane.v1.OrganizationUsageGroupBy,oneof" json:"group_by,omitempty"`
+	// Narrows the history to one project (its hosted_projects name): only the
+	// hosted usage of that project's environments, and only its deployments in
+	// the inventory. Managed LLM, dev boxes and observability are metered per
+	// organization and are left out, which the hosted_infrastructure coverage
+	// entry says. Unset or empty reads the whole organization. An unknown
+	// project is NOT_FOUND.
+	ProjectId     *string `protobuf:"bytes,6,opt,name=project_id,json=projectId,proto3,oneof" json:"project_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -785,6 +806,13 @@ func (x *ListOrganizationUsageRequest) GetGroupBy() OrganizationUsageGroupBy {
 		return *x.GroupBy
 	}
 	return OrganizationUsageGroupBy_ORGANIZATION_USAGE_GROUP_BY_UNSPECIFIED
+}
+
+func (x *ListOrganizationUsageRequest) GetProjectId() string {
+	if x != nil && x.ProjectId != nil {
+		return *x.ProjectId
+	}
+	return ""
 }
 
 // History of one organization's usage and spend, one point per
@@ -959,8 +987,14 @@ type OrganizationUsagePoint struct {
 	// Their usage is not in list_equivalent_usd_nanos, so when this is non-empty
 	// that amount is a LOWER BOUND, not the full list equivalent.
 	UnpricedDimensions []string `protobuf:"bytes,9,rep,name=unpriced_dimensions,json=unpricedDimensions,proto3" json:"unpriced_dimensions,omitempty"`
-	unknownFields      protoimpl.UnknownFields
-	sizeCache          protoimpl.SizeCache
+	// group_by DEPLOYMENT only: the deployment's name and tier (backend,
+	// database, static), absent for usage with no deployment, and the
+	// environment the point's usage ran in.
+	DeploymentName *string `protobuf:"bytes,10,opt,name=deployment_name,json=deploymentName,proto3,oneof" json:"deployment_name,omitempty"`
+	Tier           *string `protobuf:"bytes,11,opt,name=tier,proto3,oneof" json:"tier,omitempty"`
+	EnvironmentId  *string `protobuf:"bytes,12,opt,name=environment_id,json=environmentId,proto3,oneof" json:"environment_id,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *OrganizationUsagePoint) Reset() {
@@ -1054,6 +1088,27 @@ func (x *OrganizationUsagePoint) GetUnpricedDimensions() []string {
 		return x.UnpricedDimensions
 	}
 	return nil
+}
+
+func (x *OrganizationUsagePoint) GetDeploymentName() string {
+	if x != nil && x.DeploymentName != nil {
+		return *x.DeploymentName
+	}
+	return ""
+}
+
+func (x *OrganizationUsagePoint) GetTier() string {
+	if x != nil && x.Tier != nil {
+		return *x.Tier
+	}
+	return ""
+}
+
+func (x *OrganizationUsagePoint) GetEnvironmentId() string {
+	if x != nil && x.EnvironmentId != nil {
+		return *x.EnvironmentId
+	}
+	return ""
 }
 
 type OrganizationUsageQuantity struct {
@@ -7262,15 +7317,18 @@ const file_services_billing_v1_billing_proto_rawDesc = "" +
 	"\x19_actual_charges_usd_nanosB\x14\n" +
 	"\x12_credits_usd_nanosB\x1d\n" +
 	"\x1b_pending_estimate_usd_nanosB\x10\n" +
-	"\x0e_pending_count\"\xd3\x02\n" +
+	"\x0e_pending_count\"\x86\x03\n" +
 	"\x1cListOrganizationUsageRequest\x12\x15\n" +
 	"\x06org_id\x18\x01 \x01(\tR\x05orgId\x120\n" +
 	"\x05start\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x05start\x12,\n" +
 	"\x03end\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\x03end\x12T\n" +
 	"\vgranularity\x18\x04 \x01(\x0e2-.controlplane.v1.OrganizationUsageGranularityH\x00R\vgranularity\x88\x01\x01\x12I\n" +
-	"\bgroup_by\x18\x05 \x01(\x0e2).controlplane.v1.OrganizationUsageGroupByH\x01R\agroupBy\x88\x01\x01B\x0e\n" +
+	"\bgroup_by\x18\x05 \x01(\x0e2).controlplane.v1.OrganizationUsageGroupByH\x01R\agroupBy\x88\x01\x01\x12\"\n" +
+	"\n" +
+	"project_id\x18\x06 \x01(\tH\x02R\tprojectId\x88\x01\x01B\x0e\n" +
 	"\f_granularityB\v\n" +
-	"\t_group_by\"\xcd\x05\n" +
+	"\t_group_byB\r\n" +
+	"\v_project_id\"\xcd\x05\n" +
 	"\x1dListOrganizationUsageResponse\x12\x15\n" +
 	"\x06org_id\x18\x01 \x01(\tR\x05orgId\x12\x1a\n" +
 	"\bcurrency\x18\x02 \x01(\tR\bcurrency\x12=\n" +
@@ -7285,7 +7343,7 @@ const file_services_billing_v1_billing_proto_rawDesc = "" +
 	" \x03(\v2&.controlplane.v1.OrganizationUsageRateR\n" +
 	"spendRates\x12M\n" +
 	"\tinventory\x18\v \x03(\v2/.controlplane.v1.OrganizationUsageInventoryItemR\tinventory\x12\"\n" +
-	"\fcompleteness\x18\f \x01(\tR\fcompleteness\"\xff\x03\n" +
+	"\fcompleteness\x18\f \x01(\tR\fcompleteness\"\xa2\x05\n" +
 	"\x16OrganizationUsagePoint\x12=\n" +
 	"\fbucket_start\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\vbucketStart\x12\x1a\n" +
 	"\bcategory\x18\x02 \x01(\tR\bcategory\x12\x1b\n" +
@@ -7298,9 +7356,16 @@ const file_services_billing_v1_billing_proto_rawDesc = "" +
 	"\n" +
 	"quantities\x18\b \x03(\v2*.controlplane.v1.OrganizationUsageQuantityR\n" +
 	"quantities\x12/\n" +
-	"\x13unpriced_dimensions\x18\t \x03(\tR\x12unpricedDimensionsB\x1b\n" +
+	"\x13unpriced_dimensions\x18\t \x03(\tR\x12unpricedDimensions\x12,\n" +
+	"\x0fdeployment_name\x18\n" +
+	" \x01(\tH\x02R\x0edeploymentName\x88\x01\x01\x12\x17\n" +
+	"\x04tier\x18\v \x01(\tH\x03R\x04tier\x88\x01\x01\x12*\n" +
+	"\x0eenvironment_id\x18\f \x01(\tH\x04R\renvironmentId\x88\x01\x01B\x1b\n" +
 	"\x19_actual_charges_usd_nanosB\x1c\n" +
-	"\x1a_list_equivalent_usd_nanos\"U\n" +
+	"\x1a_list_equivalent_usd_nanosB\x12\n" +
+	"\x10_deployment_nameB\a\n" +
+	"\x05_tierB\x11\n" +
+	"\x0f_environment_id\"U\n" +
 	"\x19OrganizationUsageQuantity\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04unit\x18\x02 \x01(\tR\x04unit\x12\x14\n" +
@@ -7785,12 +7850,14 @@ const file_services_billing_v1_billing_proto_rawDesc = "" +
 	"\x1cOrganizationUsageGranularity\x12.\n" +
 	"*ORGANIZATION_USAGE_GRANULARITY_UNSPECIFIED\x10\x00\x12&\n" +
 	"\"ORGANIZATION_USAGE_GRANULARITY_DAY\x10\x01\x12(\n" +
-	"$ORGANIZATION_USAGE_GRANULARITY_MONTH\x10\x02*\xbd\x01\n" +
+	"$ORGANIZATION_USAGE_GRANULARITY_MONTH\x10\x02*\x92\x02\n" +
 	"\x18OrganizationUsageGroupBy\x12+\n" +
 	"'ORGANIZATION_USAGE_GROUP_BY_UNSPECIFIED\x10\x00\x12(\n" +
 	"$ORGANIZATION_USAGE_GROUP_BY_CATEGORY\x10\x01\x12#\n" +
 	"\x1fORGANIZATION_USAGE_GROUP_BY_ENV\x10\x02\x12%\n" +
-	"!ORGANIZATION_USAGE_GROUP_BY_MODEL\x10\x03*n\n" +
+	"!ORGANIZATION_USAGE_GROUP_BY_MODEL\x10\x03\x12*\n" +
+	"&ORGANIZATION_USAGE_GROUP_BY_DEPLOYMENT\x10\x04\x12'\n" +
+	"#ORGANIZATION_USAGE_GROUP_BY_PROJECT\x10\x05*n\n" +
 	"\x0eCheckoutUiMode\x12 \n" +
 	"\x1cCHECKOUT_UI_MODE_UNSPECIFIED\x10\x00\x12\x1b\n" +
 	"\x17CHECKOUT_UI_MODE_HOSTED\x10\x01\x12\x1d\n" +
