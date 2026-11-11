@@ -5,7 +5,9 @@
 //
 //   BillingService.GetCurrentUserInfraOverage   consumption, allowance, cap, rung
 //   Usage agreement consent/budget is separate; this surface cannot mutate it.
-//   DeployService.ListUsage                     attribution rows
+//   DeployService.ListUsage                     attribution rows (dollars only
+//                                               with billing:read; see
+//                                               listUsageRequest)
 //   DeployService.ListDeployments / ListEnvironments   id → name for those rows
 //
 // THE ADAPTER IS ASSIGNMENT, NOT TRANSLATION. ./usageModel declares the wire
@@ -90,6 +92,23 @@ export function attributionWindow(
   return { start, end };
 }
 
+/**
+ * The ListUsage request for a window. Exported so the opt-in is assertable
+ * without a transport.
+ *
+ * withhold_costs_without_billing_read: this surface renders costs_withheld
+ * (DeployUsageSection's "Costs hidden" state), so it opts into dollars
+ * following billing:read, the rule of every other cost read. A member without
+ * it gets the quantities and no dollars rather than the org's spend.
+ */
+export function listUsageRequest(window: { start: Date; end: Date }) {
+  return {
+    startTime: timestampFromDate(window.start),
+    endTime: timestampFromDate(window.end),
+    withholdCostsWithoutBillingRead: true,
+  };
+}
+
 /** Floors a time to the minute, so the query key does not change every render. */
 function floorToMinute(d: Date): Date {
   return new Date(Math.floor(d.getTime() / 60_000) * 60_000);
@@ -118,10 +137,7 @@ export function useDeployUsage(): DeployUsageState {
   const rows = useQuery({
     queryKey: deployUsageKeys.rows(window.start.getTime(), window.end.getTime()),
     queryFn: () =>
-      getControlPlaneClient(DeployService).listUsage({
-        startTime: timestampFromDate(window.start),
-        endTime: timestampFromDate(window.end),
-      }),
+      getControlPlaneClient(DeployService).listUsage(listUsageRequest(window)),
     // Wait for the period: asking before it is known would fetch the fallback
     // window and then immediately refetch the real one.
     enabled: overage.isSuccess || overage.isError,
@@ -150,6 +166,7 @@ export function useDeployUsage(): DeployUsageState {
         // Structurally compatible by design (see ./usageModel's header).
         overage: overage.data as InfraOverageResponse | undefined,
         rows: rows.data?.rows ?? [],
+        costsWithheld: rows.data?.costsWithheld ?? false,
       }),
     [overage.data, rows.data],
   );

@@ -8,6 +8,7 @@ import { describe, expect, it } from "vitest";
 import {
   USAGE_RETENTION_MS,
   attributionWindow,
+  listUsageRequest,
 } from "../useDeployUsage";
 
 const now = new Date("2026-09-23T12:00:00Z");
@@ -41,5 +42,17 @@ describe("attributionWindow", () => {
     const { start, end } = attributionWindow(undefined, undefined, now);
     expect(end).toEqual(now);
     expect(end.getTime() - start.getTime()).toBe(USAGE_RETENTION_MS);
+  });
+});
+
+describe("listUsageRequest", () => {
+  it("asks for the window and opts into withholding costs without billing:read", () => {
+    // The surface renders costs_withheld, so it must ask for it: without the
+    // opt-in the server keeps sending every member the org's dollars.
+    const start = new Date(now.getTime() - days(3));
+    const request = listUsageRequest({ start, end: now });
+    expect(request.withholdCostsWithoutBillingRead).toBe(true);
+    expect(Number(request.startTime.seconds) * 1000).toBe(start.getTime());
+    expect(Number(request.endTime.seconds) * 1000).toBe(now.getTime());
   });
 });

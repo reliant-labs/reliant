@@ -9,7 +9,7 @@
 // takes from the RPC response onward; only the transport hop is absent, and
 // that hop is the adapter's concern rather than this surface's.
 
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { DeployUsageSection } from "@/components/Settings/cloud/usage/DeployUsageSection";
@@ -311,6 +311,52 @@ describe("DeployUsageSection — attribution", () => {
     });
 
     expect(screen.getByText(/not tied to a deployment/i)).toBeDefined();
+  });
+});
+
+describe("DeployUsageSection — costs withheld without billing:read", () => {
+  // ListUsage withholds the dollars from a member without billing:read and
+  // sends every cost as 0 meaning "not shown". The overage figure has its own
+  // non-zero value here, so any "$0.00" on the page could only be a withheld
+  // cost rendered as free.
+  const overage = infraOverageResponse({ accruedOverageCents: 125 });
+
+  it("shows the dollars, and no withheld state, when the costs were sent", () => {
+    render(
+      <DeployUsageSection
+        summary={buildUsageSummary({ overage, rows: [usageRow()] })}
+      />,
+    );
+
+    expect(screen.queryByText(/costs hidden/i)).toBeNull();
+    expect(screen.queryByText("Hidden")).toBeNull();
+    // 450_000_000 nanos = 45 cents, in the accrued card and the table's row.
+    expect(screen.getAllByText("$0.45")).toHaveLength(2);
+    const table = screen.getByRole("table", { name: "Accrued cost by deployment" });
+    expect(within(table).getByText("$0.45")).toBeDefined();
+  });
+
+  it("says who can see withheld costs instead of rendering them as $0.00", () => {
+    render(
+      <DeployUsageSection
+        summary={buildUsageSummary({
+          overage,
+          rows: [usageRow({ costUsdNanos: 0n })],
+          costsWithheld: true,
+        })}
+      />,
+    );
+
+    expect(screen.getByRole("note").textContent).toMatch(
+      /Costs hidden — ask a billing admin/,
+    );
+    expect(screen.queryByText("$0.00")).toBeNull();
+    // The accrued card and the row's cost cell both read Hidden.
+    expect(screen.getAllByText("Hidden")).toHaveLength(2);
+    // The quantities are still the member's to see.
+    const table = screen.getByRole("table", { name: "Usage by deployment" });
+    expect(within(table).getByText("50")).toBeDefined();
+    expect(within(table).getByText("Hidden")).toBeDefined();
   });
 });
 

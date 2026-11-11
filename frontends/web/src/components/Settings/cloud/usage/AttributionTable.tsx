@@ -21,6 +21,8 @@ import type { AttributionRow } from "./usageModel";
 
 export interface AttributionTableProps {
   rows: AttributionRow[];
+  /** ListUsage withheld the dollars: every row's accruedCents is "not shown". */
+  costsWithheld?: boolean;
   deploymentNames?: Map<string, string>;
   environmentNames?: Map<string, string>;
 }
@@ -29,6 +31,7 @@ type Row = { key: string; row: AttributionRow };
 
 export function AttributionTable({
   rows,
+  costsWithheld = false,
   deploymentNames,
   environmentNames,
 }: AttributionTableProps) {
@@ -65,17 +68,22 @@ export function AttributionTable({
     { key: "storage", header: "Storage (GiB-hr)", numeric: true, className: "text-ink-muted", render: (_, { row }) => formatQuantity(row.storageDisplay) },
     { key: "egress", header: "Egress (GB)", numeric: true, className: "text-ink-muted", render: (_, { row }) => formatQuantity(row.egressDisplay) },
     { key: "sites", header: "Extra static sites (site-hr)", numeric: true, className: "text-ink-muted", render: (_, { row }) => formatQuantity(row.staticSiteHours) },
-    { key: "accrued", header: "Accrued", numeric: true, className: "font-medium", render: (_, { row }) => formatCents(row.accruedCents) },
+    // Withheld costs arrive as 0 meaning "not shown": each cell says Hidden,
+    // never "$0.00", which would read as "this deployment is free".
+    costsWithheld
+      ? { key: "accrued", header: "Accrued", numeric: true, className: "text-ink-muted", render: () => "Hidden" }
+      : { key: "accrued", header: "Accrued", numeric: true, className: "font-medium", render: (_, { row }) => formatCents(row.accruedCents) },
   ];
 
   return (
     <div className="forge-ui flex flex-col gap-3">
       <p className="text-xs text-muted-foreground">
-        Accrued cost by deployment, highest first. Estimated from metered usage —
-        not an invoice.
+        {costsWithheld
+          ? "Usage by deployment. Costs are hidden: ask a billing admin (an organization owner or admin) to see them."
+          : "Accrued cost by deployment, highest first. Estimated from metered usage — not an invoice."}
       </p>
       <DataTable<Row>
-        ariaLabel="Accrued cost by deployment"
+        ariaLabel={costsWithheld ? "Usage by deployment" : "Accrued cost by deployment"}
         columns={columns}
         data={rows.map((row) => ({ key: `${row.environmentId}/${row.deploymentId}`, row }))}
         getRowKey={(r) => r.key}
