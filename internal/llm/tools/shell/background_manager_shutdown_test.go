@@ -59,11 +59,17 @@ func TestKillAllRunningKillsProcessesConcurrently(t *testing.T) {
 
 // Nothing to kill must not cost anything.
 func TestKillAllRunningWithNoRunningProcessesReturnsImmediately(t *testing.T) {
+	// A kill would cost a whole grace: far longer than the bound below, so
+	// a shutdown that killed something fails however busy the machine is.
+	grace := KillGraceTimeout
+	KillGraceTimeout = time.Minute
+	t.Cleanup(func() { KillGraceTimeout = grace })
+
 	m := &BackgroundManager{processes: map[string]*BackgroundProcess{
 		"done": {ID: "done", Status: "completed"},
 	}}
 
 	start := time.Now()
 	m.KillAllRunning()
-	require.Less(t, time.Since(start), time.Second)
+	require.Less(t, time.Since(start), 30*time.Second)
 }

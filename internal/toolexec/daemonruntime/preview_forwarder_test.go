@@ -223,7 +223,7 @@ func TestPreviewForwarder_SSEStreamsUnbuffered(t *testing.T) {
 		if !strings.Contains(res.line, "first") {
 			t.Errorf("first SSE line = %q", res.line)
 		}
-	case <-time.After(3 * time.Second):
+	case <-time.After(30 * time.Second):
 		t.Fatal("first SSE event did not arrive while stream was open — response is being buffered")
 	}
 }

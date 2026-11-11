@@ -307,13 +307,16 @@ func TestFailsFastOnTransportError(t *testing.T) {
 	if calls.Load() != 1 {
 		t.Errorf("transport called %d times, want exactly 1 (no retry)", calls.Load())
 	}
-	if elapsed := time.Since(start); elapsed > 500*time.Millisecond {
+	// The one call above already rules out the retries; this rules out a
+	// backoff before giving up (the old one was 1s+2s+4s), with room for a
+	// busy machine.
+	if elapsed := time.Since(start); elapsed > 5*time.Second {
 		t.Errorf("took %v; must fail fast", elapsed)
 	}
 
 	start = time.Now()
 	_, err := client.SendMessages(context.Background(), nil, userTurn("hi"), nil)
-	if err == nil || calls.Load() != 2 || time.Since(start) > 500*time.Millisecond {
+	if err == nil || calls.Load() != 2 || time.Since(start) > 5*time.Second {
 		t.Errorf("SendMessages err=%v calls=%d took=%v", err, calls.Load(), time.Since(start))
 	}
 }
@@ -322,12 +325,22 @@ func TestRefusedConnectionFailsFast(t *testing.T) {
 	srv := httptest.NewServer(http.NotFoundHandler())
 	url := srv.URL
 	srv.Close() // nothing listens any more
+	var calls atomic.Int32
+	client := newTestClient(url, func(o *llm.DriverOptions) {
+		o.Transport = roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+			calls.Add(1)
+			return http.DefaultTransport.RoundTrip(r)
+		})
+	})
 	start := time.Now()
-	got := collect(newTestClient(url, nil).StreamResponse(context.Background(), nil, userTurn("hi"), nil))
+	got := collect(client.StreamResponse(context.Background(), nil, userTurn("hi"), nil))
 	if got.err == nil {
 		t.Fatal("expected an error")
 	}
-	if time.Since(start) > time.Second {
+	if calls.Load() != 1 {
+		t.Errorf("dialled %d times, want exactly 1 (no retry)", calls.Load())
+	}
+	if time.Since(start) > 5*time.Second {
 		t.Errorf("took %v; the old driver backed off for ~7s", time.Since(start))
 	}
 }
@@ -451,7 +464,7 @@ func TestLiveOllama(t *testing.T) {
 		c := NewClient(llm.DriverOptions{BaseURL: "http://127.0.0.1:1/v1", Model: models.Model{ID: "x", APIModel: "x"}})
 		start := time.Now()
 		got := collect(c.StreamResponse(ctx, nil, userTurn("hi"), nil))
-		if got.err == nil || time.Since(start) > 2*time.Second {
+		if got.err == nil || time.Since(start) > 5*time.Second {
 			t.Errorf("err=%v took=%v", got.err, time.Since(start))
 		}
 		_ = fmt.Sprint(got)

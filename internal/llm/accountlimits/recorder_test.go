@@ -145,6 +145,7 @@ func TestRecorderDoesNotBenchAnAccountInOverage(t *testing.T) {
 func TestRecorderObserverNeverBlocksOnASlowStore(t *testing.T) {
 	r, st, c := newTestRecorder(t)
 	st.slow = make(chan struct{})
+	st.slowEntered = make(chan struct{}, 1)
 	obs := r.For("u1", "a1")
 
 	// Park a flush inside the slow store.
@@ -152,7 +153,11 @@ func TestRecorderObserverNeverBlocksOnASlowStore(t *testing.T) {
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() { defer wg.Done(); r.flush(context.Background(), false) }()
-	time.Sleep(50 * time.Millisecond)
+	select {
+	case <-st.slowEntered:
+	case <-time.After(30 * time.Second):
+		t.Fatal("the flush never reached the store")
+	}
 
 	s := snap(c.Now(), ratelimit.StatusRejected, 1, 1)
 	start := time.Now()

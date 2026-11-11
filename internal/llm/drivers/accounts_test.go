@@ -282,7 +282,7 @@ func TestRefreshMergeKeepsTheAccountWithTheRealIdentity(t *testing.T) {
 	require.NoError(t, repo.BenchAccount(ctx, user, real.ID, time.Now().Add(time.Hour), "five_hour", false))
 	require.NoError(t, repo.ScheduleUsagePoll(ctx, real.ID, time.Now().Add(time.Minute), 0, ""))
 
-	time.Sleep(10 * time.Millisecond)
+	time.Sleep(2 * time.Millisecond) // a clock tick: the placeholder's timestamps follow the real row's
 	placeholder, _, err := repo.UpsertProviderAccount(ctx, core.AccountUpsert{
 		UserID: user, Provider: "claude", AuthKind: core.AuthKindOAuth,
 		IdentityKey: core.PlaceholderIdentityKey("copied-row"), Secrets: core.AccountSecrets{Secret: "old-access", Refresh: "old-refresh"},

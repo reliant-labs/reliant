@@ -4,9 +4,24 @@ package shell
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
+
+// waitForPasses waits until the readers have looped at least n times between
+// them, so whatever the test does next runs under them, however busy the
+// machine is.
+func waitForPasses(t *testing.T, passes *atomic.Int64, n int64) {
+	t.Helper()
+	deadline := time.Now().Add(30 * time.Second)
+	for passes.Load() < n {
+		if time.Now().After(deadline) {
+			t.Fatalf("the readers made %d passes in 30s, want %d", passes.Load(), n)
+		}
+		time.Sleep(time.Millisecond)
+	}
+}
 
 // BackgroundProcess has TWO locks with different jobs, and conflating them is
 // the bug these tests pin:
@@ -57,7 +72,16 @@ func TestConcurrentReadsDuringProcessCompletion(t *testing.T) {
 
 	// Let the process exit naturally under the readers, then kill it to force
 	// the other write path too.
-	time.Sleep(50 * time.Millisecond)
+	deadline := time.Now().Add(30 * time.Second)
+	for {
+		if _, complete, _, err := m.GetProcessStatus(proc.ID); err == nil && complete {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("echo hello never completed")
+		}
+		time.Sleep(time.Millisecond)
+	}
 	_ = m.KillProcess(proc.ID)
 
 	close(stop)
@@ -80,6 +104,7 @@ func TestConcurrentKillAllWithReaders(t *testing.T) {
 	}
 
 	var wg sync.WaitGroup
+	var passes atomic.Int64
 	stop := make(chan struct{})
 	for range 3 {
 		wg.Add(1)
@@ -94,11 +119,12 @@ func TestConcurrentKillAllWithReaders(t *testing.T) {
 				_ = m.GetAllProcesses()
 				_ = m.GetProcessesByChat("")
 				_ = m.GetProcessesByWorktree("")
+				passes.Add(1)
 			}
 		}()
 	}
 
-	time.Sleep(20 * time.Millisecond)
+	waitForPasses(t, &passes, 3)
 	m.KillAllRunning()
 
 	close(stop)
@@ -121,6 +147,7 @@ func TestCleanupDoesNotDeadlockAgainstReaders(t *testing.T) {
 	t.Cleanup(func() { _ = m.KillProcess(proc.ID) })
 
 	var wg sync.WaitGroup
+	var passes atomic.Int64
 	stop := make(chan struct{})
 	for range 2 {
 		wg.Add(1)
@@ -134,6 +161,7 @@ func TestCleanupDoesNotDeadlockAgainstReaders(t *testing.T) {
 				}
 				_, _ = m.GetProcess(proc.ID)
 				m.CleanupOldProcesses(time.Hour)
+				passes.Add(1)
 			}
 		}()
 	}
@@ -144,7 +172,7 @@ func TestCleanupDoesNotDeadlockAgainstReaders(t *testing.T) {
 		close(done)
 	}()
 
-	time.Sleep(100 * time.Millisecond)
+	waitForPasses(t, &passes, 100)
 	close(stop)
 
 	select {
