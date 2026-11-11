@@ -2043,6 +2043,9 @@ func (d *daemonClient) executeTool(s *gatewaySession, req *reliantv1.ToolRequest
 	// daemon was serving. Empty for a call with no project context, which
 	// only a $HOME fault refuses.
 	workspaceRoot := resolveProjectPathFromContext(contextMap, "", "")
+	// Use of the workspace it works in and of every one its input names
+	// (worktree_use.go), recorded even if it is refused below: it was asked.
+	noteWorktreeUse(workspaceRoot, req.GetToolInput())
 	// Admitted where the call works, before it does anything: it holds only
 	// that worktree, and a worktree being retired refuses it.
 	releaseRecovery, admissionErr := beginRecoveryWorkIn(workspaceRoot)

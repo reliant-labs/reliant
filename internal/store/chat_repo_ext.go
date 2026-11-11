@@ -63,7 +63,9 @@ func GetLiveChatIDForWorktree(ctx context.Context, db orm.Context, worktreeID st
 
 // ListWorktreeIDsWithRunningChat conservatively excludes both chat and
 // spawned-thread workspace bindings while their chat has a pending, active or
-// paused/resumable run. A thread can override its chat's workspace.
+// paused/resumable run, or a thread parked on a provider wait that has not
+// reached its resume time (providerWaitSQL). A thread can override its
+// chat's workspace.
 func ListWorktreeIDsWithRunningChat(ctx context.Context, db orm.Context, worktreeIDs []string) (map[string]bool, error) {
 	out := make(map[string]bool)
 	if len(worktreeIDs) == 0 {
@@ -76,7 +78,10 @@ func ListWorktreeIDsWithRunningChat(ctx context.Context, db orm.Context, worktre
  SELECT chat_id, worktree_id FROM threads WHERE worktree_id = ANY(?0::text[])
 )
 SELECT DISTINCT b.worktree_id FROM bindings b JOIN workflows w ON w.chat_id = b.chat_id
-WHERE w.state IN (?1, ?2) OR (w.state = ?3 AND w.stop_reason = ?4)`,
+WHERE w.state IN (?1, ?2) OR (w.state = ?3 AND w.stop_reason = ?4)
+UNION
+SELECT b.worktree_id FROM bindings b JOIN provider_backoff pb ON pb.chat_id = b.chat_id
+WHERE `+providerWaitSQL+` AND pb.resume_at >= NOW()`,
 		pgdialect.Array(worktreeIDs), core.WorkflowStatePending, core.WorkflowStateActive,
 		core.WorkflowStateStopped, core.StopReasonPaused).Scan(ctx, &ids)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {

@@ -76,6 +76,10 @@ type Reclaimer struct {
 	// the archive time: the fence is the database's clock, file and reflog
 	// times are this machine's. NewReclaimer sets DefaultArchiveClockSkew.
 	ArchiveClockSkew time.Duration
+	// Use is the daemon's record of work that named a path in a workspace,
+	// reported with every active answer (Result.LastUse). Nil reports only
+	// what the files themselves show.
+	Use *UseLog
 	// DisposalCheckEvery paces the admission and process check while a parked
 	// checkout is unlinked; zero means DefaultDisposalCheckEvery.
 	DisposalCheckEvery time.Duration
@@ -1115,6 +1119,7 @@ func (r *Reclaimer) lockActive(ctx context.Context, w Worktree) Result {
 	if res.Outcome == OutcomeLocked && w.ProbeLanded && w.Retire == "" && len(checkouts) > 0 {
 		r.probeLanded(ctx, w, &res)
 	}
+	r.reportUse(ctx, w, checkouts, &res)
 	// A landed or recoverable row is about to be retired whole; shedding it
 	// first would only spend the request.
 	if res.Outcome == OutcomeLocked && !res.Landed && !res.RecoverableIdle && w.ShedAfterSeconds > 0 && len(checkouts) > 0 {
@@ -1133,6 +1138,24 @@ func (r *Reclaimer) lockActive(ctx context.Context, w Worktree) Result {
 		}
 	}
 	return res
+}
+
+// reportUse sets res.LastUse to the latest use of the workspace this daemon
+// can name: work that named a path in it (r.Use), and the workspace's and
+// its checkouts' own stamps (idleSince: directory, HEAD and reflog times). A
+// landed probe has already raised it to the newest file in each checkout.
+func (r *Reclaimer) reportUse(ctx context.Context, w Worktree, checkouts []string, res *Result) {
+	last := r.Use.LastUse(w.Path)
+	if t, err := idleSince(ctx, w.Path, checkouts); err == nil && t.After(last) {
+		last = t
+	}
+	if res.LastUse != nil && res.LastUse.After(last) {
+		last = *res.LastUse
+	}
+	if !last.IsZero() {
+		last = last.UTC()
+		res.LastUse = &last
+	}
 }
 
 // probeAnswer is what finished concluded.

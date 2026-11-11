@@ -907,6 +907,10 @@ type WorktreeSweepDeps struct {
 	Settings     *APISettings
 }
 
+// The sweep records the use a daemon reports through the optional UseStore;
+// a Repo that lost the method would silently stop recording it.
+var _ worktreesweep.UseStore = (*db.Repo)(nil)
+
 // NewWorktreeSweep settles archived worktrees' directories through their
 // daemons: WorktreeService and InboxService settle one at a time through it,
 // and the WorktreeSweeper loop sweeps them all.
