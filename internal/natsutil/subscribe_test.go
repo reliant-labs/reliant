@@ -4,6 +4,7 @@ import (
 	"net"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -332,3 +333,146 @@ func TestRefusedSubscriptionParsesSubjectAndQueue(t *testing.T) {
 type errString string
 
 func (e errString) Error() string { return string(e) }
+
+func kindEvent(kind SubscriptionEventKind, attempt int) func(SubscriptionEvent) bool {
+	return func(ev SubscriptionEvent) bool { return ev.Kind == kind && ev.Attempt == attempt }
+}
+
+func awaitSignal(t *testing.T, ch <-chan struct{}, what string) {
+	t.Helper()
+	select {
+	case <-ch:
+	case <-time.After(10 * time.Second):
+		t.Fatalf("timed out waiting for %s", what)
+	}
+}
+
+// TestSubscribeWithRecoveryResumesAcrossADisconnectDuringTheRetry — the
+// broker drops the connection in the middle of a retry, after the SUB is sent
+// but before its round trip completes. That attempt was never proven, so
+// the subscription must stay inactive, keep retrying on the same backoff
+// while the connection is down, and recover once it is back: a message
+// published afterwards is delivered.
+func TestSubscribeWithRecoveryResumesAcrossADisconnectDuringTheRetry(t *testing.T) {
+	recordLogs(t)
+	const subject = "test.reconnect.commands.disconnect"
+	srv := runPermissionedServer(t /* subject not granted yet */)
+	disconnected, reconnected := make(chan struct{}, 8), make(chan struct{}, 8)
+	nc, err := Connect(Endpoint{URL: srv.srv.ClientURL(), User: "gateway", Password: "pw"},
+		nats.ReconnectWait(10*time.Millisecond),
+		nats.DisconnectErrHandler(func(*nats.Conn, error) { disconnected <- struct{}{} }),
+		nats.ReconnectHandler(func(*nats.Conn) { reconnected <- struct{}{} }))
+	if err != nil {
+		t.Fatalf("Connect: %v", err)
+	}
+	t.Cleanup(nc.Close)
+
+	// The next retry's round trip loses the broker after its SUB is written.
+	var dropOnFlush atomic.Bool
+	flush := func(c *nats.Conn) error {
+		if dropOnFlush.CompareAndSwap(true, false) {
+			srv.srv.Shutdown()
+			awaitSignal(t, disconnected, "the connection to drop")
+			return c.FlushTimeout(50 * time.Millisecond)
+		}
+		return c.FlushTimeout(5 * time.Second)
+	}
+
+	clk := newFakeClock()
+	evs := make(events, 64)
+	delivered := make(chan string, 4)
+	sub, err := SubscribeWithRecovery(nc, subject, func(m *nats.Msg) { delivered <- string(m.Data) },
+		withClock(clk), WithEvents(evs.hook), withRetryFlush(flush))
+	if err != nil {
+		t.Fatalf("SubscribeWithRecovery: %v", err)
+	}
+	t.Cleanup(sub.Stop)
+	evs.await(t, "the first refusal", refusedEvent(1))
+
+	// The grant lands, so the retry's SUB is not refused; but the broker is
+	// gone before the round trip that would prove it was accepted.
+	srv.allow(t, subject)
+	dropOnFlush.Store(true)
+	clk.Advance(time.Second)
+	if ev := evs.await(t, "the retry whose round trip failed", kindEvent(SubscriptionDeferred, 2)); ev.RetryIn != 2*time.Second {
+		t.Fatalf("after a failed round trip: retry in %v, want 2s", ev.RetryIn)
+	}
+	if sub.Active() {
+		t.Fatal("Active() = true for a re-subscription whose round trip failed")
+	}
+
+	// Still down at the next retry: deferred again, on the same backoff.
+	clk.Advance(2 * time.Second)
+	if ev := evs.await(t, "the retry while disconnected", kindEvent(SubscriptionDeferred, 3)); ev.RetryIn != 4*time.Second {
+		t.Fatalf("while disconnected: retry in %v, want 4s", ev.RetryIn)
+	}
+
+	// The broker comes back, with the grant rolled out.
+	back := natstest.RunServer(gatewayOptions(srv.port, subject))
+	t.Cleanup(back.Shutdown)
+	awaitSignal(t, reconnected, "the reconnect")
+	if sub.Active() {
+		t.Fatal("Active() = true on reconnect, before any retry proved the subscription accepted")
+	}
+
+	clk.Advance(4 * time.Second)
+	evs.await(t, "the re-subscription after the reconnect", resubscribedEvent(3))
+	if sub.Active() {
+		t.Fatal("Active() = true before the settle window passed")
+	}
+	clk.Advance(time.Second)
+	evs.await(t, "recovery", func(ev SubscriptionEvent) bool { return ev.Kind == SubscriptionRecovered })
+	if !sub.Active() {
+		t.Fatal("Active() = false after recovery")
+	}
+
+	pub, err := Connect(Endpoint{URL: back.ClientURL(), User: "publisher", Password: "pw"})
+	if err != nil {
+		t.Fatalf("connect publisher: %v", err)
+	}
+	t.Cleanup(pub.Close)
+	if err := pub.Publish(subject, []byte("revoke d-2")); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case got := <-delivered:
+		if got != "revoke d-2" {
+			t.Fatalf("delivered %q", got)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("a message published after the reconnect and recovery was not delivered")
+	}
+	if got := refusedGauge(subject); got != 0 {
+		t.Fatalf("subscriptions_refused = %v after recovery, want 0", got)
+	}
+}
+
+// TestSubscribeWithRecoveryEndsWhenTheConnectionIsClosed — a closed
+// *nats.Conn never reconnects (Connect retries forever, so only the process
+// closes it). Recovery ends there: no retry spins on it, and the gauge does
+// not report a subscription that no longer exists.
+func TestSubscribeWithRecoveryEndsWhenTheConnectionIsClosed(t *testing.T) {
+	recordLogs(t)
+	const subject = "test.closed.commands.disconnect"
+	srv := runPermissionedServer(t)
+	nc := srv.connect(t, "gateway")
+
+	clk := newFakeClock()
+	evs := make(events, 64)
+	sub, err := SubscribeWithRecovery(nc, subject, func(*nats.Msg) {}, withClock(clk), WithEvents(evs.hook))
+	if err != nil {
+		t.Fatalf("SubscribeWithRecovery: %v", err)
+	}
+	evs.await(t, "the first refusal", refusedEvent(1))
+
+	nc.Close()
+	clk.Advance(time.Second)
+	evs.await(t, "recovery to end", func(ev SubscriptionEvent) bool { return ev.Kind == SubscriptionClosed })
+	if sub.Active() {
+		t.Fatal("Active() = true on a closed connection")
+	}
+	if got := refusedGauge(subject); got != 0 {
+		t.Fatalf("subscriptions_refused = %v after the connection closed, want 0", got)
+	}
+	sub.Stop() // still safe
+}

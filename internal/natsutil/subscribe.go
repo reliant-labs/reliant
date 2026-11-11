@@ -34,6 +34,10 @@ const (
 	DefaultRetryInitial = time.Second
 	DefaultRetryMax     = time.Minute
 
+	// retryFlushTimeout bounds a retry's round trip, so a connection that
+	// drops mid-retry defers it instead of holding it for nats.go's 10s.
+	retryFlushTimeout = 5 * time.Second
+
 	// defaultEscalateAfter is how long a subscription stays refused before it
 	// is logged at ERROR, once: a permissions roll lands within seconds or a
 	// minute or two, and a refusal that outlives that is a missing grant.
@@ -52,6 +56,13 @@ const (
 	// SubscriptionRecovered: a re-subscription went unrefused for the settle
 	// window, so the server accepted it.
 	SubscriptionRecovered
+	// SubscriptionDeferred: a retry could not get the subscription accepted
+	// because the connection is down (reconnecting, or its round trip
+	// failed); another is scheduled RetryIn from now.
+	SubscriptionDeferred
+	// SubscriptionClosed: the connection was closed while the subscription
+	// was refused; nothing is left to re-subscribe on, so recovery ended.
+	SubscriptionClosed
 )
 
 func (k SubscriptionEventKind) String() string {
@@ -62,6 +73,10 @@ func (k SubscriptionEventKind) String() string {
 		return "resubscribed"
 	case SubscriptionRecovered:
 		return "recovered"
+	case SubscriptionDeferred:
+		return "deferred"
+	case SubscriptionClosed:
+		return "closed"
 	default:
 		return fmt.Sprintf("SubscriptionEventKind(%d)", int(k))
 	}
@@ -116,6 +131,11 @@ func withClock(clk clock) SubscribeOption {
 	return func(c *subscribeConfig) { c.clock = clk }
 }
 
+// withRetryFlush replaces a retry's round trip (tests).
+func withRetryFlush(f func(*nats.Conn) error) SubscribeOption {
+	return func(c *subscribeConfig) { c.retryFlush = f }
+}
+
 type subscribeConfig struct {
 	queue         string
 	initial       time.Duration
@@ -123,6 +143,7 @@ type subscribeConfig struct {
 	escalateAfter time.Duration
 	events        func(SubscriptionEvent)
 	clock         clock
+	retryFlush    func(*nats.Conn) error
 }
 
 // delay is the wait after the n-th refusal (n from 0): initial·2ⁿ, capped.
@@ -177,7 +198,10 @@ type Subscription struct {
 // and keeps the subscription alive through the server refusing it: on a
 // permissions violation for this subscription it re-subscribes with capped
 // exponential backoff (WithBackoff; 1s to 60s by default) until the server
-// accepts it. Each refusal is logged once at WARN with the next delay; a
+// accepts it. A retry counts only after a round trip proves the server has
+// the SUB; while the connection is down retries are deferred on the same
+// backoff, so recovery ends only when the subscription is stopped or its
+// connection closed. Each refusal is logged once at WARN with the next delay; a
 // refusal that lasts past five minutes is logged once at ERROR, because by
 // then a grant is missing rather than still rolling out. The metric
 // reliant_nats_subscriptions_refused{subject} is nonzero while it is not
@@ -200,6 +224,7 @@ func SubscribeWithRecovery(nc *nats.Conn, subject string, cb nats.MsgHandler, op
 		max:           DefaultRetryMax,
 		escalateAfter: defaultEscalateAfter,
 		clock:         wallClock{},
+		retryFlush:    func(nc *nats.Conn) error { return nc.FlushTimeout(retryFlushTimeout) },
 	}
 	for _, opt := range opts {
 		opt(&cfg)
@@ -291,12 +316,14 @@ func flush(nc *nats.Conn, subject string) error {
 	return nil
 }
 
-// onRefusal handles the server refusing this subscription: it schedules the
-// next attempt and logs once for this step of the backoff.
+// onRefusal handles the server refusing this subscription.
 func (s *Subscription) onRefusal(err error) {
 	s.scheduleRetry(err, true)
 }
 
+// scheduleRetry schedules the next attempt after the current one was not
+// accepted: refused by the server (refusal), or never confirmed because the
+// connection was down. It logs once for this step of the backoff.
 func (s *Subscription) scheduleRetry(cause error, refusal bool) {
 	s.mu.Lock()
 	if s.stopped || s.retrying {
@@ -320,7 +347,9 @@ func (s *Subscription) scheduleRetry(cause error, refusal bool) {
 	s.refusals++
 	attempt := s.refusals
 	refusedFor := now.Sub(s.since)
-	alert := !s.alerted && refusedFor >= s.cfg.escalateAfter
+	// Only the server's refusal escalates: a connection that is down is
+	// reported by the connection's own handlers, not as a missing grant.
+	alert := refusal && !s.alerted && refusedFor >= s.cfg.escalateAfter
 	if alert {
 		s.alerted = true
 	}
@@ -328,22 +357,35 @@ func (s *Subscription) scheduleRetry(cause error, refusal bool) {
 	s.timer = s.cfg.clock.AfterFunc(delay, s.retry)
 	s.mu.Unlock()
 
+	kind := SubscriptionDeferred
 	if refusal {
+		kind = SubscriptionRefused
 		observability.NATSSubscriptionRefusalsTotal.WithLabelValues(s.subject).Inc()
+		logging.Warn("NATS refused a subscription; re-subscribing with backoff until it is accepted (normal for a few seconds while a NATS permissions change rolls out)",
+			"subject", s.subject, "queue", s.cfg.queue, "attempt", attempt,
+			"retry_in", delay.String(), "refused_for", refusedFor.String(), "error", cause)
+	} else {
+		logging.Warn("NATS connection unavailable; a refused subscription is re-subscribed with backoff once it is back",
+			"subject", s.subject, "queue", s.cfg.queue, "attempt", attempt,
+			"retry_in", delay.String(), "refused_for", refusedFor.String(), "error", cause)
 	}
-	logging.Warn("NATS refused a subscription; re-subscribing with backoff until it is accepted (normal for a few seconds while a NATS permissions change rolls out)",
-		"subject", s.subject, "queue", s.cfg.queue, "attempt", attempt,
-		"retry_in", delay.String(), "refused_for", refusedFor.String(), "error", cause)
 	if alert {
 		logging.Error("NATS has refused a subscription for longer than a permissions roll-out takes; grant the subject in control-plane deploy/nats/permissions.yaml if the code needs it",
 			"subject", s.subject, "queue", s.cfg.queue, "attempt", attempt,
 			"refused_for", refusedFor.String(), "error", cause)
 	}
-	s.emit(SubscriptionEvent{Kind: SubscriptionRefused, Attempt: attempt, RetryIn: delay, Err: cause})
+	s.emit(SubscriptionEvent{Kind: kind, Attempt: attempt, RetryIn: delay, Err: cause})
 }
 
-// retry replaces the refused subscription with a new one, then waits one
-// settle window (the initial backoff) for a refusal before calling it active.
+// errNotConnected defers a retry while the connection is reconnecting.
+var errNotConnected = errors.New("nats: not connected (reconnecting)")
+
+// retry replaces the refused subscription with a new one. Only once a round
+// trip proves the server has the SUB does it wait one settle window (the
+// initial backoff) for a refusal before calling it active. A connection that
+// is down defers the retry on the same backoff; nats.go reconnects forever
+// (Connect), so the episode ends only when the connection or the
+// subscription is closed.
 func (s *Subscription) retry() {
 	s.attempt.Lock()
 	defer s.attempt.Unlock()
@@ -356,11 +398,23 @@ func (s *Subscription) retry() {
 	s.retrying = false
 	s.timer = nil
 	gen := s.gen
-	old := s.sub
-	s.sub = nil
 	attempt := s.refusals
 	s.mu.Unlock()
 
+	if s.connectionClosed() {
+		return
+	}
+	if !s.nc.IsConnected() {
+		// Keep the current SUB: nats.go resends it on reconnect, and the
+		// next retry replaces it either way.
+		s.scheduleRetry(errNotConnected, false)
+		return
+	}
+
+	s.mu.Lock()
+	old := s.sub
+	s.sub = nil
+	s.mu.Unlock()
 	if old != nil {
 		// The server never registered the refused SUB; this drops the
 		// client side, and the server ignores the UNSUB.
@@ -368,18 +422,11 @@ func (s *Subscription) retry() {
 	}
 	sub, err := s.subscribeOnce()
 	if err != nil {
-		if errors.Is(err, nats.ErrConnectionClosed) || errors.Is(err, nats.ErrConnectionDraining) {
-			logging.Warn("NATS connection closed; not re-subscribing a refused subscription",
-				"subject", s.subject, "queue", s.cfg.queue, "error", err)
-			return
+		if !s.connectionClosed() {
+			s.scheduleRetry(err, false)
 		}
-		s.scheduleRetry(err, false)
 		return
 	}
-	// A flush failure means the connection is down: the SUB is buffered and
-	// sent on reconnect, where a refusal is routed here again.
-	_ = s.nc.Flush()
-
 	s.mu.Lock()
 	if s.stopped {
 		s.mu.Unlock()
@@ -387,11 +434,39 @@ func (s *Subscription) retry() {
 		return
 	}
 	s.sub = sub
-	if gen == s.gen && !s.retrying {
+	s.mu.Unlock()
+
+	if err := s.cfg.retryFlush(s.nc); err != nil {
+		// The SUB may never have reached the server, or its answer never
+		// came back: it is not accepted. It stays registered client-side
+		// (resent on reconnect); the next retry replaces it.
+		if !s.connectionClosed() {
+			s.scheduleRetry(fmt.Errorf("subscribe %s: flush: %w", s.subject, err), false)
+		}
+		return
+	}
+
+	s.mu.Lock()
+	if gen == s.gen && !s.retrying && !s.stopped {
 		s.timer = s.cfg.clock.AfterFunc(s.cfg.initial, func() { s.confirm(gen) })
 	}
 	s.mu.Unlock()
 	s.emit(SubscriptionEvent{Kind: SubscriptionResubscribed, Attempt: attempt})
+}
+
+// connectionClosed ends the subscription if its connection is closed or
+// draining. Both are terminal in nats.go — a closed *nats.Conn never
+// reconnects, and Connect retries forever, so it closes only when the process
+// closes it — and there is nothing left to re-subscribe on.
+func (s *Subscription) connectionClosed() bool {
+	if !s.nc.IsClosed() && !s.nc.IsDraining() {
+		return false
+	}
+	logging.Info("NATS connection closed; a refused subscription stops re-subscribing",
+		"subject", s.subject, "queue", s.cfg.queue)
+	s.Stop()
+	s.emit(SubscriptionEvent{Kind: SubscriptionClosed})
+	return true
 }
 
 // confirm ends the refusal episode if attempt gen went unrefused.
