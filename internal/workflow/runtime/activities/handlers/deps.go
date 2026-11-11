@@ -22,6 +22,7 @@ import (
 	core "github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/local"
 	repopkg "github.com/reliant-labs/reliant/internal/repo"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/threads"
 	"github.com/reliant-labs/reliant/internal/toolbindings"
 	"github.com/reliant-labs/reliant/internal/triggers/runevents"
@@ -401,6 +402,12 @@ type UsageLimitWaitStore interface {
 	RecordUsageLimitWait(ctx context.Context, chatID string, threadID string, provider string, probing bool, resumeAt time.Time, now time.Time) error
 	ClearUsageLimitWait(ctx context.Context, chatID string, threadID string, now time.Time) error
 	threads.Repository
+}
+
+// TriggerCapacitySlotStore is what TriggerCapacitySlotActivity writes.
+type TriggerCapacitySlotStore interface {
+	ParkTriggerCapacity(ctx context.Context, slot store.TriggerCapacitySlot) (bool, error)
+	ResumeTriggerCapacity(ctx context.Context, slot store.TriggerCapacitySlot) (bool, bool, error)
 }
 
 // ValidateThreadOwnershipStore is what ValidateThreadOwnershipActivity reads.

@@ -403,6 +403,12 @@ func (e *StepExecutor) Start(triggeredStep *core.TriggeredNode) *RunningStep {
 		threadInterruptEpoch = interrupt.Epoch()
 	}
 
+	// A run that gave its workflow-capacity slot back while it waited on a
+	// provider takes it again before it runs anything (capacity_slot.go).
+	if e.pauseCtrl != nil {
+		e.pauseCtrl.CapacitySlot.beforeStep(e.ctx)
+	}
+
 	// A machine step that follows a hold first makes sure the machine is
 	// awake (machine_resume_wake.go): the idle policy may have suspended it
 	// while the run waited, and the step's own calls never wake it.
@@ -452,7 +458,7 @@ func (e *StepExecutor) Start(triggeredStep *core.TriggeredNode) *RunningStep {
 	}
 
 	// Use StepID as canonical identifier - ActivityID kept for logging/backwards compat
-	return &RunningStep{
+	running := &RunningStep{
 		ActivityID:            node.GetId(), // Set to StepID for backwards compat
 		StepID:                node.GetId(),
 		ActivityName:          activityName,
@@ -465,6 +471,10 @@ func (e *StepExecutor) Start(triggeredStep *core.TriggeredNode) *RunningStep {
 		SaveDelegated:         saveDelegated,
 		ProviderPinsKey:       e.providerPinsKey(),
 	}
+	if e.pauseCtrl != nil {
+		e.pauseCtrl.CapacitySlot.trackStep(running)
+	}
+	return running
 }
 
 // HandleCompletion processes a completed step and returns the resulting event.
@@ -476,6 +486,9 @@ func (e *StepExecutor) Start(triggeredStep *core.TriggeredNode) *RunningStep {
 func (e *StepExecutor) HandleCompletion(running *RunningStep) *StepEvent {
 	// Use StepID for event ID - it's unique within an iteration
 	eventID := fmt.Sprintf("event-%s", running.StepID)
+	if e.pauseCtrl != nil {
+		e.pauseCtrl.CapacitySlot.untrackStep(running)
+	}
 	stepEvent := e.handleActivityCompletion(running, eventID)
 	if machine, _, _ := machineStepTools(running.Node.GetType(), nil); machine {
 		e.pauseCtrl.MachineStepDone(e.ctx)

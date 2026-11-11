@@ -443,6 +443,9 @@ func (w *usageLimitWaiter) wait(ctx workflow.Context, req usageLimitWaitRequest,
 	// The marker goes down BEFORE the park, or a supervisor reading the chat
 	// cannot tell this run from a wedged one. See db.ProviderBackoff.
 	w.recordMarker(ctx, req.Thread, limit.Provider, decision)
+	// Waiting out a limit is not running: give the workflow-capacity slot
+	// back (capacity_slot.go). The retried step takes it again first.
+	pc.capacityProviderWait(ctx, "usage limit")
 
 	startEpoch := w.retryEpoch
 	startWakes := w.tracker.threadWakeCount(req.Thread)
