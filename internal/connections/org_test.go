@@ -68,7 +68,7 @@ func (e *env) orgConnection(orgID, admin, name, key string) *core.Connection {
 func (e *env) newRunInOrg(userID, orgID string) string {
 	e.t.Helper()
 	ctx := context.Background()
-	now := time.Now().UTC()
+	now := fixedNow
 	chatID := uuid.NewString()
 	org := orgID
 	require.NoError(e.t, e.repo.CreateChat(ctx, &db.Chat{
@@ -84,6 +84,10 @@ func (e *env) newRunInOrg(userID, orgID string) string {
 	}))
 	return chatID
 }
+
+// fixedNow stamps the rows these tests create; nothing here depends on the
+// time, so it is a constant rather than the wall clock.
+var fixedNow = time.Date(2026, 11, 12, 9, 30, 0, 0, time.UTC)
 
 func serverCall(run string) connections.CallSite {
 	return connections.CallSite{RunID: run, NodeID: "n1", ToolCallID: "tc1", Placement: connections.PlacementServer}
@@ -200,7 +204,7 @@ func TestOrgConnection_TriggerOfTheOrgResolvesIt(t *testing.T) {
 	trigger := func(owner, org string) string {
 		id := "trg-" + uuid.NewString()[:8]
 		connID := conn.ID
-		now := time.Now().UTC()
+		now := fixedNow
 		require.NoError(t, e.repo.CreateTrigger(context.Background(), &core.Trigger{
 			ID: id, UserID: owner, OrgID: &org, ProjectID: "test-project", Name: id, Kind: core.TriggerKindIntegration,
 			Enabled: true, Workflow: "w", NoMachine: true, ConnectionID: &connID,

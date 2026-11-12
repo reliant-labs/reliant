@@ -402,11 +402,12 @@ func ownerPredicate(owner core.ConnectionOwner) (string, []any) {
 }
 
 // isConnectionNameTaken reports whether err is a write that lost to a live
-// connection of the same name: a person's (connections_name) or an org's
+// connection of the same name: a person's (connections_name, and its
+// owner_kind-scoped successor connections_user_name) or an org's
 // (connections_org_name).
 func isConnectionNameTaken(err error) bool {
 	switch orm.ConstraintName(err) {
-	case ConnectionConstraintName, ConnectionConstraintOrgName:
+	case ConnectionConstraintName, ConnectionConstraintUserName, ConnectionConstraintOrgName:
 		return true
 	}
 	return false

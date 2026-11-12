@@ -9,6 +9,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/forge/pkg/orm"
+
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/store/storetest"
@@ -140,7 +142,9 @@ func TestOrgConnectionDefaultsAndNamesAreTheOrgs(t *testing.T) {
 func TestIntegrationRoutingThroughOrgConnections(t *testing.T) {
 	env := storetest.New(t)
 	ctx := context.Background()
-	base := time.Now().UTC().Truncate(time.Microsecond).Add(-time.Hour)
+	// A fixed instant well before the access row's refreshed_at (now()), so
+	// the freshness bound always admits it.
+	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	if _, err := env.SQL.ExecContext(ctx, `INSERT INTO connections (id, owner_kind, user_id, org_id, integration_id, auth_kind, name, status, external_account_id)
 		VALUES ('conn-org-1', 'org', 'an-admin', 'org-1', 'slack', 'oauth2', 'Org 1 bot', 'active', 'T1'),
 		       ('conn-org-2', 'org', 'an-admin', 'org-2', 'slack', 'oauth2', 'Org 2 bot', 'active', 'T2')`); err != nil {
@@ -193,5 +197,68 @@ func TestIntegrationRoutingThroughOrgConnections(t *testing.T) {
 	sort.Strings(ids)
 	if len(ids) != 2 || ids[0] != "trg-org-1" || ids[1] != "trg-org-2" {
 		t.Fatalf("access-routed = %v, want the two triggers whose connection is their own org's", ids)
+	}
+}
+
+// The database itself holds an org to one live default and one live name per
+// integration, whatever writes the row (connections_org_one_default,
+// connections_org_name): a writer that bypasses the store's count-then-set,
+// or two that race, is refused by the index. Another org, another
+// integration, a deleted row and a personal row never conflict.
+func TestOrgConnectionIndexesHoldTheInvariants(t *testing.T) {
+	env := storetest.New(t)
+	ctx := context.Background()
+	insert := func(id, org, integration, name string, isDefault, deleted bool) error {
+		var deletedAt any
+		if deleted {
+			deletedAt = time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+		}
+		ownerKind, orgID := "org", any(org)
+		if org == "" {
+			ownerKind, orgID = "user", nil
+		}
+		// Each row its own creator, so only the org indexes can decide.
+		_, err := env.SQL.ExecContext(ctx, `INSERT INTO connections
+			(id, owner_kind, user_id, org_id, integration_id, auth_kind, name, status, is_default, deleted_at)
+			VALUES ($1, $2, 'admin-' || $1, $3, $4, 'api_key', $5, 'active', $6, $7)`,
+			id, ownerKind, orgID, integration, name, isDefault, deletedAt)
+		return err
+	}
+	constraint := func(err error) string {
+		var pgErr interface{ SQLState() string }
+		if err == nil || !errors.As(err, &pgErr) {
+			return ""
+		}
+		return orm.ConstraintName(err)
+	}
+
+	if err := insert("d-1", "org-1", "slack", "first", true, false); err != nil {
+		t.Fatalf("first org default: %v", err)
+	}
+	for _, ok := range []struct {
+		id, org, integration, name string
+		isDefault, deleted         bool
+	}{
+		{"d-other-org", "org-2", "slack", "first", true, false},
+		{"d-other-integration", "org-1", "github", "first", true, false},
+		{"d-deleted", "org-1", "slack", "deleted", true, true},
+		{"d-personal", "", "slack", "personal", true, false},
+		{"not-default", "org-1", "slack", "second", false, false},
+	} {
+		if err := insert(ok.id, ok.org, ok.integration, ok.name, ok.isDefault, ok.deleted); err != nil {
+			t.Fatalf("%s must not conflict with org-1's slack default: %v", ok.id, err)
+		}
+	}
+	if err := insert("d-2", "org-1", "slack", "third", true, false); constraint(err) != store.ConnectionConstraintOrgOneDefault {
+		t.Fatalf("a second live slack default in org-1: err = %v, want a violation of connections_org_one_default", err)
+	}
+	if _, err := env.SQL.ExecContext(ctx, `UPDATE connections SET is_default = true WHERE id = 'not-default'`); constraint(err) != store.ConnectionConstraintOrgOneDefault {
+		t.Fatalf("making a second org-1 slack row default: err = %v, want a violation of connections_org_one_default", err)
+	}
+	if err := insert("n-dup", "org-1", "slack", "second", false, false); constraint(err) != store.ConnectionConstraintOrgName {
+		t.Fatalf("a second live org-1 slack connection named second: err = %v, want a violation of connections_org_name", err)
+	}
+	if err := insert("n-other-org", "org-2", "slack", "second", false, false); err != nil {
+		t.Fatalf("the same name in another org must not conflict: %v", err)
 	}
 }
