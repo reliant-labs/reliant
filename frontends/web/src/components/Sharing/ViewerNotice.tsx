@@ -29,7 +29,11 @@ export function ViewerNotice({ chat }: { chat: Chat }) {
   const { orgs } = useActiveOrg();
   const org = orgs.find((o) => o.id === chat.orgId);
   const names = useOrgMemberNames(chat.orgId ?? null);
-  const owner = names.get(chat.userId) ?? "a member";
+  // The owner's name when the roster resolves it; else words that still say
+  // who acts ("a member" would read as any member of the org).
+  const ownerName = names.get(chat.userId);
+  const sharedBy = ownerName ? `Shared by ${ownerName}` : "Shared";
+  const actor = ownerName ?? "the person who shared it";
   const moderate = canModerateShares(org?.role);
   const [confirming, setConfirming] = useState(false);
   const unshare = useSetChatShared();
@@ -60,11 +64,11 @@ export function ViewerNotice({ chat }: { chat: Chat }) {
         <Eye className="h-4 w-4 flex-shrink-0 text-muted-foreground" aria-hidden />
         <div className="min-w-0 flex-1">
           <p className="font-medium text-foreground">
-            Shared by {owner}
+            {sharedBy}
             {org ? ` with ${org.name}` : ""} · Read only
           </p>
           <p className="text-xs text-muted-foreground">
-            You can read along as it runs. Only {owner} can send messages, approve tool calls or answer questions. Tool
+            You can read along as it runs. Only {actor} can send messages, approve tool calls or answer questions. Tool
             results stay on their machine.
           </p>
         </div>
@@ -81,7 +85,7 @@ export function ViewerNotice({ chat }: { chat: Chat }) {
         loading={unshare.isPending}
         variant="warning"
         title="Make this chat private?"
-        description={`Members of ${org?.name ?? "the organization"} will no longer see it, and neither will you. ${owner} keeps it and can share it again. This is recorded in the organization's share history.`}
+        description={`Members of ${org?.name ?? "the organization"} will no longer see it, and neither will you. ${ownerName ?? "The person who shared it"} keeps it and can share it again. This is recorded in the organization's share history.`}
         confirmLabel="Make private"
       />
     </div>

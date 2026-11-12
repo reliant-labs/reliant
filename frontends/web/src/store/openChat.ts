@@ -13,7 +13,11 @@
 import type { Chat } from "../api/client";
 import { beginWorkspaceOpen, findProject, openChatInWorkspace, ChatProjectUnavailableError } from "../lib/openChatInWorkspace";
 export { findProject, ChatProjectUnavailableError } from "../lib/openChatInWorkspace";
-import { getChatFromCache, seedChatDetail } from "../hooks/chat-queries";
+import { getChatFromCache, removeChatFromListCache, seedChatDetail } from "../hooks/chat-queries";
+import { sharingServiceKeys } from "../hooks/sharing-service-hooks_gen";
+import { queryClient } from "../lib/query-client";
+import { toast } from "../lib/toast-manager";
+import { orgKeys } from "../services/controlPlane/orgs";
 import { resolveMainWorktree, resolveWorktree } from "../hooks/worktree-queries";
 import { useChatStore } from "./chatStore";
 import { useChatNavigationStore } from "./chatNavigationStore";
@@ -40,8 +44,36 @@ export function openChat(chat: Chat, isCurrent?: () => boolean): Promise<void> {
 export function openSharedChat(chat: Chat): void {
   beginWorkspaceOpen();
   seedChatDetail(chat);
-  useChatStore.getState().selectChat(chat, { deferPersist: true });
+  // Shared again after the viewer lost it: this open is the person asking,
+  // so the stream asks the server again (it remembers refusals otherwise).
+  useChatStore.getState().selectChat(chat, { deferPersist: true, retryRefused: true });
   useChatNavigationStore.getState().navigateToChat(chat.id);
+}
+
+/**
+ * The server stopped streaming a chat to this person (StreamChatUpdates
+ * refused it). For another member's shared chat that means the viewer lost
+ * it — made private, deleted, or they left the org — and the server re-checks
+ * on an interval, so this is when an open view learns it. Close the view,
+ * drop what was cached of the chat, and say why. Returns whether it did: a
+ * chat of the person's own is not this function's to close.
+ */
+export function leaveSharedChat(chatId: string): boolean {
+  const chat = getChatFromCache(chatId);
+  if (!chat?.viewerAccess) return false;
+  const chatStore = useChatStore.getState();
+  if (chatStore.activeChatId === chatId) {
+    chatStore.clearCurrentChat(null);
+    toast.info("This chat is no longer shared with you.");
+  }
+  void useChatNavigationStore.getState().removeFromQueue(chatId);
+  chatStore.evictChat(chatId);
+  removeChatFromListCache(chat.projectId, chatId);
+  void queryClient.invalidateQueries({ queryKey: sharingServiceKeys.all });
+  // Losing it may mean losing the org: re-read membership, so a person
+  // removed from it stops seeing the org and what it shared.
+  void queryClient.invalidateQueries({ queryKey: orgKeys.mine });
+  return true;
 }
 
 /**

@@ -16,6 +16,7 @@ import { OrgFeedStream } from "@/api/org-feed-stream";
 import { ResourceVisibility } from "@/gen/reliant/v1/common_pb";
 import { OrgUpdateType, type OrgUpdate } from "@/gen/reliant/v1/streaming_pb";
 import { chatKeys, patchChatCaches } from "@/hooks/chat-queries";
+import { leaveSharedChat } from "@/store/openChat";
 import {
   sharingServiceKeys,
   useListSharedChats,
@@ -44,15 +45,19 @@ export function useSharedChats(orgId: string | null) {
 /**
  * What one batch of feed rows changes in the cache: the shared lists are
  * re-read (a row is coarse; the list read is one indexed query), and a chat
- * that was made private or deleted has its detail re-read, so a viewer who has
- * it open sees it go.
+ * that was made private or deleted is closed if a viewer has it open
+ * (leaveSharedChat), else its detail is re-read.
  */
 export function applyOrgUpdates(client: QueryClient, updates: readonly OrgUpdate[]): void {
   void client.invalidateQueries({ queryKey: sharingServiceKeys.all });
   for (const u of updates) {
     if (u.resourceKind !== "chat") continue;
     if (u.type === OrgUpdateType.UNSHARED || u.type === OrgUpdateType.DELETED) {
-      void client.invalidateQueries({ queryKey: chatKeys.detail(u.resourceId), exact: true });
+      // Another member's chat that is open here closes now; the chat
+      // stream's re-check would close it too, within its interval.
+      if (!leaveSharedChat(u.resourceId)) {
+        void client.invalidateQueries({ queryKey: chatKeys.detail(u.resourceId), exact: true });
+      }
     }
   }
 }

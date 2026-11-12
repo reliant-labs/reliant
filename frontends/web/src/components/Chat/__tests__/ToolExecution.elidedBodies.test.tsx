@@ -15,9 +15,10 @@ import { installRecordingTracer } from "../../../test/recordingTracer";
 
 const getContentBlockBodies = vi.fn();
 const collapsed = vi.hoisted(() => ({ value: true }));
+const openChat = vi.hoisted(() => ({ value: undefined as { viewerAccess?: boolean } | undefined }));
 
 vi.mock("../../../store/chatStoreHooks", () => ({
-  useChat: () => undefined,
+  useChat: () => openChat.value,
   useChatMessages: () => [],
   useStreamingMessages: () => [],
   useToolCallStates: () => new Map(),
@@ -91,6 +92,7 @@ const toggle = () => screen.getByRole("button", { name: /toggle tool details/i }
 describe("a tool row whose bodies the transcript left out", () => {
   beforeEach(() => {
     collapsed.value = true;
+    openChat.value = undefined;
     queryClient.clear();
     getContentBlockBodies.mockReset();
     serveBodies();
@@ -174,6 +176,21 @@ describe("a tool row whose bodies the transcript left out", () => {
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
     await waitFor(() => expect(screen.queryByTestId("tool-body-error")).toBeNull());
     expect(await screen.findAllByText(/FULL-BODY/)).not.toHaveLength(0);
+  });
+
+  it("shows a viewer of a shared chat the input and says the result stays with the owner", async () => {
+    // The server elides every result for a viewer and answers its body as
+    // not found: the row must not ask for it, nor call that a failure.
+    openChat.value = { viewerAccess: true };
+    render(renderRow());
+    fireEvent.click(toggle());
+
+    expect(await screen.findByTestId("tool-result-withheld")).toHaveTextContent("The result stays on the owner's machine.");
+    expect(screen.getAllByText(/FULL-BODY/).length).toBeGreaterThan(0);
+    expect(screen.queryByTestId("tool-body-error")).toBeNull();
+    expect(screen.queryByText(/STUB-OUTPUT/)).toBeNull();
+    expect(getContentBlockBodies).toHaveBeenCalledTimes(1);
+    expect(getContentBlockBodies.mock.calls[0][0]).toMatchObject({ blockIds: ["call-1"] });
   });
 
   it("shows a large output's display body first, then the whole output on request", async () => {

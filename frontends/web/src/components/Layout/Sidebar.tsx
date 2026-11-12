@@ -1033,13 +1033,17 @@ function SidebarComponent({
   useEffect(() => {
     forgetReleasedUnless(activeChatId);
   }, [activeChatId, forgetReleasedUnless]);
+  // Another member's shared chat is never pinned into the person's own list:
+  // its row is in "Shared with <org>" (SharedWithOrgSection), and pinned here
+  // it would sit under a project and workspace that are not theirs.
+  const pinnable = openedChat?.id === activeChatId && !openedChat?.viewerAccess ? openedChat : undefined;
   const chats = useMemo(
     () =>
-      withOpenChatPinned(listedChats, openedChat?.id === activeChatId ? openedChat : undefined, {
+      withOpenChatPinned(listedChats, pinnable, {
         scope: projectFilterId,
         releasedChatId,
       }),
-    [listedChats, openedChat, activeChatId, projectFilterId, releasedChatId],
+    [listedChats, pinnable, projectFilterId, releasedChatId],
   );
   // The rows the list renders: a run counted here has its own row, so the
   // automation pill does not count it again.

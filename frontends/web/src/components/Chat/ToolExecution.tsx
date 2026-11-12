@@ -29,7 +29,7 @@ import { cn } from "../../lib/utils";
 import { useSurface } from "../../lib/surfaceContext";
 import { GenericToolRenderer, ToolContentArea, type ToolRenderContext, type ToolResultData } from "./tool-renderers";
 import { TruncatedOutputNotice } from "./tool-renderers/TruncatedOutputNotice";
-import { ToolBodyError, ToolBodyPlaceholder } from "./tool-renderers/ToolBodyPending";
+import { ToolBodyError, ToolBodyPlaceholder, ToolResultWithheld } from "./tool-renderers/ToolBodyPending";
 import { useElidedToolBodies } from "./useElidedToolBodies";
 import { fetchFullToolResult, useFullToolResult } from "../../hooks/tool-result-queries";
 import { useChat, useChatMessages, useStreamingMessages, useToolCallStates } from "../../store/chatStoreHooks";
@@ -361,6 +361,7 @@ function ToolExecutionComponent({
   // (useElidedToolBodies) — the single place a skeleton could be mistaken
   // for an input.
   const needsApprovalNow = approval?.status === ApprovalStatus.PENDING;
+  const currentChat = useChat(chatId || "");
   const bodies = useElidedToolBodies({
     chatId,
     toolName: toolCall.name,
@@ -368,6 +369,7 @@ function ToolExecutionComponent({
     result: toolResult,
     shown: isExpanded || (needsApprovalNow && showRichContent),
     expanded: isExpanded,
+    viewer: !!currentChat?.viewerAccess,
   });
   const contentResult = bodies.result;
   const toggleExpanded = () => {
@@ -399,7 +401,6 @@ function ToolExecutionComponent({
   );
   const showTruncatedNotice = isTruncatedResult && fullResultContent === undefined;
 
-  const currentChat = useChat(chatId || "");
   const chatWorktreeId = currentChat?.worktreeId;
   const chatMessages = useChatMessages(chatId || undefined);
   const streamingMessages = useStreamingMessages(chatId || "");
@@ -867,7 +868,12 @@ function ToolExecutionComponent({
   // The content area's body: the renderer once every elided body is here,
   // else a placeholder sized from the body, or the error with Retry.
   const renderToolContent = (content: React.ReactNode): React.ReactNode =>
-    bodies.ready ? content : bodies.failed ? (
+    bodies.ready ? (
+      <>
+        {content}
+        {bodies.withheld && <ToolResultWithheld />}
+      </>
+    ) : bodies.failed ? (
       <ToolBodyError onRetry={bodies.retry} />
     ) : (
       <ToolBodyPlaceholder bytes={bodies.bytes} />

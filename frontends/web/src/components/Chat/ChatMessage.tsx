@@ -302,6 +302,7 @@ function ChatMessageComponent({
   const [isExpanded, setIsExpanded] = useState(false);
   const [isOverflowing, setIsOverflowing] = useState(false);
   const {
+    available: branchAvailable,
     openBranchMenu,
     branchInPlace: handleBranchChat,
     branchToExistingWorkspace: handleBranchToExistingWorkspace,
@@ -309,7 +310,7 @@ function ChatMessageComponent({
   } = useMessageBranching(chatId, message.id);
   const surface = useSurface();
   const isMobile = surface === "mobile";
-  const canBranch = useCapability("chatBranching");
+  const canBranch = useCapability("chatBranching") && branchAvailable;
   const [showActionsSheet, setShowActionsSheet] = useState(false);
   const bubbleRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -956,6 +957,7 @@ function ChatMessageComponent({
         {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
       </button>
       </Tooltip>
+      {branchAvailable && (
       <Tooltip
         content={
           failedClientMessageId
@@ -986,6 +988,7 @@ function ChatMessageComponent({
         <GitBranch className="h-3.5 w-3.5" />
       </button>
       </Tooltip>
+      )}
     </>
   );
 

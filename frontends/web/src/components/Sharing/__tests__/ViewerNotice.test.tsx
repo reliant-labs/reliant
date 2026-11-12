@@ -49,6 +49,15 @@ describe("ViewerNotice", () => {
     expect(screen.queryByTestId("viewer-make-private")).not.toBeInTheDocument();
   });
 
+  it("names who acts without a name when the roster does not resolve the owner", () => {
+    // "Only a member can send" would read as any member of the org.
+    render(<ViewerNotice chat={{ ...(chat as object), userId: "unknown" } as never} />);
+    const note = screen.getByRole("note", { name: "Read-only chat" });
+    expect(note).toHaveTextContent("Shared with Acme · Read only");
+    expect(note).toHaveTextContent("Only the person who shared it can send messages");
+    expect(note).not.toHaveTextContent("a member");
+  });
+
   it("lets an org admin make it private, and leaves the chat they can no longer read", async () => {
     state.role = "admin";
     render(<ViewerNotice chat={chat} />);
