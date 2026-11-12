@@ -1062,7 +1062,7 @@ func (g *Graph) newTrigger() (*trigger.Service, error) {
 		// A nil gitcredentialclient.Service converts to a nil interface.
 		OrgGitHubApps: apps,
 		// Binding is off until every replica and the rollback target honour it.
-		OrgRollout: g.ApiServerConfig.GetOrgs(),
+		OrgRollout: TriggerOrgRollout(g.ApiServerConfig),
 	})
 }
 

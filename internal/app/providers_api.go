@@ -1433,3 +1433,10 @@ func gitTokens(cfg *configv1.ControlPlaneConfig) (gitcredentialclient.Service, e
 		Sign:         func() (string, error) { return auth.SignInternalServiceToken(secret) },
 	}), nil
 }
+
+// TriggerOrgRollout is the org rollout gates the API server's trigger handler
+// runs with: ApiServerConfig orgs, nil (every gate off) when unset. One
+// function, so the config-path test proves what newTrigger hands the handler.
+func TriggerOrgRollout(api *configv1.ApiServerConfig) *configv1.OrgsConfig {
+	return api.GetOrgs()
+}
