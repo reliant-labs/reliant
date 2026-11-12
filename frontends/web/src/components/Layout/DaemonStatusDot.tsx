@@ -1,5 +1,6 @@
-import { Activity } from "lucide-react";
+import { Monitor } from "lucide-react";
 import { type CSSProperties } from "react";
+import { useNavigate } from "@tanstack/react-router";
 
 import { useDaemonStatus } from "../../hooks/useDaemonStatus";
 import { cn } from "../../lib/utils";
@@ -21,8 +22,8 @@ function getStatusMeta(status: DaemonConnectionStatus, daemonName?: string, hear
     case "connected":
       return {
         label: daemonName ? `Machine connected: ${daemonName}` : "Machine connected",
-        dotClassName: "bg-green-500 shadow-[0_0_0_3px_rgba(34,197,94,0.15)]",
-        iconClassName: "text-green-500",
+        dotClassName: "bg-success ring-2 ring-success/15",
+        iconClassName: "text-success-ink",
       };
     case "loading":
       return {
@@ -33,20 +34,21 @@ function getStatusMeta(status: DaemonConnectionStatus, daemonName?: string, hear
     case "recent":
       return {
         label: `Last seen ${heartbeatAgeSeconds ?? "a moment"}s ago — reconnecting...`,
-        dotClassName: "bg-yellow-500 shadow-[0_0_0_3px_rgba(234,179,8,0.15)]",
-        iconClassName: "text-yellow-500",
+        dotClassName: "bg-warning ring-2 ring-warning/15",
+        iconClassName: "text-warning-ink",
       };
     case "offline":
     default:
       return {
         label: "No machine connected",
-        dotClassName: "bg-red-500 shadow-[0_0_0_3px_rgba(239,68,68,0.15)]",
-        iconClassName: "text-red-500",
+        dotClassName: "bg-destructive ring-2 ring-destructive/15",
+        iconClassName: "text-destructive-ink",
       };
   }
 }
 
 export function DaemonStatusDot() {
+  const navigate = useNavigate();
   const { daemons, activeDaemon, loading } = useDaemonStatus();
   const daemonLastSeen = useGlobalUpdatesStore((state) => state.daemonLastSeen);
 
@@ -65,13 +67,20 @@ export function DaemonStatusDot() {
 
   return (
     <Tooltip content={meta.label} side="bottom" delay={300} triggerClassName="block">
-      <div
-        className="header-icon-btn relative flex h-7 w-7 items-center justify-center rounded text-xs transition-colors"
-        role="status"
-        aria-label={meta.label}
+      <button
+        type="button"
+        className="header-icon-btn relative flex h-7 w-7 items-center justify-center rounded text-xs transition-colors focus-visible:ring-2 focus-visible:ring-ring"
+        aria-label={`${meta.label}. Open machine settings`}
+        onClick={() => {
+          if (activeDaemon) {
+            void navigate({ to: "/settings/machines/$machineId", params: { machineId: activeDaemon.daemonId } });
+          } else {
+            void navigate({ to: "/settings/$section", params: { section: "machines" } });
+          }
+        }}
         style={{ WebkitAppRegion: "no-drag" } as CSSProperties}
       >
-        <Activity className={cn("h-4 w-4", meta.iconClassName)} aria-hidden="true" />
+        <Monitor className={cn("h-4 w-4", meta.iconClassName)} aria-hidden="true" />
         <span
           className={cn(
             "absolute right-1 top-1 h-2 w-2 rounded-full ring-1 ring-background",
@@ -79,7 +88,7 @@ export function DaemonStatusDot() {
           )}
           aria-hidden="true"
         />
-      </div>
+      </button>
     </Tooltip>
   );
 }
