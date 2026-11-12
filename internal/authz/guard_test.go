@@ -134,3 +134,79 @@ func isZeroLiteral(e ast.Expr) bool {
 	}
 	return false
 }
+
+// visibilityReadAllowedDirs may read a row's Visibility: the store that maps
+// the column, and the rule itself.
+var visibilityReadAllowedDirs = []string{"internal/store/", "internal/authz/"}
+
+// rowPackages are the imports a file needs to hold a row type that carries
+// Visibility (core.Chat, core.Project, ...), directly or through internal/db's
+// aliases.
+var rowPackages = []string{
+	`"github.com/reliant-labs/reliant/internal/db/core"`,
+	`"github.com/reliant-labs/reliant/internal/db"`,
+}
+
+// TestNoVisibilityReadsOutsideAuthz keeps the sharing rule in one place
+// (control-plane docs/design/org-sharing.md §3.2): no code outside
+// internal/authz and internal/store reads a row's `.Visibility`. Decide with
+// CanReadChat / IsViewer; show it with ChatVisibility / ProjectVisibility.
+//
+// A file is inspected when it imports a package that holds the row types, so
+// an unrelated Visibility field (an LLM model's) in a file that never imports
+// them is not flagged. It reads every file itself (os.ReadFile), so Go's test
+// cache sees each one.
+func TestNoVisibilityReadsOutsideAuthz(t *testing.T) {
+	root := filepath.Join("..", "..")
+	var found []string
+	for _, dir := range []string{"internal", "cmd"} {
+		err := filepath.WalkDir(filepath.Join(root, dir), func(path string, d fs.DirEntry, err error) error {
+			if err != nil {
+				return err
+			}
+			if d.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
+				return nil
+			}
+			rel, _ := filepath.Rel(root, path)
+			rel = filepath.ToSlash(rel)
+			for _, prefix := range visibilityReadAllowedDirs {
+				if strings.HasPrefix(rel, prefix) {
+					return nil
+				}
+			}
+			src, err := os.ReadFile(path)
+			if err != nil {
+				return err
+			}
+			if !bytes.Contains(src, []byte("Visibility")) {
+				return nil
+			}
+			holdsRows := false
+			for _, imp := range rowPackages {
+				holdsRows = holdsRows || bytes.Contains(src, []byte(imp))
+			}
+			if !holdsRows {
+				return nil
+			}
+			fset := token.NewFileSet()
+			file, err := parser.ParseFile(fset, path, src, parser.SkipObjectResolution)
+			if err != nil {
+				return err
+			}
+			ast.Inspect(file, func(n ast.Node) bool {
+				if sel, ok := n.(*ast.SelectorExpr); ok && sel.Sel.Name == "Visibility" {
+					found = append(found, fset.Position(sel.Pos()).String())
+				}
+				return true
+			})
+			return nil
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	sort.Strings(found)
+	for _, f := range found {
+		t.Errorf("a row's Visibility read at %s: ask internal/authz (CanReadChat, IsViewer, ChatVisibility) instead", f)
+	}
+}
