@@ -72,7 +72,7 @@ function renderStep(updatePlan = vi.fn(async () => {})) {
   });
   render(
     <ComputeStep
-      plan={{} as Partial<LaunchPlan>}
+      plan={{ compute: "cloud_paid" } as Partial<LaunchPlan>}
       updatePlan={updatePlan}
       onNext={vi.fn()}
       onBack={vi.fn()}
@@ -97,7 +97,7 @@ describe("ComputeStep — cloud machines fold away when Free is chosen", () => {
 
   it("collapses to a labelled disclosure, keeps connect instructions, and re-expands", () => {
     renderStep();
-    fireEvent.click(screen.getByRole("button", { name: /Use your own computer/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Your own computer/ }));
 
     const toggle = screen.getByTestId("compute-cloud-toggle");
     expect(toggle).toHaveAttribute("aria-expanded", "false");
@@ -112,7 +112,7 @@ describe("ComputeStep — cloud machines fold away when Free is chosen", () => {
 
   it("picking a hosted row switches back to hosted", () => {
     const updatePlan = renderStep();
-    fireEvent.click(screen.getByRole("button", { name: /Use your own computer/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Your own computer/ }));
     fireEvent.click(screen.getByTestId("compute-cloud-toggle"));
     fireEvent.click(screen.getByText("M"));
 
