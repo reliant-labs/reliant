@@ -54,6 +54,9 @@ type Fixture struct {
 	// PlanID is a plan in the shared chat.
 	PlanID     string
 	Transcript dbtest.TranscriptBodies
+	// Hidden is a hidden message in the shared chat (SeedHiddenMessage):
+	// RunService holds every viewer answer to never carrying its Secret.
+	Hidden HiddenMessage
 
 	// Owner, Viewer, Outsider and Admin are request contexts for the callers.
 	Owner, Viewer, Outsider, Admin context.Context
@@ -130,6 +133,7 @@ func New(t *testing.T, repo *db.Repo) *Fixture {
 		_, err := repo.ORM().Bun().NewRaw(share.stmt, share.args...).Exec(ctx)
 		must("sharing", err)
 	}
+	f.Hidden = f.SeedHiddenMessage(t)
 	f.Owner = f.Context(f.OwnerID)
 	f.Viewer = f.Context(f.ViewerID)
 	f.Outsider = f.Context(f.OutsiderID)

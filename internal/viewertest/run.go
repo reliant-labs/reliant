@@ -12,6 +12,7 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/svcerr"
+	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/reflect/protoregistry"
@@ -160,6 +161,12 @@ func RunService(t *testing.T, f *Fixture, svc any, service string, requests map[
 				if viewer.err != nil {
 					t.Fatalf("viewer: %v, want the read-only answer", viewer)
 				}
+				requireNoHidden(t, f, "viewer", viewer)
+				// Asked for the hidden message or its block by id, a
+				// viewer is refused it, or answered without it.
+				if hidden, ok := f.withHiddenIDs(build(f)); ok {
+					requireNoHidden(t, f, "viewer, by the hidden message's id", invoke(t, svc, name, f.Viewer, hidden))
+				}
 				if !refused(outsider.code) {
 					t.Fatalf("outsider: %v, want NotFound or PermissionDenied", outsider)
 				}
@@ -202,4 +209,48 @@ func invoke(t *testing.T, svc any, name string, ctx context.Context, msg proto.M
 	}
 	resp, _ := out[0].Elem().FieldByName("Msg").Interface().(proto.Message)
 	return answer{resp: resp}
+}
+
+// requireNoHidden fails if a's response carries the hidden message's text.
+func requireNoHidden(t *testing.T, f *Fixture, who string, a answer) {
+	t.Helper()
+	if a.panic != nil {
+		t.Fatalf("%s: panicked: %v", who, a.panic)
+	}
+	if a.resp == nil {
+		return
+	}
+	wire, err := protojson.Marshal(a.resp)
+	if err != nil {
+		t.Fatalf("%s: %v", who, err)
+	}
+	if strings.Contains(string(wire), f.Hidden.Secret) {
+		t.Fatalf("%s: the answer carries a hidden message (never in the transcript, so never a viewer's): %s", who, wire)
+	}
+}
+
+// withHiddenIDs is msg with each message_id set to the hidden message and
+// each block id list to its block; ok is false when msg names neither.
+func (f *Fixture) withHiddenIDs(msg proto.Message) (proto.Message, bool) {
+	out := proto.Clone(msg)
+	r := out.ProtoReflect()
+	fields := r.Descriptor().Fields()
+	set := false
+	for i := 0; i < fields.Len(); i++ {
+		fd := fields.Get(i)
+		if fd.Kind() != protoreflect.StringKind {
+			continue
+		}
+		switch {
+		case fd.Name() == "message_id" && !fd.IsList():
+			r.Set(fd, protoreflect.ValueOfString(f.Hidden.MessageID))
+			set = true
+		case fd.Name() == "block_ids" && fd.IsList():
+			list := r.Mutable(fd).List()
+			list.Truncate(0)
+			list.Append(protoreflect.ValueOfString(f.Hidden.BlockID))
+			set = true
+		}
+	}
+	return out, set
 }

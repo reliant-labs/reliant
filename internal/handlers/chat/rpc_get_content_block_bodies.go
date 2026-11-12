@@ -187,9 +187,7 @@ func viewerMayFetchBody(block *db.MessageContentBlock) bool {
 	return block.BlockType != pb.ContentBlockType_CONTENT_BLOCK_TYPE_TOOL_RESULT
 }
 
-func isHiddenMessage(msg *db.Message) bool {
-	return msg.DisplayStyle != nil && *msg.DisplayStyle == pb.DisplayStyle_DISPLAY_STYLE_HIDDEN
-}
+func isHiddenMessage(msg *db.Message) bool { return messageproto.IsHidden(msg) }
 
 // uniqueNonEmpty is ids without empties or repeats, in first appearance
 // order.

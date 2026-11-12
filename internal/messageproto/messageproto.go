@@ -450,7 +450,7 @@ func Assemble(
 
 		// Hidden messages (e.g. compaction summaries) still go to the LLM but
 		// are not part of the transcript.
-		if msg.DisplayStyle != nil && *msg.DisplayStyle == reliantv1.DisplayStyle_DISPLAY_STYLE_HIDDEN {
+		if IsHidden(msg) {
 			continue
 		}
 
@@ -488,4 +488,12 @@ func streamingStateFromComputedString(s string) reliantv1.StreamingState {
 	default:
 		return reliantv1.StreamingState_STREAMING_STATE_UNSPECIFIED
 	}
+}
+
+// IsHidden reports whether msg is left out of the transcript: a
+// DISPLAY_STYLE_HIDDEN message (a compaction summary, a mailbox envelope, a
+// sub-agent's result body) still goes to the model but is never displayed.
+// Every read that serves a viewer (who reads only the transcript) refuses one.
+func IsHidden(msg *db.Message) bool {
+	return msg != nil && msg.DisplayStyle != nil && *msg.DisplayStyle == reliantv1.DisplayStyle_DISPLAY_STYLE_HIDDEN
 }

@@ -8,6 +8,7 @@ import (
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/encoding/protojson"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -145,4 +146,52 @@ func TestViewerExpandsStubInputsButNeverResults(t *testing.T) {
 		ChatId: f.ChatID, BlockIds: []string{f.Transcript.DoneCallBlockID},
 	}))
 	assert.Equal(t, connect.CodeNotFound, svcerr.Code(err), "an outsider: %v", err)
+}
+
+// A hidden message (a compaction summary, a mailbox envelope, a sub-agent's
+// result body) is never in the transcript, so no read that serves a viewer
+// shows any of it: not the transcript, not a body fetch by block id, not a
+// scroll-back. The owner still reads it where they always could.
+func TestViewerNeverReadsAHiddenMessage(t *testing.T) {
+	repo, cleanup := db.SetupTestDB(t)
+	t.Cleanup(cleanup)
+	f := viewertest.New(t, repo)
+	hidden := f.Hidden
+	svc := NewTestChat(t, WithChatDeps(Deps{Repo: repo, Orgs: f.Membership}))
+
+	for _, mode := range []*reliantv1.ToolBodyMode{nil, reliantv1.ToolBodyMode_TOOL_BODY_MODE_FULL.Enum(), reliantv1.ToolBodyMode_TOOL_BODY_MODE_STUB.Enum()} {
+		got, err := svc.ListMessages(f.Viewer, connect.NewRequest(&reliantv1.ListMessagesRequest{ChatId: f.ChatID, ToolBodies: mode}))
+		require.NoError(t, err)
+		wire, err := protojson.Marshal(got.Msg)
+		require.NoError(t, err)
+		assert.NotContains(t, string(wire), hidden.Secret, "ListMessages, mode %v", mode)
+	}
+
+	for _, full := range []bool{false, true} {
+		full := full
+		got, err := svc.GetContentBlockBodies(f.Viewer, connect.NewRequest(&reliantv1.GetContentBlockBodiesRequest{
+			ChatId: f.ChatID, BlockIds: []string{hidden.BlockID}, Full: &full,
+		}))
+		require.NoError(t, err)
+		assert.Empty(t, got.Msg.GetBodies(), "a hidden block's body, full=%v", full)
+		assert.Equal(t, []string{hidden.BlockID}, got.Msg.GetNotFound())
+	}
+}
+
+// A viewer's scroll-back carries no error payloads: they are raw failure
+// text, which a viewer's live ERROR updates leave out too.
+func TestViewerScrollBackCarriesNoErrors(t *testing.T) {
+	repo, cleanup := db.SetupTestDB(t)
+	t.Cleanup(cleanup)
+	f := viewertest.New(t, repo)
+	require.NoError(t, repo.CreateChatUpdate(context.Background(), f.ChatID, db.UpdateTypeError, "err-1",
+		`{"update_type":"error","id":"err-1","error_message":"exit 1: SECRET=hunter2","thread":"`+f.Transcript.ThreadID+`"}`))
+	svc := NewTestChat(t, WithChatDeps(Deps{Repo: repo, Orgs: f.Membership}))
+	before := int64(1 << 40)
+	got, err := svc.ListMessages(f.Viewer, connect.NewRequest(&reliantv1.ListMessagesRequest{ChatId: f.ChatID, BeforeSeq: &before}))
+	require.NoError(t, err)
+	assert.Empty(t, got.Msg.GetErrors(), "a viewer's scroll-back carries no errors")
+	owned, err := svc.ListMessages(f.Owner, connect.NewRequest(&reliantv1.ListMessagesRequest{ChatId: f.ChatID, BeforeSeq: &before}))
+	require.NoError(t, err)
+	require.NotEmpty(t, owned.Msg.GetErrors(), "the owner's scroll-back carries the error")
 }

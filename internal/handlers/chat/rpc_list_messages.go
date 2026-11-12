@@ -190,7 +190,10 @@ func (s *Service) ListMessages(
 	trace.SpanFromContext(ctx).SetAttributes(sent.Attributes("transcript")...)
 
 	var pageErrors []*reliantv1.ChatErrorUpdate
-	if beforeSeq > 0 && (req.Msg.ThreadId == nil || *req.Msg.ThreadId == "") && len(messages) > 0 {
+	// A scroll-back's errors are raw failure text (what a command or tool
+	// printed), which a viewer never reads: their live ERROR updates carry
+	// none either (messageproto.ViewerChatUpdate).
+	if !access.Viewer() && beforeSeq > 0 && (req.Msg.ThreadId == nil || *req.Msg.ThreadId == "") && len(messages) > 0 {
 		pageErrors = s.pageErrors(ctx, req.Msg.ChatId, mainThreadID, beforeSeq, messages, hasMore)
 	}
 

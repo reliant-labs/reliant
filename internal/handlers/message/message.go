@@ -50,6 +50,13 @@ func (s *Service) GetMessage(
 	if denied != nil {
 		return nil, svcerr.NotFound("message")
 	}
+	// A hidden message (a compaction summary, a mailbox envelope, a
+	// sub-agent's result body) is not in the transcript (messageproto
+	// Assemble), so a viewer, who reads only the transcript, is refused it
+	// before any of it is loaded. Its owner can still read it by id.
+	if access.Viewer() && messageproto.IsHidden(msg) {
+		return nil, svcerr.NotFound("message")
+	}
 
 	// Get content blocks for this message
 	blocks, err := s.deps.Repo.ListContentBlocks(ctx, msg.ID)

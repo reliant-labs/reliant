@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"connectrpc.com/connect"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 
@@ -73,5 +74,29 @@ func TestGetMessageDecidesViewerAccessOnce(t *testing.T) {
 				t.Errorf("after %v: the viewer got the tool result", after)
 			}
 		}
+	}
+}
+
+// GetMessage refuses a viewer a hidden message (a compaction summary, a
+// mailbox envelope, a sub-agent's result body) as NotFound, before loading
+// any of it; its owner still reads it by id.
+func TestGetMessageRefusesAViewerAHiddenMessage(t *testing.T) {
+	repo, cleanup := db.SetupTestDB(t)
+	t.Cleanup(cleanup)
+	f := viewertest.New(t, repo)
+	hidden := f.Hidden
+	svc := NewTestMessage(t, WithMessageDeps(Deps{Repo: repo}))
+	req := connect.NewRequest(&reliantv1.GetMessageRequest{MessageId: hidden.MessageID})
+
+	_, err := svc.GetMessage(f.Viewer, req)
+	if code := svcerr.Code(err); code != connect.CodeNotFound {
+		t.Fatalf("viewer: %v (%v), want NotFound", code, err)
+	}
+	owned, err := svc.GetMessage(f.Owner, req)
+	if err != nil {
+		t.Fatalf("owner: %v", err)
+	}
+	if b := owned.Msg.Message.GetContentBlocks(); len(b) != 1 || b[0].GetContent() != hidden.Secret {
+		t.Fatalf("owner: %v, want the hidden text", b)
 	}
 }
