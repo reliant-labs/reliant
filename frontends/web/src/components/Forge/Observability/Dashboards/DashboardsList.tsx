@@ -6,20 +6,28 @@
  * else: what is wrong right now (health, issues, failing jobs, releases) is
  * the project Overview's, so this page does not repeat it.
  *
- *   toolbar         search (across every section: title, key, tags, group),
+ *   toolbar         search (across every dashboard: title, key, tags, group),
  *                   Group, Source (release / workspace), Owner (forge, the
  *                   repo, or a person) — narrowed in place, in the URL.
  *   Starred         one row of chips, the caller's stars; the first three
  *                   also sit in the nav.
- *   the list        ONE table, a section per group (dashboardGroups.ts
- *                   listSections): Built-in first when there is one, then
- *                   Overview, Services, Jobs, Product, Platform, Releases,
- *                   Custom. A section folds; an empty group is no section.
- *                   A row is one line: the name (with the Forge workload it
- *                   is about and its tags, small), where it came from, when
- *                   the caller last viewed it, when it last changed, its
- *                   panels, and the star. The whole row opens it.
+ *   cards           what forge and Reliant provide, one card each
+ *                   (dashboardHubs.ts landingOf): Overview, the Product
+ *                   analytics hub (Users · Product · Acquisition as tabs),
+ *                   the Services hub (every workload's dashboard behind one
+ *                   card), Releases, Workloads, the organization views. A
+ *                   project with sixteen services shows one Services card,
+ *                   not sixteen rows.
+ *   Your dashboards the repo's and the workspace's, one quiet row each: the
+ *                   name, its tags, when it last changed (where it came from
+ *                   in the tooltip), and the star. The whole row opens it.
+ *   results         a search or a filter lists every matching dashboard as a
+ *                   row, the ones inside a hub included, so one service's
+ *                   dashboard is a search away.
  *   Templates       the gallery to start from (and a blank dashboard).
+ *
+ * Inside the project, a generated title's "<project>: " prefix is dropped
+ * (displayTitle): every dashboard on the page is the project's.
  *
  * The page used to open on an "Overview" tab of health panels: the project
  * Overview's KPI strip, a process table, open issues, failing jobs and
@@ -36,7 +44,7 @@
  */
 
 import { useMemo, useRef, useState, type ReactNode } from "react";
-import { Boxes, ChevronDown, ChevronRight, LayoutDashboard, Lock, Plus, Search, Star } from "lucide-react";
+import { Boxes, Building2, ChevronDown, ChevronRight, LayoutDashboard, Lock, Plus, Search, Server, Star, Tag as TagIcon, Users, type LucideIcon } from "lucide-react";
 
 import Card from "@/components/forge-ui/card";
 import Link from "@/components/forge-ui/link";
@@ -56,7 +64,8 @@ import { formatAgo } from "../format";
 import { appLabel, type ObsEnvironment } from "../obsPlace";
 import { OBS_TOPICS, ObsError } from "../ObsStates";
 import { DashboardHeader } from "./DashboardHeader";
-import { DASHBOARD_GROUPS, GROUP_LABELS, listSections, SECTION_ABOUT, SECTION_LABELS, workloadOf, type DashboardGroup, type ListSection } from "./dashboardGroups";
+import { DASHBOARD_GROUPS, GROUP_LABELS, groupOf, listSections, SECTION_ABOUT, SECTION_LABELS, workloadOf, type DashboardGroup, type ListSection } from "./dashboardGroups";
+import { displayTitle, landingOf, withoutSuperseded, type Landing as LandingModel, type LandingCard } from "./dashboardHubs";
 import { filterIndex, galleryTemplates, isStandardBuiltin, NAV_STARRED, ownerOf, ownersOf, SOURCE_LABELS, starredOf, type SourceFilter } from "./dashboardModel";
 import { NewDashboardDialog, SaveCopyDialog, envScopeOf } from "./dialogs";
 import { BUTTON_PRIMARY, INK_LINK, Menu, StarButton } from "./parts";
@@ -119,7 +128,8 @@ export function DashboardsList({ project, env, environments, search, onSearch, h
     api.saveDashboardAsCopy({ orgId: org, from: input.from, projectId: requireProject(project), title: input.title, envScope: envScopeOf(input.scope, env, envIdOf) })
   );
 
-  const all = useMemo(() => index.data?.dashboards ?? [], [index.data]);
+  // A built-in another dashboard in the list supersedes is never shown (dashboardHubs.ts).
+  const all = useMemo(() => withoutSuperseded(index.data?.dashboards ?? []), [index.data]);
   // The demo console writes nothing, whatever the index says (obsReadOnly.tsx).
   const obsLock = useObsReadOnly();
   const canWrite = !!index.data?.canWrite && !obsLock.readOnly;
@@ -173,7 +183,6 @@ export function DashboardsList({ project, env, environments, search, onSearch, h
               {env === ENV_ALL ? " · all environments" : ""}
             </span>
             {env !== ENV_ALL && <Tag>{env}</Tag>}
-            <span className="hidden sm:inline">Release dashboards are code; workspace dashboards are edited here</span>
           </>
         )
       }
@@ -297,7 +306,7 @@ export function DashboardsList({ project, env, environments, search, onSearch, h
             </button>
             {orgWide ? "." : " or start from a template below."}
           </Card>
-        ) : (
+        ) : orgWide ? (
           <>
             <StarredStrip dashboards={starred} href={hrefs.dashboard} filtered={filtered} />
             <DashboardTable
@@ -309,6 +318,17 @@ export function DashboardsList({ project, env, environments, search, onSearch, h
               href={hrefs.dashboard}
               onStar={toggleStar}
             />
+          </>
+        ) : (
+          <>
+            <StarredStrip dashboards={starred} href={hrefs.dashboard} filtered={filtered} project={project} />
+            {filtered ? (
+              <div data-testid="dashboards-list">
+                <DashboardRows testId="dashboards-results" label="Matching dashboards" dashboards={shown} project={project} environments={environments} href={hrefs.dashboard} onStar={toggleStar} withGroup />
+              </div>
+            ) : (
+              <Landing landing={landingOf(all, project)} project={project} environments={environments} href={hrefs.dashboard} onStar={toggleStar} canWrite={canWrite} />
+            )}
           </>
         )}
       </div>
@@ -379,7 +399,7 @@ export function DashboardsList({ project, env, environments, search, onSearch, h
 const rowKey = (d: DashboardSummary) => `${d.ref.kind}/${d.ref.projectId}/${d.ref.key}`;
 
 /** The caller's stars as one row of chips, pinned above the list. */
-function StarredStrip({ dashboards, href, filtered }: { dashboards: DashboardSummary[]; href: (ref: DashboardRef) => string; filtered: boolean }) {
+function StarredStrip({ dashboards, href, filtered, project }: { dashboards: DashboardSummary[]; href: (ref: DashboardRef) => string; filtered: boolean; project?: string }) {
   // A filter that hides every star says nothing about stars: the strip goes with them.
   if (dashboards.length === 0 && filtered) return null;
   return (
@@ -403,11 +423,11 @@ function StarredStrip({ dashboards, href, filtered }: { dashboards: DashboardSum
                     title={d.title}
                     className={cn(chip, "transition-colors hover:border-border-strong hover:bg-ink/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring")}
                   >
-                    <span className="truncate">{d.title}</span>
+                    <span className="truncate">{displayTitle(d.title, project)}</span>
                   </Link>
                 ) : (
                   <span className={chip}>
-                    <span className="truncate">{d.title}</span>
+                    <span className="truncate">{displayTitle(d.title, project)}</span>
                   </span>
                 )}
               </li>
@@ -416,6 +436,193 @@ function StarredStrip({ dashboards, href, filtered }: { dashboards: DashboardSum
         </ul>
       )}
     </section>
+  );
+}
+
+// ── The project's landing ───────────────────────────────────────────────────
+
+const CARD_ICON: Record<string, LucideIcon> = { overview: LayoutDashboard, product: Users, services: Server, jobs: Server, releases: TagIcon, platform: Boxes, custom: LayoutDashboard };
+
+/** The cards (hubs and provided dashboards), then the team's own dashboards as rows. */
+function Landing({
+  landing,
+  project,
+  environments,
+  href,
+  onStar,
+  canWrite,
+}: {
+  landing: LandingModel;
+  project: string;
+  environments: readonly ObsEnvironment[];
+  href: (ref: DashboardRef) => string;
+  onStar: (d: DashboardSummary) => void;
+  canWrite: boolean;
+}) {
+  return (
+    <div className="space-y-6" data-testid="dashboards-list">
+      {landing.cards.length > 0 && (
+        <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3" aria-label="Dashboards forge and Reliant provide" data-testid="dashboards-hubs">
+          {landing.cards.map((card) => (
+            <LandingCardItem key={card.id} card={card} href={href} onStar={onStar} />
+          ))}
+        </ul>
+      )}
+      <section className="space-y-2" aria-labelledby="dashboards-own-heading">
+        <div className="flex items-baseline gap-2">
+          <h2 id="dashboards-own-heading" className="text-sm font-medium text-ink">
+            Your dashboards
+          </h2>
+          <span className="text-xs tabular-nums text-ink-muted" data-testid="dashboards-own-count">
+            {landing.own.length}
+          </span>
+          <span className="hidden text-xs text-ink-muted sm:inline">Declared in {project}&apos;s repo or saved here</span>
+        </div>
+        {landing.own.length === 0 ? (
+          <p className="rounded-lg border border-dashed border-border px-3 py-3 text-sm text-ink-muted" data-testid="dashboards-own-empty">
+            {canWrite ? "None yet. Start one from a template below, or save a copy of any dashboard to change it." : "None yet. A dashboard the team saves here, or declares in the repo, is listed here."}
+          </p>
+        ) : (
+          <DashboardRows testId="dashboards-own" label="Your dashboards" dashboards={landing.own} project={project} environments={environments} href={href} onStar={onStar} />
+        )}
+      </section>
+    </div>
+  );
+}
+
+/** What forge's own dashboards are for, in a line: their descriptions are written for the dashboard, not a card. */
+const CARD_ABOUT: Record<string, string> = {
+  overview: "The whole project at a glance: requests, errors, latency, traffic and users",
+  releases: "Whether the last release was good, and how each one changed errors and latency",
+  workloads: "Replicas, restarts, CPU and memory against limits",
+  frontend: "Your frontend as visitors see it: sessions, errors and web vitals",
+};
+
+const CARD = "relative flex min-h-24 flex-col rounded-lg border border-border bg-surface px-3.5 py-3 transition-colors hover:border-border-strong hover:bg-ink/5";
+const CARD_LINK =
+  "min-w-0 truncate text-sm font-medium text-ink after:absolute after:inset-0 after:rounded-lg after:content-[''] focus-visible:outline-none focus-visible:after:ring-2 focus-visible:after:ring-ring";
+
+/** One card: a hub (its tabs named under it) or one dashboard (with its star). The whole card opens it. */
+function LandingCardItem({ card, href, onStar }: { card: LandingCard; href: (ref: DashboardRef) => string; onStar: (d: DashboardSummary) => void }) {
+  if (card.kind === "hub") {
+    const { hub } = card;
+    const Icon = CARD_ICON[hub.id] ?? LayoutDashboard;
+    const workloads = hub.id === "services" ? hub.tabs.filter((tab) => workloadOf(tab.summary)).length : 0;
+    const named = hub.tabs.slice(0, 3).map((tab) => tab.label);
+    const more = hub.tabs.length - named.length;
+    return (
+      <li className={CARD} data-testid={`dashboards-hub-${hub.id}`}>
+        <span className="flex min-w-0 items-center gap-2">
+          <Icon className="h-4 w-4 shrink-0 text-ink-muted" aria-hidden="true" />
+          <Link href={href(hub.tabs[0]!.ref)} className={CARD_LINK}>
+            {hub.title}
+          </Link>
+          {workloads > 0 && (
+            <span className="text-xs tabular-nums text-ink-muted" aria-label={`${workloads} services`}>
+              {workloads}
+            </span>
+          )}
+        </span>
+        <span className="mt-1 line-clamp-2 text-xs text-ink-muted">{hub.about}</span>
+        <span className="mt-auto truncate pt-2 text-xs text-ink-muted" data-testid={`dashboards-hub-${hub.id}-tabs`}>
+          {named.join(" · ")}
+          {more > 0 ? ` · +${more} more` : ""}
+        </span>
+      </li>
+    );
+  }
+  const d = card.dashboard;
+  const target = href(d.ref);
+  const Icon = d.source === "builtin" && !isStandardBuiltin(d) ? Building2 : (CARD_ICON[groupOf(d)] ?? LayoutDashboard);
+  const note = d.source === "builtin" && d.viewKind !== "llm-usage" && !isStandardBuiltin(d) ? "Requires cost-read permission" : null;
+  return (
+    <li className={CARD} data-testid={`dashboards-hub-${d.ref.key}`}>
+      <span className="flex min-w-0 items-center gap-2">
+        <Icon className="h-4 w-4 shrink-0 text-ink-muted" aria-hidden="true" />
+        {target ? (
+          <Link href={target} aria-label={d.title} className={CARD_LINK}>
+            {card.title}
+          </Link>
+        ) : (
+          <span className="min-w-0 truncate text-sm font-medium text-ink">{card.title}</span>
+        )}
+        <span className="relative z-10 -my-1.5 -mr-1.5 ml-auto shrink-0">
+          <StarButton starred={d.starred} title={d.title} onToggle={() => onStar(d)} />
+        </span>
+      </span>
+      <span className="mt-1 line-clamp-2 text-xs text-ink-muted">{(d.source !== "builtin" || isStandardBuiltin(d) ? CARD_ABOUT[d.ref.key] : undefined) ?? (d.description || "\u00a0")}</span>
+      {note && <span className="mt-auto pt-2 text-xs text-ink-muted">{note}</span>}
+    </li>
+  );
+}
+
+/**
+ * Dashboards as quiet rows: the name, its tags, a line of description where
+ * there is room, when it last changed (where it came from in the tooltip),
+ * and the star. The whole row opens it. `withGroup` names the group, for
+ * search results that mix them.
+ */
+function DashboardRows({
+  testId,
+  label,
+  dashboards,
+  project,
+  environments,
+  href,
+  onStar,
+  withGroup = false,
+}: {
+  testId: string;
+  label: string;
+  dashboards: DashboardSummary[];
+  project: string;
+  environments: readonly ObsEnvironment[];
+  href: (ref: DashboardRef) => string;
+  onStar: (d: DashboardSummary) => void;
+  withGroup?: boolean;
+}) {
+  return (
+    <Card padding="none" className="overflow-hidden">
+      <ul className="divide-y divide-border" aria-label={label} data-testid={testId}>
+        {dashboards.map((d) => {
+          const target = href(d.ref);
+          const title = displayTitle(d.title, project);
+          const tags = d.tags ?? [];
+          return (
+            <li key={rowKey(d)} className={cn("flex min-h-10 items-center gap-3 px-3 py-1.5", target && "relative hover:bg-ink/5")} data-testid="dashboards-row">
+              <span className="flex min-w-0 flex-1 items-center gap-2">
+                {target ? (
+                  <Link
+                    href={target}
+                    aria-label={d.title}
+                    className="min-w-0 shrink-0 truncate text-sm font-medium text-ink after:absolute after:inset-0 after:content-[''] focus-visible:outline-none focus-visible:after:ring-2 focus-visible:after:ring-inset focus-visible:after:ring-ring sm:max-w-[60%]"
+                  >
+                    {title}
+                  </Link>
+                ) : (
+                  <span className="min-w-0 truncate text-sm font-medium text-ink">{title}</span>
+                )}
+                {withGroup && <span className="shrink-0 text-xs text-ink-muted">{d.source === "builtin" && !isStandardBuiltin(d) ? "Built-in" : GROUP_LABELS[groupOf(d)]}</span>}
+                {tags.length > 0 && (
+                  <span className="hidden min-w-0 items-center gap-1 overflow-hidden sm:inline-flex">
+                    {tags.slice(0, 3).map((tag) => (
+                      <Tag key={tag}>{tag}</Tag>
+                    ))}
+                  </span>
+                )}
+                {d.description && tags.length === 0 && !withGroup && <span className="hidden min-w-0 flex-1 truncate text-xs text-ink-muted lg:block">{d.description}</span>}
+              </span>
+              <span className="relative z-10 hidden shrink-0 md:inline">
+                <UpdatedCell d={d} environments={environments} />
+              </span>
+              <span className="relative z-10 -my-1 shrink-0">
+                <StarButton starred={d.starred} title={d.title} onToggle={() => onStar(d)} />
+              </span>
+            </li>
+          );
+        })}
+      </ul>
+    </Card>
   );
 }
 
@@ -604,6 +811,18 @@ function SourceCell({ d, environments }: { d: DashboardSummary; environments: re
   );
 }
 
+/** When a dashboard last changed, quietly; where it came from (the release, the file, who saved it) is the tooltip. */
+function UpdatedCell({ d, environments }: { d: DashboardSummary; environments: readonly ObsEnvironment[] }) {
+  const updated = updatedOf(d);
+  return (
+    <Tooltip content={originOf(d, environments)}>
+      <span className="text-xs text-ink-muted" data-testid="dashboards-row-source">
+        {updated === "—" ? SOURCE_LABELS[d.source] : `${SOURCE_LABELS[d.source]} · ${updated}`}
+      </span>
+    </Tooltip>
+  );
+}
+
 /** The tooltip's words: which release shipped it and from where, or who saved it and for which environments. */
 function originOf(d: DashboardSummary, environments: readonly ObsEnvironment[]): string {
   if (isStandardBuiltin(d)) return "Built in for every project, over this project's data. Read-only here; save a copy to change it.";
@@ -678,6 +897,8 @@ function Toolbar({
           ...DASHBOARD_GROUPS.map((group) => ({ label: GROUP_LABELS[group], checked: search.group === group, onSelect: () => onSearch({ group }) })),
         ]}
       />
+      {/* Where a dashboard came from and who owns it are refinements: a phone keeps search and Group. */}
+      <span className="hidden sm:contents">
       <button type="button" aria-pressed={search.source === "release"} className={chip(search.source === "release")} onClick={() => onSearch({ source: search.source === "release" ? undefined : "release" })} data-testid="dashboards-chip-release">
         Source: Release
       </button>
@@ -697,6 +918,7 @@ function Toolbar({
         testId="dashboards-chip-owner"
         entries={[{ label: "anyone", checked: !search.owner, onSelect: () => onSearch({ owner: undefined }) }, ...owners.map((owner) => ({ label: owner, checked: search.owner === owner, onSelect: () => onSearch({ owner }) }))]}
       />
+      </span>
       {apps && appFilter && (
         <Menu
           label="App"
