@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
-	"time"
 
 	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/svcerr"
@@ -27,7 +26,7 @@ func TestViewerCannotReadTheOwnersAttachment(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 	f := viewertest.New(t, repo)
-	now := time.Now().UTC()
+	now := viewertest.SeededAt
 	att := &db.Attachment{
 		ID: "att-" + f.ChatID, UserID: f.OwnerID, Filename: "screenshot.png", Size: 3, MimeType: "image/png",
 		AttachmentType: "image", Content: []byte{1, 2, 3}, CreatedAt: now, UpdatedAt: now,

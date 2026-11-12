@@ -17,9 +17,48 @@ import (
 // it is left out entirely, not previewed, and GetContentBlockBodies and
 // GetToolResult refuse a viewer, so it cannot be fetched either.
 //
-// The results the client parses to build its own state (plans, tasks,
-// questions; structuredResultTools) are the conversation's, not the
-// machine's, and stay whole.
+// The results of the built-in tools the client parses to build its own
+// state (plans, tasks, questions; viewerKeptResultTools) are the
+// conversation's, not the machine's, and stay whole.
+
+// viewerKeptResultTools are the built-in tools whose results a viewer reads
+// whole, matched by EXACT name. It is a disclosure decision, so it is not
+// structuredResultTools (a rendering decision, which matches MCP tools by
+// their last segment): an MCP tool is always named mcp__<server>__<tool>
+// (tools.mcpToolAdapter), so no MCP server can produce one of these names,
+// and mcp__anything__get_plan is a third party's output and is elided. A
+// content block carries no tool source, so the exact registered name is the
+// identity. TestViewerKeptResultToolsAreBuiltIn holds every entry to a
+// structured-result tool.
+var viewerKeptResultTools = map[string]bool{
+	"create_plan":     true,
+	"update_plan":     true,
+	"get_plan":        true,
+	"add_task":        true,
+	"update_task":     true,
+	"create_subtask":  true,
+	"list_tasks":      true,
+	"ask_user":        true,
+	"request_machine": true,
+}
+
+// viewerKeepsResult reports whether a viewer reads the result of the tool
+// named name (exactly, case and all) whole.
+func viewerKeepsResult(name string) bool { return viewerKeptResultTools[name] }
+
+// viewerKeepsResultOf decides for one tool_result block, by every name it is
+// known by: the result block's own tool_name and, when its call is in view,
+// the call's. Each known name must be a kept built-in; a block that names
+// none is elided.
+func viewerKeepsResultOf(resultName, callName string, callKnown bool) bool {
+	if resultName == "" && !callKnown {
+		return false
+	}
+	if resultName != "" && !viewerKeepsResult(resultName) {
+		return false
+	}
+	return !callKnown || viewerKeepsResult(callName)
+}
 
 // ElideForViewer leaves every tool result out of msgs, in place: content
 // removed, body_elided set and body_size the stored length. Applied after
@@ -58,11 +97,8 @@ func elideBlockForViewer(b *reliantv1.ContentBlock, names map[string]string) {
 	if b == nil || b.GetType() != reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_TOOL_RESULT {
 		return
 	}
-	name := b.GetToolName()
-	if name == "" {
-		name = names[b.GetToolCallId()]
-	}
-	if isStructuredResultTool(name) || b.Content == nil {
+	callName, known := names[b.GetToolCallId()]
+	if viewerKeepsResultOf(b.GetToolName(), callName, known) || b.Content == nil {
 		return
 	}
 	size := int64(len(b.GetContent()))
@@ -119,12 +155,10 @@ func ViewerMessageUpdate(raw []byte) []byte {
 		if !ok {
 			continue
 		}
-		name, _ := block["tool_name"].(string)
-		if name == "" {
-			id, _ := block["tool_call_id"].(string)
-			name = names[id]
-		}
-		if isStructuredResultTool(name) {
+		resultName, _ := block["tool_name"].(string)
+		id, _ := block["tool_call_id"].(string)
+		callName, known := names[id]
+		if viewerKeepsResultOf(resultName, callName, known) {
 			continue
 		}
 		size := len(content)

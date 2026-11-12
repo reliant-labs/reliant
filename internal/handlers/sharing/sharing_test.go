@@ -3,7 +3,6 @@ package sharing
 import (
 	"context"
 	"testing"
-	"time"
 
 	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/svcerr"
@@ -141,7 +140,7 @@ func TestSetChatVisibility(t *testing.T) {
 // A chat that belongs to no org has no one to be shared with.
 func TestSetChatVisibilityNeedsAnOrg(t *testing.T) {
 	svc, f := sharingFixture(t)
-	now := time.Now().UTC()
+	now := viewertest.SeededAt
 	require.NoError(t, f.Repo.CreateChat(context.Background(), &db.Chat{
 		ID: "orgless-" + f.OwnerID, UserID: f.OwnerID, ProjectID: f.ProjectID, Title: "no org",
 		CreatedAt: now, UpdatedAt: now, LastActive: now,
