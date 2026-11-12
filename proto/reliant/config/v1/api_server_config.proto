@@ -298,4 +298,26 @@ message ApiServerConfig {
     default_value: "/ready,/readyz"
     description: "Readiness probe paths on the health port (comma-separated)"
   }];
+
+  // Organization features the API server gates while they roll out.
+  OrgsConfig orgs = 85;
+}
+
+// OrgsConfig gates organization features that need every replica (and the
+// release a rollback would return to) to understand them before anything
+// writes them. The rules every config here follows are in config.proto's
+// header.
+message OrgsConfig {
+  // Lets a GitHub trigger of an org listen through one of the org's linked
+  // GitHub App installations (control-plane docs/design/org-sharing.md §7.1):
+  // only that installation's events reach it. Off by default: a release
+  // before this one routes such a trigger on its owner's access alone (every
+  // installation) and rewrites its config without the binding, so turn it on
+  // only once every API server and worker, and the release a rollback would
+  // return to, honour it. Off, naming an installation on a trigger is refused
+  // and no trigger is ever bound.
+  bool github_installation_triggers_enabled = 2 [(forge.v1.config) = {
+    env_var: "RELIANT_ORGS_GITHUB_INSTALLATION_TRIGGERS_ENABLED"
+    description: "Let an org's GitHub triggers listen through one of the org's linked GitHub App installations"
+  }];
 }

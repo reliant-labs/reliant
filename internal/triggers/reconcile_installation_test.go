@@ -178,3 +178,32 @@ func TestReconcileNeverOverwritesABindingCommittedAfterItsRead(t *testing.T) {
 		})
 	}
 }
+
+// A projection write never introduces a binding: an installation in the
+// projection is ignored and the row's own (here none) is kept. With the
+// rollout gate off nothing else writes one (TestOnlyTheGatedBindWritesAnInstallation),
+// so no trigger is bound and a previous release's replica has nothing to
+// ignore or erase.
+func TestProjectionWriteNeverIntroducesABinding(t *testing.T) {
+	repo := db.NewTestRepo(t)
+	ctx := context.Background()
+	now := time.Now().UTC()
+	user := "u-" + uuid.NewString()[:8]
+	project := "p-" + user
+	require.NoError(t, repo.CreateProject(ctx, &db.Project{ID: project, UserID: user, Name: "p", Path: t.TempDir(), CreatedAt: now, UpdatedAt: now, LastActive: now}))
+	issue := "new-issue"
+	tr := &core.Trigger{
+		ID: uuid.NewString(), UserID: user, ProjectID: project, Name: "t", Kind: core.TriggerKindIntegration,
+		Enabled: true, Workflow: "triage", WorkflowTrigger: &issue, Message: "go", DaemonID: "d",
+		Config: json.RawMessage(`{"integration":"github","events":["issues.closed"]}`), CreatedAt: now, UpdatedAt: now,
+	}
+	require.NoError(t, repo.CreateTrigger(ctx, tr))
+
+	require.NoError(t, repo.SetTriggerProjection(ctx, tr.ID, core.TriggerProjection{
+		Config: json.RawMessage(`{"integration":"github","events":["issues.opened"],"installation":"100"}`),
+	}))
+	got, err := repo.GetTrigger(ctx, tr.ID)
+	require.NoError(t, err)
+	assert.Empty(t, installationIn(t, got.Config))
+	assert.Equal(t, []string{"issues.opened"}, scopeOf(t, got.Config).Events)
+}

@@ -18,6 +18,10 @@ import (
 	"github.com/reliant-labs/reliant/internal/triggers"
 )
 
+// ReasonOrgInstallationTriggersDisabled is the reason a binding is refused
+// while the deployment's rollout gate is off.
+const ReasonOrgInstallationTriggersDisabled = "org_installation_triggers_disabled"
+
 // bindOrgGitHubApp records, in a GitHub trigger's config, the org GitHub App
 // installation its definition names as its connection
 // (ghdelegated.OrgAppConnectionID; org-sharing.md §7.1), so routing sends it
@@ -37,6 +41,12 @@ func (s *Service) bindOrgGitHubApp(ctx context.Context, ownerID string, def *rel
 	installationID, ok := ghdelegated.ParseOrgAppConnectionID(*def.ConnectionId)
 	if !ok {
 		return nil
+	}
+	// Rollout gate: a release before installation binding routes a bound
+	// trigger on its owner's access alone and drops the binding when it
+	// re-projects it, so nothing is bound until every replica honours it.
+	if s.deps.OrgRollout == nil || !s.deps.OrgRollout.GetGithubInstallationTriggersEnabled() {
+		return svcerr.WithReason(svcerr.FailedPrecondition("listening through an organization's GitHub App installation is not enabled on this deployment yet"), ReasonOrgInstallationTriggersDisabled)
 	}
 	if trigger.Kind != core.TriggerKindIntegration {
 		return svcerr.InvalidArgument("an organization's GitHub App can only be the source of a GitHub trigger")

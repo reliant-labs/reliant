@@ -110,6 +110,15 @@ type Deps struct {
 	// them (trigger_org_github.go). Nil (self-hosted) refuses such a binding.
 	// forge:optional-dep
 	OrgGitHubApps OrgGitHubApps
+
+	// OrgRollout holds the org rollout gates (ApiServerConfig orgs); its
+	// github_installation_triggers_enabled lets a GitHub trigger of an org be
+	// bound to one of the org's linked GitHub App installations. Unset or
+	// off, the default, binding is refused, so no trigger carries a binding
+	// a previous release would ignore or erase.
+	//
+	// forge:optional-dep
+	OrgRollout *configv1.OrgsConfig
 }
 
 // OrgGitHubApps names an org's linked GitHub App installations.
