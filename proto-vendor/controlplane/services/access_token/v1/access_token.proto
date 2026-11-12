@@ -135,6 +135,32 @@ service AccessTokenService {
     };
   }
 
+  // ListMyCLILogins lists the caller's human CLI logins (`forge login`): the
+  // device, when each was issued and last used, and when it ends. Browser
+  // session only: a CLI login is refused, like every rpc of this service.
+  rpc ListMyCLILogins(ListMyCLILoginsRequest) returns (ListMyCLILoginsResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {none: "reads only: lists the caller's own CLI logins, changes nothing"}
+    };
+  }
+  // RevokeMyCLILogin ends one of the caller's own CLI logins at once: its
+  // next request is refused. Idempotent: revoking a revoked login succeeds.
+  // Another person's login, or none, is NotFound. Browser session only.
+  rpc RevokeMyCLILogin(RevokeMyCLILoginRequest) returns (RevokeMyCLILoginResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+      activity: {
+        verb: "revoke"
+        target: {
+          kind: "cli_login"
+          id: "id"
+        }
+      }
+    };
+  }
+
   // ExchangeToken attenuates a machine credential acting as a person to a
   // short-lived helper. It NEVER widens: requested scopes must be explicitly
   // held by the caller (not merely implied by write), exchangeable, and still
@@ -416,6 +442,37 @@ message ResetDaemonScopePolicyRequest {
   optional string org_id = 2;
 }
 message ResetDaemonScopePolicyResponse {}
+
+// CLILogin is one of a person's human CLI logins (an rlci_ identity). The
+// secret is never returned: it exists only on the device that logged in.
+message CLILogin {
+  string id = 1;
+  // client_id is the CLI that logged in (forge-cli).
+  string client_id = 2;
+  // device_name is the device label the CLI sent at login.
+  string device_name = 3;
+  google.protobuf.Timestamp created_at = 4;
+  google.protobuf.Timestamp expires_at = 5;
+  // last_used_at is when it last authenticated, to the minute; unset if never.
+  google.protobuf.Timestamp last_used_at = 6;
+  // revoked_at is set once the login was signed out or revoked.
+  google.protobuf.Timestamp revoked_at = 7;
+}
+
+message ListMyCLILoginsRequest {
+  // include_ended also lists revoked and expired logins: the newest 100.
+  optional bool include_ended = 1;
+}
+
+message ListMyCLILoginsResponse {
+  repeated CLILogin logins = 1;
+}
+
+message RevokeMyCLILoginRequest {
+  string id = 1;
+}
+
+message RevokeMyCLILoginResponse {}
 
 message UpdateMyTokenRequest {
   string id = 1;

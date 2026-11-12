@@ -8183,8 +8183,9 @@ type QueryPanelResponse struct {
 	// the scope and range: its series is empty, never an error). Metrics panels.
 	Warnings []string `protobuf:"bytes,17,rep,name=warnings,proto3" json:"warnings,omitempty"`
 	// sql panels drawn as a time series: the width of one bucket in seconds, so a
-	// client need not guess it from the points. A Date or Date32 first column is
-	// a calendar day (86400). A DateTime column is the {step} the statement was
+	// client need not guess it from the points. A panel that declares min_step
+	// reports that duration. Otherwise a Date or Date32 first column is a
+	// calendar day (86400), and a DateTime column is the {step} the statement was
 	// bound to when it uses {step}; a statement that buckets by its own rule
 	// reports 0 (unknown). 0 for every other panel kind (see step_seconds).
 	BucketSeconds int32 `protobuf:"varint,18,opt,name=bucket_seconds,json=bucketSeconds,proto3" json:"bucket_seconds,omitempty"`
@@ -9551,7 +9552,13 @@ type Panel struct {
 	// rows (sql_columns, columns and rows of the response), whatever the column
 	// types. Empty or "auto" is a time series when the first column is a time
 	// (and something follows it), rows otherwise. Refused on other kinds.
-	Draw          string `protobuf:"bytes,20,opt,name=draw,proto3" json:"draw,omitempty"`
+	Draw string `protobuf:"bytes,20,opt,name=draw,proto3" json:"draw,omitempty"`
+	// sql panels only: the panel's bucket (forge dashspec Panel.minStep), a
+	// number and a unit of s, m, h or d ("1d", "7d"), at most 30 days. A
+	// statement that groups by a fixed bucket (toDate, toMonday) declares it, and
+	// QueryPanel reports it as bucket_seconds instead of guessing from the first
+	// column's type. Refused on other kinds or when it does not parse.
+	MinStep       string `protobuf:"bytes,21,opt,name=min_step,json=minStep,proto3" json:"min_step,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -9722,6 +9729,13 @@ func (x *Panel) GetSection() string {
 func (x *Panel) GetDraw() string {
 	if x != nil {
 		return x.Draw
+	}
+	return ""
+}
+
+func (x *Panel) GetMinStep() string {
+	if x != nil {
+		return x.MinStep
 	}
 	return ""
 }
@@ -12491,7 +12505,7 @@ const file_services_observability_v1_observability_proto_rawDesc = "" +
 	"\tpanel_ids\x18\x05 \x03(\tR\bpanelIds\"C\n" +
 	"\x13DashboardAnnotation\x12\x16\n" +
 	"\x06source\x18\x01 \x01(\tR\x06source\x12\x14\n" +
-	"\x05label\x18\x02 \x01(\tR\x05label\"\xb8\x04\n" +
+	"\x05label\x18\x02 \x01(\tR\x05label\"\xd3\x04\n" +
 	"\x05Panel\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
 	"\x05title\x18\x02 \x01(\tR\x05title\x12 \n" +
@@ -12513,7 +12527,8 @@ const file_services_observability_v1_observability_proto_rawDesc = "" +
 	"\x05limit\x18\x11 \x01(\x05R\x05limit\x12\x10\n" +
 	"\x03sql\x18\x12 \x01(\tR\x03sql\x12\x18\n" +
 	"\asection\x18\x13 \x01(\tR\asection\x12\x12\n" +
-	"\x04draw\x18\x14 \x01(\tR\x04draw\"K\n" +
+	"\x04draw\x18\x14 \x01(\tR\x04draw\x12\x19\n" +
+	"\bmin_step\x18\x15 \x01(\tR\aminStep\"K\n" +
 	"\vPanelFunnel\x12\x14\n" +
 	"\x05steps\x18\x01 \x03(\tR\x05steps\x12\x16\n" +
 	"\x06window\x18\x02 \x01(\tR\x06window\x12\x0e\n" +

@@ -78,6 +78,16 @@ enum OrganizationUsageGroupBy {
   ORGANIZATION_USAGE_GROUP_BY_ENV = 2;
   // managed_llm splits by model. Every other category keeps an empty group_key.
   ORGANIZATION_USAGE_GROUP_BY_MODEL = 3;
+  // Hosted categories split by deployment: group_key is the deployment id,
+  // group_label "<environment>/<deployment name>", and the point carries
+  // deployment_name, tier and environment_id. Usage with no deployment has an
+  // empty group_key and one point per environment. Categories with no
+  // deployment attribution keep an empty group_key.
+  ORGANIZATION_USAGE_GROUP_BY_DEPLOYMENT = 4;
+  // Hosted categories split by the environment's project (hosted_projects
+  // name): group_key and group_label are the project name, empty for usage of
+  // no project. Categories with no environment keep an empty group_key.
+  ORGANIZATION_USAGE_GROUP_BY_PROJECT = 5;
 }
 
 message ListOrganizationUsageRequest {
@@ -88,6 +98,13 @@ message ListOrganizationUsageRequest {
   google.protobuf.Timestamp end = 3;
   optional OrganizationUsageGranularity granularity = 4 [(buf.validate.field).enum.defined_only = true];
   optional OrganizationUsageGroupBy group_by = 5 [(buf.validate.field).enum.defined_only = true];
+  // Narrows the history to one project (its hosted_projects name): only the
+  // hosted usage of that project's environments, and only its deployments in
+  // the inventory. Managed LLM, dev boxes and observability are metered per
+  // organization and are left out, which the hosted_infrastructure coverage
+  // entry says. Unset or empty reads the whole organization. An unknown
+  // project is NOT_FOUND.
+  optional string project_id = 6;
 }
 
 // History of one organization's usage and spend, one point per
@@ -144,6 +161,12 @@ message OrganizationUsagePoint {
   // Their usage is not in list_equivalent_usd_nanos, so when this is non-empty
   // that amount is a LOWER BOUND, not the full list equivalent.
   repeated string unpriced_dimensions = 9;
+  // group_by DEPLOYMENT only: the deployment's name and tier (backend,
+  // database, static), absent for usage with no deployment, and the
+  // environment the point's usage ran in.
+  optional string deployment_name = 10;
+  optional string tier = 11;
+  optional string environment_id = 12;
 }
 
 message OrganizationUsageQuantity {
@@ -220,6 +243,195 @@ message OrganizationUsageInventoryItem {
   int64 storage_gib = 7;
 }
 
+message GetProjectCostRequest {
+  string org_id = 1 [(buf.validate.field).required = true];
+  // The project's hosted_projects name.
+  string project_id = 2 [(buf.validate.field).required = true];
+  // Environment ids of the project to narrow to; empty means every
+  // environment of the project, including deleted ones.
+  repeated string environment_ids = 3;
+  // Any instant in the UTC calendar month to report; unset means the current
+  // month. A month that has not started is INVALID_ARGUMENT.
+  optional google.protobuf.Timestamp period = 4;
+}
+
+// One dollar figure and how far to trust it. Every figure carries its basis,
+// so no client re-derives it.
+message ProjectCostAmount {
+  // USD nanos. ABSENT means not measured (render "n/a"), never zero.
+  optional int64 usd_nanos = 1;
+  // invoiced        a finalized Stripe invoice covers it
+  // estimated       the estimated bill: list price minus this project's
+  //                 share of the organization's allowances, before the
+  //                 invoice replaces it ("Estimated · final on the invoice")
+  // list            usage at the plan's list rate, before any allowance
+  // not_billed      usage that is recorded but not billed yet (shadow-only
+  //                 kinds such as backend egress): usd_nanos is 0
+  // not_measured    no source could measure it: usd_nanos is absent
+  string basis = 2;
+  // The amount leaves out something that exists: usage with no list rate
+  // (named in unpriced_dimensions), or history that is not recorded for the
+  // whole span. Render "≥ $x".
+  bool lower_bound = 3;
+  // Resource kinds with usage in the span but no list rate (builds, the
+  // registry, CDN). Their usage is not in usd_nanos.
+  repeated string unpriced_dimensions = 4;
+  // The figure is this project's share of an organization-level amount,
+  // pro-rata by list price within each resource kind: the allowance share,
+  // and an invoiced month's per-project figure.
+  bool allocated = 5;
+}
+
+message ProjectCostForecast {
+  // The estimated bill at the end of the period, with allowances applied at
+  // period end as the invoice applies them. Absent (basis not_measured)
+  // before 24 measured hours, or when the period has ended.
+  ProjectCostAmount amount = 1;
+  // The band: the period to date plus the lowest and highest complete day of
+  // the trailing seven, over the remaining days. Absent with amount.
+  optional int64 low_usd_nanos = 2;
+  optional int64 high_usd_nanos = 3;
+  // run_rate_and_trailing_7d: requested-capacity kinds (CPU, memory,
+  // storage) at the last complete hour's rate, flow kinds (egress, builds)
+  // at the trailing seven days' hourly average.
+  string method = 4;
+  // Distinct hours of the trailing seven days in which the scope has
+  // measured hosted usage (0..168).
+  int32 measured_hours = 5;
+  // Why there is no forecast, when there is none.
+  string unavailable_reason = 6;
+  // The list price at period end, before allowances.
+  ProjectCostAmount list = 7;
+}
+
+// One UTC day of one category in one environment, at list price.
+message ProjectCostDay {
+  google.protobuf.Timestamp day = 1;
+  // compute, databases, storage, bandwidth, static_sites, builds.
+  string category = 2;
+  string environment_id = 3;
+  ProjectCostAmount list = 4;
+  // Per resource kind: vcpu_hours, gib_hours, gib, site_hours.
+  repeated OrganizationUsageQuantity quantities = 5;
+  // The day is not over: measured through generated_at's measured_through.
+  bool partial = 6;
+}
+
+// One workload's list price over the period to date.
+message ProjectCostDriver {
+  // Empty for usage metered to no deployment (static-site egress).
+  string deployment_id = 1;
+  string deployment_name = 2;
+  string environment_id = 3;
+  string environment_name = 4;
+  // backend, database, static.
+  string tier = 5;
+  // The category that carries most of its list price.
+  string category = 6;
+  ProjectCostAmount list = 7;
+  // List price over the same elapsed span of the previous period; absent
+  // when that span is not recorded.
+  optional int64 previous_usd_nanos = 8;
+  // Share of the project's list price over the period to date (0..1).
+  double share = 9;
+  repeated OrganizationUsageQuantity quantities = 10;
+  // The deployment's requested size now; absent for usage with no
+  // deployment. Hosting bills requested, not used, capacity.
+  optional ProjectCostRequestedSize requested = 11;
+  // The deployment no longer exists; its past usage is still here.
+  bool deleted = 12;
+}
+
+message ProjectCostRequestedSize {
+  int32 replicas = 1;
+  int32 cpu_milli = 2;
+  int32 memory_mib = 3;
+  int32 storage_gib = 4;
+}
+
+// One organization allowance and how much of it this project used.
+message ProjectCostAllowance {
+  // static_egress, egress, observability.
+  string id = 1;
+  // gib.
+  string unit = 2;
+  double included = 3;
+  // The organization's use this period; absent when not measured.
+  optional double org_used = 4;
+  // This project's part of org_used; absent when the allowance's usage is
+  // not attributed to projects (observability until per-environment
+  // metering exists).
+  optional double project_used = 5;
+  // The organization's projected use at period end; absent when it cannot
+  // be projected.
+  optional double projected = 6;
+  // The allowance's usage is recorded but not billed yet.
+  bool not_billed = 7;
+  // This project's share of the allowance credit, in dollars (zero or
+  // negative; basis estimated, allocated).
+  ProjectCostAmount project_credit = 8;
+}
+
+// One organization-level cap and how close it is.
+message ProjectCostCap {
+  // hosting_budget          the hosting agreement's monthly budget (USD)
+  // observability_spend_cap the observability overage spend cap (USD)
+  // static_egress_free_tier the free tier's static-site bandwidth cut-off (GiB)
+  string id = 1;
+  // usd_nanos or gib.
+  string unit = 2;
+  optional double limit = 3;
+  optional double used = 4;
+  // At the current rate, period end.
+  optional double projected = 5;
+  // ok, reached, over_100, over_150 (the observability ladder),
+  // not_capped (the org's plan sets no such cap), or not_measured (the cap is
+  // set but usage against it could not be read).
+  string state = 6;
+  // When used reaches limit at the current rate, if before period end.
+  optional google.protobuf.Timestamp projected_reach_at = 7;
+}
+
+message GetProjectCostResponse {
+  string currency = 1;
+  google.protobuf.Timestamp generated_at = 2;
+  google.protobuf.Timestamp period_start = 3;
+  google.protobuf.Timestamp period_end = 4;
+  // The hosted usage the figures include ends here: the cost rollup's
+  // watermark, never later than generated_at. Absent when nothing is rolled.
+  google.protobuf.Timestamp measured_through = 5;
+  // The estimated bill for the period to date (basis estimated; invoiced
+  // once a finalized invoice covers a past period).
+  ProjectCostAmount month_to_date = 6;
+  // The same span at list price, before allowances.
+  ProjectCostAmount month_to_date_list = 7;
+  // The previous period's estimated bill over the same elapsed span.
+  ProjectCostAmount same_point_last_period = 8;
+  ProjectCostForecast forecast = 9;
+  // The previous period in full: invoiced (allocated) when a finalized
+  // hosting invoice covers it, estimated otherwise.
+  ProjectCostAmount last_period = 10;
+  // The period's days, by category and environment, at list price.
+  repeated ProjectCostDay daily = 11;
+  // Every workload of the scope with usage this period, most expensive
+  // first. Their list prices plus allowance_share equal month_to_date.
+  repeated ProjectCostDriver drivers = 12;
+  repeated ProjectCostAllowance allowances = 13;
+  repeated ProjectCostCap caps = 14;
+  // 15 anomalies, 16 releases and 17 budgets are kept for the design's
+  // later phases (C4, C7).
+  repeated OrganizationUsageCoverage coverage = 18;
+  // The reconciliation line: this project's share of the organization's
+  // allowance credit over the period to date (zero or negative, basis
+  // estimated, allocated). Σ drivers' list + allowance_share = month_to_date.
+  ProjectCostAmount allowance_share = 19;
+  // List price over the last 24 complete hours.
+  ProjectCostAmount last_24h = 20;
+  // The previous period's days, for the comparison line.
+  repeated ProjectCostDay last_period_daily = 21;
+  google.protobuf.Timestamp last_period_start = 22;
+}
+
 // === BillingService (public) ===
 //
 // User-facing billing RPCs. Admin-only (org-scoped or arbitrary-user) and
@@ -240,6 +452,20 @@ service BillingService {
   // ledgers (never live telemetry). Requires billing:read, re-checked at use,
   // and is scoped to the caller's organization. Range is at most 400 days.
   rpc ListOrganizationUsage(ListOrganizationUsageRequest) returns (ListOrganizationUsageResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+    };
+  }
+
+  // One project's cost for one UTC calendar month, dashboard-shaped: the
+  // estimated bill to date, the forecast, last month, daily list price,
+  // drivers per workload, allowances and caps. The server owns every figure's
+  // arithmetic and its basis. Requires billing:read, re-checked at use;
+  // environment-bound credentials are refused. The project must belong to
+  // org_id (NOT_FOUND otherwise), and environment_ids must be its
+  // environments.
+  rpc GetProjectCost(GetProjectCostRequest) returns (GetProjectCostResponse) {
     option (forge.v1.method) = {
       auth_required: true
       idempotent: true

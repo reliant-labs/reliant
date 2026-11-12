@@ -1831,8 +1831,9 @@ message QueryPanelResponse {
   // the scope and range: its series is empty, never an error). Metrics panels.
   repeated string warnings = 17;
   // sql panels drawn as a time series: the width of one bucket in seconds, so a
-  // client need not guess it from the points. A Date or Date32 first column is
-  // a calendar day (86400). A DateTime column is the {step} the statement was
+  // client need not guess it from the points. A panel that declares min_step
+  // reports that duration. Otherwise a Date or Date32 first column is a
+  // calendar day (86400), and a DateTime column is the {step} the statement was
   // bound to when it uses {step}; a statement that buckets by its own rule
   // reports 0 (unknown). 0 for every other panel kind (see step_seconds).
   int32 bucket_seconds = 18;
@@ -2094,6 +2095,12 @@ message Panel {
   // types. Empty or "auto" is a time series when the first column is a time
   // (and something follows it), rows otherwise. Refused on other kinds.
   string draw = 20 [(buf.validate.field).string.max_len = 16];
+  // sql panels only: the panel's bucket (forge dashspec Panel.minStep), a
+  // number and a unit of s, m, h or d ("1d", "7d"), at most 30 days. A
+  // statement that groups by a fixed bucket (toDate, toMonday) declares it, and
+  // QueryPanel reports it as bucket_seconds instead of guessing from the first
+  // column's type. Refused on other kinds or when it does not parse.
+  string min_step = 21 [(buf.validate.field).string.max_len = 16];
 }
 
 // The definition a funnel panel draws (forge.Funnel): product event names in

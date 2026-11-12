@@ -225,6 +225,26 @@ describe("buildUsageSummary — consumption against allowance", () => {
     expect(buildUsageSummary({ rows: [] }).isEstimate).toBe(true);
   });
 
+  it("sums the rows' costs when they were sent", () => {
+    const summary = buildUsageSummary({
+      rows: [usageRow({ costUsdNanos: 90_000_000n })],
+    });
+    expect(summary.costsWithheld).toBe(false);
+    expect(summary.accruedCents).toBe(9);
+  });
+
+  it("reads withheld costs as unknown, never as a $0 total", () => {
+    // costs_withheld: the server sent every cost as 0 meaning "not shown".
+    const summary = buildUsageSummary({
+      rows: [usageRow({ costUsdNanos: 0n })],
+      costsWithheld: true,
+    });
+    expect(summary.costsWithheld).toBe(true);
+    expect(summary.accruedCents).toBeNull();
+    // The quantities are still attributed.
+    expect(summary.attribution).toHaveLength(1);
+  });
+
   it("carries the server's accrued overage rather than re-deriving one", () => {
     const summary = buildUsageSummary({
       overage: overageResponse({ accruedOverageCents: 412, budgetCapReached: true }),

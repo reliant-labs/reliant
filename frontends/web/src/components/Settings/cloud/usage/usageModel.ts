@@ -218,8 +218,18 @@ export interface AttributionRow {
 export interface UsageSummary {
   dimensions: DimensionReading[];
   attribution: AttributionRow[];
-  /** Sum of cost_usd_nanos over the returned usage rows, in cents. */
-  accruedCents: number;
+  /**
+   * Sum of cost_usd_nanos over the returned usage rows, in cents. NULL when
+   * the costs were withheld: the server sent 0 meaning "not shown", and a
+   * number here would render as "$0.00", which reads as "free".
+   */
+  accruedCents: number | null;
+  /**
+   * The caller lacks billing:read, so ListUsage returned the quantities but no
+   * dollars (ListDeployUsageResponse.costs_withheld). Every cost on the rows
+   * is 0 meaning "not shown", and the UI must say who can see them instead.
+   */
+  costsWithheld: boolean;
   /** The server's accrued overage this period — the figure the cap is compared against. */
   accruedOverageCents: number;
   /** The server's own verdict on whether the cap has been reached. */
@@ -364,11 +374,14 @@ export interface BuildSummaryInput {
   overage?: InfraOverageResponse;
   /** ListUsage rows, for attribution only. */
   rows: DeployUsageRow[];
+  /** ListUsage's costs_withheld: the rows carry quantities but no dollars. */
+  costsWithheld?: boolean;
 }
 
 /** Assembles everything the page renders from the two RPC responses. */
 export function buildUsageSummary(input: BuildSummaryInput): UsageSummary {
   const { overage, rows } = input;
+  const costsWithheld = input.costsWithheld ?? false;
 
   const dimensions: DimensionReading[] = [];
   for (const dimension of overage?.dimensions ?? []) {
@@ -413,7 +426,8 @@ export function buildUsageSummary(input: BuildSummaryInput): UsageSummary {
   return {
     dimensions,
     attribution: buildAttribution(rows),
-    accruedCents: accruedNanos / NANOS_PER_CENT,
+    accruedCents: costsWithheld ? null : accruedNanos / NANOS_PER_CENT,
+    costsWithheld,
     accruedOverageCents: overage?.accruedOverageCents ?? 0,
     budgetCapReached: overage?.budgetCapReached ?? false,
     cap: overageChoiceFromCap(overage?.budgetCents),
