@@ -54,6 +54,7 @@ import { LaunchKindIcon } from "../runs/LaunchKindIcon";
 import { AutomationActivityPill } from "./AutomationActivityPill";
 import { InboxNavItem } from "../inbox/InboxNavItem";
 import { SidebarApps } from "../Apps/SidebarApps";
+import { SharedWithOrgSection } from "../Sharing/SharedWithOrgSection";
 import { OrgSwitcher } from "../Orgs/OrgSwitcher";
 import { SidebarUpdateButton } from "./SidebarUpdateButton";
 import type { RunsSearch } from "../../routeSchemas";
@@ -2230,6 +2231,9 @@ function SidebarComponent({
               </div>
             )
           ) : null}
+
+          {/* Other members' shared chats, read-only; nothing when there are none. */}
+          {chatListTab === "active" && <SharedWithOrgSection activeChatId={activeChatId ?? null} />}
 
           {listLoading && (
             <div role="status" aria-label="Loading chats" className="space-y-1.5 px-1 py-2" data-testid="chat-list-loading">

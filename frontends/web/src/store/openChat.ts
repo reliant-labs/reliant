@@ -13,9 +13,10 @@
 import type { Chat } from "../api/client";
 import { beginWorkspaceOpen, findProject, openChatInWorkspace, ChatProjectUnavailableError } from "../lib/openChatInWorkspace";
 export { findProject, ChatProjectUnavailableError } from "../lib/openChatInWorkspace";
-import { getChatFromCache } from "../hooks/chat-queries";
+import { getChatFromCache, seedChatDetail } from "../hooks/chat-queries";
 import { resolveMainWorktree, resolveWorktree } from "../hooks/worktree-queries";
 import { useChatStore } from "./chatStore";
+import { useChatNavigationStore } from "./chatNavigationStore";
 import { useProjectStore } from "./projectStore";
 import { useWorkspaceStateStore } from "./workspaceStateStore";
 import { useWorktreeStore } from "./worktreeStore";
@@ -28,6 +29,19 @@ import { useNewChatMachineStore } from "./newChatMachineStore";
  */
 export function openChat(chat: Chat, isCurrent?: () => boolean): Promise<void> {
   return openChatInWorkspace(chat, { navigate: true, isCurrent });
+}
+
+/**
+ * Open a chat another member shared with the org, read-only, in the main
+ * pane. Its project and workspace are its owner's, not the viewer's, so
+ * neither context follows it (openChat would refuse: the project is not one
+ * of theirs). It is not remembered as the context project's last chat either.
+ */
+export function openSharedChat(chat: Chat): void {
+  beginWorkspaceOpen();
+  seedChatDetail(chat);
+  useChatStore.getState().selectChat(chat, { deferPersist: true });
+  useChatNavigationStore.getState().navigateToChat(chat.id);
 }
 
 /**
