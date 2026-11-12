@@ -1,0 +1,197 @@
+// yours: scaffolded once, never touched again — forge will not overwrite this file
+//
+// Pins how src/lib/auth/context.tsx answers "who is signed in?" in each mode.
+//
+// The bug this guards: with MOCK_API set, the context still asked the server
+// (GET /auth/session). Pure mock has no server, so the request failed, the
+// context read signed-out, and the route guard bounced every page to a
+// sign-in form that posts to a server that is not there. Mock mode ("true"
+// AND "hybrid") must sign the UI in as the fixture user without that
+// request. With mock mode off, the server is the only thing that can answer,
+// so the context must ask it.
+//
+// Lives under the browser-shared root because it is a Vitest suite: Next.js
+// and Vite SPA both run `vitest run`.
+
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+// The runtime's telemetry entry points, observed: what the context names to
+// telemetry is the subject of the identity tests below.
+const telemetry = vi.hoisted(() => ({ identifyUser: vi.fn() }));
+vi.mock("@reliantlabs/forge-web-runtime", async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  identifyUser: telemetry.identifyUser,
+}));
+
+import { AuthContextProvider } from "./context";
+import { RouteGuard } from "./route-guard";
+import { useAuth } from "./use-auth";
+{{- if .HasTypedConfig}}
+
+// The mode is read through the typed config module, exactly as the app
+// reads it. A live object, so each test can set the mode before it mounts.
+const config = vi.hoisted(() => ({ API_URL: "", MOCK_API: "" }));
+vi.mock("@/lib/config_gen", () => ({ loadConfig: () => config }));
+
+function setMockMode(mode: string) {
+  config.MOCK_API = mode;
+}
+{{- else}}
+
+function setMockMode(mode: string) {
+  vi.stubEnv("{{if eq .Platform "vite-spa"}}VITE_MOCK_API{{else}}NEXT_PUBLIC_MOCK_API{{end}}", mode);
+}
+{{- end}}
+
+/**
+ * Stands in for the network. "unreachable" is what pure mock really looks
+ * like — there is no server — so a context that still asks reads
+ * signed-out. "signed-in" is a real backend with a live session.
+ */
+function stubServer(server: "unreachable" | "signed-in") {
+  const fetchMock = vi.fn(async () => {
+    if (server === "unreachable") throw new TypeError("Failed to fetch");
+    return new Response(JSON.stringify({ authenticated: true, email: "real@example.com", subject: "sub_real" }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  });
+  vi.stubGlobal("fetch", fetchMock);
+  return fetchMock;
+}
+
+function Probe() {
+  const { identity, isAuthenticated, isLoading, logout } = useAuth();
+  if (isLoading) return <p>checking</p>;
+  return (
+    <div>
+      <p>{isAuthenticated ? `signed in as ${identity.email ?? ""}` : "signed out"}</p>
+      <button type="button" onClick={() => void logout()}>
+        Sign out
+      </button>
+    </div>
+  );
+}
+
+afterEach(() => {
+  cleanup();
+  setMockMode("");
+  vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
+  telemetry.identifyUser.mockClear();
+  delete (window as unknown as { __FORGE_CONFIG__?: unknown }).__FORGE_CONFIG__;
+});
+
+describe("AuthContextProvider", () => {
+  it.each(["true", "hybrid"])(
+    "signs in as the fixture user when MOCK_API=%s, without asking the server",
+    async (mode) => {
+      setMockMode(mode);
+      const fetchMock = stubServer("unreachable");
+
+      render(
+        <AuthContextProvider>
+          <Probe />
+        </AuthContextProvider>,
+      );
+
+      expect(await screen.findByText("signed in as dev@localhost")).toBeTruthy();
+      expect(fetchMock).not.toHaveBeenCalled();
+    },
+  );
+
+  it("lets the route guard through in mock mode", async () => {
+    setMockMode("true");
+    stubServer("unreachable");
+    const navigate = vi.fn();
+
+    render(
+      <AuthContextProvider>
+        <RouteGuard pathname="/dashboard" navigate={navigate}>
+          <p>protected page</p>
+        </RouteGuard>
+      </AuthContextProvider>,
+    );
+
+    expect(await screen.findByText("protected page")).toBeTruthy();
+    expect(navigate).not.toHaveBeenCalled();
+  });
+
+  it("signs the fixture user out locally in mock mode", async () => {
+    setMockMode("true");
+    const fetchMock = stubServer("unreachable");
+
+    render(
+      <AuthContextProvider>
+        <Probe />
+      </AuthContextProvider>,
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "Sign out" }));
+
+    expect(await screen.findByText("signed out")).toBeTruthy();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("names the signed-in user to telemetry", async () => {
+    setMockMode("");
+    stubServer("signed-in");
+
+    render(
+      <AuthContextProvider>
+        <Probe />
+      </AuthContextProvider>,
+    );
+
+    expect(await screen.findByText("signed in as real@example.com")).toBeTruthy();
+    expect(telemetry.identifyUser).toHaveBeenLastCalledWith("sub_real");
+  });
+
+  it("names nobody to telemetry when the runtime config says IDENTIFY_USER = \"false\"", async () => {
+    setMockMode("");
+    stubServer("signed-in");
+    (window as unknown as { __FORGE_CONFIG__?: Record<string, unknown> }).__FORGE_CONFIG__ = { IDENTIFY_USER: "false" };
+
+    render(
+      <AuthContextProvider>
+        <Probe />
+      </AuthContextProvider>,
+    );
+
+    expect(await screen.findByText("signed in as real@example.com")).toBeTruthy();
+    // Only ever cleared: no subject is attached, so no heartbeat is sent.
+    expect(telemetry.identifyUser).toHaveBeenCalled();
+    for (const [id] of telemetry.identifyUser.mock.calls) expect(id).toBeNull();
+  });
+
+  it("names nobody to telemetry in mock mode", async () => {
+    setMockMode("true");
+    stubServer("unreachable");
+
+    render(
+      <AuthContextProvider>
+        <Probe />
+      </AuthContextProvider>,
+    );
+
+    expect(await screen.findByText("signed in as dev@localhost")).toBeTruthy();
+    expect(telemetry.identifyUser).not.toHaveBeenCalled();
+  });
+
+  it("asks the server who is signed in when mock mode is off", async () => {
+    setMockMode("");
+    const fetchMock = stubServer("signed-in");
+
+    render(
+      <AuthContextProvider>
+        <Probe />
+      </AuthContextProvider>,
+    );
+
+    expect(await screen.findByText("signed in as real@example.com")).toBeTruthy();
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringMatching(/\/auth\/session$/),
+      expect.anything(),
+    );
+  });
+});

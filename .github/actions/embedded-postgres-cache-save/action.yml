@@ -1,0 +1,44 @@
+name: Save the embedded postgres archives
+description: >-
+  The other half of embedded-postgres-cache: saves the embedded-postgres
+  archive directory under a key naming its content, when this job fetched an
+  archive the restored entry lacked. Run it last, under a main-only condition.
+
+# Main only, like save-go-caches: an entry a pull request saves is visible to
+# that pull request alone and costs everyone else budget. Why the key is the
+# content: embedded-postgres-cache's header.
+
+runs:
+  using: composite
+  steps:
+    - name: Name the archives this job holds
+      id: content
+      shell: bash
+      run: |
+        dir="${EMBEDDED_POSTGRES_CACHE_PATH/#\~/$HOME}"
+        if [ -z "$dir" ] || [ ! -d "$dir" ] || [ -z "$(ls -A "$dir")" ]; then
+          echo "no embedded postgres archives to save"
+          echo "save=false" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+        # File names carry the os, arch and postgres version; the size tells a
+        # complete archive from one a killed download left behind.
+        listing="$(cd "$dir" && for f in *; do printf '%s %s\n' "$f" "$(wc -c < "$f" | tr -d ' ')"; done | LC_ALL=C sort)"
+        echo "$listing"
+        key="embedded-postgres-${RUNNER_OS}-archives-$(printf '%s\n' "$listing" | sha256sum | cut -c1-16)"
+        echo "key=$key" >> "$GITHUB_OUTPUT"
+        if [ "$key" = "${EMBEDDED_POSTGRES_RESTORED_KEY:-}" ]; then
+          echo "unchanged since restore ($key)"
+          echo "save=false" >> "$GITHUB_OUTPUT"
+        else
+          echo "new archives: saving $key (restored ${EMBEDDED_POSTGRES_RESTORED_KEY:-nothing})"
+          echo "save=true" >> "$GITHUB_OUTPUT"
+        fi
+    # Another job that fetched the same archive may have saved this key first;
+    # actions/cache/save then warns and moves on.
+    - name: Save the embedded postgres archives
+      if: ${{ steps.content.outputs.save == 'true' }}
+      uses: actions/cache/save@v6
+      with:
+        path: ${{ env.EMBEDDED_POSTGRES_CACHE_PATH }}
+        key: ${{ steps.content.outputs.key }}
