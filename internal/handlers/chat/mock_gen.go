@@ -103,6 +103,7 @@ type MockRepository struct {
 	ThreadAwaitsReplyFunc                                    func(context.Context, string) (bool, error)
 	IsLatestTurnInThreadFunc                                 func(context.Context, string, string) (bool, error)
 	CountMessagesInThreadFunc                                func(context.Context, string) (int, error)
+	CountUserMessagesCappedFunc                              func(context.Context, string, int) (int, error)
 	CountMessagesInChatOutsideThreadFunc                     func(context.Context, string, string) (int, error)
 	ListTranscriptSiblingMessagesInRangeFunc                 func(context.Context, string, string, int64, *int64, int) ([]*db.Message, error)
 	GetWorkflowByThreadFunc                                  func(context.Context, string, string) (*db.Workflow, error)
@@ -443,6 +444,15 @@ func (m *MockRepository) CountMessagesInThread(ctx context.Context, threadID str
 		return m.CountMessagesInThreadFunc(ctx, threadID)
 	}
 	return 0, contractkit.MockNotSet("MockRepository", "CountMessagesInThread")
+}
+
+// CountUserMessagesCapped records the call and delegates to CountUserMessagesCappedFunc when set.
+func (m *MockRepository) CountUserMessagesCapped(ctx context.Context, userID string, limit int) (int, error) {
+	m.Recorder.Record("CountUserMessagesCapped", ctx, userID, limit)
+	if m.CountUserMessagesCappedFunc != nil {
+		return m.CountUserMessagesCappedFunc(ctx, userID, limit)
+	}
+	return 0, contractkit.MockNotSet("MockRepository", "CountUserMessagesCapped")
 }
 
 // CountMessagesInChatOutsideThread records the call and delegates to CountMessagesInChatOutsideThreadFunc when set.

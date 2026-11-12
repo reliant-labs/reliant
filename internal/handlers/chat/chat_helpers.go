@@ -310,21 +310,34 @@ func (s *Service) trackMessageSent(ctx context.Context, userID string, chat *db.
 	analyticsClient := analytics.ForUser(ctx, userID)
 	analyticsClient.TrackMessageSent(metrics)
 
-	// Check if this is the user's first-ever message across all chats
-	if isFirstInChat {
-		// List all chats for this user to see if they have any other chats with messages
-		chats, err := s.deps.Repo.SearchChats(ctx, db.ChatSearchFilters{
-			UserID: userID,
-			Limit:  2, // We only need to know if there's more than 1
+	// The message is already stored, so it is the user's first ever exactly
+	// when it is the only user message in all of their chats. A failed count
+	// reports nothing rather than a wrong first.
+	firstForUser := false
+	if n, err := s.deps.Repo.CountUserMessagesCapped(ctx, userID, 2); err == nil {
+		firstForUser = n == 1
+	} else {
+		logging.WarnContext(ctx, "[Analytics] Could not count the user's messages; user_first_message not emitted",
+			"userID", userID, "error", err)
+	}
+	if firstForUser {
+		analyticsClient.TrackUserFirstMessage(analytics.UserFirstMessageMetrics{
+			MessageID:    messageID,
+			ChatID:       chat.ID,
+			ProjectID:    chat.ProjectID,
+			WorkflowType: workflowType,
 		})
-		if err == nil && len(chats) <= 1 {
-			analyticsClient.TrackFirstMessageSent(analytics.FirstMessageSentMetrics{
-				ChatID:       chat.ID,
-				ProjectID:    chat.ProjectID,
-				WorkflowName: workflowName,
-				WorkflowType: workflowType,
-			})
-		}
+	}
+
+	// first_message_sent is per chat.
+	if isFirstInChat {
+		analyticsClient.TrackFirstMessageSent(analytics.FirstMessageSentMetrics{
+			ChatID:       chat.ID,
+			ProjectID:    chat.ProjectID,
+			WorkflowName: workflowName,
+			WorkflowType: workflowType,
+			FirstForUser: firstForUser,
+		})
 	}
 }
 

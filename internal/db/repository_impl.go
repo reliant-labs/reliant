@@ -770,6 +770,18 @@ func (r *Repo) CountMessagesInThread(ctx context.Context, threadID string) (int,
 	return r.countMessages(ctx, orm.WhereEq(store.MessageFieldThreadID, threadID))
 }
 
+// CountUserMessagesCapped counts the user-role messages in userID's chats, up
+// to limit.
+func (r *Repo) CountUserMessagesCapped(ctx context.Context, userID string, limit int) (int, error) {
+	if userID == "" {
+		return 0, fmt.Errorf("user ID cannot be empty")
+	}
+	if limit <= 0 {
+		return 0, fmt.Errorf("limit must be positive")
+	}
+	return store.CountUserMessagesCapped(ctx, r.ORM(), userID, limit)
+}
+
 // GetMessagesByContextWindow loads messages from a specific context window.
 // This is used by the threads package for CW chain resolution.
 func (r *Repo) GetMessagesByContextWindow(ctx context.Context, contextWindowID string, maxOrdinal *int64) ([]*Message, error) {

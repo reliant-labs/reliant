@@ -337,6 +337,29 @@ func CountMessagesInChatOutsideThread(ctx context.Context, db orm.Context, chatI
 	return n, nil
 }
 
+// CountUserMessagesCapped is how many messages userID has typed, counted up to
+// limit: the query stops at limit rows, so asking "is this the user's first?"
+// (limit 2) never scans a heavy user's history. Only user-role messages on a
+// chat's main thread count, in chats a person started: the prompts automations
+// and agents seed, and the ones workflow nodes write on their own threads, are
+// not the user's messages.
+func CountUserMessagesCapped(ctx context.Context, db orm.Context, userID string, limit int) (int, error) {
+	var n int
+	err := db.Bun().NewRaw(`SELECT count(*) FROM (
+ SELECT 1 FROM messages m
+ JOIN chats c ON c.id = m.chat_id
+ JOIN threads t ON t.id = m.thread_id AND t.origin = ?
+ WHERE c.user_id = ? AND m.role = ?
+   AND (c.origin IS NULL OR c.origin NOT IN (?, ?))
+ LIMIT ?) AS capped`,
+		string(core.ThreadOriginMain), userID, int32(reliantv1.MessageRole_MESSAGE_ROLE_USER),
+		int32(core.ChatOriginAutomation), int32(core.ChatOriginAgent), limit).Scan(ctx, &n)
+	if err != nil {
+		return 0, fmt.Errorf("failed to count user messages: %w", err)
+	}
+	return n, nil
+}
+
 // UpdateMessageUsage records what a message cost: the context size the LLM
 // reported (token_count) and its price. A message that does not exist is
 // not an error.

@@ -61,9 +61,29 @@ whose runtime config sets `OTEL_ENDPOINT` (`telemetryEndpoint.ts`).
 ## Who emits what
 
 Each event has exactly one producer, so a count never has to be de-duplicated.
-`message_sent` (and `first_message_sent`) are the backend's: it knows the
-message id, workflow and thread, sees every client (web, desktop, CLI,
-triggers) and is immune to ad blockers. The web has no `message_sent`.
+`message_sent`, `first_message_sent` and `user_first_message` are the
+backend's: it knows the message id, workflow and thread, sees every client (web,
+desktop, CLI, triggers) and is immune to ad blockers. The web has no
+`message_sent`.
+
+**`first_message_sent` is per CHAT, not per user:** it fires for the first
+message of every chat (so a user with 58 chats has 58), with `chat_id`,
+`project_id`, `workflow_name`, `workflow_type` and `first_for_user`. Do not
+count it for activation. **`user_first_message` is the activation event:** it
+fires exactly once per user, for the first message they ever typed (`message_id`,
+`chat_id`, `project_id`, `workflow_type`: opaque ids and an enum only, never a
+workflow name or any message text). `first_message_sent` carries
+`first_for_user=true` on the one chat whose first message is that one, so either
+`countIf(first_for_user = 'true')` or `user_first_message` answers "activated".
+
+Both are decided server-side when the message is stored: the user's first iff
+the count of user-role messages on a chat's main thread, across the chats a
+person started (automation and agent chats, whose seeded prompts the user did not
+type, are excluded), is 1 (`store.CountUserMessagesCapped`, capped at 2 rows). If
+that count fails, neither the event nor `first_for_user=true` is emitted. Two
+first chats started in the same instant can each see the other's message and
+emit neither: a rare undercount, never a double count. Messages sent before this
+shipped are not backfilled: an older user's next message is not a first.
 `llm_call_completed` is the worker's: `CallLLMActivity` emits one per model call
 (success or failure) from the one place that has the provider, the usage and the
 latency. Its fields are counts and metadata only, never prompt or reply text:
