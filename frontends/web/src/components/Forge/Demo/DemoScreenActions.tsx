@@ -3,9 +3,9 @@
 /**
  * The public demo's one row of chrome under the console's header: a quiet
  * "Sample app · read-only data" line and what the demo records (the same on
- * every entry, the tour's route included), then Take the tour, Install Forge and the primary Sign up free.
+ * every entry, the tour's route included), then Take the tour, Install Forge, Sign up free and the primary Deploy yours free.
  *
- * On a phone the row is one line, the status and Sign up: the tour, Install
+ * On a phone the row is one line, the status and Deploy yours free: the tour, Install
  * and the telemetry notice sit in the nav drawer (DemoDrawerActions, through
  * DemoNavExtras). "How it was built" is a nav row of its own, not an action.
  *
@@ -20,7 +20,7 @@ import { parseTourParam } from "@/components/Onboarding/tourParam";
 import { trackEvent } from "@/lib/analytics";
 import { PRIVACY_POLICY_URL } from "@/lib/privacyLinks";
 import { browserOptedOut, demoTelemetry, demoTelemetryNotice } from "@/lib/demoTelemetry";
-import { SignUpButton, InstallForgeLink } from "./DemoCta";
+import { DeployYoursButton, SignUpLink, InstallForgeLink } from "./DemoCta";
 import { useConsoleDrawerOpen } from "./DemoCorner";
 import { useDemoDataStatus } from "./demoData/demoDataStatus";
 import { FORGE_DEMO_PATH } from "./demoPath";
@@ -106,7 +106,8 @@ export function DemoScreenActions() {
       <div className="flex shrink-0 items-center gap-3">
         {!tourOpen && <TakeTheTourButton className="max-md:hidden" />}
         <span className="max-md:hidden"><InstallForgeLink placement="banner">Install Forge</InstallForgeLink></span>
-        <SignUpButton placement="banner" size="md" />
+        <SignUpLink placement="banner" className="max-md:hidden" />
+        <DeployYoursButton placement="banner" size="md" />
       </div>
     </nav>,host,
   );

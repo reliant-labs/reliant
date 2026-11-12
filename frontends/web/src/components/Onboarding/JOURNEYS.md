@@ -391,7 +391,7 @@ the visitor stays on the console.
 The public demo gives each page one compact, non-modal explanation: what it
 is, why it helps, and how to use it (2–3 sentences). Dismiss leaves an
 accessible `?` restore button. Secondary agent help is a click/tap/keyboard
-disclosure, not hover-only. Sign up stays primary, Install forge secondary.
+disclosure, not hover-only. Deploy yours free is primary (the only button on a phone), Install forge and Sign up free secondary.
 There is no global toast or automatic local multi-stop sequence.
 
 Every actual page entry automatically opens that page's explanation (including

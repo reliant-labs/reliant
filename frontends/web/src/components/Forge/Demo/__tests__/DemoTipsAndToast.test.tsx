@@ -160,13 +160,17 @@ it("a logs tour link that carries its trace runs the guided step, not the page c
   expect(callout).toHaveTextContent("What that request logged");
   expect(callout).not.toHaveTextContent(DEMO_TIPS.logs.body);
 });
-it("the action row is Take the tour, Install Forge and Sign up, and survives navigation", async()=>{
+it("the action row is Take the tour, Install Forge, Sign up and the primary Deploy yours free, and survives navigation", async()=>{
   const {go}=renderDemo("/forge/p/shop");
   const row = await screen.findByTestId("demo-screen-actions");
   expect(row).toHaveTextContent("Sample app · read-only data");
   expect(row).toHaveTextContent("Take the tour");
   expect(row).toHaveTextContent("Install Forge");
   expect(row.querySelector('[data-testid="demo-cta-signup"]')).not.toBeNull();
+  expect(row.querySelector('[data-testid="demo-cta-deploy"]')).toHaveTextContent("Deploy yours free");
+  // On a phone the row keeps only Deploy yours free: Sign up hides below md.
+  expect(row.querySelector('[data-testid="demo-cta-signup"]')!.className).toMatch(/max-md:hidden/);
+  expect(row.querySelector('[data-testid="demo-cta-deploy"]')!.className).not.toMatch(/max-md:hidden/);
   expect(row).not.toHaveTextContent(/How Forge builds this|How it was built/);
   // No z-index of its own: a dialog or the tour's modal card always paints over it.
   expect(row.className).not.toMatch(/\bz-/);
