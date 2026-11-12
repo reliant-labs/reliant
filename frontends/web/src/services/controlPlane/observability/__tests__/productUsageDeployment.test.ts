@@ -17,15 +17,28 @@ const client = vi.hoisted(() => ({ queryPanel: vi.fn() }));
 vi.mock("../obsClient", () => ({ obsClient: () => client }));
 const raw = readFileSync("../../deploy/observability/spec/project_gen.json");
 const spec = JSON.parse(raw.toString()) as { dashboards: { id: string; panels: unknown[] }[] };
-const usage = { panels: spec.dashboards.find(dashboard => dashboard.id === "usage")!.panels.map(panelFromJson) };
+// forge #2075's built-in analytics dashboards replaced the generated "usage"
+// dashboard: "product" is its successor, beside "users" and "acquisition".
+const ANALYTICS = { product: 15, users: 16, acquisition: 16 } as const;
+const dashboard = (id: string) => {
+  const found = spec.dashboards.find(d => d.id === id);
+  if (!found) throw new Error(`the generated spec has no "${id}" dashboard`);
+  return { panels: found.panels.map(panelFromJson) };
+};
+const usage = dashboard("product");
 const window = { startMs: Date.UTC(2026, 2, 16, 0), endMs: Date.UTC(2026, 2, 16, 12) };
 beforeEach(() => client.queryPanel.mockReset());
 
-it("loads the actual generated deployment dashboard and sends every unchanged panel through the hosted adapter", async () => {
-  expect(createHash("sha256").update(raw).digest("hex")).toBe("15000552a4f7b5fe6e8616a2076b98c8116709a691ecd068c97a4ba93a9eb22f");
-  expect(usage.panels).toHaveLength(17);
+it("loads the actual generated analytics dashboards and sends every unchanged panel through the hosted adapter", async () => {
+  expect(createHash("sha256").update(raw).digest("hex")).toBe("6e22a0004f2d793e2e4fc6d4c5c5c10250a76e097aebffb2f9d440ed2269a8b5");
+  expect(spec.dashboards.some(d => d.id === "usage")).toBe(false);
   client.queryPanel.mockResolvedValue(create(QueryPanelResponseSchema, { kind: "sql", columns: ["events"], rows: [{ group: { event: "synthetic" }, values: [2] }] }));
-  for (const panel of usage.panels) {
+  const panels = Object.entries(ANALYTICS).flatMap(([id, count]) => {
+    const { panels } = dashboard(id);
+    expect(panels, id).toHaveLength(count);
+    return panels;
+  });
+  for (const panel of panels) {
     const result = await queryPanel({ orgId: "org-a", projectId: "shop", envIds: ["env-a-prod"], filters: [], window, services: ["api"], panel, stepSeconds: 86400 });
     expect(client.queryPanel.mock.lastCall![0]).toMatchObject({ scope: { orgId: "org-a", projectId: "shop", envIds: ["env-a-prod"], services: ["api"] }, panel: { id: panel.id, kind: "sql", sql: panel.sql } });
     expect(result.rows).toEqual([{ group: { event: "synthetic" }, values: [2] }]);
