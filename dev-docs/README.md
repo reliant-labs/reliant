@@ -21,5 +21,6 @@ IDs, hosts or local infrastructure belong here, not in `docs/`.
 - `forge-shell-rollout.md` — activating the forge shell host (forge.reliantlabs.io): external configuration, post-deploy checks, rollback.
 - `project-machines-rollout.md` — post-deploy check of machine-specific folder browsing, project creation and the checkout remove/reclone guard, and their rollback.
 - `dashboard-postgres-panels.md` — post-deploy check for dashboard postgres panels (`AppDatabaseService`), and how to roll them back.
+- `forge-analytics-pin-rollout.md` — post-deploy check of the forge@cdac1da2 built-in analytics dashboards and the demo's full analytics tier (DNT/GPC included), and their rollback.
 - `design/mobile-chat-redesign.md` — mobile and tablet chat thread redesign: one top bar, inline composer, status slot, parity map.
 - `design/terminal-reattach.md` — keeping a terminal's shell across a reconnect: attach, detached-session reaper, offset replay (proposal).

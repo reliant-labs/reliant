@@ -211,12 +211,17 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant forge env floor lower`](#reliant-forge-env-floor-lower) | Lift every order floor above `<release>` and set one at it, in one change |
 | [`reliant forge env floor set`](#reliant-forge-env-floor-set) | Set an order floor: nothing cut before `<release>` deploys here |
 | [`reliant forge env floor show`](#reliant-forge-env-floor-show) | Show an environment's rollback floors |
+| [`reliant forge env gc`](#reliant-forge-env-gc) | Delete expired preview environments |
 | [`reliant forge env kcl`](#reliant-forge-env-kcl) | Evaluate this project's KCL directly |
 | [`reliant forge env kcl eval`](#reliant-forge-env-kcl-eval) | Evaluate a KCL file or package directory and print a selected field |
 | [`reliant forge env kcl imports`](#reliant-forge-env-kcl-imports) | Show where each forge project this project's KCL imports resolves to |
 | [`reliant forge env list`](#reliant-forge-env-list) | List the environments declared in deploy/kcl/ |
 | [`reliant forge env new`](#reliant-forge-env-new) | Scaffold a new deploy environment from an existing one |
 | [`reliant forge env options`](#reliant-forge-env-options) | List the render options an environment's KCL declares |
+| [`reliant forge env preview`](#reliant-forge-env-preview) | Per-PR / per-branch preview environments with an expiry |
+| [`reliant forge env preview create`](#reliant-forge-env-preview-create) | Write deploy/kcl/`<instance>`/ from the template env, with an expiry |
+| [`reliant forge env preview delete`](#reliant-forge-env-preview-delete) | Delete a preview: its hosted env or its namespaces, then its directory |
+| [`reliant forge env preview name`](#reliant-forge-env-preview-name) | Print the preview instance name for a PR or branch |
 | [`reliant forge env ps`](#reliant-forge-env-ps) | List every forge stack running on this machine, across all projects |
 | [`reliant forge env releases`](#reliant-forge-env-releases) | What was released to an environment, when, and what changed |
 | [`reliant forge env releases at`](#reliant-forge-env-releases-at) | Which release was live at a moment, and the releases either side |
@@ -1414,6 +1419,10 @@ first, then one row per skill group with its sub-skills collapsed into a
 ('forge skill load db/seeding'). Pass --all for the exhaustive flat table, or a
 group name ('forge skill list observability') for that group's parent and every
 sub-skill, each with its full path and description.
+
+In a directory with no forge.yaml (an existing app, any language), the skills
+that declare 'applies: any' come first, as APPLIES TO YOUR REPO: the ones that
+work there as it is, led by 'adopt'.
 
 'forge skill search `<keyword>`' is usually faster than reading either view —
 it scores paths, descriptions and BODIES, so it finds skills whose title
@@ -6327,10 +6336,12 @@ reliant forge env [flags]
 | [`down`](#reliant-forge-env-down) | Stop Forge host processes for an environment (or --all: across projects) |
 | [`exec`](#reliant-forge-env-exec) | Run a local command with a workload's resolved configuration |
 | [`floor`](#reliant-forge-env-floor) | Rollback floors: never deploy anything older than X to an environment |
+| [`gc`](#reliant-forge-env-gc) | Delete expired preview environments |
 | [`kcl`](#reliant-forge-env-kcl) | Evaluate this project's KCL directly |
 | [`list`](#reliant-forge-env-list) | List the environments declared in deploy/kcl/ |
 | [`new`](#reliant-forge-env-new) | Scaffold a new deploy environment from an existing one |
 | [`options`](#reliant-forge-env-options) | List the render options an environment's KCL declares |
+| [`preview`](#reliant-forge-env-preview) | Per-PR / per-branch preview environments with an expiry |
 | [`ps`](#reliant-forge-env-ps) | List every forge stack running on this machine, across all projects |
 | [`releases`](#reliant-forge-env-releases) | What was released to an environment, when, and what changed |
 | [`render`](#reliant-forge-env-render) | Print the Kubernetes objects deploy/kcl/`<env>`/ renders, with the cluster each lands on |
@@ -7480,6 +7491,40 @@ reliant forge env floor show <env> [flags]
 
 ---
 
+#### reliant forge env gc
+
+Delete expired preview environments
+
+Find and delete the preview instances whose expiry has passed:
+
+  - local instance directories (deploy/kcl/`<instance>`/ with a preview marker),
+    deleted like 'forge env preview delete': hosted env, namespaces, directory;
+  - namespaces on a cluster you operate labelled forge.dev/preview-of=`<template>`
+    whose forge.dev/expires-at has passed — found from the cluster alone, so a
+    CI runner that created them need not still exist. The clusters are the
+    ones each --from template env renders into, plus every --context.
+
+A hosted preview is also deleted by its control plane once it expires, when the
+control plane advertises shape-preview. An expiry that cannot be read is never
+treated as expired.
+
+```
+reliant forge env gc [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--context` | `stringSlice` | `[]` | Also scan these kubectl contexts for expired preview namespaces |
+| `--dry-run` | `bool` | - | List what expired; delete nothing |
+| `--from` | `stringSlice` | `[preview]` | Template env(s) whose previews to collect on its clusters |
+| `--json` | `bool` | - | Print the result as JSON |
+| `--yes` | `bool` | - | Confirm the deletions (required when non-interactive) |
+
+---
+
 #### reliant forge env kcl
 
 Evaluate this project's KCL directly
@@ -7755,6 +7800,123 @@ reliant forge env options <env> [flags]
 |------|------|---------|-------------|
 | `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 | `--json` | `bool` | - | Emit machine-readable JSON (name/type/default/help/required) |
+
+---
+
+#### reliant forge env preview
+
+Per-PR / per-branch preview environments with an expiry
+
+A preview is a copy of a committed template env (deploy/kcl/preview/ by
+default) named for a pull request or branch, which expires.
+
+  forge env preview create --pr 123 --ttl 72h   # writes deploy/kcl/preview-pr-123/
+  forge env deploy preview-pr-123 --yes         # an ordinary env from here on
+  forge env preview delete --pr 123 --yes       # on PR close
+  forge env gc --yes                            # delete what expired
+
+Hosted: a control plane that advertises shape-preview deletes an expired
+instance itself. On a cluster you operate, each instance renders into its own
+namespace (declare the template's namespace from option("env")), labelled so
+'forge env gc' finds it. Load the deploy/preview skill for the CI recipe.
+
+```
+reliant forge env preview [flags]
+```
+
+**Subcommands:**
+
+| Command | Description |
+|---------|-------------|
+| [`create`](#reliant-forge-env-preview-create) | Write deploy/kcl/`<instance>`/ from the template env, with an expiry |
+| [`delete`](#reliant-forge-env-preview-delete) | Delete a preview: its hosted env or its namespaces, then its directory |
+| [`name`](#reliant-forge-env-preview-name) | Print the preview instance name for a PR or branch |
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+
+---
+
+#### reliant forge env preview create
+
+Write deploy/kcl/`<instance>`/ from the template env, with an expiry
+
+Copy the template env (--from, default "preview") to deploy/kcl/`<instance>`/
+and mark it a preview expiring --ttl from now (default 72h; at most 30d). The
+instance's KCL is the template's, verbatim; the marker becomes Bundle.preview on
+every render. Re-running it for the same PR or branch refreshes the copy and
+the expiry.
+
+Refused: a template that is itself a preview instance; an existing env
+directory of that name that is not a preview of the same template; and an
+instance that would render into a namespace the template env renders into.
+
+```
+reliant forge env preview create [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--branch` | `string` | - | The branch the preview is for (instead of --pr) |
+| `--from` | `string` | `preview` | The committed template env the preview copies (deploy/kcl/`<from>`/) |
+| `--json` | `bool` | - | Print the result as JSON |
+| `--name-template` | `string` | - | How the instance is named: `{env}` is --from, `{id}` is pr-`<n>` or the branch (default "`{env}-``{id}`") |
+| `--pr` | `int` | `0` | The pull request the preview is for |
+| `--ttl` | `string` | `72h` | How long until the preview expires (72h, 7d; at most 30d) |
+
+---
+
+#### reliant forge env preview delete
+
+Delete a preview: its hosted env or its namespaces, then its directory
+
+Delete the preview for --pr / --branch (or --name): its hosted environment on
+the control plane, data included, or — on a cluster you operate — the
+namespaces it renders into, each only if it still carries the preview's label.
+Then remove deploy/kcl/`<instance>`/. A directory that is gone (a fresh CI
+checkout) is re-created from the template first, to know what to delete.
+
+```
+reliant forge env preview delete [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--branch` | `string` | - | The branch the preview is for (instead of --pr) |
+| `--from` | `string` | `preview` | The committed template env the preview copies (deploy/kcl/`<from>`/) |
+| `--name` | `string` | - | The instance to delete, by name (instead of --pr / --branch) |
+| `--name-template` | `string` | - | How the instance is named: `{env}` is --from, `{id}` is pr-`<n>` or the branch (default "`{env}-``{id}`") |
+| `--pr` | `int` | `0` | The pull request the preview is for |
+| `--yes` | `bool` | - | Confirm the deletion (required when non-interactive) |
+
+---
+
+#### reliant forge env preview name
+
+Print the preview instance name for a PR or branch
+
+```
+reliant forge env preview name [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--branch` | `string` | - | The branch the preview is for (instead of --pr) |
+| `--from` | `string` | `preview` | The committed template env the preview copies (deploy/kcl/`<from>`/) |
+| `--name-template` | `string` | - | How the instance is named: `{env}` is --from, `{id}` is pr-`<n>` or the branch (default "`{env}-``{id}`") |
+| `--pr` | `int` | `0` | The pull request the preview is for |
 
 ---
 
@@ -18769,6 +18931,10 @@ first, then one row per skill group with its sub-skills collapsed into a
 ('forge skill load db/seeding'). Pass --all for the exhaustive flat table, or a
 group name ('forge skill list observability') for that group's parent and every
 sub-skill, each with its full path and description.
+
+In a directory with no forge.yaml (an existing app, any language), the skills
+that declare 'applies: any' come first, as APPLIES TO YOUR REPO: the ones that
+work there as it is, led by 'adopt'.
 
 'forge skill search `<keyword>`' is usually faster than reading either view —
 it scores paths, descriptions and BODIES, so it finds skills whose title

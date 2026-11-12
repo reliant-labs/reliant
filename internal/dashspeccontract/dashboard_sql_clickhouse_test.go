@@ -2,13 +2,13 @@
 
 package dashspeccontract
 
-// The SHIPPED product-usage and Releases dashboards' SQL, executed against a
-// real ClickHouse. deploy/observability/spec/project_gen.json is forge's
-// generated output; forge proves its generator's SQL in internal/obsdash
-// (TestProductUsageSQLOnClickHouse, TestReleasesSQLOnClickHouse). These are the
-// same fixtures and the same hand-worked answers, run over the bytes this
-// repository ships rather than the generator's: a forge bump that changes the
-// dashboards is proven here, at the pin, by this repository's own lane.
+// The SHIPPED analytics and Releases dashboards' SQL, executed against a real
+// ClickHouse. deploy/observability/spec/project_gen.json is forge's generated
+// output; forge proves its SQL in pkg/obsbuiltin (the built-in analytics
+// dashboards) and internal/obsdash (TestReleasesSQLOnClickHouse). These run the
+// bytes this repository ships rather than the generator's: a forge bump that
+// changes the dashboards is proven here, at the pin, by this repository's own
+// lane.
 //
 // Every statement is compiled with forge's sql-panel compiler (obsquery), the
 // one the hosted console runs, so the parameters are bound exactly as in
@@ -37,10 +37,6 @@ const clickhouseImage = "clickhouse/clickhouse-server:26.8.24-alpine@sha256:b200
 
 // releasesDashboardID is forge's generated Releases dashboard.
 const releasesDashboardID = "releases"
-
-// retentionWeeks is the number of week columns forge's weekly-retention panel
-// draws (forge internal/obsdash retentionWeeks).
-const retentionWeeks = 12
 
 // clickhouse returns a runner over a ClickHouse container seeded with seed:
 // run(database, sql, args...) executes sql in database and returns its TSV.
@@ -139,50 +135,56 @@ func shippedSQL(t *testing.T, dashboard, id string, trend bool) string {
 	return ""
 }
 
-// productEventsSeed is the hosted product_events table (the columns the
-// panels read; control-plane's tenant schema has these and more) with a week
-// and a half of events in env e1 and one stray event in e2. The range under
-// test ends Monday 2026-03-16 12:00 UTC.
-//
-//	u1  active today, 3 days ago and 9 days ago (cohort 2026-03-02)
-//	u2  active today, and 105 days ago: past the 90-day first-seen window, so
-//	    still new today (cohort 2026-03-16)
-//	u3  active 20 days ago only (cohort 2026-02-23)
-//	anonymous page views count as views, never as users
-const productEventsSeed = `
-DROP DATABASE IF EXISTS forge_product_usage_test;
-CREATE DATABASE forge_product_usage_test;
-CREATE TABLE forge_product_usage_test.product_events (
+// analyticsSeed is the hosted tenant tables the analytics dashboards read
+// (product_events with the edge columns, and error_events; the columns the
+// panels name, typed as control-plane's tenant schema types them), with a
+// visit, a sign-up and a few product events in env e1 and one event in e2.
+// The range under test ends Monday 2026-03-16 12:00 UTC.
+const analyticsSeed = `
+DROP DATABASE IF EXISTS forge_analytics_test;
+CREATE DATABASE forge_analytics_test;
+CREATE TABLE forge_analytics_test.product_events (
     Timestamp DateTime64(9), ServiceName LowCardinality(String), EnvId LowCardinality(String),
-    SessionId String, UserId String, EventName LowCardinality(String), Props Map(LowCardinality(String), String)
+    SessionId String, UserId String, EventName LowCardinality(String), Props Map(LowCardinality(String), String),
+    Client LowCardinality(String), VisitorId String,
+    DayVisitor String DEFAULT '', Country LowCardinality(String) DEFAULT '', Region LowCardinality(String) DEFAULT '',
+    DeviceType LowCardinality(String) DEFAULT '', Browser LowCardinality(String) DEFAULT '', OS LowCardinality(String) DEFAULT '',
+    Privacy LowCardinality(String) DEFAULT '', SaltScope LowCardinality(String) DEFAULT ''
 ) ENGINE = MergeTree ORDER BY (ServiceName, EventName, Timestamp);
-INSERT INTO forge_product_usage_test.product_events VALUES
-    ('2026-03-16 10:00:00', 'api', 'e1', 's1', 'u1', 'order_item_created', {}),
-    ('2026-03-16 10:05:00', 'api', 'e1', 's1', 'u1', 'order_item_updated', {}),
-    ('2026-03-16 10:06:00', 'api', 'e1', 's1', 'u1', 'order_item_deleted', {}),
-    ('2026-03-16 11:00:00', 'api', 'e1', 's2', 'u2', 'order_item_created', {}),
-    ('2026-03-16 11:00:00', 'api', 'e1', 's2', 'u2', 'invoice_created', {}),
-    ('2026-03-16 11:01:00', 'shop-frontend', 'e1', 's2', 'u2', 'page_viewed', {'route': '/orders'}),
-    ('2026-03-16 11:02:00', 'shop-frontend', 'e1', 's9', '', 'page_viewed', {'route': '/orders'}),
-    ('2026-03-16 11:03:00', 'shop-frontend', 'e1', 's9', '', 'page_viewed', {'route': '/'}),
-    ('2026-03-13 09:00:00', 'api', 'e1', 's3', 'u1', 'subscription_started', {'plan': 'pro'}),
-    ('2026-03-07 09:00:00', 'api', 'e1', 's4', 'u1', 'order_item_created', {}),
-    ('2026-02-24 09:00:00', 'api', 'e1', 's5', 'u3', 'order_item_created', {}),
-    ('2025-12-01 09:00:00', 'api', 'e1', 's7', 'u2', 'order_item_created', {}),
-    ('2026-03-16 09:00:00', 'api', 'e2', 's6', 'u9', 'order_item_created', {});
+CREATE TABLE forge_analytics_test.error_events (
+    Timestamp DateTime64(9), ServiceName LowCardinality(String), EnvId LowCardinality(String), SessionId String
+) ENGINE = MergeTree ORDER BY (ServiceName, Timestamp);
+INSERT INTO forge_analytics_test.product_events
+    (Timestamp, ServiceName, EnvId, SessionId, UserId, EventName, Props, Client, VisitorId, DayVisitor, Country, DeviceType, Browser, OS) VALUES
+    ('2026-03-16 10:00:00', 'web', 'e1', 's1', '', 'page_viewed', {'route': '/', 'entry': 'true', 'referrer_host': 'news.ycombinator.com'}, 'web', '', 'h1', 'US', 'desktop', 'Chrome', 'macOS'),
+    ('2026-03-16 10:01:00', 'web', 'e1', 's1', '', 'page_viewed', {'route': '/pricing'}, 'web', '', 'h1', 'US', 'desktop', 'Chrome', 'macOS'),
+    ('2026-03-16 10:02:00', 'api', 'e1', 's1', 'u1', 'auth_signed_up', {'method': 'password'}, 'web', '', 'h1', 'US', 'desktop', 'Chrome', 'macOS'),
+    ('2026-03-16 10:03:00', 'api', 'e1', 's1', 'u1', 'order_created', {}, 'web', '', 'h1', 'US', 'desktop', 'Chrome', 'macOS'),
+    ('2026-03-09 09:00:00', 'api', 'e1', 's2', 'u2', 'auth_signed_in', {'kind': 'resumed'}, 'web', '', '', '', '', '', ''),
+    ('2026-03-16 09:00:00', 'api', 'e2', 's9', 'u9', 'order_created', {}, 'web', '', 'h9', 'DE', 'desktop', 'Firefox', 'Linux');
+INSERT INTO forge_analytics_test.error_events VALUES
+    ('2026-03-16 10:01:30', 'web', 'e1', 's1');
 `
 
-// TestShippedUsageSQLOnClickHouse runs every shipped Product usage panel and
-// trend against productEventsSeed and checks what the numbers mean.
-func TestShippedUsageSQLOnClickHouse(t *testing.T) {
-	ch := clickhouse(t, productEventsSeed)
+// TestShippedAnalyticsSQLOnClickHouse runs every statement of the shipped
+// analytics dashboards (forge's built-in Overview panels, Users, Product and
+// Acquisition) against analyticsSeed, in one environment and in every one,
+// and checks that another environment never sees e1's events. Forge proves
+// the figures themselves against hand-worked answers in pkg/obsbuiltin; this
+// proves the bytes this repository ships run at the pin.
+func TestShippedAnalyticsSQLOnClickHouse(t *testing.T) {
+	ch := clickhouse(t, analyticsSeed)
 
 	end := time.Date(2026, 3, 16, 12, 0, 0, 0, time.UTC)
-	statement := func(id string, trend bool) string { t.Helper(); return shippedSQL(t, usageDashboardID, id, trend) }
-	runSQL := func(sql string, env string) string {
+	run := func(sql string, envs ...string) string {
 		t.Helper()
-		sc := obsquery.Scope{Database: "t_org_a", Start: end.Add(-30 * 24 * time.Hour), End: end,
-			EnvRestricted: true, EnvIDs: []string{env}, Envs: []obsquery.Env{{ID: env, Name: env}}}
+		sc := obsquery.Scope{Database: "t_org_a", Start: end.Add(-30 * 24 * time.Hour), End: end}
+		if len(envs) > 0 {
+			sc.EnvRestricted, sc.EnvIDs = true, envs
+			for _, e := range envs {
+				sc.Envs = append(sc.Envs, obsquery.Env{ID: e, Name: e})
+			}
+		}
 		st, err := obsquery.SQLPanel{Scope: sc, SQL: sql, StepSeconds: 86400}.Compile()
 		if err != nil {
 			t.Fatal(err)
@@ -191,143 +193,22 @@ func TestShippedUsageSQLOnClickHouse(t *testing.T) {
 		for k, v := range st.Params {
 			args = append(args, "--param_"+k+"="+v)
 		}
-		return ch("forge_product_usage_test", st.SQL, args...)
-	}
-	run := func(id, env string) string { t.Helper(); return runSQL(statement(id, false), env) }
-	trend := func(id, env string) string { t.Helper(); return runSQL(statement(id, true), env) }
-
-	for id, want := range map[string]string{
-		// dau = u1, u2; wau adds nobody (u1 again); mau adds u3.
-		"dau": "2", "wau": "2", "mau": "3", "stickiness": "0.6667",
-		// u1, u2 and u3 are all first seen in the range (u2's December event is
-		// outside the first-seen window).
-		"new-users": "3",
-		// e1's events in the range, over its 3 signed-in users.
-		"events": "11", "events-per-user": "3.7",
-		"records-written": "7",
-		"actions-per-entity": "order_item\t4\t1\t1\n" +
-			"invoice\t1\t0\t0",
-		"top-pages": "/orders\t1\t1\n" +
-			"/\t0\t1",
-		// u1's first event (2026-03-07 in range) is new; 13th and 16th returning.
-		"new-vs-returning": "2026-02-24 00:00:00\t1\t0\n" +
-			"2026-03-07 00:00:00\t1\t0\n" +
-			"2026-03-13 00:00:00\t0\t1\n" +
-			"2026-03-16 00:00:00\t1\t1",
-		// Week 1 and 2 after each cohort; weeks 4 and 8 are still to come.
-		"retention-curve": "2026-02-23\t0\t0\t\\N\t\\N\n" +
-			"2026-03-02\t1\t1\t\\N\t\\N\n" +
-			"2026-03-16\t\\N\t\\N\t\\N\t\\N",
-	} {
-		if got := run(id, "e1"); got != want {
-			t.Errorf("%s =\n%s\nwant\n%s", id, got, want)
-		}
+		return ch("forge_analytics_test", st.SQL, args...)
 	}
 
-	// Retention: three cohorts. u3's (2026-02-23) never came back; u1's
-	// (2026-03-02) is back in weeks 1 and 2, and week 3 is still to come (NULL);
-	// u2's is this week (its event 105 days back is outside the first-seen
-	// window, so it neither moves u2's cohort nor drops it), so every later
-	// week is.
-	// Each row is named by its cohort and size, and its cells are fractions.
-	ret := strings.Split(run("weekly-retention", "e1"), "\n")
-	if len(ret) != 3 {
-		t.Fatalf("weekly-retention = %q, want 3 cohorts", ret)
-	}
-	if !strings.HasPrefix(ret[0], "2026-02-23 · 1 user\t0\t0\t0\t") || !strings.HasPrefix(ret[1], "2026-03-02 · 1 user\t1\t1\t\\N\t") ||
-		!strings.HasPrefix(ret[2], "2026-03-16 · 1 user\t\\N\t") || strings.Count(ret[0], "\t") != retentionWeeks-1 {
-		t.Errorf("weekly-retention =\n%s", strings.Join(ret, "\n"))
+	for _, st := range analyticsStatements(t) {
+		run(st.sql, "e1")
+		run(st.sql)
 	}
 
-	// Active users: each day's users, and the rolling seven days ending that
-	// day (u3, seen 2026-02-24, counts through 2026-03-02), never past the end
-	// of the range.
-	active := run("active-users-over-time", "e1")
-	for _, line := range []string{"2026-02-24\t1\t1", "2026-02-25\t1\t0", "2026-03-02\t1\t0", "2026-03-13\t1\t1", "2026-03-16\t2\t2"} {
-		if !strings.Contains(active, line+"\n") && !strings.HasSuffix(active, line) {
-			t.Errorf("active-users-over-time lacks %q:\n%s", line, active)
+	events := shippedSQL(t, "product", "events", false)
+	for env, want := range map[string]string{"e1": "5", "e2": "1"} {
+		if got := run(events, env); got != want {
+			t.Errorf("product events in %s = %q, want %s: another environment's rows reached it", env, got, want)
 		}
 	}
-	if strings.Contains(active, "2026-03-03\t") || strings.Contains(active, "2026-03-17") || strings.Contains(active, "2026-02-23") {
-		t.Errorf("active-users-over-time has a day outside the range or the rolling window:\n%s", active)
-	}
-	if got := run("records-by-entity", "e1"); !strings.Contains(got, "2026-03-16 00:00:00\tinvoice\t1") || !strings.Contains(got, "2026-03-16 00:00:00\torder_item\t4") {
-		t.Errorf("records-by-entity =\n%s", got)
-	}
-
-	// The figures' trends: one row per UTC day with data, the figure's own
-	// measure over that day (or the window ending on it).
-	for id, want := range map[string]string{
-		"dau":             "2026-02-24\t1\n2026-03-07\t1\n2026-03-13\t1\n2026-03-16\t2",
-		"events":          "2026-02-24\t1\n2026-03-07\t1\n2026-03-13\t1\n2026-03-16\t8",
-		"records-written": "2026-02-24\t1\n2026-03-07\t1\n2026-03-16\t5",
-		// u3 on 2026-02-24, u1 on 2026-03-07, u2 today.
-		"new-users": "2026-02-24\t1\n2026-03-07\t1\n2026-03-16\t1",
-	} {
-		if got := trend(id, "e1"); got != want {
-			t.Errorf("%s trend =\n%s\nwant\n%s", id, got, want)
-		}
-	}
-	// The rolling windows: every day of the range a window still holds
-	// someone. On the last day WAU holds u1 and u2; MAU adds u3 (seen
-	// 2026-02-24, inside 30 days); stickiness is today's 2 of those 3.
-	for id, last := range map[string]string{"wau": "2026-03-16\t2", "mau": "2026-03-16\t3", "stickiness": "2026-03-16\t0.6667"} {
-		got := trend(id, "e1")
-		if !strings.HasSuffix(got, last) {
-			t.Errorf("%s trend ends\n%s\nwant it to end %q", id, got, last)
-		}
-		if strings.Contains(got, "2026-02-13") || strings.Contains(got, "2026-03-17") {
-			t.Errorf("%s trend has a day outside the range:\n%s", id, got)
-		}
-	}
-	// The rolling trends' calendar days: over a range from noon on 2026-03-02
-	// to midnight on 2026-03-17, the first day's 7-day window starts at
-	// midnight six days earlier, so u3's 09:00 event on 2026-02-24 counts; and
-	// no point is drawn for 2026-03-17, the day the range ends on.
-	ranged := func(id string, trend bool, start, stop time.Time) string {
-		t.Helper()
-		sc := obsquery.Scope{Database: "t_org_a", Start: start, End: stop,
-			EnvRestricted: true, EnvIDs: []string{"e1"}, Envs: []obsquery.Env{{ID: "e1", Name: "e1"}}}
-		st, err := obsquery.SQLPanel{Scope: sc, SQL: statement(id, trend), StepSeconds: 86400}.Compile()
-		if err != nil {
-			t.Fatal(err)
-		}
-		var args []string
-		for k, v := range st.Params {
-			args = append(args, "--param_"+k+"="+v)
-		}
-		return ch("forge_product_usage_test", st.SQL, args...)
-	}
-	noon, midnight := time.Date(2026, 3, 2, 12, 0, 0, 0, time.UTC), time.Date(2026, 3, 17, 0, 0, 0, 0, time.UTC)
-	wau := ranged("wau", true, noon, midnight)
-	if !strings.HasPrefix(wau, "2026-03-02\t1\n") || !strings.HasSuffix(wau, "2026-03-16\t2") || strings.Contains(wau, "2026-03-17") {
-		t.Errorf("wau trend over a noon start and a midnight end =\n%s\nwant 2026-03-02 holding u3's early event first, 2026-03-16 last", wau)
-	}
-	// The Active users chart itself, over the same noon start and midnight
-	// end: its first day's weekly window holds u3's 09:00 event of 2026-02-24
-	// (day, weekly, daily), its last point is 2026-03-16, and 2026-03-17 (the
-	// day the exclusive end starts) is not drawn.
-	activeRanged := ranged("active-users-over-time", false, noon, midnight)
-	if !strings.HasPrefix(activeRanged, "2026-03-02\t1\t0\n") || !strings.HasSuffix(activeRanged, "2026-03-16\t2\t2") ||
-		strings.Contains(activeRanged, "2026-03-17") || strings.Contains(activeRanged, "2026-03-01") {
-		t.Errorf("active-users-over-time over a noon start and a midnight end =\n%s\nwant 2026-03-02 holding u3's early lookback event first, 2026-03-16 last", activeRanged)
-	}
-	if got := trend("events-per-user", "e1"); !strings.HasSuffix(got, "2026-03-16\t4") {
-		t.Errorf("events-per-user trend ends\n%s\nwant 8 events over 2 users today", got)
-	}
-
-	// Every other panel and trend runs; another environment sees none of e1's events.
-	for _, p := range shippedPanels(t, usageDashboardID) {
-		run(p.ID, "e1")
-		if p.TrendSQL != "" {
-			trend(p.ID, "e1")
-		}
-	}
-	if got := run("events-by-name", "e2"); got != "order_item_created\t1\t0" {
-		t.Errorf("events-by-name in e2 = %q, want only e2's event", got)
-	}
-	if got := run("most-active-users", "e1"); !strings.HasPrefix(got, "u1\t5\t3\t4\t") {
-		t.Errorf("most-active-users =\n%s", got)
+	if got := run(events); got != "6" {
+		t.Errorf("product events over every environment = %q, want 6", got)
 	}
 }
 
