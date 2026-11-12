@@ -9021,6 +9021,11 @@
               "Name": "params",
               "ProtoType": "message",
               "IsOptional": false
+            },
+            {
+              "Name": "owner_org_id",
+              "ProtoType": "string",
+              "IsOptional": true
             }
           ],
           "CreateApiKeyConnectionResponse": [
@@ -9036,6 +9041,11 @@
               "Name": "id",
               "ProtoType": "string",
               "IsOptional": false
+            },
+            {
+              "Name": "owner_org_id",
+              "ProtoType": "string",
+              "IsOptional": true
             }
           ],
           "DeleteConnectionResponse": null,
@@ -9044,6 +9054,11 @@
               "Name": "id",
               "ProtoType": "string",
               "IsOptional": false
+            },
+            {
+              "Name": "owner_org_id",
+              "ProtoType": "string",
+              "IsOptional": true
             }
           ],
           "GetConnectionResponse": [
@@ -9068,6 +9083,11 @@
             {
               "Name": "before_id",
               "ProtoType": "int64",
+              "IsOptional": true
+            },
+            {
+              "Name": "owner_org_id",
+              "ProtoType": "string",
               "IsOptional": true
             }
           ],
@@ -9118,6 +9138,11 @@
               "Name": "name",
               "ProtoType": "string",
               "IsOptional": false
+            },
+            {
+              "Name": "owner_org_id",
+              "ProtoType": "string",
+              "IsOptional": true
             }
           ],
           "RenameConnectionResponse": [
@@ -9133,6 +9158,11 @@
               "Name": "id",
               "ProtoType": "string",
               "IsOptional": false
+            },
+            {
+              "Name": "owner_org_id",
+              "ProtoType": "string",
+              "IsOptional": true
             }
           ],
           "SetDefaultConnectionResponse": [
@@ -9173,6 +9203,11 @@
               "Name": "loopback_redirect",
               "ProtoType": "string",
               "IsOptional": false
+            },
+            {
+              "Name": "owner_org_id",
+              "ProtoType": "string",
+              "IsOptional": true
             }
           ],
           "StartOAuthResponse": [
@@ -9187,6 +9222,11 @@
               "Name": "id",
               "ProtoType": "string",
               "IsOptional": false
+            },
+            {
+              "Name": "owner_org_id",
+              "ProtoType": "string",
+              "IsOptional": true
             }
           ],
           "TestConnectionResponse": [
@@ -9347,6 +9387,10 @@
             {
               "name": "at",
               "kind": "string"
+            },
+            {
+              "name": "user_id",
+              "kind": "string"
             }
           ],
           "reliant.v1.CreateApiKeyConnectionRequest": [
@@ -9374,6 +9418,11 @@
               "kind": "map",
               "map_key_kind": "string",
               "map_value_kind": "string"
+            },
+            {
+              "name": "owner_org_id",
+              "kind": "string",
+              "optional": true
             }
           ],
           "reliant.v1.CreateApiKeyConnectionResponse": [
@@ -9387,6 +9436,11 @@
             {
               "name": "id",
               "kind": "string"
+            },
+            {
+              "name": "owner_org_id",
+              "kind": "string",
+              "optional": true
             }
           ],
           "reliant.v1.DeleteConnectionResponse": [],
@@ -9394,6 +9448,11 @@
             {
               "name": "id",
               "kind": "string"
+            },
+            {
+              "name": "owner_org_id",
+              "kind": "string",
+              "optional": true
             }
           ],
           "reliant.v1.GetConnectionResponse": [
@@ -9488,6 +9547,11 @@
               "name": "before_id",
               "kind": "int64",
               "optional": true
+            },
+            {
+              "name": "owner_org_id",
+              "kind": "string",
+              "optional": true
             }
           ],
           "reliant.v1.ListConnectionEventsResponse": [
@@ -9535,6 +9599,11 @@
             {
               "name": "name",
               "kind": "string"
+            },
+            {
+              "name": "owner_org_id",
+              "kind": "string",
+              "optional": true
             }
           ],
           "reliant.v1.RenameConnectionResponse": [
@@ -9548,6 +9617,11 @@
             {
               "name": "id",
               "kind": "string"
+            },
+            {
+              "name": "owner_org_id",
+              "kind": "string",
+              "optional": true
             }
           ],
           "reliant.v1.SetDefaultConnectionResponse": [
@@ -9583,6 +9657,11 @@
             {
               "name": "loopback_redirect",
               "kind": "string"
+            },
+            {
+              "name": "owner_org_id",
+              "kind": "string",
+              "optional": true
             }
           ],
           "reliant.v1.StartOAuthResponse": [
@@ -9595,6 +9674,11 @@
             {
               "name": "id",
               "kind": "string"
+            },
+            {
+              "name": "owner_org_id",
+              "kind": "string",
+              "optional": true
             }
           ],
           "reliant.v1.TestConnectionResponse": [

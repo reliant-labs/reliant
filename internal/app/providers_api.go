@@ -406,6 +406,9 @@ type APIConnectionsDeps struct {
 	Integrations *IntegrationSettings
 	AppOrigins   []string
 	ControlPlane *configv1.ControlPlaneConfig
+	// OrgConnections lets org owners and admins create org-owned connections
+	// (ApiServerConfig orgs.connections_enabled; off by default).
+	OrgConnections bool
 }
 
 // NewAPIConnections builds the connection service, the token source and the
@@ -426,7 +429,8 @@ func NewAPIConnections(d APIConnectionsDeps) (*APIConnections, error) {
 	tokens := connections.NewTokenSource(store, d.Vault, providers, nil)
 	broker := connections.NewBroker(store, d.Vault, providers, nil, d.Integrations.PublicURL).WithAppOrigins(d.AppOrigins)
 	svc := connections.NewService(store, d.Vault, providers, tokens, broker, nil).
-		WithDelegated(delegatedAvailable(ControlPlaneEndpoint(d.ControlPlane).Hosted()))
+		WithDelegated(delegatedAvailable(ControlPlaneEndpoint(d.ControlPlane).Hosted())).
+		WithOrgConnections(d.OrgConnections)
 	for _, in := range svc.ListIntegrations() {
 		for _, m := range in.Methods {
 			if !m.Available {

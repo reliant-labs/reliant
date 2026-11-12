@@ -68,6 +68,7 @@ var responseFieldAllowList = map[string]bool{
 	"reliant.v1.ConnectionEvent.tool_call_id":              true,
 	"reliant.v1.ConnectionEvent.actor":                     true,
 	"reliant.v1.ConnectionEvent.at":                        true,
+	"reliant.v1.ConnectionEvent.user_id":                   true,
 	"reliant.v1.Connection.id":                             true,
 	"reliant.v1.Connection.integration_id":                 true,
 	"reliant.v1.Connection.auth_kind":                      true,
@@ -216,7 +217,7 @@ func newConnectionFixtureWithEnv(t *testing.T, getenv func(string) string) *conn
 	tokens := connections.NewTokenSource(store, v, providers, nil)
 	broker := connections.NewBroker(store, v, providers, nil, "https://api.reliant.example").
 		WithAppOrigins([]string{"https://app.reliant.example", "*", "app://bundle"})
-	conns := connections.NewService(store, v, providers, tokens, broker, nil)
+	conns := connections.NewService(store, v, providers, tokens, broker, nil).WithOrgConnections(true)
 	svc := NewTestConnection(t, WithConnectionDeps(Deps{Connections: conns}))
 	return &connectionFixture{svc: svc, raw: raw, conns: conns}
 }
@@ -494,4 +495,66 @@ func TestConnectionService_DefaultRenameDeleteEvents(t *testing.T) {
 	require.NoError(t, err)
 	_, err = f.svc.GetConnection(alice, connect.NewRequest(&reliantv1.GetConnectionRequest{Id: b.Id}))
 	requireConnectCode(t, err, connect.CodeNotFound)
+}
+
+// orgRoleMembership names roles: org -> user -> role.
+type orgRoleMembership map[string]map[string]string
+
+func (m orgRoleMembership) IsMember(_ context.Context, userID, orgID string) (bool, bool, error) {
+	_, ok := m[orgID][userID]
+	return ok, true, nil
+}
+
+func (m orgRoleMembership) RoleFresh(_ context.Context, userID, orgID string) (string, bool, error) {
+	return m[orgID][userID], true, nil
+}
+
+// Administering an org's connection is a person's act: an admin signed in to
+// the app may, the same admin through a credential an agent can hold (the CLI
+// login, an access token) is refused with reason human_only, and a member is
+// refused whatever they hold.
+func TestConnectionService_OrgConnectionAdministrationIsHumanOnly(t *testing.T) {
+	f := newConnectionFixture(t)
+	roles := orgRoleMembership{"org-1": {"ada": "admin", "dana": "member"}}
+	as := func(user string, c auth.Credential) context.Context {
+		return auth.WithCredential(authz.WithMembership(asConnUser(user), roles), c)
+	}
+	org := "org-1"
+	create := func(ctx context.Context, name string) (*connect.Response[reliantv1.CreateApiKeyConnectionResponse], error) {
+		return f.svc.CreateApiKeyConnection(ctx, connect.NewRequest(&reliantv1.CreateApiKeyConnectionRequest{
+			IntegrationId: "http", Name: name, Kind: reliantv1.ApiKeyConnectionKind_API_KEY_CONNECTION_KIND_API_KEY,
+			Fields: map[string]string{"api_key": "sk-org-secret-1"}, OwnerOrgId: &org,
+		}))
+	}
+	for _, c := range []auth.Credential{auth.CredentialAccessToken, auth.CredentialOAuthClient, auth.CredentialUnknown} {
+		_, err := create(as("ada", c), "by-token")
+		requireConnectCode(t, err, connect.CodePermissionDenied)
+		var ce *connect.Error
+		require.ErrorAs(t, err, &ce)
+		require.Equal(t, connections.ReasonHumanOnly, ce.Meta().Get(svcerr.ReasonHeader), "%v", c)
+	}
+	_, err := create(as("dana", auth.CredentialSession), "by-member")
+	requireConnectCode(t, err, connect.CodePermissionDenied)
+
+	made, err := create(as("ada", auth.CredentialSession), "by-person")
+	require.NoError(t, err)
+	got := made.Msg.Connection
+	require.Equal(t, reliantv1.ConnectionOwnerKind_CONNECTION_OWNER_KIND_ORG, got.OwnerKind)
+	require.Equal(t, "org-1", got.OrgId)
+	require.NotContains(t, made.Msg.String(), "sk-org-secret-1")
+
+	// A member reads it, with any credential; only a person who is an admin
+	// renames or deletes it.
+	read, err := f.svc.GetConnection(as("dana", auth.CredentialAccessToken), connect.NewRequest(&reliantv1.GetConnectionRequest{Id: got.Id, OwnerOrgId: &org}))
+	require.NoError(t, err)
+	require.Equal(t, got.Id, read.Msg.Connection.Id)
+	_, err = f.svc.DeleteConnection(as("ada", auth.CredentialAccessToken), connect.NewRequest(&reliantv1.DeleteConnectionRequest{Id: got.Id, OwnerOrgId: &org}))
+	requireConnectCode(t, err, connect.CodePermissionDenied)
+	_, err = f.svc.DeleteConnection(as("dana", auth.CredentialSession), connect.NewRequest(&reliantv1.DeleteConnectionRequest{Id: got.Id, OwnerOrgId: &org}))
+	requireConnectCode(t, err, connect.CodePermissionDenied)
+	// Without owner_org_id the id names the caller's own: the org's is not found.
+	_, err = f.svc.DeleteConnection(as("ada", auth.CredentialSession), connect.NewRequest(&reliantv1.DeleteConnectionRequest{Id: got.Id}))
+	requireConnectCode(t, err, connect.CodeNotFound)
+	_, err = f.svc.DeleteConnection(as("ada", auth.CredentialSession), connect.NewRequest(&reliantv1.DeleteConnectionRequest{Id: got.Id, OwnerOrgId: &org}))
+	require.NoError(t, err)
 }

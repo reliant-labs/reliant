@@ -1,0 +1,27 @@
+-- forge:backward-compatible — connections_user_name (20261112165141) holds the same uniqueness over every row a previous release writes, so its data stays correct; a release older than that index reports a personal name clash as an internal error rather than "name taken".
+
+-- Migration: drop_connections_name
+--
+-- connections_name (user_id, integration_id, name) keys user_id with no
+-- owner_kind, so it holds an org connection (control-plane
+-- docs/design/org-sharing.md §7) to the names of the admin who created it:
+-- an admin of two orgs could not call both orgs' Slack connections "Slack",
+-- nor give one the name of a connection of their own. Its replacements are in
+-- place: connections_user_name for a person's names (personal rows only) and
+-- connections_org_name for an org's, and the store reads a violation of
+-- either as "name taken".
+--
+-- CONCURRENTLY cannot run in a transaction block, so this is the only
+-- statement in the file.
+--
+-- Post-deploy verification: connections_user_name and connections_org_name
+-- are valid (indisvalid = true in pg_index), and creating a personal
+-- connection with a name already taken still answers AlreadyExists.
+--
+-- Rollback: recreate it if a release older than connections_user_name must
+-- run again and its "name taken" message matters:
+--   CREATE UNIQUE INDEX CONCURRENTLY connections_name ON public.connections
+--     USING btree (user_id, integration_id, name) WHERE (deleted_at IS NULL);
+-- (that fails while two org connections of one admin share a name; rename
+-- one first).
+DROP INDEX CONCURRENTLY IF EXISTS public.connections_name;

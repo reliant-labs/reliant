@@ -702,6 +702,9 @@ func (g *Graph) newAPIConnections() (*APIConnections, error) {
 		AppOrigins:   g.ApiServerConfig.GetCorsAllowedOrigins(),
 		ControlPlane: g.ServerProcessConfig.GetControlPlane(),
 		DB:           g.Database(),
+		// Off until every replica and the rollback target read org
+		// connections (org-sharing.md §9, D13).
+		OrgConnections: g.ApiServerConfig.GetOrgs().GetConnectionsEnabled(),
 	})
 }
 

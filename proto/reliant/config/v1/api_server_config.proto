@@ -308,6 +308,17 @@ message ApiServerConfig {
 // writes them. The rules every config here follows are in config.proto's
 // header.
 message OrgsConfig {
+  // Lets an org's owners and admins create and reconnect org-owned
+  // connections (control-plane docs/design/org-sharing.md §7, D13). Off by
+  // default: turn it on only once every API server and worker, and the
+  // release a rollback would return to, read org connections; an older
+  // replica routes no event through one. Using, listing, renaming and
+  // deleting an org connection that exists are not gated.
+  bool connections_enabled = 1 [(forge.v1.config) = {
+    env_var: "RELIANT_ORGS_CONNECTIONS_ENABLED"
+    description: "Let org owners and admins create org-owned integration connections"
+  }];
+
   // Lets a GitHub trigger of an org listen through one of the org's linked
   // GitHub App installations (control-plane docs/design/org-sharing.md §7.1):
   // only that installation's events reach it. Off by default: a release

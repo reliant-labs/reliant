@@ -56,7 +56,23 @@ const (
 	// CodePermissionDenied: the caller is signed in but may not do this (not
 	// a live member of the organization a request names).
 	CodePermissionDenied
+	// CodeHumanOnly: only a person signed in to the app may do this, and the
+	// request came with a credential an agent or a script can hold. It is
+	// PermissionDenied with reason ReasonHumanOnly.
+	CodeHumanOnly
 )
+
+// ReasonHumanOnly is the error reason of an org connection's administration
+// refused to a credential that is not a person's (the members rpcs' reason in
+// control-plane, orgs-and-members.md §2.3).
+const ReasonHumanOnly = "human_only"
+
+// HumanOnly is the refusal of an org connection's administration to a
+// credential an agent can hold: a CLI login, an access token, a daemon's.
+func HumanOnly() error {
+	return newError(CodeHumanOnly, "only a person signed in to the Reliant app can manage an organization's connections; "+
+		"this request was made with a credential an agent or a script can hold (such as the CLI login)")
+}
 
 // Error is a typed failure. Message is safe to show a user; it never contains a
 // provider response body, a token, or an authorization code.
@@ -93,6 +109,8 @@ func (e *Error) Unwrap() error {
 		kind = svcerr.ErrUnavailable
 	case CodePermissionDenied:
 		kind = svcerr.ErrPermissionDenied
+	case CodeHumanOnly:
+		return svcerr.WithCause(svcerr.WithReason(svcerr.WithMessage(svcerr.ErrPermissionDenied, e.Message), ReasonHumanOnly), e.Err)
 	default:
 		return e.Err
 	}

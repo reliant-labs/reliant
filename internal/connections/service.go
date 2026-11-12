@@ -31,12 +31,17 @@ const maxSecretLen = 8 << 10
 type serviceStore interface {
 	tokenStore
 	brokerStore
+	GetConnection(ctx context.Context, userID, id string) (*core.Connection, error)
 	ListConnections(ctx context.Context, userID, integrationID string) ([]*core.Connection, error)
 	ListOwnedConnections(ctx context.Context, owner core.ConnectionOwner, integrationID string) ([]*core.Connection, error)
+	RenameOwnedConnection(ctx context.Context, owner core.ConnectionOwner, id, name string, ev core.ConnectionEvent) error
+	SetDefaultOwnedConnection(ctx context.Context, owner core.ConnectionOwner, id string, ev core.ConnectionEvent) error
+	SoftDeleteOwnedConnection(ctx context.Context, owner core.ConnectionOwner, id string, ev core.ConnectionEvent) error
+	RecordOwnedTestResult(ctx context.Context, owner core.ConnectionOwner, id, accountLabel, senderID string) error
+	ListAllConnectionEvents(ctx context.Context, id string, limit int, beforeID int64) ([]core.ConnectionEvent, error)
 	RenameConnection(ctx context.Context, userID, id, name string, ev core.ConnectionEvent) error
 	SetDefaultConnection(ctx context.Context, userID, id string, ev core.ConnectionEvent) error
 	DeleteConnection(ctx context.Context, userID, id string, ev core.ConnectionEvent) error
-	RecordTestResult(ctx context.Context, userID, id, accountLabel, senderID string) error
 	ListConnectionEvents(ctx context.Context, userID, id string, limit int, beforeID int64) ([]core.ConnectionEvent, error)
 }
 
@@ -51,6 +56,9 @@ type Service struct {
 	broker    *Broker
 	doer      HTTPDoer
 	delegated DelegatedAvailable
+	// orgConnections lets an org's owners and admins create and reconnect
+	// org-owned connections (WithOrgConnections, org.go).
+	orgConnections bool
 }
 
 // NewService wires the service.
@@ -128,6 +136,9 @@ type CreateAPIKeyParams struct {
 	Fields        map[string]string
 	// Params are the integration's connection_params (not secret).
 	Params map[string]string
+	// OrgID, when set, makes it a connection of that organization, which
+	// UserID must be an owner or admin of (org.go); "" is UserID's own.
+	OrgID string
 }
 
 // CreateAPIKey saves an api_key or basic connection for a catalog integration
@@ -150,6 +161,18 @@ func (s *Service) CreateAPIKey(ctx context.Context, p CreateAPIKeyParams) (*core
 	conn := &core.Connection{
 		ID: id, OwnerKind: core.ConnectionOwnerUser, UserID: p.UserID, IntegrationID: p.IntegrationID,
 		Name: name, Status: core.ConnectionStatusActive, Scopes: []string{}, Params: params,
+	}
+	if p.OrgID != "" {
+		if !s.orgConnections {
+			return nil, errOrgConnectionsDisabled()
+		}
+		if err := requireOrgAdmin(ctx, p.UserID, p.OrgID); err != nil {
+			return nil, err
+		}
+		// user_id stays the admin who created it: attribution, never
+		// ownership (core.Connection.Owner).
+		org := p.OrgID
+		conn.OwnerKind, conn.OrgID = core.ConnectionOwnerOrg, &org
 	}
 	var plain []plainField
 	switch p.Kind {
@@ -228,7 +251,7 @@ func (s *Service) CreateAPIKey(ctx context.Context, p CreateAPIKeyParams) (*core
 
 	secrets := make([]core.ConnectionSecret, 0, len(plain))
 	for _, f := range plain {
-		ct, err := s.vault.Seal(ctx, vault.UserTenant(p.UserID), []byte(f.value), SecretAAD(id, f.field))
+		ct, err := s.vault.Seal(ctx, tenantOf(conn), []byte(f.value), SecretAAD(id, f.field))
 		if err != nil {
 			return nil, &Error{Code: CodeInternal, Message: "sealing credential", Err: err}
 		}
@@ -241,7 +264,8 @@ func (s *Service) CreateAPIKey(ctx context.Context, p CreateAPIKeyParams) (*core
 	if err := s.store.CreateConnection(ctx, conn, secrets, userEvent(core.ConnectionEventCreated, p.UserID)); err != nil {
 		return nil, mapStoreErr(err)
 	}
-	return s.Get(ctx, p.UserID, id)
+	created, err := s.store.GetOwnedConnection(ctx, conn.Owner(), id)
+	return created, mapStoreErr(err)
 }
 
 func (s *Service) Rename(ctx context.Context, userID, id, name string) (*core.Connection, error) {
@@ -294,11 +318,16 @@ type TestResult struct {
 // be) credential and records the account label. An integration that declares
 // no probe can only prove that the stored secret opens.
 func (s *Service) Test(ctx context.Context, userID, id string) (*TestResult, error) {
-	conn, err := s.store.GetConnection(ctx, userID, id)
+	return s.test(ctx, core.UserConnectionOwner(userID), id)
+}
+
+// test is Test for owner's connection.
+func (s *Service) test(ctx context.Context, owner core.ConnectionOwner, id string) (*TestResult, error) {
+	conn, err := s.store.GetOwnedConnection(ctx, owner, id)
 	if err != nil {
 		return nil, mapStoreErr(err)
 	}
-	secret, err := s.tokens.Token(ctx, userID, id)
+	secret, _, err := s.tokens.token(ctx, owner, id)
 	if err != nil {
 		switch CodeOf(err) {
 		case CodeNeedsReauth:
@@ -327,7 +356,7 @@ func (s *Service) Test(ctx context.Context, userID, id string) (*TestResult, err
 		}
 		return &TestResult{Probed: true, ErrorClass: class}, nil
 	}
-	if err := s.store.RecordTestResult(ctx, userID, id, who.AccountLabel, who.SenderID); err != nil {
+	if err := s.store.RecordOwnedTestResult(ctx, owner, id, who.AccountLabel, who.SenderID); err != nil {
 		return nil, mapStoreErr(err)
 	}
 	return &TestResult{OK: true, Probed: true, AccountLabel: who.AccountLabel}, nil
@@ -392,7 +421,15 @@ func (s *Service) StartOAuth(ctx context.Context, p StartParams) (string, error)
 }
 
 // CompleteOAuth finishes a flow with the code the callback relayed. Only the
-// user who started it can.
+// user who started it can. It does not vouch that the caller is a person, so
+// it finishes no org flow; CompleteOAuthFlow does.
 func (s *Service) CompleteOAuth(ctx context.Context, userID, state, code string) (*Completion, error) {
-	return s.broker.Complete(ctx, CompleteParams{State: state, Code: code, UserID: userID})
+	return s.CompleteOAuthFlow(ctx, CompleteParams{State: state, Code: code, UserID: userID})
+}
+
+// CompleteOAuthFlow finishes a flow as p says: an org's flow only for a
+// caller who is still an owner or admin of it and signed in as a person
+// (p.Person).
+func (s *Service) CompleteOAuthFlow(ctx context.Context, p CompleteParams) (*Completion, error) {
+	return s.broker.Complete(ctx, p)
 }
