@@ -854,11 +854,15 @@ function MachineName({ daemon, appCount }: { daemon: Daemon; appCount: number })
   const machineOrgs = useMachineOrgs();
   const org = machineOrgs.multiOrg ? machineOrgs.orgOf(daemon.daemonId) : undefined;
   return (
-    <span className="block">
-      <span className="font-medium text-foreground">{daemonDisplayName(daemon)}</span>
-      {daemon.isDefault && <Badge label="Default" variant="neutral" size="sm" className="ml-2 align-middle" />}
-      {org && <Badge label={org.name} variant="neutral" size="sm" className="ml-2 align-middle" />}
-      <AppAccessIndicator count={appCount} />
+    // DataTable rows have a minimum height, not vertical padding. Reserve room
+    // around both lines so a badge plus build cannot press against the border.
+    <span className="block py-2">
+      <span className="flex items-center">
+        <span className="font-medium text-foreground">{daemonDisplayName(daemon)}</span>
+        {daemon.isDefault && <Badge label="Default" variant="neutral" size="sm" className="ml-2" />}
+        {org && <Badge label={org.name} variant="neutral" size="sm" className="ml-2" />}
+        <AppAccessIndicator count={appCount} />
+      </span>
       {build && <span className="mt-0.5 block text-xs text-muted-foreground">{build}</span>}
     </span>
   );
