@@ -6,6 +6,8 @@ import (
 
 	fat "github.com/reliant-labs/forge/pkg/accesstoken"
 	"github.com/reliant-labs/forge/pkg/svcerr"
+
+	"github.com/reliant-labs/reliant/internal/authz"
 )
 
 // Credential is what kind of credential authenticated a request. The
@@ -62,9 +64,22 @@ func (c Credential) String() string {
 
 type credentialKey struct{}
 
-// WithCredential records on ctx the kind of credential that authenticated it.
+// WithCredential records on ctx the kind of credential that authenticated it,
+// and tells internal/authz whether a person holds it (authz.WithCredentialKind):
+// only a person may read what another org member shared. The person class is
+// the one RequirePerson admits.
 func WithCredential(ctx context.Context, c Credential) context.Context {
-	return context.WithValue(ctx, credentialKey{}, c)
+	ctx = context.WithValue(ctx, credentialKey{}, c)
+	kind := authz.CredentialKindSoftware
+	if isPerson(c) {
+		kind = authz.CredentialKindPerson
+	}
+	return authz.WithCredentialKind(ctx, kind)
+}
+
+// isPerson is the credential class RequirePerson admits.
+func isPerson(c Credential) bool {
+	return c == CredentialSession || c == CredentialSharedKey
 }
 
 // CredentialFromContext is the kind of credential that authenticated ctx, or
@@ -93,8 +108,8 @@ const ReasonPersonRequired = "person_required"
 //
 // Everything else is refused, CredentialUnknown included.
 func RequirePerson(ctx context.Context, action string) error {
-	switch c := CredentialFromContext(ctx); c {
-	case CredentialSession, CredentialSharedKey:
+	switch c := CredentialFromContext(ctx); {
+	case isPerson(c):
 		return nil
 	default:
 		return svcerr.WithReason(svcerr.PermissionDenied(
