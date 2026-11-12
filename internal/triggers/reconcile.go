@@ -96,6 +96,9 @@ func (r *Reconciler) ReconcileAll(ctx context.Context) (ReconcileReport, error) 
 			continue
 		}
 		p := decl.Projection(t.Params)
+		// The activation's own binding (its org's GitHub App installation)
+		// is not the declaration's to rewrite.
+		p.Config = core.CarryActivationConfig(t.Config, p.Config)
 		if sameConfig(p.Config, t.Config) && p.Filter == t.Filter {
 			continue
 		}

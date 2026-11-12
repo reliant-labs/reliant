@@ -357,6 +357,32 @@ type IntegrationConfig struct {
 	Installation string `json:"installation,omitempty"`
 }
 
+// CarryActivationConfig returns next, a config rebuilt from a workflow's
+// declaration, with what the ACTIVATION owns in prev carried over: today the
+// org GitHub App installation it was bound to (IntegrationConfig.Installation),
+// which no declaration states. Re-projecting an activation must never drop
+// it: that would silently widen the trigger to every installation its owner
+// can see. next is returned unchanged when prev binds nothing or either does
+// not parse as an integration config.
+func CarryActivationConfig(prev, next json.RawMessage) json.RawMessage {
+	var was struct {
+		Installation string `json:"installation"`
+	}
+	if json.Unmarshal(prev, &was) != nil || was.Installation == "" {
+		return next
+	}
+	var cfg map[string]any
+	if json.Unmarshal(next, &cfg) != nil || cfg == nil {
+		return next
+	}
+	cfg["installation"] = was.Installation
+	raw, err := json.Marshal(cfg)
+	if err != nil {
+		return next
+	}
+	return raw
+}
+
 // WorkflowEventConfig is Trigger.Config for TriggerKindWorkflowEvent.
 type WorkflowEventConfig struct {
 	// Workflows are the source workflow refs; empty matches any.
