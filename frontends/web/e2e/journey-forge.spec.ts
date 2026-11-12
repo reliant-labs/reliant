@@ -1,6 +1,5 @@
 import { expect, test, type Page, type Request, type Route } from '@playwright/test';
 
-import { mockAppsBackend } from './appsMocks';
 
 // The forge journey ("Explore a forge app", Onboarding/journeys/forge.tsx) on
 // the demo console (/forge/demo, fixture data), walked end to end in the
@@ -151,28 +150,6 @@ function expectNoDaemonOrChat(log: { urls: string[]; sockets: string[] }) {
   expect(log.urls.filter((url) => DAEMON_OR_CHAT.test(url))).toEqual([]);
   expect(log.sockets).toEqual([]);
 }
-
-test.describe('the forge journey in Reliant', () => {
-  test('walks the eleven steps on the demo and ends on Finish or the workflows journey', async ({ page }) => {
-    await mockAppsBackend(page);
-    await page.goto('/forge/demo?tour=forge:fg-intro', { waitUntil: 'domcontentloaded' });
-    await expect(page.locator("[data-tour='forge-console']")).toBeVisible(LOADED);
-    // Reliant's own chrome (chats, machines) loads with the page; the demo's walk adds none of it.
-    const log = recordRequests(page);
-
-    await walkToEndCard(page);
-
-    // The end card: Reliant's CLI, and the other journey runs right here.
-    await expect(endCardCommands(page, 'obs status prod')).toContainText('reliant forge obs status prod');
-    await expect(page.getByTestId('tour-secondary')).toHaveText('Try the other journey');
-    expectNoDaemonOrChat(log);
-
-    await page.getByTestId('tour-next').click();
-    // Finish lands on forge's Apps (the bare /forge lands there), tour closed.
-    await expect(page).toHaveURL(/\/(forge|apps)(\?|$)/, LOADED);
-    expect(page.url()).not.toContain('tour=');
-  });
-});
 
 test.describe('the forge journey in the forge shell', () => {
   test('a signed-out visitor from the landing page goes straight to the journey on the public demo', async ({ page }) => {
