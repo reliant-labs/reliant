@@ -1,4 +1,4 @@
--- forge:backward-compatible — connections_user_name (20261112165141) holds the same uniqueness over every row a previous release writes, so its data stays correct; a release older than that index reports a personal name clash as an internal error rather than "name taken".
+-- forge:backward-compatible — connections_user_name (20261112181141) holds the same uniqueness over every row a previous release writes, so its data stays correct; a release older than that index reports a personal name clash as an internal error rather than "name taken".
 
 -- Migration: drop_connections_name
 --
