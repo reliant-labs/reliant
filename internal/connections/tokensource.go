@@ -20,12 +20,26 @@ import (
 // refreshWindow is how close to expiry a token is treated as expired.
 const refreshWindow = 60 * time.Second
 
-// tokenStore is what the token source needs from persistence.
+// tokenStore is what the token source needs from persistence. Every read is
+// scoped to a core.ConnectionOwner, a person or an org, so a token is only
+// ever read as its connection's owner's.
 type tokenStore interface {
-	GetConnection(ctx context.Context, userID, id string) (*core.Connection, error)
-	GetSecrets(ctx context.Context, userID, id string) (map[string]core.ConnectionSecret, error)
-	WithSecretsLock(ctx context.Context, userID, id string, fn func(*db.SecretsTx) error) error
+	GetOwnedConnection(ctx context.Context, owner core.ConnectionOwner, id string) (*core.Connection, error)
+	GetOwnedSecrets(ctx context.Context, owner core.ConnectionOwner, id string) (map[string]core.ConnectionSecret, error)
+	WithOwnedSecretsLock(ctx context.Context, owner core.ConnectionOwner, id string, fn func(*db.SecretsTx) error) error
 	AppendConnectionEvent(ctx context.Context, ev core.ConnectionEvent) error
+}
+
+// tenantOf is the vault tenant a connection's secrets are sealed under: the
+// org's for an org connection, never the creating admin's, so the org's
+// connection does not die with that admin's account (org-sharing.md §7.2);
+// the person's for their own.
+func tenantOf(conn *core.Connection) vault.Tenant {
+	owner := conn.Owner()
+	if owner.Kind == core.ConnectionOwnerOrg {
+		return vault.OrgTenant(owner.ID)
+	}
+	return vault.UserTenant(owner.ID)
 }
 
 type cacheKey struct {
@@ -69,23 +83,25 @@ func NewTokenSource(store tokenStore, v Sealer, providers *Registry, doer HTTPDo
 }
 
 // Token returns the access token (or, for api_key and basic connections, the
-// stored credential) for a connection the user owns.
+// stored credential) for a personal connection the user owns.
 func (s *TokenSource) Token(ctx context.Context, userID, connectionID string) (vault.Secret, error) {
-	tok, _, err := s.token(ctx, userID, connectionID)
+	tok, _, err := s.token(ctx, core.UserConnectionOwner(userID), connectionID)
 	return tok, err
 }
 
-// token is Token plus the access token's generation (0 for a static
-// credential), which a later RefreshAfterRejection names.
-func (s *TokenSource) token(ctx context.Context, userID, connectionID string) (vault.Secret, int64, error) {
-	conn, err := s.activeConnection(ctx, userID, connectionID)
+// token is Token for owner's connection plus the access token's generation
+// (0 for a static credential), which a later RefreshAfterRejection names. The
+// caller has already decided the use is allowed (Resolver.lookup); owner only
+// scopes the reads.
+func (s *TokenSource) token(ctx context.Context, owner core.ConnectionOwner, connectionID string) (vault.Secret, int64, error) {
+	conn, err := s.activeConnection(ctx, owner, connectionID)
 	if err != nil {
 		return vault.Secret{}, 0, err
 	}
 	if conn.AuthKind == core.ConnectionAuthOAuth2 {
 		return s.oauthToken(ctx, conn)
 	}
-	secrets, err := s.store.GetSecrets(ctx, userID, connectionID)
+	secrets, err := s.store.GetOwnedSecrets(ctx, owner, connectionID)
 	if err != nil {
 		return vault.Secret{}, 0, mapStoreErr(err)
 	}
@@ -93,8 +109,8 @@ func (s *TokenSource) token(ctx context.Context, userID, connectionID string) (v
 	return tok, 0, err
 }
 
-func (s *TokenSource) activeConnection(ctx context.Context, userID, connectionID string) (*core.Connection, error) {
-	conn, err := s.store.GetConnection(ctx, userID, connectionID)
+func (s *TokenSource) activeConnection(ctx context.Context, owner core.ConnectionOwner, connectionID string) (*core.Connection, error) {
+	conn, err := s.store.GetOwnedConnection(ctx, owner, connectionID)
 	if err != nil {
 		return nil, mapStoreErr(err)
 	}
@@ -120,14 +136,19 @@ func (s *TokenSource) activeConnection(ctx context.Context, userID, connectionID
 // token) was simply refused, so it is marked needs_reauth: the user must
 // supply a new one, and retrying the same one would only be refused again.
 func (s *TokenSource) RefreshAfterRejection(ctx context.Context, userID, connectionID string, rejectedGeneration int64) (vault.Secret, int64, error) {
-	conn, err := s.activeConnection(ctx, userID, connectionID)
+	return s.refreshAfterRejection(ctx, core.UserConnectionOwner(userID), connectionID, rejectedGeneration)
+}
+
+// refreshAfterRejection is RefreshAfterRejection for owner's connection.
+func (s *TokenSource) refreshAfterRejection(ctx context.Context, owner core.ConnectionOwner, connectionID string, rejectedGeneration int64) (vault.Secret, int64, error) {
+	conn, err := s.activeConnection(ctx, owner, connectionID)
 	if err != nil {
 		return vault.Secret{}, 0, err
 	}
 	s.Forget(connectionID)
 	if conn.AuthKind != core.ConnectionAuthOAuth2 {
 		var marked error
-		if err := s.store.WithSecretsLock(ctx, conn.UserID, conn.ID, func(tx *db.SecretsTx) error {
+		if err := s.store.WithOwnedSecretsLock(ctx, conn.Owner(), conn.ID, func(tx *db.SecretsTx) error {
 			marked = s.markNeedsReauth(ctx, tx, conn, "rejected")
 			return nil
 		}); err != nil {
@@ -169,7 +190,7 @@ func (s *TokenSource) open(ctx context.Context, conn *core.Connection, sec core.
 	if len(sec.Ciphertext) == 0 {
 		return vault.Secret{}, newError(CodeInternal, "connection %q has no stored credential", conn.Name)
 	}
-	secret, err := s.vault.OpenSecret(ctx, vault.UserTenant(conn.UserID), sec.Ciphertext, SecretAAD(conn.ID, sec.Field))
+	secret, err := s.vault.OpenSecret(ctx, tenantOf(conn), sec.Ciphertext, SecretAAD(conn.ID, sec.Field))
 	if err != nil {
 		return vault.Secret{}, &Error{Code: CodeInternal, Message: "stored credential could not be opened", Err: err}
 	}
@@ -177,7 +198,7 @@ func (s *TokenSource) open(ctx context.Context, conn *core.Connection, sec core.
 }
 
 func (s *TokenSource) oauthToken(ctx context.Context, conn *core.Connection) (vault.Secret, int64, error) {
-	secrets, err := s.store.GetSecrets(ctx, conn.UserID, conn.ID)
+	secrets, err := s.store.GetOwnedSecrets(ctx, conn.Owner(), conn.ID)
 	if err != nil {
 		return vault.Secret{}, 0, mapStoreErr(err)
 	}
@@ -285,7 +306,7 @@ func (s *TokenSource) refresh(ctx context.Context, conn *core.Connection, seenGe
 // is opened. The locked generation check in refreshLocked still decides when
 // this read races a refresh in another process.
 func (s *TokenSource) alreadyReplaced(ctx context.Context, conn *core.Connection, seenGeneration int64) (refreshed, bool, error) {
-	secrets, err := s.store.GetSecrets(ctx, conn.UserID, conn.ID)
+	secrets, err := s.store.GetOwnedSecrets(ctx, conn.Owner(), conn.ID)
 	if err != nil {
 		return refreshed{}, false, mapStoreErr(err)
 	}
@@ -293,7 +314,7 @@ func (s *TokenSource) alreadyReplaced(ctx context.Context, conn *core.Connection
 	if !ok || access.Generation == seenGeneration {
 		return refreshed{}, false, nil
 	}
-	fresh, err := s.store.GetConnection(ctx, conn.UserID, conn.ID)
+	fresh, err := s.store.GetOwnedConnection(ctx, conn.Owner(), conn.ID)
 	if err != nil {
 		return refreshed{}, false, mapStoreErr(err)
 	}
@@ -319,7 +340,7 @@ func (s *TokenSource) refreshLocked(ctx context.Context, conn *core.Connection, 
 	}
 	var result refreshed
 	var permanent error
-	err = s.store.WithSecretsLock(ctx, conn.UserID, conn.ID, func(tx *db.SecretsTx) error {
+	err = s.store.WithOwnedSecretsLock(ctx, conn.Owner(), conn.ID, func(tx *db.SecretsTx) error {
 		secrets := tx.Secrets()
 		access := secrets[core.SecretFieldAccessToken]
 		// Another worker may have refreshed while we waited for the lock: use
@@ -351,7 +372,7 @@ func (s *TokenSource) refreshLocked(ctx context.Context, conn *core.Connection, 
 			permanent = s.markNeedsReauth(ctx, tx, conn, "no_refresh_token")
 			return nil
 		}
-		rt, err := s.vault.Open(ctx, vault.UserTenant(conn.UserID), refreshSecret.Ciphertext, SecretAAD(conn.ID, core.SecretFieldRefreshToken))
+		rt, err := s.vault.Open(ctx, tenantOf(conn), refreshSecret.Ciphertext, SecretAAD(conn.ID, core.SecretFieldRefreshToken))
 		if err != nil {
 			return &Error{Code: CodeInternal, Message: "stored refresh token could not be opened", Err: err}
 		}
@@ -393,7 +414,7 @@ func (s *TokenSource) refreshLocked(ctx context.Context, conn *core.Connection, 
 			return newError(CodeUnavailable, "token refresh for connection %q is temporarily unavailable", conn.Name)
 		}
 
-		nextAccess, err := s.vault.Seal(ctx, vault.UserTenant(conn.UserID), []byte(next.Token.AccessToken), SecretAAD(conn.ID, core.SecretFieldAccessToken))
+		nextAccess, err := s.vault.Seal(ctx, tenantOf(conn), []byte(next.Token.AccessToken), SecretAAD(conn.ID, core.SecretFieldAccessToken))
 		if err != nil {
 			return err
 		}
@@ -405,7 +426,7 @@ func (s *TokenSource) refreshLocked(ctx context.Context, conn *core.Connection, 
 		// next.RefreshToken is always the token to present next: the
 		// rotated one when the provider sent one, else the one just used.
 		if next.Rotated {
-			nextRefresh, err := s.vault.Seal(ctx, vault.UserTenant(conn.UserID), []byte(next.RefreshToken.Secret()), SecretAAD(conn.ID, core.SecretFieldRefreshToken))
+			nextRefresh, err := s.vault.Seal(ctx, tenantOf(conn), []byte(next.RefreshToken.Secret()), SecretAAD(conn.ID, core.SecretFieldRefreshToken))
 			if err != nil {
 				return err
 			}

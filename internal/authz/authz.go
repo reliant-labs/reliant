@@ -77,7 +77,9 @@
 // Personal resources (attachments, scenarios, integration connections,
 // connector grants, video jobs) are their owner's alone by design and never
 // become org-visible through this package: CanAccessPersonal is the one
-// spelling of that check.
+// spelling of that check. An org's own connections (owner_kind 'org') are a
+// different thing, owned by no member: OrgMemberDenial is the rule for using
+// one.
 //
 // Store queries that filter `user_id = ?` in SQL (lists, and the
 // *WithUserCheck reads) are visibility predicates, not decisions; the
@@ -594,6 +596,42 @@ func Visible[T any](ctx context.Context, userID string, rows []T, can func(conte
 // which carries the org of the resource it is about but not that resource.
 func CanReadOwn(ctx context.Context, userID string, org *string) bool {
 	return decide(ctx, userID, resource{present: true, ownerUserID: userID, orgID: orgOf(org)})
+}
+
+// OrgMemberDenial is why userID may not use something orgID owns outright,
+// with no member as its owner: an org connection (control-plane
+// docs/design/org-sharing.md §7.3). nil when they are a live member of orgID.
+//
+// It is stricter than the owner rule in one way: a Membership with no answer
+// (IsMember's ok=false: a deployment without orgs) is a refusal, because an
+// org-owned thing has no owner to fall back to. Otherwise it denies as deny
+// does: ErrDenied for an empty id or a credential bound to another org,
+// ErrNotOrgMember for a non-member, ErrMembershipUnavailable for an outage or
+// a context with no Membership (logged at ERROR: a path never wired).
+func OrgMemberDenial(ctx context.Context, userID, orgID string) error {
+	if userID == "" || orgID == "" {
+		return ErrDenied
+	}
+	if bound, ok := boundOrg(ctx); ok && bound != orgID {
+		logging.InfoContext(ctx, "[authz] a credential bound to another org; denying an org resource", "user_id", userID, "credential_org", bound, "org_id", orgID)
+		recordCredentialRefusal(ctx, orgID)
+		return ErrDenied
+	}
+	m := membershipOf(ctx)
+	if m == nil {
+		logging.ErrorContext(ctx, "[authz] no membership on the context; denying an org resource (a path was never wired with authz.WithMembership)",
+			"user_id", userID, "org_id", orgID)
+		return ErrMembershipUnavailable
+	}
+	member, ok, err := m.IsMember(ctx, userID, orgID)
+	if err != nil {
+		logging.WarnContext(ctx, "[authz] could not check org membership; denying", "user_id", userID, "org_id", orgID, "error", err)
+		return ErrMembershipUnavailable
+	}
+	if !ok || !member {
+		return ErrNotOrgMember
+	}
+	return nil
 }
 
 // CanAccessPersonal reports whether userID owns a personal resource whose

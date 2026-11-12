@@ -20,9 +20,10 @@ func (r *Repo) Connections() ConnectionStore {
 
 // ConnectionStore persists connections, over the connection queries in
 // internal/store. A call made with a ctx carrying a transaction joins it.
-// Every method that takes a userID enforces ownership in SQL; none returns
-// ciphertext except the *Secrets methods. Its consumers declare the slice of
-// it they use.
+// Every method that takes a userID enforces ownership of that user's PERSONAL
+// connections in SQL; the *Owned methods take a core.ConnectionOwner (a user,
+// or an org) instead. None returns ciphertext except the *Secrets methods.
+// Its consumers declare the slice of it they use.
 type ConnectionStore struct{ db orm.Context }
 
 // CreateConnection inserts the row, its secrets and its created event in
@@ -40,6 +41,16 @@ func (s ConnectionStore) ReauthorizeConnection(ctx context.Context, userID, id s
 
 func (s ConnectionStore) GetConnection(ctx context.Context, userID, id string) (*core.Connection, error) {
 	return store.GetUserConnection(ctx, s.db, userID, id)
+}
+
+// GetOwnedConnection returns owner's live connection.
+func (s ConnectionStore) GetOwnedConnection(ctx context.Context, owner core.ConnectionOwner, id string) (*core.Connection, error) {
+	return store.GetOwnedConnection(ctx, s.db, owner, id)
+}
+
+// ListOwnedConnections returns owner's live connections.
+func (s ConnectionStore) ListOwnedConnections(ctx context.Context, owner core.ConnectionOwner, integrationID string) ([]*core.Connection, error) {
+	return store.ListOwnedConnections(ctx, s.db, owner, integrationID)
 }
 
 func (s ConnectionStore) ListConnections(ctx context.Context, userID, integrationID string) ([]*core.Connection, error) {
@@ -77,16 +88,31 @@ func (s ConnectionStore) TouchConnectionUsed(ctx context.Context, userID, id str
 	return store.TouchConnectionUsed(ctx, s.db, userID, id)
 }
 
-// GetSecrets returns the sealed fields of a connection the user owns.
+// TouchOwnedConnectionUsed stamps the last use of owner's connection.
+func (s ConnectionStore) TouchOwnedConnectionUsed(ctx context.Context, owner core.ConnectionOwner, id string) error {
+	return store.TouchOwnedConnectionUsed(ctx, s.db, owner, id)
+}
+
+// GetSecrets returns the sealed fields of a personal connection the user owns.
 func (s ConnectionStore) GetSecrets(ctx context.Context, userID, id string) (map[string]core.ConnectionSecret, error) {
 	return store.GetConnectionSecrets(ctx, s.db, userID, id)
 }
 
-// WithSecretsLock runs fn with the connection's secret rows locked
-// (SELECT ... FOR UPDATE) inside one transaction, serializing refreshes
-// across worker processes.
+// GetOwnedSecrets returns the sealed fields of owner's connection.
+func (s ConnectionStore) GetOwnedSecrets(ctx context.Context, owner core.ConnectionOwner, id string) (map[string]core.ConnectionSecret, error) {
+	return store.GetOwnedConnectionSecrets(ctx, s.db, owner, id)
+}
+
+// WithSecretsLock runs fn with the user's personal connection's secret rows
+// locked (SELECT ... FOR UPDATE) inside one transaction, serializing
+// refreshes across worker processes.
 func (s ConnectionStore) WithSecretsLock(ctx context.Context, userID, id string, fn func(*SecretsTx) error) error {
-	return store.WithConnectionSecretsLock(ctx, s.db, userID, id,
+	return s.WithOwnedSecretsLock(ctx, core.UserConnectionOwner(userID), id, fn)
+}
+
+// WithOwnedSecretsLock is WithSecretsLock for owner's connection.
+func (s ConnectionStore) WithOwnedSecretsLock(ctx context.Context, owner core.ConnectionOwner, id string, fn func(*SecretsTx) error) error {
+	return store.WithOwnedConnectionSecretsLock(ctx, s.db, owner, id,
 		func(txCtx context.Context, conn *core.Connection, secrets map[string]core.ConnectionSecret) error {
 			return fn(&SecretsTx{txCtx: txCtx, db: s.db, conn: conn, secrets: secrets})
 		})

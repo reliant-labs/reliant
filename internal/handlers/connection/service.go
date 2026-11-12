@@ -33,6 +33,7 @@ type Deps struct {
 type Connections interface {
 	ListIntegrations() []connections.Integration
 	List(ctx context.Context, userID, integrationID string) ([]*core.Connection, error)
+	ListOrg(ctx context.Context, userID, orgID, integrationID string) ([]*core.Connection, error)
 	Get(ctx context.Context, userID, id string) (*core.Connection, error)
 	CreateAPIKey(ctx context.Context, p connections.CreateAPIKeyParams) (*core.Connection, error)
 	StartOAuth(ctx context.Context, p connections.StartParams) (string, error)

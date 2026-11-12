@@ -322,7 +322,11 @@ func ListAllWorkflowTriggerActivations(ctx context.Context, db orm.Context) ([]*
 // listIntegrationTriggersSQL is every ENABLED integration trigger for one
 // integration, with its connection's routing identity. The inner join drops
 // triggers whose connection is gone, revoked or belongs to someone else: an
-// event can only reach a trigger through its own owner's live connection.
+// event can only reach a trigger through its own owner's live personal
+// connection, or through a live connection of the trigger's own org
+// (control-plane docs/design/org-sharing.md §7). Whether the trigger's owner
+// is still a member of that org is the firing's check (CreatorLeftOrg), as
+// for every org trigger.
 // Status is returned rather than filtered so a caller can tell needs_reauth
 // apart.
 var listIntegrationTriggersSQL = `SELECT ` + columnsOf[Trigger]("t") + `,
@@ -331,8 +335,8 @@ var listIntegrationTriggersSQL = `SELECT ` + columnsOf[Trigger]("t") + `,
 FROM triggers t
 JOIN connections c
 	ON c.id = t.connection_id
-	AND c.user_id = t.user_id
-	AND c.owner_kind = 'user'
+	AND ((c.owner_kind = 'user' AND c.user_id = t.user_id)
+		OR (c.owner_kind = 'org' AND c.org_id = t.org_id))
 	AND c.deleted_at IS NULL
 WHERE t.kind = 'integration'
 	AND t.enabled
@@ -371,7 +375,9 @@ func ListIntegrationTriggers(ctx context.Context, db orm.Context, integration st
 // is only trusted while recently confirmed. A trigger that names a connection
 // must name its own owner's live one; one with no connection (a delegated
 // authority, e.g. GitHub via control-plane) is routed on access alone. The
-// model is in 20261005061008_integration_event_access.sql.
+// model is in 20261005061008_integration_event_access.sql. An org trigger may
+// name a connection of its own org instead; the event still reaches it only
+// on its owner's own access.
 var listAccessRoutedTriggersSQL = `SELECT ` + columnsOf[Trigger]("t") + `
 FROM triggers t
 JOIN integration_event_access a
@@ -387,7 +393,9 @@ WHERE t.kind = 'integration'
 	AND t.config ->> 'integration' = ?0::text
 	AND (
 		t.connection_id IS NULL
-		OR (c.id IS NOT NULL AND c.user_id = t.user_id AND c.owner_kind = 'user'
+		OR (c.id IS NOT NULL
+			AND ((c.owner_kind = 'user' AND c.user_id = t.user_id)
+				OR (c.owner_kind = 'org' AND c.org_id = t.org_id))
 			AND c.deleted_at IS NULL AND c.status = 'active')
 	)
 ORDER BY t.id`

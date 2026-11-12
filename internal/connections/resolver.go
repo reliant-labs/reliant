@@ -5,6 +5,7 @@ package connections
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -32,8 +33,11 @@ const (
 
 // Ref names the connection a call wants.
 type Ref struct {
-	// ConnectionID is explicit; when empty the owner's default for
-	// IntegrationID is used.
+	// ConnectionID is explicit: the acting user's own connection, or a
+	// connection of the run's org (org-sharing.md §7.3). When empty the
+	// acting user's own default for IntegrationID is used, never the org's:
+	// an unnamed reference does not change whose identity a call carries
+	// (D10).
 	ConnectionID  string
 	IntegrationID string
 }
@@ -69,8 +73,19 @@ type runOwners interface {
 
 type resolverStore interface {
 	tokenStore
+	// GetConnection and DefaultConnection read the user's PERSONAL
+	// connections; an org's are read through GetOwnedConnection.
+	GetConnection(ctx context.Context, userID, id string) (*core.Connection, error)
 	DefaultConnection(ctx context.Context, userID, integrationID string) (*core.Connection, error)
-	TouchConnectionUsed(ctx context.Context, userID, id string) error
+	TouchOwnedConnectionUsed(ctx context.Context, owner core.ConnectionOwner, id string) error
+}
+
+// actor is who a use acts as: the user a run, trigger or picker belongs to,
+// and the org it runs in ("" for none). The org decides which org's
+// connections the use may name; the user is the one it is attributed to.
+type actor struct {
+	userID string
+	orgID  string
 }
 
 // Resolver turns (run, connection reference) into an authenticated request
@@ -99,7 +114,7 @@ type Resolved struct {
 	auth   Authenticator
 	secret vault.Secret
 	// owner and generation identify the token for RefreshAfterRejection.
-	owner      string
+	owner      core.ConnectionOwner
 	generation int64
 	tokens     *TokenSource
 	params     map[string]string
@@ -155,7 +170,7 @@ func (r *Resolved) RefreshAfterRejection(ctx context.Context) (*Resolved, error)
 	if r.tokens == nil {
 		return nil, newError(CodeNeedsReauth, "connection %q was refused and cannot be refreshed", r.ConnectionID)
 	}
-	secret, gen, err := r.tokens.RefreshAfterRejection(ctx, r.owner, r.ConnectionID, r.generation)
+	secret, gen, err := r.tokens.refreshAfterRejection(ctx, r.owner, r.ConnectionID, r.generation)
 	if err != nil {
 		return nil, err
 	}
@@ -175,44 +190,63 @@ func (r *Resolved) RefreshAfterRejection(ctx context.Context) (*Resolved, error)
 // a thread of its own, so the thread id names no workflow at all. Such an id is
 // resolved through the thread's recorded workflow, then its chat.
 func (r *Resolver) OwnerOf(ctx context.Context, runID string) (string, error) {
+	a, err := r.actorOf(ctx, runID)
+	return a.userID, err
+}
+
+// actorOf is OwnerOf plus the org the run belongs to: the run's recorded org,
+// else its chat's ("" when neither has one).
+func (r *Resolver) actorOf(ctx context.Context, runID string) (actor, error) {
 	if runID == "" {
-		return "", newError(CodeFailedPrecondition, "no run to resolve a connection for")
+		return actor{}, newError(CodeFailedPrecondition, "no run to resolve a connection for")
 	}
 	run, err := r.owners.GetWorkflow(ctx, runID)
 	if err == nil && run != nil {
-		return r.ownerOfWorkflow(ctx, run)
+		return r.actorOfWorkflow(ctx, run)
 	}
 	if thread, terr := r.owners.GetThread(ctx, runID); terr == nil && thread != nil {
 		if thread.WorkflowID != nil && *thread.WorkflowID != "" {
 			if run, werr := r.owners.GetWorkflow(ctx, *thread.WorkflowID); werr == nil && run != nil {
-				return r.ownerOfWorkflow(ctx, run)
+				return r.actorOfWorkflow(ctx, run)
 			}
 		}
-		if owner := r.ownerOfChat(ctx, thread.ChatID); owner != "" {
-			return owner, nil
+		if chat := r.actorOfChat(ctx, thread.ChatID); chat.userID != "" {
+			return chat, nil
 		}
 	}
-	return "", newError(CodeFailedPrecondition, "run %q not found", runID)
+	return actor{}, newError(CodeFailedPrecondition, "run %q not found", runID)
 }
 
-func (r *Resolver) ownerOfWorkflow(ctx context.Context, run *core.Workflow) (string, error) {
+func (r *Resolver) actorOfWorkflow(ctx context.Context, run *core.Workflow) (actor, error) {
+	org := derefOr(run.OrgID, "")
 	if run.OwnerUserID != nil && *run.OwnerUserID != "" {
-		return *run.OwnerUserID, nil
+		if org == "" {
+			org = r.actorOfChat(ctx, run.ChatID).orgID
+		}
+		return actor{userID: *run.OwnerUserID, orgID: org}, nil
 	}
-	if owner := r.ownerOfChat(ctx, run.ChatID); owner != "" {
-		return owner, nil
+	if chat := r.actorOfChat(ctx, run.ChatID); chat.userID != "" {
+		return actor{userID: chat.userID, orgID: derefOr(run.OrgID, chat.orgID)}, nil
 	}
-	return "", newError(CodeFailedPrecondition, "run %q has no owner", run.ID)
+	return actor{}, newError(CodeFailedPrecondition, "run %q has no owner", run.ID)
 }
 
-func (r *Resolver) ownerOfChat(ctx context.Context, chatID string) string {
+func (r *Resolver) actorOfChat(ctx context.Context, chatID string) actor {
 	if chatID == "" {
-		return ""
+		return actor{}
 	}
 	if chat, err := r.owners.GetChat(ctx, chatID); err == nil && chat != nil {
-		return chat.UserID
+		return actor{userID: chat.UserID, orgID: derefOr(chat.OrgID, "")}
 	}
-	return ""
+	return actor{}
+}
+
+// derefOr is *p, or fallback when p is nil or empty.
+func derefOr(p *string, fallback string) string {
+	if p == nil || *p == "" {
+		return fallback
+	}
+	return *p
 }
 
 // ForCall resolves ref for the run's owner.
@@ -224,22 +258,23 @@ func (r *Resolver) ForCall(ctx context.Context, call CallSite, ref Ref) (*Resolv
 	if call.Placement != PlacementServer {
 		return nil, &Error{Code: CodeFailedPrecondition, Message: ErrDaemonPlacement.Error(), Err: ErrDaemonPlacement}
 	}
-	owner, err := r.OwnerOf(ctx, call.RunID)
+	a, err := r.actorOf(ctx, call.RunID)
 	if err != nil {
 		return nil, err
 	}
-	actor := ActorWorker
+	by := ActorWorker
 	if call.TriggerID != "" {
-		actor = ActorTrigger(call.TriggerID)
+		by = ActorTrigger(call.TriggerID)
 	}
-	return r.resolve(ctx, owner, ref, core.ConnectionEvent{
-		RunID: call.RunID, NodeID: call.NodeID, ToolCallID: call.ToolCallID, Actor: actor,
+	return r.resolve(ctx, a, ref, core.ConnectionEvent{
+		RunID: call.RunID, NodeID: call.NodeID, ToolCallID: call.ToolCallID, Actor: by,
 	})
 }
 
 // ForUser resolves ref for userID acting as themselves, outside any run: a
 // picker listing the values of a typed input. It applies every rule ForCall
-// does (the user's own connection only, a foreign or missing id reads like
+// does (the user's own connection only — there is no run, so no org's
+// connection either — a foreign or missing id reads like
 // none, for that integration, active, refreshed, the use audited with the user
 // as actor); only the owner differs, being the authenticated caller instead of
 // a run record's. Server placement is the caller's to enforce, as ForCall's is
@@ -248,18 +283,19 @@ func (r *Resolver) ForUser(ctx context.Context, userID string, ref Ref) (*Resolv
 	if userID == "" {
 		return nil, newError(CodeFailedPrecondition, "no user to resolve a connection for")
 	}
-	return r.resolve(ctx, userID, ref, core.ConnectionEvent{Actor: ActorUser(userID)})
+	return r.resolve(ctx, actor{userID: userID}, ref, core.ConnectionEvent{Actor: ActorUser(userID)})
 }
 
 // ForTrigger resolves the connection a trigger listens through, for a use
 // that has no run: a poll.
 //
 // Everything that decides WHOSE credential this is comes from the trigger
-// row — its owner (user_id), its connection (connection_id) and its
-// integration (config.integration) — exactly as ForCall reads the owner from
-// the run row. The connection is then held to every rule ForCall applies:
-// server placement only, the owner's own connection (a foreign or missing id
-// reads like none), for that integration, active (needs_reauth is a typed
+// row — its owner (user_id), its org (org_id), its connection
+// (connection_id) and its integration (config.integration) — exactly as
+// ForCall reads them from the run row. The connection is then held to every
+// rule ForCall applies: server placement only, the owner's own connection or
+// one of the trigger's org that the owner is a live member of (a foreign or
+// missing id reads like none), for that integration, active (needs_reauth is a typed
 // CodeNeedsReauth), refreshed through the TokenSource, and the use audited
 // with the trigger as actor.
 func (r *Resolver) ForTrigger(ctx context.Context, site TriggerSite) (*Resolved, error) {
@@ -288,7 +324,8 @@ func (r *Resolver) ForTrigger(ctx context.Context, site TriggerSite) (*Resolved,
 		// owner's default: the owner picked a specific account to listen to.
 		return nil, noConnection(Ref{})
 	}
-	return r.resolve(ctx, trigger.UserID, Ref{ConnectionID: *trigger.ConnectionID, IntegrationID: cfg.Integration},
+	return r.resolve(ctx, actor{userID: trigger.UserID, orgID: derefOr(trigger.OrgID, "")},
+		Ref{ConnectionID: *trigger.ConnectionID, IntegrationID: cfg.Integration},
 		core.ConnectionEvent{Actor: ActorTrigger(trigger.ID)})
 }
 
@@ -307,13 +344,13 @@ func (r *Resolver) Usable(ctx context.Context, call CallSite, refs []Ref) (map[R
 	if call.Placement != PlacementServer {
 		return nil, &Error{Code: CodeFailedPrecondition, Message: ErrDaemonPlacement.Error(), Err: ErrDaemonPlacement}
 	}
-	owner, err := r.OwnerOf(ctx, call.RunID)
+	a, err := r.actorOf(ctx, call.RunID)
 	if err != nil {
 		return nil, err
 	}
 	out := make(map[Ref]error, len(refs))
 	for _, ref := range refs {
-		_, err := r.lookup(ctx, owner, ref)
+		_, err := r.lookup(ctx, a, ref)
 		out[ref] = err
 	}
 	return out, nil
@@ -327,20 +364,29 @@ type usableConnection struct {
 	hosts map[string]bool
 }
 
-// lookup is the half of resolve that decides WHICH connection (owner, ref)
+// lookup is the half of resolve that decides WHICH connection (actor, ref)
 // names and whether it can authenticate a call — every rule short of reading
 // the secret. resolve and Usable share it, so a connection Usable reports is
 // one resolve would hand out.
-func (r *Resolver) lookup(ctx context.Context, owner string, ref Ref) (*usableConnection, error) {
+//
+// An explicit id names the actor's own connection, or else one of the org the
+// use runs in, which only a live member of that org may use (org-sharing.md
+// §7.3). An integration alone names the actor's own default and nothing else:
+// it never falls back to the org's (D10), so a call that used to fail with
+// "no connection" does not start acting as the org's account.
+func (r *Resolver) lookup(ctx context.Context, a actor, ref Ref) (*usableConnection, error) {
 	var (
 		conn *core.Connection
 		err  error
 	)
 	switch {
 	case ref.ConnectionID != "":
-		conn, err = r.store.GetConnection(ctx, owner, ref.ConnectionID)
+		conn, err = r.store.GetConnection(ctx, a.userID, ref.ConnectionID)
+		if isNotFound(err) && a.orgID != "" {
+			conn, err = r.store.GetOwnedConnection(ctx, core.OrgConnectionOwner(a.orgID), ref.ConnectionID)
+		}
 	case ref.IntegrationID != "":
-		conn, err = r.store.DefaultConnection(ctx, owner, ref.IntegrationID)
+		conn, err = r.store.DefaultConnection(ctx, a.userID, ref.IntegrationID)
 	default:
 		return nil, newError(CodeFailedPrecondition, "the action names no connection or integration")
 	}
@@ -350,7 +396,10 @@ func (r *Resolver) lookup(ctx context.Context, owner string, ref Ref) (*usableCo
 		}
 		return nil, mapStoreErr(err)
 	}
-	if conn.OwnerKind != core.ConnectionOwnerUser || !authz.CanAccessPersonal(owner, conn.UserID) {
+	if err := mayUse(ctx, a, conn); err != nil {
+		if errors.Is(err, authz.ErrMembershipUnavailable) {
+			return nil, &Error{Code: CodeUnavailable, Message: "could not check organization membership; try again", Err: err}
+		}
 		return nil, noConnection(ref)
 	}
 	if ref.IntegrationID != "" && conn.IntegrationID != ref.IntegrationID {
@@ -379,22 +428,43 @@ func (r *Resolver) lookup(ctx context.Context, owner string, ref Ref) (*usableCo
 	return &usableConnection{conn: conn, auth: auth, hosts: hosts}, nil
 }
 
-// resolve turns (owner, ref) into a credential. It is the one implementation
-// of the rules every door shares; use carries the audit attribution.
-func (r *Resolver) resolve(ctx context.Context, owner string, ref Ref, use core.ConnectionEvent) (*Resolved, error) {
-	found, err := r.lookup(ctx, owner, ref)
+// mayUse is the ownership rule of a use: a personal connection is its owner's
+// alone; an org's is usable by a live member of that org, in a use that runs
+// in that org. nil allows; a denial is authz's (ErrMembershipUnavailable is
+// an outage, not an answer).
+func mayUse(ctx context.Context, a actor, conn *core.Connection) error {
+	switch owner := conn.Owner(); owner.Kind {
+	case core.ConnectionOwnerUser:
+		if authz.CanAccessPersonal(a.userID, conn.UserID) {
+			return nil
+		}
+	case core.ConnectionOwnerOrg:
+		if a.orgID != "" && owner.ID == a.orgID {
+			return authz.OrgMemberDenial(ctx, a.userID, owner.ID)
+		}
+	}
+	return authz.ErrDenied
+}
+
+// resolve turns (actor, ref) into a credential. It is the one implementation
+// of the rules every door shares; use carries the audit attribution, always to
+// the acting user, also for an org's connection, so an admin can answer "who
+// posted as our bot".
+func (r *Resolver) resolve(ctx context.Context, a actor, ref Ref, use core.ConnectionEvent) (*Resolved, error) {
+	found, err := r.lookup(ctx, a, ref)
 	if err != nil {
 		return nil, err
 	}
 	conn, auth, hosts := found.conn, found.auth, found.hosts
+	owner := conn.Owner()
 	secret, gen, err := r.tokens.token(ctx, owner, conn.ID)
 	if err != nil {
 		return nil, err
 	}
 
-	use.ConnectionID, use.UserID, use.Kind = conn.ID, owner, core.ConnectionEventUsed
+	use.ConnectionID, use.UserID, use.Kind = conn.ID, a.userID, core.ConnectionEventUsed
 	appendBestEffort(ctx, r.store, use)
-	_ = r.store.TouchConnectionUsed(context.WithoutCancel(ctx), owner, conn.ID)
+	_ = r.store.TouchOwnedConnectionUsed(context.WithoutCancel(ctx), owner, conn.ID)
 
 	return &Resolved{
 		ConnectionID: conn.ID, IntegrationID: conn.IntegrationID, Redactor: NewRedactor(),

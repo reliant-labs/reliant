@@ -141,6 +141,61 @@ func (ConnectionStatus) EnumDescriptor() ([]byte, []int) {
 	return file_reliant_v1_connection_proto_rawDescGZIP(), []int{1}
 }
 
+// ConnectionOwnerKind is who a connection belongs to.
+type ConnectionOwnerKind int32
+
+const (
+	// A server that predates org connections sends this; read it as USER.
+	ConnectionOwnerKind_CONNECTION_OWNER_KIND_UNSPECIFIED ConnectionOwnerKind = 0
+	// The caller's own: only they use it, and only they manage it.
+	ConnectionOwnerKind_CONNECTION_OWNER_KIND_USER ConnectionOwnerKind = 1
+	// An organization's (org_id): any live member may use it in that org's
+	// runs, naming it explicitly; only the org's admins and owners manage it.
+	// A reference that names only an integration never falls back to it.
+	ConnectionOwnerKind_CONNECTION_OWNER_KIND_ORG ConnectionOwnerKind = 2
+)
+
+// Enum value maps for ConnectionOwnerKind.
+var (
+	ConnectionOwnerKind_name = map[int32]string{
+		0: "CONNECTION_OWNER_KIND_UNSPECIFIED",
+		1: "CONNECTION_OWNER_KIND_USER",
+		2: "CONNECTION_OWNER_KIND_ORG",
+	}
+	ConnectionOwnerKind_value = map[string]int32{
+		"CONNECTION_OWNER_KIND_UNSPECIFIED": 0,
+		"CONNECTION_OWNER_KIND_USER":        1,
+		"CONNECTION_OWNER_KIND_ORG":         2,
+	}
+)
+
+func (x ConnectionOwnerKind) Enum() *ConnectionOwnerKind {
+	p := new(ConnectionOwnerKind)
+	*p = x
+	return p
+}
+
+func (x ConnectionOwnerKind) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (ConnectionOwnerKind) Descriptor() protoreflect.EnumDescriptor {
+	return file_reliant_v1_connection_proto_enumTypes[2].Descriptor()
+}
+
+func (ConnectionOwnerKind) Type() protoreflect.EnumType {
+	return &file_reliant_v1_connection_proto_enumTypes[2]
+}
+
+func (x ConnectionOwnerKind) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use ConnectionOwnerKind.Descriptor instead.
+func (ConnectionOwnerKind) EnumDescriptor() ([]byte, []int) {
+	return file_reliant_v1_connection_proto_rawDescGZIP(), []int{2}
+}
+
 type ApiKeyConnectionKind int32
 
 const (
@@ -180,11 +235,11 @@ func (x ApiKeyConnectionKind) String() string {
 }
 
 func (ApiKeyConnectionKind) Descriptor() protoreflect.EnumDescriptor {
-	return file_reliant_v1_connection_proto_enumTypes[2].Descriptor()
+	return file_reliant_v1_connection_proto_enumTypes[3].Descriptor()
 }
 
 func (ApiKeyConnectionKind) Type() protoreflect.EnumType {
-	return &file_reliant_v1_connection_proto_enumTypes[2]
+	return &file_reliant_v1_connection_proto_enumTypes[3]
 }
 
 func (x ApiKeyConnectionKind) Number() protoreflect.EnumNumber {
@@ -193,7 +248,7 @@ func (x ApiKeyConnectionKind) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use ApiKeyConnectionKind.Descriptor instead.
 func (ApiKeyConnectionKind) EnumDescriptor() ([]byte, []int) {
-	return file_reliant_v1_connection_proto_rawDescGZIP(), []int{2}
+	return file_reliant_v1_connection_proto_rawDescGZIP(), []int{3}
 }
 
 // Connection is metadata only. There is deliberately no field that could hold
@@ -225,7 +280,12 @@ type Connection struct {
 	// GitHub user id (the number, never the renameable login), a Gmail
 	// address. Empty when the integration does not say.
 	// It is what a trigger's "Only from: Me" allowlists.
-	SenderId      string `protobuf:"bytes,16,opt,name=sender_id,json=senderId,proto3" json:"sender_id,omitempty"`
+	SenderId string `protobuf:"bytes,16,opt,name=sender_id,json=senderId,proto3" json:"sender_id,omitempty"`
+	// Who the connection belongs to. An org connection's other fields describe
+	// the org's account (its Slack bot, its API key), not the caller's.
+	OwnerKind ConnectionOwnerKind `protobuf:"varint,17,opt,name=owner_kind,json=ownerKind,proto3,enum=reliant.v1.ConnectionOwnerKind" json:"owner_kind,omitempty"`
+	// The organization of an org connection; empty for a personal one.
+	OrgId         string `protobuf:"bytes,18,opt,name=org_id,json=orgId,proto3" json:"org_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -368,6 +428,20 @@ func (x *Connection) GetParams() map[string]string {
 func (x *Connection) GetSenderId() string {
 	if x != nil {
 		return x.SenderId
+	}
+	return ""
+}
+
+func (x *Connection) GetOwnerKind() ConnectionOwnerKind {
+	if x != nil {
+		return x.OwnerKind
+	}
+	return ConnectionOwnerKind_CONNECTION_OWNER_KIND_UNSPECIFIED
+}
+
+func (x *Connection) GetOrgId() string {
+	if x != nil {
+		return x.OrgId
 	}
 	return ""
 }
@@ -686,6 +760,11 @@ type ListConnectionsRequest struct {
 	// IntegrationId keeps only that integration's connections. Unset (or empty)
 	// lists every integration's.
 	IntegrationId *string `protobuf:"bytes,1,opt,name=integration_id,json=integrationId,proto3,oneof" json:"integration_id,omitempty"`
+	// OrgId adds that organization's connections (owner_kind ORG) to the
+	// caller's own, for a caller who is a live member of it
+	// (PERMISSION_DENIED otherwise). Unset lists only the caller's own, as
+	// before this field existed.
+	OrgId         *string `protobuf:"bytes,2,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -723,6 +802,13 @@ func (*ListConnectionsRequest) Descriptor() ([]byte, []int) {
 func (x *ListConnectionsRequest) GetIntegrationId() string {
 	if x != nil && x.IntegrationId != nil {
 		return *x.IntegrationId
+	}
+	return ""
+}
+
+func (x *ListConnectionsRequest) GetOrgId() string {
+	if x != nil && x.OrgId != nil {
+		return *x.OrgId
 	}
 	return ""
 }
@@ -1814,7 +1900,7 @@ var File_reliant_v1_connection_proto protoreflect.FileDescriptor
 const file_reliant_v1_connection_proto_rawDesc = "" +
 	"\n" +
 	"\x1breliant/v1/connection.proto\x12\n" +
-	"reliant.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\"\x9b\x05\n" +
+	"reliant.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\"\xf2\x05\n" +
 	"\n" +
 	"Connection\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12%\n" +
@@ -1837,7 +1923,10 @@ const file_reliant_v1_connection_proto_rawDesc = "" +
 	"\n" +
 	"updated_at\x18\x0e \x01(\tR\tupdatedAt\x12:\n" +
 	"\x06params\x18\x0f \x03(\v2\".reliant.v1.Connection.ParamsEntryR\x06params\x12\x1b\n" +
-	"\tsender_id\x18\x10 \x01(\tR\bsenderId\x1a9\n" +
+	"\tsender_id\x18\x10 \x01(\tR\bsenderId\x12>\n" +
+	"\n" +
+	"owner_kind\x18\x11 \x01(\x0e2\x1f.reliant.v1.ConnectionOwnerKindR\townerKind\x12\x15\n" +
+	"\x06org_id\x18\x12 \x01(\tR\x05orgId\x1a9\n" +
 	"\vParamsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xd2\x01\n" +
@@ -1863,10 +1952,12 @@ const file_reliant_v1_connection_proto_rawDesc = "" +
 	"\brequired\x18\x06 \x01(\bR\brequired\"\x19\n" +
 	"\x17ListIntegrationsRequest\"W\n" +
 	"\x18ListIntegrationsResponse\x12;\n" +
-	"\fintegrations\x18\x01 \x03(\v2\x17.reliant.v1.IntegrationR\fintegrations\"W\n" +
+	"\fintegrations\x18\x01 \x03(\v2\x17.reliant.v1.IntegrationR\fintegrations\"~\n" +
 	"\x16ListConnectionsRequest\x12*\n" +
-	"\x0eintegration_id\x18\x01 \x01(\tH\x00R\rintegrationId\x88\x01\x01B\x11\n" +
-	"\x0f_integration_id\"S\n" +
+	"\x0eintegration_id\x18\x01 \x01(\tH\x00R\rintegrationId\x88\x01\x01\x12\x1a\n" +
+	"\x06org_id\x18\x02 \x01(\tH\x01R\x05orgId\x88\x01\x01B\x11\n" +
+	"\x0f_integration_idB\t\n" +
+	"\a_org_id\"S\n" +
 	"\x17ListConnectionsResponse\x128\n" +
 	"\vconnections\x18\x01 \x03(\v2\x16.reliant.v1.ConnectionR\vconnections\"&\n" +
 	"\x14GetConnectionRequest\x12\x0e\n" +
@@ -1964,7 +2055,11 @@ const file_reliant_v1_connection_proto_rawDesc = "" +
 	"\x1dCONNECTION_STATUS_UNSPECIFIED\x10\x00\x12\x1c\n" +
 	"\x18CONNECTION_STATUS_ACTIVE\x10\x01\x12\"\n" +
 	"\x1eCONNECTION_STATUS_NEEDS_REAUTH\x10\x02\x12\x1d\n" +
-	"\x19CONNECTION_STATUS_REVOKED\x10\x03*\x87\x01\n" +
+	"\x19CONNECTION_STATUS_REVOKED\x10\x03*{\n" +
+	"\x13ConnectionOwnerKind\x12%\n" +
+	"!CONNECTION_OWNER_KIND_UNSPECIFIED\x10\x00\x12\x1e\n" +
+	"\x1aCONNECTION_OWNER_KIND_USER\x10\x01\x12\x1d\n" +
+	"\x19CONNECTION_OWNER_KIND_ORG\x10\x02*\x87\x01\n" +
 	"\x14ApiKeyConnectionKind\x12'\n" +
 	"#API_KEY_CONNECTION_KIND_UNSPECIFIED\x10\x00\x12#\n" +
 	"\x1fAPI_KEY_CONNECTION_KIND_API_KEY\x10\x01\x12!\n" +
@@ -2007,92 +2102,94 @@ func file_reliant_v1_connection_proto_rawDescGZIP() []byte {
 	return file_reliant_v1_connection_proto_rawDescData
 }
 
-var file_reliant_v1_connection_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
+var file_reliant_v1_connection_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
 var file_reliant_v1_connection_proto_msgTypes = make([]protoimpl.MessageInfo, 32)
 var file_reliant_v1_connection_proto_goTypes = []any{
 	(ConnectionAuthKind)(0),                // 0: reliant.v1.ConnectionAuthKind
 	(ConnectionStatus)(0),                  // 1: reliant.v1.ConnectionStatus
-	(ApiKeyConnectionKind)(0),              // 2: reliant.v1.ApiKeyConnectionKind
-	(*Connection)(nil),                     // 3: reliant.v1.Connection
-	(*Integration)(nil),                    // 4: reliant.v1.Integration
-	(*IntegrationAuthMethod)(nil),          // 5: reliant.v1.IntegrationAuthMethod
-	(*IntegrationConnectionParam)(nil),     // 6: reliant.v1.IntegrationConnectionParam
-	(*ListIntegrationsRequest)(nil),        // 7: reliant.v1.ListIntegrationsRequest
-	(*ListIntegrationsResponse)(nil),       // 8: reliant.v1.ListIntegrationsResponse
-	(*ListConnectionsRequest)(nil),         // 9: reliant.v1.ListConnectionsRequest
-	(*ListConnectionsResponse)(nil),        // 10: reliant.v1.ListConnectionsResponse
-	(*GetConnectionRequest)(nil),           // 11: reliant.v1.GetConnectionRequest
-	(*GetConnectionResponse)(nil),          // 12: reliant.v1.GetConnectionResponse
-	(*CreateApiKeyConnectionRequest)(nil),  // 13: reliant.v1.CreateApiKeyConnectionRequest
-	(*CreateApiKeyConnectionResponse)(nil), // 14: reliant.v1.CreateApiKeyConnectionResponse
-	(*StartOAuthRequest)(nil),              // 15: reliant.v1.StartOAuthRequest
-	(*StartOAuthResponse)(nil),             // 16: reliant.v1.StartOAuthResponse
-	(*CompleteOAuthRequest)(nil),           // 17: reliant.v1.CompleteOAuthRequest
-	(*CompleteOAuthResponse)(nil),          // 18: reliant.v1.CompleteOAuthResponse
-	(*TestConnectionRequest)(nil),          // 19: reliant.v1.TestConnectionRequest
-	(*TestConnectionResponse)(nil),         // 20: reliant.v1.TestConnectionResponse
-	(*RenameConnectionRequest)(nil),        // 21: reliant.v1.RenameConnectionRequest
-	(*RenameConnectionResponse)(nil),       // 22: reliant.v1.RenameConnectionResponse
-	(*SetDefaultConnectionRequest)(nil),    // 23: reliant.v1.SetDefaultConnectionRequest
-	(*SetDefaultConnectionResponse)(nil),   // 24: reliant.v1.SetDefaultConnectionResponse
-	(*DeleteConnectionRequest)(nil),        // 25: reliant.v1.DeleteConnectionRequest
-	(*DeleteConnectionResponse)(nil),       // 26: reliant.v1.DeleteConnectionResponse
-	(*ConnectionEvent)(nil),                // 27: reliant.v1.ConnectionEvent
-	(*ListConnectionEventsRequest)(nil),    // 28: reliant.v1.ListConnectionEventsRequest
-	(*ListConnectionEventsResponse)(nil),   // 29: reliant.v1.ListConnectionEventsResponse
-	nil,                                    // 30: reliant.v1.Connection.ParamsEntry
-	nil,                                    // 31: reliant.v1.IntegrationAuthMethod.FieldLabelsEntry
-	nil,                                    // 32: reliant.v1.CreateApiKeyConnectionRequest.FieldsEntry
-	nil,                                    // 33: reliant.v1.CreateApiKeyConnectionRequest.ParamsEntry
-	nil,                                    // 34: reliant.v1.StartOAuthRequest.ParamsEntry
+	(ConnectionOwnerKind)(0),               // 2: reliant.v1.ConnectionOwnerKind
+	(ApiKeyConnectionKind)(0),              // 3: reliant.v1.ApiKeyConnectionKind
+	(*Connection)(nil),                     // 4: reliant.v1.Connection
+	(*Integration)(nil),                    // 5: reliant.v1.Integration
+	(*IntegrationAuthMethod)(nil),          // 6: reliant.v1.IntegrationAuthMethod
+	(*IntegrationConnectionParam)(nil),     // 7: reliant.v1.IntegrationConnectionParam
+	(*ListIntegrationsRequest)(nil),        // 8: reliant.v1.ListIntegrationsRequest
+	(*ListIntegrationsResponse)(nil),       // 9: reliant.v1.ListIntegrationsResponse
+	(*ListConnectionsRequest)(nil),         // 10: reliant.v1.ListConnectionsRequest
+	(*ListConnectionsResponse)(nil),        // 11: reliant.v1.ListConnectionsResponse
+	(*GetConnectionRequest)(nil),           // 12: reliant.v1.GetConnectionRequest
+	(*GetConnectionResponse)(nil),          // 13: reliant.v1.GetConnectionResponse
+	(*CreateApiKeyConnectionRequest)(nil),  // 14: reliant.v1.CreateApiKeyConnectionRequest
+	(*CreateApiKeyConnectionResponse)(nil), // 15: reliant.v1.CreateApiKeyConnectionResponse
+	(*StartOAuthRequest)(nil),              // 16: reliant.v1.StartOAuthRequest
+	(*StartOAuthResponse)(nil),             // 17: reliant.v1.StartOAuthResponse
+	(*CompleteOAuthRequest)(nil),           // 18: reliant.v1.CompleteOAuthRequest
+	(*CompleteOAuthResponse)(nil),          // 19: reliant.v1.CompleteOAuthResponse
+	(*TestConnectionRequest)(nil),          // 20: reliant.v1.TestConnectionRequest
+	(*TestConnectionResponse)(nil),         // 21: reliant.v1.TestConnectionResponse
+	(*RenameConnectionRequest)(nil),        // 22: reliant.v1.RenameConnectionRequest
+	(*RenameConnectionResponse)(nil),       // 23: reliant.v1.RenameConnectionResponse
+	(*SetDefaultConnectionRequest)(nil),    // 24: reliant.v1.SetDefaultConnectionRequest
+	(*SetDefaultConnectionResponse)(nil),   // 25: reliant.v1.SetDefaultConnectionResponse
+	(*DeleteConnectionRequest)(nil),        // 26: reliant.v1.DeleteConnectionRequest
+	(*DeleteConnectionResponse)(nil),       // 27: reliant.v1.DeleteConnectionResponse
+	(*ConnectionEvent)(nil),                // 28: reliant.v1.ConnectionEvent
+	(*ListConnectionEventsRequest)(nil),    // 29: reliant.v1.ListConnectionEventsRequest
+	(*ListConnectionEventsResponse)(nil),   // 30: reliant.v1.ListConnectionEventsResponse
+	nil,                                    // 31: reliant.v1.Connection.ParamsEntry
+	nil,                                    // 32: reliant.v1.IntegrationAuthMethod.FieldLabelsEntry
+	nil,                                    // 33: reliant.v1.CreateApiKeyConnectionRequest.FieldsEntry
+	nil,                                    // 34: reliant.v1.CreateApiKeyConnectionRequest.ParamsEntry
+	nil,                                    // 35: reliant.v1.StartOAuthRequest.ParamsEntry
 }
 var file_reliant_v1_connection_proto_depIdxs = []int32{
 	0,  // 0: reliant.v1.Connection.auth_kind:type_name -> reliant.v1.ConnectionAuthKind
 	1,  // 1: reliant.v1.Connection.status:type_name -> reliant.v1.ConnectionStatus
-	30, // 2: reliant.v1.Connection.params:type_name -> reliant.v1.Connection.ParamsEntry
-	5,  // 3: reliant.v1.Integration.methods:type_name -> reliant.v1.IntegrationAuthMethod
-	6,  // 4: reliant.v1.Integration.connection_params:type_name -> reliant.v1.IntegrationConnectionParam
-	0,  // 5: reliant.v1.IntegrationAuthMethod.kind:type_name -> reliant.v1.ConnectionAuthKind
-	31, // 6: reliant.v1.IntegrationAuthMethod.field_labels:type_name -> reliant.v1.IntegrationAuthMethod.FieldLabelsEntry
-	4,  // 7: reliant.v1.ListIntegrationsResponse.integrations:type_name -> reliant.v1.Integration
-	3,  // 8: reliant.v1.ListConnectionsResponse.connections:type_name -> reliant.v1.Connection
-	3,  // 9: reliant.v1.GetConnectionResponse.connection:type_name -> reliant.v1.Connection
-	2,  // 10: reliant.v1.CreateApiKeyConnectionRequest.kind:type_name -> reliant.v1.ApiKeyConnectionKind
-	32, // 11: reliant.v1.CreateApiKeyConnectionRequest.fields:type_name -> reliant.v1.CreateApiKeyConnectionRequest.FieldsEntry
-	33, // 12: reliant.v1.CreateApiKeyConnectionRequest.params:type_name -> reliant.v1.CreateApiKeyConnectionRequest.ParamsEntry
-	3,  // 13: reliant.v1.CreateApiKeyConnectionResponse.connection:type_name -> reliant.v1.Connection
-	34, // 14: reliant.v1.StartOAuthRequest.params:type_name -> reliant.v1.StartOAuthRequest.ParamsEntry
-	3,  // 15: reliant.v1.CompleteOAuthResponse.connection:type_name -> reliant.v1.Connection
-	3,  // 16: reliant.v1.RenameConnectionResponse.connection:type_name -> reliant.v1.Connection
-	3,  // 17: reliant.v1.SetDefaultConnectionResponse.connection:type_name -> reliant.v1.Connection
-	27, // 18: reliant.v1.ListConnectionEventsResponse.events:type_name -> reliant.v1.ConnectionEvent
-	7,  // 19: reliant.v1.ConnectionService.ListIntegrations:input_type -> reliant.v1.ListIntegrationsRequest
-	9,  // 20: reliant.v1.ConnectionService.ListConnections:input_type -> reliant.v1.ListConnectionsRequest
-	11, // 21: reliant.v1.ConnectionService.GetConnection:input_type -> reliant.v1.GetConnectionRequest
-	13, // 22: reliant.v1.ConnectionService.CreateApiKeyConnection:input_type -> reliant.v1.CreateApiKeyConnectionRequest
-	15, // 23: reliant.v1.ConnectionService.StartOAuth:input_type -> reliant.v1.StartOAuthRequest
-	17, // 24: reliant.v1.ConnectionService.CompleteOAuth:input_type -> reliant.v1.CompleteOAuthRequest
-	19, // 25: reliant.v1.ConnectionService.TestConnection:input_type -> reliant.v1.TestConnectionRequest
-	21, // 26: reliant.v1.ConnectionService.RenameConnection:input_type -> reliant.v1.RenameConnectionRequest
-	23, // 27: reliant.v1.ConnectionService.SetDefaultConnection:input_type -> reliant.v1.SetDefaultConnectionRequest
-	25, // 28: reliant.v1.ConnectionService.DeleteConnection:input_type -> reliant.v1.DeleteConnectionRequest
-	28, // 29: reliant.v1.ConnectionService.ListConnectionEvents:input_type -> reliant.v1.ListConnectionEventsRequest
-	8,  // 30: reliant.v1.ConnectionService.ListIntegrations:output_type -> reliant.v1.ListIntegrationsResponse
-	10, // 31: reliant.v1.ConnectionService.ListConnections:output_type -> reliant.v1.ListConnectionsResponse
-	12, // 32: reliant.v1.ConnectionService.GetConnection:output_type -> reliant.v1.GetConnectionResponse
-	14, // 33: reliant.v1.ConnectionService.CreateApiKeyConnection:output_type -> reliant.v1.CreateApiKeyConnectionResponse
-	16, // 34: reliant.v1.ConnectionService.StartOAuth:output_type -> reliant.v1.StartOAuthResponse
-	18, // 35: reliant.v1.ConnectionService.CompleteOAuth:output_type -> reliant.v1.CompleteOAuthResponse
-	20, // 36: reliant.v1.ConnectionService.TestConnection:output_type -> reliant.v1.TestConnectionResponse
-	22, // 37: reliant.v1.ConnectionService.RenameConnection:output_type -> reliant.v1.RenameConnectionResponse
-	24, // 38: reliant.v1.ConnectionService.SetDefaultConnection:output_type -> reliant.v1.SetDefaultConnectionResponse
-	26, // 39: reliant.v1.ConnectionService.DeleteConnection:output_type -> reliant.v1.DeleteConnectionResponse
-	29, // 40: reliant.v1.ConnectionService.ListConnectionEvents:output_type -> reliant.v1.ListConnectionEventsResponse
-	30, // [30:41] is the sub-list for method output_type
-	19, // [19:30] is the sub-list for method input_type
-	19, // [19:19] is the sub-list for extension type_name
-	19, // [19:19] is the sub-list for extension extendee
-	0,  // [0:19] is the sub-list for field type_name
+	31, // 2: reliant.v1.Connection.params:type_name -> reliant.v1.Connection.ParamsEntry
+	2,  // 3: reliant.v1.Connection.owner_kind:type_name -> reliant.v1.ConnectionOwnerKind
+	6,  // 4: reliant.v1.Integration.methods:type_name -> reliant.v1.IntegrationAuthMethod
+	7,  // 5: reliant.v1.Integration.connection_params:type_name -> reliant.v1.IntegrationConnectionParam
+	0,  // 6: reliant.v1.IntegrationAuthMethod.kind:type_name -> reliant.v1.ConnectionAuthKind
+	32, // 7: reliant.v1.IntegrationAuthMethod.field_labels:type_name -> reliant.v1.IntegrationAuthMethod.FieldLabelsEntry
+	5,  // 8: reliant.v1.ListIntegrationsResponse.integrations:type_name -> reliant.v1.Integration
+	4,  // 9: reliant.v1.ListConnectionsResponse.connections:type_name -> reliant.v1.Connection
+	4,  // 10: reliant.v1.GetConnectionResponse.connection:type_name -> reliant.v1.Connection
+	3,  // 11: reliant.v1.CreateApiKeyConnectionRequest.kind:type_name -> reliant.v1.ApiKeyConnectionKind
+	33, // 12: reliant.v1.CreateApiKeyConnectionRequest.fields:type_name -> reliant.v1.CreateApiKeyConnectionRequest.FieldsEntry
+	34, // 13: reliant.v1.CreateApiKeyConnectionRequest.params:type_name -> reliant.v1.CreateApiKeyConnectionRequest.ParamsEntry
+	4,  // 14: reliant.v1.CreateApiKeyConnectionResponse.connection:type_name -> reliant.v1.Connection
+	35, // 15: reliant.v1.StartOAuthRequest.params:type_name -> reliant.v1.StartOAuthRequest.ParamsEntry
+	4,  // 16: reliant.v1.CompleteOAuthResponse.connection:type_name -> reliant.v1.Connection
+	4,  // 17: reliant.v1.RenameConnectionResponse.connection:type_name -> reliant.v1.Connection
+	4,  // 18: reliant.v1.SetDefaultConnectionResponse.connection:type_name -> reliant.v1.Connection
+	28, // 19: reliant.v1.ListConnectionEventsResponse.events:type_name -> reliant.v1.ConnectionEvent
+	8,  // 20: reliant.v1.ConnectionService.ListIntegrations:input_type -> reliant.v1.ListIntegrationsRequest
+	10, // 21: reliant.v1.ConnectionService.ListConnections:input_type -> reliant.v1.ListConnectionsRequest
+	12, // 22: reliant.v1.ConnectionService.GetConnection:input_type -> reliant.v1.GetConnectionRequest
+	14, // 23: reliant.v1.ConnectionService.CreateApiKeyConnection:input_type -> reliant.v1.CreateApiKeyConnectionRequest
+	16, // 24: reliant.v1.ConnectionService.StartOAuth:input_type -> reliant.v1.StartOAuthRequest
+	18, // 25: reliant.v1.ConnectionService.CompleteOAuth:input_type -> reliant.v1.CompleteOAuthRequest
+	20, // 26: reliant.v1.ConnectionService.TestConnection:input_type -> reliant.v1.TestConnectionRequest
+	22, // 27: reliant.v1.ConnectionService.RenameConnection:input_type -> reliant.v1.RenameConnectionRequest
+	24, // 28: reliant.v1.ConnectionService.SetDefaultConnection:input_type -> reliant.v1.SetDefaultConnectionRequest
+	26, // 29: reliant.v1.ConnectionService.DeleteConnection:input_type -> reliant.v1.DeleteConnectionRequest
+	29, // 30: reliant.v1.ConnectionService.ListConnectionEvents:input_type -> reliant.v1.ListConnectionEventsRequest
+	9,  // 31: reliant.v1.ConnectionService.ListIntegrations:output_type -> reliant.v1.ListIntegrationsResponse
+	11, // 32: reliant.v1.ConnectionService.ListConnections:output_type -> reliant.v1.ListConnectionsResponse
+	13, // 33: reliant.v1.ConnectionService.GetConnection:output_type -> reliant.v1.GetConnectionResponse
+	15, // 34: reliant.v1.ConnectionService.CreateApiKeyConnection:output_type -> reliant.v1.CreateApiKeyConnectionResponse
+	17, // 35: reliant.v1.ConnectionService.StartOAuth:output_type -> reliant.v1.StartOAuthResponse
+	19, // 36: reliant.v1.ConnectionService.CompleteOAuth:output_type -> reliant.v1.CompleteOAuthResponse
+	21, // 37: reliant.v1.ConnectionService.TestConnection:output_type -> reliant.v1.TestConnectionResponse
+	23, // 38: reliant.v1.ConnectionService.RenameConnection:output_type -> reliant.v1.RenameConnectionResponse
+	25, // 39: reliant.v1.ConnectionService.SetDefaultConnection:output_type -> reliant.v1.SetDefaultConnectionResponse
+	27, // 40: reliant.v1.ConnectionService.DeleteConnection:output_type -> reliant.v1.DeleteConnectionResponse
+	30, // 41: reliant.v1.ConnectionService.ListConnectionEvents:output_type -> reliant.v1.ListConnectionEventsResponse
+	31, // [31:42] is the sub-list for method output_type
+	20, // [20:31] is the sub-list for method input_type
+	20, // [20:20] is the sub-list for extension type_name
+	20, // [20:20] is the sub-list for extension extendee
+	0,  // [0:20] is the sub-list for field type_name
 }
 
 func init() { file_reliant_v1_connection_proto_init() }
@@ -2107,7 +2204,7 @@ func file_reliant_v1_connection_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_reliant_v1_connection_proto_rawDesc), len(file_reliant_v1_connection_proto_rawDesc)),
-			NumEnums:      3,
+			NumEnums:      4,
 			NumMessages:   32,
 			NumExtensions: 0,
 			NumServices:   1,
