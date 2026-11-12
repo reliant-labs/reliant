@@ -1,0 +1,142 @@
+{
+  "name": "@reliantlabs/forge-web-runtime",
+  "version": "0.13.12",
+  "description": "The forge frontend runtime: Connect interceptor stack, session, error boundary, toast queue, <Resource> container, W3C trace propagation and the HyperDX browser SDK wiring (errors, console, network, traces; replay off by default). The web twin of forge/pkg.",
+  "license": "Apache-2.0",
+  "//repository note": "REQUIRED for `npm publish --provenance`, not decoration. npm cross-checks this against the repository in the signed provenance statement and rejects the publish with a 422 if they disagree — an absent field reads as \"\" and fails that comparison. `directory` names the subdirectory this package lives in, so the provenance points at the real source. Omitting this is what made the first 0.3.1 publish fail AFTER the tarball had been signed and written to the sigstore transparency log.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/reliant-labs/forge.git",
+    "directory": "web-runtime"
+  },
+  "homepage": "https://github.com/reliant-labs/forge/tree/main/web-runtime#readme",
+  "bugs": {
+    "url": "https://github.com/reliant-labs/forge/issues"
+  },
+  "//publishConfig note": "A SCOPED package defaults to restricted. Restricted breaks `npm install` for anyone outside the org — including every machine that scaffolds a project with a released forge, which resolves this package from the registry by semver range. Declaring access here means a publish cannot accidentally ship private by omitting --access public.",
+  "publishConfig": {
+    "access": "public"
+  },
+  "// overrides note": "The recorder still pins vulnerable fflate 0.7.4 (GHSA-px8p-9vwx-vf98); use the patched 0.7 line only in that subtree. npm applies overrides only at the install root, not from published dependencies, so the Next.js and Vite scaffold manifests carry the same override. Remove when HyperDX updates the recorder's pin.",
+  "overrides": {
+    "@hyperdx/otel-web-session-recorder": {
+      "fflate": "^0.7.5"
+    }
+  },
+  "type": "module",
+  "sideEffects": false,
+  "files": [
+    "dist",
+    "interceptors",
+    "README.md",
+    "NOTICE"
+  ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./auth/auth0": {
+      "types": "./dist/auth/auth0.d.ts",
+      "default": "./dist/auth/auth0.js"
+    },
+    "./auth/clerk": {
+      "types": "./dist/auth/clerk.d.ts",
+      "default": "./dist/auth/clerk.js"
+    },
+    "./auth/firebase": {
+      "types": "./dist/auth/firebase.d.ts",
+      "default": "./dist/auth/firebase.js"
+    },
+    "./auth/supabase": {
+      "types": "./dist/auth/supabase.d.ts",
+      "default": "./dist/auth/supabase.js"
+    },
+    "./interceptors": {
+      "types": "./dist/interceptors.d.ts",
+      "default": "./dist/interceptors.js"
+    },
+    "./node": {
+      "types": "./dist/node.d.ts",
+      "default": "./dist/node.js"
+    },
+    "./otel-proxy": {
+      "types": "./dist/otel-proxy.d.ts",
+      "default": "./dist/otel-proxy.js"
+    },
+    "./mock-transport": {
+      "types": "./dist/mock-transport.d.ts",
+      "default": "./dist/mock-transport.js"
+    },
+    "./service-hooks": {
+      "types": "./dist/service-hooks.d.ts",
+      "default": "./dist/service-hooks.js"
+    },
+    "./telemetry": {
+      "types": "./dist/telemetry.d.ts",
+      "default": "./dist/telemetry.js"
+    },
+    "./vite": {
+      "types": "./dist/vite.d.ts",
+      "default": "./dist/vite.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.react18.json --noEmit",
+    "build": "node scripts/build.mjs",
+    "dev": "tsc -p tsconfig.build.json --watch --preserveWatchOutput",
+    "prepare": "node scripts/build.mjs",
+    "pretest": "node scripts/build.mjs",
+    "test": "vitest run",
+    "test:browser": "node --test scripts/browser-telemetry-smoke.mjs"
+  },
+  "// peerDependencies note": "@opentelemetry/api is the one REQUIRED peer: trace.ts propagates traceparent on every RPC from the barrel, and the './node' entry builds its spans on it. Every other peer is OPTIONAL because some entry point never imports it, and npm installs a non-optional peer for every consumer whether or not it is reached: react, @connectrpc/connect and @bufbuild/protobuf are imported by the barrel and the browser subpaths, which every forge frontend scaffold (Next.js, Vite, Expo) declares as its own direct dependencies, while a './node'-only consumer (an Electron main process, a Node CLI) imports none of them. @hyperdx/browser is exact-pinned and imported only (and lazily) by the './telemetry' subpath; it carries the whole OpenTelemetry web SDK and the rrweb recorder, so a frontend that never imports './telemetry' (React Native) installs none of it. @tanstack/react-query is imported only by './service-hooks'. src/published-surface.test.ts holds the rule: a peer the './node' import closure does not reach must be optional.",
+  "peerDependencies": {
+    "@bufbuild/protobuf": "^2.5.0",
+    "@connectrpc/connect": "^2.0.0",
+    "@hyperdx/browser": "0.26.0",
+    "@opentelemetry/api": "^1.9.0",
+    "@tanstack/react-query": "^5.62.0",
+    "react": "^18.3.0 || ^19.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@bufbuild/protobuf": {
+      "optional": true
+    },
+    "@connectrpc/connect": {
+      "optional": true
+    },
+    "@hyperdx/browser": {
+      "optional": true
+    },
+    "@tanstack/react-query": {
+      "optional": true
+    },
+    "react": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@bufbuild/protobuf": "^2.5.0",
+    "@connectrpc/connect": "^2.0.0",
+    "@connectrpc/connect-web": "^2.3.0",
+    "@hyperdx/browser": "0.26.0",
+    "@opentelemetry/api": "^1.9.0",
+    "@tanstack/react-query": "^5.62.0",
+    "@types/node": "^22.14.0",
+    "@types/react": "^19.1.0",
+    "@types/react-18": "npm:@types/react@~18.3.0",
+    "@types/react-dom": "^19.3.0",
+    "playwright": "1.58.0",
+    "react": "^19.1.0",
+    "react-dom": "^19.3.0",
+    "typescript": "^5.8.0",
+    "vitest": "^4.1.11"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
