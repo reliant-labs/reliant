@@ -69,6 +69,7 @@
         "Scenario",
         "ScheduleSyncer",
         "Settings",
+        "Sharing",
         "Streaming",
         "StreamingHub",
         "System",
@@ -279,6 +280,13 @@
         {
           "component": "Settings",
           "service": "reliant.v1.SettingsService",
+          "route_set": "UserRoutes",
+          "audience": "user",
+          "resolution": "declared_route_set"
+        },
+        {
+          "component": "Sharing",
+          "service": "reliant.v1.SharingService",
           "route_set": "UserRoutes",
           "audience": "user",
           "resolution": "declared_route_set"
@@ -23345,6 +23353,20 @@
               "name": "org_id",
               "kind": "string",
               "optional": true
+            },
+            {
+              "name": "visibility",
+              "kind": "enum",
+              "type_name": "reliant.v1.ResourceVisibility"
+            },
+            {
+              "name": "viewer_access",
+              "kind": "bool"
+            },
+            {
+              "name": "shared_at",
+              "kind": "string",
+              "optional": true
             }
           ],
           "reliant.v1.ProjectDaemon": [
@@ -23617,6 +23639,11 @@
             "PROJECT_INSTALL_STATE_INSTALLING",
             "PROJECT_INSTALL_STATE_INSTALLED",
             "PROJECT_INSTALL_STATE_FAILED"
+          ],
+          "reliant.v1.ResourceVisibility": [
+            "RESOURCE_VISIBILITY_UNSPECIFIED",
+            "RESOURCE_VISIBILITY_PRIVATE",
+            "RESOURCE_VISIBILITY_ORG"
           ]
         },
         "EnumNumbers": {
@@ -23632,6 +23659,11 @@
             1,
             2,
             3
+          ],
+          "reliant.v1.ResourceVisibility": [
+            0,
+            1,
+            2
           ]
         },
         "EnumGoRefs": {
@@ -23642,6 +23674,10 @@
           "reliant.v1.ProjectInstallState": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
             "GoName": "ProjectInstallState"
+          },
+          "reliant.v1.ResourceVisibility": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "ResourceVisibility"
           }
         }
       }
@@ -30771,6 +30807,846 @@
           "reliant.v1.UsageSource": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
             "GoName": "UsageSource"
+          }
+        }
+      }
+    },
+    {
+      "name": "reliant.v1.SharingService",
+      "proto_file": "reliant/v1/sharing.proto",
+      "methods": [
+        {
+          "id": "reliant.v1.SharingService/ListSharedChats",
+          "name": "ListSharedChats",
+          "input": "reliant.v1.ListSharedChatsRequest",
+          "output": "reliant.v1.ListSharedChatsResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "UNKNOWN",
+          "auth_required": true
+        },
+        {
+          "id": "reliant.v1.SharingService/ListSharedProjects",
+          "name": "ListSharedProjects",
+          "input": "reliant.v1.ListSharedProjectsRequest",
+          "output": "reliant.v1.ListSharedProjectsResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "UNKNOWN",
+          "auth_required": true
+        },
+        {
+          "id": "reliant.v1.SharingService/SetChatVisibility",
+          "name": "SetChatVisibility",
+          "input": "reliant.v1.SetChatVisibilityRequest",
+          "output": "reliant.v1.SetChatVisibilityResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "UNKNOWN",
+          "auth_required": true
+        },
+        {
+          "id": "reliant.v1.SharingService/SetProjectVisibility",
+          "name": "SetProjectVisibility",
+          "input": "reliant.v1.SetProjectVisibilityRequest",
+          "output": "reliant.v1.SetProjectVisibilityResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "UNKNOWN",
+          "auth_required": true
+        }
+      ],
+      "descriptor": {
+        "Name": "SharingService",
+        "Package": "reliant.v1",
+        "GoPackage": "github.com/reliant-labs/reliant/gen/reliant/v1",
+        "PkgName": "reliantv1",
+        "Methods": [
+          {
+            "Name": "SetChatVisibility",
+            "InputType": "SetChatVisibilityRequest",
+            "OutputType": "SetChatVisibilityResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "InputTypeFQ": "reliant.v1.SetChatVisibilityRequest",
+            "OutputTypeFQ": "reliant.v1.SetChatVisibilityResponse",
+            "InputProtoFile": "reliant/v1/sharing.proto",
+            "OutputProtoFile": "reliant/v1/sharing.proto",
+            "Activity": {
+              "Mutating": true,
+              "Declared": true,
+              "Verb": "set_visibility",
+              "TargetKind": "chat",
+              "Writer": "INTERCEPTOR"
+            }
+          },
+          {
+            "Name": "SetProjectVisibility",
+            "InputType": "SetProjectVisibilityRequest",
+            "OutputType": "SetProjectVisibilityResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "InputTypeFQ": "reliant.v1.SetProjectVisibilityRequest",
+            "OutputTypeFQ": "reliant.v1.SetProjectVisibilityResponse",
+            "InputProtoFile": "reliant/v1/sharing.proto",
+            "OutputProtoFile": "reliant/v1/sharing.proto",
+            "Activity": {
+              "Mutating": true,
+              "Declared": true,
+              "Verb": "set_visibility",
+              "TargetKind": "project",
+              "Writer": "INTERCEPTOR"
+            }
+          },
+          {
+            "Name": "ListSharedChats",
+            "InputType": "ListSharedChatsRequest",
+            "OutputType": "ListSharedChatsResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "InputTypeFQ": "reliant.v1.ListSharedChatsRequest",
+            "OutputTypeFQ": "reliant.v1.ListSharedChatsResponse",
+            "InputProtoFile": "reliant/v1/sharing.proto",
+            "OutputProtoFile": "reliant/v1/sharing.proto",
+            "Activity": {
+              "Mutating": false,
+              "Declared": true,
+              "None": "reads only: lists what others shared"
+            }
+          },
+          {
+            "Name": "ListSharedProjects",
+            "InputType": "ListSharedProjectsRequest",
+            "OutputType": "ListSharedProjectsResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "InputTypeFQ": "reliant.v1.ListSharedProjectsRequest",
+            "OutputTypeFQ": "reliant.v1.ListSharedProjectsResponse",
+            "InputProtoFile": "reliant/v1/sharing.proto",
+            "OutputProtoFile": "reliant/v1/sharing.proto",
+            "Activity": {
+              "Mutating": false,
+              "Declared": true,
+              "None": "reads only: lists what others shared"
+            }
+          }
+        ],
+        "ProtoFile": "reliant/v1/sharing.proto",
+        "ModulePath": "github.com/reliant-labs/reliant",
+        "Messages": {
+          "ListSharedChatsRequest": [
+            {
+              "Name": "org_id",
+              "ProtoType": "string",
+              "IsOptional": true
+            },
+            {
+              "Name": "project_id",
+              "ProtoType": "string",
+              "IsOptional": true
+            },
+            {
+              "Name": "limit",
+              "ProtoType": "int32",
+              "IsOptional": false
+            },
+            {
+              "Name": "offset",
+              "ProtoType": "int32",
+              "IsOptional": false
+            }
+          ],
+          "ListSharedChatsResponse": [
+            {
+              "Name": "chats",
+              "ProtoType": "[]message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.Chat"
+            }
+          ],
+          "ListSharedProjectsRequest": [
+            {
+              "Name": "org_id",
+              "ProtoType": "string",
+              "IsOptional": true
+            },
+            {
+              "Name": "limit",
+              "ProtoType": "int32",
+              "IsOptional": false
+            },
+            {
+              "Name": "offset",
+              "ProtoType": "int32",
+              "IsOptional": false
+            }
+          ],
+          "ListSharedProjectsResponse": [
+            {
+              "Name": "projects",
+              "ProtoType": "[]message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.Project"
+            }
+          ],
+          "SetChatVisibilityRequest": [
+            {
+              "Name": "chat_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "visibility",
+              "ProtoType": "enum",
+              "IsOptional": false
+            }
+          ],
+          "SetChatVisibilityResponse": [
+            {
+              "Name": "chat",
+              "ProtoType": "message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.Chat"
+            },
+            {
+              "Name": "changed",
+              "ProtoType": "bool",
+              "IsOptional": false
+            }
+          ],
+          "SetProjectVisibilityRequest": [
+            {
+              "Name": "project_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "visibility",
+              "ProtoType": "enum",
+              "IsOptional": false
+            }
+          ],
+          "SetProjectVisibilityResponse": [
+            {
+              "Name": "project",
+              "ProtoType": "message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.Project"
+            },
+            {
+              "Name": "changed",
+              "ProtoType": "bool",
+              "IsOptional": false
+            }
+          ]
+        },
+        "Audience": "user",
+        "Schemas": {
+          "reliant.v1.Chat": [
+            {
+              "name": "id",
+              "kind": "string"
+            },
+            {
+              "name": "user_id",
+              "kind": "string"
+            },
+            {
+              "name": "title",
+              "kind": "string"
+            },
+            {
+              "name": "project_id",
+              "kind": "string"
+            },
+            {
+              "name": "worktree_id",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "workflow_name",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "state",
+              "kind": "enum",
+              "type_name": "reliant.v1.ChatState"
+            },
+            {
+              "name": "workflow_id",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "run_id",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "created_at",
+              "kind": "string"
+            },
+            {
+              "name": "updated_at",
+              "kind": "string"
+            },
+            {
+              "name": "last_active",
+              "kind": "string"
+            },
+            {
+              "name": "last_message_at",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "selected_presets",
+              "kind": "map",
+              "map_key_kind": "string",
+              "map_value_kind": "string"
+            },
+            {
+              "name": "needs_recovery",
+              "kind": "bool"
+            },
+            {
+              "name": "activity",
+              "kind": "enum",
+              "type_name": "reliant.v1.ChatActivity"
+            },
+            {
+              "name": "unread",
+              "kind": "bool"
+            },
+            {
+              "name": "active_daemon_id",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "workflow_state",
+              "kind": "enum",
+              "type_name": "reliant.v1.WorkflowState"
+            },
+            {
+              "name": "workflow_stop_reason",
+              "kind": "enum",
+              "type_name": "reliant.v1.WorkflowStopReason"
+            },
+            {
+              "name": "launch_kind",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "trigger_id",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "adopted_at",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "no_machine",
+              "kind": "bool"
+            },
+            {
+              "name": "usage_limit_resumes_at",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "usage_limit_provider",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "usage_limit_probing",
+              "kind": "bool"
+            },
+            {
+              "name": "selection",
+              "kind": "message",
+              "type_name": "reliant.v1.ChatSelection"
+            },
+            {
+              "name": "worktree",
+              "kind": "message",
+              "type_name": "reliant.v1.WorktreeSummary"
+            },
+            {
+              "name": "working_threads",
+              "kind": "int32"
+            },
+            {
+              "name": "origin",
+              "kind": "enum",
+              "type_name": "reliant.v1.ChatOrigin"
+            },
+            {
+              "name": "org_id",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "visibility",
+              "kind": "enum",
+              "type_name": "reliant.v1.ResourceVisibility"
+            },
+            {
+              "name": "viewer_access",
+              "kind": "bool"
+            },
+            {
+              "name": "shared_at",
+              "kind": "string",
+              "optional": true
+            }
+          ],
+          "reliant.v1.ChatSelection": [
+            {
+              "name": "workflow_name",
+              "kind": "string"
+            },
+            {
+              "name": "params",
+              "kind": "message",
+              "type_name": "google.protobuf.Struct"
+            },
+            {
+              "name": "provider_policy",
+              "kind": "message",
+              "type_name": "reliant.v1.ProviderPolicy"
+            },
+            {
+              "name": "version",
+              "kind": "int64"
+            },
+            {
+              "name": "updated_at",
+              "kind": "string"
+            }
+          ],
+          "reliant.v1.ListSharedChatsRequest": [
+            {
+              "name": "org_id",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "project_id",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "limit",
+              "kind": "int32",
+              "validate": {
+                "gte": "0",
+                "lte": "100"
+              }
+            },
+            {
+              "name": "offset",
+              "kind": "int32",
+              "validate": {
+                "gte": "0"
+              }
+            }
+          ],
+          "reliant.v1.ListSharedChatsResponse": [
+            {
+              "name": "chats",
+              "kind": "message",
+              "type_name": "reliant.v1.Chat",
+              "repeated": true
+            }
+          ],
+          "reliant.v1.ListSharedProjectsRequest": [
+            {
+              "name": "org_id",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "limit",
+              "kind": "int32",
+              "validate": {
+                "gte": "0",
+                "lte": "100"
+              }
+            },
+            {
+              "name": "offset",
+              "kind": "int32",
+              "validate": {
+                "gte": "0"
+              }
+            }
+          ],
+          "reliant.v1.ListSharedProjectsResponse": [
+            {
+              "name": "projects",
+              "kind": "message",
+              "type_name": "reliant.v1.Project",
+              "repeated": true
+            }
+          ],
+          "reliant.v1.Project": [
+            {
+              "name": "id",
+              "kind": "string"
+            },
+            {
+              "name": "user_id",
+              "kind": "string"
+            },
+            {
+              "name": "name",
+              "kind": "string"
+            },
+            {
+              "name": "path",
+              "kind": "string"
+            },
+            {
+              "name": "description",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "is_git_repo",
+              "kind": "bool"
+            },
+            {
+              "name": "default_branch",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "created_at",
+              "kind": "string"
+            },
+            {
+              "name": "updated_at",
+              "kind": "string"
+            },
+            {
+              "name": "last_active",
+              "kind": "string"
+            },
+            {
+              "name": "remote_url",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "is_forge",
+              "kind": "bool"
+            },
+            {
+              "name": "forge_project_name",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "org_id",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "visibility",
+              "kind": "enum",
+              "type_name": "reliant.v1.ResourceVisibility"
+            },
+            {
+              "name": "viewer_access",
+              "kind": "bool"
+            },
+            {
+              "name": "shared_at",
+              "kind": "string",
+              "optional": true
+            }
+          ],
+          "reliant.v1.ProviderPolicy": [
+            {
+              "name": "on_limit",
+              "kind": "enum",
+              "type_name": "reliant.v1.ProviderPolicy.OnLimit"
+            },
+            {
+              "name": "fallback_model",
+              "kind": "string",
+              "optional": true
+            }
+          ],
+          "reliant.v1.SetChatVisibilityRequest": [
+            {
+              "name": "chat_id",
+              "kind": "string",
+              "validate": {
+                "min_len": 1
+              }
+            },
+            {
+              "name": "visibility",
+              "kind": "enum",
+              "type_name": "reliant.v1.ResourceVisibility"
+            }
+          ],
+          "reliant.v1.SetChatVisibilityResponse": [
+            {
+              "name": "chat",
+              "kind": "message",
+              "type_name": "reliant.v1.Chat"
+            },
+            {
+              "name": "changed",
+              "kind": "bool"
+            }
+          ],
+          "reliant.v1.SetProjectVisibilityRequest": [
+            {
+              "name": "project_id",
+              "kind": "string",
+              "validate": {
+                "min_len": 1
+              }
+            },
+            {
+              "name": "visibility",
+              "kind": "enum",
+              "type_name": "reliant.v1.ResourceVisibility"
+            }
+          ],
+          "reliant.v1.SetProjectVisibilityResponse": [
+            {
+              "name": "project",
+              "kind": "message",
+              "type_name": "reliant.v1.Project"
+            },
+            {
+              "name": "changed",
+              "kind": "bool"
+            }
+          ],
+          "reliant.v1.WorktreeSummary": [
+            {
+              "name": "id",
+              "kind": "string"
+            },
+            {
+              "name": "name",
+              "kind": "string"
+            },
+            {
+              "name": "branch",
+              "kind": "string"
+            },
+            {
+              "name": "path",
+              "kind": "string"
+            },
+            {
+              "name": "is_main",
+              "kind": "bool"
+            },
+            {
+              "name": "status",
+              "kind": "enum",
+              "type_name": "reliant.v1.WorktreeStatus"
+            },
+            {
+              "name": "deleted_at",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "project_id",
+              "kind": "string"
+            }
+          ]
+        },
+        "SchemaFiles": {
+          "reliant.v1.Chat": "reliant/v1/chat.proto",
+          "reliant.v1.ChatSelection": "reliant/v1/chat.proto",
+          "reliant.v1.ListSharedChatsRequest": "reliant/v1/sharing.proto",
+          "reliant.v1.ListSharedChatsResponse": "reliant/v1/sharing.proto",
+          "reliant.v1.ListSharedProjectsRequest": "reliant/v1/sharing.proto",
+          "reliant.v1.ListSharedProjectsResponse": "reliant/v1/sharing.proto",
+          "reliant.v1.Project": "reliant/v1/project.proto",
+          "reliant.v1.ProviderPolicy": "reliant/v1/chat.proto",
+          "reliant.v1.SetChatVisibilityRequest": "reliant/v1/sharing.proto",
+          "reliant.v1.SetChatVisibilityResponse": "reliant/v1/sharing.proto",
+          "reliant.v1.SetProjectVisibilityRequest": "reliant/v1/sharing.proto",
+          "reliant.v1.SetProjectVisibilityResponse": "reliant/v1/sharing.proto",
+          "reliant.v1.WorktreeSummary": "reliant/v1/worktree.proto"
+        },
+        "Enums": {
+          "reliant.v1.ChatActivity": [
+            "CHAT_ACTIVITY_IDLE",
+            "CHAT_ACTIVITY_RUNNING",
+            "CHAT_ACTIVITY_AWAITING_INPUT",
+            "CHAT_ACTIVITY_ERROR",
+            "CHAT_ACTIVITY_PAUSED",
+            "CHAT_ACTIVITY_WAITING_FOR_DAEMON",
+            "CHAT_ACTIVITY_QUEUED_FOR_MACHINE",
+            "CHAT_ACTIVITY_WAITING_FOR_USAGE_LIMIT"
+          ],
+          "reliant.v1.ChatOrigin": [
+            "CHAT_ORIGIN_UNSPECIFIED",
+            "CHAT_ORIGIN_USER",
+            "CHAT_ORIGIN_AUTOMATION",
+            "CHAT_ORIGIN_AGENT",
+            "CHAT_ORIGIN_MANUAL_RUN",
+            "CHAT_ORIGIN_BUILDER_TEST",
+            "CHAT_ORIGIN_CLI"
+          ],
+          "reliant.v1.ChatState": [
+            "CHAT_STATE_UNSPECIFIED",
+            "CHAT_STATE_IDLE",
+            "CHAT_STATE_ARCHIVED"
+          ],
+          "reliant.v1.ProviderPolicy.OnLimit": [
+            "ON_LIMIT_UNSPECIFIED",
+            "ON_LIMIT_WAIT",
+            "ON_LIMIT_FALLBACK"
+          ],
+          "reliant.v1.ResourceVisibility": [
+            "RESOURCE_VISIBILITY_UNSPECIFIED",
+            "RESOURCE_VISIBILITY_PRIVATE",
+            "RESOURCE_VISIBILITY_ORG"
+          ],
+          "reliant.v1.WorkflowState": [
+            "WORKFLOW_STATE_UNSPECIFIED",
+            "WORKFLOW_STATE_PENDING",
+            "WORKFLOW_STATE_ACTIVE",
+            "WORKFLOW_STATE_STOPPED"
+          ],
+          "reliant.v1.WorkflowStopReason": [
+            "WORKFLOW_STOP_REASON_UNSPECIFIED",
+            "WORKFLOW_STOP_REASON_COMPLETED",
+            "WORKFLOW_STOP_REASON_FAILED",
+            "WORKFLOW_STOP_REASON_PAUSED",
+            "WORKFLOW_STOP_REASON_CANCELLED"
+          ],
+          "reliant.v1.WorktreeStatus": [
+            "WORKTREE_STATUS_UNSPECIFIED",
+            "WORKTREE_STATUS_ACTIVE",
+            "WORKTREE_STATUS_COMPLETED",
+            "WORKTREE_STATUS_ABANDONED",
+            "WORKTREE_STATUS_MERGING",
+            "WORKTREE_STATUS_CREATING",
+            "WORKTREE_STATUS_FAILED"
+          ]
+        },
+        "EnumNumbers": {
+          "reliant.v1.ChatActivity": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7
+          ],
+          "reliant.v1.ChatOrigin": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6
+          ],
+          "reliant.v1.ChatState": [
+            0,
+            2,
+            3
+          ],
+          "reliant.v1.ProviderPolicy.OnLimit": [
+            0,
+            1,
+            2
+          ],
+          "reliant.v1.ResourceVisibility": [
+            0,
+            1,
+            2
+          ],
+          "reliant.v1.WorkflowState": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "reliant.v1.WorkflowStopReason": [
+            0,
+            1,
+            2,
+            3,
+            4
+          ],
+          "reliant.v1.WorktreeStatus": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6
+          ]
+        },
+        "EnumGoRefs": {
+          "reliant.v1.ChatActivity": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "ChatActivity"
+          },
+          "reliant.v1.ChatOrigin": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "ChatOrigin"
+          },
+          "reliant.v1.ChatState": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "ChatState"
+          },
+          "reliant.v1.ProviderPolicy.OnLimit": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "ProviderPolicy_OnLimit"
+          },
+          "reliant.v1.ResourceVisibility": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "ResourceVisibility"
+          },
+          "reliant.v1.WorkflowState": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "WorkflowState"
+          },
+          "reliant.v1.WorkflowStopReason": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "WorkflowStopReason"
+          },
+          "reliant.v1.WorktreeStatus": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "WorktreeStatus"
           }
         }
       }
@@ -47116,6 +47992,18 @@
       "implementation_candidates": []
     },
     {
+      "id": "Sharing",
+      "name": "Sharing",
+      "kind": "component",
+      "type": "*github.com/reliant-labs/reliant/internal/handlers/sharing.Service",
+      "source": {
+        "path": "internal/handlers/sharing/service.go",
+        "symbol": "New"
+      },
+      "methods": [],
+      "implementation_candidates": []
+    },
+    {
       "id": "StateDerivation",
       "name": "StateDerivation",
       "kind": "provider",
@@ -48594,6 +49482,32 @@
       "consumer": "Settings",
       "field": "Repo",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/settings.Repository",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Sharing",
+      "field": "Orgs",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/sharing.OrgResolver",
+      "methods": [],
+      "candidates": [
+        "OrgResolver"
+      ],
+      "providers": [
+        "OrgResolver"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Sharing",
+      "field": "Repo",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/sharing.Repository",
       "methods": [],
       "candidates": [
         "Database"

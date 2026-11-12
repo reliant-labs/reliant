@@ -163,18 +163,20 @@ func (s *Service) GetPlanByChatId(
 	req *connect.Request[reliantv1.GetPlanByChatIdRequest],
 ) (*connect.Response[reliantv1.GetPlanByChatIdResponse], error) {
 	userID := auth.MustGetUserID(ctx)
+	// Serves viewers of a shared chat (authz.WithViewerReads).
+	ctx = authz.WithViewerReads(ctx)
 
 	if req.Msg.ChatId == "" {
 		return nil, svcerr.InvalidArgument("chat_id is required")
 	}
 
-	// Verify the chat belongs to the user
+	// The owner, or a viewer of a shared chat.
 	chat, err := s.deps.Repo.GetChatRow(ctx, req.Msg.ChatId)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}
 
-	if !authz.CanReadChat(ctx, userID, chat) {
+	if _, denied := authz.ReadChatAccess(ctx, userID, chat); denied != nil {
 		return nil, svcerr.PermissionDenied("access denied")
 	}
 

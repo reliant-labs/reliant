@@ -21,6 +21,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/ospath"
 	"github.com/reliant-labs/reliant/internal/projectcheckout"
 	"github.com/reliant-labs/reliant/internal/projectfacts"
+	"github.com/reliant-labs/reliant/internal/projectproto"
 )
 
 // gitCheckBudget bounds GetProject's live check of the project's git status
@@ -224,33 +225,9 @@ func (s *Service) projectBelongsToUser(ctx context.Context, projectID string, us
 	return nil
 }
 
-// projectToProto converts a db.Project to proto Project
+// projectToProto is the project as its owner reads it (projectproto.Project).
 func projectToProto(p *db.Project) *reliantv1.Project {
-	proto := &reliantv1.Project{
-		Id:         p.ID,
-		UserId:     p.UserID,
-		Name:       p.Name,
-		Path:       p.Path,
-		IsGitRepo:  p.IsGitRepo,
-		IsForge:    p.IsForge,
-		CreatedAt:  p.CreatedAt.Format(time.RFC3339),
-		UpdatedAt:  p.UpdatedAt.Format(time.RFC3339),
-		LastActive: p.LastActive.Format(time.RFC3339),
-	}
-	if p.Description != nil {
-		proto.Description = p.Description
-	}
-	if p.DefaultBranch != nil {
-		proto.DefaultBranch = p.DefaultBranch
-	}
-	if p.RemoteURL != nil {
-		proto.RemoteUrl = p.RemoteURL
-	}
-	proto.OrgId = p.OrgID
-	if p.ForgeProjectName != nil {
-		proto.ForgeProjectName = p.ForgeProjectName
-	}
-	return proto
+	return projectproto.Project(p)
 }
 
 // ListProjects lists all projects for the current user
@@ -307,6 +284,17 @@ func (s *Service) GetProject(
 	userID := auth.MustGetUserID(ctx)
 
 	if err := s.projectBelongsToUser(ctx, req.Msg.ProjectId, userID); err != nil {
+		// A viewer of a shared project reads its card, in the viewer's shape
+		// (no path) and without the git check, which would reach the owner's
+		// machine.
+		viewing := authz.WithViewerReads(ctx)
+		if shared, getErr := s.deps.Repo.GetProject(viewing, req.Msg.ProjectId); getErr == nil {
+			// Not the owner here, so a readable answer is a viewer's: it is
+			// shaped for one whatever the decision says.
+			if _, denied := authz.ReadProjectAccess(viewing, userID, shared); denied == nil {
+				return connect.NewResponse(&reliantv1.GetProjectResponse{Project: projectproto.ForViewer(projectToProto(shared))}), nil
+			}
+		}
 		return nil, err
 	}
 
