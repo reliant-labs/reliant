@@ -112,3 +112,69 @@ func TestReconcileKeepsInstallationOnlyRouting(t *testing.T) {
 	assert.ElementsMatch(t, []string{bound.ID, unbound.ID}, routed("100", "1"))
 	assert.Equal(t, []string{unbound.ID}, routed("200", "9"), "the bound activation still takes only its installation's events")
 }
+
+// afterRead is the real store, with a step run once between the reconciler's
+// read of every activation and its first write: a concurrent UpdateTrigger
+// that commits in that window, deterministically.
+type afterRead struct {
+	*db.Repo
+	step func()
+}
+
+func (a *afterRead) ListAllWorkflowTriggerActivations(ctx context.Context) ([]*core.Trigger, error) {
+	ts, err := a.Repo.ListAllWorkflowTriggerActivations(ctx)
+	if a.step != nil {
+		a.step()
+		a.step = nil
+	}
+	return ts, err
+}
+
+// A binding committed after the reconciler read its snapshot survives the
+// reconciler's write: binding an unbound activation, moving a bound one to
+// another installation, and unbinding one. The store keeps the row's binding
+// as of the write, never the snapshot's.
+func TestReconcileNeverOverwritesABindingCommittedAfterItsRead(t *testing.T) {
+	cases := map[string]struct{ before, after string }{
+		"bound after the read":   {"", "100"},
+		"moved after the read":   {"100", "200"},
+		"unbound after the read": {"100", ""},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			repo := db.NewTestRepo(t)
+			ctx := context.Background()
+			now := time.Now().UTC()
+			user := "u-" + uuid.NewString()[:8]
+			project := "p-" + user
+			require.NoError(t, repo.CreateProject(ctx, &db.Project{ID: project, UserID: user, Name: "p", Path: t.TempDir(), CreatedAt: now, UpdatedAt: now, LastActive: now}))
+			issue := "new-issue"
+			config := func(installation string) json.RawMessage {
+				cfg := core.IntegrationConfig{Integration: "github", Events: []string{"issues.closed"}, Installation: installation}
+				raw, err := json.Marshal(cfg)
+				require.NoError(t, err)
+				return raw
+			}
+			tr := &core.Trigger{
+				ID: uuid.NewString(), UserID: user, ProjectID: project, Name: "t", Kind: core.TriggerKindIntegration,
+				Enabled: true, Workflow: "triage", WorkflowTrigger: &issue, Message: "go", DaemonID: "d",
+				Config: config(tc.before), CreatedAt: now, UpdatedAt: now,
+			}
+			require.NoError(t, repo.CreateTrigger(ctx, tr))
+
+			store := &afterRead{Repo: repo, step: func() {
+				// What UpdateTrigger commits: the row's whole config, rebound.
+				_, err := repo.DB.DB(ctx).ExecContext(ctx, `UPDATE triggers SET config = $1 WHERE id = $2`, string(config(tc.after)), tr.ID)
+				require.NoError(t, err)
+			}}
+			report, err := NewReconciler(store, fakeWorkflows{yaml: map[string]string{"triage": declaringWorkflow}}, nil).ReconcileAll(ctx)
+			require.NoError(t, err)
+			require.Equal(t, 1, report.Updated, "the stale events forced a write from the old snapshot")
+
+			got, err := repo.GetTrigger(ctx, tr.ID)
+			require.NoError(t, err)
+			assert.Equal(t, tc.after, installationIn(t, got.Config), "the binding committed after the read is the one kept")
+			assert.Equal(t, []string{"issues.opened"}, scopeOf(t, got.Config).Events, "the declaration's part is still re-projected")
+		})
+	}
+}

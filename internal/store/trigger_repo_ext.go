@@ -282,9 +282,17 @@ func GetTriggerWebhookCredentials(ctx context.Context, db orm.Context, id string
 // The kind is not here: an activation whose declaration changed kind is
 // broken (its connection or webhook token belongs to the old kind), never
 // re-projected. An id that is not an activation is core.ErrTriggerNotFound.
+//
+// The org GitHub App installation an activation is bound to (config
+// "installation") is the activation's, not the declaration's: the write keeps
+// the row's CURRENT binding and ignores any in p. The UPDATE reads config at
+// the row version it writes, so a binding committed after the reconciler
+// read its snapshot is neither dropped nor overwritten with the old one.
 func SetTriggerProjection(ctx context.Context, db orm.Context, id string, p core.TriggerProjection) error {
+	cfg := string(triggerConfigJSON(p.Config))
 	res, err := db.Bun().NewUpdate().Model((*Trigger)(nil)).
-		Set("config = ?", string(triggerConfigJSON(p.Config))).
+		Set(projectionConfigSQL, cfg, cfg, core.ActivationInstallationKey, core.ActivationInstallationKey,
+			core.ActivationInstallationKey, core.ActivationInstallationKey, cfg).
 		Set("filter = ?", p.Filter).
 		Set("updated_at = NOW()").
 		Where("id = ?", id).
@@ -302,6 +310,16 @@ func SetTriggerProjection(ctx context.Context, db orm.Context, id string, p core
 	}
 	return nil
 }
+
+// projectionConfigSQL is the new config: the projection without any
+// "installation", plus the row's own "installation" when it has one. A
+// projection that is not an object is stored as it is.
+// Its placeholders: the projection twice, core.ActivationInstallationKey four
+// times, the projection.
+const projectionConfigSQL = `config = CASE WHEN jsonb_typeof(?::jsonb) = 'object'
+	THEN (?::jsonb - ?::text) || CASE WHEN jsonb_typeof(config -> ?::text) = 'string'
+		THEN jsonb_build_object(?::text, config -> ?::text) ELSE '{}'::jsonb END
+	ELSE ?::jsonb END`
 
 // ListAllWorkflowTriggerActivations lists every activation of a declared
 // trigger, for the periodic reconcile.
@@ -393,7 +411,7 @@ LEFT JOIN connections c
 WHERE t.kind = 'integration'
 	AND t.enabled
 	AND t.config ->> 'integration' = ?0::text
-	AND (t.config ->> 'installation' IS NULL OR t.config ->> 'installation' = ?1::text)
+	AND (t.config ->> '` + core.ActivationInstallationKey + `' IS NULL OR t.config ->> '` + core.ActivationInstallationKey + `' = ?1::text)
 	AND (
 		t.connection_id IS NULL
 		OR (c.id IS NOT NULL

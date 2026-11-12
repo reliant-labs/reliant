@@ -33,3 +33,15 @@ func TestCarryActivationConfig(t *testing.T) {
 		})
 	}
 }
+
+// The one name of the activation-owned key is IntegrationConfig's JSON name.
+func TestActivationInstallationKeyIsTheConfigsName(t *testing.T) {
+	raw, err := json.Marshal(IntegrationConfig{Installation: "42"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var m map[string]any
+	if err := json.Unmarshal(raw, &m); err != nil || m[ActivationInstallationKey] != "42" {
+		t.Fatalf("IntegrationConfig JSON %s does not name %q", raw, ActivationInstallationKey)
+	}
+}

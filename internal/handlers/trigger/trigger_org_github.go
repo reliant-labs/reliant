@@ -72,7 +72,7 @@ func (s *Service) bindOrgGitHubApp(ctx context.Context, ownerID string, def *rel
 		if in.Suspended {
 			return svcerr.FailedPrecondition("that GitHub App installation is suspended")
 		}
-		cfg["installation"] = strconv.FormatInt(installationID, 10)
+		cfg[core.ActivationInstallationKey] = strconv.FormatInt(installationID, 10)
 		raw, err := json.Marshal(cfg)
 		if err != nil {
 			return svcerr.Internal("encoding the trigger config")
