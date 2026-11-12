@@ -13,6 +13,92 @@ Regenerate with: task generate:docs:changelog
 
 Track what's new in each Reliant release.
 
+<Update label="v1.16.0" description="November 11, 2026">
+### 3 new features, 1 fix and 4 other changes
+
+Every pull request merged since v1.15.0, grouped by its conventional-commit type.
+
+#### Added
+
+- **retention: compact chat update logs and prune finished runs' internal steps** [#2536](https://github.com/reliant-labs/reliant/pull/2536)
+- **console: forge's built-in product dashboards in the demo, and a Users card on the Overview** [#2597](https://github.com/reliant-labs/reliant/pull/2597)
+- **inbox: keep or reclaim now a worktree marked to be reclaimed** [#2584](https://github.com/reliant-labs/reliant/pull/2584)
+
+#### Changed
+
+- **handlers, streaming, daemonstate, …: wait on events, not the wall clock** [#2616](https://github.com/reliant-labs/reliant/pull/2616)
+- **toolexec: wait on events, not the wall clock** [#2614](https://github.com/reliant-labs/reliant/pull/2614)
+- **llm, daemonruntime: wait on events, not the wall clock** [#2615](https://github.com/reliant-labs/reliant/pull/2615)
+- **workflow, triggers, auth, …: wait on events, not the wall clock** [#2617](https://github.com/reliant-labs/reliant/pull/2617)
+
+#### Fixed
+
+- **gateway: re-subscribe NATS subscriptions the broker refused, with capped backoff** [#2618](https://github.com/reliant-labs/reliant/pull/2618)
+
+</Update>
+
+<Update label="v1.15.0" description="November 11, 2026">
+### 21 new features, 14 fixes and 11 other changes
+
+Every pull request merged since v1.14.0, grouped by its conventional-commit type.
+
+#### Added
+
+- **worktreereclaim: an Inbox approval delivered by the server removes the approved worktree; approvals.json alone never does** [#2559](https://github.com/reliant-labs/reliant/pull/2559)
+- **web: org members page, invitations, accept-invite and create organization** [#2501](https://github.com/reliant-labs/reliant/pull/2501)
+- **orgs: projects, chats, saved workflows, triggers and runs belong to one org, and the org boundary is enforced** [#2537](https://github.com/reliant-labs/reliant/pull/2537)
+- **console: tighten the Overview and Dashboards, one field style for every input** [#2568](https://github.com/reliant-labs/reliant/pull/2568)
+- **desktop: sidebar update button, and a Check for Updates menu item that always answers** [#2561](https://github.com/reliant-labs/reliant/pull/2561)
+- **dashboards: standard dashboards show as built-ins, not templates** [#2499](https://github.com/reliant-labs/reliant/pull/2499)
+- **daemon: remove and reclone of a checkout are durable operations the machine acknowledges** [#2549](https://github.com/reliant-labs/reliant/pull/2549)
+- **sdk: an inbox item kind for worktrees marked to be reclaimed (protos, PR A)** [#2581](https://github.com/reliant-labs/reliant/pull/2581)
+- **web: people × environments permission grid in Settings › Members** [#2583](https://github.com/reliant-labs/reliant/pull/2583)
+- **sdk: Trigger.paused_reason, why Reliant paused a trigger itself (protos, PR A)** [#2585](https://github.com/reliant-labs/reliant/pull/2585)
+- **web: navigate explicit Data and Identity subjects** [#2382](https://github.com/reliant-labs/reliant/pull/2382)
+- **worktrees: the daemon places, reports and honours a reclaim tombstone** [#2579](https://github.com/reliant-labs/reliant/pull/2579)
+- **web: lists, the user stream and machine pickers follow the active org** [#2586](https://github.com/reliant-labs/reliant/pull/2586)
+- **web: name each dashboard panel's read with Forge-Panel** [#2150](https://github.com/reliant-labs/reliant/pull/2150)
+- **worktrees: reclaim in two phases: mark a quiet worktree, reclaim it a day later only if nothing contradicted the mark** [#2580](https://github.com/reliant-labs/reliant/pull/2580)
+- **triggers: pause a trigger whose creator left its org (creator_left_org) instead of failing every firing** [#2587](https://github.com/reliant-labs/reliant/pull/2587)
+- **sdk: org_id on ListArchivedChats, SearchChats and ListInbox requests (protos, PR A)** [#2589](https://github.com/reliant-labs/reliant/pull/2589)
+- **console: Dashboards is a compact dashboard browser; a brighter console text ramp** [#2596](https://github.com/reliant-labs/reliant/pull/2596)
+- **console: a top-level Users page for who can sign in to each environment** [#2594](https://github.com/reliant-labs/reliant/pull/2594)
+- **worktrees: under disk pressure a reclaim mark needs an hour of quiet and stands an hour** [#2598](https://github.com/reliant-labs/reliant/pull/2598)
+- **workflows: a run waiting on a provider no longer counts against concurrency.max_running** [#2602](https://github.com/reliant-labs/reliant/pull/2602)
+
+#### Changed
+
+- **remove unreachable Go packages and dead code** [#2566](https://github.com/reliant-labs/reliant/pull/2566)
+- **db: drop chat_updates and messages indexes nothing reads (~2.3 GB)** [#2564](https://github.com/reliant-labs/reliant/pull/2564)
+- **deps: pin sdk/go to #2537's squash commit on main** [#2575](https://github.com/reliant-labs/reliant/pull/2575)
+- **web: a chat switch sends its stream before rendering the cached transcript** [#2572](https://github.com/reliant-labs/reliant/pull/2572)
+- **web: lift the catch-up overlay the frame the timeline is usable; time mobile chat opens** [#2565](https://github.com/reliant-labs/reliant/pull/2565)
+- **privacy: draft help text for cookieless visitor counting on hosted apps** [#2577](https://github.com/reliant-labs/reliant/pull/2577)
+- **chat: materialize the chat snapshot's update heads in chat_update_heads** [#2569](https://github.com/reliant-labs/reliant/pull/2569)
+- **pin: forge de8e6d23 for coherent root command compatibility** [#2512](https://github.com/reliant-labs/reliant/pull/2512)
+- **add a Connect action to Settings → Integrations** [#2582](https://github.com/reliant-labs/reliant/pull/2582)
+- **worktreereclaim: remove the flaky sandbox-init ledger test (#2590)** [#2591](https://github.com/reliant-labs/reliant/pull/2591)
+- **workflows: pin that an unattended give-up runs on_failure and a driver-pinned reviewer falls back** [#2606](https://github.com/reliant-labs/reliant/pull/2606)
+
+#### Fixed
+
+- **db: prod keeps 20 idle connections warm, as #2172 intended** [#2563](https://github.com/reliant-labs/reliant/pull/2563)
+- **demo: subtract the demo's chrome, repeated copy and auto-opening tips; make the tour spotlight robust** [#2567](https://github.com/reliant-labs/reliant/pull/2567)
+- **dev: make the local merge gate and host-dependent tests work on macOS** [#2574](https://github.com/reliant-labs/reliant/pull/2574)
+- **reliant main is green again after #2559, #2567 and #2537 (optional Sender guard, journey e2e follows the demo polish, two org-era tests)** [#2576](https://github.com/reliant-labs/reliant/pull/2576)
+- **worktreereclaim: never retire a worktree that was used after it was archived** [#2571](https://github.com/reliant-labs/reliant/pull/2571)
+- **worktrees: count usage-limit waits and daemon-seen path use as worktree activity** [#2578](https://github.com/reliant-labs/reliant/pull/2578)
+- **credsandbox: the sandbox init dies with the process that started it** [#2560](https://github.com/reliant-labs/reliant/pull/2560)
+- **workflow: opt out of configured skill catalog per call** [#2519](https://github.com/reliant-labs/reliant/pull/2519)
+- **demo: one coherent sample dataset for the public demo** [#2573](https://github.com/reliant-labs/reliant/pull/2573)
+- **pdfutil: PDF reads no longer panic where pdfcpu cannot write its config dir** [#2588](https://github.com/reliant-labs/reliant/pull/2588)
+- **web: transport tests build requests with context values, as Connect does (#2586's org stage reads them)** [#2593](https://github.com/reliant-labs/reliant/pull/2593)
+- **deps: Go toolchain 1.27.4 for GO-2026-6859** [#2600](https://github.com/reliant-labs/reliant/pull/2600)
+- **ci: exempt unreachable docker/docker advisories GO-2026-4883/4887 from vuln-scan** [#2603](https://github.com/reliant-labs/reliant/pull/2603)
+- **deps: web vite 7.3.8, zod 4.6.7, source-map-js 1.2.2 for high npm advisories** [#2604](https://github.com/reliant-labs/reliant/pull/2604)
+
+</Update>
+
 <Update label="v1.14.0" description="November 10, 2026">
 ### 2 new features, 8 fixes and 7 other changes
 

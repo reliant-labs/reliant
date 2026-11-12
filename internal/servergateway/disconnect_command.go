@@ -3,12 +3,12 @@
 package servergateway
 
 import (
-	"fmt"
 	"sync"
 
 	"github.com/nats-io/nats.go"
 
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/natsutil"
 	"github.com/reliant-labs/reliant/pkg/daemonwire"
 )
 
@@ -29,29 +29,32 @@ type daemonDisconnecter interface {
 // The subscription is a plain fan-out one, never a queue group: a queue group
 // would hand the command to ONE replica, which most of the time is not the
 // one holding the stream. Each replica answers only for itself.
+//
+// It survives the NATS server refusing it (natsutil.SubscribeWithRecovery): a
+// gateway that starts before the broker has loaded the grant re-subscribes
+// until it has, instead of staying deaf to the command until it restarts
+// (reliant#2610).
 type DisconnectCommandSubscriber struct {
 	target daemonDisconnecter
+	opts   []natsutil.SubscribeOption
 
 	mu  sync.Mutex
-	sub *nats.Subscription
+	sub *natsutil.Subscription
 }
 
 // NewDisconnectCommandSubscriber returns an unstarted subscriber that ends
-// streams through target.
-func NewDisconnectCommandSubscriber(target daemonDisconnecter) *DisconnectCommandSubscriber {
-	return &DisconnectCommandSubscriber{target: target}
+// streams through target. opts tune the subscription's recovery.
+func NewDisconnectCommandSubscriber(target daemonDisconnecter, opts ...natsutil.SubscribeOption) *DisconnectCommandSubscriber {
+	return &DisconnectCommandSubscriber{target: target, opts: opts}
 }
 
 // Start subscribes on nc. The subscription is registered with the server
-// before Start returns, so a command published after it is not missed.
+// before Start returns, so a command published after it is not missed; if the
+// server refuses it, it is re-subscribed until accepted.
 func (s *DisconnectCommandSubscriber) Start(nc *nats.Conn) error {
-	sub, err := nc.Subscribe(daemonwire.SubjectDisconnectCommand, s.handle)
+	sub, err := natsutil.SubscribeWithRecovery(nc, daemonwire.SubjectDisconnectCommand, s.handle, s.opts...)
 	if err != nil {
-		return fmt.Errorf("subscribe %s: %w", daemonwire.SubjectDisconnectCommand, err)
-	}
-	if err := nc.Flush(); err != nil {
-		_ = sub.Unsubscribe()
-		return fmt.Errorf("subscribe %s: flush: %w", daemonwire.SubjectDisconnectCommand, err)
+		return err
 	}
 	s.mu.Lock()
 	s.sub = sub
@@ -84,7 +87,5 @@ func (s *DisconnectCommandSubscriber) Stop() {
 	sub := s.sub
 	s.sub = nil
 	s.mu.Unlock()
-	if sub != nil {
-		_ = sub.Unsubscribe()
-	}
+	sub.Stop()
 }

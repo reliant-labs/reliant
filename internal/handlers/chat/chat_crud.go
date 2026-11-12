@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"time"
 
 	"connectrpc.com/connect"
@@ -660,7 +661,8 @@ func (s *Service) cancelArchivedChatWorkflow(ctx context.Context, chat *db.Chat)
 }
 
 // SearchChats searches the caller's chats by title and message content: in
-// one project, or in all of their projects when project_id is empty.
+// one project, or in all of their projects when project_id is empty; in the
+// named org's chats (orgs.ListScope), or in every org's when it names none.
 func (s *Service) SearchChats(
 	ctx context.Context,
 	req *connect.Request[reliantv1.SearchChatsRequest],
@@ -680,10 +682,15 @@ func (s *Service) SearchChats(
 		limit = int(*req.Msg.Limit)
 	}
 
+	scope, err := s.listScope(ctx, userID, req.Msg.GetOrgId())
+	if err != nil {
+		return nil, err
+	}
 	filters := db.ChatSearchFilters{
 		UserID:      userID,
 		ProjectID:   req.Msg.ProjectId,
 		SearchQuery: req.Msg.Query,
+		Org:         scope,
 		Limit:       limit,
 	}
 
@@ -704,14 +711,19 @@ func (s *Service) SearchChats(
 	}), nil
 }
 
-// ListArchivedChats lists all archived chats with worktree info
+// ListArchivedChats lists the caller's archived chats with worktree info: the
+// named org's (orgs.ListScope), or every org's when it names none.
 func (s *Service) ListArchivedChats(
 	ctx context.Context,
 	req *connect.Request[reliantv1.ListArchivedChatsRequest],
 ) (*connect.Response[reliantv1.ListArchivedChatsResponse], error) {
 	userID := auth.MustGetUserID(ctx)
 
-	archivedChats, err := s.deps.Repo.ListArchivedChats(ctx, userID)
+	scope, err := s.listScope(ctx, userID, req.Msg.GetOrgId())
+	if err != nil {
+		return nil, err
+	}
+	archivedChats, err := s.deps.Repo.ListArchivedChats(ctx, userID, scope)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list archived chats"))
 	}
@@ -739,6 +751,27 @@ func (s *Service) ListArchivedChats(
 		Total: int32(len(protoChats)),
 	}), nil
 }
+
+// ChatCompactedThroughHeader is the GetChatUpdates response header carrying
+// the chat's compaction watermark (store.CompactChatUpdates). At or below it
+// the log is compacted: MESSAGE, TOOL_CALL, STREAM_FINALIZED and
+// AGENT_MESSAGES_DRAINED updates are gone, NODE_EXECUTION keeps each node's
+// newest update and every other type each entity's newest, while THREAD,
+// WORKFLOW_STATUS, ERROR and QUESTION are whole. A poll from at or above it
+// gets every update. A poll from below it fails with OutOfRange, reason
+// ChatHistoryCompactedReason, and this header on the error: a successful
+// replay there would be a partial one, and a poller that does not know about
+// compaction (every client released before it) would advance its cursor past
+// transitions it never saw. A poller that does know re-reads the chat's
+// current state (GetChat, ListMessages, its open gates) and resumes from the
+// watermark. A header, not a response field: GetChatUpdatesResponse is public
+// SDK API, which changes in its own PR (sdk/go/README.md), and a header is
+// invisible to every client that does not look for it. 0: never compacted.
+const ChatCompactedThroughHeader = "Reliant-Chat-Compacted-Through"
+
+// ChatHistoryCompactedReason is the error reason (svcerr.ReasonHeader) of a
+// GetChatUpdates poll from below the compaction watermark.
+const ChatHistoryCompactedReason = "chat_history_compacted"
 
 // GetChatUpdates fetches chat updates since a sequence number
 func (s *Service) GetChatUpdates(
@@ -769,6 +802,24 @@ func (s *Service) GetChatUpdates(
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get latest sequence"))
 	}
 
+	// The compaction watermark, read AFTER the updates: compaction raises it
+	// before it deletes, and it only rises, so a value at or below since_seq
+	// proves nothing under the updates above was deleted, and anything a
+	// concurrent compaction took from this read is under the value reported.
+	// Unreadable, the poll fails rather than claim a log it cannot vouch for.
+	compactedThrough, err := s.deps.Repo.GetChatCompactedThrough(ctx, req.Msg.ChatId)
+	if err != nil {
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to read the chat's compaction watermark"))
+	}
+	// Below the watermark the log no longer holds every transition: refuse the
+	// replay rather than hand back a partial one a poller would advance past.
+	if req.Msg.SinceSeq < compactedThrough {
+		through := strconv.FormatInt(compactedThrough, 10)
+		return nil, svcerr.WithMetadata(svcerr.WithReason(svcerr.OutOfRange(fmt.Sprintf(
+			"chat updates through sequence %s were compacted, so a replay from %d would be incomplete: re-read the chat's current state and poll again from since_seq %s",
+			through, req.Msg.SinceSeq, through)), ChatHistoryCompactedReason), ChatCompactedThroughHeader, through)
+	}
+
 	// Convert to proto messages
 	toolBodies := messageproto.ResolveToolBodyMode(req.Msg.GetToolBodies(), s.deps.Config.GetTranscript().GetToolBodyStubs())
 	protoUpdates := make([]*reliantv1.ChatUpdate, len(updates))
@@ -793,11 +844,13 @@ func (s *Service) GetChatUpdates(
 	// What this read sent, by block kind, on the RPC's span.
 	trace.SpanFromContext(ctx).SetAttributes(sent.Attributes("transcript")...)
 
-	return connect.NewResponse(&reliantv1.GetChatUpdatesResponse{
+	resp := connect.NewResponse(&reliantv1.GetChatUpdatesResponse{
 		Updates:        protoUpdates,
 		Total:          int32(len(updates)),
 		LatestSequence: latestSeq,
-	}), nil
+	})
+	resp.Header().Set(ChatCompactedThroughHeader, strconv.FormatInt(compactedThrough, 10))
+	return resp, nil
 }
 
 // ListChatPlans lists plans associated with a chat

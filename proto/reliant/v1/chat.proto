@@ -1080,6 +1080,11 @@ message SearchChatsRequest {
   string project_id = 1;
   string query = 2;                    // Search query
   optional int32 limit = 3;
+  // Search only this organization's chats. It must be one the caller is a
+  // live member of (PERMISSION_DENIED otherwise). Chats created before orgs
+  // are searched with the caller's default org. Unset searches every chat
+  // the caller owns, in any org, as before this field existed.
+  optional string org_id = 4;
 }
 
 // SearchChatsResponse returns matching chats
@@ -1093,7 +1098,13 @@ message SearchChatsResponse {
 // (chats_with_activity.list_in_sidebar), so an archived automation run — an
 // automation archives its runs once they finish successfully — is not listed
 // here; it stays browsable in Runs (RunService.ListRuns, include_archived).
-message ListArchivedChatsRequest {}
+message ListArchivedChatsRequest {
+  // List only this organization's archived chats. It must be one the caller
+  // is a live member of (PERMISSION_DENIED otherwise). Chats created before
+  // orgs list under the caller's default org. Unset lists every archived chat
+  // the caller owns, in any org, as before this field existed.
+  optional string org_id = 1;
+}
 
 // ListArchivedChatsResponse returns archived chats with worktree info
 message ListArchivedChatsResponse {

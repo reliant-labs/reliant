@@ -59,13 +59,16 @@ const (
 	// A worktree-reclaim id names the machine and the set of proposals it
 	// asks about (reclaimItemID).
 	inboxWorktreeReclaimPrefix = "worktree_reclaim:"
+	// A marked worktree's id names the worktree and the mark: a new mark
+	// after a cancel is a new item (markedItemID).
+	inboxWorktreeMarkedPrefix = "worktree_marked:"
 )
 
 var inboxItemPrefixes = []string{
 	inboxApprovalPrefix, inboxQuestionPrefix, inboxWaitingForMachinePrefix,
 	inboxFailingPrefix, inboxLaunchFailedPrefix, inboxStoragePrefix,
 	inboxNeedsSetupPrefix, inboxRecoveryPrefix, inboxRunPausedPrefix, inboxDefinitionBrokenPrefix,
-	inboxWorktreeReclaimPrefix,
+	inboxWorktreeReclaimPrefix, inboxWorktreeMarkedPrefix,
 }
 
 // maxInboxDismissBatch bounds one Dismiss/Restore call ("Dismiss all" on a
@@ -97,6 +100,10 @@ func (s *Service) ListInbox(
 	}
 
 	projectID := strings.TrimSpace(req.Msg.GetProjectId())
+	scope, err := s.listScope(ctx, userID, req.Msg.GetOrgId())
+	if err != nil {
+		return nil, err
+	}
 
 	read, err := s.sharedRead(ctx, userID)
 	if err != nil {
@@ -119,6 +126,8 @@ func (s *Service) ListInbox(
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list inbox"))
 	}
+
+	items = read.inScope(items, scope)
 
 	resp := &reliantv1.ListInboxResponse{}
 	if projectID != "" {
@@ -180,6 +189,10 @@ type inboxReads struct {
 	// declaration: needs-setup and broken (declarationItems).
 	declarations []*reliantv1.InboxItem
 	recovery     []*reliantv1.InboxItem
+	// orgs is the org of each chat, project ("chat:<id>", "project:<id>")
+	// and trigger ("trigger:<id>") the items are about, nil for one with no
+	// org yet: what ListInbox's org scope decides an item by (itemOrg).
+	orgs map[string]*string
 }
 
 // inboxReadTimeout bounds a shared read (sharedRead), which runs detached
@@ -226,6 +239,10 @@ func (l readLimiter) do(ctx context.Context, read func() error) error {
 func (s *Service) readInbox(ctx context.Context, userID string) (*inboxReads, error) {
 	lim := make(readLimiter, inboxReadConcurrency)
 	var out inboxReads
+	// One authz reader for the pending and recovery sections, so each chat
+	// and project is read once, and its org kept for the org scope.
+	reads := s.readableItem()
+	var triggerOrgs map[string]*string
 	g, gctx := errgroup.WithContext(ctx)
 	// advisory logs an advisory read's failure, unless the read only failed
 	// because a required one already had and cancelled it.
@@ -238,7 +255,7 @@ func (s *Service) readInbox(ctx context.Context, userID string) (*inboxReads, er
 	g.Go(func() error {
 		return lim.do(gctx, func() (err error) {
 			out.pending, err = s.deps.Repo.ListInboxPending(gctx, userID)
-			out.pending = authz.Visible(gctx, userID, out.pending, s.readableItem().pending)
+			out.pending = authz.Visible(gctx, userID, out.pending, reads.pending)
 			return err
 		})
 	})
@@ -254,6 +271,10 @@ func (s *Service) readInbox(ctx context.Context, userID string) (*inboxReads, er
 			return err
 		}); err != nil {
 			return err
+		}
+		triggerOrgs = make(map[string]*string, len(stored))
+		for _, t := range stored {
+			triggerOrgs["trigger:"+t.ID] = t.OrgID
 		}
 		tg, tctx := errgroup.WithContext(gctx)
 		tg.Go(func() (err error) {
@@ -286,7 +307,7 @@ func (s *Service) readInbox(ctx context.Context, userID string) (*inboxReads, er
 			if err != nil {
 				return err
 			}
-			rows = authz.Visible(gctx, userID, rows, s.readableItem().recovery)
+			rows = authz.Visible(gctx, userID, rows, reads.recovery)
 			for _, row := range rows {
 				if row.Phase == "refs_deleted" {
 					continue
@@ -301,6 +322,22 @@ func (s *Service) readInbox(ctx context.Context, userID string) (*inboxReads, er
 	if err := g.Wait(); err != nil {
 		return nil, err
 	}
+	for k, v := range triggerOrgs {
+		reads.orgs[k] = v
+	}
+	// Read the org of every item the sections built without an authz read
+	// of their own (automation health, broken definitions), so ListInbox's
+	// org scope decides each one by what it is about, never by a key nobody
+	// read. Before the read is returned: it may be shared (sharedRead).
+	// Storage carries the person's marked worktrees (markedItems), each about
+	// a project: its org is read here too, so an org scope lists only its own.
+	// A machine's own storage items name nothing and stay in every org.
+	for _, section := range [][]*reliantv1.InboxItem{out.failing, out.declarations, out.recovery, out.storage} {
+		for _, it := range section {
+			reads.resolveOrg(ctx, userID, it)
+		}
+	}
+	out.orgs = reads.orgs
 	return &out, nil
 }
 
@@ -777,7 +814,21 @@ func firstQuestionPrompt(metadata string) string {
 // storageItems returns one item per machine with a volume under disk pressure
 // or archived worktrees it declined to remove. Storage items are not tied to a
 // project, so they appear in every project scope.
+// storageItems is every machine's storage items, and the user's marked
+// worktrees (markedItems).
 func (s *Service) storageItems(ctx context.Context, userID string) ([]*reliantv1.InboxItem, error) {
+	out, err := s.machineStorageItems(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	marked, err := s.markedItems(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	return append(out, marked...), nil
+}
+
+func (s *Service) machineStorageItems(ctx context.Context, userID string) ([]*reliantv1.InboxItem, error) {
 	machines, err := s.storageView(ctx, userID)
 	if err != nil || len(machines) == 0 {
 		return nil, err
@@ -1106,10 +1157,13 @@ type itemReads struct {
 	mu       sync.Mutex
 	chats    map[string]bool
 	projects map[string]bool
+	// orgs is the org of each chat and project read ("chat:<id>",
+	// "project:<id>"), nil for one with no org yet or a project that is gone.
+	orgs map[string]*string
 }
 
 func (s *Service) readableItem() *itemReads {
-	return &itemReads{s: s, chats: map[string]bool{}, projects: map[string]bool{}}
+	return &itemReads{s: s, chats: map[string]bool{}, projects: map[string]bool{}, orgs: map[string]*string{}}
 }
 
 func (r *itemReads) chat(ctx context.Context, userID, id string) bool {
@@ -1120,6 +1174,9 @@ func (r *itemReads) chat(ctx context.Context, userID, id string) bool {
 		chat, err := r.s.deps.Repo.GetChat(ctx, id)
 		ok = err == nil && authz.CanReadChat(ctx, userID, chat)
 		r.chats[id] = ok
+		if err == nil {
+			r.orgs["chat:"+id] = chat.OrgID
+		}
 	}
 	return ok
 }
@@ -1133,8 +1190,12 @@ func (r *itemReads) project(ctx context.Context, userID, id string) bool {
 		switch {
 		case svcerr.IsNotFound(err):
 			ok = authz.CanReadOwn(ctx, userID, nil)
+			r.orgs["project:"+id] = nil
 		default:
 			ok = err == nil && authz.CanReadProject(ctx, userID, project)
+			if err == nil {
+				r.orgs["project:"+id] = project.OrgID
+			}
 		}
 		r.projects[id] = ok
 	}

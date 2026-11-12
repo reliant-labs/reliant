@@ -22,8 +22,8 @@ const window = { startMs: Date.UTC(2026, 2, 16, 0), endMs: Date.UTC(2026, 2, 16,
 beforeEach(() => client.queryPanel.mockReset());
 
 it("loads the actual generated deployment dashboard and sends every unchanged panel through the hosted adapter", async () => {
-  expect(createHash("sha256").update(raw).digest("hex")).toBe("0bac08970965d4e235f0bd3265574ee37d37ce0f08ab83f0655acec733fd2d8e");
-  expect(usage.panels).toHaveLength(9);
+  expect(createHash("sha256").update(raw).digest("hex")).toBe("15000552a4f7b5fe6e8616a2076b98c8116709a691ecd068c97a4ba93a9eb22f");
+  expect(usage.panels).toHaveLength(17);
   client.queryPanel.mockResolvedValue(create(QueryPanelResponseSchema, { kind: "sql", columns: ["events"], rows: [{ group: { event: "synthetic" }, values: [2] }] }));
   for (const panel of usage.panels) {
     const result = await queryPanel({ orgId: "org-a", projectId: "shop", envIds: ["env-a-prod"], filters: [], window, services: ["api"], panel, stepSeconds: 86400 });

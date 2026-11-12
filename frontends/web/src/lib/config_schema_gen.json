@@ -5,6 +5,11 @@
   "message": "ReliantWebConfig",
   "keys": [
     {
+      "name": "ANALYTICS_MODE",
+      "type": "string",
+      "source": "runtime"
+    },
+    {
       "name": "API_URL",
       "type": "string",
       "source": "config",
@@ -17,6 +22,11 @@
     },
     {
       "name": "APP_URL",
+      "type": "string",
+      "source": "config"
+    },
+    {
+      "name": "AUTH_COOKIE_DOMAIN",
       "type": "string",
       "source": "config"
     },
@@ -102,6 +112,11 @@
       "source": "config"
     },
     {
+      "name": "IDENTIFY_USER",
+      "type": "string",
+      "source": "runtime"
+    },
+    {
       "name": "OTEL_ENDPOINT",
       "type": "string",
       "source": "config"
@@ -120,6 +135,11 @@
       "name": "OTEL_REPLAY_SAMPLE_RATE",
       "type": "string",
       "source": "config"
+    },
+    {
+      "name": "PAGE_VIEWS",
+      "type": "string",
+      "source": "runtime"
     },
     {
       "name": "REPLAY_SAMPLE_RATE",

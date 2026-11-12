@@ -70,7 +70,7 @@ func (m *MockOrgResolver) ListScope(ctx context.Context, userID string, requeste
 var _ OrgResolver = (*MockOrgResolver)(nil)
 
 // forge:section MockRepository
-// forge:hash=e5d6feda809aa26331764d5e5c32b708037baeb30ab2e11fc276274c8bc38f10
+// forge:hash=b85774f0478f8e51cf5dd4b4533d11151de8c290a0569c6c2b6067c56b014489
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -86,7 +86,7 @@ type MockRepository struct {
 	GetChatRowWithUserCheckFunc                              func(context.Context, string, string) (*db.ChatRow, error)
 	GetChatWithUserCheckFunc                                 func(context.Context, string, string) (*db.Chat, error)
 	SearchChatsFunc                                          func(context.Context, db.ChatSearchFilters) ([]*db.Chat, error)
-	ListArchivedChatsFunc                                    func(context.Context, string) ([]*db.ArchivedChatInfo, error)
+	ListArchivedChatsFunc                                    func(context.Context, string, *core.OrgScope) ([]*db.ArchivedChatInfo, error)
 	DeleteChatFunc                                           func(context.Context, string) error
 	UpdateChatStateFunc                                      func(context.Context, string, db.ChatState, string) error
 	UpdateChatUnreadFunc                                     func(context.Context, string, bool, string) error
@@ -130,6 +130,7 @@ type MockRepository struct {
 	GetBasicStepExecutionsForChatFunc                        func(context.Context, string) ([]*db.ChatStepExecution, error)
 	ListStepExecutionRecordsForChatFunc                      func(context.Context, string, string, int) ([]*db.StepExecution, error)
 	GetLatestUpdateSequenceFunc                              func(context.Context, string) (int64, error)
+	GetChatCompactedThroughFunc                              func(context.Context, string) (int64, error)
 	GetUpdatesSinceFunc                                      func(context.Context, string, int64, int) ([]db.ChatUpdate, error)
 	ListErrorUpdatesInRangeFunc                              func(context.Context, string, *time.Time, string, int64) ([]db.ChatUpdate, error)
 	GetLatestWorkflowNodeUpdatesFunc                         func(context.Context, string, string) ([]db.ChatUpdate, error)
@@ -292,10 +293,10 @@ func (m *MockRepository) SearchChats(ctx context.Context, filters db.ChatSearchF
 }
 
 // ListArchivedChats records the call and delegates to ListArchivedChatsFunc when set.
-func (m *MockRepository) ListArchivedChats(ctx context.Context, userID string) ([]*db.ArchivedChatInfo, error) {
-	m.Recorder.Record("ListArchivedChats", ctx, userID)
+func (m *MockRepository) ListArchivedChats(ctx context.Context, userID string, org *core.OrgScope) ([]*db.ArchivedChatInfo, error) {
+	m.Recorder.Record("ListArchivedChats", ctx, userID, org)
 	if m.ListArchivedChatsFunc != nil {
-		return m.ListArchivedChatsFunc(ctx, userID)
+		return m.ListArchivedChatsFunc(ctx, userID, org)
 	}
 	return nil, contractkit.MockNotSet("MockRepository", "ListArchivedChats")
 }
@@ -685,6 +686,15 @@ func (m *MockRepository) GetLatestUpdateSequence(ctx context.Context, chatID str
 		return m.GetLatestUpdateSequenceFunc(ctx, chatID)
 	}
 	return 0, contractkit.MockNotSet("MockRepository", "GetLatestUpdateSequence")
+}
+
+// GetChatCompactedThrough records the call and delegates to GetChatCompactedThroughFunc when set.
+func (m *MockRepository) GetChatCompactedThrough(ctx context.Context, chatID string) (int64, error) {
+	m.Recorder.Record("GetChatCompactedThrough", ctx, chatID)
+	if m.GetChatCompactedThroughFunc != nil {
+		return m.GetChatCompactedThroughFunc(ctx, chatID)
+	}
+	return 0, contractkit.MockNotSet("MockRepository", "GetChatCompactedThrough")
 }
 
 // GetUpdatesSince records the call and delegates to GetUpdatesSinceFunc when set.

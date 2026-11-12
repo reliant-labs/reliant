@@ -86,6 +86,30 @@ func TestShouldRetryReliantAPIError(t *testing.T) {
 	}
 }
 
+// An empty Reliant wallet is the user's state, not a fault: logged at ERROR it
+// opened a production error issue (prod obs 1efa682e, 15 events, one user).
+func TestReliantAPIErrorLogLevel(t *testing.T) {
+	cases := []struct {
+		name     string
+		status   int
+		body     string
+		expected bool
+	}{
+		{"quota exhausted", 429, `{"error":{"message":"You're out of Reliant credit.","type":"insufficient_quota","code":"insufficient_quota"}}`, true},
+		{"rate limited, retried", 429, `{"error":{"message":"Rate limited","type":"rate_limit_error","code":"429"}}`, true},
+		{"non-retryable 500", 500, `{"error":{"message":"Model misconfiguration for local provider","type":"api_error","code":"500"}}`, false},
+		{"auth failure", 401, `{"error":{"message":"invalid api key","type":"auth_error","code":"401"}}`, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			retry, reason := shouldRetryReliantAPIError(newOpenAIErrorForTest(t, tc.status, tc.body))
+			if got := reliantAPIErrorIsExpected(retry, reason); got != tc.expected {
+				t.Fatalf("expected = %v, want %v (retry=%v reason=%q)", got, tc.expected, retry, reason)
+			}
+		})
+	}
+}
+
 func TestReliantRetryExhaustedError(t *testing.T) {
 	rateLimitErr := newOpenAIErrorForTest(t, 429, `{"error":{"message":"Rate limited","type":"rate_limit_error","code":"429"}}`)
 	if got := reliantRetryExhaustedError(rateLimitErr).Error(); got != "maximum retry attempts reached for rate limit: 8 retries" {

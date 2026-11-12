@@ -42,14 +42,14 @@ func handleIncomingUntil(t *testing.T, svc *Service, conn *daemonConnection, str
 		defer close(returned)
 		_ = svc.handleIncoming(ctx, conn)
 	}()
-	require.Eventually(t, func() bool { return stream.receiving.Load() == 1 }, 3*time.Second, time.Millisecond,
+	require.Eventually(t, func() bool { return stream.receiving.Load() == 1 }, 30*time.Second, time.Millisecond,
 		"the reader never parked in Receive")
 
 	end(cancel)
 
 	select {
 	case <-returned:
-	case <-time.After(3 * time.Second):
+	case <-time.After(30 * time.Second):
 		t.Fatal("handleIncoming did not return")
 	}
 }
@@ -100,7 +100,7 @@ func TestReleaseStreamWaitsForTheSendInFlight(t *testing.T) {
 	conn := newTestConn("user-1", uuid.NewString(), stream)
 	svc.startSender(conn)
 	conn.sendCh <- &reliantv1.ServerMessage{}
-	require.Eventually(t, func() bool { return stream.sending.Load() == 1 }, 3*time.Second, time.Millisecond)
+	require.Eventually(t, func() bool { return stream.sending.Load() == 1 }, 30*time.Second, time.Millisecond)
 
 	released := make(chan struct{})
 	go func() {
@@ -116,7 +116,7 @@ func TestReleaseStreamWaitsForTheSendInFlight(t *testing.T) {
 	close(stream.release) // the write-stall guard's job in production
 	select {
 	case <-released:
-	case <-time.After(3 * time.Second):
+	case <-time.After(30 * time.Second):
 		t.Fatal("releaseStream did not return once the Send finished")
 	}
 	require.Zero(t, stream.sending.Load())

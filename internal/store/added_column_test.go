@@ -34,7 +34,7 @@ func TestPreparedQueriesSurviveAnAddedColumn(t *testing.T) {
 
 	queries := map[string]func() error{
 		"ListArchivedChats": func() error {
-			_, err := store.ListArchivedChats(ctx, env.ORM, user)
+			_, err := store.ListArchivedChats(ctx, env.ORM, user, nil)
 			return err
 		},
 		"GetThreadWithParent": func() error {

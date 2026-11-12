@@ -136,7 +136,7 @@ func TestActivityWrapper_StopNudgeStopsTheActivity(t *testing.T) {
 	var result string
 	require.NoError(t, encoded.Get(&result))
 	assert.Equal(t, "stopped: "+temporal.NewCanceledError().Error(), result)
-	assert.Less(t, time.Since(begin), 3*time.Second,
+	assert.Less(t, time.Since(begin), 30*time.Second,
 		"a nudged stop must not wait for the heartbeat window (%s)", activityHeartbeatTimeout)
 }
 

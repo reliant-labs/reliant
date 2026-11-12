@@ -18,6 +18,7 @@ import * as activity from "./activityApi";
 import * as alerting from "./alertingApi";
 import * as appDatabase from "./appDatabaseApi";
 import * as rpc from "./api";
+import * as frontendReplay from "./frontendReplayApi";
 import * as graph from "./graphApi";
 import * as dashboards from "./dashboardsApi";
 import * as delivery from "./deliveryApi";
@@ -86,6 +87,8 @@ export interface ObservabilityApi {
   getSession: typeof rum.getSession;
   getSessionTimeline: typeof rum.getSessionTimeline;
   getSessionReplay: typeof rum.getSessionReplay;
+  // Session replay per frontend (ObservabilityService.ListFrontendReplay): each frontend's live switch.
+  listFrontendReplay: typeof frontendReplay.listFrontendReplay;
   // Native dashboards (DashboardService): reads need membership,
   // authoring the admin role.
   listDashboards: typeof dashboards.listDashboards;
@@ -155,6 +158,7 @@ export const controlPlaneObservabilityApi: ObservabilityApi = {
   getSession: rum.getSession,
   getSessionTimeline: rum.getSessionTimeline,
   getSessionReplay: rum.getSessionReplay,
+  listFrontendReplay: frontendReplay.listFrontendReplay,
   listDashboards: dashboards.listDashboards,
   listDashboardTemplates: dashboards.listDashboardTemplates,
   getDashboard: dashboards.getDashboard,

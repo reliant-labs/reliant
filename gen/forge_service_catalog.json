@@ -433,6 +433,7 @@
         "Database",
         "DebugServer",
         "IntegrationSettings",
+        "LedgerRetention",
         "NATSConn",
         "OrgResolver",
         "PauseService",
@@ -5324,7 +5325,13 @@
               "IsOptional": false
             }
           ],
-          "ListArchivedChatsRequest": null,
+          "ListArchivedChatsRequest": [
+            {
+              "Name": "org_id",
+              "ProtoType": "string",
+              "IsOptional": true
+            }
+          ],
           "ListArchivedChatsResponse": [
             {
               "Name": "chats",
@@ -5741,6 +5748,11 @@
             {
               "Name": "limit",
               "ProtoType": "int32",
+              "IsOptional": true
+            },
+            {
+              "Name": "org_id",
+              "ProtoType": "string",
               "IsOptional": true
             }
           ],
@@ -6967,7 +6979,13 @@
               "repeated": true
             }
           ],
-          "reliant.v1.ListArchivedChatsRequest": [],
+          "reliant.v1.ListArchivedChatsRequest": [
+            {
+              "name": "org_id",
+              "kind": "string",
+              "optional": true
+            }
+          ],
           "reliant.v1.ListArchivedChatsResponse": [
             {
               "name": "chats",
@@ -7533,6 +7551,11 @@
             {
               "name": "limit",
               "kind": "int32",
+              "optional": true
+            },
+            {
+              "name": "org_id",
+              "kind": "string",
               "optional": true
             }
           ],
@@ -15115,10 +15138,30 @@
           "auth_required": true
         },
         {
+          "id": "reliant.v1.InboxService/KeepMarkedWorktree",
+          "name": "KeepMarkedWorktree",
+          "input": "reliant.v1.KeepMarkedWorktreeRequest",
+          "output": "reliant.v1.KeepMarkedWorktreeResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "UNKNOWN",
+          "auth_required": true
+        },
+        {
           "id": "reliant.v1.InboxService/ListInbox",
           "name": "ListInbox",
           "input": "reliant.v1.ListInboxRequest",
           "output": "reliant.v1.ListInboxResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "UNKNOWN",
+          "auth_required": true
+        },
+        {
+          "id": "reliant.v1.InboxService/ReclaimMarkedWorktreeNow",
+          "name": "ReclaimMarkedWorktreeNow",
+          "input": "reliant.v1.ReclaimMarkedWorktreeNowRequest",
+          "output": "reliant.v1.ReclaimMarkedWorktreeNowResponse",
           "client_streaming": false,
           "server_streaming": false,
           "idempotency": "UNKNOWN",
@@ -15201,6 +15244,48 @@
             }
           },
           {
+            "Name": "KeepMarkedWorktree",
+            "InputType": "KeepMarkedWorktreeRequest",
+            "OutputType": "KeepMarkedWorktreeResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "InputTypeFQ": "reliant.v1.KeepMarkedWorktreeRequest",
+            "OutputTypeFQ": "reliant.v1.KeepMarkedWorktreeResponse",
+            "InputProtoFile": "reliant/v1/inbox.proto",
+            "OutputProtoFile": "reliant/v1/inbox.proto",
+            "Activity": {
+              "Mutating": true,
+              "Declared": true,
+              "Verb": "keep_marked_worktree",
+              "TargetKind": "worktree",
+              "Writer": "INTERCEPTOR"
+            }
+          },
+          {
+            "Name": "ReclaimMarkedWorktreeNow",
+            "InputType": "ReclaimMarkedWorktreeNowRequest",
+            "OutputType": "ReclaimMarkedWorktreeNowResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "InputTypeFQ": "reliant.v1.ReclaimMarkedWorktreeNowRequest",
+            "OutputTypeFQ": "reliant.v1.ReclaimMarkedWorktreeNowResponse",
+            "InputProtoFile": "reliant/v1/inbox.proto",
+            "OutputProtoFile": "reliant/v1/inbox.proto",
+            "Activity": {
+              "Mutating": true,
+              "Declared": true,
+              "Verb": "reclaim_marked_worktree",
+              "TargetKind": "worktree",
+              "Writer": "INTERCEPTOR"
+            }
+          },
+          {
             "Name": "DismissInboxItem",
             "InputType": "DismissInboxItemRequest",
             "OutputType": "DismissInboxItemResponse",
@@ -15278,6 +15363,19 @@
             }
           ],
           "ForgetStorageWorktreeResponse": null,
+          "KeepMarkedWorktreeRequest": [
+            {
+              "Name": "worktree_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "mark_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            }
+          ],
+          "KeepMarkedWorktreeResponse": null,
           "ListInboxRequest": [
             {
               "Name": "limit",
@@ -15286,6 +15384,11 @@
             },
             {
               "Name": "project_id",
+              "ProtoType": "string",
+              "IsOptional": true
+            },
+            {
+              "Name": "org_id",
               "ProtoType": "string",
               "IsOptional": true
             }
@@ -15318,6 +15421,19 @@
               "IsOptional": false
             }
           ],
+          "ReclaimMarkedWorktreeNowRequest": [
+            {
+              "Name": "worktree_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "mark_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            }
+          ],
+          "ReclaimMarkedWorktreeNowResponse": null,
           "RestoreInboxItemRequest": [
             {
               "Name": "item_ids",
@@ -15876,6 +15992,17 @@
               "kind": "int32"
             }
           ],
+          "reliant.v1.KeepMarkedWorktreeRequest": [
+            {
+              "name": "worktree_id",
+              "kind": "string"
+            },
+            {
+              "name": "mark_id",
+              "kind": "string"
+            }
+          ],
+          "reliant.v1.KeepMarkedWorktreeResponse": [],
           "reliant.v1.ListInboxRequest": [
             {
               "name": "limit",
@@ -15884,6 +16011,11 @@
             },
             {
               "name": "project_id",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "org_id",
               "kind": "string",
               "optional": true
             }
@@ -15958,6 +16090,17 @@
               "kind": "string"
             }
           ],
+          "reliant.v1.ReclaimMarkedWorktreeNowRequest": [
+            {
+              "name": "worktree_id",
+              "kind": "string"
+            },
+            {
+              "name": "mark_id",
+              "kind": "string"
+            }
+          ],
+          "reliant.v1.ReclaimMarkedWorktreeNowResponse": [],
           "reliant.v1.RecoveryInboxItem": [
             {
               "name": "recovery_id",
@@ -16200,10 +16343,14 @@
           "reliant.v1.InboxWaitingForMachine": "reliant/v1/inbox.proto",
           "reliant.v1.InboxWorktreeMarked": "reliant/v1/inbox.proto",
           "reliant.v1.InboxWorktreeReclaim": "reliant/v1/inbox.proto",
+          "reliant.v1.KeepMarkedWorktreeRequest": "reliant/v1/inbox.proto",
+          "reliant.v1.KeepMarkedWorktreeResponse": "reliant/v1/inbox.proto",
           "reliant.v1.ListInboxRequest": "reliant/v1/inbox.proto",
           "reliant.v1.ListInboxResponse": "reliant/v1/inbox.proto",
           "reliant.v1.ProcessReport": "reliant/v1/tools_daemon.proto",
           "reliant.v1.ProcessTree": "reliant/v1/tools_daemon.proto",
+          "reliant.v1.ReclaimMarkedWorktreeNowRequest": "reliant/v1/inbox.proto",
+          "reliant.v1.ReclaimMarkedWorktreeNowResponse": "reliant/v1/inbox.proto",
           "reliant.v1.RecoveryInboxItem": "reliant/v1/inbox.proto",
           "reliant.v1.RestoreInboxItemRequest": "reliant/v1/inbox.proto",
           "reliant.v1.RestoreInboxItemResponse": "reliant/v1/inbox.proto",
@@ -46524,6 +46671,18 @@
       "implementation_candidates": []
     },
     {
+      "id": "LedgerRetention",
+      "name": "LedgerRetention",
+      "kind": "provider",
+      "type": "*github.com/reliant-labs/reliant/internal/app.LedgerRetention",
+      "source": {
+        "path": "internal/app/providers_worker.go",
+        "symbol": "NewLedgerRetention"
+      },
+      "methods": [],
+      "implementation_candidates": []
+    },
+    {
       "id": "MCP",
       "name": "MCP",
       "kind": "component",
@@ -47897,6 +48056,19 @@
       ],
       "providers": [
         "TokenAuthority"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Inbox",
+      "field": "Orgs",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/inbox.OrgResolver",
+      "methods": [],
+      "candidates": [
+        "OrgResolver"
+      ],
+      "providers": [
+        "OrgResolver"
       ],
       "resolution": "composition_expression"
     },

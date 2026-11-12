@@ -324,11 +324,11 @@ func TestChatListAndSearch(t *testing.T) {
 	if _, err := env.SQL.Exec(`UPDATE chats SET worktree_id = 'wt-gone' WHERE id = 'l-2'`); err != nil {
 		t.Fatalf("point l-2 at a missing worktree: %v", err)
 	}
-	archivedRows, err := store.ListArchivedChats(ctx, env.ORM, storetest.SeedUserID)
+	archivedRows, err := store.ListArchivedChats(ctx, env.ORM, storetest.SeedUserID, nil)
 	if err != nil {
 		t.Fatalf("ListArchivedChats: %v", err)
 	}
-	twinRows, err := env.Repo.ListArchivedChats(ctx, storetest.SeedUserID)
+	twinRows, err := env.Repo.ListArchivedChats(ctx, storetest.SeedUserID, nil)
 	if err != nil {
 		t.Fatalf("Repo.ListArchivedChats: %v", err)
 	}

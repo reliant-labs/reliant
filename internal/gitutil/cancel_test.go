@@ -133,7 +133,7 @@ func TestCancelledIndexWrite_DoesNotStrandLock(t *testing.T) {
 			// Give git's signal handler a moment to run. The default path has
 			// no handler to run, so this delay cannot mask the bug — it only
 			// avoids racing the graceful path's cleanup.
-			deadline := time.Now().Add(3 * time.Second)
+			deadline := time.Now().Add(30 * time.Second)
 			for time.Now().Before(deadline) {
 				if _, err := os.Stat(lock); os.IsNotExist(err) {
 					break

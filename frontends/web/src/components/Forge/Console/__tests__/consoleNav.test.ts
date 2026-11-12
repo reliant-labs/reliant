@@ -19,7 +19,7 @@ const ENVS = [
 ];
 
 describe("buildConsoleNav", () => {
-  it("is Overview, Releases, Observability ›, Data, Storage, then Configure, with Activity pinned last", () => {
+  it("is Overview, Releases, Observability ›, Data, Storage, Users, then Configure, with Activity pinned last", () => {
     const { items, footer } = buildConsoleNav({ project: "shop", page: { kind: "overview" }, env: "prod", envs: ENVS });
     expect(items.map((item) => [item.label, item.section ?? ""])).toEqual([
       ["Overview", ""],
@@ -27,6 +27,7 @@ describe("buildConsoleNav", () => {
       ["Observability", ""],
       ["Data", ""],
       ["Storage", ""],
+      ["Users", ""],
       ["Environments", "Configure"],
       ["Secrets", "Configure"],
       ["Domains", "Configure"],
@@ -40,6 +41,15 @@ describe("buildConsoleNav", () => {
     expect(storage.href).toBe("/forge/p/shop/storage?env=staging");
     expect(storage.active).toBe(true);
     expect(consoleCrumbs("shop", { kind: "storage" }, "staging")).toEqual([{ label: "Storage" }]);
+  });
+
+  it("links Users with the scope, lights it on its page, and crumbs it", () => {
+    const { items } = buildConsoleNav({ project: "shop", page: { kind: "users" }, env: "staging", envs: ENVS });
+    const users = items.find((item) => item.label === "Users")!;
+    expect(users.href).toBe("/forge/p/shop/users?env=staging");
+    expect(users.active).toBe(true);
+    expect(items.filter((item) => item.active).map((item) => item.label)).toEqual(["Users"]);
+    expect(consoleCrumbs("shop", { kind: "users" }, "staging")).toEqual([{ label: "Users" }]);
   });
 
   it("links Data with the scope, lights it on its page, and crumbs it", () => {

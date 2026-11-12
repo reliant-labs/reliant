@@ -1121,6 +1121,14 @@ func chatOrg(spec Spec, project *db.Project) (*string, error) {
 }
 
 func projectLookupError(err error) error {
+	// A membership that could not be checked is not an answer: the launch
+	// fails closed, retryably, and nothing (a trigger pausing for good)
+	// may be decided from it.
+	if errors.Is(err, authz.ErrMembershipUnavailable) {
+		return &InternalError{Reason: "could not verify the project's organization; try again", Err: err}
+	}
+	// A creator who left the project's org stays NotFound to the caller,
+	// carrying authz.ErrNotOrgMember (OwnerLeftOrg).
 	if errors.Is(err, core.ErrProjectNotFound) {
 		return &NotFoundError{Reason: "project not found", Err: err}
 	}

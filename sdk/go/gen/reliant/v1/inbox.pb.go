@@ -204,7 +204,15 @@ type ListInboxRequest struct {
 	Limit *int32 `protobuf:"varint,1,opt,name=limit,proto3,oneof" json:"limit,omitempty"`
 	// Only items of this project. Unset lists every project. The counts follow
 	// the same scope.
-	ProjectId     *string `protobuf:"bytes,2,opt,name=project_id,json=projectId,proto3,oneof" json:"project_id,omitempty"`
+	ProjectId *string `protobuf:"bytes,2,opt,name=project_id,json=projectId,proto3,oneof" json:"project_id,omitempty"`
+	// Only items of this organization: those about its chats, projects and
+	// automations. It must be one the caller is a live member of
+	// (PERMISSION_DENIED otherwise). Items about something created before orgs
+	// list under the caller's default org; a machine's storage and worktree
+	// items belong to no org and list in every one. Unset lists every item,
+	// in any org, as before this field existed. The counts follow the same
+	// scope.
+	OrgId         *string `protobuf:"bytes,3,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -249,6 +257,13 @@ func (x *ListInboxRequest) GetLimit() int32 {
 func (x *ListInboxRequest) GetProjectId() string {
 	if x != nil && x.ProjectId != nil {
 		return *x.ProjectId
+	}
+	return ""
+}
+
+func (x *ListInboxRequest) GetOrgId() string {
+	if x != nil && x.OrgId != nil {
+		return *x.OrgId
 	}
 	return ""
 }
@@ -2421,13 +2436,15 @@ var File_reliant_v1_inbox_proto protoreflect.FileDescriptor
 const file_reliant_v1_inbox_proto_rawDesc = "" +
 	"\n" +
 	"\x16reliant/v1/inbox.proto\x12\n" +
-	"reliant.v1\x1a\x14forge/v1/forge.proto\x1a\x19reliant/v1/approval.proto\x1a\x1dreliant/v1/tools_daemon.proto\x1a\x18reliant/v1/trigger.proto\"j\n" +
+	"reliant.v1\x1a\x14forge/v1/forge.proto\x1a\x19reliant/v1/approval.proto\x1a\x1dreliant/v1/tools_daemon.proto\x1a\x18reliant/v1/trigger.proto\"\x91\x01\n" +
 	"\x10ListInboxRequest\x12\x19\n" +
 	"\x05limit\x18\x01 \x01(\x05H\x00R\x05limit\x88\x01\x01\x12\"\n" +
 	"\n" +
-	"project_id\x18\x02 \x01(\tH\x01R\tprojectId\x88\x01\x01B\b\n" +
+	"project_id\x18\x02 \x01(\tH\x01R\tprojectId\x88\x01\x01\x12\x1a\n" +
+	"\x06org_id\x18\x03 \x01(\tH\x02R\x05orgId\x88\x01\x01B\b\n" +
 	"\x06_limitB\r\n" +
-	"\v_project_id\"\xe4\x01\n" +
+	"\v_project_idB\t\n" +
+	"\a_org_id\"\xe4\x01\n" +
 	"\x11ListInboxResponse\x12+\n" +
 	"\x05items\x18\x01 \x03(\v2\x15.reliant.v1.InboxItemR\x05items\x12%\n" +
 	"\x0eblocking_count\x18\x02 \x01(\x05R\rblockingCount\x12+\n" +
@@ -2619,7 +2636,7 @@ const file_reliant_v1_inbox_proto_rawDesc = "" +
 	"\x15CleanupStorageOutcome\x12'\n" +
 	"#CLEANUP_STORAGE_OUTCOME_UNSPECIFIED\x10\x00\x12$\n" +
 	" CLEANUP_STORAGE_OUTCOME_ACCEPTED\x10\x01\x12#\n" +
-	"\x1fCLEANUP_STORAGE_OUTCOME_SKIPPED\x10\x022\xbe\x05\n" +
+	"\x1fCLEANUP_STORAGE_OUTCOME_SKIPPED\x10\x022\x8d\b\n" +
 	"\fInboxService\x12J\n" +
 	"\tListInbox\x12\x1c.reliant.v1.ListInboxRequest\x1a\x1d.reliant.v1.ListInboxResponse\"\x00\x12\x85\x01\n" +
 	"\x0eCleanupStorage\x12!.reliant.v1.CleanupStorageRequest\x1a\".reliant.v1.CleanupStorageResponse\",\xa2\xbb\x18(:&\n" +
@@ -2627,6 +2644,12 @@ const file_reliant_v1_inbox_proto_rawDesc = "" +
 	"\x06daemon\x12\tdaemon_id\x12\x9d\x01\n" +
 	"\x15ForgetStorageWorktree\x12(.reliant.v1.ForgetStorageWorktreeRequest\x1a).reliant.v1.ForgetStorageWorktreeResponse\"/\xa2\xbb\x18+:)\n" +
 	"\x0eforget_storage\x12\x17\n" +
+	"\bworktree\x12\vworktree_id\x12\x9a\x01\n" +
+	"\x12KeepMarkedWorktree\x12%.reliant.v1.KeepMarkedWorktreeRequest\x1a&.reliant.v1.KeepMarkedWorktreeResponse\"5\xa2\xbb\x181:/\n" +
+	"\x14keep_marked_worktree\x12\x17\n" +
+	"\bworktree\x12\vworktree_id\x12\xaf\x01\n" +
+	"\x18ReclaimMarkedWorktreeNow\x12+.reliant.v1.ReclaimMarkedWorktreeNowRequest\x1a,.reliant.v1.ReclaimMarkedWorktreeNowResponse\"8\xa2\xbb\x184:2\n" +
+	"\x17reclaim_marked_worktree\x12\x17\n" +
 	"\bworktree\x12\vworktree_id\x12\xa4\x01\n" +
 	"\x10DismissInboxItem\x12#.reliant.v1.DismissInboxItemRequest\x1a$.reliant.v1.DismissInboxItemResponse\"E\xa2\xbb\x18A:?:=per-user inbox read state: hides items without resolving them\x12\x92\x01\n" +
 	"\x10RestoreInboxItem\x12#.reliant.v1.RestoreInboxItemRequest\x1a$.reliant.v1.RestoreInboxItemResponse\"3\xa2\xbb\x18/:-:+per-user inbox read state: undoes a dismissB:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
@@ -2715,15 +2738,19 @@ var file_reliant_v1_inbox_proto_depIdxs = []int32{
 	2,  // 25: reliant.v1.InboxService.ListInbox:input_type -> reliant.v1.ListInboxRequest
 	29, // 26: reliant.v1.InboxService.CleanupStorage:input_type -> reliant.v1.CleanupStorageRequest
 	27, // 27: reliant.v1.InboxService.ForgetStorageWorktree:input_type -> reliant.v1.ForgetStorageWorktreeRequest
-	15, // 28: reliant.v1.InboxService.DismissInboxItem:input_type -> reliant.v1.DismissInboxItemRequest
-	17, // 29: reliant.v1.InboxService.RestoreInboxItem:input_type -> reliant.v1.RestoreInboxItemRequest
-	3,  // 30: reliant.v1.InboxService.ListInbox:output_type -> reliant.v1.ListInboxResponse
-	30, // 31: reliant.v1.InboxService.CleanupStorage:output_type -> reliant.v1.CleanupStorageResponse
-	28, // 32: reliant.v1.InboxService.ForgetStorageWorktree:output_type -> reliant.v1.ForgetStorageWorktreeResponse
-	16, // 33: reliant.v1.InboxService.DismissInboxItem:output_type -> reliant.v1.DismissInboxItemResponse
-	18, // 34: reliant.v1.InboxService.RestoreInboxItem:output_type -> reliant.v1.RestoreInboxItemResponse
-	30, // [30:35] is the sub-list for method output_type
-	25, // [25:30] is the sub-list for method input_type
+	23, // 28: reliant.v1.InboxService.KeepMarkedWorktree:input_type -> reliant.v1.KeepMarkedWorktreeRequest
+	25, // 29: reliant.v1.InboxService.ReclaimMarkedWorktreeNow:input_type -> reliant.v1.ReclaimMarkedWorktreeNowRequest
+	15, // 30: reliant.v1.InboxService.DismissInboxItem:input_type -> reliant.v1.DismissInboxItemRequest
+	17, // 31: reliant.v1.InboxService.RestoreInboxItem:input_type -> reliant.v1.RestoreInboxItemRequest
+	3,  // 32: reliant.v1.InboxService.ListInbox:output_type -> reliant.v1.ListInboxResponse
+	30, // 33: reliant.v1.InboxService.CleanupStorage:output_type -> reliant.v1.CleanupStorageResponse
+	28, // 34: reliant.v1.InboxService.ForgetStorageWorktree:output_type -> reliant.v1.ForgetStorageWorktreeResponse
+	24, // 35: reliant.v1.InboxService.KeepMarkedWorktree:output_type -> reliant.v1.KeepMarkedWorktreeResponse
+	26, // 36: reliant.v1.InboxService.ReclaimMarkedWorktreeNow:output_type -> reliant.v1.ReclaimMarkedWorktreeNowResponse
+	16, // 37: reliant.v1.InboxService.DismissInboxItem:output_type -> reliant.v1.DismissInboxItemResponse
+	18, // 38: reliant.v1.InboxService.RestoreInboxItem:output_type -> reliant.v1.RestoreInboxItemResponse
+	32, // [32:39] is the sub-list for method output_type
+	25, // [25:32] is the sub-list for method input_type
 	25, // [25:25] is the sub-list for extension type_name
 	25, // [25:25] is the sub-list for extension extendee
 	0,  // [0:25] is the sub-list for field type_name

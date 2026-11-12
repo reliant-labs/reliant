@@ -218,6 +218,12 @@ func (i ActingIdentity) OrOwner() ActingIdentity {
 	return i
 }
 
+// TriggerPausedCreatorLeftOrg is Trigger.PausedReason of a trigger the system
+// paused because a launch was refused: its creator, whose identity every run
+// it launches executes as, is no longer a live member of the trigger's org.
+// It stays paused until the creator, a member again, resumes it.
+const TriggerPausedCreatorLeftOrg = "creator_left_org"
+
 // Trigger is a stored trigger definition. UserID is the owner, and the
 // identity every run it launches executes as.
 type Trigger struct {
@@ -283,8 +289,12 @@ type Trigger struct {
 	// per-repository installation token control-plane mints only when the
 	// owner can push). Never empty on a stored row.
 	ActingIdentity ActingIdentity
-	CreatedAt      time.Time
-	UpdatedAt      time.Time
+	// PausedReason is why the system paused the trigger
+	// (TriggerPausedCreatorLeftOrg); empty when it is enabled or a person
+	// paused it. Meaningful only while Enabled is false: enabling clears it.
+	PausedReason string
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
 
 	// ProjectName and DaemonName are read-only display names joined in by
 	// GetTrigger and ListTriggers. Empty when the project or daemon row is

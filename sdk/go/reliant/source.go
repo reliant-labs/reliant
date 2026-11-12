@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strconv"
 	"strings"
 	"time"
 
@@ -38,6 +39,9 @@ func (s *chatSource) Updates(ctx context.Context, sinceSeq int64) ([]follow.RawU
 		SinceSeq: sinceSeq,
 	}))
 	if err != nil {
+		if through, ok := historyCompactedThrough(err); ok {
+			return nil, sinceSeq, &follow.HistoryCompactedError{Through: through}
+		}
 		return nil, sinceSeq, err
 	}
 	updates := make([]follow.RawUpdate, 0, len(resp.Msg.GetUpdates()))
@@ -56,6 +60,25 @@ func (s *chatSource) Updates(ctx context.Context, sinceSeq int64) ([]follow.RawU
 		updates = append(updates, s.narrow(ctx, raw, &poll))
 	}
 	return updates, resp.Msg.GetLatestSequence(), nil
+}
+
+// chatCompactedThroughHeader carries a session's compaction watermark on a
+// GetChatUpdates response, and on the OutOfRange error that refuses a poll from
+// below it.
+const chatCompactedThroughHeader = "Reliant-Chat-Compacted-Through"
+
+// historyCompactedThrough reports the watermark of a GetChatUpdates poll the
+// server refused because it started below the compacted part of the feed.
+func historyCompactedThrough(err error) (int64, bool) {
+	var cerr *connect.Error
+	if !errors.As(err, &cerr) || cerr.Code() != connect.CodeOutOfRange {
+		return 0, false
+	}
+	through, perr := strconv.ParseInt(cerr.Meta().Get(chatCompactedThroughHeader), 10, 64)
+	if perr != nil || through <= 0 {
+		return 0, false
+	}
+	return through, true
 }
 
 // pollState bounds narrow's extra reads to one of each per poll.

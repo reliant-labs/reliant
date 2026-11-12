@@ -17,6 +17,9 @@
  *   /forge/p/:project/data                    Data: the scoped environment's databases, read-only
  *                                             (`db`, `table`, `f`, `sort`, `cols`, `page`, `size`, `row`:
  *                                             Data/dataUrl-model.ts)
+ *   /forge/p/:project/users                   Users: who can sign in to the scoped environment
+ *                                             (its managed identity), `user` and `q` as the
+ *                                             environment page's Identity tab takes them
  *   /forge/p/:project/environments            Environments (Configure)
  *   /forge/p/:project/environments/:env       one environment, as a configured object
  *   /forge/p/:project/secrets                 Secrets
@@ -134,6 +137,8 @@ export type ConsolePage =
   | { kind: "storage" }
   /** The data browser: the scoped environment's databases (Data/DataPage.tsx). */
   | { kind: "data" }
+  /** Who can sign in to the scoped environment: its managed identity's users (Users/UsersPage.tsx). */
+  | { kind: "users" }
   | { kind: "environments" }
   | { kind: "environment"; env: string }
   | { kind: "secrets" }
@@ -164,6 +169,8 @@ export function consolePath(project: string, page: ConsolePage): string {
       return `${base}/storage`;
     case "data":
       return `${base}/data`;
+    case "users":
+      return `${base}/users`;
     case "environments":
       return `${base}/environments`;
     case "environment":
@@ -213,6 +220,7 @@ export function consolePageOf(pathname: string): { project: string; page: Consol
         return sub ? { kind: "environment", env: safeDecode(sub) } : { kind: "environments" };
       case "storage":
       case "data":
+      case "users":
       case "secrets":
       case "domains":
       case "activity":

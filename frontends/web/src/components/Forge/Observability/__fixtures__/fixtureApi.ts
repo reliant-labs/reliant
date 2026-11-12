@@ -518,6 +518,20 @@ export function fixtureDayGrainedDashboard(): Dashboard {
         width: 12,
         height: 8,
       },
+      {
+        // A weekly bucket: the server reports a Date column as one day, the panel's minStep says seven.
+        id: "signups-weekly",
+        title: "Sign-ups per week",
+        kind: "sql",
+        signal: "",
+        series: [],
+        sql: "SELECT toDate(toMonday(Timestamp)) AS week, count() AS \"Sign-ups\" FROM product_events WHERE Timestamp >= {from:DateTime64(9)} AND Timestamp < {to:DateTime64(9)} GROUP BY week ORDER BY week",
+        minStep: "7d",
+        width: 12,
+        height: 8,
+      },
+      // A delivery panel (dashspec delivery.go): drawn from the release ledger, with no spans to explore or alert on.
+      { id: "promotions", title: "Promotions", kind: "promotions", signal: "", series: [], width: 24, height: 9 },
       // A metrics panel, so the dashboard's own range reaches "Explore in Metrics".
       { id: "goroutines", title: "Goroutines", kind: "line", signal: "metrics", series: [{ label: "goroutines", agg: "sum", field: "go.goroutine.count", metricType: "sum" }], unit: "count", width: 12, height: 7 },
     ],

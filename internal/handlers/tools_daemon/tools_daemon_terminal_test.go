@@ -116,7 +116,7 @@ func TestCloseAllSubscribers_ReleasesWaitingDispatch(t *testing.T) {
 	t.Cleanup(func() { terminalOutputSendTimeout = prev })
 
 	svc, conn := newTerminalTestService(t)
-	_, unsub, err := svc.SubscribeTerminalOutput("user-1", "daemon-1", "s1")
+	out, unsub, err := svc.SubscribeTerminalOutput("user-1", "daemon-1", "s1")
 	require.NoError(t, err)
 	defer unsub()
 
@@ -127,7 +127,9 @@ func TestCloseAllSubscribers_ReleasesWaitingDispatch(t *testing.T) {
 			conn.dispatchTerminalEvent(&toolexec.TerminalOutputEvent{SessionID: "s1", Data: []byte("x")})
 		}
 	}()
-	time.Sleep(20 * time.Millisecond)
+	// The queue is full: the last dispatch is the one waiting on it.
+	require.Eventually(t, func() bool { return len(out) == toolexec.TerminalOutputQueueCapacity }, 30*time.Second, time.Millisecond,
+		"the dispatches never filled the subscriber's queue")
 	conn.closeAllSubscribers()
 	select {
 	case <-done:

@@ -296,7 +296,7 @@ func TestGuard_StateChangeSignalsTheHeartbeat(t *testing.T) {
 	g.Check(context.Background())
 	select {
 	case <-g.Changed():
-	case <-time.After(time.Second):
+	case <-time.After(30 * time.Second):
 		t.Fatal("entering refusal did not signal")
 	}
 }

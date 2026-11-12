@@ -22,7 +22,7 @@ import DataTable, { type DataTableColumn } from "@/components/forge-ui/data_tabl
 import Mono from "@/components/forge-ui/mono";
 import Status from "@/components/forge-ui/status";
 import Tag from "@/components/forge-ui/tag";
-import { useSessions, type SessionFilters } from "@/hooks/observability-session-queries";
+import { REPLAY_EVIDENCE_RANGE, useFrontendReplay, useReplayEvidence, useSessions, type SessionFilters } from "@/hooks/observability-session-queries";
 import { rumErrorKind } from "@/services/controlPlane/observability/errors";
 import type { RumScope, SessionSummary } from "@/services/controlPlane/observability/rumTypes";
 import type { ObsScope } from "@/services/controlPlane/observability/types";
@@ -38,6 +38,7 @@ import type { ReplayerCtor } from "./ReplayPlayer";
 import { SessionDetail } from "./SessionDetail";
 import { isReplayKnownUnplayable, rumScopeOf, sessionTitle } from "./sessionModel";
 import { SessionsNotConfigured, SessionsReplayOff } from "./SessionStates";
+import { offEnvIds, replayStatus } from "./replayStatus";
 import { ClientName, DeviceSummary } from "../Client";
 import { ClientFilters, hasClientFilters, NO_CLIENT_FILTERS, type ClientFilterValues } from "../ClientFilters";
 import { CONTROL_FIELD, SEGMENTED, segmentTone } from "../../controlStyles";
@@ -62,6 +63,8 @@ export interface SessionsViewProps {
   navigate: ObsNavigate;
   /** Test seam: the Replayer the player constructs. */
   loadReplayer?: () => Promise<ReplayerCtor>;
+  /** The place's environments: names an environment the replay-state read could not reach. */
+  environments?: readonly { id: string; name: string }[];
 }
 
 /** What a filter change also resets: the page (its token belongs to the old filters). */
@@ -88,7 +91,7 @@ export function SessionsView(props: SessionsViewProps) {
   return <SessionList {...props} rumScope={rumScope} service={service} />;
 }
 
-function SessionList({ scope, rumScope, subject, range, service, text, hasError, user, client = NO_FILTER_VALUES, cursor, navigate }: SessionsViewProps & { rumScope: RumScope }) {
+function SessionList({ scope, rumScope, subject, range, service, text, hasError, user, client = NO_FILTER_VALUES, cursor, navigate, environments }: SessionsViewProps & { rumScope: RumScope }) {
   const pageToken = cursor.length ? cursor[cursor.length - 1] : undefined;
   const { browser, os, fe } = client;
   const filters: SessionFilters = useMemo(
@@ -132,7 +135,7 @@ function SessionList({ scope, rumScope, subject, range, service, text, hasError,
           <ObsError error={sessions.error} subject={subject} onRetry={() => void sessions.refetch()} retrying={sessions.isFetching} />
         )
       ) : rows.length === 0 && page === 1 && !filtered ? (
-        <SessionsReplayOff range={range} onWiden={() => navigate({ range: "7d", ...FIRST_PAGE })} />
+        <SessionsNoReplays rumScope={rumScope} range={range} environments={environments} onWiden={() => navigate({ range: "7d", ...FIRST_PAGE })} />
       ) : rows.length === 0 && page === 1 ? (
         <ObsNoData
           what="browser sessions"
@@ -174,6 +177,38 @@ function SessionList({ scope, rumScope, subject, range, service, text, hasError,
       )}
     </div>
   );
+}
+
+/**
+ * The empty, unfiltered first page: no replay in the window. It reads each
+ * frontend's replay switch (ListFrontendReplay) and, for one whose config
+ * reads "off", whether replays arrived anyway over the last 7 days — the
+ * deprecated build flag, which the server cannot see. Until both answer, or
+ * when either fails, the note stays the generic one: it never says "off" on a
+ * guess. A 7-day window needs no second read: this empty page is the evidence.
+ */
+function SessionsNoReplays({
+  rumScope,
+  range,
+  environments,
+  onWiden,
+}: {
+  rumScope: RumScope;
+  range: RangePreset;
+  environments?: readonly { id: string; name: string }[];
+  onWiden: () => void;
+}) {
+  const replay = useFrontendReplay(rumScope);
+  const list = replay.data;
+  const offEnvs = useMemo(() => (list ? offEnvIds(list) : []), [list]);
+  const needEvidence = offEnvs.length > 0 && range !== REPLAY_EVIDENCE_RANGE;
+  const evidence = useReplayEvidence(rumScope, offEnvs, needEvidence);
+  const status = useMemo(() => {
+    if (!list || (needEvidence && evidence.isLoading)) return null;
+    const observed = !needEvidence ? { sessions: [], complete: true } : (evidence.data ?? null);
+    return replayStatus(list, observed, (id) => environments?.find((env) => env.id === id)?.name);
+  }, [list, needEvidence, evidence.isLoading, evidence.data, environments]);
+  return <SessionsReplayOff range={range} onWiden={onWiden} status={status} />;
 }
 
 const INPUT =

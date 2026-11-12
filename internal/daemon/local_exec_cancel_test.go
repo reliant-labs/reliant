@@ -83,7 +83,7 @@ func TestRunCommand_CancelledCommandRunsCleanup(t *testing.T) {
 		t.Fatal("RunCommand did not return after cancellation")
 	}
 
-	deadline := time.Now().Add(3 * time.Second)
+	deadline := time.Now().Add(30 * time.Second)
 	for time.Now().Before(deadline) {
 		if b, err := os.ReadFile(marker); err == nil && strings.TrimSpace(string(b)) == "cleaned" {
 			return

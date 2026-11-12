@@ -130,12 +130,25 @@ ORDER BY event.capacity_order LIMIT 1`, scope.UserID, scope.ProjectID, scope.Wor
 	return triggerEventToCore(rows[0])
 }
 
+// occupiedForAdmission is the slot predicate queued admission counts, over an
+// alias named occupied: a launched run that was not released, unless it is
+// parked on a provider (ParkTriggerCapacity) and has not asked for its slot
+// back. A parked run that asked is ahead of every queued firing, so it counts.
+const occupiedForAdmission = `occupied.capacity_order IS NOT NULL AND occupied.outcome = 'launched'
+       AND NOT occupied.capacity_released
+       AND (occupied.capacity_parked_at IS NULL OR occupied.capacity_resume_requested_at IS NOT NULL)`
+
 // CanLaunchTriggerCapacity checks FIFO and capacity inside the caller's launch
 // transaction. The caller MUST claim the pending event in that same transaction
 // before releasing the lock (ClaimPendingTriggerEvent already does this).
 // Missing terminal evidence retains a slot, including half-starts, paused runs,
 // deleted chats and unknown statuses. Only the Temporal-confirmed release flag
-// frees capacity; best-effort chat/run status never releases a slot.
+// frees capacity; best-effort chat/run status never releases a slot. The one
+// exception is a run parked on a provider, which holds none while it waits
+// (ParkTriggerCapacity).
+//
+// An admitted event is stamped with maxRunning: the cap a parked run resumes
+// against (ResumeTriggerCapacity).
 func CanLaunchTriggerCapacity(ctx context.Context, db orm.Context, eventID string, scope TriggerCapacityScope, maxRunning uint32) (bool, error) {
 	if !scope.valid() || eventID == "" || maxRunning == 0 {
 		return false, errors.New("invalid trigger capacity policy")
@@ -156,12 +169,130 @@ func CanLaunchTriggerCapacity(ctx context.Context, db orm.Context, eventID strin
    )
    AND (SELECT count(*) FROM trigger_events occupied
      WHERE occupied.user_id = ?1 AND occupied.capacity_project_id = ?2 AND occupied.capacity_workflow_ref = ?3
-       AND occupied.capacity_order IS NOT NULL AND occupied.outcome = 'launched'
-       AND NOT occupied.capacity_released
+       AND `+occupiedForAdmission+`
    ) < ?4
 )`, eventID, scope.UserID, scope.ProjectID, scope.WorkflowRef, maxRunning).Scan(ctx, &allowed)
 	if err != nil {
 		return false, fmt.Errorf("check trigger capacity: %w", err)
 	}
+	if allowed {
+		if _, err := db.Bun().NewRaw(`UPDATE trigger_events SET capacity_limit = ? WHERE id = ?`, maxRunning, eventID).Exec(ctx); err != nil {
+			return false, fmt.Errorf("stamp trigger capacity limit: %w", err)
+		}
+	}
 	return allowed, nil
+}
+
+// TriggerCapacitySlot names the slot one run holds: its trigger event and the
+// exact chain admitted for it. A later chain on the same chat (a human turn)
+// never matches.
+type TriggerCapacitySlot struct {
+	EventID    string
+	WorkflowID string
+	FirstRunID string
+}
+
+func (s TriggerCapacitySlot) valid() bool {
+	return s.EventID != "" && s.WorkflowID != "" && s.FirstRunID != ""
+}
+
+// heldSlotSQL matches the row of a slot the run still holds or has parked, by
+// its event and chain (?0 event, ?1 workflow id, ?2 first run id). A chain not
+// yet bound matches on its workflow id; the binding follows.
+const heldSlotSQL = `id = ?0 AND capacity_order IS NOT NULL AND outcome = 'launched' AND NOT capacity_released
+ AND capacity_workflow_id = ?1 AND (capacity_first_run_id IS NULL OR capacity_first_run_id = ?2)`
+
+// ParkTriggerCapacity gives back the slot of a run that is waiting on a
+// provider: until it resumes (ResumeTriggerCapacity) it counts toward neither
+// queued admission nor resumes. held is false when the run holds no slot to
+// park (it was not capacity-admitted, the slot was released, or the chain is a
+// later one); the caller then stops asking. Idempotent.
+func ParkTriggerCapacity(ctx context.Context, db orm.Context, slot TriggerCapacitySlot) (held bool, err error) {
+	if !slot.valid() {
+		return false, errors.New("invalid trigger capacity slot")
+	}
+	res, err := db.Bun().NewRaw(`UPDATE trigger_events SET capacity_parked_at = COALESCE(capacity_parked_at, now()), capacity_resume_requested_at = NULL
+ WHERE `+heldSlotSQL, slot.EventID, slot.WorkflowID, slot.FirstRunID).Exec(ctx)
+	if err != nil {
+		return false, fmt.Errorf("park trigger capacity: %w", err)
+	}
+	return oneRowTouched(res)
+}
+
+// ResumeTriggerCapacity takes back the slot of a parked run, under the same
+// scope lock admission takes. It is granted while fewer than the event's
+// admitted cap of the scope's runs are running (not parked); otherwise the run
+// is marked as asking, which puts it ahead of every queued firing
+// (occupiedForAdmission) without preempting anything, and it asks again later.
+//
+// held is false when the run holds no slot (see ParkTriggerCapacity); granted
+// is then true, as it is for a run that was not parked. A row admitted before
+// caps were stamped resumes unconditionally.
+func ResumeTriggerCapacity(ctx context.Context, db orm.Context, slot TriggerCapacitySlot) (held, granted bool, err error) {
+	if !slot.valid() {
+		return false, false, errors.New("invalid trigger capacity slot")
+	}
+	err = db.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
+		var rows []struct {
+			UserID      string  `bun:"user_id"`
+			ProjectID   string  `bun:"capacity_project_id"`
+			WorkflowRef string  `bun:"capacity_workflow_ref"`
+			Parked      bool    `bun:"parked"`
+			Limit       *uint32 `bun:"capacity_limit"`
+		}
+		read := func() error {
+			rows = nil
+			return db.Bun().NewRaw(`SELECT user_id, capacity_project_id, capacity_workflow_ref, capacity_parked_at IS NOT NULL AS parked, capacity_limit
+ FROM trigger_events WHERE `+heldSlotSQL, slot.EventID, slot.WorkflowID, slot.FirstRunID).Scan(ctx, &rows)
+		}
+		if err := read(); err != nil {
+			return err
+		}
+		if len(rows) == 0 {
+			held, granted = false, true
+			return nil
+		}
+		if !rows[0].Parked {
+			held, granted = true, true
+			return nil
+		}
+		if err := lockTriggerCapacity(ctx, db, TriggerCapacityScope{UserID: rows[0].UserID, ProjectID: rows[0].ProjectID, WorkflowRef: rows[0].WorkflowRef}); err != nil {
+			return err
+		}
+		// Re-read under the lock: a release or another resume may have landed.
+		if err := read(); err != nil {
+			return err
+		}
+		if len(rows) == 0 {
+			held, granted = false, true
+			return nil
+		}
+		row := rows[0]
+		held = true
+		if !row.Parked {
+			granted = true
+			return nil
+		}
+		granted = row.Limit == nil
+		if !granted {
+			var running uint32
+			if err := db.Bun().NewRaw(`SELECT count(*) FROM trigger_events occupied
+ WHERE occupied.user_id = ? AND occupied.capacity_project_id = ? AND occupied.capacity_workflow_ref = ?
+   AND occupied.capacity_order IS NOT NULL AND occupied.outcome = 'launched' AND NOT occupied.capacity_released
+   AND occupied.capacity_parked_at IS NULL`, row.UserID, row.ProjectID, row.WorkflowRef).Scan(ctx, &running); err != nil {
+				return err
+			}
+			granted = running < *row.Limit
+		}
+		if granted {
+			_, err := db.Bun().NewRaw(`UPDATE trigger_events SET capacity_parked_at = NULL, capacity_resume_requested_at = NULL WHERE id = ?`, slot.EventID).Exec(ctx)
+			return err
+		}
+		_, err := db.Bun().NewRaw(`UPDATE trigger_events SET capacity_resume_requested_at = COALESCE(capacity_resume_requested_at, now()) WHERE id = ?`, slot.EventID).Exec(ctx)
+		return err
+	})
+	if err != nil {
+		return false, false, fmt.Errorf("resume trigger capacity: %w", err)
+	}
+	return held, granted, nil
 }

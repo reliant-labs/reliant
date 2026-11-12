@@ -19,6 +19,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/orgs"
 	"github.com/reliant-labs/reliant/internal/projectcheckout"
 )
 
@@ -97,7 +98,7 @@ func (s *Service) moveOrg(ctx context.Context, userID string, chat *db.Chat, sou
 	}
 	def, err := s.deps.Orgs.DefaultOrg(ctx, userID)
 	if err != nil {
-		return moveOrgs{}, svcerr.WithCause(svcerr.Unavailable("could not resolve your default organization; try again"), err)
+		return moveOrgs{}, orgs.LookupFailed(ctx, "could not resolve your default organization; try again", err)
 	}
 	org := def
 	if from != nil {

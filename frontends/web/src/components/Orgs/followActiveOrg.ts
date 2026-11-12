@@ -3,6 +3,8 @@
 import type { QueryClient, QueryKey } from "@tanstack/react-query";
 
 import { chatKeys } from "@/hooks/chat-queries";
+import { chatServiceKeys } from "@/hooks/chat-service-hooks_gen";
+import { inboxServiceKeys } from "@/hooks/inbox-service-hooks_gen";
 import { projectServiceKeys } from "@/hooks/project-service-hooks_gen";
 import { runServiceKeys } from "@/hooks/run-service-hooks_gen";
 import { triggerServiceKeys } from "@/hooks/trigger-service-hooks_gen";
@@ -12,8 +14,8 @@ import { useProjectStore } from "@/store/projectStore";
 /**
  * The product reads the server answers for the active org: projects, chats,
  * saved workflows, triggers and runs each belong to one org, and their list
- * rpcs filter by the request's org_id, which orgInterceptor fills from the
- * active org. Their cache keys do not name the org, so a switch resets them:
+ * rpcs (the archived chats, chat search and the Inbox too) filter by the
+ * request's org_id, which orgInterceptor fills from the active org. Their cache keys do not name the org, so a switch resets them:
  * the next read asks for the new org's, and nothing shows the old org's
  * meanwhile.
  *
@@ -23,6 +25,9 @@ import { useProjectStore } from "@/store/projectStore";
  */
 export const ORG_SCOPED_PRODUCT_QUERIES: readonly QueryKey[] = [
   chatKeys.lists(),
+  chatServiceKeys.listArchivedChats.all,
+  chatServiceKeys.searchChats.all,
+  inboxServiceKeys.all,
   projectServiceKeys.all,
   workflowServiceKeys.all,
   triggerServiceKeys.all,

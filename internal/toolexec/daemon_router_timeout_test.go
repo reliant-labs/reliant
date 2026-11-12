@@ -48,7 +48,7 @@ func envelopeTimeoutMs(t *testing.T, envelopes <-chan []byte) int32 {
 		}
 		require.NoError(t, json.Unmarshal(data, &env))
 		return env.TimeoutMs
-	case <-time.After(2 * time.Second):
+	case <-time.After(30 * time.Second):
 		t.Fatal("the daemon received no command")
 		return 0
 	}

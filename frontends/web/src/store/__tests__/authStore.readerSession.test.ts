@@ -109,12 +109,19 @@ it.each(["signOut", "adoptSession", "authEvent"])("real auth boundary resets mou
 
 it("handles auth-event replacement, same-user token refresh, anonymous refusal and API-key replacement", async () => {
   await useAuthStore.getState().initialize();
+  // Auth events are adopted in turn (authStore adoptIdentity), so each
+  // principal is waited for rather than read synchronously.
   auth.callback!("SIGNED_IN", { user: user("A") } as Session);
+  await vi.waitFor(() => expect(getReaderSession().principalId).toBe("A"));
   const a = getReaderSession();
   auth.callback!("TOKEN_REFRESHED", { user: user("A"), access_token: "rotated" } as Session);
+  await vi.waitFor(() => expect(useAuthStore.getState().session?.access_token).toBe("rotated"));
   expect(getReaderSession()).toBe(a);
   auth.callback!("SIGNED_IN", { user: user("B") } as Session);
-  expect(getReaderSession().principalId).toBe("B");
+  // Fail closed at once: A's reader authority ends before B's adoption (and
+  // the cleanup of A's state) has run.
+  expect(getReaderSession().principalId).toBeNull();
+  await vi.waitFor(() => expect(getReaderSession().principalId).toBe("B"));
   expect(getReaderSession()).not.toBe(a);
   useAuthStore.getState().setUser({ ...user("anonymous"), is_anonymous: true });
   expect(getReaderSession().principalId).toBeNull();

@@ -23,7 +23,7 @@ import SkeletonLoader from "@/components/forge-ui/skeleton_loader";
 import { useOrgEnvironments } from "@/hooks/apps-queries";
 import type { DashboardRef } from "@/services/controlPlane/observability/dashboardTypes";
 
-import { rosterReadFailed, useForgeConsole } from "../../Console/consoleContext";
+import { useForgeConsole } from "../../Console/consoleContext";
 import { ENV_ALL } from "../../Console/envScope";
 import { NoEnvironmentsState } from "../../Console/NoEnvironmentsState";
 import { CloudNotice } from "../../SourceNotices";
@@ -97,7 +97,7 @@ function useObservabilityHrefs(): DashboardHrefs {
       dashboards: href({ kind: "obs-view", view: "dashboards" }),
       list: href({ kind: "obs-view", view: "dashboards" }),
       releases: href({ kind: "releases" }),
-      release: (version: string) => href({ kind: "release", version }),
+      release: (version: string, extra?: Record<string, unknown>) => href({ kind: "release", version }, extra),
       trace: (traceId: string) => href({ kind: "obs-view", view: "traces" }, { trace: traceId, range: "7d" }),
       session: (sessionId: string) => href({ kind: "obs-view", view: "sessions" }, { session: sessionId }),
       workload: (name: string, envName?: string | null) => workloadPath(href, envName ?? env, name),
@@ -143,21 +143,7 @@ export function DashboardsPage() {
   const environments = useRecordedEnvs();
   const hrefs = useObservabilityHrefs();
   const navigateTo = useNavigateTo();
-  const { href } = useForgeConsole();
-  const listHrefs = useMemo(
-    () => ({
-      dashboard: hrefs.dashboard,
-      hub: {
-        alerts: href({ kind: "obs-view", view: "alerts" }),
-        releases: href({ kind: "releases" }),
-        errors: href({ kind: "obs-view", view: "errors" }),
-        release: hrefs.release,
-        workload: (name: string, where: string | null) => workloadPath(href, where ?? env, name),
-        logs: (service: string) => hrefs.logs({ service, severity: "error,fatal" }),
-      },
-    }),
-    [hrefs, href, env]
-  );
+  const listHrefs = useMemo(() => ({ dashboard: hrefs.dashboard }), [hrefs]);
   return (
     // Not behind RosterGate: organization costs are a builtin dashboard that
     // needs no deployed environment, so the list stays reachable and the
@@ -171,8 +157,8 @@ export function DashboardsPage() {
         project={forgeProject}
         env={env}
         environments={environments}
-        environmentsUnread={rosterReadFailed(roster)}
-        search={{ view: search.view, q: search.q, group: search.group, source: search.source, owner: search.owner }}
+        // An old `view` (the retired Overview tab) is read and ignored: every link lands on the list.
+        search={{ q: search.q, group: search.group, source: search.source, owner: search.owner }}
         onSearch={onSearch}
         hrefs={listHrefs}
         navigateTo={navigateTo}

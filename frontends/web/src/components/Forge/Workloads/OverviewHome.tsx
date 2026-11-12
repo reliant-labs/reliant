@@ -9,9 +9,10 @@
  *   left         the health KPIs (one card of four figures) and what needs
  *                attention, each item with the release it followed and the
  *                way back.
- *   rail         what changed: recent releases. The rail is where further
- *                "who and what changed" cards stack (a Users card for apps on
- *                managed auth: new, returning and active users), so it is
+ *   rail         what changed: recent releases, then who uses the app (the
+ *                Users card: accounts, and active, new and returning users
+ *                over 7 days, read from the generated Overview dashboard's
+ *                Users panels; hidden until there are users to show). It is
  *                kept as a column of its own rather than folded into the left.
  *   below        Services (long-running workloads, one tight row each:
  *                health, ready, release, requests, CPU and memory against
@@ -93,6 +94,7 @@ import { SkeletonRows } from "./workloadParts";
 import { FrontendList, FrontendsEmpty, FrontendsLoading } from "../Frontends/FrontendList";
 import { JobTimeline } from "./JobTimeline";
 import { ServiceCards } from "./ServiceCards";
+import { UsersCard } from "./UsersCard";
 import { filterRows, overviewRows, rowKindsOf, ROW_KIND_LABEL } from "./overviewRows";
 import { PartialNote, StaleNote, keepsStaleResult } from "./tileState";
 
@@ -111,6 +113,10 @@ export interface OverviewHrefs {
   alerts: string;
   /** The Overview scoped to one environment: what an environment cell links to. */
   scoped: (env: string) => string;
+  /** The Users page: the Users card's "View users". */
+  users?: string;
+  /** A release dashboard's page by key: the Users card's "Open Users dashboard". */
+  dashboard?: (key: string) => string;
 }
 
 /** Rolling an environment back from "Needs attention": the targets, and the confirm flow that carries one out. */
@@ -200,7 +206,7 @@ export function OverviewHome({
   const jobRuns = useMemo(() => (listed.data?.jobs ?? []).filter((run) => all || run.envName === env), [listed.data, all, env]);
   const jobWindow = useMemo(() => resolveWindow(range), [range, listed.dataUpdatedAt]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // The list's request side: GetServiceOverview for the scope (the read the Dashboards hub's Processes makes, so one cached answer).
+  // The list's request side: GetServiceOverview for the scope.
   const redGroupBy = useMemo(() => (kpiScope?.envIds.length === 0 ? [ENV_KEY] : []), [kpiScope]);
   const red = useServiceOverview(kpiScope, range, [], redGroupBy);
   // Its own state: a failed telemetry read blanks only the figures, never the rows the workload read drew.
@@ -360,9 +366,10 @@ export function OverviewHome({
             </>
           )}
         </div>
-        {/* What changed. Cards about who uses the app (a Users card, for apps on managed auth) stack here too. */}
+        {/* What changed, then who uses the app. */}
         <aside className="min-w-0 space-y-4" aria-label="Recent changes" data-testid="overview-rail">
           <RecentReleases project={project} envs={envs} hrefs={hrefs} />
+          {!unrecorded && <UsersCard scope={kpiScope} project={project} range={range} usersHref={hrefs.users} dashboardHref={hrefs.dashboard} />}
         </aside>
       </div>
 

@@ -25,7 +25,9 @@ export const SPEC_VERSION = "forge.dashboards/v1";
 /** Where a promoted dashboard lives in the user's repo. */
 export const DASHBOARDS_DIR = "deploy/observability/dashboards";
 
-export const PANEL_KINDS = ["line", "number", "table", "bar", "heatmap", "search", "sql", "postgres", "text", "funnel", "issues", "sessions"] as const;
+export const PANEL_KINDS = ["line", "number", "table", "bar", "heatmap", "search", "sql", "postgres", "text", "funnel", "issues", "sessions", "release_health", "promotions", "delivery"] as const;
+/** The kinds drawn from the release ledger and release health (dashspec delivery.go): no query, no signal; promotions alone takes a limit. */
+export const DELIVERY_PANEL_KINDS = ["release_health", "promotions", "delivery"] as const;
 export { DRAWN_KINDS, panelRunsQuery } from "@/services/controlPlane/observability/panelKinds";
 
 /** The kinds read from the tenant's browser tables, not from series over a signal (C7). */
@@ -229,6 +231,15 @@ export function panelProblems(panel: Panel): string[] {
   if (panel.width !== undefined && panel.width !== 0 && (panel.width < 1 || panel.width > 24 || !Number.isInteger(panel.width))) problems.push("Width is 1 to 24 grid columns.");
   if (panel.height !== undefined && (panel.height < 0 || panel.height > MAX_GRID_HEIGHT || !Number.isInteger(panel.height))) problems.push(`Height is a whole number of rows up to ${MAX_GRID_HEIGHT}.`);
   for (const [key, kind, what] of OWN_FIELDS) if (panel.kind !== kind && present(panel[key])) problems.push(`Only a ${kind} panel takes ${what}.`);
+  if (has(DELIVERY_PANEL_KINDS, panel.kind)) {
+    if (panel.signal || (panel.series ?? []).length || (panel.where ?? []).length || (panel.groupBy ?? []).length || panel.unit || panel.display) {
+      problems.push(`A ${panel.kind} panel is drawn from the release ledger and takes no signal, series, filters, group-by, unit or display.`);
+    }
+    if (panel.limit !== undefined && (panel.kind !== "promotions" || panel.limit < 1 || panel.limit > 200 || !Number.isInteger(panel.limit))) {
+      problems.push(panel.kind === "promotions" ? "A promotions panel's limit is 1 to 200." : `A ${panel.kind} panel takes no limit.`);
+    }
+    return problems;
+  }
   displayProblems(panel, problems);
   if (has(SELF_CONTAINED_KINDS, panel.kind)) {
     selfContainedProblems(panel, problems);
@@ -436,6 +447,10 @@ function displayProblems(panel: Panel, problems: string[]) {
   if (display.topN !== undefined) {
     if (!Number.isInteger(display.topN) || display.topN < 1 || display.topN > MAX_TOP_N) problems.push(`Top N is a whole number of series from 1 to ${MAX_TOP_N}.`);
     else if (!options.topN) problems.push(`A ${style} ${panel.kind} panel has no series to fold into "Other"${panel.kind === "bar" ? " (a bar panel keeps its top groups with its limit)" : ""}.`);
+  }
+  if (display.exact !== undefined) {
+    if (typeof display.exact !== "boolean") problems.push("Exact is true or false.");
+    else if (panel.kind !== "number" && panel.kind !== "sql") problems.push("Only a number or sql panel draws figures to keep exact.");
   }
   if ((style === "pie" || style === "donut") && (panel.series ?? []).length !== 1) problems.push(`A ${style} draws one value per group: it takes exactly one series.`);
   colourProblems(display, style, problems);

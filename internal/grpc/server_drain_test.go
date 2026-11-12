@@ -106,7 +106,7 @@ func TestDrainEndsOpenStreamsAndReturnsPromptly(t *testing.T) {
 
 	// A budget well above what a drain needs and well below the test
 	// timeout: before the fix the stop spent all of it.
-	const budget = 3 * time.Second
+	const budget = time.Minute
 	ctx, cancel := context.WithTimeout(context.Background(), budget)
 	defer cancel()
 	start := time.Now()

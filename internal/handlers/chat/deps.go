@@ -46,7 +46,7 @@ type Repository interface {
 	// The chat with its activity-derived fields, for a handler that reads one.
 	GetChatWithUserCheck(ctx context.Context, id, userID string) (*db.Chat, error)
 	SearchChats(ctx context.Context, filters db.ChatSearchFilters) ([]*db.Chat, error)
-	ListArchivedChats(ctx context.Context, userID string) ([]*db.ArchivedChatInfo, error)
+	ListArchivedChats(ctx context.Context, userID string, org *core.OrgScope) ([]*db.ArchivedChatInfo, error)
 	DeleteChat(ctx context.Context, id string) error
 	UpdateChatState(ctx context.Context, chatID string, state db.ChatState, reason string) error
 	UpdateChatUnread(ctx context.Context, chatID string, unread bool, reason string) error
@@ -105,6 +105,9 @@ type Repository interface {
 
 	// The chat and user update logs.
 	GetLatestUpdateSequence(ctx context.Context, chatID string) (int64, error)
+	// The compaction watermark: at or below it the log keeps only each
+	// entity's newest update.
+	GetChatCompactedThrough(ctx context.Context, chatID string) (int64, error)
 	GetUpdatesSince(ctx context.Context, chatID string, sinceSeq int64, limit int) ([]db.ChatUpdate, error)
 	ListErrorUpdatesInRange(ctx context.Context, chatID string, from *time.Time, thread string, beforeSeq int64) ([]db.ChatUpdate, error)
 	GetLatestWorkflowNodeUpdates(ctx context.Context, chatID, workflowID string) ([]db.ChatUpdate, error)

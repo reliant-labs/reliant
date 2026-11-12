@@ -66,6 +66,21 @@ func (v safeHistogramVec) With(labels prometheus.Labels) prometheus.Observer {
 	return v.HistogramVec.With(validUTF8Labels(labels))
 }
 
+// safeGaugeVec is the gauge twin of safeCounterVec.
+type safeGaugeVec struct{ *prometheus.GaugeVec }
+
+func newGaugeVec(opts prometheus.GaugeOpts, labelNames []string) safeGaugeVec {
+	return safeGaugeVec{prometheus.NewGaugeVec(opts, labelNames)}
+}
+
+func (v safeGaugeVec) WithLabelValues(values ...string) prometheus.Gauge {
+	return v.GaugeVec.WithLabelValues(validUTF8Values(values)...)
+}
+
+func (v safeGaugeVec) With(labels prometheus.Labels) prometheus.Gauge {
+	return v.GaugeVec.With(validUTF8Labels(labels))
+}
+
 // validUTF8Values returns values with any malformed bytes stripped. This runs
 // on every metric observation — including per-RPC and per-NATS-message paths —
 // so the all-valid case, which is all of them today, allocates nothing and

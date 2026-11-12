@@ -65,9 +65,9 @@ describe("usage dashboards", () => {
     const api = createFixtureApi();
     api.listDashboards = vi.fn().mockResolvedValue({ canWrite: false, dashboards: [USAGE, BILLING] });
     renderWithApi(api, <DashboardsList project={FIXTURE_PROJECT} env="all" environments={[]} search={{}} onSearch={vi.fn()} hrefs={hrefs} navigateTo={vi.fn()} />);
-    // All three are in the Product group, the client's LLM usage after the
+    // All three are in the Built-in section, the client's LLM usage after the
     // server's built-ins.
-    const listed = await screen.findByTestId("dashboards-group-product");
+    const listed = await screen.findByTestId("dashboards-group-builtin");
     expect(within(listed).getAllByRole("link").map((a) => a.getAttribute("href"))).toEqual([
       "/d/builtin/org-usage",
       "/d/builtin/org-billing",

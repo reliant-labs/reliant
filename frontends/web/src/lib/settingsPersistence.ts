@@ -1,6 +1,12 @@
 import { batchUpsertSettings, deleteSetting } from "../hooks/settings-queries";
 import { getAuthTokenProvider } from "../api/authProvider";
+import { isWriteOwnerMismatch } from "../api/writeOwner";
 import { settingsSync } from "../services/settingsSync";
+import {
+  credentialBelongsTo,
+  currentSessionOwner,
+  type SessionOwner,
+} from "./auth/sessionOwner";
 import { logger } from "./logger";
 
 /**
@@ -16,12 +22,40 @@ import { logger } from "./logger";
  * unauthenticated and must not deadlock the sign-in flow itself. Settings are
  * unambiguously auth-only, so the narrow gate is both safe and sufficient.
  */
-async function hasAuthToken(): Promise<boolean> {
+async function currentToken(): Promise<string | null> {
   try {
-    return (await getAuthTokenProvider().getToken()) !== null;
+    return await getAuthTokenProvider().getToken();
   } catch {
+    return null;
+  }
+}
+
+async function hasAuthToken(): Promise<boolean> {
+  return (await currentToken()) !== null;
+}
+
+/**
+ * Whether a write queued for `owner` is worth sending: there is a credential,
+ * and it still belongs to `owner`. Its token wait can span an identity change
+ * (another host signing in as someone else through the shared session
+ * cookie). This is the cheap early answer only: the transport resolves the
+ * credential again when the request leaves, and that second wait can span a
+ * change too, so the write also carries `owner` to the transport
+ * (api/writeOwner.ts), which refuses to send it with anyone else's credential.
+ */
+async function mayWriteFor(owner: SessionOwner, keys: string[]): Promise<boolean> {
+  const token = await currentToken();
+  if (token === null) {
+    logger.warn("[settingsPersistence] Skipping setting writes while unauthenticated", { keys });
     return false;
   }
+  if (!credentialBelongsTo(owner, token)) {
+    logger.warn("[settingsPersistence] Dropping setting writes queued for a previous identity", {
+      keys,
+    });
+    return false;
+  }
+  return true;
 }
 
 export interface PersistedStringSetting {
@@ -80,6 +114,8 @@ export async function safeGetSetting(
  * fan-out this exists to remove.
  */
 interface PendingWrites {
+  // The account the writes were made for: a batch never mixes two.
+  owner: SessionOwner;
   values: Map<string, string>;
   waiters: Array<() => void>;
 }
@@ -97,14 +133,15 @@ async function flushWrites(batch: PendingWrites): Promise<void> {
     // The auth gate runs HERE, once for the whole batch, rather than in
     // upsertStringSetting. Awaiting a token before enqueuing would put each
     // caller in a different microtask and defeat the coalescing entirely.
-    if (!(await hasAuthToken())) {
-      logger.warn("[settingsPersistence] Skipping setting writes while unauthenticated", {
+    if (!(await mayWriteFor(batch.owner, settings.map((s) => s.key)))) return;
+    await batchUpsertSettings(settings, undefined, batch.owner);
+  } catch (error) {
+    if (isWriteOwnerMismatch(error)) {
+      logger.warn("[settingsPersistence] Dropped setting writes queued for a previous identity", {
         keys: settings.map((s) => s.key),
       });
       return;
     }
-    await batchUpsertSettings(settings);
-  } catch (error) {
     logger.error("[settingsPersistence] Failed to upsert settings batch", {
       keys: settings.map((s) => s.key),
       error,
@@ -121,11 +158,12 @@ export function upsertStringSetting(key: string, value: string): Promise<void> {
 
   // Enqueue SYNCHRONOUSLY — no await before this point, or callers in the same
   // tick would land in different batches.
-  if (!pendingWrites) {
-    const batch: PendingWrites = { values: new Map(), waiters: [] };
+  const owner = currentSessionOwner();
+  if (!pendingWrites || pendingWrites.owner !== owner) {
+    const batch: PendingWrites = { owner, values: new Map(), waiters: [] };
     pendingWrites = batch;
     void Promise.resolve().then(() => {
-      pendingWrites = null;
+      if (pendingWrites === batch) pendingWrites = null;
       void flushWrites(batch);
     });
   }
@@ -138,11 +176,13 @@ export function upsertStringSetting(key: string, value: string): Promise<void> {
 }
 
 export async function deleteSettingIfExists(key: string): Promise<void> {
+  const owner = currentSessionOwner();
   settingsSync.removeFromCache(key);
-  if (!(await hasAuthToken())) return;
+  if (!(await mayWriteFor(owner, [key]))) return;
   try {
-    await deleteSetting(key);
+    await deleteSetting(key, undefined, owner);
   } catch {
-    // Ignore missing setting or transient errors.
+    // Ignore missing setting, transient errors, and a delete the transport
+    // dropped because the credential moved to another account.
   }
 }

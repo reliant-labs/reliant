@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/db/core"
 )
 
@@ -26,8 +27,10 @@ func TestFire_ScheduleCarriesTheTriggersOrg(t *testing.T) {
 			trigger := testTrigger(t, func(tr *core.Trigger, _ *core.ScheduleConfig) { tr.OrgID = tc.org })
 			repo.triggers[trigger.ID] = trigger
 			launcher := &fakeLauncher{}
+			// Its creator is a live member: a fire asks before it launches.
+			ctx := authz.WithMembership(context.Background(), memberOf("acme"))
 
-			_, err := NewFirer(repo, launcher).Fire(context.Background(), fireReq(trigger.ID))
+			_, err := NewFirer(repo, launcher).Fire(ctx, fireReq(trigger.ID))
 			require.NoError(t, err)
 			assert.Equal(t, tc.want, launcher.snapshot()[0].Spec.OrgID)
 		})
@@ -42,8 +45,9 @@ func TestEventFire_CarriesTheTriggersOrg(t *testing.T) {
 	repo.triggers[trigger.ID] = trigger
 	ev := pendingEvent(repo, trigger, "d1", map[string]any{"body": map[string]any{"ref": "main"}})
 	launcher := &fakeLauncher{}
+	ctx := authz.WithMembership(context.Background(), memberOf("acme"))
 
-	_, err := NewEventFirer(repo, launcher).Fire(context.Background(),
+	_, err := NewEventFirer(repo, launcher).Fire(ctx,
 		EventFireInput{TriggerID: trigger.ID, Kind: ev.Kind, DedupeKey: ev.DedupeKey})
 	require.NoError(t, err)
 	assert.Equal(t, "acme", launcher.snapshot()[0].Spec.OrgID)

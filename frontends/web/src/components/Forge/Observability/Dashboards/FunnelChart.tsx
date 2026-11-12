@@ -17,8 +17,18 @@
 import type { FunnelStepResult, PanelResult } from "@/services/controlPlane/observability/types";
 import { cn } from "@/lib/utils";
 
-import { formatCount, formatPercent } from "../format";
+import { formatCount, formatPercent as roundPercent } from "../format";
 import { CHART_PALETTE, tokenColor } from "./seriesModel";
+
+/**
+ * A share as a percentage that never rounds to a lie: a drop of 99.7% is not
+ * "100% drop off", which a funnel whose first step counts every visitor
+ * (forge's visit → sign-up → activation) shows at once.
+ */
+export function formatPercent(share: number): string {
+  if (share > 0.995 && share < 1) return `${(Math.floor(share * 1000) / 10).toFixed(1)}%`;
+  return roundPercent(share);
+}
 
 /** One step: a name and how many journeys reached it. */
 export type FunnelStep = Pick<FunnelStepResult, "event" | "count">;
