@@ -262,3 +262,51 @@ func TestOrgConnectionIndexesHoldTheInvariants(t *testing.T) {
 		t.Fatalf("the same name in another org must not conflict: %v", err)
 	}
 }
+
+// connections_user_name holds a person's names on its own: with
+// connections_name dropped (as the release that creates org connections does),
+// a second live personal connection of one name, integration and user is
+// refused by it, while another user, another integration, a deleted row and an
+// org row of the same creator never conflict.
+func TestConnectionUserNameIndexHoldsPersonalNamesAlone(t *testing.T) {
+	env := storetest.New(t)
+	ctx := context.Background()
+	if _, err := env.SQL.ExecContext(ctx, `DROP INDEX public.connections_name`); err != nil {
+		t.Fatalf("dropping connections_name in this test's database: %v", err)
+	}
+	deletedAt := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	insert := func(id, user, org, integration string, deleted bool) error {
+		ownerKind, orgID := "user", any(nil)
+		if org != "" {
+			ownerKind, orgID = "org", org
+		}
+		var del any
+		if deleted {
+			del = deletedAt
+		}
+		_, err := env.SQL.ExecContext(ctx, `INSERT INTO connections
+			(id, owner_kind, user_id, org_id, integration_id, auth_kind, name, status, deleted_at)
+			VALUES ($1, $2, $3, $4, $5, 'api_key', 'Bot', 'active', $6)`, id, ownerKind, user, orgID, integration, del)
+		return err
+	}
+	if err := insert("p-1", "ada", "", "slack", false); err != nil {
+		t.Fatalf("first personal Bot: %v", err)
+	}
+	for _, ok := range []struct {
+		id, user, org, integration string
+		deleted                    bool
+	}{
+		{"p-other-user", "bob", "", "slack", false},
+		{"p-other-integration", "ada", "", "github", false},
+		{"p-deleted", "ada", "", "slack", true},
+		{"o-same-creator", "ada", "org-1", "slack", false},
+	} {
+		if err := insert(ok.id, ok.user, ok.org, ok.integration, ok.deleted); err != nil {
+			t.Fatalf("%s must not conflict with ada's slack Bot: %v", ok.id, err)
+		}
+	}
+	err := insert("p-dup", "ada", "", "slack", false)
+	if got := orm.ConstraintName(err); got != store.ConnectionConstraintUserName {
+		t.Fatalf("a second live personal slack Bot of ada: err = %v (constraint %q), want a violation of connections_user_name", err, got)
+	}
+}
