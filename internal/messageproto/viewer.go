@@ -183,3 +183,100 @@ func ViewerMessageUpdate(raw []byte) []byte {
 	}
 	return out
 }
+
+// ViewerChatUpdate is what a viewer is sent of one chat update's data (a
+// replay, a snapshot's other updates, a live frame), by the update's type:
+//
+//   - MESSAGE: ViewerMessageUpdate (tool results out).
+//   - RUN_OUTPUT, EXECUTION_LOG: only the step's identity, its command and
+//     how it ended (runOutputViewerKeys); its stdout, stderr, output, working
+//     directory and log file are left out.
+//   - NODE_EXECUTION, WORKFLOW_EXECUTION: without what a node produced or
+//     why it failed (nodeOutputKeys), at any depth.
+//   - Every other type (status, approvals, threads, questions, errors) is
+//     sent as it is: none carries what a tool read or a command printed.
+//
+// A payload of an output-bearing type that cannot be decoded is sent as {}.
+func ViewerChatUpdate(t reliantv1.ChatUpdateType, data string) string {
+	switch t {
+	case reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_MESSAGE:
+		return string(ViewerMessageUpdate([]byte(data)))
+	case reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_RUN_OUTPUT,
+		reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_EXECUTION_LOG:
+		var payload map[string]any
+		if err := json.Unmarshal([]byte(data), &payload); err != nil {
+			return `{}`
+		}
+		for k := range payload {
+			if !runOutputViewerKeys[k] {
+				delete(payload, k)
+			}
+		}
+		payload["body_elided"] = true
+		return marshalOrEmpty(payload)
+	case reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_NODE_EXECUTION,
+		reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_WORKFLOW_EXECUTION:
+		var payload any
+		if err := json.Unmarshal([]byte(data), &payload); err != nil {
+			return `{}`
+		}
+		dropKeys(payload, nodeOutputKeys)
+		return marshalOrEmpty(payload)
+	default:
+		return data
+	}
+}
+
+// runOutputViewerKeys is what a viewer keeps of a run step's output update.
+var runOutputViewerKeys = map[string]bool{
+	"update_type": true, "id": true, "step_id": true, "command": true, "exit_code": true,
+	"interrupted": true, "duration": true, "workflow_id": true, "unique_activity_id": true, "timestamp": true,
+}
+
+// nodeOutputKeys are what a node produced, or why it failed.
+var nodeOutputKeys = map[string]bool{
+	"output": true, "outputs": true, "output_json": true, "result": true,
+	"error_message": true, "error": true, "metadata": true, "stdout": true, "stderr": true,
+}
+
+func dropKeys(v any, keys map[string]bool) {
+	switch x := v.(type) {
+	case map[string]any:
+		for k, child := range x {
+			if keys[k] {
+				delete(x, k)
+				continue
+			}
+			dropKeys(child, keys)
+		}
+	case []any:
+		for _, child := range x {
+			dropKeys(child, keys)
+		}
+	}
+}
+
+func marshalOrEmpty(v any) string {
+	out, err := json.Marshal(v)
+	if err != nil {
+		return `{}`
+	}
+	return string(out)
+}
+
+// ElideWorkflowStatesForViewer leaves what each run produced out of a chat
+// snapshot's live workflow states, in place: their outputs, and each node's
+// error and metadata. Their params (the run's inputs) stay.
+func ElideWorkflowStatesForViewer(states []*reliantv1.WorkflowExecutionState) {
+	for _, w := range states {
+		if w == nil {
+			continue
+		}
+		w.Outputs = nil
+		for _, n := range w.GetNodes() {
+			n.ErrorMessage = nil
+			n.Metadata = nil
+		}
+		ElideWorkflowStatesForViewer(w.GetChildren())
+	}
+}
