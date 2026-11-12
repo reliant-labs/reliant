@@ -144,6 +144,18 @@ enum ConnectionStatus {
   CONNECTION_STATUS_REVOKED = 3;
 }
 
+// ConnectionOwnerKind is who a connection belongs to.
+enum ConnectionOwnerKind {
+  // A server that predates org connections sends this; read it as USER.
+  CONNECTION_OWNER_KIND_UNSPECIFIED = 0;
+  // The caller's own: only they use it, and only they manage it.
+  CONNECTION_OWNER_KIND_USER = 1;
+  // An organization's (org_id): any live member may use it in that org's
+  // runs, naming it explicitly; only the org's admins and owners manage it.
+  // A reference that names only an integration never falls back to it.
+  CONNECTION_OWNER_KIND_ORG = 2;
+}
+
 // Connection is metadata only. There is deliberately no field that could hold
 // a credential.
 message Connection {
@@ -173,6 +185,11 @@ message Connection {
   // address. Empty when the integration does not say.
   // It is what a trigger's "Only from: Me" allowlists.
   string sender_id = 16;
+  // Who the connection belongs to. An org connection's other fields describe
+  // the org's account (its Slack bot, its API key), not the caller's.
+  ConnectionOwnerKind owner_kind = 17;
+  // The organization of an org connection; empty for a personal one.
+  string org_id = 18;
 }
 
 // Integration is one catalog integration a connection can be made to.
@@ -216,6 +233,11 @@ message ListConnectionsRequest {
   // IntegrationId keeps only that integration's connections. Unset (or empty)
   // lists every integration's.
   optional string integration_id = 1;
+  // OrgId adds that organization's connections (owner_kind ORG) to the
+  // caller's own, for a caller who is a live member of it
+  // (PERMISSION_DENIED otherwise). Unset lists only the caller's own, as
+  // before this field existed.
+  optional string org_id = 2;
 }
 message ListConnectionsResponse {
   repeated Connection connections = 1;

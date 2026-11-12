@@ -79,6 +79,19 @@ export const ERROR_REASONS = [
   "billing_email_missing",
   /** The org's Reliant credit is at or below zero. */
   "reliant_credit_exhausted",
+  // ── control-plane: coupon redemption (internal/coupon RedeemError) ──
+  /** No such code. NotFound. */
+  "coupon_not_found",
+  /** The coupon was switched off. FailedPrecondition. */
+  "coupon_inactive",
+  /** Past its end date. FailedPrecondition. */
+  "coupon_expired",
+  /** Every redemption of it is spent. ResourceExhausted. */
+  "coupon_exhausted",
+  /** This org already redeemed it (once, or its per-org maximum). AlreadyExists. */
+  "coupon_already_redeemed",
+  /** The anti-guessing limiter tripped. ResourceExhausted. */
+  "coupon_too_many_attempts",
   // ── access tokens and deploy (control-plane handlers/access_token, reliant handlers/token) ──
   /** Authenticated, but the token lacks a scope; the scopes ride ERROR_SCOPES_HEADER. */
   "scope_missing",

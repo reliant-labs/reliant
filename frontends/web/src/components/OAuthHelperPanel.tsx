@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Loader2, Terminal } from "lucide-react";
 import { cn } from "@/lib/utils";
+import type { OAuthHelperProblemReason } from "@/lib/oauth-local";
 import { authServeCommand } from "@/lib/cli-commands";
 import { CommandBlock } from "@/components/CommandBlock";
 import { SetupHelp } from "@/components/SetupHelp";
@@ -19,6 +20,24 @@ export interface OAuthHelperPanelProps {
   loading: boolean;
   /** Re-check helper availability on demand. */
   onRetry: () => void;
+  /** Why the helper is unavailable, when the availability check knows. */
+  problem?: OAuthHelperProblemReason | null;
+  /** The availability check gave up polling; only Retry asks again. */
+  stopped?: boolean;
+  /**
+   * A way out that works without the helper (an API key, Reliant credit).
+   * Offered beside the instructions so a user without a computer to run them
+   * on is never left with only a Retry button.
+   */
+  alternative?: { label: string; onClick: () => void };
+  /** A smaller second way out (Reliant credit), shown after `alternative`. */
+  secondaryAlternative?: { label: string; onClick: () => void };
+  /**
+   * Choose this provider now and finish the sign-in later, once the helper is
+   * running. Shown while the helper is unavailable so nobody is stuck on a
+   * panel that cannot succeed yet.
+   */
+  later?: { label: string; onClick: () => void; busy?: boolean };
   /** Start the OAuth flow for this provider. */
   onConnect: () => void;
   /** True while the OAuth flow is in progress. */
@@ -56,6 +75,22 @@ export interface OAuthHelperPanelProps {
   framed?: boolean;
 }
 
+function helperProblemCopy(
+  problem: OAuthHelperProblemReason | null,
+  providerName: string,
+): string {
+  switch (problem) {
+    case "no_machine":
+      return `No machine is connected to your account yet. Signing in with ${providerName} needs the Reliant desktop app or CLI on your computer.`;
+    case "machine_offline":
+      return "Your machine is not answering right now. Check that the Reliant desktop app or CLI is still running on your computer.";
+    case "not_colocated":
+      return `Your connected machine is not this computer, so ${providerName} sign-in cannot reach it. Run the helper below on this computer.`;
+    default:
+      return "The sign-in helper is not running on this computer.";
+  }
+}
+
 /**
  * Renders the "Authenticate via X" panel shared across the API key setup modal,
  * settings, and onboarding. Handles the "OAuth helper not running" state with a
@@ -71,6 +106,11 @@ export function OAuthHelperPanel({
   available,
   loading,
   onRetry,
+  problem = null,
+  stopped = false,
+  alternative,
+  secondaryAlternative,
+  later,
   onConnect,
   connecting,
   onCancel,
@@ -225,6 +265,53 @@ export function OAuthHelperPanel({
               ? `Sign in with ${providerName} to connect your account.`
               : "Start the sign-in helper on your computer."}
         </p>
+        {!available && !loading && !connecting && (problem || stopped) && (
+          <div
+            role="status"
+            data-testid="oauth-helper-problem"
+            className={cn(
+              "space-y-2 rounded-lg border border-warning/30 bg-warning/5 p-3 text-warning-ink",
+              bodyText,
+            )}
+          >
+            <p>{helperProblemCopy(problem, providerName)}</p>
+            {stopped && (
+              <p>We stopped checking automatically. Press Retry once it is running.</p>
+            )}
+            {later && (
+              <button
+                type="button"
+                onClick={later.onClick}
+                disabled={later.busy}
+                className="block w-full rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
+              >
+                {later.label}
+              </button>
+            )}
+            {(alternative || secondaryAlternative) && (
+              <p className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                {alternative && (
+                  <button
+                    type="button"
+                    onClick={alternative.onClick}
+                    className="font-medium underline underline-offset-2 hover:no-underline"
+                  >
+                    {alternative.label}
+                  </button>
+                )}
+                {secondaryAlternative && (
+                  <button
+                    type="button"
+                    onClick={secondaryAlternative.onClick}
+                    className="text-xs underline underline-offset-2 opacity-80 hover:no-underline hover:opacity-100"
+                  >
+                    {secondaryAlternative.label}
+                  </button>
+                )}
+              </p>
+            )}
+          </div>
+        )}
         {!available && !loading && (
           <div className="space-y-3">
             {/* ── STEP 1: install ────────────────────────────────────────

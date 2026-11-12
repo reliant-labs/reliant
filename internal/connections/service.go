@@ -10,6 +10,7 @@ import (
 	"unicode/utf8"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/integrations/manifest"
 	"github.com/reliant-labs/reliant/internal/vault"
@@ -31,6 +32,7 @@ type serviceStore interface {
 	tokenStore
 	brokerStore
 	ListConnections(ctx context.Context, userID, integrationID string) ([]*core.Connection, error)
+	ListOwnedConnections(ctx context.Context, owner core.ConnectionOwner, integrationID string) ([]*core.Connection, error)
 	RenameConnection(ctx context.Context, userID, id, name string, ev core.ConnectionEvent) error
 	SetDefaultConnection(ctx context.Context, userID, id string, ev core.ConnectionEvent) error
 	DeleteConnection(ctx context.Context, userID, id string, ev core.ConnectionEvent) error
@@ -94,6 +96,21 @@ func (s *Service) ListIntegrations() []Integration {
 
 func (s *Service) List(ctx context.Context, userID, integrationID string) ([]*core.Connection, error) {
 	cs, err := s.store.ListConnections(ctx, userID, integrationID)
+	return cs, mapStoreErr(err)
+}
+
+// ListOrg returns orgID's own connections (owner_kind org), of one
+// integration when integrationID is set, to a live member of orgID. They are
+// the org's accounts, which any member may name in that org's runs
+// (org-sharing.md §7.3); they carry no secret, as no listing does.
+func (s *Service) ListOrg(ctx context.Context, userID, orgID, integrationID string) ([]*core.Connection, error) {
+	if err := authz.OrgMemberDenial(ctx, userID, orgID); err != nil {
+		if errors.Is(err, authz.ErrMembershipUnavailable) {
+			return nil, &Error{Code: CodeUnavailable, Message: "could not check organization membership; try again", Err: err}
+		}
+		return nil, &Error{Code: CodePermissionDenied, Message: "you are not a member of that organization", Err: err}
+	}
+	cs, err := s.store.ListOwnedConnections(ctx, core.OrgConnectionOwner(orgID), integrationID)
 	return cs, mapStoreErr(err)
 }
 

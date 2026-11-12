@@ -47,8 +47,7 @@ import {
   onboardingExitTarget,
   type OnboardingExitReason,
 } from "../leaveOnboarding";
-import { TOUR_ENTRY_PARAM } from "../leaveOnboarding";
-import { START_APP } from "@/components/Apps/appStart";
+import { START_APP, START_CHAT, START_REPO } from "@/components/Apps/appStart";
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -75,26 +74,35 @@ describe("onboardingExitTarget — where each reason lands the user", () => {
     expect(offenders).toEqual([]);
   });
 
-  it("starts the post-onboarding tour when the user actually finished", () => {
-    // The tour param is the ONLY thing that starts the tour. Cloud's finalize
-    // never touched the URL, so preserving it from `prev` silently dropped the
-    // tour for every cloud user — it has to be SET on the way out.
+  it("opens a chat with a first message when the user actually finished, and not the tour", () => {
+    // In the first week none of 12 external signups sent a chat: the two who
+    // finished were dropped on a tour / the forge journey. Finishing now lands
+    // on the composer; the tour is one click away from there.
     for (const reason of ["completed_local", "completed_cloud_gate_continue"] as const) {
       expect(onboardingExitTarget(reason).to).toBe("/");
-      expect(resolveSearch(reason)).toEqual({ tour: TOUR_ENTRY_PARAM });
+      const search = resolveSearch(reason) as Record<string, unknown>;
+      expect(search.start).toBe(START_CHAT);
+      // Explicitly cleared: the root route retains `?tour=` otherwise.
+      expect("tour" in search && search.tour === undefined).toBe(true);
     }
   });
 
-  it("lands a user who chose to build an app on the app-building composer", () => {
-    // The choice is a peer of "just chat" in onboarding; finishing it must not
-    // drop the user on the same blank chat as everyone else.
-    for (const reason of ["completed_local", "completed_cloud_gate_continue"] as const) {
-      const target = onboardingExitTarget(reason, "build_app");
-      expect(target.to).toBe("/");
-      expect(target.search).toEqual({ tour: TOUR_ENTRY_PARAM, start: START_APP });
-    }
-    for (const landing of ["chat", "existing_codebase", undefined] as const) {
-      expect(onboardingExitTarget("completed_cloud_gate_continue", landing).search).toEqual({ tour: TOUR_ENTRY_PARAM });
+  it("picks the first message from what the user said they came to do", () => {
+    const startFor = (landing: Parameters<typeof onboardingExitTarget>[1]) =>
+      (onboardingExitTarget("completed_cloud_gate_continue", landing).search as Record<string, unknown>).start;
+
+    expect(startFor("build_app")).toBe(START_APP);
+    expect(startFor("existing_codebase")).toBe(START_REPO);
+    expect(startFor("chat")).toBe(START_CHAT);
+    expect(startFor(undefined)).toBe(START_CHAT);
+  });
+
+  it("never carries a tour into the chat it opens", () => {
+    for (const landing of ["build_app", "existing_codebase", "chat", undefined] as const) {
+      for (const reason of ["completed_local", "completed_cloud_gate_continue"] as const) {
+        const search = onboardingExitTarget(reason, landing).search as Record<string, unknown>;
+        expect(search.tour).toBeUndefined();
+      }
     }
   });
 
@@ -135,7 +143,7 @@ describe("leaveOnboarding — the single exit", () => {
     expect(options.to).toBe("/");
     expect(
       typeof options.search === "function" ? options.search({}) : options.search,
-    ).toEqual({ tour: TOUR_ENTRY_PARAM });
+    ).toMatchObject({ start: START_CHAT });
   });
 
   it("logs the reason, so an exit nobody asked for is greppable", async () => {

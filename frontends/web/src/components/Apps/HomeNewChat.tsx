@@ -16,21 +16,51 @@
 import { useCallback } from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 
+import { pickerParam } from "@/components/Onboarding/tourParam";
+import { trackEvent } from "@/lib/analytics";
+import { useProjectStore } from "@/store/projectStore";
+import { PendingProviderBanner } from "../OnboardingFlow/PendingProviderBanner";
+
 import { MainNewChatView } from "../Chat/MainNewChatView";
 import { HomeBuildApp } from "./HomeBuildApp";
-import { BUILD_APP_PROMPT, START_APP } from "./appStart";
+import { START_APP, START_REPO, isStartValue, starterPrompt, type StartValue } from "./appStart";
 
-// The build prefill's id, clear of the ones NewChatView's own prefills use
+// The prefill's id, clear of the ones NewChatView's own prefills use
 // (0…, and 1_000_000… for text handed back after a failed start). It is ONE
 // id, so a remount applies the same text rather than a second copy.
-const BUILD_PREFILL_ID = 2_000_000;
+const STARTER_PREFILL_ID = 2_000_000;
+
+function StarterHeading({ start, projectName, onTour }: { start: StartValue; projectName?: string; onTour: () => void }) {
+  const project = projectName?.trim() || "your project";
+  const [title, hint] =
+    start === START_APP
+      ? ["What do you want to build?", "Finish the sentence below. Reliant builds it with forge and deploys it to a live URL."]
+      : start === START_REPO
+        ? [`Ready to deploy ${project}?`, "Send this as is, or change it first. Reliant sets it up with forge and gives you a live URL."]
+        : ["What should we work on first?", "Send this as is, or ask for something else. Reliant works in your project."];
+  return (
+    <div className="space-y-1" data-testid="home-build-heading">
+      <h1 className="text-xl font-semibold tracking-tight text-foreground">{title}</h1>
+      <p className="text-sm text-muted-foreground">{hint}</p>
+      <button
+        type="button"
+        onClick={onTour}
+        data-testid="home-take-tour"
+        className="text-xs font-medium text-primary-ink hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        Prefer a quick tour first?
+      </button>
+    </div>
+  );
+}
 
 export function HomeNewChat({ onNavigateToWorktrees }: { onNavigateToWorktrees?: () => void }) {
   const navigate = useNavigate();
-  const { start } = useSearch({ strict: false }) as { start?: string };
-  const building = start === START_APP;
+  const { start: rawStart } = useSearch({ strict: false }) as { start?: string };
+  const start = isStartValue(rawStart) ? rawStart : undefined;
+  const projectName = useProjectStore((state) => state.currentProject?.name);
   const setStart = useCallback(
-    (value: typeof START_APP | undefined) =>
+    (value: StartValue | undefined) =>
       void navigate({
         to: ".",
         search: (prev: Record<string, unknown>) => {
@@ -41,25 +71,31 @@ export function HomeNewChat({ onNavigateToWorktrees }: { onNavigateToWorktrees?:
       }),
     [navigate]
   );
+  // The tour stays one click away: it is what finishing onboarding used to
+  // drop the user into, and some people do want it first. It opens as a menu
+  // pick, so skipping it does not trigger the post-onboarding key prompt.
+  const openTour = useCallback(() => {
+    trackEvent("onboarding_tour_chosen", { from: "starter_heading" });
+    void navigate({
+      to: ".",
+      search: (prev: Record<string, unknown>) => ({ ...prev, tour: pickerParam("menu") }),
+    });
+  }, [navigate]);
 
   return (
     <MainNewChatView
       tabId="new-chat"
       onNavigateToWorktrees={onNavigateToWorktrees}
       showProjectChip
-      onChatCreated={building ? () => setStart(undefined) : undefined}
-      composerPrefill={building ? { text: BUILD_APP_PROMPT, id: BUILD_PREFILL_ID } : undefined}
+      onChatCreated={start ? () => setStart(undefined) : undefined}
+      composerPrefill={start ? { text: starterPrompt(start, projectName), id: STARTER_PREFILL_ID } : undefined}
       heading={
-        building ? (
-          <div className="space-y-1" data-testid="home-build-heading">
-            <h1 className="text-xl font-semibold tracking-tight text-foreground">What do you want to build?</h1>
-            <p className="text-sm text-muted-foreground">
-              Finish the sentence below. Reliant builds it with forge and deploys it to a live URL.
-            </p>
-          </div>
-        ) : undefined
+        <>
+          <PendingProviderBanner />
+          {start ? <StarterHeading start={start} projectName={projectName} onTour={openTour} /> : null}
+        </>
       }
-      welcomePanel={building ? undefined : <HomeBuildApp onStart={() => setStart(START_APP)} />}
+      welcomePanel={start ? undefined : <HomeBuildApp onStart={() => setStart(START_APP)} />}
     />
   );
 }

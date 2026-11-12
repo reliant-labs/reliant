@@ -315,6 +315,7 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant forge obs dashboards audit`](#reliant-forge-obs-dashboards-audit) | Why is a dashboard empty? Replay each panel as the console asks and probe the empty ones |
 | [`reliant forge obs dashboards check`](#reliant-forge-obs-dashboards-check) | Validate the dashboards a release bundle would carry |
 | [`reliant forge obs endpoints`](#reliant-forge-obs-endpoints) | The slowest or most failing endpoints |
+| [`reliant forge obs init`](#reliant-forge-obs-init) | Send an existing app's telemetry to Reliant: register envs, mint ingest tokens, print the OTEL_* variables |
 | [`reliant forge obs issue`](#reliant-forge-obs-issue) | Everything needed to fix one issue; resolve, ignore and unresolve triage it |
 | [`reliant forge obs issue assign`](#reliant-forge-obs-issue-assign) | Assign an issue to a person, or clear its assignee |
 | [`reliant forge obs issue comment`](#reliant-forge-obs-issue-comment) | Add a comment to an issue |
@@ -331,9 +332,19 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant forge obs metrics query`](#reliant-forge-obs-metrics-query) | A metrics panel: one or more metrics over time, as the console's explorer runs it |
 | [`reliant forge obs profile`](#reliant-forge-obs-profile) | Export an aggregated continuous profile as pprof, speedscope or collapsed stacks |
 | [`reliant forge obs query`](#reliant-forge-obs-query) | Anything else: raw SQL or a dashboard panel, with the scope bound |
+| [`reliant forge obs receivers`](#reliant-forge-obs-receivers) | Route the org's alerts to Slack, a webhook, email or PagerDuty |
+| [`reliant forge obs receivers create`](#reliant-forge-obs-receivers-create) | Create an alert receiver |
+| [`reliant forge obs receivers delete`](#reliant-forge-obs-receivers-delete) | Delete an alert receiver |
+| [`reliant forge obs receivers list`](#reliant-forge-obs-receivers-list) | List the org's alert receivers |
+| [`reliant forge obs receivers test`](#reliant-forge-obs-receivers-test) | Send a test alert to a receiver |
 | [`reliant forge obs session`](#reliant-forge-obs-session) | What one user did: a text timeline of navigations, clicks, failed requests and errors |
 | [`reliant forge obs sessions`](#reliant-forge-obs-sessions) | Real-user browser sessions: who hit errors, and which have a replay |
 | [`reliant forge obs status`](#reliant-forge-obs-status) | What is wrong right now? Services, open issues, alerts, telemetry and the release in force |
+| [`reliant forge obs tokens`](#reliant-forge-obs-tokens) | List, create, rotate and revoke an env's telemetry ingest tokens |
+| [`reliant forge obs tokens create`](#reliant-forge-obs-tokens-create) | Mint an ingest token for an env (printed once) |
+| [`reliant forge obs tokens list`](#reliant-forge-obs-tokens-list) | List ingest tokens (metadata only; a token is shown once, at mint) |
+| [`reliant forge obs tokens revoke`](#reliant-forge-obs-tokens-revoke) | Revoke an ingest token now (the collector drops it within minutes) |
+| [`reliant forge obs tokens rotate`](#reliant-forge-obs-tokens-rotate) | Mint a replacement; the old token keeps working for --grace |
 | [`reliant forge obs trace`](#reliant-forge-obs-trace) | One trace as a tree, with its errors and logs |
 | [`reliant forge obs traces`](#reliant-forge-obs-traces) | Find traces: the slowest, the failing, by route |
 | [`reliant forge obs users`](#reliant-forge-obs-users) | Users of the app: active, new and returning, from its product events |
@@ -362,7 +373,7 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant forge project migrate`](#reliant-forge-project-migrate) | Project-level migration tooling (import, convert) |
 | [`reliant forge project migrate import`](#reliant-forge-project-migrate-import) | Import migrations from another format (e.g. goose) into golang-migrate shape |
 | [`reliant forge project migrate tdd`](#reliant-forge-project-migrate-tdd) | Rewrite hand-rolled handler tests to use tdd.RunRPCCases |
-| [`reliant forge project new`](#reliant-forge-project-new) | Create a new Forge project (service / CLI / library / static site) |
+| [`reliant forge project new`](#reliant-forge-project-new) | Create a new Forge project (service / CLI / library / static site), or adopt an existing app in any language |
 | [`reliant forge project prune`](#reliant-forge-project-prune) | Delete unmodified forge-generated files no step writes any more |
 | [`reliant forge project rescaffold`](#reliant-forge-project-rescaffold) | Re-create scaffold-once files you deleted, as forge would scaffold them today |
 | [`reliant forge project scaffolded`](#reliant-forge-project-scaffolded) | List the scaffold-once files forge has written, and which are absent |
@@ -4017,8 +4028,14 @@ verdicts:
 There is no "down": forge rolls forward only. A bad migration is repaired by a
 new forward migration written against the state the database is actually in.
 
-Migrations are read from db/migrations/ by default. Nothing else needs to be
-installed.
+Migrations are read from db/migrations/ by default (forge.yaml
+database.migrations.dir moves them). Nothing else needs to be installed.
+
+A project that keeps its own migration tool (forge.yaml
+database.migrations.tool: goose, atlas, flyway, dbmate, golang-migrate or
+custom) gets 'up', 'status' and 'version' run by that tool, with
+DATABASE_URL set to the database below; 'force' refuses, because the tool
+keeps its own state.
 
 The connection string can be provided via --dsn or, if the flag is omitted,
 the DATABASE_URL environment variable.
@@ -11842,15 +11859,18 @@ reliant forge obs [flags]
 | [`check`](#reliant-forge-obs-check) | Did the deploy work? Judge a release by the window after it against the window before |
 | [`dashboards`](#reliant-forge-obs-dashboards) | Work with the dashboards a release carries |
 | [`endpoints`](#reliant-forge-obs-endpoints) | The slowest or most failing endpoints |
+| [`init`](#reliant-forge-obs-init) | Send an existing app's telemetry to Reliant: register envs, mint ingest tokens, print the OTEL_* variables |
 | [`issue`](#reliant-forge-obs-issue) | Everything needed to fix one issue; resolve, ignore and unresolve triage it |
 | [`issues`](#reliant-forge-obs-issues) | Grouped errors: what is failing, how often, since which release |
 | [`logs`](#reliant-forge-obs-logs) | Search and tail logs |
 | [`metrics`](#reliant-forge-obs-metrics) | List and query metrics; print the declared schema |
 | [`profile`](#reliant-forge-obs-profile) | Export an aggregated continuous profile as pprof, speedscope or collapsed stacks |
 | [`query`](#reliant-forge-obs-query) | Anything else: raw SQL or a dashboard panel, with the scope bound |
+| [`receivers`](#reliant-forge-obs-receivers) | Route the org's alerts to Slack, a webhook, email or PagerDuty |
 | [`session`](#reliant-forge-obs-session) | What one user did: a text timeline of navigations, clicks, failed requests and errors |
 | [`sessions`](#reliant-forge-obs-sessions) | Real-user browser sessions: who hit errors, and which have a replay |
 | [`status`](#reliant-forge-obs-status) | What is wrong right now? Services, open issues, alerts, telemetry and the release in force |
+| [`tokens`](#reliant-forge-obs-tokens) | List, create, rotate and revoke an env's telemetry ingest tokens |
 | [`trace`](#reliant-forge-obs-trace) | One trace as a tree, with its errors and logs |
 | [`traces`](#reliant-forge-obs-traces) | Find traces: the slowest, the failing, by route |
 | [`users`](#reliant-forge-obs-users) | Users of the app: active, new and returning, from its product events |
@@ -11861,6 +11881,8 @@ reliant forge obs [flags]
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
 | `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--control-plane` | `string` | - | the control plane of a monitoring-only env (default: forge.yaml monitoring.control_plane, else Reliant's) |
+| `--project` | `string` | - | the forge project name, for a repo with no forge.yaml (default: forge.yaml `name`) |
 
 ---
 
@@ -12497,6 +12519,54 @@ reliant forge obs endpoints [env] [flags]
 | `--to` | `string` | - | range end, RFC 3339 (default now) |
 | `--top` | `int` | `10` | most endpoints to return |
 | `--user` | `string` | - | read every dev instance of one `user` (the reliant.instance.user the gateway stamps; the control plane resolves an email) |
+
+---
+
+#### reliant forge obs init
+
+Send an existing app's telemetry to Reliant: register envs, mint ingest tokens, print the OTEL_* variables
+
+Monitoring for an app forge did not build and does not deploy — any language,
+any CI, any infrastructure. Sign in first (`forge login`); there is no
+anonymous path.
+
+For each env, init registers it on the control plane (self-managed: the platform
+never deploys there), mints a telemetry ingest token for it, and prints the
+standard OpenTelemetry variables your app needs — nothing forge-specific:
+
+  OTEL_EXPORTER_OTLP_ENDPOINT   the public OTLP edge
+  OTEL_EXPORTER_OTLP_HEADERS    authorization=Bearer \<the token>  (shown once: store it as a secret)
+  OTEL_SERVICE_NAME             one per deployable (api, worker, web)
+  OTEL_RESOURCE_ATTRIBUTES      deployment.environment.name=`<env>`,service.version=\<your version>
+
+It records the envs in forge.yaml (`envs:` with `monitoring: true`), writing a
+minimal forge.yaml when there is none (it asks first; --write-config to skip the
+question, --no-write to keep the directory untouched and pass --project).
+
+  forge login
+  forge obs init prod staging
+  forge obs status prod        # then: forge obs issues prod, forge obs logs prod
+  forge obs init prod --json   # the same, as a document
+
+Rotate or revoke a token with `forge obs tokens`; route alerts with `forge obs receivers`.
+Language-by-language setup: forge skill load observability (section "Monitoring only, any language").
+
+```
+reliant forge obs init [env…] [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--json` | `bool` | - | print the result as a forge.obs.init/v1 document |
+| `--no-write` | `bool` | - | never write forge.yaml (name the project with --project) |
+| `--org` | `string` | - | the organization a NEW project is created in (default: your only one) |
+| `--service` | `string` | - | fill OTEL_SERVICE_NAME with this service.name (default: a placeholder to fill per deployable) |
+| `--token-name` | `string` | `forge-obs-init` | the ingest token's label (ci, laptop, prod-k8s) |
+| `--ttl` | `duration` | `0s` | the ingest token's lifetime (default and maximum 90 days, at least 1h) |
+| `--write-config` | `bool` | - | write or update forge.yaml without asking |
 
 ---
 
@@ -13625,8 +13695,11 @@ reliant forge obs issue unresolve <id> [env] [flags]
 
 Grouped errors: what is failing, how often, since which release
 
-List the env's error issues: ERROR logs grouped by fingerprint (sfp1), with how
-often each fired, how many traces it touched and when. [env] defaults to dev.
+List the env's error issues: server failures grouped by fingerprint (sfp1), with
+how often each fired, how many traces it touched and when. A server failure is
+an ERROR log, or a WARN log the error-class policy classed a server failure
+(error_class=server: a retryable Aborted, say) other than a caller's own
+deadline (deadline=caller). [env] defaults to dev.
 
 --source `<name>` lists the issues of an issue source instead: records of any
 level that carry issue.source=`<name>` (observe.IssueSource), such as the reports
@@ -14438,6 +14511,115 @@ reliant forge obs query [env] [flags]
 
 ---
 
+#### reliant forge obs receivers
+
+Route the org's alerts to Slack, a webhook, email or PagerDuty
+
+Receivers are where the organization's alerts are delivered. Every org also
+has the Reliant console's in-app inbox. They need no deploy tree, so a
+monitoring-only project routes its alerts from here.
+
+  forge obs receivers create oncall --type slack --secret "$SLACK_WEBHOOK_URL" --setting channel=#oncall
+  forge obs receivers create hooks --type webhook --setting url=https://example.com/alerts --secret "$BEARER"
+  forge obs receivers create team --type email --setting to=ops@example.com
+  forge obs receivers create pager --type pagerduty --secret "$PD_ROUTING_KEY"
+  forge obs receivers test `<id>`
+  forge obs receivers list
+  forge obs receivers delete `<id>`
+
+The secret (a Slack webhook URL, a bearer token, a PagerDuty routing key) is
+write-only: it is never shown again.
+
+```
+reliant forge obs receivers [flags]
+```
+
+**Subcommands:**
+
+| Command | Description |
+|---------|-------------|
+| [`create`](#reliant-forge-obs-receivers-create) | Create an alert receiver |
+| [`delete`](#reliant-forge-obs-receivers-delete) | Delete an alert receiver |
+| [`list`](#reliant-forge-obs-receivers-list) | List the org's alert receivers |
+| [`test`](#reliant-forge-obs-receivers-test) | Send a test alert to a receiver |
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+
+---
+
+#### reliant forge obs receivers create
+
+Create an alert receiver
+
+```
+reliant forge obs receivers create <name> [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--json` | `bool` | - | print the receiver as JSON |
+| `--secret` | `string` | - | slack: the incoming-webhook URL; webhook: a bearer token (optional); pagerduty: the Events v2 routing key |
+| `--setting` | `stringArray` | `[]` | key=value (repeatable): slack channel=, webhook url= (https), email to= (comma-separated), pagerduty severity= |
+| `--type` | `string` | - | slack | webhook | email | pagerduty |
+
+---
+
+#### reliant forge obs receivers delete
+
+Delete an alert receiver
+
+```
+reliant forge obs receivers delete <receiver-id> [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+
+---
+
+#### reliant forge obs receivers list
+
+List the org's alert receivers
+
+```
+reliant forge obs receivers list [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--json` | `bool` | - | print a forge.obs.receivers/v1 document |
+
+---
+
+#### reliant forge obs receivers test
+
+Send a test alert to a receiver
+
+```
+reliant forge obs receivers test <receiver-id> [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+
+---
+
 #### reliant forge obs session
 
 What one user did: a text timeline of navigations, clicks, failed requests and errors
@@ -14757,6 +14939,117 @@ reliant forge obs status [env] [flags]
 | `--since` | `duration` | `1h0m0s` | how far back to read (ignored with --from) |
 | `--to` | `string` | - | range end, RFC 3339 (default now) |
 | `--user` | `string` | - | read every dev instance of one `user` (the reliant.instance.user the gateway stamps; the control plane resolves an email) |
+
+---
+
+#### reliant forge obs tokens
+
+List, create, rotate and revoke an env's telemetry ingest tokens
+
+Telemetry ingest tokens are what an app forge does not deploy sends its OTLP
+with (OTEL_EXPORTER_OTLP_HEADERS=authorization=Bearer `<token>`). Each is for one
+env, has a name, expires (90 days by default, and at most: the control plane
+refuses a longer --ttl), and nothing renews it: rotate it before it expires
+(list says "expires soon: rotate it" in its last 14 days), with a grace period
+so the old one keeps working while the new one rolls out, or revoke it at once. Minting, rotating and revoking need the obs:write
+permission (owners and admins hold it); listing needs membership.
+
+  forge obs tokens list prod
+  forge obs tokens create prod --name github-actions
+  forge obs tokens rotate `<id>` --grace 24h     # the old one keeps working for 24h
+  forge obs tokens revoke `<id>` --reason leaked
+
+```
+reliant forge obs tokens [flags]
+```
+
+**Subcommands:**
+
+| Command | Description |
+|---------|-------------|
+| [`create`](#reliant-forge-obs-tokens-create) | Mint an ingest token for an env (printed once) |
+| [`list`](#reliant-forge-obs-tokens-list) | List ingest tokens (metadata only; a token is shown once, at mint) |
+| [`revoke`](#reliant-forge-obs-tokens-revoke) | Revoke an ingest token now (the collector drops it within minutes) |
+| [`rotate`](#reliant-forge-obs-tokens-rotate) | Mint a replacement; the old token keeps working for --grace |
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+
+---
+
+#### reliant forge obs tokens create
+
+Mint an ingest token for an env (printed once)
+
+```
+reliant forge obs tokens create <env> [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--json` | `bool` | - | print the token as JSON |
+| `--name` | `string` | - | the token's label (ci, laptop, prod-k8s) |
+| `--ttl` | `duration` | `0s` | lifetime (default and maximum 90 days, at least 1h) |
+
+---
+
+#### reliant forge obs tokens list
+
+List ingest tokens (metadata only; a token is shown once, at mint)
+
+```
+reliant forge obs tokens list [env] [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--all` | `bool` | - | include revoked tokens |
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--json` | `bool` | - | print a forge.obs.tokens/v1 document |
+
+---
+
+#### reliant forge obs tokens revoke
+
+Revoke an ingest token now (the collector drops it within minutes)
+
+```
+reliant forge obs tokens revoke <token-id> [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--reason` | `string` | - | why, for the audit trail |
+
+---
+
+#### reliant forge obs tokens rotate
+
+Mint a replacement; the old token keeps working for --grace
+
+```
+reliant forge obs tokens rotate <token-id> [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--grace` | `duration` | `24h0m0s` | how long the old token keeps working (0s revokes it now; at most 7 days) |
+| `--json` | `bool` | - | print the token as JSON |
+| `--ttl` | `duration` | `0s` | the new token's lifetime (default and maximum 90 days, at least 1h) |
 
 ---
 
@@ -15283,7 +15576,7 @@ reliant forge project [flags]
 | [`map`](#reliant-forge-project-map) | Print project tree with ownership annotations |
 | [`memory`](#reliant-forge-project-memory) | Print the framework guide an agent harness injects for this project |
 | [`migrate`](#reliant-forge-project-migrate) | Project-level migration tooling (import, convert) |
-| [`new`](#reliant-forge-project-new) | Create a new Forge project (service / CLI / library / static site) |
+| [`new`](#reliant-forge-project-new) | Create a new Forge project (service / CLI / library / static site), or adopt an existing app in any language |
 | [`prune`](#reliant-forge-project-prune) | Delete unmodified forge-generated files no step writes any more |
 | [`rescaffold`](#reliant-forge-project-rescaffold) | Re-create scaffold-once files you deleted, as forge would scaffold them today |
 | [`scaffolded`](#reliant-forge-project-scaffolded) | List the scaffold-once files forge has written, and which are absent |
@@ -16111,7 +16404,7 @@ reliant forge project migrate tdd [flags]
 
 #### reliant forge project new
 
-Create a new Forge project (service / CLI / library / static site)
+Create a new Forge project (service / CLI / library / static site), or adopt an existing app in any language
 
 Create a new project with the Forge framework structure.
 
@@ -16138,6 +16431,15 @@ Pick a project kind with --kind:
                             a starter app (--frontend-kind nextjs, the default:
                             a static export; or vite-spa); --in-place inside an
                             existing Vite or Next.js app adopts it untouched.
+  --kind app                An existing app in ANY language, with --in-place:
+                            forge.yaml and deploy/kcl (workloads.k + dev,
+                            staging and prod envs) declaring what it runs,
+                            read from its Dockerfile(s) and compose file —
+                            ports, managed Postgres, migration job, secrets.
+                            Nothing else is written (no Go, no Taskfile, no
+                            CI) and none of the app's files change, except a
+                            forge block appended to .gitignore. --dry-run
+                            prints the files instead.
 
 Use --disable to turn features off at creation time. Each is pinned off in
 forge.yaml's features: block, so a later change to the tree does not turn it
@@ -16157,6 +16459,8 @@ Example:
   forge project new landing    --kind site                          # new static site (Next.js export)
   forge project new landing    --kind site --frontend-kind vite-spa # new static site (Vite SPA)
   cd my-vite-app && forge project new --in-place --kind site --name landing   # adopt an existing site
+  cd my-express-app && forge project new --in-place --kind app --dry-run      # see what adopting an app writes
+  cd my-django-app && forge project new --in-place --kind app --name shop     # adopt an app in any language
   forge project new --in-place --mod github.com/example/my-project
   forge project new --in-place --name my-project --mod github.com/example/my-project
 
@@ -16199,6 +16503,7 @@ reliant forge project new [project-name] --mod [module-path] [flags]
 | `--buf-plugins` | `string` | `local` | Default proto plugin source: 'local' (resolved from PATH; no BSR auth needed) or 'remote' (BSR-hosted, requires login under load) |
 | `--claimable` | `bool` | - | Scaffold prod for an ANONYMOUS deploy: forge env deploy prod --claimable then publishes with no account and prints a claim link. prod declares control_plane = forge.ControlPlane `{claimable = True}` and sizes its hosted services and jobs to the claimable plan (125m / 128 MiB, request and limit) instead of the billed shape band. A static site needs nothing extra |
 | `--disable` | `stringSlice` | `[]` | Features to leave out of the scaffold (comma-separated): orm, codegen, migrations, ci, build, deploy, contracts, frontend, observability, hot_reload. Each is pinned off in forge.yaml's features: block (orm, which has no key, only steers this scaffold). |
+| `--dry-run` | `bool` | - | With --kind app: print what was detected and every file it would write, and write nothing |
 | `--force` | `bool` | - | With --in-place: scaffold over an existing forge.yaml, and REPLACE every pre-existing file the scaffold writes (README.md, go.mod, Taskfile.yml, …) with forge's version. Without it, existing files are kept and listed. .gitignore is always merged, never replaced |
 | `--forge-root` | `string` | - | The forge checkout --link-forge bridges to (also: FORGE_ROOT). Default: the checkout this binary was built from, else the go.mod replace it embeds forge through, else the checkout it sits or was started in |
 | `--frontend` | `stringSlice` | `[]` | Name(s) of Next.js frontends (can be repeated or comma-separated). With --kind site: the one name the site's frontend is declared under (default web) |
@@ -16207,7 +16512,7 @@ reliant forge project new [project-name] --mod [module-path] [flags]
 | `--go-version` | `string` | - | Go version to use in go.mod (e.g., 1.24); defaults to detected version |
 | `--harness` | `string` | - | AI harness to scaffold for: reliant, claude, cursor, copilot, codex, or none (no agent files at all: no AGENTS.md, pointers or .mcp.json). Default: detected from the agent running this command (RELIANT_AGENT_SHELL, CLAUDECODE, CODEX_THREAD_ID, CURSOR_AGENT), else reliant. Every harness gets AGENTS.md, the project guide; claude adds CLAUDE.md (imports AGENTS.md) and a .claude/skills/forge pointer skill, cursor adds .cursorrules and .cursor/rules/forge.mdc, copilot adds .github/copilot-instructions.md, reliant renders the guide in memory from forge.yaml. The pointers hold no skill bodies: skills are read from the forge binary ('forge skill search|load'). Recorded as 'harness:' in forge.yaml and honored by every later generate |
 | `--in-place` | `bool` | - | Create project in current directory instead of a new subdirectory |
-| `--kind` | `string` | - | Project kind: service (default), cli, library, site (a static site with no backend: a new starter app, or with --in-place the Vite/Next.js app already here) |
+| `--kind` | `string` | - | Project kind: service (default), cli, library, site (a static site with no backend: a new starter app, or with --in-place the Vite/Next.js app already here), app (with --in-place: the app already here, in any language, deployed from its own Dockerfile — forge.yaml and deploy/kcl only) |
 | `--link-forge` | `bool` | - | Bridge the project to the forge checkout this binary was built from (gitignored go.work 'use' + .forge-link/ for the web runtime). Off by default, except for a service scaffold from an unreleased forge build, which is linked automatically when its checkout is found (--link-forge=false refuses instead; also: FORGE_LINK_FORGE=1) |
 | `--mod` | `string` | - | Go module path (e.g., github.com/example/my-project). Defaults to example.com/`<name>`, so a first project needs no flag; set it to the path you will publish under |
 | `--name` | `string` | - | Project name. Same as the positional arg, and the way to name an --in-place project whose directory (a worktree, a branch checkout) is not the product name; defaults to the directory name |

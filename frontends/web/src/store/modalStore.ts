@@ -39,8 +39,13 @@ export interface UpgradeRequiredData {
   retryLabel?: string;
 }
 
+/** Which provider the API-key setup dialog opens on; omitted: its own default. */
+export interface ApiKeySetupData {
+  provider?: "claude" | "codex" | "antigravity" | "copilot" | "anthropic" | "openai" | "gemini" | "openrouter";
+}
+
 export interface ModalData {
-  "api-key-setup": undefined;
+  "api-key-setup": ApiKeySetupData | undefined;
   "upgrade-required": UpgradeRequiredData;
   "app-out-of-date": AppOutOfDateData;
 }

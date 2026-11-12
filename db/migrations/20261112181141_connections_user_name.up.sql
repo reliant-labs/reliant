@@ -1,0 +1,30 @@
+-- forge:backward-compatible — additive partial unique index, implied by connections_name which stays in place; every row the previous release writes already satisfies it.
+
+-- Migration: connections_user_name
+--
+-- Names a person's connection uniquely among their own, as connections_name
+-- (user_id, integration_id, name) does today, but over personal rows only
+-- (owner_kind = 'user'). connections_name keys user_id with no owner_kind, so
+-- it also covers org connections, whose user_id is only the admin who created
+-- them: one admin of two orgs could not name each org's Slack connection
+-- "Slack", nor give one the name of their own. connections_org_name holds an
+-- org's names; this one holds a person's.
+--
+-- connections_name stays until a later release, whose rollback target is
+-- this one, drops it: the store reads a violation of either as "name taken".
+--
+-- CONCURRENTLY cannot run in a transaction block, so this is the only
+-- statement in the file.
+--
+-- Post-deploy verification (prod, once the release carrying this file is
+-- deployed):
+--
+--   1. The build finished and is usable (indisvalid = true):
+--        reliant forge db query prod --database reliant --confirm-env prod --reason "verify connections_user_name" \
+--          "SELECT indisvalid, indisready FROM pg_index WHERE indexrelid = 'public.connections_user_name'::regclass"
+--      An INVALID index is dropped with DROP INDEX CONCURRENTLY
+--      connections_user_name and rebuilt by re-running this statement.
+--
+-- Rollback: none needed. Every row that satisfies connections_name satisfies
+-- this index.
+CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS connections_user_name ON public.connections USING btree (user_id, integration_id, name) WHERE ((deleted_at IS NULL) AND (owner_kind = 'user'::text));

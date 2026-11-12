@@ -290,7 +290,11 @@ var purgeSteps = []step{
 	// deleted account must leave nothing keyed to it.
 	{"oauth_flows", `DELETE FROM oauth_flows WHERE user_id = $1`},
 	{"connection_events", `DELETE FROM connection_events WHERE user_id = $1`},
-	{"connections", `DELETE FROM connections WHERE user_id = $1`},
+	// Only the user's PERSONAL connections. An org connection's user_id is
+	// the admin who created it (attribution): it is the org's, sealed under
+	// the org's tenant, and must outlive the admin's account
+	// (control-plane docs/design/org-sharing.md §7.2).
+	{"connections", `DELETE FROM connections WHERE user_id = $1 AND owner_kind = 'user'`},
 	// Last: dropping the user's wrapped DEK is crypto-shredding. Anything the
 	// purge missed, or a backup, becomes unreadable. Must follow every table
 	// holding data sealed under it (connection_secrets references vault_keys).

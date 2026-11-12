@@ -106,7 +106,7 @@ func TestRefresh_TwoWorkersRaceResolvedByGeneration(t *testing.T) {
 	require.Equal(t, "active", mustStatus(t, e, conn.ID), "a lost race must not push the connection into needs_reauth")
 }
 
-// secretsAfter runs before() once, just before the first GetSecrets: the
+// secretsAfter runs before() once, just before the first GetOwnedSecrets: the
 // moment between a caller's connection read and its secrets read.
 type secretsAfter struct {
 	db.ConnectionStore
@@ -114,9 +114,9 @@ type secretsAfter struct {
 	before func()
 }
 
-func (s *secretsAfter) GetSecrets(ctx context.Context, userID, id string) (map[string]core.ConnectionSecret, error) {
+func (s *secretsAfter) GetOwnedSecrets(ctx context.Context, owner core.ConnectionOwner, id string) (map[string]core.ConnectionSecret, error) {
 	s.once.Do(s.before)
-	return s.ConnectionStore.GetSecrets(ctx, userID, id)
+	return s.ConnectionStore.GetOwnedSecrets(ctx, owner, id)
 }
 
 // The interleaving behind TestRefresh_TwoWorkersRaceResolvedByGeneration's
@@ -257,9 +257,9 @@ type countingStore struct {
 	locks atomic.Int32
 }
 
-func (c *countingStore) WithSecretsLock(ctx context.Context, userID, id string, fn func(*db.SecretsTx) error) error {
+func (c *countingStore) WithOwnedSecretsLock(ctx context.Context, owner core.ConnectionOwner, id string, fn func(*db.SecretsTx) error) error {
 	c.locks.Add(1)
-	return c.ConnectionStore.WithSecretsLock(ctx, userID, id, fn)
+	return c.ConnectionStore.WithOwnedSecretsLock(ctx, owner, id, fn)
 }
 
 // The row lock alone would also yield one provider call, but only after every
@@ -291,7 +291,7 @@ func TestRefresh_SingleFlightCollapsesDatabaseTransactions(t *testing.T) {
 type lateCallerKey struct{}
 
 // lateReaderStore holds back the caller whose context carries lateCallerKey
-// right after its first GetSecrets: it has read the generation the refresh is
+// right after its first GetOwnedSecrets: it has read the generation the refresh is
 // about to replace, and resumes only once that refresh has returned.
 type lateReaderStore struct {
 	countingStore
@@ -300,8 +300,8 @@ type lateReaderStore struct {
 	lateReads atomic.Int32
 }
 
-func (l *lateReaderStore) GetSecrets(ctx context.Context, userID, id string) (map[string]core.ConnectionSecret, error) {
-	secrets, err := l.countingStore.GetSecrets(ctx, userID, id)
+func (l *lateReaderStore) GetOwnedSecrets(ctx context.Context, owner core.ConnectionOwner, id string) (map[string]core.ConnectionSecret, error) {
+	secrets, err := l.countingStore.GetOwnedSecrets(ctx, owner, id)
 	if ctx.Value(lateCallerKey{}) != nil && l.lateReads.Add(1) == 1 {
 		close(l.read)
 		<-l.refreshed

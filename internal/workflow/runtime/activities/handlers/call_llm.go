@@ -1218,6 +1218,7 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 		modelSelector.Tags = protoModel.GetTags()
 		modelSelector.Providers = protoModel.GetProviders()
 	}
+	modelSelector = agentTurnSelector(modelSelector)
 	// While the thread is on a fallback model (its own provider hit a usage
 	// limit and the chat allows another), that model replaces the selector.
 	// The workflow only sets it inside the lease, so this needs no clock.

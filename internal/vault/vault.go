@@ -18,8 +18,14 @@ import (
 )
 
 const (
-	// TenantUser is the only tenant kind v1 uses; "org" is reserved.
+	// TenantUser is a person's tenant: their personal connections, flows and
+	// webhook secrets. Deleting their account crypto-shreds it.
 	TenantUser = "user"
+	// TenantOrg is an organization's tenant: the secrets of its org-owned
+	// connections (control-plane docs/design/org-sharing.md §7.2). They are
+	// never sealed under the creating admin's user tenant, so an org's
+	// connection outlives any one member's account.
+	TenantOrg = "org"
 
 	stateGlobalPrimary = "primary"
 	dekLen             = 32
@@ -38,8 +44,11 @@ var (
 // Tenant is the unit that owns a DEK.
 type Tenant struct{ Kind, ID string }
 
-// UserTenant is the v1 tenant for a user id.
+// UserTenant is the tenant for a user id.
 func UserTenant(userID string) Tenant { return Tenant{Kind: TenantUser, ID: userID} }
+
+// OrgTenant is the tenant for an organization id.
+func OrgTenant(orgID string) Tenant { return Tenant{Kind: TenantOrg, ID: orgID} }
 
 type cachedKey struct {
 	tenant Tenant

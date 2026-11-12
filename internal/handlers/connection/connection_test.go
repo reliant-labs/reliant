@@ -18,6 +18,7 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/connections"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/integrations/catalog"
@@ -89,6 +90,9 @@ var responseFieldAllowList = map[string]bool{
 	// an email address), never a credential: it is what their events carry
 	// in the clear as trigger.sender.id.
 	"reliant.v1.Connection.sender_id": true,
+	// Who owns the connection (a person or an org) and which org: ids.
+	"reliant.v1.Connection.owner_kind": true,
+	"reliant.v1.Connection.org_id":     true,
 }
 
 func walkMessage(md protoreflect.MessageDescriptor, seen map[protoreflect.FullName]bool, visit func(protoreflect.FieldDescriptor)) {
@@ -302,6 +306,51 @@ func TestConnectionService_CreateListGetNeverReturnSecret(t *testing.T) {
 }
 
 type fmtStringer interface{ String() string }
+
+// An org's connections are listed only when the request names the org, and
+// only to a live member of it; every row says whose it is. An old client,
+// which never names an org, sees exactly its own, as before.
+func TestConnectionService_ListConnectionsAddsTheNamedOrgsConnections(t *testing.T) {
+	f := newConnectionFixture(t)
+	mine := f.createKey(t, "dana", "http", "mine")
+	if _, err := f.raw.Exec(`INSERT INTO connections (id, owner_kind, user_id, org_id, integration_id, auth_kind, name, status)
+		VALUES ('conn-org', 'org', 'admin', 'org-1', 'http', 'api_key', 'Org key', 'active')`); err != nil {
+		t.Fatal(err)
+	}
+	members := orgMembership{"org-1": {"admin": true, "dana": true}}
+	as := func(user string) context.Context { return authz.WithMembership(asConnUser(user), members) }
+	list := func(ctx context.Context, org *string) (*connect.Response[reliantv1.ListConnectionsResponse], error) {
+		return f.svc.ListConnections(ctx, connect.NewRequest(&reliantv1.ListConnectionsRequest{OrgId: org}))
+	}
+
+	own, err := list(as("dana"), nil)
+	require.NoError(t, err)
+	require.Len(t, own.Msg.Connections, 1)
+	require.Equal(t, mine.Id, own.Msg.Connections[0].Id)
+	require.Equal(t, reliantv1.ConnectionOwnerKind_CONNECTION_OWNER_KIND_USER, own.Msg.Connections[0].OwnerKind)
+	require.Empty(t, own.Msg.Connections[0].OrgId)
+
+	org := "org-1"
+	both, err := list(as("dana"), &org)
+	require.NoError(t, err)
+	require.Len(t, both.Msg.Connections, 2)
+	got := both.Msg.Connections[1]
+	require.Equal(t, "conn-org", got.Id)
+	require.Equal(t, reliantv1.ConnectionOwnerKind_CONNECTION_OWNER_KIND_ORG, got.OwnerKind)
+	require.Equal(t, "org-1", got.OrgId)
+
+	_, err = list(as("mallory"), &org)
+	requireConnectCode(t, err, connect.CodePermissionDenied)
+	// The admin who created it reaches it as the org's, never as their own.
+	_, err = f.svc.GetConnection(as("admin"), connect.NewRequest(&reliantv1.GetConnectionRequest{Id: "conn-org"}))
+	requireConnectCode(t, err, connect.CodeNotFound)
+}
+
+type orgMembership map[string]map[string]bool
+
+func (m orgMembership) IsMember(_ context.Context, userID, orgID string) (bool, bool, error) {
+	return m[orgID][userID], true, nil
+}
 
 func TestConnectionService_OtherUserGetsNotFoundEverywhere(t *testing.T) {
 	f := newConnectionFixture(t)

@@ -9084,6 +9084,11 @@
               "Name": "integration_id",
               "ProtoType": "string",
               "IsOptional": true
+            },
+            {
+              "Name": "org_id",
+              "ProtoType": "string",
+              "IsOptional": true
             }
           ],
           "ListConnectionsResponse": [
@@ -9299,6 +9304,15 @@
             {
               "name": "sender_id",
               "kind": "string"
+            },
+            {
+              "name": "owner_kind",
+              "kind": "enum",
+              "type_name": "reliant.v1.ConnectionOwnerKind"
+            },
+            {
+              "name": "org_id",
+              "kind": "string"
             }
           ],
           "reliant.v1.ConnectionEvent": [
@@ -9489,6 +9503,11 @@
               "name": "integration_id",
               "kind": "string",
               "optional": true
+            },
+            {
+              "name": "org_id",
+              "kind": "string",
+              "optional": true
             }
           ],
           "reliant.v1.ListConnectionsResponse": [
@@ -9640,6 +9659,11 @@
             "CONNECTION_AUTH_KIND_NONE",
             "CONNECTION_AUTH_KIND_DELEGATED"
           ],
+          "reliant.v1.ConnectionOwnerKind": [
+            "CONNECTION_OWNER_KIND_UNSPECIFIED",
+            "CONNECTION_OWNER_KIND_USER",
+            "CONNECTION_OWNER_KIND_ORG"
+          ],
           "reliant.v1.ConnectionStatus": [
             "CONNECTION_STATUS_UNSPECIFIED",
             "CONNECTION_STATUS_ACTIVE",
@@ -9661,6 +9685,11 @@
             5,
             6
           ],
+          "reliant.v1.ConnectionOwnerKind": [
+            0,
+            1,
+            2
+          ],
           "reliant.v1.ConnectionStatus": [
             0,
             1,
@@ -9676,6 +9705,10 @@
           "reliant.v1.ConnectionAuthKind": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
             "GoName": "ConnectionAuthKind"
+          },
+          "reliant.v1.ConnectionOwnerKind": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "ConnectionOwnerKind"
           },
           "reliant.v1.ConnectionStatus": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",

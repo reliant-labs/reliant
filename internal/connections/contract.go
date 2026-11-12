@@ -53,6 +53,9 @@ const (
 	CodeUnavailable
 	// CodeInternal: anything else.
 	CodeInternal
+	// CodePermissionDenied: the caller is signed in but may not do this (not
+	// a live member of the organization a request names).
+	CodePermissionDenied
 )
 
 // Error is a typed failure. Message is safe to show a user; it never contains a
@@ -88,6 +91,8 @@ func (e *Error) Unwrap() error {
 		kind = svcerr.ErrFailedPrecondition
 	case CodeUnavailable:
 		kind = svcerr.ErrUnavailable
+	case CodePermissionDenied:
+		kind = svcerr.ErrPermissionDenied
 	default:
 		return e.Err
 	}
