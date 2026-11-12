@@ -6,6 +6,7 @@ const track = vi.fn();
 vi.mock("@/lib/analytics", () => ({ trackEvent: (...a: unknown[]) => track(...a) }));
 
 import {
+  AGENT_PROMPT,
   CLAIMABLE_DEPLOY_ADOPTS,
   CLAUDE_MCP_COMMAND,
   claimableDeployCommands,
@@ -25,8 +26,8 @@ describe("the forge first-run steps", () => {
     render(<ForgeFirstRun />);
     expect(screen.getByTestId("apps-empty")).toBeInTheDocument();
     expect(screen.queryByText("Nothing deployed yet")).toBeNull();
-    expect(screen.getByTestId("forge-first-run-step-1")).toHaveTextContent("In your app folder, deploy");
-    expect(screen.getByTestId("forge-first-run-step-2")).toHaveTextContent("Or ask your agent");
+    expect(screen.getByTestId("forge-first-run-step-1")).toHaveTextContent("Ask your agent");
+    expect(screen.getByTestId("forge-first-run-step-2")).toHaveTextContent("Or deploy from your app folder");
     expect(screen.getByTestId("forge-first-run-step-3")).toHaveTextContent("Read the docs");
   });
 
@@ -37,7 +38,7 @@ describe("the forge first-run steps", () => {
       "npx -y @reliantlabs/forge env deploy prod",
     ]);
     render(<ForgeFirstRun />);
-    const step = within(screen.getByTestId("forge-first-run-step-1"));
+    const step = within(screen.getByTestId("forge-first-run-step-2"));
     expect(step.getAllByText("npx -y @reliantlabs/forge login")).toHaveLength(1);
     expect(step.getAllByText("npx -y @reliantlabs/forge env deploy prod")).toHaveLength(1);
   });
@@ -49,6 +50,18 @@ describe("the forge first-run steps", () => {
       "npx -y @reliantlabs/forge env deploy prod --claimable",
     ]);
     expect(claimableDeployCommands(true).map((c) => c.command)).toEqual(["npx -y @reliantlabs/forge env deploy prod --claimable"]);
+  });
+
+  it("leads with the agent prompt, the landing page's words, and copies it whole", async () => {
+    expect(AGENT_PROMPT).toBe(
+      "Deploy this app with forge, no account needed. If the `forge` command isn't installed, install it with `npm i -g @reliantlabs/forge`. Then run `forge start` and follow it. When the site is live, give me its URL and the claim link, and remind me it goes offline in 72 hours unless I open the claim link.",
+    );
+    render(<ForgeFirstRun />);
+    const step = within(screen.getByTestId("forge-first-run-step-1"));
+    expect(step.getByTestId("forge-first-run-prompt")).toHaveTextContent(AGENT_PROMPT);
+    fireEvent.click(step.getByRole("button", { name: "Copy the prompt" }));
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith(AGENT_PROMPT));
+    expect(track).toHaveBeenCalledWith("forge_first_run_copied", { id: "agent_prompt" });
   });
 
   it("offers the MCP install command and the Cursor and VS Code links", () => {
@@ -80,9 +93,9 @@ describe("the forge first-run steps", () => {
     }
   });
 
-  it("puts a copy button on every command: 3 signed-in, 2 no-login, 1 MCP", () => {
+  it("puts a copy button on the prompt and every command: 1 prompt, 1 MCP, 3 signed-in, 2 no-login", () => {
     render(<ForgeFirstRun />);
-    expect(screen.getAllByRole("button", { name: /^Copy / })).toHaveLength(6);
+    expect(screen.getAllByRole("button", { name: /^Copy / })).toHaveLength(7);
   });
 
   it("records link clicks by id", () => {

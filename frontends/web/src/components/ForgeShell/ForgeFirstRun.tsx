@@ -2,16 +2,18 @@
 
 /**
  * What a brand-new forge account sees on /apps before anything is deployed:
- * three steps, each command with a copy button.
+ * three steps, each with a copy button.
  *
- *   1. Deploy from the app's folder (signed in: login, adopt, deploy).
- *   2. Or ask an agent: the MCP install commands and one-click links.
+ *   1. Ask your agent: one prompt for any coding agent with a shell (the same
+ *      words as reliantlabs.com/products/forge#start), or forge's MCP server.
+ *   2. Or deploy from the app's folder (signed in: login, adopt, deploy).
  *   3. The docs.
  *
  * Copies and link clicks are recorded with opaque ids only (never the command).
  */
 
-import { ArrowUpRight, Bot, BookOpen, Rocket } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { ArrowUpRight, Bot, BookOpen, Check, Copy, Rocket } from "lucide-react";
 
 import { TourCommand } from "@/components/Onboarding/journeys/TourCommand";
 import { trackEvent } from "@/lib/analytics";
@@ -24,6 +26,20 @@ export const FORGE_NPX = "npx -y @reliantlabs/forge";
  * no-login deploy is two commands. Flip this when forge ships it.
  */
 export const CLAIMABLE_DEPLOY_ADOPTS = false;
+
+/**
+ * The prompt for the visitor's own coding agent: install forge, follow
+ * `forge start`, deploy with no login, hand back the URL and the claim link
+ * (opened here, the claim lands in this account). Validated 2026-11-12 with
+ * cold agents and no credentials, in a bare Vite app and an empty folder.
+ * Word-for-word the same as AGENT_PROMPT in the landing page's
+ * src/content/forgeStart.ts.
+ */
+export const AGENT_PROMPT =
+  "Deploy this app with forge, no account needed. If the `forge` command isn't installed, install it with `npm i -g @reliantlabs/forge`. Then run `forge start` and follow it. When the site is live, give me its URL and the claim link, and remind me it goes offline in 72 hours unless I open the claim link.";
+
+/** What to ask an agent that already has forge's MCP server (its deploy_claimable tool). */
+export const MCP_ASK = "Deploy this app with forge, no account needed. When it's live, give me its URL and the claim link.";
 
 export const DOCS_URL = "https://docs.reliantlabs.io/forge/quick-start";
 export const CLAUDE_MCP_COMMAND = "claude mcp add forge -- npx -y @reliantlabs/forge mcp";
@@ -98,6 +114,38 @@ function Commands({ commands }: { commands: readonly FirstRunCommand[] }) {
   );
 }
 
+/** The agent prompt: prose that wraps (TourCommand is one scrolling shell line), with a Copy button. */
+function AgentPrompt({ onCopied }: { onCopied: () => void }) {
+  const [copied, setCopied] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useEffect(() => () => clearTimeout(timer.current), []);
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(AGENT_PROMPT);
+    } catch {
+      return; // No clipboard: the prompt is on screen to select.
+    }
+    setCopied(true);
+    onCopied();
+    clearTimeout(timer.current);
+    timer.current = setTimeout(() => setCopied(false), 1500);
+  }
+  return (
+    <div className="flex items-start gap-1 rounded-md border border-border bg-muted/40 py-1.5 pl-2.5 pr-0.5" data-testid="forge-first-run-prompt">
+      <p className="min-w-0 flex-1 whitespace-pre-wrap text-xs leading-relaxed text-foreground">{AGENT_PROMPT}</p>
+      <button
+        type="button"
+        onClick={() => void copy()}
+        aria-label={copied ? "Copied the prompt" : "Copy the prompt"}
+        title={copied ? "Copied" : "Copy"}
+        className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted-foreground hover:text-foreground"
+      >
+        {copied ? <Check className="h-3 w-3" aria-hidden="true" /> : <Copy className="h-3 w-3" aria-hidden="true" />}
+      </button>
+    </div>
+  );
+}
+
 const linkClass =
   "inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-border bg-surface px-3 text-sm font-medium text-ink hover:bg-ink/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
@@ -105,10 +153,38 @@ export function ForgeFirstRun({ testId = "apps-empty" }: { testId?: string }) {
   return (
     <section className="rounded-lg border border-border bg-surface p-4 sm:p-5" data-testid={testId} aria-label="Deploy your first app">
       <h2 className="text-base font-semibold text-ink">Deploy your first app</h2>
-      <p className="mt-1 text-sm text-ink-muted">Nothing is deployed to this account yet. Start from the folder of an existing Vite or Next.js app.</p>
+      <p className="mt-1 text-sm text-ink-muted">Nothing is deployed to this account yet. Use the coding agent you already have, or the terminal.</p>
 
       <ol className="mt-4 space-y-5">
-        <Step n={1} icon={<Rocket className="h-4 w-4 text-ink-muted" aria-hidden="true" />} title="In your app folder, deploy">
+        <Step n={1} icon={<Bot className="h-4 w-4 text-ink-muted" aria-hidden="true" />} title="Ask your agent">
+          <p className="text-xs text-ink-muted">
+            Paste this into Claude Code, Cursor, Codex or any agent that can run commands, in your app's folder or an empty one. Open the claim link it
+            gives you here to keep the app in this account.
+          </p>
+          <AgentPrompt onCopied={copied("agent_prompt")} />
+          <details className="text-sm" data-testid="forge-first-run-mcp">
+            <summary className="cursor-pointer text-ink-muted hover:text-ink">Agent supports MCP?</summary>
+            <div className="mt-2 space-y-2">
+              <p className="text-xs text-ink-muted">Add forge as an MCP server, then ask: “{MCP_ASK}”</p>
+              <div className="space-y-1">
+                <span className="text-xs text-ink-muted">Claude Code</span>
+                <TourCommand command={CLAUDE_MCP_COMMAND} onCopied={copied("claude_mcp")} />
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <a href={CURSOR_MCP_URL} target="_blank" rel="noopener noreferrer" onClick={opened("cursor_mcp")} className={linkClass} data-testid="forge-first-run-cursor">
+                  Add to Cursor
+                  <ArrowUpRight className="h-3.5 w-3.5" aria-hidden="true" />
+                </a>
+                <a href={VSCODE_MCP_URL} target="_blank" rel="noopener noreferrer" onClick={opened("vscode_mcp")} className={linkClass} data-testid="forge-first-run-vscode">
+                  Install in VS Code
+                  <ArrowUpRight className="h-3.5 w-3.5" aria-hidden="true" />
+                </a>
+              </div>
+            </div>
+          </details>
+        </Step>
+
+        <Step n={2} icon={<Rocket className="h-4 w-4 text-ink-muted" aria-hidden="true" />} title="Or deploy from your app folder">
           <Commands commands={signedInDeployCommands()} />
           <details className="text-sm" data-testid="forge-first-run-claimable">
             <summary className="cursor-pointer text-ink-muted hover:text-ink">Rather not sign the CLI in?</summary>
@@ -119,26 +195,6 @@ export function ForgeFirstRun({ testId = "apps-empty" }: { testId?: string }) {
               <Commands commands={claimableDeployCommands()} />
             </div>
           </details>
-        </Step>
-
-        <Step n={2} icon={<Bot className="h-4 w-4 text-ink-muted" aria-hidden="true" />} title="Or ask your agent">
-          <p className="text-xs text-ink-muted">
-            Add forge to your agent, then ask it to deploy this app with forge. It returns a live URL and a claim link.
-          </p>
-          <div className="space-y-1">
-            <span className="text-xs text-ink-muted">Claude Code</span>
-            <TourCommand command={CLAUDE_MCP_COMMAND} onCopied={copied("claude_mcp")} />
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <a href={CURSOR_MCP_URL} target="_blank" rel="noopener noreferrer" onClick={opened("cursor_mcp")} className={linkClass} data-testid="forge-first-run-cursor">
-              Add to Cursor
-              <ArrowUpRight className="h-3.5 w-3.5" aria-hidden="true" />
-            </a>
-            <a href={VSCODE_MCP_URL} target="_blank" rel="noopener noreferrer" onClick={opened("vscode_mcp")} className={linkClass} data-testid="forge-first-run-vscode">
-              Install in VS Code
-              <ArrowUpRight className="h-3.5 w-3.5" aria-hidden="true" />
-            </a>
-          </div>
         </Step>
 
         <Step n={3} icon={<BookOpen className="h-4 w-4 text-ink-muted" aria-hidden="true" />} title="Read the docs">
