@@ -57,6 +57,10 @@ type Project struct {
 	CreatedAt  time.Time `json:"created_at"`
 	UpdatedAt  time.Time `json:"updated_at"`
 	LastActive time.Time `json:"last_active"`
+	// Visibility is who besides UserID may read the project; SharedAt when
+	// it was shared (nil while private). Read by internal/authz only.
+	Visibility Visibility `json:"visibility,omitempty"`
+	SharedAt   *time.Time `json:"shared_at,omitempty"`
 }
 
 // ProjectDaemon records that a daemon has a local clone of a project. A

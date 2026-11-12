@@ -682,6 +682,8 @@ func GetChatRow(ctx context.Context, db orm.Context, id string) (*core.ChatRow, 
 		CreatedAt:      row.CreatedAt,
 		UpdatedAt:      row.UpdatedAt,
 		LastActive:     row.LastActive,
+		Visibility:     visibilityOf(row.Visibility),
+		SharedAt:       row.SharedAt,
 	}
 	if row.State != nil {
 		out.State = *row.State

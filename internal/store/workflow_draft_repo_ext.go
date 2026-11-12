@@ -302,6 +302,8 @@ func workflowDraftToCore(row *WorkflowDraft) *core.WorkflowDraft {
 		UpdatedAt:   row.UpdatedAt,
 		IsHidden:    row.IsHidden,
 		Version:     row.Version,
+		Visibility:  visibilityOf(row.Visibility),
+		SharedAt:    row.SharedAt,
 	}
 }
 
