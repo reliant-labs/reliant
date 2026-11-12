@@ -76,14 +76,16 @@ func (s *Service) StreamChatUpdates(
 	if err != nil {
 		return svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}
-	if !authz.CanReadChat(ctx, userID, chat) {
+	// Decided once, here, and every frame of the stream is shaped from it:
+	// a viewer of a shared chat follows it read-only (viewerChatSender: no
+	// tool result, no run output, no resolved value) and is not forwarded
+	// the owner's user-level updates. The tick below only asks whether the
+	// stream may go on (stillReadable); it never reshapes it.
+	access, denied := authz.ReadChatAccess(ctx, userID, chat)
+	if denied != nil {
 		return svcerr.NotFound("chat")
 	}
-	// A viewer of a shared chat follows it read-only: every frame passes
-	// through viewerChatSender (no tool result, no run output), the owner's
-	// user-level updates are not forwarded, and the decision is re-made on a
-	// re-read row every tick, so an unshare ends the stream.
-	viewer := authz.IsViewer(ctx, userID, chat)
+	viewer := access.Viewer()
 	var out chatSender = stream
 	if viewer {
 		out = viewerChatSender{stream}
@@ -265,7 +267,7 @@ func (s *Service) StreamChatUpdates(
 				}
 				chat = refreshed
 			}
-			if !authz.CanReadChat(ctx, userID, chat) {
+			if !stillReadable(ctx, userID, chat) {
 				logging.InfoContext(ctx, LOG_PREFIX_STREAM_CHAT+" Caller may no longer read the chat; ending its stream",
 					"userID", userID, "chatID", shortID(chatID))
 				return svcerr.NotFound("chat")
@@ -407,6 +409,15 @@ func (s *Service) sendSingleChatUpdate(update db.ChatUpdate, latestSeq int64, se
 		return err
 	}
 	return nil
+}
+
+// stillReadable is whether an open chat stream may go on: the read decision
+// again, on the row as it is now. It only ever ends a stream; the stream's
+// shape is the one decided at its open, so a later answer can never turn a
+// viewer's frames into the owner's.
+func stillReadable(ctx context.Context, userID string, chat *db.ChatRow) bool {
+	_, denied := authz.ReadChatAccess(ctx, userID, chat)
+	return denied == nil
 }
 
 // chatSender is where a chat stream's frames go: the stream itself, or, for

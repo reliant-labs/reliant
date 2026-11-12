@@ -3,7 +3,7 @@
 -- Migration: update_stream_counters_org_kind_validate
 -- Created: 2026-11-12T18:03:55Z
 --
--- Validates 20261112180335_update_stream_counters_org_kind's CHECK in its own
+-- Validates 20261112195257_update_stream_counters_org_kind's CHECK in its own
 -- transaction (SHARE UPDATE EXCLUSIVE: reads and writes continue).
 --
 -- Post-deploy verification (prod):

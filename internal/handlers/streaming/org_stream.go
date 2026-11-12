@@ -32,9 +32,10 @@ const orgFeedBatchSize = 200
 // O(events), not O(events x members). The caller's own rows are left out.
 //
 // Only a person may follow it, only for an org they are a live member of,
-// and membership is asked again every reauthorizeInterval: a removal ends
-// the stream within orgs.CacheTTL plus that interval, and an outage ends it
-// too (the client reconnects and the open decides).
+// and membership is asked again every reauthorizeInterval (orgFeedMember):
+// anything but a definite "member" (a removal, an unknown answer, an
+// outage) ends it, within orgs.CacheTTL plus that interval for a removal.
+// The client reconnects and the open decides.
 func (s *Service) StreamOrgUpdates(
 	ctx context.Context,
 	req *connect.Request[reliantv1.StreamOrgUpdatesRequest],
@@ -54,6 +55,9 @@ func (s *Service) StreamOrgUpdates(
 
 	cursor := int64(0)
 	if orgID != "" {
+		if err := s.orgFeedMember(ctx, userID, orgID); err != nil {
+			return err
+		}
 		latest, err := s.deps.Repo.LatestOrgUpdateSequence(ctx, orgID)
 		if err != nil {
 			return svcerr.WrapOr(err, svcerr.Internal("failed to read the org feed"))
@@ -95,16 +99,8 @@ func (s *Service) StreamOrgUpdates(
 			if orgID == "" {
 				continue
 			}
-			member, ok, err := s.deps.Orgs.IsMember(ctx, userID, orgID)
-			if err != nil {
-				logging.WarnContext(ctx, LOG_PREFIX_STREAM_CHAT+" Could not re-check org membership; ending the org feed",
-					"userID", userID, "orgID", orgID, "error", err)
-				return orgs.LookupFailed(ctx, "could not re-check your organization membership", err)
-			}
-			if ok && !member {
-				logging.InfoContext(ctx, LOG_PREFIX_STREAM_CHAT+" Caller is no longer a member; ending the org feed",
-					"userID", userID, "orgID", orgID)
-				return orgs.NotMember(orgID)
+			if err := s.orgFeedMember(ctx, userID, orgID); err != nil {
+				return err
 			}
 		case <-heartbeat.C:
 			if err := stream.Send(&reliantv1.OrgStreamEvent{Event: &reliantv1.OrgStreamEvent_Heartbeat{
@@ -114,6 +110,26 @@ func (s *Service) StreamOrgUpdates(
 			}
 		}
 	}
+}
+
+// orgFeedMember is whether userID may follow orgID's feed now: only a
+// definite "a live member". An org feed is org-wide, so the owner-only
+// fallback of a single row has no meaning here: a removal (not a member), an
+// answer the resolver does not have (ok false) and an outage (an error) all
+// refuse it, at the open and on every re-check, which ends an open feed.
+func (s *Service) orgFeedMember(ctx context.Context, userID, orgID string) error {
+	member, ok, err := s.deps.Orgs.IsMember(ctx, userID, orgID)
+	switch {
+	case err != nil:
+		logging.WarnContext(ctx, LOG_PREFIX_STREAM_CHAT+" Could not check org membership; ending the org feed",
+			"userID", userID, "orgID", orgID, "error", err)
+		return orgs.LookupFailed(ctx, "could not check your organization membership", err)
+	case !ok || !member:
+		logging.InfoContext(ctx, LOG_PREFIX_STREAM_CHAT+" Caller is not a live member; ending the org feed",
+			"userID", userID, "orgID", orgID, "known", ok)
+		return orgs.NotMember(orgID)
+	}
+	return nil
 }
 
 // orgFeedOrg is the org a feed follows: the named one, verified, else the

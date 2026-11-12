@@ -8,7 +8,7 @@
 -- and 'chat' only; it is replaced by one that also allows 'org'. Dropping
 -- and adding happen in this one transaction, so no write sees the table
 -- without a check. The new one is NOT VALID here and validated by
--- 20261112180355_update_stream_counters_org_kind_validate under SHARE UPDATE
+-- 20261112195258_update_stream_counters_org_kind_validate under SHARE UPDATE
 -- EXCLUSIVE. lock_timeout bounds the wait behind a long transaction.
 --
 -- Rollback: none needed. The previous release writes only 'user' and 'chat',

@@ -14,7 +14,7 @@
 -- is a bare marker (ids only).
 --
 -- sequence_number is per org, allocated from update_stream_counters
--- (stream_kind 'org', 20261112180335_update_stream_counters_org_kind), so a
+-- (stream_kind 'org', 20261112195257_update_stream_counters_org_kind), so a
 -- StreamOrgUpdates client resumes from its cursor exactly as a user stream
 -- does. No foreign keys: org ids are control-plane's, and a row outlives the
 -- resource it reports deleted.

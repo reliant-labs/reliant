@@ -3,6 +3,8 @@ package streaming
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -14,6 +16,7 @@ import (
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/orgs"
 	"github.com/reliant-labs/reliant/internal/viewertest"
 )
 
@@ -172,4 +175,93 @@ func TestStreamOrgUpdates_RefusesNonMembersAndAgents(t *testing.T) {
 	agent := as(f.ViewerID, &reliantv1.StreamOrgUpdatesRequest{OrgId: &org})
 	agent.Header().Set(testCredentialHeader, "access-token")
 	assert.Equal(t, connect.CodePermissionDenied, refused(agent), "an agent's CLI login")
+}
+
+// flippableFeedMembership answers as the fixture's resolver until flipped,
+// then with its after answer, counting the questions asked after the flip.
+type flippableFeedMembership struct {
+	*orgs.Resolver
+	flipped      atomic.Bool
+	afterMember  bool
+	afterOK      bool
+	afterErr     error
+	askedFlipped atomic.Int32
+}
+
+func (m *flippableFeedMembership) IsMember(ctx context.Context, userID, orgID string) (bool, bool, error) {
+	if !m.flipped.Load() {
+		return m.Resolver.IsMember(ctx, userID, orgID)
+	}
+	m.askedFlipped.Add(1)
+	return m.afterMember, m.afterOK, m.afterErr
+}
+
+// An open org feed ends the moment its caller is anything but a definite live
+// member: removed, unknown (the resolver has no answer) or unreachable. The
+// org-wide feed has no owner-only fallback. No row written after that is sent.
+func TestStreamOrgUpdates_EndsWhenMembershipIsNotConfirmed(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		member bool
+		ok     bool
+		err    error
+		code   connect.Code
+	}{
+		{"removed", false, true, nil, connect.CodePermissionDenied},
+		{"unknown", false, false, nil, connect.CodePermissionDenied},
+		{"unknown though member", true, false, nil, connect.CodePermissionDenied},
+		{"outage", false, false, errors.New("control plane down"), connect.CodeUnavailable},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			repo, cleanup := db.SetupTestDB(t)
+			t.Cleanup(cleanup)
+			f := viewertest.New(t, repo)
+			m := &flippableFeedMembership{Resolver: f.Membership, afterMember: tc.member, afterOK: tc.ok, afterErr: tc.err}
+			svc := NewTestStreaming(t, WithStreamingDeps(Deps{Repo: repo, Deltas: noopHub{}, Orgs: m}))
+			svc.heartbeatInterval = time.Hour
+			svc.orgFeedPollInterval = 10 * time.Millisecond
+			svc.reauthorizeInterval = 10 * time.Millisecond
+			client := sharedStreams(t, svc, f.Membership)
+
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			t.Cleanup(cancel)
+			stream, err := client.StreamOrgUpdates(ctx, as(f.ViewerID, &reliantv1.StreamOrgUpdatesRequest{}))
+			require.NoError(t, err)
+			events := receiveAll(t, stream)
+			nextEvent(t, events, "caught_up", func(ev *reliantv1.OrgStreamEvent) bool { return ev.GetCaughtUp() != nil })
+
+			m.flipped.Store(true)
+			require.Eventually(t, func() bool { return m.askedFlipped.Load() >= 1 }, 10*time.Second, time.Millisecond,
+				"the open feed never re-asked the membership")
+			// A change after the re-check that ended the feed.
+			_, err = repo.ORM().Bun().NewRaw(`UPDATE chats SET title = 'After the end' WHERE id = ?`, f.ChatID).Exec(context.Background())
+			require.NoError(t, err)
+
+			for ev := range events {
+				if len(ev.GetUpdates().GetUpdates()) > 0 {
+					t.Fatalf("a row was sent after the membership was not confirmed: %v", ev)
+				}
+			}
+			require.Equal(t, tc.code, connect.CodeOf(stream.Err()), "%v", stream.Err())
+		})
+	}
+}
+
+// The open itself refuses a caller whose membership is not confirmed.
+func TestStreamOrgUpdates_OpenRefusesUnconfirmedMembership(t *testing.T) {
+	repo, cleanup := db.SetupTestDB(t)
+	t.Cleanup(cleanup)
+	f := viewertest.New(t, repo)
+	m := &flippableFeedMembership{Resolver: f.Membership, afterMember: true, afterOK: false}
+	m.flipped.Store(true)
+	svc := NewTestStreaming(t, WithStreamingDeps(Deps{Repo: repo, Deltas: noopHub{}, Orgs: m}))
+	client := sharedStreams(t, svc, f.Membership)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	t.Cleanup(cancel)
+	stream, err := client.StreamOrgUpdates(ctx, as(f.ViewerID, &reliantv1.StreamOrgUpdatesRequest{}))
+	require.NoError(t, err)
+	for ev := range receiveAll(t, stream) {
+		t.Fatalf("an unconfirmed member was sent %v", ev)
+	}
+	require.Equal(t, connect.CodePermissionDenied, connect.CodeOf(stream.Err()))
 }

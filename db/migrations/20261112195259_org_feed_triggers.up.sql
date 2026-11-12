@@ -20,7 +20,7 @@
 --
 -- Each appends through org_feed_append, which takes the org's next sequence
 -- number from update_stream_counters ('org', admitted by
--- 20261112180335_update_stream_counters_org_kind) under its row lock, so a
+-- 20261112195257_update_stream_counters_org_kind) under its row lock, so a
 -- feed's sequence has no gaps and its order is commit order per org. A
 -- message, a tool call or a token never writes the feed.
 CREATE FUNCTION org_feed_append(p_org text, p_type integer, p_kind text, p_id text, p_owner text, p_project text, p_title text, p_data text)
@@ -81,13 +81,40 @@ BEGIN
   RETURN NEW;
 END $$;
 
--- One primary-key read per activity announcement, only for chats.
+-- An activity announcement about a shared chat: CHANGED, decided under the
+-- org feed's lock so it can never follow the chat's UNSHARED (or DELETED).
+--
+-- A change of visibility appends its row (org_feed_chats) while holding the
+-- org's counter row until it commits. This takes that same lock FIRST, and
+-- only then reads the chat, in a statement of its own: under READ COMMITTED
+-- each statement of a volatile function sees everything committed before it
+-- started, so an unshare that held the lock is either committed and read
+-- (private: nothing is appended) or not yet begun its append, in which case
+-- this CHANGED lands before its UNSHARED. Either way the feed's order is
+-- true. A chat no feed row was ever written for has no counter row, so it
+-- was never shared in its org and there is nothing to say.
+--
+-- No chat row lock is taken. This runs after the user's counter row is
+-- locked (AppendUserUpdate*), while other writers (UpdateChatUnread,
+-- PinChatDaemonIfUnset, SetChatDaemon) lock the chat row and then the user's
+-- counter; a FOR SHARE here would invert that order and deadlock against
+-- them. The org counter is every writer's last lock, so taking it here
+-- closes no cycle.
 CREATE FUNCTION org_feed_chat_activity() RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE
   c record;
+  org text;
 BEGIN
+  SELECT org_id INTO org FROM chats WHERE id = NEW.chat_id;
+  IF NOT FOUND OR org IS NULL OR org = '' THEN
+    RETURN NULL;
+  END IF;
+  PERFORM 1 FROM update_stream_counters WHERE stream_kind = 'org' AND stream_id = org FOR UPDATE;
+  IF NOT FOUND THEN
+    RETURN NULL;
+  END IF;
   SELECT id, org_id, user_id, project_id, title, visibility INTO c FROM chats WHERE id = NEW.chat_id;
-  IF FOUND AND c.visibility = 'org' THEN
+  IF FOUND AND c.visibility = 'org' AND c.org_id = org THEN
     PERFORM org_feed_append(c.org_id, 3, 'chat', c.id, c.user_id, c.project_id, c.title, NEW.data);
   END IF;
   RETURN NULL;
