@@ -1,0 +1,27 @@
+-- forge:backward-compatible — additive partial index over org-owned rows only; no release writes an org connection before org connections are enabled, so the previous release never meets it.
+
+-- Migration: connections_org_name
+--
+-- Names an org connection uniquely within its org and integration, as
+-- connections_name (user_id, integration_id, name) does a person's. The
+-- personal index keys user_id, which on an org row is only the admin who
+-- created it (attribution), so it cannot stop two admins naming two of the
+-- org's Slack connections alike. It still applies to org rows (its predicate
+-- has no owner_kind), so an admin cannot give an org connection the name of a
+-- personal one of their own for the same integration; the rpc says the name
+-- is taken, exactly as for a personal clash.
+--
+-- CONCURRENTLY cannot run in a transaction block, so this is the only
+-- statement in the file.
+--
+-- Post-deploy verification (prod, once the release carrying this file is
+-- deployed):
+--
+--   1. The build finished and is usable (indisvalid = true):
+--        reliant forge db query prod --database reliant --confirm-env prod --reason "verify connections_org_name" \
+--          "SELECT indisvalid, indisready FROM pg_index WHERE indexrelid = 'public.connections_org_name'::regclass"
+--      An INVALID index is dropped with DROP INDEX CONCURRENTLY
+--      connections_org_name and rebuilt by re-running this statement.
+--
+-- Rollback: none needed. The previous release writes no org rows.
+CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS connections_org_name ON public.connections USING btree (org_id, integration_id, name) WHERE ((deleted_at IS NULL) AND (owner_kind = 'org'::text));

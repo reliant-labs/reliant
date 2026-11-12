@@ -467,6 +467,42 @@ func TestPurge_RemovesConnectionsAndShredsVaultKey(t *testing.T) {
 	}
 }
 
+// An org connection's user_id is the admin who created it, for attribution
+// only: deleting that admin's account must not delete the org's connection,
+// its secrets (sealed under the org's tenant) or the org's vault key.
+func TestPurge_KeepsTheOrgConnectionsAnAdminCreated(t *testing.T) {
+	_, rawDB, cleanup := db.SetupTestDBWithRawDB(t)
+	defer cleanup()
+	ctx := context.Background()
+	const admin = "org-admin"
+	seedUser(t, rawDB, admin)
+	mustExec(t, rawDB, `INSERT INTO vault_keys (id, tenant_kind, tenant_id, version, kek_id, wrapped_dek, state)
+		VALUES ('vk-user','user',$1,1,'v1','\x01','primary'), ('vk-org','org','org-1',1,'v1','\x01','primary')`, admin)
+	mustExec(t, rawDB, `INSERT INTO connections (id, owner_kind, user_id, org_id, integration_id, auth_kind, name, status)
+		VALUES ('conn-personal','user',$1,NULL,'slack','api_key','mine','active'),
+		       ('conn-org','org',$1,'org-1','slack','api_key','org bot','active')`, admin)
+	mustExec(t, rawDB, `INSERT INTO connection_secrets (connection_id, field, vault_key_id, ciphertext)
+		VALUES ('conn-personal','api_key','vk-user','\x02'), ('conn-org','api_key','vk-org','\x02')`)
+
+	if _, err := accountpurge.Purge(ctx, rawDB, admin); err != nil {
+		t.Fatalf("Purge: %v", err)
+	}
+	var personal, org, orgSecrets, orgKey int
+	if err := rawDB.QueryRowContext(ctx, `SELECT
+		(SELECT count(*) FROM connections WHERE id='conn-personal'),
+		(SELECT count(*) FROM connections WHERE id='conn-org'),
+		(SELECT count(*) FROM connection_secrets WHERE connection_id='conn-org'),
+		(SELECT count(*) FROM vault_keys WHERE id='vk-org')`).Scan(&personal, &org, &orgSecrets, &orgKey); err != nil {
+		t.Fatal(err)
+	}
+	if personal != 0 {
+		t.Errorf("the admin's personal connection survived the purge")
+	}
+	if org != 1 || orgSecrets != 1 || orgKey != 1 {
+		t.Errorf("the purge removed the org's connection (%d), its secrets (%d) or the org's key (%d); want all kept", org, orgSecrets, orgKey)
+	}
+}
+
 func mustExec(t *testing.T, d *sql.DB, q string, args ...any) {
 	t.Helper()
 	if _, err := d.Exec(q, args...); err != nil {

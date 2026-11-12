@@ -1,0 +1,31 @@
+-- forge:backward-compatible — additive partial index over org-owned rows only; no release writes an org connection before org connections are enabled, so the previous release never meets it.
+
+-- Migration: connections_org_one_default
+--
+-- An org connection (owner_kind = 'org', control-plane
+-- docs/design/org-sharing.md §7) may be its org's default for an
+-- integration, the one the picker offers first. connections_one_default
+-- (user_id, integration_id) covers personal rows only (its predicate says
+-- owner_kind = 'user'), so this is its sibling for org rows: at most one
+-- live default per (org, integration). A default is never a fallback
+-- (D10): an unnamed integration reference still resolves to the caller's
+-- own default alone.
+--
+-- CONCURRENTLY cannot run in a transaction block, so this is the only
+-- statement in the file.
+--
+-- Post-deploy verification (prod, once the release carrying this file is
+-- deployed):
+--
+--   1. The build finished and is usable (indisvalid = true):
+--        reliant forge db query prod --database reliant --confirm-env prod --reason "verify connections_org_one_default" \
+--          "SELECT indisvalid, indisready FROM pg_index WHERE indexrelid = 'public.connections_org_one_default'::regclass"
+--      An INVALID index (a failed concurrent build) is dropped with
+--      DROP INDEX CONCURRENTLY connections_org_one_default and rebuilt by
+--      re-running this statement; IF NOT EXISTS would otherwise keep it.
+--   2. No row matches yet: org connections are created only once
+--      orgs.connections_enabled is on.
+--
+-- Rollback: none needed. The previous release writes no org rows, so the
+-- index constrains nothing it does.
+CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS connections_org_one_default ON public.connections USING btree (org_id, integration_id) WHERE (is_default AND (deleted_at IS NULL) AND (owner_kind = 'org'::text));

@@ -40,12 +40,20 @@ func derefStr(s *string) string {
 	return *s
 }
 
+func connectionOwnerKindToProto(c *core.Connection) reliantv1.ConnectionOwnerKind {
+	if c.OwnerKind == core.ConnectionOwnerOrg {
+		return reliantv1.ConnectionOwnerKind_CONNECTION_OWNER_KIND_ORG
+	}
+	return reliantv1.ConnectionOwnerKind_CONNECTION_OWNER_KIND_USER
+}
+
 func connectionToProto(c *core.Connection) *reliantv1.Connection {
 	scopes := c.Scopes
 	if scopes == nil {
 		scopes = []string{}
 	}
 	return &reliantv1.Connection{
+		OwnerKind: connectionOwnerKindToProto(c), OrgId: derefStr(c.OrgID),
 		Id: c.ID, IntegrationId: c.IntegrationID, AuthKind: connectionrpc.AuthKind(c.AuthKind),
 		Name: c.Name, AccountLabel: derefStr(c.AccountLabel), ExternalAccountId: derefStr(c.ExternalAccountID),
 		Scopes: scopes, Status: connectionStatusToProto(c.Status), StatusReason: derefStr(c.StatusReason),
@@ -87,6 +95,15 @@ func (s *Service) ListConnections(ctx context.Context, req *connect.Request[reli
 	cs, err := s.deps.Connections.List(ctx, userID, req.Msg.GetIntegrationId())
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("connection service error"))
+	}
+	// The org's own connections only when the request names the org: an old
+	// client, which never does, sees exactly its own, as before.
+	if org := req.Msg.GetOrgId(); org != "" {
+		orgs, err := s.deps.Connections.ListOrg(ctx, userID, org, req.Msg.GetIntegrationId())
+		if err != nil {
+			return nil, svcerr.WrapOr(err, svcerr.Internal("connection service error"))
+		}
+		cs = append(cs, orgs...)
 	}
 	out := make([]*reliantv1.Connection, 0, len(cs))
 	for _, c := range cs {
