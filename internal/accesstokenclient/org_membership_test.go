@@ -104,3 +104,34 @@ func TestResolveOrgMembership_OlderControlPlaneIsUnsupported(t *testing.T) {
 		})
 	}
 }
+
+// role (control-plane org-sharing S0) rides on a member's answer. A control
+// plane that predates it omits it, which decodes as "" (unknown), and a role
+// on a negative answer is never carried.
+func TestResolveOrgMembership_Role(t *testing.T) {
+	srv := fakeCP(t, func(_ string, body map[string]any) (int, string) {
+		switch body["orgId"] {
+		case "org-admin":
+			return 200, `{"orgId":"org-admin","member":true,"role":"admin"}`
+		case "org-old":
+			return 200, `{"orgId":"org-old","member":true}`
+		case "org-odd":
+			return 200, `{"orgId":"org-odd","role":"owner"}`
+		default:
+			return 200, `{"orgId":"org-home","member":true,"role":"owner"}`
+		}
+	})
+	defer srv.Close()
+	c := New(Deps{BaseURL: srv.URL, Sign: sign})
+	for org, want := range map[string]OrgMembership{
+		"org-admin": {OrgID: "org-admin", Member: true, Role: "admin"},
+		"org-old":   {OrgID: "org-old", Member: true},
+		"org-odd":   {OrgID: "org-odd"},
+		"":          {OrgID: "org-home", Member: true, Role: "owner"},
+	} {
+		got, err := c.ResolveOrgMembership(context.Background(), "user-1", org)
+		if err != nil || got != want {
+			t.Errorf("org %q: %+v, %v; want %+v", org, got, err, want)
+		}
+	}
+}

@@ -605,3 +605,63 @@ func CanReadOwn(ctx context.Context, userID string, org *string) bool {
 func CanAccessPersonal(userID, ownerUserID string) bool {
 	return userID != "" && ownerUserID == userID
 }
+
+// orgRoles is a Membership that also names a member's role in an org, asked
+// of control-plane now rather than from a cache. *orgs.Resolver is one. role
+// is "owner", "admin" or "member" for a live member and "" otherwise; ok is
+// false when the role is unknown (no orgs, or a control plane that predates
+// the role), and err is an outage.
+type orgRoles interface {
+	RoleFresh(ctx context.Context, userID, orgID string) (role string, ok bool, err error)
+}
+
+// ErrNotOrgAdmin is the denial of an admin-only action to a caller who is not
+// an owner or admin of the org: a member, a non-member, or a caller whose role
+// control-plane could not name (an older control plane answers no role, and
+// an unknown role is never guessed upward).
+var ErrNotOrgAdmin = errors.New("authz: not an owner or admin of the organization")
+
+// RequireOrgAdmin decides an action only an org's administrators may take
+// (clearing a member's share, creating an org connection, adopting a departed
+// member's automation; control-plane docs/design/org-sharing.md §3.4): nil when
+// userID is an owner or admin of orgID right now.
+//
+// The role is asked fresh (RoleFresh), never from the membership cache, so a
+// just-demoted admin cannot act on a stale answer. It fails closed: a
+// credential bound to another org is ErrDenied, a context with no Membership
+// or one that cannot name roles and an outage are ErrMembershipUnavailable,
+// and anything but owner or admin (unknown included) is ErrNotOrgAdmin.
+func RequireOrgAdmin(ctx context.Context, userID, orgID string) error {
+	if userID == "" || orgID == "" {
+		return ErrDenied
+	}
+	if bound, ok := boundOrg(ctx); ok && bound != orgID {
+		logging.InfoContext(ctx, "[authz] a credential bound to another org; denying an admin action", "user_id", userID, "credential_org", bound, "org_id", orgID)
+		recordCredentialRefusal(ctx, orgID)
+		return ErrDenied
+	}
+	m := membershipOf(ctx)
+	if m == nil {
+		logging.ErrorContext(ctx, "[authz] no membership on the context; denying an admin action (a path was never wired with authz.WithMembership)",
+			"user_id", userID, "org_id", orgID)
+		return ErrMembershipUnavailable
+	}
+	roles, ok := m.(orgRoles)
+	if !ok {
+		logging.ErrorContext(ctx, "[authz] the membership on the context cannot name roles; denying an admin action",
+			"user_id", userID, "org_id", orgID)
+		return ErrMembershipUnavailable
+	}
+	role, known, err := roles.RoleFresh(ctx, userID, orgID)
+	if err != nil {
+		logging.WarnContext(ctx, "[authz] could not read the org role; denying an admin action", "user_id", userID, "org_id", orgID, "error", err)
+		return ErrMembershipUnavailable
+	}
+	if known && (role == "owner" || role == "admin") {
+		return nil
+	}
+	if !known {
+		logging.InfoContext(ctx, "[authz] the org role is unknown (an older control plane?); denying an admin action", "user_id", userID, "org_id", orgID)
+	}
+	return ErrNotOrgAdmin
+}
