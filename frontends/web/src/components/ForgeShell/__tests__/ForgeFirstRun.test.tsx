@@ -54,7 +54,7 @@ describe("the forge first-run steps", () => {
 
   it("leads with the agent prompt, the landing page's words, and copies it whole", async () => {
     expect(AGENT_PROMPT).toBe(
-      "Deploy this app with forge, no account needed. If the `forge` command isn't installed, install it with `npm i -g @reliantlabs/forge`. Then run `forge start` and follow it. When the site is live, give me its URL and the claim link, and remind me it goes offline in 72 hours unless I open the claim link.",
+      "Deploy this app with forge, no account needed. Run `npx -y @reliantlabs/forge@latest start` and follow it (use `npx -y @reliantlabs/forge@latest` wherever it says `forge`). When the site is live, give me its URL and the claim link, and remind me it goes offline in 72 hours unless I open the claim link.",
     );
     render(<ForgeFirstRun />);
     const step = within(screen.getByTestId("forge-first-run-step-1"));

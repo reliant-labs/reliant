@@ -28,15 +28,18 @@ export const FORGE_NPX = "npx -y @reliantlabs/forge";
 export const CLAIMABLE_DEPLOY_ADOPTS = false;
 
 /**
- * The prompt for the visitor's own coding agent: install forge, follow
+ * The prompt for the visitor's own coding agent: run forge through
+ * `npx …@latest` (a version floor, and no `npm i -g` EACCES), follow
  * `forge start`, deploy with no login, hand back the URL and the claim link
- * (opened here, the claim lands in this account). Validated 2026-11-12 with
- * cold agents and no credentials, in a bare Vite app and an empty folder.
+ * (opened here, the claim lands in this account). `forge start` is the router
+ * from reliant-labs/forge#2173; it needs a release carrying it as npm latest.
+ * Validated 2026-11-12 against forge main at #2173 with cold agents and no
+ * credentials, in a bare Vite app and an empty folder.
  * Word-for-word the same as AGENT_PROMPT in the landing page's
  * src/content/forgeStart.ts.
  */
 export const AGENT_PROMPT =
-  "Deploy this app with forge, no account needed. If the `forge` command isn't installed, install it with `npm i -g @reliantlabs/forge`. Then run `forge start` and follow it. When the site is live, give me its URL and the claim link, and remind me it goes offline in 72 hours unless I open the claim link.";
+  "Deploy this app with forge, no account needed. Run `npx -y @reliantlabs/forge@latest start` and follow it (use `npx -y @reliantlabs/forge@latest` wherever it says `forge`). When the site is live, give me its URL and the claim link, and remind me it goes offline in 72 hours unless I open the claim link.";
 
 /** What to ask an agent that already has forge's MCP server (its deploy_claimable tool). */
 export const MCP_ASK = "Deploy this app with forge, no account needed. When it's live, give me its URL and the claim link.";
@@ -165,7 +168,10 @@ export function ForgeFirstRun({ testId = "apps-empty" }: { testId?: string }) {
           <details className="text-sm" data-testid="forge-first-run-mcp">
             <summary className="cursor-pointer text-ink-muted hover:text-ink">Agent supports MCP?</summary>
             <div className="mt-2 space-y-2">
-              <p className="text-xs text-ink-muted">Add forge as an MCP server, then ask: “{MCP_ASK}”</p>
+              <p className="text-xs text-ink-muted">
+                Add forge as an MCP server, then ask: “{MCP_ASK}” Its <code className="font-mono">deploy_claimable</code> tool deploys a Vite or Next.js app as
+                it stands. Starting from an empty folder? Use the prompt above: <code className="font-mono">forge start</code> covers that.
+              </p>
               <div className="space-y-1">
                 <span className="text-xs text-ink-muted">Claude Code</span>
                 <TourCommand command={CLAUDE_MCP_COMMAND} onCopied={copied("claude_mcp")} />
