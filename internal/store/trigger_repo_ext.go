@@ -377,7 +377,9 @@ func ListIntegrationTriggers(ctx context.Context, db orm.Context, integration st
 // authority, e.g. GitHub via control-plane) is routed on access alone. The
 // model is in 20261005061008_integration_event_access.sql. An org trigger may
 // name a connection of its own org instead; the event still reaches it only
-// on its owner's own access.
+// on its owner's own access. A trigger bound to one of its org's GitHub App
+// installations (config "installation") takes only that installation's
+// events (?1 is the event's account: the installation id).
 var listAccessRoutedTriggersSQL = `SELECT ` + columnsOf[Trigger]("t") + `
 FROM triggers t
 JOIN integration_event_access a
@@ -391,6 +393,7 @@ LEFT JOIN connections c
 WHERE t.kind = 'integration'
 	AND t.enabled
 	AND t.config ->> 'integration' = ?0::text
+	AND (t.config ->> 'installation' IS NULL OR t.config ->> 'installation' = ?1::text)
 	AND (
 		t.connection_id IS NULL
 		OR (c.id IS NOT NULL

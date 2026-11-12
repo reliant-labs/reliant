@@ -53,7 +53,7 @@ func (s *Service) PrepareActivation(ctx context.Context, user, operation string,
 
 // savedDefinition is a saved activation as the definition an edit starts from.
 func savedDefinition(existing *core.Trigger) (*pb.TriggerDefinition, error) {
-	rendered, err := triggers.ToProto(existing, nil, nil, nil)
+	rendered, err := renderTrigger(existing, nil, nil, nil)
 	if err != nil {
 		return nil, svcerr.Wrap(err)
 	}

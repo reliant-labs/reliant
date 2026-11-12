@@ -12,6 +12,7 @@ import (
 	reliantv1connect "github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/connections"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/gitcredentialclient"
 	"github.com/reliant-labs/reliant/pkg/config"
 )
 
@@ -26,6 +27,21 @@ type Deps struct {
 	// broker and the audit trail. The handlers validate the wire, extract
 	// the caller, convert and map errors; no rpc returns a secret value.
 	Connections Connections
+
+	// OrgGitHubApps lists the GitHub App installations an org has linked at
+	// control-plane, which ListConnections shows the org's members as the
+	// org's GitHub connections (org-sharing.md §7.1). Unset (self-hosted, no
+	// control plane) shows none.
+	//
+	// forge:optional-dep
+	OrgGitHubApps OrgGitHubApps
+}
+
+// OrgGitHubApps is the slice of control-plane's git credential service that
+// names an org's linked installations. gitcredentialclient's client satisfies
+// it.
+type OrgGitHubApps interface {
+	ListOrgGitHubInstallations(ctx context.Context, orgID string) ([]gitcredentialclient.OrgInstallation, error)
 }
 
 // Connections is the slice of *connections.Service the handlers serve.

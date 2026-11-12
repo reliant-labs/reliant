@@ -349,6 +349,12 @@ type IntegrationConfig struct {
 	// PollInterval is a Go duration for polled integrations; empty means the
 	// integration's default.
 	PollInterval string `json:"poll_interval,omitempty"`
+	// Installation, when set, is the GitHub App installation (its id, in
+	// decimal) of the trigger's org that the trigger listens through
+	// (org-sharing.md §7.1): only an event from that installation reaches it,
+	// and still only while its owner can see the event's repository. Empty
+	// listens on every installation the owner's own access covers.
+	Installation string `json:"installation,omitempty"`
 }
 
 // WorkflowEventConfig is Trigger.Config for TriggerKindWorkflowEvent.
