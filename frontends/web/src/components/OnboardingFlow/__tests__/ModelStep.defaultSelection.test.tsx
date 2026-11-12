@@ -1,18 +1,16 @@
 /**
- * The step opens on a provider the user can actually FINISH where they are,
- * and opens on it PASSIVELY.
+ * The step opens on the user's OWN model, and opens on it PASSIVELY.
  *
- * Why context decides the default: a subscription sign-in (Claude, Codex,
- * Antigravity) runs through a helper on the user's own computer. Pre-selecting
- * it for everyone put browser and cloud users on a panel that cannot succeed —
- * every one of the 12 external signups in the first week who reached this step
- * either left or lost minutes to it (one sat 30 minutes). So:
+ * Product decision (owner, on reliant#2639): bring-your-own comes first and
+ * Reliant credit is never preselected.
  *
- *  1. With a self-hosted machine connected (or in the desktop app), the
- *     subscription sign-in is the default — it is free and it works.
- *  2. Otherwise the default is Reliant credit (or an API key where the
- *     deployment sells none), and the subscription tiles say what they need.
- *  3. Pre-selecting must write NOTHING. `deriveStep` routes on
+ *  1. Desktop app, or a self-hosted machine connected: the subscription
+ *     sign-in is the default — it is free, and the helper it needs is there.
+ *  2. A browser or cloud user with no machine: the Anthropic API-key form is
+ *     the default, because it is the one thing they can finish right now.
+ *  3. Reliant credit is the LAST tile, quieter than the rest, never selected
+ *     by default — but still there.
+ *  4. Pre-selecting must write NOTHING. `deriveStep` routes on
  *     `plan.modelProvider`, so writing it on mount would derive the user
  *     straight past the question.
  */
@@ -21,7 +19,12 @@ import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
-import { ModelStep, defaultProviderFor, SUBSCRIPTION_NEEDS_LOCAL_HINT } from "../steps/ModelStep";
+import {
+  ModelStep,
+  defaultProviderFor,
+  orderedProviderIds,
+  SUBSCRIPTION_NEEDS_LOCAL_HINT,
+} from "../steps/ModelStep";
 import type { LaunchPlan } from "../types";
 
 const mockUseWalletOverview = vi.fn();
@@ -50,25 +53,9 @@ function wrapper({ children }: { children: React.ReactNode }) {
   return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
 }
 
-const noMachines = () => ({
-  daemons: [],
-  activeDaemon: undefined,
-  loading: false,
-  unreachable: false,
-  refresh: vi.fn(),
-});
-
-const cloudOnly = () => ({
-  daemons: [{ status: 1, daemonType: "managed" }],
-  activeDaemon: { status: 1, daemonType: "managed" },
-  loading: false,
-  unreachable: false,
-  refresh: vi.fn(),
-});
-
-const selfHosted = () => ({
-  daemons: [{ status: 1, daemonType: "self_hosted" }],
-  activeDaemon: { status: 1, daemonType: "self_hosted" },
+const machines = (type?: string) => ({
+  daemons: type ? [{ status: 1, daemonType: type }] : [],
+  activeDaemon: type ? { status: 1, daemonType: type } : undefined,
   loading: false,
   unreachable: false,
   refresh: vi.fn(),
@@ -87,12 +74,18 @@ function renderStep(props: { updatePlan?: () => void; onNext?: () => void } = {}
 }
 
 const claudeConnectButton = () => screen.queryByRole("button", { name: /connect claude subscription/i });
+const apiKeyInput = () => screen.queryByPlaceholderText("sk-ant-...");
 const reliantCta = () => screen.queryByRole("button", { name: /(start with reliant|continue with \$)/i });
+const tileNames = () =>
+  screen
+    .getAllByRole("button")
+    .map((b) => b.getAttribute("aria-label"))
+    .filter((n): n is string => !!n && /Reliant credit|Claude subscription|Codex|Antigravity|Copilot|Anthropic API|OpenAI|OpenRouter/.test(n));
 
 beforeEach(() => {
   vi.clearAllMocks();
   mockCapabilities.managedCredits = true;
-  mockDaemonStatus.mockReturnValue(noMachines());
+  mockDaemonStatus.mockReturnValue(machines());
   mockUseWalletOverview.mockReturnValue({
     data: { wallet: { balanceUsdNanos: 0n } },
     isLoading: false,
@@ -104,37 +97,64 @@ afterEach(() => {
 });
 
 describe("defaultProviderFor", () => {
-  it("is the subscription sign-in only when a local machine can complete it", () => {
-    expect(defaultProviderFor({ localMachineConnected: true, managedCredits: true })).toBe("claude");
-    expect(defaultProviderFor({ localMachineConnected: false, managedCredits: true })).toBe("reliant");
+  it("is the subscription sign-in only where a local helper can complete it, else the Anthropic key", () => {
+    expect(defaultProviderFor({ localMachineConnected: true })).toBe("claude");
+    expect(defaultProviderFor({ localMachineConnected: false })).toBe("anthropic");
   });
 
-  it("falls back to an API key where the deployment sells no credit", () => {
-    expect(defaultProviderFor({ localMachineConnected: false, managedCredits: false })).toBe("anthropic");
+  it("is never Reliant credit", () => {
+    for (const localMachineConnected of [true, false]) {
+      expect(defaultProviderFor({ localMachineConnected })).not.toBe("reliant");
+    }
+  });
+});
+
+describe("orderedProviderIds", () => {
+  it("puts Reliant credit last in both contexts", () => {
+    expect(orderedProviderIds(true).at(-1)).toBe("reliant");
+    expect(orderedProviderIds(false).at(-1)).toBe("reliant");
+  });
+
+  it("leads with the API keys (Anthropic first) when no local helper exists", () => {
+    expect(orderedProviderIds(false).slice(0, 3)).toEqual(["anthropic", "openai", "openrouter"]);
+  });
+
+  it("leads with the subscriptions when a local helper exists", () => {
+    expect(orderedProviderIds(true)[0]).toBe("claude");
+  });
+
+  it("lists every provider exactly once", () => {
+    for (const local of [true, false]) {
+      const ids = orderedProviderIds(local);
+      expect(new Set(ids).size).toBe(ids.length);
+      expect(ids).toHaveLength(8);
+    }
   });
 });
 
 describe("ModelStep — default selection", () => {
-  it("a browser user with no machine opens on Reliant credit, not a sign-in that cannot finish", () => {
+  it("a browser user with no machine opens on the Anthropic API-key form", () => {
     renderStep();
 
-    expect(reliantCta()).toBeInTheDocument();
+    expect(apiKeyInput()).toBeInTheDocument();
     expect(claudeConnectButton()).toBeNull();
+    expect(reliantCta()).toBeNull();
   });
 
-  it("a browser user whose only machine is a cloud one opens on Reliant credit", () => {
-    mockDaemonStatus.mockReturnValue(cloudOnly());
+  it("a cloud user whose only machine is a cloud one also opens on the API-key form", () => {
+    mockDaemonStatus.mockReturnValue(machines("managed"));
     renderStep();
 
-    expect(reliantCta()).toBeInTheDocument();
-    expect(claudeConnectButton()).toBeNull();
+    expect(apiKeyInput()).toBeInTheDocument();
+    expect(reliantCta()).toBeNull();
   });
 
   it("opens on the Claude subscription when a self-hosted machine is connected", () => {
-    mockDaemonStatus.mockReturnValue(selfHosted());
+    mockDaemonStatus.mockReturnValue(machines("self_hosted"));
     renderStep();
 
     expect(claudeConnectButton()).toBeInTheDocument();
+    expect(reliantCta()).toBeNull();
   });
 
   it("opens on the Claude subscription in the desktop app, which bundles the helper", () => {
@@ -144,55 +164,88 @@ describe("ModelStep — default selection", () => {
     expect(claudeConnectButton()).toBeInTheDocument();
   });
 
-  it("opens on the API-key form where the deployment sells no credit", () => {
-    mockCapabilities.managedCredits = false;
+  it("opens on the API key even where the deployment sells credit; credit is still one click away", () => {
+    mockCapabilities.managedCredits = true;
     renderStep();
+    expect(reliantCta()).toBeNull();
 
-    expect(screen.getByPlaceholderText("sk-ant-...")).toBeInTheDocument();
-    expect(claudeConnectButton()).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Reliant credit" }));
+    expect(reliantCta()).toBeInTheDocument();
   });
 
   it("writes nothing on mount — a default selection is not a choice", () => {
-    for (const machines of [noMachines(), selfHosted()]) {
-      mockDaemonStatus.mockReturnValue(machines);
+    for (const m of [machines(), machines("self_hosted")]) {
+      mockDaemonStatus.mockReturnValue(m);
       const updatePlan = vi.fn();
       const onNext = vi.fn();
       const { unmount } = renderStep({ updatePlan, onNext });
 
       expect(updatePlan).not.toHaveBeenCalled();
-      // The decisive one: derivation routes on modelProvider, so a write here
-      // would skip the step entirely rather than default it.
       expect(onNext).not.toHaveBeenCalled();
       unmount();
     }
   });
 });
 
+describe("ModelStep — order and weight of the tiles", () => {
+  it("with no machine: API keys first, subscriptions next, Reliant credit last", () => {
+    renderStep();
+
+    expect(tileNames()).toEqual([
+      "Anthropic API",
+      "OpenAI",
+      "OpenRouter",
+      "Claude subscription",
+      "Codex (ChatGPT)",
+      "Antigravity",
+      "GitHub Copilot",
+      "Reliant credit",
+    ]);
+  });
+
+  it("with a machine: subscriptions first, Reliant credit still last", () => {
+    mockDaemonStatus.mockReturnValue(machines("self_hosted"));
+    renderStep();
+
+    const names = tileNames();
+    expect(names[0]).toBe("Claude subscription");
+    expect(names.at(-1)).toBe("Reliant credit");
+  });
+
+  it("Reliant credit is visually quieter while not selected", () => {
+    renderStep();
+    const credit = screen.getByRole("button", { name: "Reliant credit" });
+    const other = screen.getByRole("button", { name: "OpenAI" });
+
+    expect(credit.className).toMatch(/border-dashed/);
+    expect(other.className).not.toMatch(/border-dashed/);
+  });
+});
+
 describe("ModelStep — subscription tiles without a local machine", () => {
-  it("labels each subscription tile with what it needs, and no API-key or Reliant tile", () => {
+  it("labels each subscription tile with what it needs; keys and credit carry no label", () => {
     renderStep();
 
     for (const name of ["Claude subscription", "Codex (ChatGPT)", "Antigravity"]) {
-      const tile = screen.getByRole("button", { name });
-      expect(tile).toHaveAccessibleDescription(SUBSCRIPTION_NEEDS_LOCAL_HINT);
+      expect(screen.getByRole("button", { name })).toHaveAccessibleDescription(SUBSCRIPTION_NEEDS_LOCAL_HINT);
     }
-    for (const name of ["Reliant", "Anthropic API", "OpenAI", "OpenRouter", "GitHub Copilot"]) {
+    for (const name of ["Reliant credit", "Anthropic API", "OpenAI", "OpenRouter", "GitHub Copilot"]) {
       expect(screen.getByRole("button", { name })).not.toHaveAccessibleDescription(SUBSCRIPTION_NEEDS_LOCAL_HINT);
     }
     expect(SUBSCRIPTION_NEEDS_LOCAL_HINT).toMatch(/desktop app or CLI on your computer/i);
   });
 
   it("drops the labels once a local machine is connected", () => {
-    mockDaemonStatus.mockReturnValue(selfHosted());
+    mockDaemonStatus.mockReturnValue(machines("self_hosted"));
     renderStep();
 
     expect(screen.queryByText(SUBSCRIPTION_NEEDS_LOCAL_HINT)).toBeNull();
   });
 
-  it("the subscription tile is still selectable, so someone who has the CLI is not locked out", () => {
+  it("the subscription tile is still selectable", () => {
     renderStep();
     fireEvent.click(screen.getByRole("button", { name: "Claude subscription" }));
 
-    expect(claudeConnectButton()).toBeInTheDocument();
+    expect(screen.getByText(/authenticate via claude subscription/i)).toBeInTheDocument();
   });
 });

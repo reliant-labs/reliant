@@ -15,6 +15,7 @@ vi.mock("@tanstack/react-router", () => ({
   useSearch: () => mocks.search,
 }));
 vi.mock("@/lib/analytics", () => ({ trackEvent: vi.fn() }));
+vi.mock("../../OnboardingFlow/PendingProviderBanner", () => ({ PendingProviderBanner: () => null }));
 // The composer is not under test: record the prefill and heading it was given.
 vi.mock("../../Chat/MainNewChatView", () => ({
   MainNewChatView: (props: { composerPrefill?: { text: string }; heading?: React.ReactNode; welcomePanel?: React.ReactNode }) => {

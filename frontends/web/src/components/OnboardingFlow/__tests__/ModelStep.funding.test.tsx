@@ -123,12 +123,11 @@ function renderStep(
     />,
     { wrapper },
   );
-  // The step opens with Claude subscription pre-selected — the free path, so a user
-  // can finish onboarding without being charged. Every test in this file is
+  // The step opens on the user's own model (never Reliant credit). Every test in this file is
   // about the FUNDING GATE on the Reliant CTA, which is not on screen until
   // Reliant is chosen, so the choice is made here rather than each test
   // silently depending on which provider happens to be the default.
-  fireEvent.click(screen.getByRole("button", { name: /^reliant$/i }));
+  fireEvent.click(screen.getByRole("button", { name: /^reliant credit$/i }));
   return result;
 }
 

@@ -72,3 +72,43 @@ describe("OAuthHelperPanel — why it is unavailable", () => {
     expect(screen.queryByTestId("oauth-helper-problem")).toBeNull();
   });
 });
+
+describe("OAuthHelperPanel — never a dead end", () => {
+  it("offers to continue now and connect later, as the primary action", () => {
+    const onClick = vi.fn();
+    render(
+      <OAuthHelperPanel
+        {...base}
+        problem="no_machine"
+        later={{ label: "Continue, and connect Claude subscription later", onClick }}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /connect claude subscription later/i }));
+    expect(onClick).toHaveBeenCalledTimes(1);
+  });
+
+  it("disables 'later' while it is saving", () => {
+    render(<OAuthHelperPanel {...base} problem="no_machine" later={{ label: "Continue later", onClick: vi.fn(), busy: true }} />);
+
+    expect(screen.getByRole("button", { name: /continue later/i })).toBeDisabled();
+  });
+
+  it("puts the API-key alternative first and the credit link after it, smaller", () => {
+    render(
+      <OAuthHelperPanel
+        {...base}
+        problem="no_machine"
+        alternative={{ label: "Use an API key instead", onClick: vi.fn() }}
+        secondaryAlternative={{ label: "or use Reliant credit", onClick: vi.fn() }}
+      />,
+    );
+
+    const key = screen.getByRole("button", { name: /use an api key instead/i });
+    const credit = screen.getByRole("button", { name: /or use reliant credit/i });
+    expect(key.compareDocumentPosition(credit) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(credit.className).toMatch(/text-xs/);
+    expect(key.className).not.toMatch(/text-xs/);
+  });
+});
+

@@ -19,6 +19,7 @@ import { useNavigate, useSearch } from "@tanstack/react-router";
 import { pickerParam } from "@/components/Onboarding/tourParam";
 import { trackEvent } from "@/lib/analytics";
 import { useProjectStore } from "@/store/projectStore";
+import { PendingProviderBanner } from "../OnboardingFlow/PendingProviderBanner";
 
 import { MainNewChatView } from "../Chat/MainNewChatView";
 import { HomeBuildApp } from "./HomeBuildApp";
@@ -88,7 +89,12 @@ export function HomeNewChat({ onNavigateToWorktrees }: { onNavigateToWorktrees?:
       showProjectChip
       onChatCreated={start ? () => setStart(undefined) : undefined}
       composerPrefill={start ? { text: starterPrompt(start, projectName), id: STARTER_PREFILL_ID } : undefined}
-      heading={start ? <StarterHeading start={start} projectName={projectName} onTour={openTour} /> : undefined}
+      heading={
+        <>
+          <PendingProviderBanner />
+          {start ? <StarterHeading start={start} projectName={projectName} onTour={openTour} /> : null}
+        </>
+      }
       welcomePanel={start ? undefined : <HomeBuildApp onStart={() => setStart(START_APP)} />}
     />
   );

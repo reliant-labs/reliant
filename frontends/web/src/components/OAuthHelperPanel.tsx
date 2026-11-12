@@ -30,6 +30,14 @@ export interface OAuthHelperPanelProps {
    * on is never left with only a Retry button.
    */
   alternative?: { label: string; onClick: () => void };
+  /** A smaller second way out (Reliant credit), shown after `alternative`. */
+  secondaryAlternative?: { label: string; onClick: () => void };
+  /**
+   * Choose this provider now and finish the sign-in later, once the helper is
+   * running. Shown while the helper is unavailable so nobody is stuck on a
+   * panel that cannot succeed yet.
+   */
+  later?: { label: string; onClick: () => void; busy?: boolean };
   /** Start the OAuth flow for this provider. */
   onConnect: () => void;
   /** True while the OAuth flow is in progress. */
@@ -101,6 +109,8 @@ export function OAuthHelperPanel({
   problem = null,
   stopped = false,
   alternative,
+  secondaryAlternative,
+  later,
   onConnect,
   connecting,
   onCancel,
@@ -268,14 +278,37 @@ export function OAuthHelperPanel({
             {stopped && (
               <p>We stopped checking automatically. Press Retry once it is running.</p>
             )}
-            {alternative && (
+            {later && (
               <button
                 type="button"
-                onClick={alternative.onClick}
-                className="font-medium underline underline-offset-2 hover:no-underline"
+                onClick={later.onClick}
+                disabled={later.busy}
+                className="block w-full rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
               >
-                {alternative.label}
+                {later.label}
               </button>
+            )}
+            {(alternative || secondaryAlternative) && (
+              <p className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                {alternative && (
+                  <button
+                    type="button"
+                    onClick={alternative.onClick}
+                    className="font-medium underline underline-offset-2 hover:no-underline"
+                  >
+                    {alternative.label}
+                  </button>
+                )}
+                {secondaryAlternative && (
+                  <button
+                    type="button"
+                    onClick={secondaryAlternative.onClick}
+                    className="text-xs underline underline-offset-2 opacity-80 hover:no-underline hover:opacity-100"
+                  >
+                    {secondaryAlternative.label}
+                  </button>
+                )}
+              </p>
             )}
           </div>
         )}
