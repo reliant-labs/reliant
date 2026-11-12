@@ -88,7 +88,7 @@ function renderStep(updatePlan = vi.fn(async (_patch: Partial<LaunchPlan>) => {}
     <QueryClientProvider client={client}>{children}</QueryClientProvider>
   );
   return render(
-    <ComputeStep plan={{} as Partial<LaunchPlan>} updatePlan={updatePlan} onNext={vi.fn()} onBack={vi.fn()} />,
+    <ComputeStep plan={{ compute: "cloud_paid" } as Partial<LaunchPlan>} updatePlan={updatePlan} onNext={vi.fn()} onBack={vi.fn()} />,
     { wrapper },
   );
 }
