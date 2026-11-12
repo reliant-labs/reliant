@@ -46,7 +46,8 @@ func (s *Service) GetMessage(
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get message"))
 	}
-	if !authz.CanReadChat(ctx, userID, chat) {
+	access, denied := authz.ReadChatAccess(ctx, userID, chat)
+	if denied != nil {
 		return nil, svcerr.NotFound("message")
 	}
 
@@ -102,7 +103,7 @@ func (s *Service) GetMessage(
 		ToolBodies:             toolBodies,
 	})
 
-	if authz.IsViewer(ctx, userID, chat) {
+	if access.Viewer() {
 		messageproto.ElideForViewer([]*reliantv1.Message{protoMessage})
 	}
 

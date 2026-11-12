@@ -2,6 +2,7 @@ package message
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"connectrpc.com/connect"
@@ -47,5 +48,30 @@ func TestGetMessageElidesResultsForAViewer(t *testing.T) {
 	}
 	if b := get(f.Owner); b.GetContent() == "" {
 		t.Fatal("owner: the result is missing")
+	}
+}
+
+// GetMessage shapes a viewer's answer from the one decision that admitted
+// them: membership that answers "member" once and then expires or fails
+// cannot hand the viewer the owner's unredacted message.
+func TestGetMessageDecidesViewerAccessOnce(t *testing.T) {
+	repo, cleanup := db.SetupTestDB(t)
+	t.Cleanup(cleanup)
+	f := viewertest.New(t, repo)
+	svc := NewTestMessage(t, WithMessageDeps(Deps{Repo: repo}))
+	for _, after := range []error{nil, errors.New("control plane down")} {
+		m := &viewertest.FirstAnswerOnly{First: f.Membership, After: after}
+		resp, err := svc.GetMessage(f.ContextWith(f.ViewerID, m), connect.NewRequest(&reliantv1.GetMessageRequest{MessageId: f.Transcript.ToolMessageID}))
+		if err != nil {
+			t.Fatalf("after %v: %v", after, err)
+		}
+		if m.Asked() != 1 {
+			t.Errorf("after %v: membership asked %d times, want once", after, m.Asked())
+		}
+		for _, b := range resp.Msg.Message.GetContentBlocks() {
+			if b.GetId() == f.Transcript.ResultBlockID && (b.Content != nil || !b.GetBodyElided()) {
+				t.Errorf("after %v: the viewer got the tool result", after)
+			}
+		}
 	}
 }

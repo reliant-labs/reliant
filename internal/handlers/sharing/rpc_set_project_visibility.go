@@ -40,10 +40,13 @@ func (s *Service) SetProjectVisibility(
 		}
 	}
 	resp := &pb.SetProjectVisibilityResponse{Changed: changed}
-	if after, err := s.deps.Repo.GetProject(ctx, project.ID); err == nil && authz.CanReadProject(ctx, userID, after) {
-		resp.Project = projectproto.Project(after)
-		if authz.IsProjectViewer(ctx, userID, after) {
-			resp.Project = projectproto.ForViewer(resp.Project)
+	// One decision shapes it (authz.ReadProjectAccess).
+	if after, err := s.deps.Repo.GetProject(ctx, project.ID); err == nil {
+		if access, denied := authz.ReadProjectAccess(ctx, userID, after); denied == nil {
+			resp.Project = projectproto.Project(after)
+			if access.Viewer() {
+				resp.Project = projectproto.ForViewer(resp.Project)
+			}
 		}
 	}
 	return connect.NewResponse(resp), nil

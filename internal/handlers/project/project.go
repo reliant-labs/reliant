@@ -288,8 +288,12 @@ func (s *Service) GetProject(
 		// (no path) and without the git check, which would reach the owner's
 		// machine.
 		viewing := authz.WithViewerReads(ctx)
-		if shared, getErr := s.deps.Repo.GetProject(viewing, req.Msg.ProjectId); getErr == nil && authz.IsProjectViewer(viewing, userID, shared) {
-			return connect.NewResponse(&reliantv1.GetProjectResponse{Project: projectproto.ForViewer(projectToProto(shared))}), nil
+		if shared, getErr := s.deps.Repo.GetProject(viewing, req.Msg.ProjectId); getErr == nil {
+			// Not the owner here, so a readable answer is a viewer's: it is
+			// shaped for one whatever the decision says.
+			if _, denied := authz.ReadProjectAccess(viewing, userID, shared); denied == nil {
+				return connect.NewResponse(&reliantv1.GetProjectResponse{Project: projectproto.ForViewer(projectToProto(shared))}), nil
+			}
 		}
 		return nil, err
 	}

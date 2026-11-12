@@ -206,7 +206,7 @@ func (s *Service) ListTasks(
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}
 
-	if !authz.CanReadChat(ctx, userID, chat) {
+	if _, denied := authz.ReadChatAccess(ctx, userID, chat); denied != nil {
 		return nil, svcerr.PermissionDenied("access denied")
 	}
 

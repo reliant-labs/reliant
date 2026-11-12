@@ -360,12 +360,13 @@ func (s *Service) GetChat(
 	}
 
 	// The owner, or a viewer of a shared chat.
-	if !authz.CanReadChat(ctx, userID, chat) {
+	access, denied := authz.ReadChatAccess(ctx, userID, chat)
+	if denied != nil {
 		return nil, svcerr.NotFound("chat")
 	}
 	// A viewer reads the chat, never the owner's composer, workspace or run
 	// recovery: no selection read, no Temporal describe.
-	if authz.IsViewer(ctx, userID, chat) {
+	if access.Viewer() {
 		return connect.NewResponse(&reliantv1.GetChatResponse{Chat: chatproto.ForViewer(chatToProto(chat))}), nil
 	}
 
@@ -879,7 +880,7 @@ func (s *Service) ListChatPlans(
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}
-	if !authz.CanReadChat(ctx, userID, chat) {
+	if _, denied := authz.ReadChatAccess(ctx, userID, chat); denied != nil {
 		return nil, svcerr.NotFound("chat")
 	}
 

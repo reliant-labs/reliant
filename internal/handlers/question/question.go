@@ -132,53 +132,73 @@ func (s *Service) ListPendingQuestions(
 ) (*connect.Response[reliantv1.ListPendingQuestionsResponse], error) {
 	userID := auth.MustGetUserID(ctx)
 
-	var (
-		questions []*db.Question
-		err       error
-	)
 	if req.Msg.ChatId == nil {
-		questions, err = s.deps.Repo.ListAnswerablePendingQuestionsByUser(ctx, userID)
-		// The store lists the caller's questions; one in a chat they may no
-		// longer read (an org they left, a credential's other org) is not
-		// listed, as GetChat would not show its chat.
-		readable := map[string]bool{}
-		questions = authz.Visible(ctx, userID, questions, func(ctx context.Context, userID string, q *db.Question) bool {
-			ok, seen := readable[q.ChatID]
-			if !seen {
-				chat, getErr := s.deps.Repo.GetChatRow(ctx, q.ChatID)
-				ok = getErr == nil && authz.CanReadChat(ctx, userID, chat)
-				readable[q.ChatID] = ok
-			}
-			return ok
-		})
-	} else {
-		chatID := req.Msg.GetChatId()
-		if chatID == "" {
-			return nil, svcerr.InvalidArgument("chat_id, when set, must not be empty")
+		questions, err := s.pendingQuestionsOfUser(ctx, userID)
+		if err != nil {
+			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list pending questions"))
 		}
-		// One chat's questions serve its viewers too, as read-only cards:
-		// answering stays the owner's (ResolveQuestion).
-		ctx = authz.WithViewerReads(ctx)
-		chat, getErr := s.deps.Repo.GetChatRow(ctx, chatID)
-		if getErr != nil {
-			return nil, svcerr.WrapOr(getErr, svcerr.Internal("failed to get chat"))
-		}
-		if !authz.CanReadChat(ctx, userID, chat) {
-			return nil, svcerr.NotFound("chat")
-		}
-		questions, err = s.deps.Repo.ListAnswerablePendingQuestionsByChat(ctx, chatID)
+		return connect.NewResponse(&reliantv1.ListPendingQuestionsResponse{Questions: questionsToProto(questions, authz.AccessOwner)}), nil
 	}
+	chatID := req.Msg.GetChatId()
+	if chatID == "" {
+		return nil, svcerr.InvalidArgument("chat_id, when set, must not be empty")
+	}
+	// One chat's questions serve its viewers too, as read-only cards:
+	// answering stays the owner's (ResolveQuestion). One decision shapes them.
+	ctx = authz.WithViewerReads(ctx)
+	chat, err := s.deps.Repo.GetChatRow(ctx, chatID)
+	if err != nil {
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
+	}
+	access, denied := authz.ReadChatAccess(ctx, userID, chat)
+	if denied != nil {
+		return nil, svcerr.NotFound("chat")
+	}
+	questions, err := s.deps.Repo.ListAnswerablePendingQuestionsByChat(ctx, chatID)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list pending questions"))
 	}
+	return connect.NewResponse(&reliantv1.ListPendingQuestionsResponse{Questions: questionsToProto(questions, access)}), nil
+}
 
-	resp := &reliantv1.ListPendingQuestionsResponse{
-		Questions: make([]*reliantv1.QuestionInfo, 0, len(questions)),
+// pendingQuestionsOfUser is every answerable pending question of the caller.
+// The store lists the caller's questions; one in a chat they may no longer
+// read (an org they left, a credential's other org) is not listed, as GetChat
+// would not show its chat. Owner reads only: no viewer is served here.
+func (s *Service) pendingQuestionsOfUser(ctx context.Context, userID string) ([]*db.Question, error) {
+	questions, err := s.deps.Repo.ListAnswerablePendingQuestionsByUser(ctx, userID)
+	if err != nil {
+		return nil, err
 	}
+	readable := map[string]bool{}
+	return authz.Visible(ctx, userID, questions, func(ctx context.Context, userID string, q *db.Question) bool {
+		ok, seen := readable[q.ChatID]
+		if !seen {
+			chat, getErr := s.deps.Repo.GetChatRow(ctx, q.ChatID)
+			ok = getErr == nil && authz.CanReadChat(ctx, userID, chat)
+			readable[q.ChatID] = ok
+		}
+		return ok
+	}), nil
+}
+
+// questionsToProto is questions as access reads them. A viewer gets every
+// question's identity and status, but a workflow step's question (no
+// tool_call_id) without its metadata or answer: the engine resolved that
+// prompt, and a resolved value can carry an earlier step's or tool's result
+// (D2). An agent's question (ask_user) is the model's own words, which the
+// viewer already reads as the tool call's input, so it stays whole.
+func questionsToProto(questions []*db.Question, access authz.Access) []*reliantv1.QuestionInfo {
+	out := make([]*reliantv1.QuestionInfo, 0, len(questions))
 	for _, q := range questions {
-		resp.Questions = append(resp.Questions, questionToProto(q))
+		info := questionToProto(q)
+		if access.Viewer() && info.GetToolCallId() == "" {
+			info.Metadata = nil
+			info.ResponseData = nil
+		}
+		out = append(out, info)
 	}
-	return connect.NewResponse(resp), nil
+	return out
 }
 
 // ============================================================================

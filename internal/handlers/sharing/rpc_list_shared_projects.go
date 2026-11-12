@@ -40,7 +40,7 @@ func (s *Service) ListSharedProjects(
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list shared projects"))
 	}
 	ctx = authz.WithViewerReads(ctx)
-	for _, p := range authz.Visible(ctx, userID, projects, authz.IsProjectViewer) {
+	for _, p := range authz.SharedProjectsFor(ctx, userID, projects) {
 		out.Projects = append(out.Projects, projectproto.ForViewer(projectproto.Project(p)))
 	}
 	return connect.NewResponse(out), nil

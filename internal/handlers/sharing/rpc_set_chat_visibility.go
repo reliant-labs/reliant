@@ -45,10 +45,13 @@ func (s *Service) SetChatVisibility(
 	resp := &pb.SetChatVisibilityResponse{Changed: changed}
 	// The chat as the caller now reads it: an admin who made it private
 	// reads it no longer.
-	if after, err := s.deps.Repo.GetChat(ctx, chat.ID); err == nil && authz.CanReadChat(ctx, userID, after) {
-		resp.Chat = chatproto.Chat(after)
-		if authz.IsViewer(ctx, userID, after) {
-			resp.Chat = chatproto.ForViewer(resp.Chat)
+	// One decision shapes it (authz.ReadChatAccess).
+	if after, err := s.deps.Repo.GetChat(ctx, chat.ID); err == nil {
+		if access, denied := authz.ReadChatAccess(ctx, userID, after); denied == nil {
+			resp.Chat = chatproto.Chat(after)
+			if access.Viewer() {
+				resp.Chat = chatproto.ForViewer(resp.Chat)
+			}
 		}
 	}
 	return connect.NewResponse(resp), nil

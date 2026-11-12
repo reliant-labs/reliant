@@ -123,15 +123,20 @@ func ForViewer(out *reliantv1.Chat) *reliantv1.Chat {
 	return out
 }
 
-// ElideStepsForViewer leaves what each step produced out of steps, in place:
-// its output and its error, which embed the output of commands that ran on
-// the owner's machine. What the step was given (input_json) stays, as a tool
-// call's input does (messageproto.ElideForViewer).
+// ElideStepsForViewer leaves every resolved value out of steps, in place: what
+// each step produced (its output and its error, which embed the output of
+// commands that ran on the owner's machine) and what it was given
+// (input_json). A step's input is not the model's words, as a tool call's
+// input is: the engine resolved it, and a resolved argument can carry an
+// earlier step's or tool's result, which a viewer never reads (D2). What
+// stays is which step ran and how it ended (step id, activity, exit code,
+// success, duration, attempt, node path).
 func ElideStepsForViewer(steps []*reliantv1.StepExecution) {
 	for _, s := range steps {
 		if s == nil {
 			continue
 		}
+		s.InputJson = ""
 		s.OutputJson = ""
 		s.ErrorMessage = ""
 	}

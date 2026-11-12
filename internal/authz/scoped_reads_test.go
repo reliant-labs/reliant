@@ -70,7 +70,7 @@ var userScopedReads = map[string]string{
 	"GetProjectByRemoteURLAndUser":         readCallersFilter,
 
 	// The shared lists read OTHER users' rows of one org; SharingService
-	// passes each through authz.Visible with IsViewer / IsProjectViewer,
+	// passes each through authz.SharedChatsFor / SharedProjectsFor,
 	// which is where a viewer is decided.
 	"ListSharedChats":    readCallersFilter,
 	"ListSharedProjects": readCallersFilter,

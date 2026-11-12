@@ -380,3 +380,61 @@ func TestSharingReachesOnlyWhatIsListed(t *testing.T) {
 		t.Error("gen/forge_service_catalog.json names SharingService")
 	}
 }
+
+// TestViewerReadSitesDecideOnce pins how a read site that serves viewers
+// (calls WithViewerReads) decides: with one ReadChatAccess / ReadProjectAccess
+// call, whose Access shapes the whole answer, and never with CanReadChat /
+// CanReadProject, whose boolean says nothing about the shape. A second
+// decision can disagree with the first (a membership answer expiring, an
+// outage) and must never be what turns a viewer's answer into the owner's.
+func TestViewerReadSitesDecideOnce(t *testing.T) {
+	forbidden := map[string]bool{"CanReadChat": true, "CanReadProject": true}
+	decisions := map[string]bool{"ReadChatAccess": true, "ReadProjectAccess": true}
+	sites := 0
+	goSources(t, func(rel string, src []byte) {
+		if strings.HasPrefix(rel, "internal/authz/") || !bytes.Contains(src, []byte("WithViewerReads(")) {
+			return
+		}
+		fset := token.NewFileSet()
+		file, err := parser.ParseFile(fset, rel, src, parser.SkipObjectResolution)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, decl := range file.Decls {
+			fn, ok := decl.(*ast.FuncDecl)
+			if !ok || fn.Body == nil {
+				continue
+			}
+			serves, decided := false, 0
+			var bad []string
+			ast.Inspect(fn.Body, func(n ast.Node) bool {
+				sel, ok := n.(*ast.SelectorExpr)
+				if !ok {
+					return true
+				}
+				switch name := sel.Sel.Name; {
+				case name == "WithViewerReads":
+					serves = true
+				case forbidden[name]:
+					bad = append(bad, fset.Position(sel.Pos()).String()+" "+name)
+				case decisions[name]:
+					decided++
+				}
+				return true
+			})
+			if !serves {
+				continue
+			}
+			sites++
+			for _, b := range bad {
+				t.Errorf("%s in %s, which serves viewers: decide once with authz.ReadChatAccess / ReadProjectAccess and shape from its Access", b, fn.Name.Name)
+			}
+			if decided > 1 {
+				t.Errorf("%s:%s decides access %d times: decide once and shape every part of the answer from that Access", rel, fn.Name.Name, decided)
+			}
+		}
+	})
+	if sites == 0 {
+		t.Fatal("found no read site that serves viewers: the guard is reading the wrong tree")
+	}
+}

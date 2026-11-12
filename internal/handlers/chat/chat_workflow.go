@@ -348,7 +348,8 @@ func (s *Service) GetWorkflowExecutions(
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}
-	if !authz.CanReadChat(ctx, userID, chat) {
+	access, denied := authz.ReadChatAccess(ctx, userID, chat)
+	if denied != nil {
 		return nil, svcerr.NotFound("chat")
 	}
 
@@ -485,7 +486,7 @@ func (s *Service) GetWorkflowExecutions(
 	if threadsErr == nil {
 		s.attachThreadsWithoutWorkflowRow(threads, allRootProtos)
 	}
-	if authz.IsViewer(ctx, userID, chat) {
+	if access.Viewer() {
 		chatproto.ElideWorkflowsForViewer(allRootProtos)
 	}
 

@@ -40,7 +40,8 @@ func (s *Service) ListMessages(
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}
-	if !authz.CanReadChat(ctx, userID, chat) {
+	access, denied := authz.ReadChatAccess(ctx, userID, chat)
+	if denied != nil {
 		return nil, svcerr.NotFound("chat")
 	}
 
@@ -178,7 +179,7 @@ func (s *Service) ListMessages(
 	toolBodies := messageproto.ResolveToolBodyMode(req.Msg.GetToolBodies(), s.deps.Config.GetTranscript().GetToolBodyStubs())
 	protoMessages := messageproto.AssembleForDisplay(
 		ctx, s.deps.Repo, messages, blocksByMessageID, attachmentMap, viewingThreadID, 0, toolBodies)
-	if authz.IsViewer(ctx, userID, chat) {
+	if access.Viewer() {
 		messageproto.ElideForViewer(protoMessages)
 	}
 	// What this read sent, by block kind, on the RPC's span: counted after

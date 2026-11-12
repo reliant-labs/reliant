@@ -45,7 +45,8 @@ func (s *Service) ListStepExecutions(
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}
-	if !authz.CanReadChat(ctx, userID, chat) {
+	access, denied := authz.ReadChatAccess(ctx, userID, chat)
+	if denied != nil {
 		return nil, svcerr.NotFound("chat")
 	}
 
@@ -63,7 +64,7 @@ func (s *Service) ListStepExecutions(
 	for i, row := range rows {
 		executions[i] = stepExecutionRecordToProto(row)
 	}
-	if authz.IsViewer(ctx, userID, chat) {
+	if access.Viewer() {
 		chatproto.ElideStepsForViewer(executions)
 	}
 	return connect.NewResponse(&reliantv1.ListStepExecutionsResponse{

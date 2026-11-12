@@ -41,7 +41,7 @@ func (s *Service) ListSharedChats(
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list shared chats"))
 	}
 	ctx = authz.WithViewerReads(ctx)
-	for _, c := range authz.Visible(ctx, userID, chats, authz.IsViewer[*core.Chat]) {
+	for _, c := range authz.SharedChatsFor(ctx, userID, chats) {
 		out.Chats = append(out.Chats, chatproto.ForViewer(chatproto.Chat(c)))
 	}
 	return connect.NewResponse(out), nil
