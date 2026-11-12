@@ -79,6 +79,12 @@ describe("toReleaseRecord", () => {
   it("leaves subject and author empty for a release cut before they were recorded", () => {
     expect(toReleaseRecord(create(DeployReleaseSchema, { version: "v1" }))).toMatchObject({ subject: "", author: "", commits: null, run: null });
   });
+
+  it("reads a release recorded by CI, and a forge-built one as not recorded", () => {
+    expect(toReleaseRecord(create(DeployReleaseSchema, { version: "v1", recordOnly: true })).recordOnly).toBe(true);
+    expect(toReleaseRecord(create(DeployReleaseSchema, { version: "v1" })).recordOnly).toBe(false);
+    expect(toReleasePromotion(create(DeployPromotionSchema, { releaseVersion: "v1", recordOnly: true })).recordOnly).toBe(true);
+  });
 });
 
 describe("toReleasePromotion", () => {
