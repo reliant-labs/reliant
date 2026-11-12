@@ -71,6 +71,7 @@ import { logger } from "../lib/logger";
 import { getAuthTokenProvider } from "./authProvider";
 import { upgradeInterceptor } from "./upgradeInterceptor";
 import { orgInterceptor } from "./orgInterceptor";
+import { signupAttributionInterceptor } from "./signupAttribution";
 import { machineWakeInterceptor } from "./machineWakeInterceptor";
 import { createDeadlineInterceptor } from "./rpcDeadline";
 import { writeOwnerInterceptor } from "./writeOwner";
@@ -780,6 +781,9 @@ export function buildInterceptors(
     upgradeInterceptor,
     machineWakeInterceptor,
     ...(withAuth ? [unauthInterceptor, writeOwnerInterceptor] : []),
+    // The landing handoff on signed-in control-plane requests until one
+    // succeeds: the request that creates the account stores it (signupAttribution.ts).
+    ...(withAuth && backend === "control-plane" ? [signupAttributionInterceptor] : []),
     // Innermost: everything above (the token above all) is settled.
     requestSentInterceptor,
   ];
