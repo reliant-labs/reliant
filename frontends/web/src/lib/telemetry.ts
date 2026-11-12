@@ -23,7 +23,7 @@
  * decided not to, goes around it (keepHandledRpcFailuresOutOfSdk).
  */
 
-import { disableTelemetry, setTelemetryUser } from "@reliantlabs/forge-web-runtime";
+import { disableTelemetry, grantAnalyticsConsent, setTelemetryUser } from "@reliantlabs/forge-web-runtime";
 import {
   enableAttribution,
   initBrowserTelemetry,
@@ -216,6 +216,12 @@ export function buildTelemetryConfig(
     appClient: input.desktop ? "electron" : "web",
     consoleCapture: false,
     advancedNetworkCapture: false,
+    // The demo runs forge's `full` analytics tier (a persistent visitor id,
+    // and replay when it records one), on the strength of its visible notice:
+    // start() grants the consent the tier needs. Owner decision, 2026-11-11.
+    // The app itself keeps forge's cookieless default (`identified`).
+    // GPC / DNT browsers never get here (demoTelemetry() is "off").
+    ...(demo && input.demoTelemetry && input.demoTelemetry !== "off" ? { analytics: "full" as const } : {}),
     // The demo records replays by its own switch (DEMO_TELEMETRY, owner
     // default on); the runtime masks all text and inputs whenever replay runs.
     replay: demo ? input.demoTelemetry === "replay" : config.OTEL_REPLAY === "true",
@@ -401,6 +407,9 @@ async function start(): Promise<boolean> {
   // console.error as it is before the SDK wraps it (the logger's redirect):
   // where a handled RPC failure's console line goes instead of the SDK.
   const beneathSdk = console.error;
+  // The demo's notice is its consent (buildTelemetryConfig's `analytics`):
+  // granted before the SDK starts, so the first page view is in the full tier.
+  if (config.analytics === "full") grantAnalyticsConsent();
   const running = await initBrowserTelemetry(config);
   if (!running) return false;
   if (handoff) dropLandingAttribution();
