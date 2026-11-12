@@ -1,0 +1,101 @@
+// yours: scaffolded once, never touched again — forge will not overwrite this file
+// External-client implementation; canonical pattern in `forge skill load service-layer`.
+package {{.Name}}
+
+import (
+	"context"
+	"fmt"
+	"io"
+	"log/slog"
+	"net/http"
+
+	"github.com/reliant-labs/forge/pkg/observe"
+{{- if .HasConfig}}
+
+	"{{.Module}}/pkg/config"
+{{- end}}
+)
+
+// Deps contains the dependencies for the {{.Name}} client.
+type Deps struct {
+	Logger *slog.Logger
+{{- if .HasConfig}}
+	Config *config.Config
+{{- end}}
+
+	// HTTPClient is injected so tests can swap in an httptest-backed
+	// transport. Production wiring passes `infra.DefaultClient()` (see
+	// internal/app/providers.go) — a fresh client over the SHARED
+	// instrumented base transport (OTel client spans + trace propagation
+	// + timeout). The composition site (internal/app/compose.go) wires it
+	// automatically; nil falls back to a plain 30s-timeout client.
+	HTTPClient *http.Client
+}
+
+// client implements Service by calling the external API.
+type client struct {
+	deps    Deps
+	http    *http.Client
+	baseURL string
+}
+
+// New creates a new {{.Name}} client.
+//
+// The two-result `(Service, error)` shape lets New surface dep-validation
+// or one-time-init failures (missing required deps, bad config, etc.).
+// Scaffolds ship with a no-error path; polish the body when you grow
+// dep validation or eager initialization.
+func New(deps Deps) (Service, error) {
+	httpClient := deps.HTTPClient
+	if httpClient == nil {
+		// Defaulted so a minimal wiring (logger + config only) still works
+		// in dev/tests — the same traced client production wiring passes.
+		httpClient = observe.NewHTTPClient(observe.HTTPClientOptions{})
+	}
+	return &client{
+		deps: deps,
+		http: httpClient,
+		// TODO: Set your base URL from config:
+		// baseURL: deps.Config.{{.Name | pascalCase}}BaseURL,
+		baseURL: "https://api.example.com",
+	}, nil
+}
+
+// HealthCheck verifies connectivity to the external service.
+func (c *client) HealthCheck(ctx context.Context) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/health", nil)
+	if err != nil {
+		return fmt.Errorf("create request: %w", err)
+	}
+
+	resp, err := c.do(req)
+	if err != nil {
+		return fmt.Errorf("health check: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("health check returned status %d", resp.StatusCode)
+	}
+	return nil
+}
+
+// do executes an HTTP request with standard headers.
+func (c *client) do(req *http.Request) (*http.Response, error) {
+	req.Header.Set("Content-Type", "application/json")
+	// TODO: Add authentication header from config:
+	// req.Header.Set("Authorization", "Bearer "+c.deps.Config.{{.Name | pascalCase}}APIKey)
+
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("{{.Name}} request %s %s: %w", req.Method, req.URL.Path, err)
+	}
+
+	if resp.StatusCode >= 400 {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
+		resp.Body.Close()
+		return nil, fmt.Errorf("{{.Name}} %s %s returned %d: %s", req.Method, req.URL.Path, resp.StatusCode, string(body))
+	}
+
+	return resp, nil
+}

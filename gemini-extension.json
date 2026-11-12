@@ -1,0 +1,11 @@
+{
+  "name": "forge",
+  "version": "1.3.0",
+  "description": "Deploy a site or app with no account: live URL plus a claim link. Scaffold, lint and generate Go and Connect RPC projects with Reliant Forge.",
+  "mcpServers": {
+    "forge": {
+      "command": "npx",
+      "args": ["-y", "@reliantlabs/forge", "mcp"]
+    }
+  }
+}
