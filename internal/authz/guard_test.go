@@ -10,6 +10,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"testing"
@@ -208,5 +209,122 @@ func TestNoVisibilityReadsOutsideAuthz(t *testing.T) {
 	sort.Strings(found)
 	for _, f := range found {
 		t.Errorf("a row's Visibility read at %s: ask internal/authz (CanReadChat, IsViewer, ChatVisibility) instead", f)
+	}
+}
+
+// shareGuard is what this head allows of sharing, pinned so a later change
+// to it is deliberate (org-sharing S3 widens each list as it adds the rpcs).
+var shareGuard = struct {
+	// visibilityWriters may write a visibility column (SQL or ORM field).
+	visibilityWriters map[string]string
+	// applyCallers may call ApplyShareChange.
+	applyCallers []string
+	// viewerReadSites may serve viewers (WithViewerReads).
+	viewerReadSites map[string]string
+	// shareRPCs are the share rpcs that exist; none yet.
+	shareRPCs []string
+}{
+	visibilityWriters: map[string]string{
+		"internal/store/share_event_repo_ext.go": "ApplyShareChange, the one writer, and the shared lists' read predicates",
+		"internal/viewertest/viewertest.go":      "the viewer-matrix fixture seeds a shared row; imported by _test.go files only",
+	},
+	applyCallers:    []string{"internal/db/", "internal/store/"},
+	viewerReadSites: map[string]string{},
+	shareRPCs:       nil,
+}
+
+// visibilityWrite matches a write of a visibility column: SQL that assigns
+// it, or an ORM field constant naming it (generated constants live in
+// *_gen.go, which is not scanned).
+var visibilityWrite = regexp.MustCompile(`(?i)\bvisibility\s*=\s*('|\?|NULL|\$)|Set\(\s*"visibility|FieldVisibility\b`)
+
+// goSources walks the non-test, non-generated Go files of internal/ and cmd/,
+// reading each itself so Go's test cache sees it.
+func goSources(t *testing.T, fn func(rel string, src []byte)) {
+	t.Helper()
+	root := filepath.Join("..", "..")
+	for _, dir := range []string{"internal", "cmd"} {
+		err := filepath.WalkDir(filepath.Join(root, dir), func(path string, d fs.DirEntry, err error) error {
+			if err != nil {
+				return err
+			}
+			if d.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") || strings.HasSuffix(path, "_gen.go") {
+				return nil
+			}
+			src, err := os.ReadFile(path)
+			if err != nil {
+				return err
+			}
+			rel, _ := filepath.Rel(root, path)
+			fn(filepath.ToSlash(rel), src)
+			return nil
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+// TestSharingIsNotReachableYet pins that at this head nothing can share a row
+// or serve one to a viewer: the one writer of a visibility column is
+// store.ApplyShareChange, only the store and the repository call it, no proto
+// declares a share rpc, and no read site serves viewers. So a viewer can read
+// a shared row only once a later change deliberately adds the rpc and the
+// viewer-serving sites (with their redaction), and updates shareGuard.
+func TestSharingIsNotReachableYet(t *testing.T) {
+	goSources(t, func(rel string, src []byte) {
+		if bytes.Contains(bytes.ToLower(src), []byte("visibility")) && visibilityWrite.Match(src) {
+			if _, ok := shareGuard.visibilityWriters[rel]; !ok {
+				t.Errorf("%s writes a visibility column: only store.ApplyShareChange may (shareGuard.visibilityWriters)", rel)
+			}
+		}
+		if bytes.Contains(src, []byte("ApplyShareChange(")) {
+			allowed := false
+			for _, prefix := range shareGuard.applyCallers {
+				allowed = allowed || strings.HasPrefix(rel, prefix)
+			}
+			if !allowed {
+				t.Errorf("%s calls ApplyShareChange: no rpc may share yet (shareGuard.applyCallers)", rel)
+			}
+		}
+		if !strings.HasPrefix(rel, "internal/authz/") && bytes.Contains(src, []byte("WithViewerReads(")) {
+			if _, ok := shareGuard.viewerReadSites[rel]; !ok {
+				t.Errorf("%s serves viewers: no read site may yet (shareGuard.viewerReadSites)", rel)
+			}
+		}
+		if bytes.Contains(src, []byte(`"github.com/reliant-labs/reliant/internal/viewertest"`)) {
+			t.Errorf("%s imports internal/viewertest outside a test", rel)
+		}
+	})
+
+	root := filepath.Join("..", "..")
+	protos, err := filepath.Glob(filepath.Join(root, "proto", "reliant", "v1", "*.proto"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	rpc := regexp.MustCompile(`(?m)^\s*rpc\s+(Set\w*Visibility|ListShared\w*|StreamOrgUpdates)\s*\(`)
+	var found []string
+	for _, p := range protos {
+		src, err := os.ReadFile(p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, m := range rpc.FindAllSubmatch(src, -1) {
+			// SetWorkflowVisibility is the saved-workflow hidden flag, not sharing.
+			if name := string(m[1]); name != "SetWorkflowVisibility" {
+				found = append(found, filepath.Base(p)+":"+name)
+			}
+		}
+	}
+	sort.Strings(found)
+	if strings.Join(found, ",") != strings.Join(shareGuard.shareRPCs, ",") {
+		t.Errorf("share rpcs declared: %v, want %v (shareGuard.shareRPCs)", found, shareGuard.shareRPCs)
+	}
+	catalog, err := os.ReadFile(filepath.Join(root, "gen", "forge_service_catalog.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(shareGuard.shareRPCs) == 0 && bytes.Contains(catalog, []byte("SharingService")) {
+		t.Error("gen/forge_service_catalog.json names SharingService")
 	}
 }

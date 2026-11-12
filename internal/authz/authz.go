@@ -61,8 +61,10 @@
 // (WithCredentialKind, which auth.WithCredential installs at the edge): an
 // agent's shell holds its user's CLI login, and a teammate's transcript is
 // not something an agent may read into its context. Unset is not a person, so
-// a path that never classified its credential refuses viewers. IsViewer tells
-// a read site it is serving a viewer (no composer, tool results elided).
+// a path that never classified its credential refuses viewers. A read site
+// admits viewers only once it opts in (WithViewerReads) by shaping its answer
+// for them; IsViewer tells it it is serving one (no composer, tool results
+// elided), and every site that has not opted in stays owner-only.
 //
 // Only this package and internal/store read a row's Visibility (guard_test);
 // a handler that shows it asks ChatVisibility / ProjectVisibility.
@@ -356,7 +358,8 @@ func credentialReaches(ctx context.Context, userID, bound, org string) bool {
 // denyRead is the read rule: deny (the owner, a live member of the row's org,
 // through a credential of that org), or, for a row its owner shared with its
 // org, a viewer: a live member of the row's org, holding a person credential
-// (WithCredentialKind), through no credential bound to another org. nil
+// (WithCredentialKind), through no credential bound to another org, on a read
+// site that serves viewers (WithViewerReads). nil
 // allows. A row that is not shared answers exactly what deny answers, so
 // sharing changes nothing for private rows. A viewer's refusal is ErrDenied,
 // or ErrMembershipUnavailable when membership could not be asked (fail
@@ -369,7 +372,7 @@ func denyRead(ctx context.Context, userID string, r resource) error {
 	if r.visibility != core.VisibilityOrg || r.orgID == "" || r.orgless {
 		return ErrDenied
 	}
-	if !personCredential(ctx) {
+	if !servesViewers(ctx) || !personCredential(ctx) {
 		return ErrDenied
 	}
 	if bound, ok := boundOrg(ctx); ok && bound != r.orgID {
@@ -393,6 +396,26 @@ func denyRead(ctx context.Context, userID string, r resource) error {
 		return ErrDenied
 	}
 	return nil
+}
+
+type viewerReadsKey struct{}
+
+// WithViewerReads marks ctx as a read site that serves viewers: one that
+// shapes what it returns for a viewer (IsViewer: tool results elided, the
+// owner's path, workspace, machine and composer choice left out) and changes
+// nothing of the owner's state by being read. Only on such a context does
+// CanReadChat / CanReadProject admit a viewer; every other read site keeps
+// the owner rule, so a site nobody migrated cannot leak a shared row in the
+// owner's shape. A site opts in deliberately, with the redaction and a viewer
+// test beside it.
+func WithViewerReads(ctx context.Context) context.Context {
+	return context.WithValue(ctx, viewerReadsKey{}, true)
+}
+
+// servesViewers reports whether ctx's read site serves viewers.
+func servesViewers(ctx context.Context) bool {
+	v, _ := ctx.Value(viewerReadsKey{}).(bool)
+	return v
 }
 
 // isViewer is denyRead allowing a caller who is not the owner.

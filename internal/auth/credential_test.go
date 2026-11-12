@@ -134,7 +134,7 @@ func TestWithCredentialInstallsThePersonKind(t *testing.T) {
 		CredentialUnknown:     false,
 	} {
 		ctx := WithCredential(base, c)
-		if got := authz.CanReadChat(ctx, "viewer", shared); got != person {
+		if got := authz.CanReadChat(authz.WithViewerReads(ctx), "viewer", shared); got != person {
 			t.Errorf("%v: a shared read = %v, want %v", c, got, person)
 		}
 		if (RequirePerson(ctx, "x") == nil) != person {

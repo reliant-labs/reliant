@@ -35,8 +35,10 @@ func (failingMembership) IsMember(context.Context, string, string) (bool, bool, 
 // nothing); globex is another org.
 var live = shareMembers{"bob": {"acme": true}, "alice": {"acme": true}, "olga": {"globex": true}}
 
+// person is a viewer-serving read site acting for a person: the context every
+// viewer read is decided on.
 func person(ctx context.Context) context.Context {
-	return WithCredentialKind(ctx, CredentialKindPerson)
+	return WithViewerReads(WithCredentialKind(ctx, CredentialKindPerson))
 }
 
 // decisions is every decision the sharing table pins, for one row kind.
@@ -84,15 +86,16 @@ func TestSharingDecisionTable(t *testing.T) {
 		{"viewer: live member, person", person(WithMembership(base, live)), "alice", decisions{}, decisions{true, false, true}},
 		{"non-member", person(WithMembership(base, live)), "olga", decisions{}, decisions{}},
 		{"removed member", person(WithMembership(base, live)), "remi", decisions{}, decisions{}},
-		{"live member, software credential (an agent's CLI login)", WithCredentialKind(WithMembership(base, live), CredentialKindSoftware), "alice", decisions{}, decisions{}},
-		{"live member, unclassified credential", WithMembership(base, live), "alice", decisions{}, decisions{}},
-		{"live member, machine-bound token of the org", WithCredentialOrg(WithCredentialKind(WithMembership(base, live), CredentialKindSoftware), "acme"), "alice", decisions{}, decisions{}},
+		{"live member, software credential (an agent's CLI login)", WithViewerReads(WithCredentialKind(WithMembership(base, live), CredentialKindSoftware)), "alice", decisions{}, decisions{}},
+		{"live member, unclassified credential", WithViewerReads(WithMembership(base, live)), "alice", decisions{}, decisions{}},
+		{"live member, machine-bound token of the org", WithViewerReads(WithCredentialOrg(WithCredentialKind(WithMembership(base, live), CredentialKindSoftware), "acme")), "alice", decisions{}, decisions{}},
 		{"live member, credential bound to another org", WithCredentialOrg(person(WithMembership(base, live)), "globex"), "alice", decisions{}, decisions{}},
 		{"live member, credential bound to the row's org", WithCredentialOrg(person(WithMembership(base, live)), "acme"), "alice", decisions{}, decisions{true, false, true}},
 		{"membership outage", person(WithMembership(base, failingMembership{})), "alice", decisions{}, decisions{}},
 		{"no Membership wired", person(base), "alice", decisions{}, decisions{}},
 		{"a deployment with no orgs", person(WithMembership(base, NoOrgs{})), "alice", decisions{}, decisions{}},
 		{"no caller", person(WithMembership(base, live)), "", decisions{}, decisions{}},
+		{"live member, person, at a site that does not serve viewers", WithCredentialKind(WithMembership(base, live), CredentialKindPerson), "alice", decisions{}, decisions{}},
 	}
 	for _, tc := range cases {
 		for _, shared := range []bool{false, true} {
@@ -241,5 +244,23 @@ func TestVisibilityAccessors(t *testing.T) {
 		ProjectVisibility(&core.Project{Visibility: core.VisibilityOrg}) != core.VisibilityOrg ||
 		ProjectVisibility(nil) != core.VisibilityPrivate {
 		t.Fatal("visibility accessors")
+	}
+}
+
+// A read site that has not opted in to serving viewers (WithViewerReads)
+// keeps the owner rule for a shared row, whoever asks: an un-migrated read
+// cannot hand a viewer the owner's unredacted shape.
+func TestSharedReadNeedsAViewerServingSite(t *testing.T) {
+	ctx := WithCredentialKind(WithMembership(context.Background(), live), CredentialKindPerson)
+	c := &core.Chat{UserID: "bob", OrgID: strp("acme"), Visibility: core.VisibilityOrg}
+	p := &core.Project{UserID: "bob", OrgID: strp("acme"), Visibility: core.VisibilityOrg}
+	if CanReadChat(ctx, "alice", c) || IsViewer(ctx, "alice", c) || CanReadProject(ctx, "alice", p) || IsProjectViewer(ctx, "alice", p) {
+		t.Fatal("a site that does not serve viewers admitted one")
+	}
+	if !CanReadChat(ctx, "bob", c) || !CanReadProject(ctx, "bob", p) {
+		t.Fatal("the owner must read at any site")
+	}
+	if !CanReadChat(WithViewerReads(ctx), "alice", c) || !CanReadProject(WithViewerReads(ctx), "alice", p) {
+		t.Fatal("a viewer-serving site must admit the viewer")
 	}
 }
