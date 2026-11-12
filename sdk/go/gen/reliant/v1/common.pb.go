@@ -368,6 +368,62 @@ func (ConfigScope) EnumDescriptor() ([]byte, []int) {
 	return file_reliant_v1_common_proto_rawDescGZIP(), []int{5}
 }
 
+// ResourceVisibility is who besides its owner may read a chat or project
+// (read-only sharing; control-plane docs/design/org-sharing.md). Only the
+// owner shares; an org admin may make a shared one private again. The share
+// rpcs are the app's (SharingService), not the SDK's.
+type ResourceVisibility int32
+
+const (
+	// A server that predates sharing; read it as PRIVATE.
+	ResourceVisibility_RESOURCE_VISIBILITY_UNSPECIFIED ResourceVisibility = 0
+	// The owner alone.
+	ResourceVisibility_RESOURCE_VISIBILITY_PRIVATE ResourceVisibility = 1
+	// Every live member of the resource's organization, read-only.
+	ResourceVisibility_RESOURCE_VISIBILITY_ORG ResourceVisibility = 2
+)
+
+// Enum value maps for ResourceVisibility.
+var (
+	ResourceVisibility_name = map[int32]string{
+		0: "RESOURCE_VISIBILITY_UNSPECIFIED",
+		1: "RESOURCE_VISIBILITY_PRIVATE",
+		2: "RESOURCE_VISIBILITY_ORG",
+	}
+	ResourceVisibility_value = map[string]int32{
+		"RESOURCE_VISIBILITY_UNSPECIFIED": 0,
+		"RESOURCE_VISIBILITY_PRIVATE":     1,
+		"RESOURCE_VISIBILITY_ORG":         2,
+	}
+)
+
+func (x ResourceVisibility) Enum() *ResourceVisibility {
+	p := new(ResourceVisibility)
+	*p = x
+	return p
+}
+
+func (x ResourceVisibility) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (ResourceVisibility) Descriptor() protoreflect.EnumDescriptor {
+	return file_reliant_v1_common_proto_enumTypes[6].Descriptor()
+}
+
+func (ResourceVisibility) Type() protoreflect.EnumType {
+	return &file_reliant_v1_common_proto_enumTypes[6]
+}
+
+func (x ResourceVisibility) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use ResourceVisibility.Descriptor instead.
+func (ResourceVisibility) EnumDescriptor() ([]byte, []int) {
+	return file_reliant_v1_common_proto_rawDescGZIP(), []int{6}
+}
+
 // Empty represents an empty message (no fields)
 type Empty struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -520,7 +576,11 @@ const file_reliant_v1_common_proto_rawDesc = "" +
 	"\x18CONFIG_SCOPE_UNSPECIFIED\x10\x00\x12\x17\n" +
 	"\x13CONFIG_SCOPE_GLOBAL\x10\x01\x12\x18\n" +
 	"\x14CONFIG_SCOPE_PROJECT\x10\x02\x12\x1e\n" +
-	"\x1aCONFIG_SCOPE_PROJECT_LOCAL\x10\x03B:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
+	"\x1aCONFIG_SCOPE_PROJECT_LOCAL\x10\x03*w\n" +
+	"\x12ResourceVisibility\x12#\n" +
+	"\x1fRESOURCE_VISIBILITY_UNSPECIFIED\x10\x00\x12\x1f\n" +
+	"\x1bRESOURCE_VISIBILITY_PRIVATE\x10\x01\x12\x1b\n" +
+	"\x17RESOURCE_VISIBILITY_ORG\x10\x02B:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
 
 var (
 	file_reliant_v1_common_proto_rawDescOnce sync.Once
@@ -534,7 +594,7 @@ func file_reliant_v1_common_proto_rawDescGZIP() []byte {
 	return file_reliant_v1_common_proto_rawDescData
 }
 
-var file_reliant_v1_common_proto_enumTypes = make([]protoimpl.EnumInfo, 6)
+var file_reliant_v1_common_proto_enumTypes = make([]protoimpl.EnumInfo, 7)
 var file_reliant_v1_common_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
 var file_reliant_v1_common_proto_goTypes = []any{
 	(PlanStatus)(0),              // 0: reliant.v1.PlanStatus
@@ -543,12 +603,13 @@ var file_reliant_v1_common_proto_goTypes = []any{
 	(OutputStreamType)(0),        // 3: reliant.v1.OutputStreamType
 	(FileChangeStatus)(0),        // 4: reliant.v1.FileChangeStatus
 	(ConfigScope)(0),             // 5: reliant.v1.ConfigScope
-	(*Empty)(nil),                // 6: reliant.v1.Empty
-	(*ErrorDetail)(nil),          // 7: reliant.v1.ErrorDetail
-	nil,                          // 8: reliant.v1.ErrorDetail.MetadataEntry
+	(ResourceVisibility)(0),      // 6: reliant.v1.ResourceVisibility
+	(*Empty)(nil),                // 7: reliant.v1.Empty
+	(*ErrorDetail)(nil),          // 8: reliant.v1.ErrorDetail
+	nil,                          // 9: reliant.v1.ErrorDetail.MetadataEntry
 }
 var file_reliant_v1_common_proto_depIdxs = []int32{
-	8, // 0: reliant.v1.ErrorDetail.metadata:type_name -> reliant.v1.ErrorDetail.MetadataEntry
+	9, // 0: reliant.v1.ErrorDetail.metadata:type_name -> reliant.v1.ErrorDetail.MetadataEntry
 	1, // [1:1] is the sub-list for method output_type
 	1, // [1:1] is the sub-list for method input_type
 	1, // [1:1] is the sub-list for extension type_name
@@ -566,7 +627,7 @@ func file_reliant_v1_common_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_reliant_v1_common_proto_rawDesc), len(file_reliant_v1_common_proto_rawDesc)),
-			NumEnums:      6,
+			NumEnums:      7,
 			NumMessages:   3,
 			NumExtensions: 0,
 			NumServices:   0,

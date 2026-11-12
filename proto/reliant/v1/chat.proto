@@ -644,6 +644,18 @@ message Chat {
   // bills this org. Unset for a chat created before orgs or where no org
   // could be resolved: such a chat belongs to its creator's default org.
   optional string org_id = 44;
+  // Who besides its owner may read the chat (read-only sharing). Set on
+  // every read by a server that knows sharing; UNSPECIFIED from an older
+  // one, which means private.
+  ResourceVisibility visibility = 45;
+  // True when the caller reads the chat as a VIEWER: a member of its org it
+  // was shared with, not its owner. A viewer's reads are read-only (every
+  // write answers NOT_FOUND), tool results come elided and cannot be
+  // fetched, and the owner's composer choice, workspace and machine are left
+  // out. The client hides the composer and shows whose chat it is.
+  bool viewer_access = 46;
+  // When the chat was shared (RFC 3339); unset while private.
+  optional string shared_at = 47;
 }
 
 // ChatOrigin is who started a chat. It is the chat list's policy key: a USER

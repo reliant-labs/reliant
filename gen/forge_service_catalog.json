@@ -6468,6 +6468,20 @@
               "name": "org_id",
               "kind": "string",
               "optional": true
+            },
+            {
+              "name": "visibility",
+              "kind": "enum",
+              "type_name": "reliant.v1.ResourceVisibility"
+            },
+            {
+              "name": "viewer_access",
+              "kind": "bool"
+            },
+            {
+              "name": "shared_at",
+              "kind": "string",
+              "optional": true
             }
           ],
           "reliant.v1.ChatErrorUpdate": [
@@ -8352,6 +8366,11 @@
             "RECOVERY_TYPE_RESUMED",
             "RECOVERY_TYPE_WORKFLOW_LOST"
           ],
+          "reliant.v1.ResourceVisibility": [
+            "RESOURCE_VISIBILITY_UNSPECIFIED",
+            "RESOURCE_VISIBILITY_PRIVATE",
+            "RESOURCE_VISIBILITY_ORG"
+          ],
           "reliant.v1.StreamingState": [
             "STREAMING_STATE_UNSPECIFIED",
             "STREAMING_STATE_STREAMING",
@@ -8475,6 +8494,11 @@
             1,
             2
           ],
+          "reliant.v1.ResourceVisibility": [
+            0,
+            1,
+            2
+          ],
           "reliant.v1.StreamingState": [
             0,
             1,
@@ -8562,6 +8586,10 @@
           "reliant.v1.RecoveryType": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
             "GoName": "RecoveryType"
+          },
+          "reliant.v1.ResourceVisibility": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "ResourceVisibility"
           },
           "reliant.v1.StreamingState": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
