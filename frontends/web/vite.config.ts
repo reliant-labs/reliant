@@ -206,6 +206,11 @@ const appConfig: ViteUserConfig = {
       { find: "@reliantlabs/sdk/react", replacement: path.resolve(__dirname, "../../sdk/ts/src/react/index.ts") },
       { find: /^#gen\/(.*)\.js$/, replacement: path.resolve(__dirname, "./src/gen/$1") },
     ],
+    // The SDK's source imports the runtime too, and its own lock entry can pin
+    // an older release. The dev optimizer keys prebundled deps by specifier, so
+    // whichever copy it crawls first serves BOTH importers. Resolve the one
+    // this app declares.
+    dedupe: ["@reliantlabs/forge-web-runtime"],
   },
   // Absolute base: the app is served at the domain root (app.reliantlabs.io) with
   // history routing + SPA fallback. Relative "./" breaks fresh loads/refreshes on
