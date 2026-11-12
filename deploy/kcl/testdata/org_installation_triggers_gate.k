@@ -10,6 +10,8 @@
 
 import config_gen
 import workloads
+import dev.config as devcfg
+import demo.config as democfg
 
 _process = lambda api: config_gen.ApiServerConfig -> config_gen.ReliantProcess {
     config_gen.ReliantProcess {
@@ -25,3 +27,10 @@ gate_default = config_gen.workloadEnvMap(_process(config_gen.ApiServerConfig {})
 
 # The API server's env with installation-bound triggers turned on.
 gate_on = config_gen.workloadEnvMap(_process(config_gen.ApiServerConfig {orgs = {github_installation_triggers_enabled = True}}), workloads.api_server)
+
+# The API server's env as this repo's own environments render it: dev and demo
+# pin no orgs gate, so they ship it off. (prod's ApiServerConfig is composed by
+# control-plane's lib/reliant_process.k, which sets no orgs field either, so it
+# takes the schema default gate_default pins.)
+dev_api = config_gen.workloadEnvMap(devcfg.reliant_process, workloads.api_server)
+demo_api = config_gen.workloadEnvMap(democfg.reliant_process, workloads.api_server)

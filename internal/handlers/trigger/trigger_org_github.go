@@ -11,6 +11,7 @@ import (
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
+	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -21,6 +22,14 @@ import (
 // ReasonOrgInstallationTriggersDisabled is the reason a binding is refused
 // while the deployment's rollout gate is off.
 const ReasonOrgInstallationTriggersDisabled = "org_installation_triggers_disabled"
+
+// InstallationBindingAllowed reports whether the deployment's org rollout
+// gates (Deps.OrgRollout) let a trigger be bound to an org's GitHub App
+// installation: only when orgs.github_installation_triggers_enabled is set.
+// nil is every gate off.
+func InstallationBindingAllowed(gates *configv1.OrgsConfig) bool {
+	return gates != nil && gates.GetGithubInstallationTriggersEnabled()
+}
 
 // bindOrgGitHubApp records, in a GitHub trigger's config, the org GitHub App
 // installation its definition names as its connection
@@ -45,7 +54,7 @@ func (s *Service) bindOrgGitHubApp(ctx context.Context, ownerID string, def *rel
 	// Rollout gate: a release before installation binding routes a bound
 	// trigger on its owner's access alone and drops the binding when it
 	// re-projects it, so nothing is bound until every replica honours it.
-	if s.deps.OrgRollout == nil || !s.deps.OrgRollout.GetGithubInstallationTriggersEnabled() {
+	if !InstallationBindingAllowed(s.deps.OrgRollout) {
 		return svcerr.WithReason(svcerr.FailedPrecondition("listening through an organization's GitHub App installation is not enabled on this deployment yet"), ReasonOrgInstallationTriggersDisabled)
 	}
 	if trigger.Kind != core.TriggerKindIntegration {

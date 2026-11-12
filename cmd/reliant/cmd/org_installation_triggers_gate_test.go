@@ -11,12 +11,13 @@ import (
 	"github.com/reliant-labs/forge/pkg/kcleval"
 	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/reliant-labs/reliant/internal/app"
+	"github.com/reliant-labs/reliant/internal/handlers/trigger"
 	"github.com/reliant-labs/reliant/pkg/config"
 )
 
 // TestOrgInstallationTriggersGateReachesTheTriggerHandler pins the rollout
-// gate for installation-bound GitHub triggers on the path production takes:
-// an env's KCL (config_gen.workloadEnvMap for the api root) projects
+// gate for installation-bound GitHub triggers on the path production takes.
+// dev and demo, as this repo renders them, ship it off. An env's KCL (config_gen.workloadEnvMap for the api root) projects
 // RELIANT_ORGS_GITHUB_INSTALLATION_TRIGGERS_ENABLED, `server api` loads its
 // ApiServerConfig from it, and app.TriggerOrgRollout (what newTrigger hands
 // the trigger handler) carries it. At the schema default it is "false" and the
@@ -37,6 +38,8 @@ func TestOrgInstallationTriggersGateReachesTheTriggerHandler(t *testing.T) {
 		wantOn   bool
 	}{
 		{"gate_default", "false", false},
+		{"dev_api", "false", false},
+		{"demo_api", "false", false},
 		{"gate_on", "true", true},
 	} {
 		t.Run(tc.selector, func(t *testing.T) {
@@ -52,7 +55,10 @@ func TestOrgInstallationTriggersGateReachesTheTriggerHandler(t *testing.T) {
 			require.NoError(t, err)
 			api, err := config.LoadApiServerConfig(cmd)
 			require.NoError(t, err)
-			assert.Equal(t, tc.wantOn, app.TriggerOrgRollout(api).GetGithubInstallationTriggersEnabled())
+			assert.Equal(t, tc.wantOn, api.GetOrgs().GetGithubInstallationTriggersEnabled(), "ApiServerConfig.Orgs as loaded")
+			// What newTrigger hands the trigger handler, and the check
+			// bindOrgGitHubApp makes with it.
+			assert.Equal(t, tc.wantOn, trigger.InstallationBindingAllowed(app.TriggerOrgRollout(api)), "binding allowed")
 		})
 	}
 }
@@ -65,10 +71,10 @@ func TestOrgInstallationTriggersGateIsOffByDefault(t *testing.T) {
 	require.NoError(t, err)
 	api, err := config.LoadApiServerConfig(cmd)
 	require.NoError(t, err)
-	assert.False(t, app.TriggerOrgRollout(api).GetGithubInstallationTriggersEnabled())
+	assert.False(t, trigger.InstallationBindingAllowed(app.TriggerOrgRollout(api)))
 
 	t.Setenv("RELIANT_ORGS_GITHUB_INSTALLATION_TRIGGERS_ENABLED", "true")
 	api, err = config.LoadApiServerConfig(cmd)
 	require.NoError(t, err)
-	assert.True(t, app.TriggerOrgRollout(api).GetGithubInstallationTriggersEnabled())
+	assert.True(t, trigger.InstallationBindingAllowed(app.TriggerOrgRollout(api)))
 }
