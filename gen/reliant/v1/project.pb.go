@@ -114,7 +114,17 @@ type Project struct {
 	// The organization the project belongs to, fixed at creation. Unset for a
 	// project created before orgs or where no org could be resolved: such a
 	// project belongs to its creator's default org.
-	OrgId         *string `protobuf:"bytes,14,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
+	OrgId *string `protobuf:"bytes,14,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
+	// Who besides its owner may read the project (read-only sharing): see
+	// Chat.visibility. Sharing a project shares its card and lets viewers list
+	// its shared chats; it never shares a chat that is not shared itself.
+	Visibility v1.ResourceVisibility `protobuf:"varint,15,opt,name=visibility,proto3,enum=reliant.v1.ResourceVisibility" json:"visibility,omitempty"`
+	// True when the caller reads the project as a viewer (see
+	// Chat.viewer_access). A viewer's project leaves out path (a home
+	// directory names its owner) and every write answers NOT_FOUND.
+	ViewerAccess bool `protobuf:"varint,16,opt,name=viewer_access,json=viewerAccess,proto3" json:"viewer_access,omitempty"`
+	// When the project was shared (RFC 3339); unset while private.
+	SharedAt      *string `protobuf:"bytes,17,opt,name=shared_at,json=sharedAt,proto3,oneof" json:"shared_at,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -243,6 +253,27 @@ func (x *Project) GetForgeProjectName() string {
 func (x *Project) GetOrgId() string {
 	if x != nil && x.OrgId != nil {
 		return *x.OrgId
+	}
+	return ""
+}
+
+func (x *Project) GetVisibility() v1.ResourceVisibility {
+	if x != nil {
+		return x.Visibility
+	}
+	return v1.ResourceVisibility(0)
+}
+
+func (x *Project) GetViewerAccess() bool {
+	if x != nil {
+		return x.ViewerAccess
+	}
+	return false
+}
+
+func (x *Project) GetSharedAt() string {
+	if x != nil && x.SharedAt != nil {
+		return *x.SharedAt
 	}
 	return ""
 }
@@ -3686,7 +3717,7 @@ var File_reliant_v1_project_proto protoreflect.FileDescriptor
 const file_reliant_v1_project_proto_rawDesc = "" +
 	"\n" +
 	"\x18reliant/v1/project.proto\x12\n" +
-	"reliant.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\x1a\x17reliant/v1/common.proto\"\x8e\x04\n" +
+	"reliant.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\x1a\x17reliant/v1/common.proto\"\xa3\x05\n" +
 	"\aProject\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x17\n" +
 	"\auser_id\x18\x02 \x01(\tR\x06userId\x12\x12\n" +
@@ -3706,12 +3737,19 @@ const file_reliant_v1_project_proto_rawDesc = "" +
 	"remote_url\x18\v \x01(\tH\x02R\tremoteUrl\x88\x01\x01\x12\x19\n" +
 	"\bis_forge\x18\f \x01(\bR\aisForge\x121\n" +
 	"\x12forge_project_name\x18\r \x01(\tH\x03R\x10forgeProjectName\x88\x01\x01\x12\x1a\n" +
-	"\x06org_id\x18\x0e \x01(\tH\x04R\x05orgId\x88\x01\x01B\x0e\n" +
+	"\x06org_id\x18\x0e \x01(\tH\x04R\x05orgId\x88\x01\x01\x12>\n" +
+	"\n" +
+	"visibility\x18\x0f \x01(\x0e2\x1e.reliant.v1.ResourceVisibilityR\n" +
+	"visibility\x12#\n" +
+	"\rviewer_access\x18\x10 \x01(\bR\fviewerAccess\x12 \n" +
+	"\tshared_at\x18\x11 \x01(\tH\x05R\bsharedAt\x88\x01\x01B\x0e\n" +
 	"\f_descriptionB\x11\n" +
 	"\x0f_default_branchB\r\n" +
 	"\v_remote_urlB\x15\n" +
 	"\x13_forge_project_nameB\t\n" +
-	"\a_org_id\"\xfd\x02\n" +
+	"\a_org_idB\f\n" +
+	"\n" +
+	"_shared_at\"\xfd\x02\n" +
 	"\rProjectDaemon\x12\x1d\n" +
 	"\n" +
 	"project_id\x18\x01 \x01(\tR\tprojectId\x12\x1b\n" +
@@ -4130,86 +4168,88 @@ var file_reliant_v1_project_proto_goTypes = []any{
 	(*DetachProjectFromDaemonResponse)(nil),     // 56: reliant.v1.DetachProjectFromDaemonResponse
 	(*RecloneProjectOnDaemonRequest)(nil),       // 57: reliant.v1.RecloneProjectOnDaemonRequest
 	(*RecloneProjectOnDaemonResponse)(nil),      // 58: reliant.v1.RecloneProjectOnDaemonResponse
-	(v1.FileChangeStatus)(0),                    // 59: reliant.v1.FileChangeStatus
+	(v1.ResourceVisibility)(0),                  // 59: reliant.v1.ResourceVisibility
+	(v1.FileChangeStatus)(0),                    // 60: reliant.v1.FileChangeStatus
 }
 var file_reliant_v1_project_proto_depIdxs = []int32{
-	0,  // 0: reliant.v1.ProjectDaemon.install_state:type_name -> reliant.v1.ProjectInstallState
-	1,  // 1: reliant.v1.CreateProjectResponse.project:type_name -> reliant.v1.Project
-	2,  // 2: reliant.v1.CreateProjectResponse.project_daemon:type_name -> reliant.v1.ProjectDaemon
-	1,  // 3: reliant.v1.ListProjectsResponse.projects:type_name -> reliant.v1.Project
-	1,  // 4: reliant.v1.GetProjectResponse.project:type_name -> reliant.v1.Project
-	1,  // 5: reliant.v1.UpdateProjectResponse.project:type_name -> reliant.v1.Project
-	1,  // 6: reliant.v1.UpdateProjectMetadataResponse.project:type_name -> reliant.v1.Project
-	21, // 7: reliant.v1.GetProjectGitBranchesResponse.branches:type_name -> reliant.v1.GitBranch
-	59, // 8: reliant.v1.FileChange.status:type_name -> reliant.v1.FileChangeStatus
-	28, // 9: reliant.v1.GetProjectChangesResponse.files:type_name -> reliant.v1.FileChange
-	31, // 10: reliant.v1.GetProjectPromptsResponse.prompts:type_name -> reliant.v1.Prompt
-	31, // 11: reliant.v1.SaveProjectPromptsRequest.prompts:type_name -> reliant.v1.Prompt
-	31, // 12: reliant.v1.SaveProjectPromptsResponse.prompts:type_name -> reliant.v1.Prompt
-	2,  // 13: reliant.v1.ListProjectDaemonsForDaemonResponse.project_daemons:type_name -> reliant.v1.ProjectDaemon
-	2,  // 14: reliant.v1.ListProjectDaemonsResponse.project_daemons:type_name -> reliant.v1.ProjectDaemon
-	2,  // 15: reliant.v1.MarkProjectInstalledResponse.project_daemon:type_name -> reliant.v1.ProjectDaemon
-	1,  // 16: reliant.v1.CreateProjectFromRepoResponse.project:type_name -> reliant.v1.Project
-	2,  // 17: reliant.v1.CreateProjectFromRepoResponse.project_daemon:type_name -> reliant.v1.ProjectDaemon
-	46, // 18: reliant.v1.ListRepositoriesForDaemonResponse.repositories:type_name -> reliant.v1.DaemonRepository
-	2,  // 19: reliant.v1.AttachProjectToDaemonResponse.project_daemon:type_name -> reliant.v1.ProjectDaemon
-	3,  // 20: reliant.v1.ProjectService.CreateProject:input_type -> reliant.v1.CreateProjectRequest
-	5,  // 21: reliant.v1.ProjectService.ListProjects:input_type -> reliant.v1.ListProjectsRequest
-	7,  // 22: reliant.v1.ProjectService.GetProject:input_type -> reliant.v1.GetProjectRequest
-	9,  // 23: reliant.v1.ProjectService.UpdateProject:input_type -> reliant.v1.UpdateProjectRequest
-	11, // 24: reliant.v1.ProjectService.DeleteProject:input_type -> reliant.v1.DeleteProjectRequest
-	13, // 25: reliant.v1.ProjectService.TouchProject:input_type -> reliant.v1.TouchProjectRequest
-	15, // 26: reliant.v1.ProjectService.GetProjectMetadata:input_type -> reliant.v1.GetProjectMetadataRequest
-	17, // 27: reliant.v1.ProjectService.UpdateProjectMetadata:input_type -> reliant.v1.UpdateProjectMetadataRequest
-	19, // 28: reliant.v1.ProjectService.GetProjectGitInfo:input_type -> reliant.v1.GetProjectGitInfoRequest
-	22, // 29: reliant.v1.ProjectService.GetProjectGitBranches:input_type -> reliant.v1.GetProjectGitBranchesRequest
-	24, // 30: reliant.v1.ProjectService.GetProjectInitStatus:input_type -> reliant.v1.GetProjectInitStatusRequest
-	26, // 31: reliant.v1.ProjectService.InitializeProject:input_type -> reliant.v1.InitializeProjectRequest
-	29, // 32: reliant.v1.ProjectService.GetProjectChanges:input_type -> reliant.v1.GetProjectChangesRequest
-	32, // 33: reliant.v1.ProjectService.GetProjectPrompts:input_type -> reliant.v1.GetProjectPromptsRequest
-	34, // 34: reliant.v1.ProjectService.SaveProjectPrompts:input_type -> reliant.v1.SaveProjectPromptsRequest
-	36, // 35: reliant.v1.ProjectService.InitializeGitRepo:input_type -> reliant.v1.InitializeGitRepoRequest
-	38, // 36: reliant.v1.ProjectService.ListProjectDaemonsForDaemon:input_type -> reliant.v1.ListProjectDaemonsForDaemonRequest
-	40, // 37: reliant.v1.ProjectService.ListProjectDaemons:input_type -> reliant.v1.ListProjectDaemonsRequest
-	42, // 38: reliant.v1.ProjectService.MarkProjectInstalled:input_type -> reliant.v1.MarkProjectInstalledRequest
-	44, // 39: reliant.v1.ProjectService.CreateProjectFromRepo:input_type -> reliant.v1.CreateProjectFromRepoRequest
-	47, // 40: reliant.v1.ProjectService.ListRepositoriesForDaemon:input_type -> reliant.v1.ListRepositoriesForDaemonRequest
-	49, // 41: reliant.v1.ProjectService.PullProjectOnDaemon:input_type -> reliant.v1.PullProjectOnDaemonRequest
-	51, // 42: reliant.v1.ProjectService.RemoveProjectFromDaemon:input_type -> reliant.v1.RemoveProjectFromDaemonRequest
-	53, // 43: reliant.v1.ProjectService.AttachProjectToDaemon:input_type -> reliant.v1.AttachProjectToDaemonRequest
-	55, // 44: reliant.v1.ProjectService.DetachProjectFromDaemon:input_type -> reliant.v1.DetachProjectFromDaemonRequest
-	57, // 45: reliant.v1.ProjectService.RecloneProjectOnDaemon:input_type -> reliant.v1.RecloneProjectOnDaemonRequest
-	4,  // 46: reliant.v1.ProjectService.CreateProject:output_type -> reliant.v1.CreateProjectResponse
-	6,  // 47: reliant.v1.ProjectService.ListProjects:output_type -> reliant.v1.ListProjectsResponse
-	8,  // 48: reliant.v1.ProjectService.GetProject:output_type -> reliant.v1.GetProjectResponse
-	10, // 49: reliant.v1.ProjectService.UpdateProject:output_type -> reliant.v1.UpdateProjectResponse
-	12, // 50: reliant.v1.ProjectService.DeleteProject:output_type -> reliant.v1.DeleteProjectResponse
-	14, // 51: reliant.v1.ProjectService.TouchProject:output_type -> reliant.v1.TouchProjectResponse
-	16, // 52: reliant.v1.ProjectService.GetProjectMetadata:output_type -> reliant.v1.GetProjectMetadataResponse
-	18, // 53: reliant.v1.ProjectService.UpdateProjectMetadata:output_type -> reliant.v1.UpdateProjectMetadataResponse
-	20, // 54: reliant.v1.ProjectService.GetProjectGitInfo:output_type -> reliant.v1.GetProjectGitInfoResponse
-	23, // 55: reliant.v1.ProjectService.GetProjectGitBranches:output_type -> reliant.v1.GetProjectGitBranchesResponse
-	25, // 56: reliant.v1.ProjectService.GetProjectInitStatus:output_type -> reliant.v1.GetProjectInitStatusResponse
-	27, // 57: reliant.v1.ProjectService.InitializeProject:output_type -> reliant.v1.InitializeProjectResponse
-	30, // 58: reliant.v1.ProjectService.GetProjectChanges:output_type -> reliant.v1.GetProjectChangesResponse
-	33, // 59: reliant.v1.ProjectService.GetProjectPrompts:output_type -> reliant.v1.GetProjectPromptsResponse
-	35, // 60: reliant.v1.ProjectService.SaveProjectPrompts:output_type -> reliant.v1.SaveProjectPromptsResponse
-	37, // 61: reliant.v1.ProjectService.InitializeGitRepo:output_type -> reliant.v1.InitializeGitRepoResponse
-	39, // 62: reliant.v1.ProjectService.ListProjectDaemonsForDaemon:output_type -> reliant.v1.ListProjectDaemonsForDaemonResponse
-	41, // 63: reliant.v1.ProjectService.ListProjectDaemons:output_type -> reliant.v1.ListProjectDaemonsResponse
-	43, // 64: reliant.v1.ProjectService.MarkProjectInstalled:output_type -> reliant.v1.MarkProjectInstalledResponse
-	45, // 65: reliant.v1.ProjectService.CreateProjectFromRepo:output_type -> reliant.v1.CreateProjectFromRepoResponse
-	48, // 66: reliant.v1.ProjectService.ListRepositoriesForDaemon:output_type -> reliant.v1.ListRepositoriesForDaemonResponse
-	50, // 67: reliant.v1.ProjectService.PullProjectOnDaemon:output_type -> reliant.v1.PullProjectOnDaemonResponse
-	52, // 68: reliant.v1.ProjectService.RemoveProjectFromDaemon:output_type -> reliant.v1.RemoveProjectFromDaemonResponse
-	54, // 69: reliant.v1.ProjectService.AttachProjectToDaemon:output_type -> reliant.v1.AttachProjectToDaemonResponse
-	56, // 70: reliant.v1.ProjectService.DetachProjectFromDaemon:output_type -> reliant.v1.DetachProjectFromDaemonResponse
-	58, // 71: reliant.v1.ProjectService.RecloneProjectOnDaemon:output_type -> reliant.v1.RecloneProjectOnDaemonResponse
-	46, // [46:72] is the sub-list for method output_type
-	20, // [20:46] is the sub-list for method input_type
-	20, // [20:20] is the sub-list for extension type_name
-	20, // [20:20] is the sub-list for extension extendee
-	0,  // [0:20] is the sub-list for field type_name
+	59, // 0: reliant.v1.Project.visibility:type_name -> reliant.v1.ResourceVisibility
+	0,  // 1: reliant.v1.ProjectDaemon.install_state:type_name -> reliant.v1.ProjectInstallState
+	1,  // 2: reliant.v1.CreateProjectResponse.project:type_name -> reliant.v1.Project
+	2,  // 3: reliant.v1.CreateProjectResponse.project_daemon:type_name -> reliant.v1.ProjectDaemon
+	1,  // 4: reliant.v1.ListProjectsResponse.projects:type_name -> reliant.v1.Project
+	1,  // 5: reliant.v1.GetProjectResponse.project:type_name -> reliant.v1.Project
+	1,  // 6: reliant.v1.UpdateProjectResponse.project:type_name -> reliant.v1.Project
+	1,  // 7: reliant.v1.UpdateProjectMetadataResponse.project:type_name -> reliant.v1.Project
+	21, // 8: reliant.v1.GetProjectGitBranchesResponse.branches:type_name -> reliant.v1.GitBranch
+	60, // 9: reliant.v1.FileChange.status:type_name -> reliant.v1.FileChangeStatus
+	28, // 10: reliant.v1.GetProjectChangesResponse.files:type_name -> reliant.v1.FileChange
+	31, // 11: reliant.v1.GetProjectPromptsResponse.prompts:type_name -> reliant.v1.Prompt
+	31, // 12: reliant.v1.SaveProjectPromptsRequest.prompts:type_name -> reliant.v1.Prompt
+	31, // 13: reliant.v1.SaveProjectPromptsResponse.prompts:type_name -> reliant.v1.Prompt
+	2,  // 14: reliant.v1.ListProjectDaemonsForDaemonResponse.project_daemons:type_name -> reliant.v1.ProjectDaemon
+	2,  // 15: reliant.v1.ListProjectDaemonsResponse.project_daemons:type_name -> reliant.v1.ProjectDaemon
+	2,  // 16: reliant.v1.MarkProjectInstalledResponse.project_daemon:type_name -> reliant.v1.ProjectDaemon
+	1,  // 17: reliant.v1.CreateProjectFromRepoResponse.project:type_name -> reliant.v1.Project
+	2,  // 18: reliant.v1.CreateProjectFromRepoResponse.project_daemon:type_name -> reliant.v1.ProjectDaemon
+	46, // 19: reliant.v1.ListRepositoriesForDaemonResponse.repositories:type_name -> reliant.v1.DaemonRepository
+	2,  // 20: reliant.v1.AttachProjectToDaemonResponse.project_daemon:type_name -> reliant.v1.ProjectDaemon
+	3,  // 21: reliant.v1.ProjectService.CreateProject:input_type -> reliant.v1.CreateProjectRequest
+	5,  // 22: reliant.v1.ProjectService.ListProjects:input_type -> reliant.v1.ListProjectsRequest
+	7,  // 23: reliant.v1.ProjectService.GetProject:input_type -> reliant.v1.GetProjectRequest
+	9,  // 24: reliant.v1.ProjectService.UpdateProject:input_type -> reliant.v1.UpdateProjectRequest
+	11, // 25: reliant.v1.ProjectService.DeleteProject:input_type -> reliant.v1.DeleteProjectRequest
+	13, // 26: reliant.v1.ProjectService.TouchProject:input_type -> reliant.v1.TouchProjectRequest
+	15, // 27: reliant.v1.ProjectService.GetProjectMetadata:input_type -> reliant.v1.GetProjectMetadataRequest
+	17, // 28: reliant.v1.ProjectService.UpdateProjectMetadata:input_type -> reliant.v1.UpdateProjectMetadataRequest
+	19, // 29: reliant.v1.ProjectService.GetProjectGitInfo:input_type -> reliant.v1.GetProjectGitInfoRequest
+	22, // 30: reliant.v1.ProjectService.GetProjectGitBranches:input_type -> reliant.v1.GetProjectGitBranchesRequest
+	24, // 31: reliant.v1.ProjectService.GetProjectInitStatus:input_type -> reliant.v1.GetProjectInitStatusRequest
+	26, // 32: reliant.v1.ProjectService.InitializeProject:input_type -> reliant.v1.InitializeProjectRequest
+	29, // 33: reliant.v1.ProjectService.GetProjectChanges:input_type -> reliant.v1.GetProjectChangesRequest
+	32, // 34: reliant.v1.ProjectService.GetProjectPrompts:input_type -> reliant.v1.GetProjectPromptsRequest
+	34, // 35: reliant.v1.ProjectService.SaveProjectPrompts:input_type -> reliant.v1.SaveProjectPromptsRequest
+	36, // 36: reliant.v1.ProjectService.InitializeGitRepo:input_type -> reliant.v1.InitializeGitRepoRequest
+	38, // 37: reliant.v1.ProjectService.ListProjectDaemonsForDaemon:input_type -> reliant.v1.ListProjectDaemonsForDaemonRequest
+	40, // 38: reliant.v1.ProjectService.ListProjectDaemons:input_type -> reliant.v1.ListProjectDaemonsRequest
+	42, // 39: reliant.v1.ProjectService.MarkProjectInstalled:input_type -> reliant.v1.MarkProjectInstalledRequest
+	44, // 40: reliant.v1.ProjectService.CreateProjectFromRepo:input_type -> reliant.v1.CreateProjectFromRepoRequest
+	47, // 41: reliant.v1.ProjectService.ListRepositoriesForDaemon:input_type -> reliant.v1.ListRepositoriesForDaemonRequest
+	49, // 42: reliant.v1.ProjectService.PullProjectOnDaemon:input_type -> reliant.v1.PullProjectOnDaemonRequest
+	51, // 43: reliant.v1.ProjectService.RemoveProjectFromDaemon:input_type -> reliant.v1.RemoveProjectFromDaemonRequest
+	53, // 44: reliant.v1.ProjectService.AttachProjectToDaemon:input_type -> reliant.v1.AttachProjectToDaemonRequest
+	55, // 45: reliant.v1.ProjectService.DetachProjectFromDaemon:input_type -> reliant.v1.DetachProjectFromDaemonRequest
+	57, // 46: reliant.v1.ProjectService.RecloneProjectOnDaemon:input_type -> reliant.v1.RecloneProjectOnDaemonRequest
+	4,  // 47: reliant.v1.ProjectService.CreateProject:output_type -> reliant.v1.CreateProjectResponse
+	6,  // 48: reliant.v1.ProjectService.ListProjects:output_type -> reliant.v1.ListProjectsResponse
+	8,  // 49: reliant.v1.ProjectService.GetProject:output_type -> reliant.v1.GetProjectResponse
+	10, // 50: reliant.v1.ProjectService.UpdateProject:output_type -> reliant.v1.UpdateProjectResponse
+	12, // 51: reliant.v1.ProjectService.DeleteProject:output_type -> reliant.v1.DeleteProjectResponse
+	14, // 52: reliant.v1.ProjectService.TouchProject:output_type -> reliant.v1.TouchProjectResponse
+	16, // 53: reliant.v1.ProjectService.GetProjectMetadata:output_type -> reliant.v1.GetProjectMetadataResponse
+	18, // 54: reliant.v1.ProjectService.UpdateProjectMetadata:output_type -> reliant.v1.UpdateProjectMetadataResponse
+	20, // 55: reliant.v1.ProjectService.GetProjectGitInfo:output_type -> reliant.v1.GetProjectGitInfoResponse
+	23, // 56: reliant.v1.ProjectService.GetProjectGitBranches:output_type -> reliant.v1.GetProjectGitBranchesResponse
+	25, // 57: reliant.v1.ProjectService.GetProjectInitStatus:output_type -> reliant.v1.GetProjectInitStatusResponse
+	27, // 58: reliant.v1.ProjectService.InitializeProject:output_type -> reliant.v1.InitializeProjectResponse
+	30, // 59: reliant.v1.ProjectService.GetProjectChanges:output_type -> reliant.v1.GetProjectChangesResponse
+	33, // 60: reliant.v1.ProjectService.GetProjectPrompts:output_type -> reliant.v1.GetProjectPromptsResponse
+	35, // 61: reliant.v1.ProjectService.SaveProjectPrompts:output_type -> reliant.v1.SaveProjectPromptsResponse
+	37, // 62: reliant.v1.ProjectService.InitializeGitRepo:output_type -> reliant.v1.InitializeGitRepoResponse
+	39, // 63: reliant.v1.ProjectService.ListProjectDaemonsForDaemon:output_type -> reliant.v1.ListProjectDaemonsForDaemonResponse
+	41, // 64: reliant.v1.ProjectService.ListProjectDaemons:output_type -> reliant.v1.ListProjectDaemonsResponse
+	43, // 65: reliant.v1.ProjectService.MarkProjectInstalled:output_type -> reliant.v1.MarkProjectInstalledResponse
+	45, // 66: reliant.v1.ProjectService.CreateProjectFromRepo:output_type -> reliant.v1.CreateProjectFromRepoResponse
+	48, // 67: reliant.v1.ProjectService.ListRepositoriesForDaemon:output_type -> reliant.v1.ListRepositoriesForDaemonResponse
+	50, // 68: reliant.v1.ProjectService.PullProjectOnDaemon:output_type -> reliant.v1.PullProjectOnDaemonResponse
+	52, // 69: reliant.v1.ProjectService.RemoveProjectFromDaemon:output_type -> reliant.v1.RemoveProjectFromDaemonResponse
+	54, // 70: reliant.v1.ProjectService.AttachProjectToDaemon:output_type -> reliant.v1.AttachProjectToDaemonResponse
+	56, // 71: reliant.v1.ProjectService.DetachProjectFromDaemon:output_type -> reliant.v1.DetachProjectFromDaemonResponse
+	58, // 72: reliant.v1.ProjectService.RecloneProjectOnDaemon:output_type -> reliant.v1.RecloneProjectOnDaemonResponse
+	47, // [47:73] is the sub-list for method output_type
+	21, // [21:47] is the sub-list for method input_type
+	21, // [21:21] is the sub-list for extension type_name
+	21, // [21:21] is the sub-list for extension extendee
+	0,  // [0:21] is the sub-list for field type_name
 }
 
 func init() { file_reliant_v1_project_proto_init() }

@@ -27,12 +27,15 @@ func (s *Service) ListMessages(
 	req *connect.Request[reliantv1.ListMessagesRequest],
 ) (*connect.Response[reliantv1.ListMessagesResponse], error) {
 	userID := auth.MustGetUserID(ctx)
+	// Serves viewers of a shared chat: their transcript leaves every tool
+	// result out (messageproto.ElideForViewer).
+	ctx = authz.WithViewerReads(ctx)
 
 	if req.Msg.ChatId == "" {
 		return nil, svcerr.InvalidArgument("chat_id is required")
 	}
 
-	// Verify user owns the chat
+	// The owner, or a viewer of a shared chat
 	chat, err := s.deps.Repo.GetChatRow(ctx, req.Msg.ChatId)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
@@ -175,6 +178,9 @@ func (s *Service) ListMessages(
 	toolBodies := messageproto.ResolveToolBodyMode(req.Msg.GetToolBodies(), s.deps.Config.GetTranscript().GetToolBodyStubs())
 	protoMessages := messageproto.AssembleForDisplay(
 		ctx, s.deps.Repo, messages, blocksByMessageID, attachmentMap, viewingThreadID, 0, toolBodies)
+	if authz.IsViewer(ctx, userID, chat) {
+		messageproto.ElideForViewer(protoMessages)
+	}
 	// What this read sent, by block kind, on the RPC's span: counted after
 	// the stub policy, so a STUB read reports the bytes it really sent and
 	// what it left out (transcript.blocks_elided, transcript.bytes_elided).

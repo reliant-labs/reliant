@@ -156,6 +156,9 @@ func (s *Service) ListPendingQuestions(
 		if chatID == "" {
 			return nil, svcerr.InvalidArgument("chat_id, when set, must not be empty")
 		}
+		// One chat's questions serve its viewers too, as read-only cards:
+		// answering stays the owner's (ResolveQuestion).
+		ctx = authz.WithViewerReads(ctx)
 		chat, getErr := s.deps.Repo.GetChatRow(ctx, chatID)
 		if getErr != nil {
 			return nil, svcerr.WrapOr(getErr, svcerr.Internal("failed to get chat"))

@@ -50,6 +50,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/handlers/run"
 	"github.com/reliant-labs/reliant/internal/handlers/scenario"
 	"github.com/reliant-labs/reliant/internal/handlers/settings"
+	"github.com/reliant-labs/reliant/internal/handlers/sharing"
 	streaminghandler "github.com/reliant-labs/reliant/internal/handlers/streaming"
 	"github.com/reliant-labs/reliant/internal/handlers/system"
 	"github.com/reliant-labs/reliant/internal/handlers/task"
@@ -81,7 +82,7 @@ var userServices = []string{
 	reliantv1connect.ModelEndpointServiceName, reliantv1connect.TokenServiceName, reliantv1connect.DaemonServiceName,
 	reliantv1connect.AccountServiceName, reliantv1connect.ConnectionServiceName, reliantv1connect.ConnectorServiceName,
 	reliantv1connect.BackgroundServiceName, reliantv1connect.TerminalServiceName, reliantv1connect.UsageServiceName,
-	reliantv1connect.WorktreeReclaimServiceName,
+	reliantv1connect.WorktreeReclaimServiceName, reliantv1connect.SharingServiceName,
 }
 
 // testUserRoutes is the api's route set over services that are never called
@@ -98,7 +99,7 @@ func testUserRoutes(t *testing.T, opts MountOptions) *UserRoutes {
 		Message: &message.Service{}, ModelEndpoint: &model_endpoint.Service{}, PackageCommands: &package_commands.Service{},
 		Task: &task.Service{}, Plan: &plan.Service{}, Preset: &preset.Service{}, Project: &project.Service{},
 		ProviderAccount: &provider_account.Service{}, Question: &question.Service{}, Repo: &repo.Service{},
-		Scenario: &scenario.Service{}, Settings: &settings.Service{}, Streaming: &streaminghandler.Service{},
+		Scenario: &scenario.Service{}, Settings: &settings.Service{}, Sharing: &sharing.Service{}, Streaming: &streaminghandler.Service{},
 		System: &system.Service{}, Terminal: &terminal.Service{}, Token: &token.Service{}, ToolCall: &tool_call.Service{},
 		Workflow: &workflowhandler.Service{}, Usage: &usage.Service{}, WorktreeReclaim: &worktree_reclaim.Service{},
 		Logger:  slog.Default(),

@@ -627,13 +627,19 @@ var ErrNotOrgAdmin = errors.New("authz: not an owner or admin of the organizatio
 // userID is an owner or admin of orgID right now.
 //
 // The role is asked fresh (RoleFresh), never from the membership cache, so a
-// just-demoted admin cannot act on a stale answer. It fails closed: a
-// credential bound to another org is ErrDenied, a context with no Membership
+// just-demoted admin cannot act on a stale answer. Only a person may
+// administer (ErrPersonRequired for any other credential, WithCredentialKind).
+// It fails closed: a credential bound to another org is ErrDenied, a context with no Membership
 // or one that cannot name roles and an outage are ErrMembershipUnavailable,
 // and anything but owner or admin (unknown included) is ErrNotOrgAdmin.
 func RequireOrgAdmin(ctx context.Context, userID, orgID string) error {
 	if userID == "" || orgID == "" {
 		return ErrDenied
+	}
+	// Administering an org is a person's act (org-sharing.md §3.4): an
+	// agent's shell holds its admin's CLI login, and must not wield it.
+	if !personCredential(ctx) {
+		return ErrPersonRequired
 	}
 	if bound, ok := boundOrg(ctx); ok && bound != orgID {
 		logging.InfoContext(ctx, "[authz] a credential bound to another org; denying an admin action", "user_id", userID, "credential_org", bound, "org_id", orgID)
@@ -664,4 +670,86 @@ func RequireOrgAdmin(ctx context.Context, userID, orgID string) error {
 		logging.InfoContext(ctx, "[authz] the org role is unknown (an older control plane?); denying an admin action", "user_id", userID, "org_id", orgID)
 	}
 	return ErrNotOrgAdmin
+}
+
+// Refusals of a visibility change (ChatShareChange, ProjectShareChange)
+// beyond ErrDenied (the call site's NotFound), ErrNotOrgAdmin and
+// ErrMembershipUnavailable.
+var (
+	// ErrPersonRequired: sharing, and every admin action (RequireOrgAdmin),
+	// are a person's acts, never an agent's (the credential is software's).
+	ErrPersonRequired = errors.New("authz: only a person signed in to the app may do this")
+	// ErrShareNeedsOrg: a resource that belongs to no organization has no
+	// one to be shared with.
+	ErrShareNeedsOrg = errors.New("authz: the resource belongs to no organization")
+	// ErrOnlyOwnerShares: a viewer (an admin included) asked to share what
+	// is not theirs. Disclosure is the owner's act alone.
+	ErrOnlyOwnerShares = errors.New("authz: only the owner can share it")
+	// ErrInvalidVisibility: a visibility this build does not know.
+	ErrInvalidVisibility = errors.New("authz: unknown visibility")
+)
+
+// ChatShareChange decides userID setting chat's visibility to to
+// (control-plane docs/design/org-sharing.md §2): the change to apply, with its
+// action, or why it is refused.
+//
+//   - The owner (CanWriteChat) may make it private with any credential, and
+//     may share it only as a person and only when it belongs to an org.
+//   - Anyone who may not read it is ErrDenied (NotFound: it does not exist for
+//     them).
+//   - A viewer may never share it (ErrOnlyOwnerShares); a viewer who is an
+//     admin or owner of its org, asked fresh and acting as a person, may make
+//     it private (ShareActionAdminUnshare). Any other viewer is ErrNotOrgAdmin.
+//
+// The returned change carries the row's owner and org, so applying it after
+// either moved writes nothing (store.ApplyShareChange). Whether it changes
+// anything (already shared, already private) is the store's to say.
+func ChatShareChange[C chatRecord](ctx context.Context, userID string, chat C, id string, to core.Visibility) (core.ShareChange, error) {
+	return shareChange(ctx, userID, chatResource(chat), core.ShareKindChat, id, to)
+}
+
+// ProjectShareChange is ChatShareChange for a project.
+func ProjectShareChange(ctx context.Context, userID string, project *core.Project, to core.Visibility) (core.ShareChange, error) {
+	id := ""
+	if project != nil {
+		id = project.ID
+	}
+	return shareChange(ctx, userID, projectResource(project), core.ShareKindProject, id, to)
+}
+
+func shareChange(ctx context.Context, userID string, r resource, kind core.ShareKind, id string, to core.Visibility) (core.ShareChange, error) {
+	if !to.Valid() {
+		return core.ShareChange{}, ErrInvalidVisibility
+	}
+	c := core.ShareChange{Kind: kind, ResourceID: id, OrgID: r.orgID, OwnerUserID: r.ownerUserID, ActorUserID: userID}
+	if err := deny(ctx, userID, r); err == nil {
+		if to == core.VisibilityPrivate {
+			c.Action = core.ShareActionUnshare
+			return c, nil
+		}
+		if !personCredential(ctx) {
+			return core.ShareChange{}, ErrPersonRequired
+		}
+		if r.orgID == "" {
+			return core.ShareChange{}, ErrShareNeedsOrg
+		}
+		c.Action = core.ShareActionShare
+		return c, nil
+	}
+	if r.ownerUserID == userID || !isViewer(ctx, userID, r) {
+		// The owner who may not write it (removed from its org) and every
+		// non-reader get what they would get for any other change.
+		return core.ShareChange{}, ErrDenied
+	}
+	if to == core.VisibilityOrg {
+		return core.ShareChange{}, ErrOnlyOwnerShares
+	}
+	if !personCredential(ctx) {
+		return core.ShareChange{}, ErrPersonRequired
+	}
+	if err := RequireOrgAdmin(ctx, userID, r.orgID); err != nil {
+		return core.ShareChange{}, err
+	}
+	c.Action = core.ShareActionAdminUnshare
+	return c, nil
 }

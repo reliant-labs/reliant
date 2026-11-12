@@ -31,6 +31,8 @@ func (s *Service) ListAsyncQuestions(
 	if req.Msg.ChatId == "" {
 		return nil, svcerr.InvalidArgument("chat_id is required")
 	}
+	// Serves viewers of a shared chat, as read-only cards.
+	ctx = authz.WithViewerReads(ctx)
 
 	chat, err := s.deps.Repo.GetChatRow(ctx, req.Msg.ChatId)
 	if err != nil {

@@ -17,6 +17,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/authz"
+	"github.com/reliant-labs/reliant/internal/chatproto"
 	"github.com/reliant-labs/reliant/internal/daemonchoice"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -346,6 +347,8 @@ func (s *Service) GetChat(
 	req *connect.Request[reliantv1.GetChatRequest],
 ) (*connect.Response[reliantv1.GetChatResponse], error) {
 	userID := auth.MustGetUserID(ctx)
+	// Serves viewers of a shared chat (chatproto.ForViewer).
+	ctx = authz.WithViewerReads(ctx)
 
 	if req.Msg.ChatId == "" {
 		return nil, svcerr.InvalidArgument("chat_id is required")
@@ -356,9 +359,14 @@ func (s *Service) GetChat(
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}
 
-	// Verify user owns the chat
+	// The owner, or a viewer of a shared chat.
 	if !authz.CanReadChat(ctx, userID, chat) {
 		return nil, svcerr.NotFound("chat")
+	}
+	// A viewer reads the chat, never the owner's composer, workspace or run
+	// recovery: no selection read, no Temporal describe.
+	if authz.IsViewer(ctx, userID, chat) {
+		return connect.NewResponse(&reliantv1.GetChatResponse{Chat: chatproto.ForViewer(chatToProto(chat))}), nil
 	}
 
 	// Ghost detection (DB says running, but Temporal lost it) is advisory
@@ -859,12 +867,14 @@ func (s *Service) ListChatPlans(
 	req *connect.Request[reliantv1.ListChatPlansRequest],
 ) (*connect.Response[reliantv1.ListChatPlansResponse], error) {
 	userID := auth.MustGetUserID(ctx)
+	// Serves viewers of a shared chat (authz.WithViewerReads).
+	ctx = authz.WithViewerReads(ctx)
 
 	if req.Msg.ChatId == "" {
 		return nil, svcerr.InvalidArgument("chat_id is required")
 	}
 
-	// Get chat to verify ownership
+	// The owner, or a viewer of a shared chat.
 	chat, err := s.deps.Repo.GetChatRow(ctx, req.Msg.ChatId)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))

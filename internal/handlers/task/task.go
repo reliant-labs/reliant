@@ -183,12 +183,14 @@ func (s *Service) ListTasks(
 	req *connect.Request[reliantv1.ListTasksRequest],
 ) (*connect.Response[reliantv1.ListTasksResponse], error) {
 	userID := auth.MustGetUserID(ctx)
+	// Serves viewers of a shared chat (authz.WithViewerReads).
+	ctx = authz.WithViewerReads(ctx)
 
 	if req.Msg.GetPlanId() == "" {
 		return nil, svcerr.InvalidArgument("plan_id is required")
 	}
 
-	// Verify user owns the plan
+	// The owner of the plan's chat, or a viewer of it shared.
 	plan, err := s.deps.Repo.GetPlan(ctx, *req.Msg.PlanId)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get plan"))

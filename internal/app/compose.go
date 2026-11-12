@@ -58,6 +58,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/handlers/run"
 	"github.com/reliant-labs/reliant/internal/handlers/scenario"
 	"github.com/reliant-labs/reliant/internal/handlers/settings"
+	"github.com/reliant-labs/reliant/internal/handlers/sharing"
 	streaminghandler "github.com/reliant-labs/reliant/internal/handlers/streaming"
 	"github.com/reliant-labs/reliant/internal/handlers/system"
 	"github.com/reliant-labs/reliant/internal/handlers/task"
@@ -916,6 +917,7 @@ func (g *Graph) newUserRoutes() (*UserRoutes, error) {
 		Options:         apiMountOptions(g.ApiServerConfig.GetDisableForgeApi()),
 		Usage:           g.Usage(),
 		WorktreeReclaim: g.WorktreeReclaim(),
+		Sharing:         g.Sharing(),
 	})
 }
 
@@ -1362,5 +1364,16 @@ func (g *Graph) newWorktreeReclaim() (*worktree_reclaim.Service, error) {
 func (g *Graph) newChatUpdateHeadsBackfill() (*ChatUpdateHeadsBackfill, error) {
 	return NewChatUpdateHeadsBackfill(ChatUpdateHeadsBackfillDeps{
 		DB: g.Database(),
+	})
+}
+
+// newSharing constructs the sharing handler (internal/handlers/sharing):
+// read-only sharing of chats and projects with their org's live members.
+func (g *Graph) newSharing() (*sharing.Service, error) {
+	return sharing.New(sharing.Deps{
+		Logger: g.Log,
+		Config: g.Cfg,
+		Repo:   g.Database(),
+		Orgs:   g.OrgResolver(),
 	})
 }

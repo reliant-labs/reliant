@@ -131,7 +131,7 @@ func TestRole_CacheAndFresh(t *testing.T) {
 // so a signature drift would silently refuse every admin).
 func TestResolverAnswersAuthzAdminCheck(t *testing.T) {
 	r, _ := newResolver(newRoleFake())
-	ctx := authz.WithMembership(context.Background(), r)
+	ctx := authz.WithCredentialKind(authz.WithMembership(context.Background(), r), authz.CredentialKindPerson)
 	if err := authz.RequireOrgAdmin(ctx, "alice", "acme"); err != nil {
 		t.Fatalf("an admin: %v", err)
 	}

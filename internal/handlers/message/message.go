@@ -25,6 +25,8 @@ func (s *Service) GetMessage(
 	if messageID == "" {
 		return nil, svcerr.InvalidArgument("message_id is required")
 	}
+	// Serves viewers of a shared chat, with every tool result left out.
+	ctx = authz.WithViewerReads(ctx)
 
 	// Get message from database
 	msg, err := s.deps.Repo.GetMessage(ctx, messageID)
@@ -99,6 +101,10 @@ func (s *Service) GetMessage(
 		SenderTitlesByThreadID: messageproto.SenderTitles(ctx, s.deps.Repo, []*db.Message{msg}),
 		ToolBodies:             toolBodies,
 	})
+
+	if authz.IsViewer(ctx, userID, chat) {
+		messageproto.ElideForViewer([]*reliantv1.Message{protoMessage})
+	}
 
 	// What this read sent, by block kind, on the RPC's span (after the stub
 	// policy).

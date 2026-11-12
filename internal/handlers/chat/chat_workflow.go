@@ -17,6 +17,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/authz"
+	"github.com/reliant-labs/reliant/internal/chatproto"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/launch"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -334,12 +335,15 @@ func (s *Service) GetWorkflowExecutions(
 	req *connect.Request[reliantv1.GetWorkflowExecutionsRequest],
 ) (*connect.Response[reliantv1.GetWorkflowExecutionsResponse], error) {
 	userID := auth.MustGetUserID(ctx)
+	// Serves viewers of a shared chat, without what its steps produced
+	// (chatproto.ElideWorkflowsForViewer).
+	ctx = authz.WithViewerReads(ctx)
 
 	if req.Msg.ChatId == "" {
 		return nil, svcerr.InvalidArgument("chat_id is required")
 	}
 
-	// Verify ownership
+	// The owner, or a viewer of a shared chat.
 	chat, err := s.deps.Repo.GetChatRow(ctx, req.Msg.ChatId)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
@@ -480,6 +484,9 @@ func (s *Service) GetWorkflowExecutions(
 	// from the table that owns thread identity.
 	if threadsErr == nil {
 		s.attachThreadsWithoutWorkflowRow(threads, allRootProtos)
+	}
+	if authz.IsViewer(ctx, userID, chat) {
+		chatproto.ElideWorkflowsForViewer(allRootProtos)
 	}
 
 	return connect.NewResponse(&reliantv1.GetWorkflowExecutionsResponse{
