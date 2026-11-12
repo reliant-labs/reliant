@@ -20,6 +20,17 @@ const mocks = vi.hoisted(() => ({
   validateProviderAPIKey: vi.fn(),
 }));
 
+// A connected self-hosted machine: the context in which a subscription sign-in
+// is the default and can complete. (Without one the step opens on Reliant.)
+vi.mock("@/hooks/useDaemonStatus", () => ({
+  useDaemonStatus: () => ({
+    daemons: [{ status: 1, daemonType: "self_hosted" }],
+    activeDaemon: { status: 1, daemonType: "self_hosted" },
+    loading: false,
+    unreachable: false,
+    refresh: vi.fn(),
+  }),
+}));
 vi.mock("@/hooks/useReliantAIQueries", () => ({
   useWalletOverview: () => ({
     data: undefined,

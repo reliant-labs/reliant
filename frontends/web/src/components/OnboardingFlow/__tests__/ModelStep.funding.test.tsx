@@ -41,6 +41,9 @@ type WalletReturn = {
 
 const mockUseWalletOverview = vi.fn<() => WalletReturn>();
 
+vi.mock("@/hooks/useDaemonStatus", () => ({
+  useDaemonStatus: () => ({ daemons: [], activeDaemon: undefined, loading: false, unreachable: false, refresh: vi.fn() }),
+}));
 vi.mock("@/hooks/useReliantAIQueries", () => ({
   useWalletOverview: () => ({
     refetch: vi.fn().mockResolvedValue({}),

@@ -5,6 +5,9 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ModelStep } from "../steps/ModelStep";
 import type { LaunchPlan } from "../types";
 
+vi.mock("@/hooks/useDaemonStatus", () => ({
+  useDaemonStatus: () => ({ daemons: [], activeDaemon: undefined, loading: false, unreachable: false, refresh: vi.fn() }),
+}));
 vi.mock("@/hooks/useCloudBillingQueries", () => ({
   useWalletOverview: () => ({ data: { wallet: { balanceUsdNanos: 0n } }, isLoading: false }),
   useCloudEligibility: () => ({ data: { eligible: false }, isLoading: false }),
