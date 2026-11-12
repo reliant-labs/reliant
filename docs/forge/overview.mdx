@@ -39,6 +39,10 @@ An app deployed to Reliant hosting reports on itself from its first deploy: gene
 
 A landing page, docs site, SPA or PWA with no backend is a complete forge project: one static frontend, dev, staging and prod environments, and no server to run. An existing Vite or Next.js app can be adopted in place with `forge project new --in-place --kind site`. Agents can load the `deploy/static-site` skill for the details.
 
+### An app you already have, in any language
+
+A server written in another language keeps its code and its Dockerfile. Your agent adopts it by following `forge skill load adopt`, which works in tiers. Tier 1 ships the app to Reliant hosting with a managed Postgres, and you can stop there. The later tiers add OpenTelemetry, gated promotion and CI, and, only when it pays, moving pieces onto Forge's Go stack. [Escape hatches](/forge/deploy/escape-hatches#adopt-an-app-that-already-exists) has the details.
+
 ## How Forge and Reliant fit together
 
 Reliant's cloud runs your agents; a machine you choose, your computer or a Reliant cloud machine, runs their tools; and Forge is what they are building and running there. The Forge CLI ships inside the `reliant` binary, so `reliant forge …` works wherever Reliant does, signed in as you, and agents' shells have it already. See [Forge through Reliant](/cli/forge) for what that gives you.

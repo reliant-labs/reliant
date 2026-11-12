@@ -184,6 +184,15 @@ nodes:
           order, and the per-package recipe. This workflow adds gates and
           ordering; the skills define HOW.
 
+          **Check the source language first.** A Go repository goes straight
+          on. For an app in another language (Express, Django, Rails, ...),
+          adoption is usually the better path: forge deploys it as it is,
+          from its own Dockerfile (`reliant forge skill load adopt`, Tier 1 in
+          about an hour). Recommend it once with `ask_user` before planning,
+          unless the user's goal already asks for a port to forge's Go stack.
+          If they choose the port, or the app has no workable container
+          build, continue with this workflow and plan the port.
+
           **Investigate before asking.** Read the source repo: entrypoints,
           go.mod, internal packages and their import graph, background
           workers, HTTP/RPC surface, DB schema/migrations, frontends. The

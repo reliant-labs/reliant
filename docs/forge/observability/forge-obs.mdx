@@ -56,6 +56,10 @@ The exit code is the contract. It is the same as the `exit_code` field in the JS
 | 2 | INCONCLUSIVE | The after window has not finished, or no service reached the minimum request count, or forge could not look (control plane unreachable, auth refused, telemetry off) |
 | 8 | Wait timed out | `--wait` ran out (`--timeout`, default 30 minutes) before the after window finished |
 
+An INCONCLUSIVE document says why twice: `reason`, a sentence, and `reason_code`, one of `window_open`, `low_traffic`, `no_request_telemetry`, `standing_critical_alert` or `alert_state_unread`. Branch on the code.
+
+`no_request_telemetry` means no service sent a single request span in either window. Request counts, error rates and latency come from each service's own OpenTelemetry traces, not from the ingress. An app forge did not build, such as one adopted by its Dockerfile or a third-party image, has no request data until it exports traces, however much traffic it serves, and the reason names it. To fix it, add an OpenTelemetry SDK that exports OTLP to `$OTEL_EXPORTER_OTLP_ENDPOINT`. Hosting sets that variable and `OTEL_SERVICE_NAME` on every workload. Restarts, alerts and new issues are still judged without traces, and `forge obs workloads` and `forge obs logs` show the app's health and output.
+
 <Warning>
 Exit 2 is never green. "Not enough traffic to judge" and "the telemetry query failed" both mean the release is **not proven good**, and a gate that reads either as a pass has turned a blind spot into a green tick. If you do want an inconclusive result to pass, say so with `--allow-inconclusive`; that flag exists so the choice is explicit rather than a default. Exit 8 is a different case: the verdict is still coming, so check again later rather than redeploy.
 </Warning>
