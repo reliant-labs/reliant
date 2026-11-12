@@ -4,6 +4,7 @@ package store_test
 import (
 	"context"
 	"reflect"
+	"sync"
 	"testing"
 	"time"
 
@@ -189,9 +190,16 @@ func TestApplyShareChange(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Every change carries an explicit, increasing At (one minute apart), so
+	// the history's order never depends on the wall clock.
+	tick := at
 	apply := func(c core.ShareChange) bool {
 		t.Helper()
 		c.Kind, c.ResourceID = core.ShareKindChat, "c1"
+		if c.At.IsZero() {
+			tick = tick.Add(time.Minute)
+			c.At = tick
+		}
 		if c.OrgID == "" {
 			c.OrgID = "acme"
 		}
@@ -217,6 +225,7 @@ func TestApplyShareChange(t *testing.T) {
 	}
 
 	sharedAt := at.Add(time.Hour)
+	tick = sharedAt
 	if !apply(core.ShareChange{Action: core.ShareActionShare, At: sharedAt}) {
 		t.Fatal("share: not applied")
 	}
@@ -264,8 +273,16 @@ func TestApplyShareChange(t *testing.T) {
 	if !apply(core.ShareChange{Action: core.ShareActionShare}) || !apply(core.ShareChange{Action: core.ShareActionUnshare}) {
 		t.Fatal("share then unshare: not applied")
 	}
-	if n := len(events()); n != 4 {
-		t.Fatalf("%d events after four changes, want 4", n)
+	ev = events()
+	var actions []core.ShareAction
+	for i, e := range ev {
+		actions = append(actions, e.Action)
+		if i > 0 && !e.CreatedAt.Before(ev[i-1].CreatedAt) {
+			t.Fatalf("history not newest first by At: %+v", ev)
+		}
+	}
+	if want := []core.ShareAction{core.ShareActionUnshare, core.ShareActionShare, core.ShareActionAdminUnshare, core.ShareActionShare}; !reflect.DeepEqual(actions, want) {
+		t.Fatalf("history = %v, want %v", actions, want)
 	}
 
 	// A missing row changes nothing.
@@ -322,5 +339,79 @@ func TestShareWorkflowDraft(t *testing.T) {
 	}
 	if got.Visibility != core.VisibilityOrg || got.SharedAt == nil || got.Version != 1 {
 		t.Fatalf("draft: visibility %q shared_at %v version %d", got.Visibility, got.SharedAt, got.Version)
+	}
+}
+
+// The visibility change and its share_events row are one unit: when the event
+// cannot be written, the visibility change is rolled back.
+func TestApplyShareChangeRollsBackWithoutItsEvent(t *testing.T) {
+	env := storetest.New(t)
+	ctx := context.Background()
+	at := time.Date(2026, 11, 12, 10, 0, 0, 0, time.UTC)
+	shareChat(t, env, "c1", "bob", strp("acme"), at)
+	for _, stmt := range []string{
+		`CREATE FUNCTION refuse_share_event() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'share_events refused by the test'; END $$`,
+		`CREATE TRIGGER refuse_share_event BEFORE INSERT ON share_events FOR EACH ROW EXECUTE FUNCTION refuse_share_event()`,
+	} {
+		if _, err := env.SQL.ExecContext(ctx, stmt); err != nil {
+			t.Fatal(err)
+		}
+	}
+	changed, err := env.Repo.ApplyShareChange(ctx, core.ShareChange{
+		Kind: core.ShareKindChat, ResourceID: "c1", OrgID: "acme", OwnerUserID: "bob", ActorUserID: "bob",
+		Action: core.ShareActionShare, At: at.Add(time.Minute),
+	})
+	if err == nil || changed {
+		t.Fatalf("changed=%v err=%v, want the event's failure", changed, err)
+	}
+	row, err := store.GetChatRow(ctx, env.ORM, "c1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if row.Visibility != core.VisibilityPrivate || row.SharedAt != nil {
+		t.Fatalf("visibility %q shared_at %v survived a failed event write", row.Visibility, row.SharedAt)
+	}
+}
+
+// Concurrent changes of one resource serialize on its row: of N simultaneous
+// shares exactly one applies and records an event, and the rest are no-ops.
+func TestConcurrentShareChangesApplyOnce(t *testing.T) {
+	env := storetest.New(t)
+	ctx := context.Background()
+	at := time.Date(2026, 11, 12, 10, 0, 0, 0, time.UTC)
+	shareChat(t, env, "c1", "bob", strp("acme"), at)
+	const n = 8
+	var wg sync.WaitGroup
+	results := make([]bool, n)
+	errs := make([]error, n)
+	start := make(chan struct{})
+	for i := 0; i < n; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			<-start
+			results[i], errs[i] = env.Repo.ApplyShareChange(ctx, core.ShareChange{
+				Kind: core.ShareKindChat, ResourceID: "c1", OrgID: "acme", OwnerUserID: "bob", ActorUserID: "bob",
+				Action: core.ShareActionShare, At: at.Add(time.Duration(i+1) * time.Minute),
+			})
+		}(i)
+	}
+	close(start)
+	wg.Wait()
+	applied := 0
+	for i := range results {
+		if errs[i] != nil {
+			t.Fatalf("change %d: %v", i, errs[i])
+		}
+		if results[i] {
+			applied++
+		}
+	}
+	ev, err := env.Repo.ListShareEvents(ctx, core.ShareKindChat, "c1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if applied != 1 || len(ev) != 1 {
+		t.Fatalf("%d applied, %d events; want exactly one of each", applied, len(ev))
 	}
 }
