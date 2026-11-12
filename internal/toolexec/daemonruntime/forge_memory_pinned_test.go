@@ -213,7 +213,13 @@ func TestCollectRepoMemories_EachForgeCarriesItsOwnGuide(t *testing.T) {
 	assert.Contains(t, string(mem["b"]), "# guide of forge v1.0.5 for b", "b was pointed at another forge's guide")
 	assert.Contains(t, string(mem["c"]), "`a`", "c shares a's forge, so it points at a's guide")
 	assert.Less(t, len(mem["c"]), 1000)
-	assert.Contains(t, string(mem["d"]), "Use forge skills", "d has no pin: the embedded guide")
+	// d has no pin: it carries the embedded forge's own guide for d. Compared
+	// whole rather than by a phrase: which guide forge writes depends on the
+	// project's shape (forge #2107 gives an adopted, forge.yaml-only project
+	// like d its own), and that is forge's to decide, not this test's.
+	embedded, err := forgecli.RenderProjectMemory(filepath.Join(root, "d"))
+	require.NoError(t, err)
+	assert.Contains(t, string(mem["d"]), string(embedded), "d has no pin: the embedded guide")
 }
 
 // A proto rewrite that keeps the file's size and mtime (an atomic replace with

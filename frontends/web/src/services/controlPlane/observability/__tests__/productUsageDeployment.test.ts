@@ -22,7 +22,7 @@ const window = { startMs: Date.UTC(2026, 2, 16, 0), endMs: Date.UTC(2026, 2, 16,
 beforeEach(() => client.queryPanel.mockReset());
 
 it("loads the actual generated deployment dashboard and sends every unchanged panel through the hosted adapter", async () => {
-  expect(createHash("sha256").update(raw).digest("hex")).toBe("508ea26b9703be50b8109f615e71dfe05dc4ff46c99928c031cc6ab21705914b");
+  expect(createHash("sha256").update(raw).digest("hex")).toBe("15000552a4f7b5fe6e8616a2076b98c8116709a691ecd068c97a4ba93a9eb22f");
   expect(usage.panels).toHaveLength(17);
   client.queryPanel.mockResolvedValue(create(QueryPanelResponseSchema, { kind: "sql", columns: ["events"], rows: [{ group: { event: "synthetic" }, values: [2] }] }));
   for (const panel of usage.panels) {
