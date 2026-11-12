@@ -119,7 +119,7 @@ beforeEach(() => {
 
 describe("ComputeStep machine picker selection", () => {
   it("shows one row per plan: no S1 row that would buy the S2 plan", () => {
-    renderStep({});
+    renderStep({ compute: "cloud_paid" });
     expect(machineRows()).toHaveLength(2);
     expect(screen.getByRole("button", { name: /^S2 / })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /^M / })).toBeInTheDocument();
@@ -128,7 +128,7 @@ describe("ComputeStep machine picker selection", () => {
   });
 
   it("clicking S2 selects S2 alone and records its plan", () => {
-    const updatePlan = renderStep({});
+    const updatePlan = renderStep({ compute: "cloud_paid" });
     fireEvent.click(screen.getByRole("button", { name: /^S2 / }));
     expect(updatePlan).toHaveBeenCalledWith({ computePlanId: "plan_compute_s2" });
   });
@@ -137,7 +137,7 @@ describe("ComputeStep machine picker selection", () => {
     ["plan_compute_s2", "S2"],
     ["plan_compute_m", "M"],
   ])("with %s chosen, exactly one row is pressed (%s)", (computePlanId, label) => {
-    renderStep({ computePlanId });
+    renderStep({ compute: "cloud_paid", computePlanId });
     const pressed = machineRows().filter((row) => row.getAttribute("aria-pressed") === "true");
     expect(pressed).toHaveLength(1);
     expect(pressed[0]).toHaveAccessibleName(new RegExp(`^${label} `));
