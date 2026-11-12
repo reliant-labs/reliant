@@ -69,6 +69,12 @@ var userScopedReads = map[string]string{
 	"GetProjectByPathAndUser":              readCallersFilter,
 	"GetProjectByRemoteURLAndUser":         readCallersFilter,
 
+	// The shared lists (org-sharing S1) read OTHER users' rows of one org;
+	// their first caller (S3) passes each through authz.Visible with
+	// CanReadChat / CanReadProject, which is where a viewer is decided.
+	"ListSharedChats":    readUnused,
+	"ListSharedProjects": readUnused,
+
 	"FiringsSinceLastSuccess":   readParentAuthorized,
 	"GetPresetBySlugAndProject": readParentAuthorized,
 	"GetWorktreeRecovery":       readParentAuthorized,

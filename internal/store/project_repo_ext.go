@@ -265,5 +265,7 @@ func projectToCore(row *Project) *core.Project {
 		CreatedAt:        row.CreatedAt,
 		UpdatedAt:        row.UpdatedAt,
 		LastActive:       row.LastActive,
+		Visibility:       visibilityOf(row.Visibility),
+		SharedAt:         row.SharedAt,
 	}
 }

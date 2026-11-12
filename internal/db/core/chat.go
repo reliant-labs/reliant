@@ -266,6 +266,11 @@ type Chat struct {
 	// the stored trigger that fired it, nil for ad hoc kinds.
 	LaunchKind string  `json:"launch_kind,omitempty"`
 	TriggerID  *string `json:"trigger_id,omitempty"`
+
+	// Visibility is who besides UserID may read the chat; SharedAt when it
+	// was shared (nil while private). Read by internal/authz only.
+	Visibility Visibility `json:"visibility,omitempty"`
+	SharedAt   *time.Time `json:"shared_at,omitempty"`
 }
 
 // MainThreadID returns the chat's root thread id, or "" if no root workflow
@@ -302,6 +307,9 @@ type ChatRow struct {
 	CreatedAt      time.Time
 	UpdatedAt      time.Time
 	LastActive     time.Time
+	// Visibility is who besides UserID may read the chat (see Chat).
+	Visibility Visibility
+	SharedAt   *time.Time
 }
 
 // MainThreadID is Chat.MainThreadID for the row's root workflow.
