@@ -163,19 +163,33 @@ export function useOAuthAvailability(
       timer = setTimeout(() => void tick(), delay)
     }
 
+    // Whatever the check throws is "not running", never a halt: a poll that
+    // dies on one rejection (a failed lazy import, an unexpected RPC error)
+    // would stop re-checking for the rest of the panel's life.
+    const check = async (): Promise<OAuthHelperOutcome> => {
+      try {
+        const health = await probeOAuthHelper()
+        return health?.ready ? { ready: true, health } : await requestOAuthHelper()
+      } catch {
+        return { ready: false, reason: 'not_running' }
+      }
+    }
+
     const tick = async () => {
-      const health = await probeOAuthHelper()
+      const outcome = await check()
       if (cancelled) return
-      apply(
-        health?.ready ? { ready: true, health } : await requestOAuthHelper(),
-      )
-      if (cancelled) return
+      apply(outcome)
       scheduleNext()
     }
 
     void (async () => {
       setLoading(true)
-      const outcome = await requestOAuthHelper()
+      let outcome: OAuthHelperOutcome
+      try {
+        outcome = await requestOAuthHelper()
+      } catch {
+        outcome = { ready: false, reason: 'not_running' }
+      }
       if (cancelled) return
       apply(outcome)
       setLoading(false)
