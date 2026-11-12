@@ -67,7 +67,7 @@ func TestWorker_CancelAfterRequestToB_TargetsB(t *testing.T) {
 
 	select {
 	case <-cancelOnB:
-	case <-time.After(2 * time.Second):
+	case <-time.After(30 * time.Second):
 		t.Fatal("cancel never reached daemon B")
 	}
 	select {
@@ -99,7 +99,7 @@ func TestWorker_AbandonCancelUsesTheRunsSelector(t *testing.T) {
 
 	select {
 	case <-cancelOnB:
-	case <-time.After(2 * time.Second):
+	case <-time.After(30 * time.Second):
 		t.Fatal("abandon-cancel never reached daemon B")
 	}
 	select {

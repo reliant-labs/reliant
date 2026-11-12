@@ -27,6 +27,7 @@ import (
 	"github.com/reliant-labs/forge/pkg/observe"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/natsutil"
 	"github.com/reliant-labs/reliant/pkg/daemonwire"
 )
 
@@ -140,7 +141,7 @@ func (d *Derivation) Start(ctx context.Context) error {
 		return errors.New("daemonstate: nil repository")
 	}
 
-	sub, err := d.nc.Subscribe(daemonwire.SubjectWildcard, func(msg *nats.Msg) {
+	sub, err := natsutil.SubscribeWithRecovery(d.nc, daemonwire.SubjectWildcard, func(msg *nats.Msg) {
 		// Detach from the NATS dispatch goroutine so a slow DB call doesn't
 		// stall the subscription. NATS-side delivery has no backpressure here;
 		// the gateway publisher is rate-limited.
@@ -149,19 +150,19 @@ func (d *Derivation) Start(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("daemonstate: subscribe %s: %w", daemonwire.SubjectWildcard, err)
 	}
-	defer func() { _ = sub.Unsubscribe() }()
+	defer sub.Stop()
 
 	// The reconcile with the control plane's daemon set. Applied on the
 	// subscription goroutine rather than detached: snapshots arrive one per
 	// owner per sweep, and applying them in order keeps two snapshots for the
 	// same owner from interleaving.
-	snapSub, err := d.nc.QueueSubscribe(daemonwire.SubjectRegistrySnapshot, registrySnapshotQueue, func(msg *nats.Msg) {
+	snapSub, err := natsutil.SubscribeWithRecovery(d.nc, daemonwire.SubjectRegistrySnapshot, func(msg *nats.Msg) {
 		d.handleSnapshot(ctx, msg)
-	})
+	}, natsutil.WithQueue(registrySnapshotQueue))
 	if err != nil {
 		return fmt.Errorf("daemonstate: subscribe %s: %w", daemonwire.SubjectRegistrySnapshot, err)
 	}
-	defer func() { _ = snapSub.Unsubscribe() }()
+	defer snapSub.Stop()
 
 	// The reaper rides along with the consumer because it is the one
 	// lease write no live stream can make: expiring the rows of a gateway

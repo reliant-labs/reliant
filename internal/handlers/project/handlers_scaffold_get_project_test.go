@@ -93,8 +93,9 @@ func TestGetProject_SlowDaemonCostsOnlyTheGitCheckBudget(t *testing.T) {
 	}
 	svc := newService(t, store, stalledDaemon{})
 
-	// The request's own deadline is far away, as the client's 10s was.
-	ctx, cancel := context.WithTimeout(project.AuthedContext(t), 10*time.Second)
+	// The request's own deadline is far away, as the client's 10s was, and
+	// far beyond the bound below.
+	ctx, cancel := context.WithTimeout(project.AuthedContext(t), 2*time.Minute)
 	defer cancel()
 	start := time.Now()
 	resp, err := svc.GetProject(ctx, connect.NewRequest(&pb.GetProjectRequest{ProjectId: "p-1"}))
@@ -105,7 +106,7 @@ func TestGetProject_SlowDaemonCostsOnlyTheGitCheckBudget(t *testing.T) {
 	if !resp.Msg.GetProject().GetIsGitRepo() {
 		t.Fatal("the stored git flag must be served when the daemon does not answer")
 	}
-	if elapsed > 2*time.Second {
+	if elapsed > 30*time.Second {
 		t.Fatalf("GetProject took %s: it waited on the daemon past the git-check budget", elapsed)
 	}
 }

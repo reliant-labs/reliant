@@ -8,7 +8,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -75,8 +74,9 @@ func TestHashWalkDir_DetectsModifiedFile(t *testing.T) {
 	h1, err := hashWalkDir(context.Background(), dir)
 	require.NoError(t, err)
 
-	// Ensure modtime differs — sleep briefly then rewrite with different size.
-	time.Sleep(10 * time.Millisecond)
+	// Rewrite with a different size: the hash covers each file's size as well
+	// as its modtime, so the change shows even when the filesystem's coarse
+	// clock gives both writes the same modtime.
 	writeFile(t, target, "modified content that is longer")
 
 	h2, err := hashWalkDir(context.Background(), dir)

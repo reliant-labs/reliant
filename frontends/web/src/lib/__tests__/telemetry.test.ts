@@ -30,6 +30,7 @@ const runtime = vi.hoisted(() => ({
   enableAttribution: vi.fn(),
   disableTelemetry: vi.fn(),
   setTelemetryUser: vi.fn(),
+  grantAnalyticsConsent: vi.fn(),
   reportException: vi.fn(() => true),
   setGlobalAttributes: vi.fn(),
 }));
@@ -37,6 +38,7 @@ const runtime = vi.hoisted(() => ({
 vi.mock("@reliantlabs/forge-web-runtime", () => ({
   disableTelemetry: runtime.disableTelemetry,
   setTelemetryUser: runtime.setTelemetryUser,
+  grantAnalyticsConsent: runtime.grantAnalyticsConsent,
   reportException: runtime.reportException,
 }));
 vi.mock("@reliantlabs/forge-web-runtime/telemetry", () => ({
@@ -86,6 +88,7 @@ type Config = {
   replay?: boolean;
   replaySampleRate?: number;
   appClient?: string;
+  analytics?: string;
 };
 
 function lastConfig(): Config {
@@ -529,6 +532,23 @@ describe("the demo shell", () => {
     expect(await initTelemetry()).toBe(true);
     expect(lastConfig()).toMatchObject({ serviceName: "reliant-forge-demo", replay: true, replaySampleRate: 1 });
     expect(runtime.setTelemetryUser).not.toHaveBeenCalled();
+  });
+
+  it("runs the full analytics tier on its notice: consent granted before the SDK starts", async () => {
+    resetShellForTests("demo");
+    expect(await initTelemetry()).toBe(true);
+    expect(lastConfig().analytics).toBe("full");
+    expect(runtime.grantAnalyticsConsent).toHaveBeenCalledTimes(1);
+    expect(runtime.grantAnalyticsConsent.mock.invocationCallOrder[0]).toBeLessThan(runtime.initBrowserTelemetry.mock.invocationCallOrder[0]!);
+    expect(buildTelemetryConfig({ ...base, shell: "demo", demoTelemetry: "analytics" }).analytics).toBe("full");
+  });
+
+  it("leaves the app's own shells on forge's default tier, without consent", async () => {
+    expect(buildTelemetryConfig(base).analytics).toBeUndefined();
+    expect(buildTelemetryConfig({ ...base, shell: "forge" }).analytics).toBeUndefined();
+    resetShellForTests("forge");
+    expect(await initTelemetry()).toBe(true);
+    expect(runtime.grantAnalyticsConsent).not.toHaveBeenCalled();
   });
 
   it("records analytics without replay when DEMO_TELEMETRY=analytics, and nothing when off", async () => {

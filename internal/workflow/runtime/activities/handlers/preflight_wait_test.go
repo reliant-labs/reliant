@@ -349,8 +349,9 @@ func TestPreflightWait_PersistentFailedEndsOnceItHolds(t *testing.T) {
 	require.True(t, first.Waiting)
 	require.NotNil(t, first.FailedSince)
 
-	time.Sleep(60 * time.Millisecond)
-	_, err = runPreflight(t, a, PreflightDaemonCheckInput{ChatID: chatID, FailedSince: first.FailedSince})
+	// The next look comes after the Failed report has held past the settle.
+	heldSince := first.FailedSince.Add(-a.failedSettle - time.Second)
+	_, err = runPreflight(t, a, PreflightDaemonCheckInput{ChatID: chatID, FailedSince: &heldSince})
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "Your machine failed to start: out of capacity")

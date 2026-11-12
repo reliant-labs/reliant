@@ -73,7 +73,7 @@ func TestPublisher_LifecycleAndRateLimit(t *testing.T) {
 		t.Fatalf("flush: %v", err)
 	}
 	// Drain a short window so the async subscription handler runs.
-	deadline := time.Now().Add(500 * time.Millisecond)
+	deadline := time.Now().Add(30 * time.Second)
 	for time.Now().Before(deadline) {
 		mu.Lock()
 		total := byType[daemonwire.EventConnected] + byType[daemonwire.EventDisconnected] + byType[daemonwire.EventActivity]

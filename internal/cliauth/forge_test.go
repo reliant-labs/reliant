@@ -32,6 +32,10 @@ func TestForgeScopes_IsEveryControlPlaneCapability(t *testing.T) {
 		// Machine management spends a person's money: forge never binds it
 		// to a daemon (accesstoken's personOnlyScopes).
 		fat.ScopeDaemonManage,
+		// A registry-only credential (forge #2059): a grant naming it names
+		// no other scope and is bound to nothing, so forge refuses it on a
+		// daemon binding, and a control plane refuses it on every RPC.
+		fat.ScopeSourcemapsWrite,
 	)
 	requested, err := fat.NewSet(ForgeScopes())
 	if err != nil {

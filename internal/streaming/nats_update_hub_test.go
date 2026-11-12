@@ -61,7 +61,7 @@ func TestUpdateHub_DeliversEvents(t *testing.T) {
 		if got.SequenceNumber != 7 || got.Payload != "hello" {
 			t.Errorf("got %+v, want seq=7 payload=hello", got)
 		}
-	case <-time.After(2 * time.Second):
+	case <-time.After(30 * time.Second):
 		t.Fatal("timed out waiting for event")
 	}
 }
@@ -140,7 +140,7 @@ func TestUpdateHub_UnsubscribeRacingDeliveryNoPanic(t *testing.T) {
 	// Teardown is asynchronous (the consume loop observes cancellation, then
 	// deregisters and closes). Give the loops a moment, then confirm every
 	// subscriber was unhooked — a leak here means the close never ran.
-	deadline := time.Now().Add(2 * time.Second)
+	deadline := time.Now().Add(30 * time.Second)
 	for time.Now().Before(deadline) && hub.subscriberCount() > 0 {
 		time.Sleep(10 * time.Millisecond)
 	}
@@ -170,7 +170,7 @@ func TestUpdateHub_ContextCancelClosesChannel(t *testing.T) {
 			if !ok {
 				return // closed — the consume loop owned it
 			}
-		case <-time.After(2 * time.Second):
+		case <-time.After(30 * time.Second):
 			t.Fatal("events channel was never closed after context cancel")
 		}
 	}

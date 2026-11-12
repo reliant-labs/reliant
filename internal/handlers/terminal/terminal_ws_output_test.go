@@ -186,10 +186,12 @@ func TestTerminalWS_ShellExitClosesWithNormalClosure(t *testing.T) {
 func requireServerClose(t *testing.T, conn *websocket.Conn, code int) {
 	t.Helper()
 	start := time.Now()
-	_ = conn.SetReadDeadline(time.Now().Add(5 * time.Second))
+	// Past the pong timeout, so a close that waited for it is read and
+	// failed below rather than timing the read out.
+	_ = conn.SetReadDeadline(time.Now().Add(wsPongTimeout + 15*time.Second))
 	_, _, err := conn.ReadMessage()
 	var closeErr *websocket.CloseError
 	require.ErrorAs(t, err, &closeErr, "the server closes the websocket with a close frame")
 	require.Equal(t, code, closeErr.Code)
-	require.Less(t, time.Since(start), 3*time.Second)
+	require.Less(t, time.Since(start), wsPongTimeout-15*time.Second, "the close came after the pong timeout, not at once")
 }

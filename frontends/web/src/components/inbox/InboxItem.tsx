@@ -72,6 +72,7 @@ import { formatBytes } from "@/lib/formatBytes";
 import { consumerSummary, heavyRefused, pressuredVolume, reclaimSummary, volumeUsage } from "@/lib/machineDisk";
 import { isUnownedStorage, StorageAction, totalHeldBytes } from "./StorageAction";
 import { reclaimDetail, WorktreeReclaimAction } from "./WorktreeReclaimAction";
+import { MarkedWorktreeAction, markedDetail, markedTitle } from "./MarkedWorktreeAction";
 import { RecoveryAction } from "./RecoveryAction";
 
 /** How long "Already handled" shows before the row leaves. */
@@ -476,6 +477,8 @@ function KindIcon({ kind }: { kind: InboxItemKind }) {
       return <HardDrive className={cn(className, "text-warning-ink")} aria-label="Storage" />;
     case InboxItemKind.WORKTREE_RECLAIM:
       return <FolderX className={cn(className, "text-warning-ink")} aria-label="Worktrees proposed for removal" />;
+    case InboxItemKind.WORKTREE_MARKED:
+      return <FolderX className={className} aria-label="Worktree marked to be reclaimed" />;
     default:
       return <CheckCircle2 className={className} aria-hidden="true" />;
   }
@@ -495,6 +498,7 @@ export function subjectName(item: InboxItemData): string {
   if (item.payload.case === "worktreeReclaim") {
     return `${machineName(item.payload.value.daemonName, item.payload.value.daemonId)} worktrees`;
   }
+  if (item.payload.case === "worktreeMarked") return item.payload.value.name || "Worktree";
   return item.chatTitle || item.triggerName || "Untitled run";
 }
 
@@ -647,6 +651,10 @@ function rowDetail(item: InboxItemData): { node: ReactNode; title: string } | nu
     case "worktreeReclaim": {
       const text = reclaimDetail(payload.value);
       return { node: text, title: text };
+    }
+    case "worktreeMarked": {
+      const text = markedDetail(payload.value);
+      return { node: text, title: markedTitle(payload.value) };
     }
     case "automationNeedsSetup": {
       const text = payload.value.issues.map((issue) => sentenceCase(issue.message)).join(" · ");
@@ -839,6 +847,8 @@ function InlineAction({ item, expanded, onToggle }: InlineActionProps) {
       return (
         <WorktreeReclaimAction item={payload.value} label={machineName(payload.value.daemonName, payload.value.daemonId)} />
       );
+    case "worktreeMarked":
+      return <MarkedWorktreeAction item={payload.value} />;
     case "automationRunPaused":
       return item.chatId ? (
         <RunLink chatId={item.chatId} className={actionButtonClass}>

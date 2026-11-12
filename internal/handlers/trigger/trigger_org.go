@@ -87,7 +87,7 @@ func (s *Service) updatedTriggerOrg(ctx context.Context, userID string, existing
 	if from == nil || (target != nil && to == nil) {
 		var err error
 		if def, err = s.deps.Orgs.DefaultOrg(ctx, userID); err != nil {
-			return nil, svcerr.WithCause(svcerr.Unavailable("could not resolve your default organization; try again"), err)
+			return nil, orgs.LookupFailed(ctx, "could not resolve your default organization; try again", err)
 		}
 	}
 	effective := func(org *string) string {

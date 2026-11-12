@@ -198,7 +198,7 @@ func (r *Resolver) Named(ctx context.Context, userID, requested string) (string,
 func (r *Resolver) liveMember(ctx context.Context, userID, orgID string) (string, error) {
 	member, ok, err := r.IsMember(ctx, userID, orgID)
 	if err != nil {
-		return "", svcerr.WithCause(svcerr.Unavailable("could not verify the organization; try again"), err)
+		return "", LookupFailed(ctx, "could not verify the organization; try again", err)
 	}
 	if !ok {
 		// No orgs here: nothing to store the name under.
@@ -208,6 +208,18 @@ func (r *Resolver) liveMember(ctx context.Context, userID, orgID string) (string
 		return "", NotMember(orgID)
 	}
 	return orgID, nil
+}
+
+// LookupFailed is the error of an org lookup that failed: Unavailable with
+// detail and err as its cause, unless the request itself ended first. A
+// request its client cancelled, or whose deadline passed, failed for that
+// reason, not for an outage: it is Canceled / DeadlineExceeded, so a client
+// navigating away is never reported, logged or counted as a server error.
+func LookupFailed(ctx context.Context, detail string, err error) error {
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return svcerr.Wrap(ctxErr)
+	}
+	return svcerr.WithCause(svcerr.Unavailable(detail), err)
 }
 
 // NotMember is the refusal of a request naming an org its caller is not a
@@ -275,7 +287,7 @@ func (r *Resolver) ListScope(ctx context.Context, userID, requested string, stam
 	}
 	def, err := r.DefaultOrg(ctx, userID)
 	if err != nil {
-		return nil, svcerr.WithCause(svcerr.Unavailable("could not resolve your default organization; try again"), err)
+		return nil, LookupFailed(ctx, "could not resolve your default organization; try again", err)
 	}
 	scope := &core.OrgScope{OrgID: requested, IncludeUnassigned: def == requested}
 	if scope.IncludeUnassigned && stamp != nil && r.dueForStamp(userID) {

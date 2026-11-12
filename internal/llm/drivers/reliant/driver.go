@@ -877,7 +877,7 @@ func (c *ReliantClient) logReliantAPIError(attempts int, apierr *openai.Error, r
 	}
 
 	logFn := logging.Error
-	if retry {
+	if reliantAPIErrorIsExpected(retry, reason) {
 		logFn = logging.Warn
 	}
 
@@ -902,6 +902,14 @@ func (c *ReliantClient) logReliantAPIError(attempts int, apierr *openai.Error, r
 		"litellm_model_id", litellmModelID,
 		"proxyman_id", proxymanID,
 	)
+}
+
+// reliantAPIErrorIsExpected reports whether a failed request is a normal
+// outcome rather than a fault: one about to be retried, or a user whose
+// Reliant credit is spent (the chat shows the upgrade prompt). Those log at
+// WARN; at ERROR an empty wallet raised a production error issue per user.
+func reliantAPIErrorIsExpected(retry bool, reason string) bool {
+	return retry || reason == "reliant_managed_quota_exhausted"
 }
 
 func summarizeReliantAPIError(apierr *openai.Error) string {

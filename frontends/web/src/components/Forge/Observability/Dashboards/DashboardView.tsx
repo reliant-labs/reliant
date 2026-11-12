@@ -113,13 +113,15 @@ import { PanelErrorBoundary } from "./PanelErrorBoundary";
 import { BUTTON_PRIMARY, BUTTON_SECONDARY, BUTTON_SMALL, ICON_BUTTON, INK_LINK, Menu, PointMenu, Segmented, SourceTag, StarButton, VariableSelect, type MenuEntry } from "./parts";
 import { useObsReadOnly } from "../obsReadOnly";
 import { DataPanelBody, type PanelDataContext } from "./DataPanel";
+import { isDeliveryKind, type DeliveryPanelContext } from "./DeliveryPanels";
 import { browseParams } from "./dataPanelModel";
 import type { DataSearch } from "../../Data/dataUrl-model";
 
 export interface DashboardHrefs extends ExploreHrefs {
   data?: (search: DataSearch) => string;
   list: string;
-  release: (version: string) => string;
+  /** A release's page; `extra` is its search (`{ tab: "health", in: "prod" }`). */
+  release: (version: string, extra?: Record<string, unknown>) => string;
   trace: (traceId: string) => string;
   /** One browser session (a sessions panel's row). Absent: rows are not links. */
   session?: (sessionId: string) => string;
@@ -387,8 +389,14 @@ export function DashboardView({ project, dashRef, env: consoleEnv, environments:
               ...(exploreHref(panel)
                 ? [{ label: "Explore in Metrics", detail: "this query, editable", href: exploreHref(panel)!, testId: `dashboard-panel-explore-${panel.id}` }]
                 : []),
-              { label: panel.signal === "logs" ? "Explore in Logs" : "Explore in Traces", detail: "with this panel's service", href: links.searchHref(panel) },
-              { label: CREATE_ALERT_LABEL, detail: "as KCL", onSelect: () => setAlertPanel(panel), separated: true, testId: `dashboard-panel-alert-${panel.id}` },
+              // A delivery panel (release health, promotions, DORA) reads the release ledger, not telemetry:
+              // there are no spans to explore and no query to alert on.
+              ...(isDeliveryKind(panel.kind)
+                ? []
+                : [
+                    { label: panel.signal === "logs" ? "Explore in Logs" : "Explore in Traces", detail: "with this panel's service", href: links.searchHref(panel) },
+                    { label: CREATE_ALERT_LABEL, detail: "as KCL", onSelect: () => setAlertPanel(panel), separated: true, testId: `dashboard-panel-alert-${panel.id}` },
+                  ]),
               {
                 label: "Ask Reliant",
                 detail: "in a new chat",
@@ -404,6 +412,7 @@ export function DashboardView({ project, dashRef, env: consoleEnv, environments:
               env: { id: envId, name: env }, href: hrefs.data,
               params: browseParams(spec, search, browseWindow),
             } : undefined}
+            delivery={{ scope: platform || orgScoped ? null : delivery, environments, range, releaseHref: hrefs.release }}
             range={range}
             services={viewerQuery(spec, panel, search).services}
             refreshEvery={refreshEvery}
@@ -1103,6 +1112,7 @@ function DashboardPanelCard({
   queryPanel,
   scope,
   dataContext,
+  delivery,
   range: rangeOfCard,
   services,
   refreshEvery,
@@ -1118,6 +1128,8 @@ function DashboardPanelCard({
   queryPanel: Panel;
   scope: ObsScope | null;
   dataContext?: PanelDataContext;
+  /** What a delivery-kind panel (release_health, promotions, delivery) reads. */
+  delivery?: DeliveryPanelContext;
   range: RangePreset;
   services: string[];
   refreshEvery: number | false;
@@ -1159,6 +1171,8 @@ function DashboardPanelCard({
   const trendQuery = usePanelQuery(scope, range, trendPanel ?? queryPanel, services, [], {
     refetchInterval: refreshEvery,
     enabled: !!trendPanel && near && drawsSqlFigures(queryPanel, rawQuery.data),
+    // Labelled like the figure's own read (Forge-Panel: <dashboard>/<panel>.trend), so query_log names the sparkline's statement too.
+    dashboardId,
   });
   const span = spanOf(panel);
   const offsetSec = target.mode === "release" || target.mode === "period" ? Math.round(target.offsetMs / 1000) : 0;
@@ -1239,6 +1253,7 @@ function DashboardPanelCard({
       <div ref={bodyRef} className="px-4 pb-4 pt-2">
         <DataPanelBody
           context={near ? dataContext : undefined}
+          delivery={near ? delivery : undefined}
           panel={queryPanel}
           query={query}
           compare={comparable && offsetSec ? { query: compareQuery, label: target.mode === "release" ? target.label : "previous period", offsetSec } : undefined}

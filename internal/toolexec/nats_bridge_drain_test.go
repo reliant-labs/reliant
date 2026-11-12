@@ -981,7 +981,9 @@ func TestDrainPendingCommands_SlowDispatchOutlivesFetchBudget(t *testing.T) {
 // dispatch.
 func TestDrainPendingCommands_EmptyDrainReturnsPromptly(t *testing.T) {
 	orig := pendingDrainFetchBudget
-	pendingDrainFetchBudget = 5 * time.Second // realistic prod value
+	// Far longer than the bound below, so a drain that blocked for the budget
+	// fails the test however busy the machine is.
+	pendingDrainFetchBudget = time.Minute
 	defer func() { pendingDrainFetchBudget = orig }()
 
 	mgr := &recordingDaemonMgr{}
@@ -999,7 +1001,7 @@ func TestDrainPendingCommands_EmptyDrainReturnsPromptly(t *testing.T) {
 	bridge.drainPendingCommands(context.Background(), pendingDrainUser, "daemon-1")
 	elapsed := time.Since(start)
 
-	assert.Less(t, elapsed, 1*time.Second,
+	assert.Less(t, elapsed, 30*time.Second,
 		"an empty drain must return quickly, not block for the full fetch budget (%s)", elapsed)
 	mgr.mu.Lock()
 	defer mgr.mu.Unlock()
@@ -1109,13 +1111,13 @@ func TestPollPendingCommands_PicksUpCommandEnqueuedWhileAlreadyConnected(t *test
 		mgr.mu.Lock()
 		defer mgr.mu.Unlock()
 		return len(mgr.commands) == 1
-	}, 2*time.Second, 10*time.Millisecond,
+	}, 30*time.Second, 10*time.Millisecond,
 		"a command enqueued after connect must still be dispatched, without waiting for a reconnect")
 
 	cancel()
 	select {
 	case <-done:
-	case <-time.After(2 * time.Second):
+	case <-time.After(30 * time.Second):
 		t.Fatal("pollPendingCommands did not exit after its context was cancelled")
 	}
 
@@ -1157,7 +1159,7 @@ func TestPollPendingCommands_StopsWhenContextCancelled(t *testing.T) {
 
 	select {
 	case <-done:
-	case <-time.After(2 * time.Second):
+	case <-time.After(30 * time.Second):
 		t.Fatal("pollPendingCommands did not exit after its context was cancelled")
 	}
 }

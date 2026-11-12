@@ -60,6 +60,11 @@ func (r *snapshotGateRepo) GetLatestUserUpdateSequence(context.Context, string) 
 	return 0, nil
 }
 
+// GetChatCompactedThrough: the chat was never compacted.
+func (r *snapshotGateRepo) GetChatCompactedThrough(context.Context, string) (int64, error) {
+	return 0, nil
+}
+
 func (r *snapshotGateRepo) GetChatRow(context.Context, string) (*db.ChatRow, error) {
 	return &db.ChatRow{ID: raceTestChatID, UserID: raceTestUserID}, nil
 }

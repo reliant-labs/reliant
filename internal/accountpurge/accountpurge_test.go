@@ -561,7 +561,7 @@ func TestPurge_ACallStartedMidPurgeCannotRecreateUsage(t *testing.T) {
 			t.Fatalf("delete %s: %v", table, err)
 		}
 	}
-	time.Sleep(50 * time.Millisecond) // the purge transaction is now older than the call below
+	time.Sleep(2 * time.Millisecond) // a clock tick: the purge transaction is now older than the call below
 
 	type result struct {
 		written bool

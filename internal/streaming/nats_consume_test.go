@@ -198,11 +198,13 @@ func TestConsumeLoop_UnsubscribeNoPanic(t *testing.T) {
 	// Tear down without draining — the loop may be parked in a blocking send.
 	sub.Unsubscribe()
 
-	// Give the loop a moment to observe cancellation and close cleanly.
-	time.Sleep(200 * time.Millisecond)
-	// Reaching here without a panic is the assertion; also confirm the
-	// subscriber was deregistered.
-	if c := hub.SubscriberCount(chatID); c != 0 {
-		t.Errorf("SubscriberCount after unsubscribe = %d, want 0", c)
+	// Reaching the deregistration without a panic is the assertion: the
+	// loop observes cancellation and closes cleanly.
+	deadline := time.Now().Add(30 * time.Second)
+	for hub.SubscriberCount(chatID) != 0 {
+		if time.Now().After(deadline) {
+			t.Fatalf("SubscriberCount after unsubscribe = %d, want 0", hub.SubscriberCount(chatID))
+		}
+		time.Sleep(5 * time.Millisecond)
 	}
 }

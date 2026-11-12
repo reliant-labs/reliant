@@ -63,13 +63,16 @@ func TestUserChainOrder(t *testing.T) {
 	require.Equal(t, serverkit.AudienceUser, chain.Audience())
 
 	got := chain.Interceptors()
-	require.Len(t, got, 16)
+	// 17 since forge #2068 (via #2065): observe.Chain installs the resumed
+	// sign-in heartbeat (auth_signed_in{kind=resumed}) right after auth and
+	// its identity span, ahead of the domain whitelist.
+	require.Len(t, got, 17)
 	require.IsType(t, interceptors.RequestScope(nil), got[0], "the trace span opens outermost, inside a request scope")
 	require.IsType(t, serverkit.Deadline{}, got[9], "the deadline wraps authentication")
-	require.IsType(t, &interceptors.DomainWhitelistInterceptor{}, got[12], "the domain whitelist reads the user auth stashed")
-	require.Equal(t, reflect.TypeOf(serverkit.StreamDrainInterceptor()), reflect.TypeOf(got[14]),
+	require.IsType(t, &interceptors.DomainWhitelistInterceptor{}, got[13], "the domain whitelist reads the user auth stashed")
+	require.Equal(t, reflect.TypeOf(serverkit.StreamDrainInterceptor()), reflect.TypeOf(got[15]),
 		"the stream drain sits outside svcerr, so it judges the code the client receives")
-	require.Equal(t, reflect.TypeOf(svcerr.Interceptor()), reflect.TypeOf(got[15]),
+	require.Equal(t, reflect.TypeOf(svcerr.Interceptor()), reflect.TypeOf(got[16]),
 		"svcerr is innermost, so logging records the status the client received")
 }
 

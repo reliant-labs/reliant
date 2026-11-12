@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus/testutil"
@@ -75,19 +76,21 @@ func TestTerminalOutputQueue_SlowConsumerGetsEveryByteInOrder(t *testing.T) {
 
 // Close releases a producer waiting on a full queue, and is safe to repeat.
 func TestTerminalOutputQueue_CloseReleasesWaitingSend(t *testing.T) {
-	q := NewTerminalOutputQueue("s1", 1, time.Minute)
-	require.NoError(t, q.Send(&TerminalOutputEvent{Data: []byte("a")}))
-	done := make(chan error, 1)
-	go func() { done <- q.Send(&TerminalOutputEvent{Data: []byte("b")}) }()
-	time.Sleep(10 * time.Millisecond)
-	q.Close()
-	q.Close()
-	select {
-	case err := <-done:
-		require.ErrorIs(t, err, ErrTerminalOutputClosed)
-	case <-time.After(5 * time.Second):
-		t.Fatal("Close did not release the waiting Send")
-	}
+	synctest.Test(t, func(t *testing.T) {
+		q := NewTerminalOutputQueue("s1", 1, time.Minute)
+		require.NoError(t, q.Send(&TerminalOutputEvent{Data: []byte("a")}))
+		done := make(chan error, 1)
+		go func() { done <- q.Send(&TerminalOutputEvent{Data: []byte("b")}) }()
+		synctest.Wait() // the second Send is waiting on the full queue
+		q.Close()
+		q.Close()
+		select {
+		case err := <-done:
+			require.ErrorIs(t, err, ErrTerminalOutputClosed)
+		case <-time.After(5 * time.Second):
+			t.Fatal("Close did not release the waiting Send")
+		}
+	})
 }
 
 // A consumer that takes nothing past the timeout ends the stream loudly: the

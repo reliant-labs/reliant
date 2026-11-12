@@ -206,7 +206,30 @@ forge project new --in-place --kind site --name my-site
 
 That writes `forge.yaml` (with no Go module, since a site has none) and `deploy/kcl/{dev,staging,prod}/main.k`, each declaring the app at the project root and binding it to its dev server in `dev` and to hosted static hosting in `staging` and `prod`. Your own files are untouched and `.gitignore` is merged. Build-time keys such as `VITE_*` and `NEXT_PUBLIC_*` become `env_vars` on the frontend, baked in per release; values that must change without a rebuild belong in `runtime_config`, which the platform writes into `config.js` after each deploy. [Hosting on Reliant](/forge/hosting) covers what static hosting serves.
 
-A server that already has its own protos and handlers adopts in place, one service per pull request, with `// forge:unmanaged`. Agents can run `forge skill load migration` for that path.
+A server in another language, such as Node, Python, Ruby or Java, keeps every file. It is not scaffolded: there is no `forge project new` kind for it, and `forge project new --in-place` refuses a directory that has a Dockerfile and no `go.mod` rather than writing a Go server into it. Instead, your agent writes the declarations, following a skill:
+
+```bash
+forge skill load adopt
+```
+
+The skill is organised as tiers. Each tier is complete, so you can stop after any of them:
+
+| Tier | What you get | What it takes |
+|---|---|---|
+| 1. Ship it | `dev`, `staging` and `prod` environments, the app on Reliant hosting with a managed Postgres and managed secrets, and releases you can redeploy | About an hour, and no change to the app's code |
+| 2. See it | Traces, metrics, dashboards, alerts, and `forge obs check` verdicts that pass or fail a release | An OpenTelemetry SDK in the app. Hosting already sets `OTEL_EXPORTER_OTLP_ENDPOINT` |
+| 3. Harden it | Promotion to prod gated on staging's verdict, deploys from CI, and real health probes | A little configuration per environment |
+| 4. Move in | Forge's Go stack: a generated API, ORM and typed frontend hooks | A port, done only when it pays for itself |
+
+Tier 1 is copy-paste templates for `forge.yaml` and `deploy/kcl/`:
+
+- **`workloads.k`** declares the app once, as a `forge.DockerBuild` on your Dockerfile, with its port and a TCP probe. It also declares a pre-rollout migration job that runs the app's own migrate command from the same image.
+- **`dev/main.k`** runs the app as a host process with your dev command, next to a Postgres that forge runs on your machine.
+- **`staging/main.k`** and **`prod/main.k`** run it on hosting, with `DATABASE_URL` from a `forge.ManagedDatabase` and each credential delivered as a `forge.ManagedSecret`.
+
+The skill ends Tier 1 with the commands that prove it works: `forge lint`, `forge env up dev`, `forge env deploy staging --plan-only`, the deploy, and `forge obs check`. It also lists the gotchas that came up when it was tested on a real Express and Prisma app. For example, the Dockerfile must build on its own, and `obs check` stays INCONCLUSIVE with `reason_code: no_request_telemetry` until Tier 2.
+
+A Go server that already has its own protos and handlers adopts in place with `forge project new --in-place --kind service`, one service per pull request, using `// forge:unmanaged`. That path is Tier 4, and `forge skill load migration` covers it.
 
 ## Turn features off
 

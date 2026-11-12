@@ -24,7 +24,7 @@ Telemetry is collected from the first deploy too: see [Observability](/forge/obs
 
 ## Any app, any language
 
-A workload does not have to be forge-generated Go. Hosting runs any container image, so an existing Node, Python, Rails or Java app deploys from its own Dockerfile, and third-party software deploys from its published image:
+A workload does not have to be forge-generated Go. Hosting runs any container image, so an existing Node, Python, Rails or Java app deploys from its own Dockerfile, and third-party software deploys from its published image. To bring an existing app, have your agent run `forge skill load adopt`. That skill writes the declarations below, plus the environments, a managed database and a migration job, in tiers you can stop after. See [Adopt an app that already exists](/forge/deploy/escape-hatches#adopt-an-app-that-already-exists).
 
 ```python
 # Your app, built from its own Dockerfile (any language).

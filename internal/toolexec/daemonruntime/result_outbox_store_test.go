@@ -12,6 +12,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -135,8 +136,12 @@ func TestOutboxBoundsHoldOnDiskAndAtLoad(t *testing.T) {
 		dir := filepath.Join(t.TempDir(), "outbox")
 		o, _ := newStoredOutbox(t, dir)
 		o.ttl = 50 * time.Millisecond
+		var now atomic.Int64
+		now.Store(time.Now().UnixNano())
+		o.clock = func() time.Time { return time.Unix(0, now.Load()) }
 		o.hold("old", resultMsg("old", "x"), nil)
-		time.Sleep(120 * time.Millisecond)
+		// Well past the ttl, in memory and on disk.
+		now.Add(int64(time.Hour))
 		o.hold("new", resultMsg("new", "y"), nil) // any activity sweeps
 		require.Equal(t, []string{"new.result"}, outboxFiles(t, dir))
 		require.Equal(t, toolexec.ToolRequestUnknown, o.state("old"))

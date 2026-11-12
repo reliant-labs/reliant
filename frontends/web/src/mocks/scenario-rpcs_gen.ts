@@ -203,11 +203,13 @@ export type ScenarioRpcHandlers =
   }
 
   // forge:section reliant.v1.InboxService
-  // forge:hash=6609b08ba73b11860b20b6b303a9ab42cff0986797ccad1a23578f97c9444c73
+  // forge:hash=233796b504a2107440aa88448ad3ebe693419b1a43e81982f381cd19efa8ce11
   & {
     "reliant.v1.InboxService/ListInbox"?: (req: import("@/gen/reliant/v1/inbox_pb").ListInboxRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/inbox_pb").ListInboxResponseSchema>>;
     "reliant.v1.InboxService/CleanupStorage"?: (req: import("@/gen/reliant/v1/inbox_pb").CleanupStorageRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/inbox_pb").CleanupStorageResponseSchema>>;
     "reliant.v1.InboxService/ForgetStorageWorktree"?: (req: import("@/gen/reliant/v1/inbox_pb").ForgetStorageWorktreeRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/inbox_pb").ForgetStorageWorktreeResponseSchema>>;
+    "reliant.v1.InboxService/KeepMarkedWorktree"?: (req: import("@/gen/reliant/v1/inbox_pb").KeepMarkedWorktreeRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/inbox_pb").KeepMarkedWorktreeResponseSchema>>;
+    "reliant.v1.InboxService/ReclaimMarkedWorktreeNow"?: (req: import("@/gen/reliant/v1/inbox_pb").ReclaimMarkedWorktreeNowRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/inbox_pb").ReclaimMarkedWorktreeNowResponseSchema>>;
     "reliant.v1.InboxService/DismissInboxItem"?: (req: import("@/gen/reliant/v1/inbox_pb").DismissInboxItemRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/inbox_pb").DismissInboxItemResponseSchema>>;
     "reliant.v1.InboxService/RestoreInboxItem"?: (req: import("@/gen/reliant/v1/inbox_pb").RestoreInboxItemRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/inbox_pb").RestoreInboxItemResponseSchema>>;
   }

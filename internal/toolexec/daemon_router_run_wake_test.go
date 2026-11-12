@@ -6,7 +6,7 @@ import (
 	"errors"
 	"sync"
 	"testing"
-	"time"
+	"testing/synctest"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -69,36 +69,38 @@ func TestWakeForRunWakesTheSuspendedMachineWithoutAUserToken(t *testing.T) {
 // reset) cost one control-plane wake: concurrent callers wait for the one in
 // flight, and later ones within the cooldown are answered from memory.
 func TestWakeForRunCollapsesRunsResumingTogether(t *testing.T) {
-	rr := &fakeRunResumer{release: make(chan struct{}), entered: make(chan struct{}, 8)}
-	router := NewNATSDaemonRouter(nil, WithDatabase(suspendedRecords("u")), WithRunResumer(rr))
+	synctest.Test(t, func(t *testing.T) {
+		rr := &fakeRunResumer{release: make(chan struct{}), entered: make(chan struct{}, 8)}
+		router := NewNATSDaemonRouter(nil, WithDatabase(suspendedRecords("u")), WithRunResumer(rr))
 
-	var wg sync.WaitGroup
-	errs := make(chan error, 5)
-	start := func() {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			_, err := router.WakeForRun(context.Background(), "u", pinned)
-			errs <- err
-		}()
-	}
-	start()
-	<-rr.entered // the first wake is in flight
-	for i := 0; i < 4; i++ {
+		var wg sync.WaitGroup
+		errs := make(chan error, 5)
+		start := func() {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				_, err := router.WakeForRun(context.Background(), "u", pinned)
+				errs <- err
+			}()
+		}
 		start()
-	}
-	time.Sleep(20 * time.Millisecond) // let the others queue behind it
-	close(rr.release)
-	wg.Wait()
-	close(errs)
-	for err := range errs {
-		require.NoError(t, err)
-	}
-	assert.Equal(t, 1, rr.count(), "five runs, one wake")
+		<-rr.entered // the first wake is in flight
+		for i := 0; i < 4; i++ {
+			start()
+		}
+		synctest.Wait() // the others are parked behind it
+		close(rr.release)
+		wg.Wait()
+		close(errs)
+		for err := range errs {
+			require.NoError(t, err)
+		}
+		assert.Equal(t, 1, rr.count(), "five runs, one wake")
 
-	_, err := router.WakeForRun(context.Background(), "u", pinned)
-	require.NoError(t, err)
-	assert.Equal(t, 1, rr.count(), "a run resuming right after is answered from the cooldown")
+		_, err := router.WakeForRun(context.Background(), "u", pinned)
+		require.NoError(t, err)
+		assert.Equal(t, 1, rr.count(), "a run resuming right after is answered from the cooldown")
+	})
 }
 
 // A refused wake (a failed machine, a funding gate) is reported, and is not

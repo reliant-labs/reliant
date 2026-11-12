@@ -1,3 +1,9 @@
+// Package natsutil is how every reliant role connects to NATS and subscribes
+// on it: the connection's resilience options, and subscriptions that survive
+// the broker refusing them.
+//
+//forge:lint-disable-next-line forge-exclude-contract-outbound-io: the package IS the NATS client setup every role shares; its callers take *nats.Conn and *natsutil.Subscription directly, and a contract over them would mock nats.go itself
+//forge:exclude-contract: thin helpers over *nats.Conn; Subscription is a concrete handle the caller owns, with no second implementation to substitute
 package natsutil
 
 import (
@@ -34,7 +40,9 @@ type Endpoint struct {
 //   - A permissions violation (publishing or subscribing outside the role's
 //     grants) drops only that message or subscription, so it is logged at
 //     ERROR with the subject: a feature is broken, and the fix is a line in
-//     permissions.yaml.
+//     permissions.yaml. The exception is a subscription made with
+//     SubscribeWithRecovery: its refusal is routed to it, and it re-subscribes
+//     until the broker's grants catch up (logged at WARN per retry).
 func Connect(ep Endpoint, opts ...nats.Option) (*nats.Conn, error) {
 	defaults := []nats.Option{
 		nats.MaxReconnects(-1),

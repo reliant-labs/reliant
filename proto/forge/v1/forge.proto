@@ -187,7 +187,7 @@ enum StoreAs {
   // Inferred from the protobuf type (default behavior).
   STORE_AS_UNSPECIFIED = 0;
 
-  // Store as a JSONB column (PostgreSQL) or JSON text (SQLite).
+  // Store as a JSONB column.
   STORE_AS_JSONB = 1;
 
   // Store as a TEXT column.
