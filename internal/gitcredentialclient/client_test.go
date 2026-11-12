@@ -251,6 +251,70 @@ func TestMintInstallationToken_SendsTheRequestAndReturnsTheToken(t *testing.T) {
 	assert.NotContains(t, fmt.Sprintf("%v %+v %#v", got, got, got), "ghs_install", "an InstallationToken never prints its token")
 }
 
+// A mint for an org sends the org, and the installation the token came
+// through travels back (an int64, so a JSON string on Connect's wire).
+func TestMintInstallationToken_OrgTravelsAndTheInstallationComesBack(t *testing.T) {
+	f := &fakeMint{respond: func(w http.ResponseWriter) {
+		_, _ = io.WriteString(w, `{"token":"ghs_x","expiresAt":"2099-01-01T00:00:00Z","installationId":"4242"}`)
+	}}
+	c := newMintClient(t, f)
+	got, err := c.MintInstallationToken(context.Background(), gitcredentialclient.InstallationRequest{
+		ExternalUserID: "u", Owner: "o", Repo: "r", OrgID: "org-1",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "org-1", f.got["orgId"])
+	assert.Equal(t, int64(4242), got.InstallationID)
+}
+
+// No org is no orgId key at all, so an older control plane sees the request
+// it always did; an absent installationId is zero.
+func TestMintInstallationToken_NoOrgSendsNoOrgID(t *testing.T) {
+	f := &fakeMint{respond: func(w http.ResponseWriter) {
+		_, _ = io.WriteString(w, `{"token":"ghs_x","expiresAt":"2099-01-01T00:00:00Z"}`)
+	}}
+	c := newMintClient(t, f)
+	got, err := c.MintInstallationToken(context.Background(), gitcredentialclient.InstallationRequest{ExternalUserID: "u", Owner: "o", Repo: "r", OrgID: "  "})
+	require.NoError(t, err)
+	_, present := f.got["orgId"]
+	assert.False(t, present)
+	assert.Zero(t, got.InstallationID)
+}
+
+func TestMintInstallationToken_InvalidInstallationIDIsAnError(t *testing.T) {
+	f := &fakeMint{respond: func(w http.ResponseWriter) {
+		_, _ = io.WriteString(w, `{"token":"ghs_x","expiresAt":"2099-01-01T00:00:00Z","installationId":"nope"}`)
+	}}
+	_, err := newMintClient(t, f).MintInstallationToken(context.Background(), gitcredentialclient.InstallationRequest{ExternalUserID: "u", Owner: "o", Repo: "r"})
+	require.Error(t, err)
+}
+
+func TestListOrgGitHubInstallations_DecodesTheList(t *testing.T) {
+	f := &fakeMint{respond: func(w http.ResponseWriter) {
+		_, _ = io.WriteString(w, `{"installations":[{"installationId":"4242","accountLogin":"acme","accountType":"Organization"},{"installationId":"7","accountLogin":"bob","accountType":"User","suspended":true}]}`)
+	}}
+	c := newMintClient(t, f)
+	got, err := c.ListOrgGitHubInstallations(context.Background(), "org-1")
+	require.NoError(t, err)
+	assert.Equal(t, "/controlplane.v1.GitCredentialInternalService/ListOrgGitHubInstallations", f.gotPath)
+	assert.Equal(t, map[string]any{"orgId": "org-1"}, f.got)
+	assert.Equal(t, []gitcredentialclient.OrgInstallation{
+		{InstallationID: 4242, AccountLogin: "acme", AccountType: "Organization"},
+		{InstallationID: 7, AccountLogin: "bob", AccountType: "User", Suspended: true},
+	}, got)
+}
+
+func TestListOrgGitHubInstallations_RefusesLocallyAndRejectsBadIDs(t *testing.T) {
+	f := &fakeMint{respond: func(w http.ResponseWriter) {
+		_, _ = io.WriteString(w, `{"installations":[{"installationId":"0"}]}`)
+	}}
+	c := newMintClient(t, f)
+	_, err := c.ListOrgGitHubInstallations(context.Background(), " ")
+	require.Error(t, err)
+	assert.Empty(t, f.gotPath, "no org, no call")
+	_, err = c.ListOrgGitHubInstallations(context.Background(), "org-1")
+	require.Error(t, err, "an installation id of zero is not one")
+}
+
 func TestMintInstallationToken_OmitsPermissionsWhenNoneAsked(t *testing.T) {
 	f := &fakeMint{respond: func(w http.ResponseWriter) {
 		_, _ = io.WriteString(w, `{"token":"ghs_x","expiresAt":"2099-01-01T00:00:00Z"}`)
@@ -275,6 +339,8 @@ func TestMintInstallationToken_TypedOutcomes(t *testing.T) {
 		"owner cannot push":  {http.StatusForbidden, "permission_denied", "github_owner_cannot_push", gitcredentialclient.ErrOwnerCannotPush},
 		"not connected":      {http.StatusBadRequest, "failed_precondition", "git_credential_not_connected", gitcredentialclient.ErrNotConnected},
 		"needs reconnect":    {http.StatusBadRequest, "failed_precondition", "git_credential_needs_reconnect", gitcredentialclient.ErrNeedsReconnect},
+		"app not linked":     {http.StatusBadRequest, "failed_precondition", "github_app_not_linked", gitcredentialclient.ErrAppNotLinked},
+		"not org member":     {http.StatusForbidden, "permission_denied", "not_org_member", gitcredentialclient.ErrNotOrgMember},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {

@@ -187,6 +187,9 @@ func TestConnectionServiceRequestSecretsAreDebugRedacted(t *testing.T) {
 type connectionFixture struct {
 	svc *Service
 	raw *sql.DB
+	// conns is the connections service svc serves, for a test that builds a
+	// Service with more deps over the same store.
+	conns *connections.Service
 }
 
 func newConnectionFixture(t *testing.T) *connectionFixture {
@@ -213,8 +216,9 @@ func newConnectionFixtureWithEnv(t *testing.T, getenv func(string) string) *conn
 	tokens := connections.NewTokenSource(store, v, providers, nil)
 	broker := connections.NewBroker(store, v, providers, nil, "https://api.reliant.example").
 		WithAppOrigins([]string{"https://app.reliant.example", "*", "app://bundle"})
-	svc := NewTestConnection(t, WithConnectionDeps(Deps{Connections: connections.NewService(store, v, providers, tokens, broker, nil)}))
-	return &connectionFixture{svc: svc, raw: raw}
+	conns := connections.NewService(store, v, providers, tokens, broker, nil)
+	svc := NewTestConnection(t, WithConnectionDeps(Deps{Connections: conns}))
+	return &connectionFixture{svc: svc, raw: raw, conns: conns}
 }
 
 // StartOAuth relays the provider's redirect back to the web app the request

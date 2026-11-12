@@ -98,7 +98,8 @@ func (s *Service) ListConnections(ctx context.Context, req *connect.Request[reli
 	}
 	// The org's own connections only when the request names the org: an old
 	// client, which never does, sees exactly its own, as before.
-	if org := req.Msg.GetOrgId(); org != "" {
+	org := req.Msg.GetOrgId()
+	if org != "" {
 		orgs, err := s.deps.Connections.ListOrg(ctx, userID, org, req.Msg.GetIntegrationId())
 		if err != nil {
 			return nil, svcerr.WrapOr(err, svcerr.Internal("connection service error"))
@@ -108,6 +109,10 @@ func (s *Service) ListConnections(ctx context.Context, req *connect.Request[reli
 	out := make([]*reliantv1.Connection, 0, len(cs))
 	for _, c := range cs {
 		out = append(out, connectionToProto(c))
+	}
+	// ListOrg has established the caller is a live member of org.
+	if org != "" {
+		out = append(out, s.orgGitHubApps(ctx, org, req.Msg.GetIntegrationId())...)
 	}
 	return connect.NewResponse(&reliantv1.ListConnectionsResponse{Connections: out}), nil
 }

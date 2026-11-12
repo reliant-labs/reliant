@@ -20,6 +20,32 @@ func (b *broker) ActingCredential(ctx context.Context, ownerUserID string, req h
 		return nil, &httpaction.CredentialError{Code: httpaction.CodeInvalidArgument,
 			Message: fmt.Sprintf("unknown acting identity %q: the GitHub broker has the owner and the App's bot", req.ActingIdentity)}
 	}
+	return b.mintBot(ctx, ownerUserID, "", BotConnectionID, req)
+}
+
+// OwnsConnectionID implements Service.
+func (b *broker) OwnsConnectionID(id string) bool {
+	_, ok := ParseOrgAppConnectionID(id)
+	return ok
+}
+
+// OrgActingCredential implements Service.
+func (b *broker) OrgActingCredential(ctx context.Context, ownerUserID, orgID string, req httpaction.CredentialRequest) (httpaction.Credential, error) {
+	if _, ok := ParseOrgAppConnectionID(req.ConnectionID); !ok {
+		return nil, &httpaction.CredentialError{Code: httpaction.CodeInvalidArgument,
+			Message: fmt.Sprintf("%q does not name an organization's GitHub App installation", req.ConnectionID)}
+	}
+	if orgID == "" {
+		return nil, &httpaction.CredentialError{Code: httpaction.CodeFailedPrecondition,
+			Message: "an organization's GitHub connection is only usable in a run of that organization"}
+	}
+	return b.mintBot(ctx, ownerUserID, orgID, req.ConnectionID, req)
+}
+
+// mintBot mints the App's installation token for the one repository req
+// names, through the org's linked installation when orgID is set, and
+// reports connID as the credential that spoke.
+func (b *broker) mintBot(ctx context.Context, ownerUserID, orgID, connID string, req httpaction.CredentialRequest) (httpaction.Credential, error) {
 	if ownerUserID == "" {
 		return nil, &httpaction.CredentialError{Code: httpaction.CodeFailedPrecondition, Message: "the run has no owner to act for"}
 	}
@@ -35,10 +61,16 @@ func (b *broker) ActingCredential(ctx context.Context, ownerUserID string, req h
 	// does not need contents.
 	perms := permissionsFor(req.ActionID)
 	tok, err := b.installations.MintInstallationToken(ctx, gitcredentialclient.InstallationRequest{
-		ExternalUserID: ownerUserID, Owner: owner, Repo: repo, Permissions: perms,
+		ExternalUserID: ownerUserID, Owner: owner, Repo: repo, Permissions: perms, OrgID: orgID,
 	})
 	switch {
 	case err == nil:
+	case errors.Is(err, gitcredentialclient.ErrAppNotLinked):
+		return nil, &httpaction.CredentialError{Code: httpaction.CodeFailedPrecondition,
+			Message: fmt.Sprintf("the GitHub App installation that covers %s/%s is not linked to this organization: an organization owner or admin links it in the organization's settings", owner, repo), Err: err}
+	case errors.Is(err, gitcredentialclient.ErrNotOrgMember):
+		return nil, &httpaction.CredentialError{Code: httpaction.CodeFailedPrecondition,
+			Message: "the run's owner is not a member of the organization whose GitHub connection this step names", Err: err}
 	case errors.Is(err, gitcredentialclient.ErrAppNotConfigured):
 		// The control plane holds no App key (a dev or e2e stack, or a deploy
 		// before the key is seeded). The write fails; it is never made as the
@@ -68,8 +100,18 @@ func (b *broker) ActingCredential(ctx context.Context, ownerUserID string, req h
 	if tok.Token.Empty() {
 		return nil, &httpaction.CredentialError{Code: httpaction.CodeInternal, Message: "control-plane returned no installation token"}
 	}
+	// A step that names an org's installation writes through that one. The
+	// control plane mints through whichever installation covers the
+	// repository, so one the org linked but the step did not name is
+	// refused, as is a control plane that does not say (it predates org
+	// installations and so never checked the link either).
+	if want, ok := ParseOrgAppConnectionID(connID); ok && tok.InstallationID != want {
+		return nil, &httpaction.CredentialError{Code: httpaction.CodeFailedPrecondition,
+			Message: fmt.Sprintf("%s/%s is not covered by the GitHub App installation this step names (%s): name the organization's installation that covers it", owner, repo, connID)}
+	}
 	return &botCredential{
 		credential: credential{token: tok.Token, host: b.host},
+		connID:     connID,
 		owner:      tok.ActingForLogin,
 		bot:        tok.BotLogin,
 		automation: req.Automation,
@@ -132,6 +174,9 @@ func permissionsFor(actionID string) map[string]string { return actionPermission
 // scrubs exactly as the owner's does, and in addition signs what it authors.
 type botCredential struct {
 	credential
+	// connID is the identity that spoke: BotConnectionID, or the org's
+	// installation (OrgAppConnectionID).
+	connID     string
 	owner      string
 	bot        string
 	automation string
@@ -141,7 +186,12 @@ var _ httpaction.Attributing = (*botCredential)(nil)
 
 // ConnectionID reports the App identity, so a result and an audit say which
 // credential spoke.
-func (c *botCredential) ConnectionID() string { return BotConnectionID }
+func (c *botCredential) ConnectionID() string {
+	if c.connID == "" {
+		return BotConnectionID
+	}
+	return c.connID
+}
 
 func (c *botCredential) String() string {
 	return "ghdelegated.botCredential{" + c.host + "}"

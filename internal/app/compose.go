@@ -966,11 +966,22 @@ func (g *Graph) newBackground() (*background.Service, error) {
 
 // newConnection constructs the connection handler (internal/handlers/connection).
 func (g *Graph) newConnection() (*connection.Service, error) {
-	return connection.New(connection.Deps{
-		Logger:      g.Log,
-		Config:      g.Cfg,
-		Connections: g.APIConnections().Service,
-	})
+	deps := connection.Deps{
+		Logger:        g.Log,
+		Config:        g.Cfg,
+		Connections:   g.APIConnections().Service,
+		OrgGitHubApps: nil, // optional — no provider
+	}
+	// The org's linked GitHub App installations, from control-plane: none
+	// when self-hosted.
+	apps, err := gitTokens(g.ServerProcessConfig.GetControlPlane())
+	if err != nil {
+		return nil, err
+	}
+	if apps != nil {
+		deps.OrgGitHubApps = apps
+	}
+	return connection.New(deps)
 }
 
 // newWorktree constructs the worktree handler (internal/handlers/worktree).
@@ -1025,6 +1036,12 @@ func (g *Graph) newRun() (*run.Service, error) {
 func (g *Graph) newTrigger() (*trigger.Service, error) {
 	in := g.TriggerInbound()
 	syncer, fires := trigger.TemporalBackend(g.TemporalClient().Client, g.Database(), v2workflow.SharedTaskQueue, in.Registry.IsPolled)
+	// An org's linked GitHub App installations, from control-plane: nil when
+	// self-hosted, which refuses binding a trigger to one.
+	apps, err := gitTokens(g.ServerProcessConfig.GetControlPlane())
+	if err != nil {
+		return nil, err
+	}
 	return trigger.New(trigger.Deps{
 		Logger:       g.Log,
 		Config:       g.Cfg,
@@ -1042,6 +1059,10 @@ func (g *Graph) newTrigger() (*trigger.Service, error) {
 		Alerting:     alertingProvisioner(g.TriggerAlerting()),
 		Drafter:      automationDrafter(g.TemporalClient().Client, v2workflow.SharedTaskQueue),
 		Orgs:         g.OrgResolver(),
+		// A nil gitcredentialclient.Service converts to a nil interface.
+		OrgGitHubApps: apps,
+		// Binding is off until every replica and the rollback target honour it.
+		OrgRollout: TriggerOrgRollout(g.ApiServerConfig),
 	})
 }
 

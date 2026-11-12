@@ -7,6 +7,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/reliant-labs/reliant/internal/gitcredentialclient"
@@ -26,7 +27,37 @@ const (
 	ConnectionID = "controlplane:github"
 	// BotConnectionID is what a credential for the App's bot reports.
 	BotConnectionID = "controlplane:github-app"
+	// OrgAppConnectionPrefix starts the id of an org's GitHub App
+	// installation: "controlplane:github-app:<installation id>". It is the
+	// connection a member names to write as the org's bot (org-sharing.md
+	// §7.1); there is no row, as there is none for BotConnectionID.
+	OrgAppConnectionPrefix = BotConnectionID + ":"
 )
+
+// OrgAppConnectionID is the connection id of an org's installation.
+func OrgAppConnectionID(installationID int64) string {
+	return OrgAppConnectionPrefix + strconv.FormatInt(installationID, 10)
+}
+
+// IsOrgAppConnectionID reports whether id names an org's installation.
+func IsOrgAppConnectionID(id string) bool {
+	_, ok := ParseOrgAppConnectionID(id)
+	return ok
+}
+
+// ParseOrgAppConnectionID returns the installation id an org app connection
+// id names; ok is false for anything else.
+func ParseOrgAppConnectionID(id string) (installationID int64, ok bool) {
+	rest, found := strings.CutPrefix(id, OrgAppConnectionPrefix)
+	if !found || rest == "" || strings.TrimLeft(rest, "0123456789") != "" {
+		return 0, false
+	}
+	n, err := strconv.ParseInt(rest, 10, 64)
+	if err != nil || n <= 0 {
+		return 0, false
+	}
+	return n, true
+}
 
 // broker asks control-plane for the owner's current GitHub token.
 type broker struct {

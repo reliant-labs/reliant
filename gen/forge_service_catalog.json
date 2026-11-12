@@ -47908,6 +47908,15 @@
       "resolution": "composition_expression"
     },
     {
+      "consumer": "Connection",
+      "field": "OrgGitHubApps",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/connection.OrgGitHubApps",
+      "methods": [],
+      "candidates": [],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
       "consumer": "Connector",
       "field": "Grants",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/connector.GrantStore",
@@ -48937,6 +48946,15 @@
     },
     {
       "consumer": "Trigger",
+      "field": "OrgGitHubApps",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/trigger.OrgGitHubApps",
+      "methods": [],
+      "candidates": [],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "Trigger",
       "field": "Orgs",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/trigger.OrgResolver",
       "methods": [],
@@ -49263,6 +49281,14 @@
     },
     {
       "code": "binding_unresolved",
+      "component": "Connection.OrgGitHubApps",
+      "source": {
+        "path": "internal/handlers/connection/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
       "component": "DaemonEventPublisher.Ctx",
       "source": {
         "path": "internal/app/nodes_gateway.go",
@@ -49368,6 +49394,14 @@
     {
       "code": "binding_unresolved",
       "component": "Trigger.Intake",
+      "source": {
+        "path": "internal/handlers/trigger/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "Trigger.OrgGitHubApps",
       "source": {
         "path": "internal/handlers/trigger/service.go",
         "symbol": "New"

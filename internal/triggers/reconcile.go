@@ -96,6 +96,12 @@ func (r *Reconciler) ReconcileAll(ctx context.Context) (ReconcileReport, error) 
 			continue
 		}
 		p := decl.Projection(t.Params)
+		// The activation's own binding (its org's GitHub App installation)
+		// is not the declaration's to rewrite. Carrying it here keeps a
+		// current projection from looking stale; the store keeps the row's
+		// binding as of the write itself, so a binding committed after this
+		// pass read t is never lost to it (SetTriggerProjection).
+		p.Config = core.CarryActivationConfig(t.Config, p.Config)
 		if sameConfig(p.Config, t.Config) && p.Filter == t.Filter {
 			continue
 		}

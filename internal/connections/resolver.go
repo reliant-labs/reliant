@@ -194,6 +194,13 @@ func (r *Resolver) OwnerOf(ctx context.Context, runID string) (string, error) {
 	return a.userID, err
 }
 
+// RunOrgOf returns the org a run belongs to: its recorded org, else its
+// chat's; "" for a run of no org. The run is read exactly as OwnerOf reads it.
+func (r *Resolver) RunOrgOf(ctx context.Context, runID string) (string, error) {
+	a, err := r.actorOf(ctx, runID)
+	return a.orgID, err
+}
+
 // actorOf is OwnerOf plus the org the run belongs to: the run's recorded org,
 // else its chat's ("" when neither has one).
 func (r *Resolver) actorOf(ctx context.Context, runID string) (actor, error) {

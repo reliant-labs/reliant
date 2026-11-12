@@ -9,6 +9,7 @@ import (
 	"sync"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/connections"
 	"github.com/reliant-labs/reliant/internal/integrations/httpaction"
 	"github.com/reliant-labs/reliant/internal/integrations/manifest"
@@ -101,6 +102,11 @@ func (s *source) Credential(ctx context.Context, req httpaction.CredentialReques
 	if !req.ServerPlaced {
 		return nil, &httpaction.CredentialError{Code: httpaction.CodeFailedPrecondition, Message: connections.ErrDaemonPlacement.Error(), Err: connections.ErrDaemonPlacement}
 	}
+	// A call that names an org's own identity (its GitHub App installation)
+	// speaks as that and nothing else.
+	if cred, handled, err := s.orgActingCredential(ctx, req); handled {
+		return cred, err
+	}
 	// An automation that chose to act as the App's bot writes as the bot or
 	// not at all, and is asked before any saved connection: a saved GitHub
 	// connection is the OWNER's, and letting it win would put the owner's own
@@ -189,6 +195,75 @@ func (s *source) actingCredential(ctx context.Context, req httpaction.Credential
 		return nil, true, err
 	}
 	return nil, true, &httpaction.CredentialError{Code: httpaction.CodeInternal, Message: "the delegated authority failed", Err: err}
+}
+
+// runOrgs reads the org a run belongs to. *connections.Resolver is one.
+type runOrgs interface {
+	RunOrgOf(ctx context.Context, runID string) (string, error)
+}
+
+// orgActingCredential resolves a call that names an org's own identity: a
+// connection id an OrgActingBroker owns. handled is false when the call names
+// none. The run must belong to an org, and its owner be a live member of it;
+// whether that org may use the named identity is the broker's (control-plane
+// checks the installation is linked to the org). Every failure is final: a
+// call that named the org's identity is never made as the owner instead.
+func (s *source) orgActingCredential(ctx context.Context, req httpaction.CredentialRequest) (cred httpaction.Credential, handled bool, err error) {
+	if req.ConnectionID == "" {
+		return nil, false, nil
+	}
+	broker, ok := s.delegatedBroker(req.Connection)
+	if !ok {
+		return nil, false, nil
+	}
+	org, ok := broker.(OrgActingBroker)
+	if !ok || !org.OwnsConnectionID(req.ConnectionID) {
+		return nil, false, nil
+	}
+	orgs, ok := s.resolver.(runOrgs)
+	if !ok {
+		return nil, true, &httpaction.CredentialError{Code: httpaction.CodeFailedPrecondition,
+			Message: "this process cannot tell which organization the run belongs to, so it cannot use an organization's connection"}
+	}
+	owner, err := s.resolver.OwnerOf(ctx, req.RunID)
+	if err != nil {
+		return nil, true, ownerErr(err)
+	}
+	orgID, err := orgs.RunOrgOf(ctx, req.RunID)
+	if err != nil {
+		return nil, true, ownerErr(err)
+	}
+	if orgID == "" {
+		return nil, true, &httpaction.CredentialError{Code: httpaction.CodeFailedPrecondition,
+			Message: "this step names an organization's GitHub connection, but the run belongs to no organization"}
+	}
+	switch derr := authz.OrgMemberDenial(ctx, owner, orgID); {
+	case derr == nil:
+	case errors.Is(derr, authz.ErrMembershipUnavailable):
+		return nil, true, &httpaction.CredentialError{Code: httpaction.CodeUnavailable,
+			Message: "could not check organization membership; try again", Err: derr}
+	default:
+		return nil, true, &httpaction.CredentialError{Code: httpaction.CodeFailedPrecondition,
+			Message: "the run's owner is not a member of the organization whose GitHub connection this step names", Err: derr}
+	}
+	cred, err = org.OrgActingCredential(ctx, owner, orgID, req)
+	if err == nil && cred == nil {
+		return nil, true, &httpaction.CredentialError{Code: httpaction.CodeInternal, Message: "the organization's connection resolved to no credential"}
+	}
+	var ce *httpaction.CredentialError
+	if err != nil && !errors.As(err, &ce) {
+		return nil, true, &httpaction.CredentialError{Code: httpaction.CodeInternal, Message: "the delegated authority failed", Err: err}
+	}
+	return cred, true, err
+}
+
+// ownerErr is a failure to read a run's owner or org as a credential error.
+func ownerErr(err error) error {
+	var ce *connections.Error
+	if errors.As(err, &ce) {
+		return &httpaction.CredentialError{Code: httpaction.CodeFailedPrecondition, Message: ce.Message, Err: err}
+	}
+	return &httpaction.CredentialError{Code: httpaction.CodeInternal, Message: "could not resolve the run owner", Err: err}
 }
 
 func noBotIdentity(req httpaction.CredentialRequest) error {
