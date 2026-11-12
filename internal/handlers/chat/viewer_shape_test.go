@@ -11,6 +11,7 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/ptr"
 	"github.com/reliant-labs/reliant/internal/toolexec/toolexectest"
 	"github.com/reliant-labs/reliant/internal/viewertest"
 )
@@ -79,11 +80,8 @@ func TestViewerReadsAreReadOnlyAndRedacted(t *testing.T) {
 	assert.True(t, before.UpdatedAt.Equal(after.UpdatedAt), "reading does not touch the row")
 	assert.Empty(t, router.selectors, "a viewer's read never wakes a machine")
 
-	// The bodies a viewer's transcript left out cannot be fetched either.
-	_, err = svc.GetContentBlockBodies(f.Viewer, connect.NewRequest(&reliantv1.GetContentBlockBodiesRequest{
-		ChatId: f.ChatID, BlockIds: []string{f.Transcript.ResultBlockID, f.Transcript.DoneCallBlockID},
-	}))
-	assert.Equal(t, connect.CodeNotFound, svcerr.Code(err), "GetContentBlockBodies: %v", err)
+	// A tool result a viewer's transcript left out cannot be fetched either
+	// (TestViewerExpandsStubInputsButNeverResults covers the body fetch).
 	_, err = svc.GetToolResult(f.Viewer, connect.NewRequest(&reliantv1.GetToolResultRequest{ChatId: f.ChatID, ToolCallId: f.Transcript.DoneCallID}))
 	assert.Equal(t, connect.CodeNotFound, svcerr.Code(err), "GetToolResult: %v", err)
 }
@@ -99,4 +97,52 @@ func TestUnsharedChatInASharedProjectIsPrivate(t *testing.T) {
 	assert.Equal(t, connect.CodeNotFound, svcerr.Code(err))
 	_, err = svc.ListMessages(f.Viewer, connect.NewRequest(&reliantv1.ListMessagesRequest{ChatId: f.PrivateChatID}))
 	assert.Equal(t, connect.CodeNotFound, svcerr.Code(err))
+}
+
+// A STUB transcript leaves a large tool input out (body_elided), so a viewer
+// can only read it by expanding it: GetContentBlockBodies gives a viewer
+// exactly what their FULL read shows, the call's whole input, and never a
+// tool result, which comes back in not_found as an id that is not there.
+func TestViewerExpandsStubInputsButNeverResults(t *testing.T) {
+	repo, cleanup := db.SetupTestDB(t)
+	t.Cleanup(cleanup)
+	f := viewertest.New(t, repo)
+	svc := NewTestChat(t, WithChatDeps(Deps{Repo: repo, Orgs: f.Membership}))
+
+	stub, err := svc.ListMessages(f.Viewer, connect.NewRequest(&reliantv1.ListMessagesRequest{
+		ChatId: f.ChatID, ToolBodies: reliantv1.ToolBodyMode_TOOL_BODY_MODE_STUB.Enum(),
+	}))
+	require.NoError(t, err)
+	call := blocksByID(stub.Msg.Messages)[f.Transcript.DoneCallBlockID]
+	require.NotNil(t, call)
+	require.True(t, call.GetBodyElided(), "a large completed input is left out of a STUB read")
+
+	bodies, err := svc.GetContentBlockBodies(f.Viewer, connect.NewRequest(&reliantv1.GetContentBlockBodiesRequest{
+		ChatId: f.ChatID, BlockIds: []string{f.Transcript.DoneCallBlockID, f.Transcript.ResultBlockID},
+	}))
+	require.NoError(t, err)
+	require.Len(t, bodies.Msg.GetBodies(), 1)
+	assert.Equal(t, f.Transcript.DoneCallBlockID, bodies.Msg.GetBodies()[0].GetBlockId())
+	assert.Equal(t, f.Transcript.DoneInput, bodies.Msg.GetBodies()[0].GetInput(), "the viewer expands the whole input")
+	assert.Equal(t, []string{f.Transcript.ResultBlockID}, bodies.Msg.GetNotFound(), "a tool result is never a viewer's")
+	for _, full := range []bool{false, true} {
+		full := full
+		got, err := svc.GetContentBlockBodies(f.Viewer, connect.NewRequest(&reliantv1.GetContentBlockBodiesRequest{
+			ChatId: f.ChatID, BlockIds: []string{f.Transcript.ResultBlockID}, Full: &full,
+		}))
+		require.NoError(t, err)
+		assert.Empty(t, got.Msg.GetBodies(), "full=%v", full)
+	}
+
+	owned, err := svc.GetContentBlockBodies(f.Owner, connect.NewRequest(&reliantv1.GetContentBlockBodiesRequest{
+		ChatId: f.ChatID, BlockIds: []string{f.Transcript.ResultBlockID}, Full: ptr.Of(true),
+	}))
+	require.NoError(t, err)
+	require.Len(t, owned.Msg.GetBodies(), 1)
+	assert.Equal(t, f.Transcript.Result, owned.Msg.GetBodies()[0].GetContent(), "the owner reads the result")
+
+	_, err = svc.GetContentBlockBodies(f.Outsider, connect.NewRequest(&reliantv1.GetContentBlockBodiesRequest{
+		ChatId: f.ChatID, BlockIds: []string{f.Transcript.DoneCallBlockID},
+	}))
+	assert.Equal(t, connect.CodeNotFound, svcerr.Code(err), "an outsider: %v", err)
 }

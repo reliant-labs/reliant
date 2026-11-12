@@ -257,6 +257,7 @@ var shareGuard = struct {
 	viewerReadSites: map[string]string{
 		"internal/handlers/chat/chat_crud.go":                     "GetChat (chatproto.ForViewer) and ListChatPlans",
 		"internal/handlers/chat/rpc_list_messages.go":             "ListMessages (messageproto.ElideForViewer)",
+		"internal/handlers/chat/rpc_get_content_block_bodies.go":  "GetContentBlockBodies: input and thinking bodies only, never a tool result",
 		"internal/handlers/chat/chat_step_executions.go":          "ListStepExecutions (chatproto.ElideStepsForViewer)",
 		"internal/handlers/chat/chat_workflow.go":                 "GetWorkflowExecutions (chatproto.ElideWorkflowsForViewer)",
 		"internal/handlers/message/message.go":                    "GetMessage (messageproto.ElideForViewer)",

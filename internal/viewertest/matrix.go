@@ -54,6 +54,10 @@ var Matrix = map[string]Viewer{
 	// The project card, without its path.
 	"reliant.v1.ProjectService/GetProject": Answered,
 
+	// The bodies a STUB read left out, for a viewer only those their FULL
+	// read shows: a tool call's input, never a tool result.
+	"reliant.v1.ChatService/GetContentBlockBodies": Answered,
+
 	"reliant.v1.StreamingService/StreamChatUpdates": Stream,
 	"reliant.v1.StreamingService/StreamUserUpdates": Stream,
 
@@ -61,8 +65,8 @@ var Matrix = map[string]Viewer{
 	"reliant.v1.SharingService/SetProjectVisibility": Dedicated,
 	"reliant.v1.SharingService/ListSharedChats":      Dedicated,
 
-	// Everything else: a viewer is an outsider. Tool bodies and results
-	// (GetContentBlockBodies, GetToolResult), the run's live inputs
+	// Everything else: a viewer is an outsider. Tool results
+	// (GetToolResult), the run's live inputs
 	// (GetThreadWorkflowInputs), its updates feed (GetChatUpdates), its
 	// approvals, branches and machine, and every write.
 	"reliant.v1.ApprovalService/ListApprovalsByChat":           AsOutsider,
@@ -74,7 +78,6 @@ var Matrix = map[string]Viewer{
 	"reliant.v1.ChatService/DeleteChat":                        AsOutsider,
 	"reliant.v1.ChatService/DismissChat":                       AsOutsider,
 	"reliant.v1.ChatService/GetChatUpdates":                    AsOutsider,
-	"reliant.v1.ChatService/GetContentBlockBodies":             AsOutsider,
 	"reliant.v1.ChatService/GetThreadWorkflowInputs":           AsOutsider,
 	"reliant.v1.ChatService/GetToolResult":                     AsOutsider,
 	"reliant.v1.ChatService/GetWorkflowNodeExecutions":         AsOutsider,

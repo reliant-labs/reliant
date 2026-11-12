@@ -10,6 +10,7 @@ import (
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/messageproto"
@@ -30,7 +31,13 @@ var contentBlockBodiesBudget = 4 << 20
 // block's content. A block id is a primary key, unlike a provider's tool call
 // id, so one id names one block.
 //
-// The caller must own chat_id, and each block must be one that chat displays,
+// A viewer of a shared chat (authz.ReadChatAccess, decided once) fetches the
+// bodies its own FULL read shows, so a STUB transcript expands for them as
+// it does for the owner: a tool call's input, a thinking block. A tool
+// result is never theirs (messageproto.ElideForViewer): it comes back in
+// not_found, as an id that is not there.
+//
+// The caller must own or view chat_id, and each block must be one that chat displays,
 // by GetToolResult's rule (chatBlockVisibility): in the chat itself, or in
 // history a branch of it inherited. A block of a hidden message (a compaction
 // summary) is not in the transcript. Every other id, whether or not it exists
@@ -48,8 +55,14 @@ func (s *Service) GetContentBlockBodies(
 	if len(req.Msg.BlockIds) > maxContentBlockBodyIDs {
 		return nil, svcerr.Wrap(svcerr.InvalidArgument("at most 100 block_ids per request"))
 	}
-	if err := s.requireChatOwner(ctx, req.Msg.ChatId, userID); err != nil {
+	ctx = authz.WithViewerReads(ctx)
+	chat, err := s.deps.Repo.GetChatRow(ctx, req.Msg.ChatId)
+	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
+	}
+	access, denied := authz.ReadChatAccess(ctx, userID, chat)
+	if denied != nil {
+		return nil, svcerr.Wrap(svcerr.NotFound("chat"))
 	}
 
 	ids := uniqueNonEmpty(req.Msg.BlockIds)
@@ -66,7 +79,9 @@ func (s *Service) GetContentBlockBodies(
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to read messages"))
 	}
 
-	vis := s.newChatBlockVisibility(req.Msg.ChatId, userID)
+	// Inherited history is the chat's owner's (a branch's source is always
+	// its own user's), whoever reads it.
+	vis := s.newChatBlockVisibility(req.Msg.ChatId, chat.UserID)
 	resp := &pb.GetContentBlockBodiesResponse{}
 	var shown []*db.MessageContentBlock
 	for _, id := range ids {
@@ -75,7 +90,7 @@ func (s *Service) GetContentBlockBodies(
 		if block != nil {
 			msg = msgs[block.MessageID]
 		}
-		if msg == nil || isHiddenMessage(msg) {
+		if msg == nil || isHiddenMessage(msg) || (access.Viewer() && !viewerMayFetchBody(block)) {
 			resp.NotFound = append(resp.NotFound, id)
 			continue
 		}
@@ -164,6 +179,12 @@ func (s *Service) resultToolNames(ctx context.Context, blocks []*db.MessageConte
 		}
 	}
 	return names
+}
+
+// viewerMayFetchBody is whether a viewer may fetch block's body: everything
+// their FULL read shows, which is every block but a tool result.
+func viewerMayFetchBody(block *db.MessageContentBlock) bool {
+	return block.BlockType != pb.ContentBlockType_CONTENT_BLOCK_TYPE_TOOL_RESULT
 }
 
 func isHiddenMessage(msg *db.Message) bool {
