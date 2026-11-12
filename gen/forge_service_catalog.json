@@ -35761,6 +35761,11 @@
             {
               "name": "last_oom_kill_at_ms",
               "kind": "int64"
+            },
+            {
+              "name": "health",
+              "kind": "message",
+              "type_name": "reliant.v1.MachineHealth"
             }
           ],
           "reliant.v1.DaemonKillProcessRequest": [
@@ -36411,6 +36416,25 @@
             }
           ],
           "reliant.v1.LocalModelRefresh": [],
+          "reliant.v1.MachineHealth": [
+            {
+              "name": "state",
+              "kind": "enum",
+              "type_name": "reliant.v1.MachineHealthState"
+            },
+            {
+              "name": "code",
+              "kind": "string"
+            },
+            {
+              "name": "reason",
+              "kind": "string"
+            },
+            {
+              "name": "since_ms",
+              "kind": "int64"
+            }
+          ],
           "reliant.v1.ProcessOutputChunkMessage": [
             {
               "name": "process_id",
@@ -37171,6 +37195,7 @@
           "reliant.v1.LocalModelInfo": "reliant/v1/tools_daemon.proto",
           "reliant.v1.LocalModelInventory": "reliant/v1/tools_daemon.proto",
           "reliant.v1.LocalModelRefresh": "reliant/v1/tools_daemon.proto",
+          "reliant.v1.MachineHealth": "reliant/v1/tools_daemon.proto",
           "reliant.v1.ProcessOutputChunkMessage": "reliant/v1/tools_daemon.proto",
           "reliant.v1.ProcessOutputSubscribeMessage": "reliant/v1/tools_daemon.proto",
           "reliant.v1.ProcessOutputUnsubscribeMessage": "reliant/v1/tools_daemon.proto",
@@ -37215,6 +37240,11 @@
             "FILE_CHANGE_TYPE_UPDATED",
             "FILE_CHANGE_TYPE_DELETED"
           ],
+          "reliant.v1.MachineHealthState": [
+            "MACHINE_HEALTH_STATE_UNSPECIFIED",
+            "MACHINE_HEALTH_STATE_OK",
+            "MACHINE_HEALTH_STATE_DEGRADED"
+          ],
           "reliant.v1.TerminalSessionEvent.EventType": [
             "EVENT_TYPE_UNSPECIFIED",
             "EVENT_TYPE_CREATED",
@@ -37234,6 +37264,11 @@
             2,
             3
           ],
+          "reliant.v1.MachineHealthState": [
+            0,
+            1,
+            2
+          ],
           "reliant.v1.TerminalSessionEvent.EventType": [
             0,
             1,
@@ -37249,6 +37284,10 @@
           "reliant.v1.FileChangeType": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
             "GoName": "FileChangeType"
+          },
+          "reliant.v1.MachineHealthState": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "MachineHealthState"
           },
           "reliant.v1.TerminalSessionEvent.EventType": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
