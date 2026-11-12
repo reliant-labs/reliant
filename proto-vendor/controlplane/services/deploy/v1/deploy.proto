@@ -574,7 +574,11 @@ service DeployService {
   // ListUsage returns metered infrastructure usage for the caller's org, with
   // per-resource attribution. Post-hoc: these rows come from a sweeper that
   // read the live cluster, so a deployment declared and never applied appears
-  // in none of them.
+  // in none of them. Quantities and dollar amounts are readable by any
+  // member. A client that renders withheld costs sets
+  // withhold_costs_without_billing_read: then dollar amounts need billing:read
+  // (org owners and admins), the rule of every other cost read, and without it
+  // the rows come back with costs_withheld set.
   rpc ListUsage(ListDeployUsageRequest) returns (ListDeployUsageResponse) {
     option (forge.v1.method) = {auth_required: true};
   }
@@ -928,6 +932,15 @@ message GetDeployCapabilitiesResponse {
   // "object-summaries"). forge sends a hosted bundle only the parts named here;
   // a server that names none gets the document every older decoder knew.
   repeated string bundle_document_features = 4;
+  // Snapshot semantics this server implements beyond the intent seals
+  // immutable_snapshot_seals names. forge attaches a snapshot to a bundle only
+  // when the feature that makes the server keep it is named here:
+  //   "evidence-seal": RecordDeployBundle accepts a schema-v2 bundle carrying
+  //   a complete snapshot for a release cut WITHOUT snapshot intents (a plain
+  //   `forge env deploy`), records an evidence seal on that bundle, and the
+  //   promotion that ships the bundle freezes the snapshot (snapshot,
+  //   snapshot_digest, bundle_id, bundle_digest on DeployPromotion).
+  repeated string snapshot_features = 5;
 }
 
 message ResolveHostedProjectRequest {
@@ -1927,6 +1940,12 @@ message ListDeployUsageRequest {
   // org. A person must be a member of it; a machine credential may name only
   // its own org.
   optional string org_id = 7;
+  // The caller renders costs_withheld, so the dollars may follow billing:read:
+  // a caller without it gets every cost as 0 with costs_withheld set. Unset
+  // (every client that predates this field), every member gets the dollars as
+  // before and costs_withheld is never set.
+  // forge:lint-disable-next-line forgeconv-list-filter-optional: an opt-in behaviour flag, not a list filter; unset = false is the backward-compatible default for older clients (owner decision 79d4908b), and `optional` would be a buf-breaking cardinality change.
+  bool withhold_costs_without_billing_read = 8;
 }
 
 message ListDeployUsageResponse {
@@ -1935,6 +1954,12 @@ message ListDeployUsageResponse {
   // total without re-summing integers it may have narrowed to floats on the
   // way in.
   int64 total_cost_usd_nanos = 2;
+  // Set only when the request asked for withhold_costs_without_billing_read
+  // and the caller does not hold billing:read in the org: no dollar amount is
+  // returned, so every cost_usd_nanos and total_cost_usd_nanos is 0 meaning
+  // "not shown", never "free". Render the quantities and say who can grant
+  // billing:read.
+  bool costs_withheld = 3;
 }
 
 // === Bundles ===

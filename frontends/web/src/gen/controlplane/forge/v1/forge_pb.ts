@@ -1282,7 +1282,7 @@ export enum StoreAs {
   UNSPECIFIED = 0,
 
   /**
-   * Store as a JSONB column (PostgreSQL) or JSON text (SQLite).
+   * Store as a JSONB column.
    *
    * @generated from enum value: STORE_AS_JSONB = 1;
    */
