@@ -1372,6 +1372,10 @@ function EnvironmentDetail({
     refetchInterval: restartStage ? 2_000 : 15_000,
   }));
   const daemon = listQ.data?.find((d) => d.daemonId === daemonId);
+  // A self-hosted registry entry need not have a cloud provisioning record.
+  // Wait for its type before fetching that record; missing cloud metadata must
+  // never prevent opening a personal machine's settings.
+  const needsCloudSpec = cloud && !!daemon && !isExternalDaemon(daemon);
 
   const daemonQ = useQuery({
     queryKey: QK.daemon(daemonId),
@@ -1382,7 +1386,7 @@ function EnvironmentDetail({
     // to look alive. 5s while the disk grows, which takes about a minute.
     refetchInterval: (query) =>
       restartStage ? 2_000 : query.state.data?.daemon?.disk?.state === DaemonDiskState.EXPANDING ? 5_000 : 15_000,
-    enabled: cloud,
+    enabled: needsCloudSpec,
   });
   const spec = daemonQ.data?.daemon;
   const workspaceBaseDomain = daemonQ.data?.workspaceBaseDomain ?? "";
@@ -1594,8 +1598,8 @@ function EnvironmentDetail({
   const growNotice = disk ? diskGrowStatus(disk, daemon ? daemon.status !== DaemonStatus.SUSPENDED : false) : null;
   // The registry list is what proves the machine exists; the control-plane
   // spec is an extra half that only a cloud build has.
-  const loading = listQ.isLoading || (cloud && daemonQ.isLoading);
-  const loadError = cloud ? daemonQ.error : listQ.error;
+  const loading = listQ.isLoading || (needsCloudSpec && daemonQ.isLoading);
+  const loadError = listQ.error ?? (needsCloudSpec ? daemonQ.error : null);
   // A managed pod's projects live under the clone root; a personal machine
   // has no safe default, so the user names one (or picks a reported project).
   const suggestedRoots = Array.from(

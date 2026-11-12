@@ -31,9 +31,9 @@ beforeEach(() => {
 afterEach(() => vi.restoreAllMocks());
 
 describe("DaemonStatusDot", () => {
-  it("uses the machine picker icon and opens the active machine, not the first listed machine", () => {
+  it.each(["managed", "self_hosted"])("uses the machine picker icon and opens the active %s machine, not the first listed machine", (daemonType) => {
     const offline = create(DaemonInfoSchema, { daemonId: "offline", status: DaemonStatus.DISCONNECTED });
-    const active = create(DaemonInfoSchema, { daemonId: "active", name: "My machine", status: DaemonStatus.ACTIVE });
+    const active = create(DaemonInfoSchema, { daemonId: "active", name: "My machine", daemonType, status: DaemonStatus.ACTIVE });
     state.daemons = [offline, active];
     state.activeDaemon = active;
     render(<DaemonStatusDot />);
