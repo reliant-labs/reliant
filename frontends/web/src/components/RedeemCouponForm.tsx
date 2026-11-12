@@ -26,6 +26,7 @@ import { logger } from "@/lib/logger";
 import { cn } from "@/lib/utils";
 import { useAccountGate } from "@/hooks/useAccountGate";
 import { ACCOUNT_REQUIRED_COUPON_COPY } from "@/lib/accountRequired";
+import { describeCouponError } from "@/lib/couponErrors";
 import { isSafeReturnTo } from "@/lib/returnTo";
 import { computeCouponRedeemedLine, formatPrice } from "@/components/Billing/priceFormat";
 
@@ -63,14 +64,6 @@ export interface RedeemCouponFormProps {
   /** Compact sizing for dense cards. */
   size?: "sm" | "md";
   className?: string;
-}
-
-/** Strips the `[code]` prefix Connect puts in front of the server's message. */
-function userFacingMessage(err: unknown): string {
-  if (err instanceof Error && err.message) {
-    return err.message.replace(/^\[[a-z_]+\]\s*/i, "");
-  }
-  return "Could not redeem that code.";
 }
 
 export function RedeemCouponForm({
@@ -111,8 +104,10 @@ export function RedeemCouponForm({
   };
 
   const attempt = (trimmed: string) => {
+    setError("");
     redeem.mutate(trimmed, {
       onSuccess: (res) => {
+        setError("");
         setRedeemed(
           res.kind === RedeemedCouponKind.COMPUTE_MINUTES
             ? computeCouponRedeemedLine(res.computeMinutes)
@@ -149,14 +144,16 @@ export function RedeemCouponForm({
           );
         }
       },
-      // The server's message is already user-facing and per-case (unknown code
-      // / already redeemed / fully claimed / expired), so it is shown verbatim
-      // rather than flattened into one generic string.
+      // Every refusal is told apart (lib/couponErrors): not valid, expired,
+      // fully redeemed, already used. A refusal that needs an email opens the
+      // identity modal, and ALSO leaves this line behind — closing the modal
+      // used to leave a form that had failed without saying why.
       onError: (err: unknown) => {
         if (accountGate.handleError(err, () => attempt(trimmed), ACCOUNT_REQUIRED_COUPON_COPY)) {
+          setError("This code needs an account with an email. Add one to redeem it.");
           return;
         }
-        setError(userFacingMessage(err));
+        setError(describeCouponError(err));
       },
     });
   };

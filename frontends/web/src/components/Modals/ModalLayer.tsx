@@ -15,6 +15,7 @@ import {
   useModalStore,
   type UpgradeRequiredData,
   type AppOutOfDateData,
+  type ApiKeySetupData,
 } from "@/store/modalStore";
 import { isModalAllowedOnRoute } from "./modalRoutePolicy";
 import { ApiKeySetupModal } from "../ApiKeySetupModal";
@@ -37,7 +38,7 @@ export function ModalLayer() {
   }
 
   if (activeModal === "api-key-setup") {
-    return <ApiKeySetupModal isOpen onClose={closeModal} />;
+    return <ApiKeySetupModal isOpen onClose={closeModal} initialProvider={(data as ApiKeySetupData | undefined)?.provider} />;
   }
 
   if (activeModal === "upgrade-required") {

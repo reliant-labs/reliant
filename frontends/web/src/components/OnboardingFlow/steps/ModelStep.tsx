@@ -38,6 +38,10 @@ import {
 import { useApiKeySetupStore } from "@/store/apiKeySetupStore";
 import { trackEvent } from "@/lib/analytics";
 import { getEventBus } from "@/lib/events";
+import { useDaemonStatus } from "@/hooks/useDaemonStatus";
+import { DaemonStatus } from "@/gen/reliant/v1/daemon_registry_pb";
+import { capabilities } from "@/services/controlPlane/capabilities";
+import { setPendingProvider } from "@/lib/pendingProvider";
 import type { ModelProvider, StepProps } from "../types";
 import { getForcedEligibility } from "../forcedEligibility";
 import { formatPrice } from "@/components/Billing/priceFormat";
@@ -46,7 +50,7 @@ const PROVIDERS = [
   {
     id: "reliant" as const,
     modelProvider: "reliant_credits" as ModelProvider,
-    name: "Reliant",
+    name: "Reliant credit",
     docsUrl: "",
     keyFormat: "",
     usesOAuth: false as const,
@@ -119,6 +123,40 @@ const PROVIDERS = [
 
 type ProviderId = (typeof PROVIDERS)[number]["id"];
 
+/** Shown under a subscription sign-in that this browser cannot complete. */
+export const SUBSCRIPTION_NEEDS_LOCAL_HINT =
+  "Needs the Reliant desktop app or CLI on your computer";
+
+/**
+ * The provider the step opens on: the user's own model, never Reliant credit.
+ *
+ * The owner's product decision is bring-your-own first. A subscription sign-in
+ * (Claude, Codex, Antigravity) runs through a helper on the user's OWN
+ * computer, so it is the default only where one exists (the desktop app, or a
+ * connected self-hosted machine). Everywhere else — a browser, a cloud user
+ * with no machine yet — the default is the Anthropic API-key form, which
+ * anyone can finish. Reliant credit stays available but is never preselected.
+ */
+export function defaultProviderFor(context: {
+  localMachineConnected: boolean;
+}): ProviderId {
+  return context.localMachineConnected ? "claude" : "anthropic";
+}
+
+const SUBSCRIPTION_IDS: readonly ProviderId[] = ["claude", "codex", "antigravity", "copilot"];
+const API_KEY_IDS: readonly ProviderId[] = ["anthropic", "openai", "openrouter"];
+
+/**
+ * Tile order: bring-your-own first, Reliant credit last. Where a local helper
+ * exists the subscriptions lead (free, and they work); otherwise the API keys
+ * do, because those are what the user can complete.
+ */
+export function orderedProviderIds(localMachineConnected: boolean): ProviderId[] {
+  return localMachineConnected
+    ? [...SUBSCRIPTION_IDS, ...API_KEY_IDS, "reliant"]
+    : [...API_KEY_IDS, ...SUBSCRIPTION_IDS, "reliant"];
+}
+
 function parseErrorMessage(errorText: string, provider: string): string {
   const lowerError = (errorText || "").toLowerCase();
 
@@ -168,16 +206,31 @@ export function ModelStep({ plan, updatePlan, onNext }: StepProps) {
   // hatch for exercising either branch on purpose.
   const forcedEligibility = getForcedEligibility();
 
-  // Claude Code, not Reliant: it is the path that costs the user nothing —
-  // they bring a Claude subscription they already pay for — so pre-selecting
-  // it means the default route through onboarding is the free one.
+  // A subscription sign-in works only with a helper on this computer. The
+  // desktop app always has one; in a browser, a connected self-hosted machine
+  // is the signal that one may exist. Anything else, and the tile says what it
+  // needs rather than letting the user find out from a failing panel.
+  const isDesktop = typeof window !== "undefined" && !!window.electronAPI;
+  const { daemons } = useDaemonStatus();
+  const localMachineConnected =
+    isDesktop ||
+    daemons.some(
+      (d) => d.status === DaemonStatus.ACTIVE && d.daemonType === "self_hosted",
+    );
+  const orderedProviders = orderedProviderIds(localMachineConnected).map(
+    (id) => PROVIDERS.find((item) => item.id === id)!,
+  );
+
+  // What the user can finish where they are — see defaultProviderFor. Read once,
+  // at mount, so the default never swaps under a user who has not touched it.
   //
   // A default SELECTION only. `plan.modelProvider` is deliberately NOT written
   // here, and this does not advance the step: `deriveStep` routes on that
   // field, so writing it on mount would skip the very step this default is
   // meant to make easy to answer. The user still chooses.
-  const [selectedProvider, setSelectedProvider] =
-    useState<ProviderId>("claude");
+  const [selectedProvider, setSelectedProvider] = useState<ProviderId>(() =>
+    defaultProviderFor({ localMachineConnected }),
+  );
   const [apiKey, setApiKey] = useState("");
   const [showKey, setShowKey] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -383,6 +436,28 @@ export function ModelStep({ plan, updatePlan, onNext }: StepProps) {
     await finishOnboarding(provider.modelProvider);
   }, [copilotOAuth, finishOnboarding, provider]);
 
+  // Choose a subscription sign-in now and finish it later. The sign-in runs on
+  // the user's own computer, and a cloud user reaches this step before any
+  // machine exists, so refusing to continue would strand them. The choice is
+  // recorded as a per-user setting and the first chat offers to finish it
+  // (components/OnboardingFlow/PendingProviderBanner). Nothing is stored on a
+  // daemon, so no backend support is involved.
+  const [deferring, setDeferring] = useState(false);
+  const handleDeferSubscription = useCallback(async () => {
+    if (!isRedirectOAuthProvider(provider.usesOAuth)) return;
+    setDeferring(true);
+    setError(null);
+    try {
+      await setPendingProvider(provider.usesOAuth);
+      trackEvent("onboarding_provider_deferred", { provider: provider.id });
+      await finishOnboarding(provider.modelProvider);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not save your choice. Please try again.");
+    } finally {
+      setDeferring(false);
+    }
+  }, [finishOnboarding, provider]);
+
   const handleSaveKey = useCallback(async () => {
     if (!apiKey.trim() || provider.usesOAuth) return;
     setError(null);
@@ -446,8 +521,9 @@ export function ModelStep({ plan, updatePlan, onNext }: StepProps) {
           Which AI should Reliant use?
         </h2>
         <p className="mx-auto max-w-[52ch] text-sm leading-relaxed text-muted-foreground">
-          Already pay for Claude, ChatGPT or Copilot? Sign in and use it here.
-          Or add credit to Reliant and we handle the rest.
+          {localMachineConnected
+            ? "Use the model you already pay for: sign in with your Claude, ChatGPT or Copilot subscription, or paste an API key."
+            : "Bring your own model: paste an API key, or use a Claude or ChatGPT subscription. A subscription signs in from the Reliant desktop app or CLI on your computer, so you can pick it now and connect it once that is running."}
         </p>
       </div>
 
@@ -460,37 +536,65 @@ export function ModelStep({ plan, updatePlan, onNext }: StepProps) {
                 Choose a provider
               </h3>
               <p className="mt-0.5 text-xs text-muted-foreground">
-                Bring a subscription you already pay for, paste an API key, or
-                use Reliant credit.
+                Paste an API key or use a subscription you already pay for.
+                Reliant credit is there too, below, if you would rather not.
               </p>
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-2">
-            {PROVIDERS.map((item) => (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => {
-                  setSelectedProvider(item.id);
-                  setValidationResult(null);
-                  setError(null);
-                  // Abort/clear any prior Copilot device flow when switching.
-                  copilotOAuth.reset();
-                }}
-                className={cn(
-                  "flex items-center gap-2.5 rounded-lg border px-3 py-2 text-left transition-colors",
-                  item.id === selectedProvider
-                    ? "border-primary bg-primary/10 ring-2 ring-primary/20"
-                    : "border-border/40 bg-background hover:bg-muted/60",
-                )}
-              >
-                <ProviderLogo provider={item.id} size="lg" />
-                <span className="block min-w-0 text-sm font-medium text-foreground">
-                  {item.name}
-                </span>
-              </button>
-            ))}
+            {orderedProviders.map((item) => {
+              const needsLocalHelper =
+                isRedirectOAuthProvider(item.usesOAuth) && !localMachineConnected;
+              const hintId = `onboarding-provider-hint-${item.id}`;
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  // The name stays the provider's; the hint is a description,
+                  // so a screen reader announces it without renaming the tile.
+                  aria-label={item.name}
+                  aria-describedby={needsLocalHelper ? hintId : undefined}
+                  onClick={() => {
+                    setSelectedProvider(item.id);
+                    setValidationResult(null);
+                    setError(null);
+                    // Abort/clear any prior Copilot device flow when switching.
+                    copilotOAuth.reset();
+                  }}
+                  className={cn(
+                    "flex items-center gap-2.5 rounded-lg border px-3 py-2 text-left transition-colors",
+                    item.id === selectedProvider
+                      ? "border-primary bg-primary/10 ring-2 ring-primary/20"
+                      : item.id === "reliant"
+                        ? "border-dashed border-border/40 bg-transparent text-muted-foreground hover:bg-muted/40"
+                        : "border-border/40 bg-background hover:bg-muted/60",
+                  )}
+                >
+                  <ProviderLogo provider={item.id} size="lg" />
+                  <span className="block min-w-0">
+                    <span
+                      className={cn(
+                        "block text-sm font-medium",
+                        item.id === "reliant" && item.id !== selectedProvider
+                          ? "text-muted-foreground"
+                          : "text-foreground",
+                      )}
+                    >
+                      {item.name}
+                    </span>
+                    {needsLocalHelper && (
+                      <span
+                        id={hintId}
+                        className="block text-2xs leading-snug text-muted-foreground"
+                      >
+                        {SUBSCRIPTION_NEEDS_LOCAL_HINT}
+                      </span>
+                    )}
+                  </span>
+                </button>
+              );
+            })}
           </div>
 
           {provider.builtIn ? (
@@ -510,8 +614,8 @@ export function ModelStep({ plan, updatePlan, onNext }: StepProps) {
               ) : (
                 <p className="text-xs leading-relaxed text-muted-foreground">
                   No API key needed — pick how much credit to start with. If you
-                  already pay for Claude, ChatGPT or Copilot, choose it above
-                  instead and this is free.
+                  have your own key or a Claude, ChatGPT or Copilot
+                  subscription, choose it above and there is nothing to buy.
                 </p>
               )}
 
@@ -588,6 +692,29 @@ export function ModelStep({ plan, updatePlan, onNext }: StepProps) {
               available={oauthAvailability.available}
               loading={oauthAvailability.loading}
               onRetry={oauthAvailability.recheck}
+              problem={oauthAvailability.problem}
+              stopped={oauthAvailability.stopped}
+              alternative={{
+                label: "Use an API key instead",
+                onClick: () => setSelectedProvider("anthropic"),
+              }}
+              secondaryAlternative={
+                capabilities.managedCredits
+                  ? {
+                      label: "or use Reliant credit",
+                      onClick: () => setSelectedProvider("reliant"),
+                    }
+                  : undefined
+              }
+              later={
+                isRedirectOAuthProvider(provider.usesOAuth)
+                  ? {
+                      label: `Continue, and connect ${provider.name} later`,
+                      busy: saving || deferring,
+                      onClick: () => void handleDeferSubscription(),
+                    }
+                  : undefined
+              }
               onConnect={handleConnectOAuth}
               // The OAuth flow's own state. This was previously wired to
               // validateKeyMutation.isPending, which no OAuth path ever sets,

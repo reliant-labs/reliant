@@ -130,9 +130,11 @@ export interface ApiKeySetupModalProps {
    */
   isOpen?: boolean;
   onClose?: () => void;
+  /** The provider the dialog opens on (a prompt to finish a sign-in the user chose earlier). */
+  initialProvider?: ProviderId;
 }
 
-export function ApiKeySetupModal({ isOpen, onClose }: ApiKeySetupModalProps = {}) {
+export function ApiKeySetupModal({ isOpen, onClose, initialProvider }: ApiKeySetupModalProps = {}) {
   const legacyShowModal = useApiKeySetupStore((s) => s.showModal);
   const dismissModal = useApiKeySetupStore((s) => s.dismissModal);
 
@@ -148,7 +150,7 @@ export function ApiKeySetupModal({ isOpen, onClose }: ApiKeySetupModalProps = {}
   );
 
   const [selectedProvider, setSelectedProvider] = useState<ProviderId>(
-    "claude"
+    initialProvider ?? "claude"
   );
   const [apiKey, setApiKey] = useState("");
   const [showKey, setShowKey] = useState(false);

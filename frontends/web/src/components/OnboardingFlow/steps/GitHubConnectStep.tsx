@@ -181,7 +181,7 @@ export function GitHubConnectStep({ plan, updatePlan, onBack }: StepProps) {
           commit={commit}
           compute={plan.compute}
           onContinue={() =>
-            void leaveOnboarding("completed_cloud_gate_continue", navigate)
+            void leaveOnboarding("completed_cloud_gate_continue", navigate, plan.intent)
           }
           onRetry={() => void retry(plan)}
         />

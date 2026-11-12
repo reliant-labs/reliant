@@ -12,7 +12,10 @@
  * a successful probe IS the proof.
  */
 
+import { Code, ConnectError } from '@connectrpc/connect'
+
 import type { StartOAuthFlowResponse } from '@/gen/reliant/v1/daemon_pb'
+import { DAEMON_CONNECTING_REASONS, hasErrorReason } from '@/lib/errorReasons'
 
 export const OAUTH_LOCAL_SERVER_PORT = 19284
 export const OAUTH_LOCAL_SERVER_URL = `http://127.0.0.1:${OAUTH_LOCAL_SERVER_PORT}`
@@ -70,6 +73,41 @@ export interface OAuthStartResult {
 }
 
 /**
+ * Why the helper is not usable from this page. Each has a different next
+ * action, which is why they are told apart rather than folded into one
+ * "unavailable":
+ *
+ *  - `no_machine`: the account has no machine at all (OpenOAuthHelper 400,
+ *    reason `no_daemon`). Waiting cannot fix it; the user has to install the
+ *    desktop app or CLI.
+ *  - `machine_offline`: a machine exists but is not answering (503 / reason
+ *    `daemon_not_connected`, or the RPC timed out).
+ *  - `not_colocated`: the daemon opened its port, but not on THIS computer.
+ *  - `not_running`: nothing answered, and no daemon refused either.
+ */
+export type OAuthHelperProblemReason =
+  | 'no_machine'
+  | 'machine_offline'
+  | 'not_colocated'
+  | 'not_running'
+
+export type OAuthHelperOutcome =
+  | { ready: true; health: OAuthHelperHealth }
+  | { ready: false; reason: OAuthHelperProblemReason }
+
+function classifyOpenFailure(err: unknown): OAuthHelperProblemReason {
+  if (hasErrorReason(err, 'no_daemon')) return 'no_machine'
+  if (
+    hasErrorReason(err, DAEMON_CONNECTING_REASONS) ||
+    (err instanceof ConnectError &&
+      (err.code === Code.Unavailable || err.code === Code.DeadlineExceeded))
+  ) {
+    return 'machine_offline'
+  }
+  return 'not_running'
+}
+
+/**
  * Ask the daemon to open its helper port, then confirm it is reachable HERE.
  *
  * This two-step is the co-location test, and neither half works alone. The
@@ -80,22 +118,25 @@ export interface OAuthStartResult {
  * opened is on the wrong host, and an OAuth redirect to `localhost` would
  * never reach it.
  *
- * Returns the helper's identity on success, or null when the daemon is remote
- * (or nothing answered). Callers that get null should fall back to
- * `reliant auth serve` and say so.
+ * Returns the helper's identity on success, or the reason it is unusable.
+ * Callers that get a failure should fall back to `reliant auth serve` and say
+ * which of the reasons it was.
  *
- * On a null result the port opened on the remote daemon is released, so a
+ * On a failed probe the port opened on the remote daemon is released, so a
  * failed probe does not leave a listener behind on someone else's machine.
  */
 export async function requestOAuthHelper(
   signal?: AbortSignal,
-): Promise<OAuthHelperHealth | null> {
+): Promise<OAuthHelperOutcome> {
   try {
     await openOAuthHelper(window.location.origin, signal)
-  } catch {
+  } catch (err) {
     // The daemon is unreachable, too old to know the RPC, or refused. Fall
     // back to probing in case a standalone `auth serve` is already running.
-    return probeOAuthHelper()
+    const health = await probeOAuthHelper()
+    return health?.ready
+      ? { ready: true, health }
+      : { ready: false, reason: classifyOpenFailure(err) }
   }
 
   // The daemon reports success as soon as its listener is bound, but that
@@ -103,9 +144,11 @@ export async function requestOAuthHelper(
   const health = await probeOAuthHelper()
   if (!health) {
     void closeOAuthHelper()
-    return null
+    return { ready: false, reason: 'not_colocated' }
   }
-  return health
+  return health.ready
+    ? { ready: true, health }
+    : { ready: false, reason: 'not_running' }
 }
 
 /** Release the helper port. Safe to call when nothing is open. */
