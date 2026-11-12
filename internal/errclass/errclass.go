@@ -56,7 +56,29 @@ func Library(err error) svcerr.Class {
 	if errors.As(err, &canceled) {
 		return svcerr.ClassCanceled
 	}
+	if isRetryableRefusal(err) {
+		return svcerr.ClassUser
+	}
 	return svcerr.ClassNone
+}
+
+// retryableRefusal is an error that reports work refused on purpose, for a
+// moment, which the caller retries: a daemon refusing work in a worktree
+// whose recovery it is finalizing (toolexec.ErrRecoveryFinalizing). That is
+// admission control working, not a server fault.
+type retryableRefusal interface {
+	RetryableRefusal() bool
+}
+
+// isRetryableRefusal reports whether a retryableRefusal anywhere on err's
+// chain says so. Anywhere includes behind a handler's svcerr.WithCause, which
+// svcerr.Classify does not look through: like a cancellation, the refusal is
+// a fact about the request whatever code a handler wrapped it in (every
+// daemon-forwarding handler picks its own), so it is read the same at every
+// layer.
+func isRetryableRefusal(err error) bool {
+	var refusal retryableRefusal
+	return errors.As(err, &refusal) && refusal.RetryableRefusal()
 }
 
 // TemporalCategory is the ApplicationError category an activity error should
