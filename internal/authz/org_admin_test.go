@@ -38,7 +38,7 @@ func TestRequireOrgAdmin(t *testing.T) {
 		unknown: map[string]bool{"uma": true},
 		asks:    &asks,
 	}
-	ctx := WithMembership(context.Background(), m)
+	ctx := person(WithMembership(context.Background(), m))
 	cases := []struct {
 		name      string
 		ctx       context.Context
@@ -55,10 +55,12 @@ func TestRequireOrgAdmin(t *testing.T) {
 		{"no org", ctx, "adam", "", ErrDenied},
 		{"credential bound to another org", WithCredentialOrg(ctx, "globex"), "adam", "acme", ErrDenied},
 		{"credential bound to this org", WithCredentialOrg(ctx, "acme"), "adam", "acme", nil},
-		{"outage", WithMembership(context.Background(), roleMembers{err: errors.New("down")}), "adam", "acme", ErrMembershipUnavailable},
-		{"membership that cannot name roles", WithMembership(context.Background(), members{}), "adam", "acme", ErrMembershipUnavailable},
-		{"no orgs in this deployment", WithMembership(context.Background(), NoOrgs{}), "adam", "acme", ErrMembershipUnavailable},
-		{"no membership wired", context.Background(), "adam", "acme", ErrMembershipUnavailable},
+		{"outage", person(WithMembership(context.Background(), roleMembers{err: errors.New("down")})), "adam", "acme", ErrMembershipUnavailable},
+		{"membership that cannot name roles", person(WithMembership(context.Background(), members{})), "adam", "acme", ErrMembershipUnavailable},
+		{"no orgs in this deployment", person(WithMembership(context.Background(), NoOrgs{})), "adam", "acme", ErrMembershipUnavailable},
+		{"no membership wired", person(context.Background()), "adam", "acme", ErrMembershipUnavailable},
+		{"an admin through a software credential (an agent's CLI login)", WithCredentialKind(WithMembership(context.Background(), m), CredentialKindSoftware), "adam", "acme", ErrPersonRequired},
+		{"an admin through an unclassified credential", WithMembership(context.Background(), m), "adam", "acme", ErrPersonRequired},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -80,7 +82,7 @@ func TestRequireOrgAdmin(t *testing.T) {
 // The credential refused on another org is reported, as for any other
 // refusal of a bound credential.
 func TestRequireOrgAdminRecordsCredentialRefusal(t *testing.T) {
-	ctx := WithCredentialOrg(WithMembership(context.Background(), roleMembers{}), "globex")
+	ctx := WithCredentialOrg(person(WithMembership(context.Background(), roleMembers{})), "globex")
 	_ = RequireOrgAdmin(ctx, "adam", "acme")
 	if bound, refused, ok := CredentialRefusal(ctx); !ok || bound != "globex" || refused != "acme" {
 		t.Fatalf("CredentialRefusal = %q, %q, %v; want globex, acme, true", bound, refused, ok)

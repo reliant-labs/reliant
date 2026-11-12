@@ -63,8 +63,9 @@
 // not something an agent may read into its context. Unset is not a person, so
 // a path that never classified its credential refuses viewers. A read site
 // admits viewers only once it opts in (WithViewerReads) by shaping its answer
-// for them; IsViewer tells it it is serving one (no composer, tool results
-// elided), and every site that has not opted in stays owner-only.
+// for them; ReadChatAccess / ReadProjectAccess decide, once, whether it is
+// serving one (no composer, tool results elided), and every site that has not
+// opted in stays owner-only.
 //
 // Only this package and internal/store read a row's Visibility (guard_test);
 // a handler that shows it asks ChatVisibility / ProjectVisibility.
@@ -401,7 +402,7 @@ func denyRead(ctx context.Context, userID string, r resource) error {
 type viewerReadsKey struct{}
 
 // WithViewerReads marks ctx as a read site that serves viewers: one that
-// shapes what it returns for a viewer (IsViewer: tool results elided, the
+// shapes what it returns for a viewer (ReadChatAccess: tool results elided, the
 // owner's path, workspace, machine and composer choice left out) and changes
 // nothing of the owner's state by being read. Only on such a context does
 // CanReadChat / CanReadProject admit a viewer; every other read site keeps
@@ -421,6 +422,52 @@ func servesViewers(ctx context.Context) bool {
 // isViewer is denyRead allowing a caller who is not the owner.
 func isViewer(ctx context.Context, userID string, r resource) bool {
 	return r.present && userID != "" && r.ownerUserID != userID && denyRead(ctx, userID, r) == nil
+}
+
+// Access is how a caller reads a chat or project: as its owner, or as a
+// viewer of one its owner shared. A read site that serves viewers decides it
+// ONCE (ReadChatAccess / ReadProjectAccess) and shapes its whole answer from
+// that value. It never asks again: a second decision can differ from the
+// first (a membership answer expiring, an outage), and a viewer whose second
+// answer came back "not a viewer" must not be handed the owner's shape.
+type Access uint8
+
+const (
+	// AccessNone is no access; it is only ever returned with an error.
+	AccessNone Access = iota
+	// AccessOwner is the owner's read: the whole answer.
+	AccessOwner
+	// AccessViewer is a viewer's read: the read-only, redacted answer.
+	AccessViewer
+)
+
+// Viewer reports whether an answer must be shaped for a viewer: every access
+// but the owner's, so a zero value fails closed.
+func (a Access) Viewer() bool { return a != AccessOwner }
+
+// readAccess is denyRead's verdict as an Access: the owner (decided by the
+// row, which no membership answer changes) or a viewer.
+func readAccess(ctx context.Context, userID string, r resource) (Access, error) {
+	if err := denyRead(ctx, userID, r); err != nil {
+		return AccessNone, err
+	}
+	if r.ownerUserID == userID {
+		return AccessOwner, nil
+	}
+	return AccessViewer, nil
+}
+
+// ReadChatAccess is CanReadChat's decision with how the caller reads: the
+// owner, or a viewer of a shared chat (only on a WithViewerReads context).
+// An error is a refusal (ErrDenied, ErrNotOrgMember, ErrMembershipUnavailable).
+// Shape the answer from the returned Access; never decide again.
+func ReadChatAccess[C chatRecord](ctx context.Context, userID string, chat C) (Access, error) {
+	return readAccess(ctx, userID, chatResource(chat))
+}
+
+// ReadProjectAccess is ReadChatAccess for a project.
+func ReadProjectAccess(ctx context.Context, userID string, project *core.Project) (Access, error) {
+	return readAccess(ctx, userID, projectResource(project))
 }
 
 func chatResource[C chatRecord](chat C) resource {
@@ -444,11 +491,13 @@ func CanReadChat[C chatRecord](ctx context.Context, userID string, chat C) bool 
 	return denyRead(ctx, userID, chatResource(chat)) == nil
 }
 
-// IsViewer reports whether userID reads chat as a viewer: CanReadChat allows
-// it and userID is not its owner. A read site uses it to serve the read-only
-// shape (no composer, tool results elided, the owner's path omitted).
-func IsViewer[C chatRecord](ctx context.Context, userID string, chat C) bool {
-	return isViewer(ctx, userID, chatResource(chat))
+// SharedChatsFor is the chats of chats userID reads as a viewer: shared with
+// an org they are a live member of, and not their own. The shared list's
+// filter; its rows are always answered in the viewer's shape.
+func SharedChatsFor[C chatRecord](ctx context.Context, userID string, chats []C) []C {
+	return Visible(ctx, userID, chats, func(ctx context.Context, userID string, c C) bool {
+		return isViewer(ctx, userID, chatResource(c))
+	})
 }
 
 // ChatVisibility is who besides its owner may read chat, for display (the
@@ -477,10 +526,11 @@ func CanReadProject(ctx context.Context, userID string, project *core.Project) b
 	return denyRead(ctx, userID, projectResource(project)) == nil
 }
 
-// IsProjectViewer reports whether userID reads project as a viewer:
-// CanReadProject allows it and userID is not its owner.
-func IsProjectViewer(ctx context.Context, userID string, project *core.Project) bool {
-	return isViewer(ctx, userID, projectResource(project))
+// SharedProjectsFor is SharedChatsFor for projects.
+func SharedProjectsFor(ctx context.Context, userID string, projects []*core.Project) []*core.Project {
+	return Visible(ctx, userID, projects, func(ctx context.Context, userID string, p *core.Project) bool {
+		return isViewer(ctx, userID, projectResource(p))
+	})
 }
 
 // ProjectVisibility is who besides its owner may read project, for display.
@@ -627,13 +677,19 @@ var ErrNotOrgAdmin = errors.New("authz: not an owner or admin of the organizatio
 // userID is an owner or admin of orgID right now.
 //
 // The role is asked fresh (RoleFresh), never from the membership cache, so a
-// just-demoted admin cannot act on a stale answer. It fails closed: a
-// credential bound to another org is ErrDenied, a context with no Membership
+// just-demoted admin cannot act on a stale answer. Only a person may
+// administer (ErrPersonRequired for any other credential, WithCredentialKind).
+// It fails closed: a credential bound to another org is ErrDenied, a context with no Membership
 // or one that cannot name roles and an outage are ErrMembershipUnavailable,
 // and anything but owner or admin (unknown included) is ErrNotOrgAdmin.
 func RequireOrgAdmin(ctx context.Context, userID, orgID string) error {
 	if userID == "" || orgID == "" {
 		return ErrDenied
+	}
+	// Administering an org is a person's act (org-sharing.md §3.4): an
+	// agent's shell holds its admin's CLI login, and must not wield it.
+	if !personCredential(ctx) {
+		return ErrPersonRequired
 	}
 	if bound, ok := boundOrg(ctx); ok && bound != orgID {
 		logging.InfoContext(ctx, "[authz] a credential bound to another org; denying an admin action", "user_id", userID, "credential_org", bound, "org_id", orgID)
@@ -664,4 +720,86 @@ func RequireOrgAdmin(ctx context.Context, userID, orgID string) error {
 		logging.InfoContext(ctx, "[authz] the org role is unknown (an older control plane?); denying an admin action", "user_id", userID, "org_id", orgID)
 	}
 	return ErrNotOrgAdmin
+}
+
+// Refusals of a visibility change (ChatShareChange, ProjectShareChange)
+// beyond ErrDenied (the call site's NotFound), ErrNotOrgAdmin and
+// ErrMembershipUnavailable.
+var (
+	// ErrPersonRequired: sharing, and every admin action (RequireOrgAdmin),
+	// are a person's acts, never an agent's (the credential is software's).
+	ErrPersonRequired = errors.New("authz: only a person signed in to the app may do this")
+	// ErrShareNeedsOrg: a resource that belongs to no organization has no
+	// one to be shared with.
+	ErrShareNeedsOrg = errors.New("authz: the resource belongs to no organization")
+	// ErrOnlyOwnerShares: a viewer (an admin included) asked to share what
+	// is not theirs. Disclosure is the owner's act alone.
+	ErrOnlyOwnerShares = errors.New("authz: only the owner can share it")
+	// ErrInvalidVisibility: a visibility this build does not know.
+	ErrInvalidVisibility = errors.New("authz: unknown visibility")
+)
+
+// ChatShareChange decides userID setting chat's visibility to to
+// (control-plane docs/design/org-sharing.md §2): the change to apply, with its
+// action, or why it is refused.
+//
+//   - The owner (CanWriteChat) may make it private with any credential, and
+//     may share it only as a person and only when it belongs to an org.
+//   - Anyone who may not read it is ErrDenied (NotFound: it does not exist for
+//     them).
+//   - A viewer may never share it (ErrOnlyOwnerShares); a viewer who is an
+//     admin or owner of its org, asked fresh and acting as a person, may make
+//     it private (ShareActionAdminUnshare). Any other viewer is ErrNotOrgAdmin.
+//
+// The returned change carries the row's owner and org, so applying it after
+// either moved writes nothing (store.ApplyShareChange). Whether it changes
+// anything (already shared, already private) is the store's to say.
+func ChatShareChange[C chatRecord](ctx context.Context, userID string, chat C, id string, to core.Visibility) (core.ShareChange, error) {
+	return shareChange(ctx, userID, chatResource(chat), core.ShareKindChat, id, to)
+}
+
+// ProjectShareChange is ChatShareChange for a project.
+func ProjectShareChange(ctx context.Context, userID string, project *core.Project, to core.Visibility) (core.ShareChange, error) {
+	id := ""
+	if project != nil {
+		id = project.ID
+	}
+	return shareChange(ctx, userID, projectResource(project), core.ShareKindProject, id, to)
+}
+
+func shareChange(ctx context.Context, userID string, r resource, kind core.ShareKind, id string, to core.Visibility) (core.ShareChange, error) {
+	if !to.Valid() {
+		return core.ShareChange{}, ErrInvalidVisibility
+	}
+	c := core.ShareChange{Kind: kind, ResourceID: id, OrgID: r.orgID, OwnerUserID: r.ownerUserID, ActorUserID: userID}
+	if err := deny(ctx, userID, r); err == nil {
+		if to == core.VisibilityPrivate {
+			c.Action = core.ShareActionUnshare
+			return c, nil
+		}
+		if !personCredential(ctx) {
+			return core.ShareChange{}, ErrPersonRequired
+		}
+		if r.orgID == "" {
+			return core.ShareChange{}, ErrShareNeedsOrg
+		}
+		c.Action = core.ShareActionShare
+		return c, nil
+	}
+	if r.ownerUserID == userID || !isViewer(ctx, userID, r) {
+		// The owner who may not write it (removed from its org) and every
+		// non-reader get what they would get for any other change.
+		return core.ShareChange{}, ErrDenied
+	}
+	if to == core.VisibilityOrg {
+		return core.ShareChange{}, ErrOnlyOwnerShares
+	}
+	if !personCredential(ctx) {
+		return core.ShareChange{}, ErrPersonRequired
+	}
+	if err := RequireOrgAdmin(ctx, userID, r.orgID); err != nil {
+		return core.ShareChange{}, err
+	}
+	c.Action = core.ShareActionAdminUnshare
+	return c, nil
 }

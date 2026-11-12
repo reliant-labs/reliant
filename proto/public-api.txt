@@ -90,6 +90,7 @@ withhold ProviderAccountService   # not part of the first public surface
 withhold RepoService              # not part of the first public surface
 withhold ScenarioService          # not part of the first public surface
 withhold SettingsService          # not part of the first public surface
+withhold SharingService           # read-only sharing is the app's (org members, as a person)
 withhold StreamingService         # UI plumbing; a run-shaped stream is a later addition
 withhold SystemService            # not part of the first public surface
 withhold TaskService              # not part of the first public surface

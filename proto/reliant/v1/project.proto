@@ -331,6 +331,16 @@ message Project {
   // project created before orgs or where no org could be resolved: such a
   // project belongs to its creator's default org.
   optional string org_id = 14;
+  // Who besides its owner may read the project (read-only sharing): see
+  // Chat.visibility. Sharing a project shares its card and lets viewers list
+  // its shared chats; it never shares a chat that is not shared itself.
+  ResourceVisibility visibility = 15;
+  // True when the caller reads the project as a viewer (see
+  // Chat.viewer_access). A viewer's project leaves out path (a home
+  // directory names its owner) and every write answers NOT_FOUND.
+  bool viewer_access = 16;
+  // When the project was shared (RFC 3339); unset while private.
+  optional string shared_at = 17;
 }
 
 // ProjectDaemon records that a daemon has a local clone of a project.

@@ -91,6 +91,8 @@ var inboxRows = []scopeRow{
 	{reliantv1connect.InboxServiceRestoreInboxItemProcedure, fat.ScopeInboxManage},
 	{reliantv1connect.InboxServiceCleanupStorageProcedure, ""},
 	{reliantv1connect.InboxServiceForgetStorageWorktreeProcedure, ""},
+	{reliantv1connect.InboxServiceKeepMarkedWorktreeProcedure, ""},
+	{reliantv1connect.InboxServiceReclaimMarkedWorktreeNowProcedure, ""},
 
 	{reliantv1connect.QuestionServiceResolveQuestionProcedure, fat.ScopeQuestionsAnswer},
 	{reliantv1connect.QuestionServiceListPendingQuestionsProcedure, ""},

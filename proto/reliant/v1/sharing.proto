@@ -1,0 +1,143 @@
+// Copyright (c) 2026 Reliant Labs. All rights reserved.
+syntax = "proto3";
+
+package reliant.v1;
+
+import "buf/validate/validate.proto";
+import "forge/v1/forge.proto";
+import "reliant/v1/chat.proto";
+import "reliant/v1/common.proto";
+import "reliant/v1/project.proto";
+
+option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
+
+// SharingService is read-only sharing (control-plane
+// docs/design/org-sharing.md): an owner shares a chat or project with the
+// live members of its organization, who can then read it, never change it.
+//
+// Sharing is reachable only through this service and the Chat/Project
+// visibility and viewer_access fields: no existing list (ListChats,
+// ListProjects, SearchChats, ...) ever includes another person's shared chat,
+// so a client that predates sharing never shows one as the caller's own.
+// Every read of a shared item, and every change of who may read it, is a
+// person's (a session in the app): an agent's CLI login is refused, so no
+// agent reads a teammate's transcript into its context. It is not part of the
+// public SDK (proto/public-api.txt).
+service SharingService {
+  // SetChatVisibility shares a chat with its organization (ORG) or makes it
+  // private again (PRIVATE).
+  //
+  // Only the owner may share, as a person, and only a chat that belongs to an
+  // org (FAILED_PRECONDITION otherwise). The owner may make it private with any
+  // credential that can change the chat. An admin or owner of the chat's org
+  // (asked of control-plane fresh, as a person) may make a member's shared
+  // chat private, never share it (PERMISSION_DENIED). Anyone who cannot read
+  // it is NOT_FOUND. Each change records one share event; setting what is
+  // already set changes nothing (changed = false).
+  rpc SetChatVisibility(SetChatVisibilityRequest) returns (SetChatVisibilityResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "set_visibility"
+        target: {
+          kind: "chat"
+          id: "chat_id"
+          label: "response.chat.title"
+        }
+        detail: ["visibility"]
+      }
+    };
+  }
+
+  // SetProjectVisibility is SetChatVisibility for a project. Sharing a
+  // project shares its card and lets viewers list its shared chats; it never
+  // shares a chat that is not shared itself.
+  rpc SetProjectVisibility(SetProjectVisibilityRequest) returns (SetProjectVisibilityResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "set_visibility"
+        target: {
+          kind: "project"
+          id: "project_id"
+          label: "response.project.name"
+        }
+        detail: ["visibility"]
+      }
+    };
+  }
+
+  // ListSharedChats lists the chats other members shared with an
+  // organization the caller is a live member of, most recently active first:
+  // the "Shared with the org" list. Never the caller's own. Each carries
+  // viewer_access, and leaves out what is the owner's alone (see
+  // Chat.viewer_access).
+  rpc ListSharedChats(ListSharedChatsRequest) returns (ListSharedChatsResponse) {
+    option (forge.v1.method) = {
+      activity: {none: "reads only: lists what others shared"}
+    };
+  }
+
+  // ListSharedProjects lists the projects other members shared with an
+  // organization the caller is a live member of, most recently active first,
+  // each with viewer_access set and without path.
+  rpc ListSharedProjects(ListSharedProjectsRequest) returns (ListSharedProjectsResponse) {
+    option (forge.v1.method) = {
+      activity: {none: "reads only: lists what others shared"}
+    };
+  }
+}
+
+message SetChatVisibilityRequest {
+  string chat_id = 1 [(buf.validate.field).string.min_len = 1];
+  // ORG or PRIVATE.
+  ResourceVisibility visibility = 2 [(buf.validate.field).enum = {in: [1, 2]}];
+}
+
+message SetChatVisibilityResponse {
+  // The chat as the caller now reads it.
+  Chat chat = 1;
+  // False when the chat already had the visibility asked for.
+  bool changed = 2;
+}
+
+message SetProjectVisibilityRequest {
+  string project_id = 1 [(buf.validate.field).string.min_len = 1];
+  // ORG or PRIVATE.
+  ResourceVisibility visibility = 2 [(buf.validate.field).enum = {in: [1, 2]}];
+}
+
+message SetProjectVisibilityResponse {
+  // The project as the caller now reads it.
+  Project project = 1;
+  // False when the project already had the visibility asked for.
+  bool changed = 2;
+}
+
+message ListSharedChatsRequest {
+  // The organization whose shared chats to list: one the caller is a live
+  // member of (PERMISSION_DENIED otherwise). Unset: the caller's default
+  // organization.
+  optional string org_id = 1;
+  // Narrow the list to one project's shared chats.
+  optional string project_id = 2;
+  // At most this many (default and cap 100).
+  int32 limit = 3 [(buf.validate.field).int32 = {gte: 0, lte: 100}];
+  int32 offset = 4 [(buf.validate.field).int32.gte = 0];
+}
+
+message ListSharedChatsResponse {
+  repeated Chat chats = 1;
+}
+
+message ListSharedProjectsRequest {
+  // The organization whose shared projects to list: one the caller is a live
+  // member of (PERMISSION_DENIED otherwise). Unset: the caller's default
+  // organization.
+  optional string org_id = 1;
+  // At most this many (default and cap 100).
+  int32 limit = 2 [(buf.validate.field).int32 = {gte: 0, lte: 100}];
+  int32 offset = 3 [(buf.validate.field).int32.gte = 0];
+}
+
+message ListSharedProjectsResponse {
+  repeated Project projects = 1;
+}
