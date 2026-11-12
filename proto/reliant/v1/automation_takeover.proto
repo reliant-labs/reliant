@@ -1,0 +1,257 @@
+// Copyright (c) 2025 Reliant Labs. All rights reserved.
+syntax = "proto3";
+
+package reliant.v1;
+
+import "buf/validate/validate.proto";
+import "forge/v1/forge.proto";
+import "reliant/v1/trigger.proto";
+
+option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
+
+// AutomationTakeoverService lets an organization take back the automations
+// of a member who left it (control-plane docs/design/org-sharing.md §8).
+//
+// Every run a trigger launches executes as its owner: their machines,
+// provider accounts, connections and grants. When the owner leaves the
+// trigger's organization it is paused (Trigger.paused_reason
+// "creator_left_org") and nobody can act on it. Nobody is ever made the
+// owner of an automation without accepting it: an org admin adopts an orphan
+// to themselves, or offers it to a member who accepts. Adoption re-owns the
+// trigger in place (its id, webhook URL and firing history survive), leaves
+// it disabled, and never carries a credential: the new owner supplies the
+// project, machine, connection, presets and webhook secret, and enabling it
+// (TriggerService.SetTriggerEnabled) runs every gate as them.
+//
+// "Org admin" is the org role admin or owner, read fresh from control-plane,
+// for a person signed in to the app (never a machine or agent credential).
+// A refusal on the role is PERMISSION_DENIED with reason org_admin_required;
+// a role that cannot be confirmed is refused the same way (fail closed).
+//
+// Saved workflows of a departed member are forked, never re-owned
+// (WorkflowService.ForkOrphanedWorkflow).
+service AutomationTakeoverService {
+  // ListOrphanedAutomations lists an organization's orphans: triggers and
+  // saved workflows whose creator is no longer a live member of it, with the
+  // pending offer of each trigger. Org admins only. Param values are
+  // withheld (param_names says which are set), and no secret, connection or
+  // event payload is returned.
+  // forge:custom — an org-wide read for admins, filtered to creators who left, with values withheld
+  rpc ListOrphanedAutomations(ListOrphanedAutomationsRequest) returns (ListOrphanedAutomationsResponse) {}
+
+  // AdoptTrigger takes an orphaned trigger back for the org. Org admins
+  // only. With new_owner_user_id empty or the caller, the caller adopts it
+  // now, supplying `rebinding`; the response carries the trigger (disabled)
+  // and, for a webhook, its new token. With another live member of the org
+  // it creates a pending offer that member must accept
+  // (AcceptTriggerOffer), and `rebinding` must be unset: the project,
+  // machine and connections are the accepting member's to choose. An offer
+  // expires after 7 days, supersedes any earlier one, and is revoked when
+  // either party leaves the org.
+  rpc AdoptTrigger(AdoptTriggerRequest) returns (AdoptTriggerResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "adopt"
+        target: {
+          kind: "trigger"
+          id: "trigger_id"
+        }
+        detail: ["new_owner_user_id"]
+      }
+    };
+  }
+
+  // AcceptTriggerOffer adopts the trigger an admin offered the caller, a
+  // person signed in to the app. Only the offeree: anyone else's offer is
+  // NOT_FOUND. A dead offer (expired, revoked, a party left, the trigger
+  // re-owned) is FAILED_PRECONDITION saying why.
+  rpc AcceptTriggerOffer(AcceptTriggerOfferRequest) returns (AcceptTriggerOfferResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "accept"
+        target: {
+          kind: "trigger_offer"
+          id: "offer_id"
+        }
+      }
+    };
+  }
+
+  // ListTriggerOffers lists the live offers made to the caller, each with
+  // the offered trigger (param values withheld).
+  // forge:custom — only the caller's live offers; a dead one is settled as it is read
+  rpc ListTriggerOffers(ListTriggerOffersRequest) returns (ListTriggerOffersResponse) {}
+
+  // RevokeTriggerOffer withdraws a pending offer (an org admin) or declines
+  // it (its offeree). Anyone else's is NOT_FOUND.
+  rpc RevokeTriggerOffer(RevokeTriggerOfferRequest) returns (RevokeTriggerOfferResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "revoke"
+        target: {
+          kind: "trigger_offer"
+          id: "offer_id"
+        }
+      }
+    };
+  }
+}
+
+// TriggerRebinding is what the new owner of an adopted trigger supplies in
+// place of every credential-bearing reference the departed owner had. None
+// of the old owner's is carried: their machine, worktree, connection,
+// presets and webhook secret were theirs.
+message TriggerRebinding {
+  // One of the new owner's projects, in the trigger's organization, that the
+  // runs execute in. Required.
+  string project_id = 1;
+
+  // A worktree of that project. Unset means its main worktree.
+  optional string worktree_id = 2;
+
+  // Exactly one of daemon_id (one of the new owner's machines), no_machine
+  // and machine_pool_id (one of their pools), as in TriggerDefinition.
+  string daemon_id = 3;
+  bool no_machine = 4;
+  string machine_pool_id = 5;
+
+  // Integration triggers: the connection the trigger listens through, one
+  // of the new owner's for that integration. Unset is their default one, as
+  // on create. The old owner's connection is never kept.
+  optional string connection_id = 6;
+
+  // Preset assignments, keyed by group as in TriggerDefinition.presets.
+  // Empty keeps the trigger's preset names. Either way each is resolved as
+  // the new owner's, and one they cannot resolve refuses the adoption
+  // (FAILED_PRECONDITION naming it).
+  map<string, string> presets = 7;
+
+  // The workflow the runs execute, when the old one was the departed
+  // owner's own saved workflow (fork it with
+  // WorkflowService.ForkOrphanedWorkflow and name the fork's slug). Unset
+  // keeps the trigger's.
+  optional string workflow = 8;
+
+  // Webhook triggers with HMAC: the signing secret. Required for one,
+  // because the old secret was sealed under the departed owner's key and is
+  // not carried; the sender must be given the new one too.
+  optional string webhook_hmac_secret = 9;
+}
+
+// OrphanedTrigger is a trigger whose creator left its organization, as an
+// org admin sees it.
+message OrphanedTrigger {
+  // The trigger's definition only: params cleared (see param_names), its
+  // connection omitted, and its last firing without the event payload.
+  Trigger trigger = 1;
+
+  // The names of the params the trigger sets; their values are withheld.
+  repeated string param_names = 2;
+
+  // The departed creator, who still owns it.
+  string creator_user_id = 3;
+
+  // The trigger's live offer, if one is pending.
+  optional TriggerOffer pending_offer = 4;
+}
+
+// OrphanedWorkflow is a saved workflow whose creator left its organization.
+// It executes nothing, so it is never re-owned: an admin forks it
+// (WorkflowService.ForkOrphanedWorkflow) into their own.
+message OrphanedWorkflow {
+  string id = 1;
+  string name = 2;
+  string slug = 3;
+  string description = 4;
+  // The workflow's YAML definition.
+  string definition = 5;
+  string creator_user_id = 6;
+  string org_id = 7;
+  // RFC3339 UTC.
+  string updated_at = 8;
+  // "draft" or "complete".
+  string status = 9;
+}
+
+// TriggerOffer is an admin's offer of an orphaned trigger to a member.
+message TriggerOffer {
+  string id = 1;
+  string trigger_id = 2;
+  string org_id = 3;
+  string offered_by_user_id = 4;
+  string offeree_user_id = 5;
+  // "pending", "accepted", "revoked" or "expired".
+  string status = 6;
+  // Why a revoked offer was: "superseded", "declined", "withdrawn",
+  // "offerer_left", "offeree_left" or "owner_changed". Empty otherwise.
+  string status_reason = 7;
+  // RFC3339 UTC.
+  string created_at = 8;
+  string expires_at = 9;
+  // ListTriggerOffers only: the offered trigger's definition, as in
+  // OrphanedTrigger.trigger, and the names of the params it sets.
+  optional Trigger trigger = 10;
+  repeated string param_names = 11;
+}
+
+message ListOrphanedAutomationsRequest {
+  // The organization. Required: optional only in the wire sense (an unset
+  // one is INVALID_ARGUMENT).
+  optional string org_id = 1;
+}
+
+message ListOrphanedAutomationsResponse {
+  repeated OrphanedTrigger triggers = 1;
+  repeated OrphanedWorkflow workflows = 2;
+}
+
+message AdoptTriggerRequest {
+  string trigger_id = 1 [(buf.validate.field).string.min_len = 1];
+  // Who adopts it: empty or the caller adopts now; another live member of
+  // the org gets an offer to accept.
+  string new_owner_user_id = 2;
+  // Required when the caller adopts; must be unset for an offer.
+  TriggerRebinding rebinding = 3;
+}
+
+message AdoptTriggerResponse {
+  // The adopted trigger, disabled, when the caller adopted it.
+  Trigger trigger = 1;
+  // A webhook trigger's new token, shown once. Its old token stopped
+  // working with the adoption; the sender needs this one.
+  WebhookCredential webhook = 2;
+  // The pending offer, when another member was named.
+  TriggerOffer offer = 3;
+  // What the new owner should know before enabling it, one sentence each.
+  repeated string notices = 4;
+}
+
+message AcceptTriggerOfferRequest {
+  string offer_id = 1 [(buf.validate.field).string.min_len = 1];
+  // Required: what the caller supplies as the trigger's new owner.
+  TriggerRebinding rebinding = 2;
+}
+
+message AcceptTriggerOfferResponse {
+  // The adopted trigger, disabled.
+  Trigger trigger = 1;
+  WebhookCredential webhook = 2;
+  repeated string notices = 3;
+}
+
+message ListTriggerOffersRequest {
+  // Only this organization's offers. Unset lists every org's.
+  optional string org_id = 1;
+}
+
+message ListTriggerOffersResponse {
+  repeated TriggerOffer offers = 1;
+}
+
+message RevokeTriggerOfferRequest {
+  string offer_id = 1 [(buf.validate.field).string.min_len = 1];
+}
+
+message RevokeTriggerOfferResponse {
+  TriggerOffer offer = 1;
+}

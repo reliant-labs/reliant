@@ -49,6 +49,9 @@ type Repository interface {
 	// lock, only while every org the handler's decision read still holds.
 	CreateTriggerInOrg(ctx context.Context, t *core.Trigger, reads ...db.OrgRead) error
 	UpdateTriggerInOrg(ctx context.Context, t *core.Trigger, reads ...db.OrgRead) error
+	// AdoptTrigger re-owns an orphaned trigger in place (AdoptAs), only
+	// while previousOwner still owns it; with offerID it accepts that offer.
+	AdoptTrigger(ctx context.Context, t *core.Trigger, previousOwner, offerID string, reads ...db.OrgRead) error
 	DeleteTrigger(ctx context.Context, id string) error
 	SetTriggerEnabled(ctx context.Context, id string, enabled bool) error
 	SetTriggerWebhookSecret(ctx context.Context, id string, sealed []byte) error
