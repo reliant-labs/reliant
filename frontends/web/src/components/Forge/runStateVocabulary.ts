@@ -9,6 +9,9 @@
  * present. Only when it is absent (an older control plane) are the owner's stop
  * and a billing suspension told apart by inference from the pair:
  *
+ *   suspend_reason claimable_expired            the platform expired an
+ *                                               unclaimed preview; claiming
+ *                                               it is the fix, not Start
  *   declared suspended + observed suspended     the owner stopped it
  *   declared suspended + still running          stopping (converging)
  *   declared running   + observed suspended     billing — the platform holds
@@ -21,7 +24,7 @@
 
 import type { ForgeHostedWorkload } from "@/services/forge/topology";
 
-export type RunStateKind = "running" | "stopped" | "billing" | "starting" | "stopping" | "unknown";
+export type RunStateKind = "running" | "stopped" | "billing" | "expired" | "starting" | "stopping" | "unknown";
 
 export interface RunStateView {
   kind: RunStateKind;
@@ -34,6 +37,8 @@ export const BILLING_FIX =
   "Suspended — billing. Resolve app hosting billing in Settings → Billing, then start it again. A machine subscription does not enable app hosting.";
 export const NO_COMPUTE_PLAN_FIX = "Enable independent app hosting billing, then start it again. No machine purchase is required.";
 export const BILLING_LAPSED_FIX = "Settle the invoice in Billing, then start it again.";
+
+export const CLAIMABLE_EXPIRED_FIX = "This unclaimed preview expired. Claim it before it is deleted to bring it back.";
 
 const STOPPED_BY_OWNER: RunStateView = {
   kind: "stopped",
@@ -59,6 +64,8 @@ function viewForSuspendReason(reason: string | undefined, error: string): RunSta
         label: "Suspended — billing",
         detail: `${BILLING_LAPSED_FIX}${platform}`,
       };
+    case "claimable_expired":
+      return { kind: "expired", label: "Expired (unclaimed)", detail: CLAIMABLE_EXPIRED_FIX };
     default:
       return null;
   }
