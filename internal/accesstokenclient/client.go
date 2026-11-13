@@ -419,6 +419,55 @@ func isUnsupported(err error) bool {
 	return errors.As(err, &rpc) && (rpc.Code == "unimplemented" || rpc.Code == http.StatusText(http.StatusNotFound))
 }
 
+// GoneOrg is an org control-plane reports gone: soft-deleted, or its owner's
+// account deleted with no live member left. At is when it went.
+type GoneOrg struct {
+	OrgID string
+	At    time.Time
+}
+
+// MaxResolveGoneOrgs is the most org ids one ResolveGoneOrgs call may name
+// (control-plane refuses a longer list).
+const MaxResolveGoneOrgs = 500
+
+// ResolveGoneOrgs asks control-plane which of orgIDs are gone. An org it
+// does not report is live, or unknown to it: a caller deletes nothing for
+// one. A control plane that predates the rpc answers ErrUnsupported.
+func (c *Client) ResolveGoneOrgs(ctx context.Context, orgIDs []string) ([]GoneOrg, error) {
+	if len(orgIDs) == 0 {
+		return nil, nil
+	}
+	if len(orgIDs) > MaxResolveGoneOrgs {
+		return nil, fmt.Errorf("accesstokenclient: ResolveGoneOrgs: %d org ids, at most %d", len(orgIDs), MaxResolveGoneOrgs)
+	}
+	var out struct {
+		Gone []struct {
+			OrgID  string    `json:"orgId"`
+			GoneAt time.Time `json:"goneAt"`
+		} `json:"gone"`
+	}
+	if err := c.call(ctx, "ResolveGoneOrgs", map[string]any{"orgIds": orgIDs}, &out); err != nil {
+		if isUnsupported(err) {
+			return nil, fmt.Errorf("%w: ResolveGoneOrgs: %w", ErrUnsupported, err)
+		}
+		return nil, err
+	}
+	asked := make(map[string]bool, len(orgIDs))
+	for _, id := range orgIDs {
+		asked[id] = true
+	}
+	gone := make([]GoneOrg, 0, len(out.Gone))
+	for _, g := range out.Gone {
+		// Only an answer about an org asked for, with a time, counts: the
+		// caller destroys what an answer names.
+		if !asked[g.OrgID] || g.GoneAt.IsZero() {
+			continue
+		}
+		gone = append(gone, GoneOrg{OrgID: g.OrgID, At: g.GoneAt.UTC()})
+	}
+	return gone, nil
+}
+
 // IsNotFound reports whether err is control-plane's not_found.
 func IsNotFound(err error) bool {
 	var rpc *RPCError

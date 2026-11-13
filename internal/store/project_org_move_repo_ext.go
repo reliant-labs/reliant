@@ -267,6 +267,20 @@ UPDATE triggers SET org_id = ?1, enabled = ?2, paused_reason = ?3, connection_id
 WHERE id = ?0`
 )
 
+// moveProjectOrgAccountAssignmentsSQL clears the moved chats' threads'
+// sticky accounts that another org funds: an org's own account, or a
+// member's seat or managed key attributed to it
+// (org-provider-accounts.md §6, "Project moved"). Only the target's are
+// usable in the target, so the target's scope chooses afresh at the next
+// call. The person's own accounts serve them in any org and are kept.
+const moveProjectOrgAccountAssignmentsSQL = `
+DELETE FROM thread_provider_accounts tpa
+USING threads t, chats c, provider_accounts a
+WHERE t.id = tpa.thread_id AND c.id = t.chat_id AND c.project_id = ?0
+  AND a.id = tpa.account_id
+  AND ((a.owner_kind = 'org' AND a.org_id IS DISTINCT FROM ?1)
+    OR (a.attributed_org_id IS NOT NULL AND a.attributed_org_id IS DISTINCT FROM ?1))`
+
 // MoveProjectOrg is the move's transaction (design §3.2). It runs inside the
 // caller's transaction (ReadCommitted), after the caller took the project
 // owner's org lock (LockUserOrgs) first, and in this order:
@@ -283,7 +297,8 @@ WHERE id = ?0`
 //     update. Then the quiescence predicate on the locked rows; anything
 //     running refuses with ErrProjectNotQuiescent and Blockers.
 //  4. the updates: the project, its chats, their runs and its triggers
-//     restamped; shares cleared with a share_events row each; enabled
+//     restamped; the chats' threads' sticky accounts that another org
+//     funds cleared; shares cleared with a share_events row each; enabled
 //     triggers paused (TriggerPausedOrgMove); org-connection bindings
 //     cleared; one trigger_changes row per trigger; the move row to moved,
 //     with its counts. The triggers are locked FOR NO KEY UPDATE, in id
@@ -409,9 +424,17 @@ func MoveProjectOrg(ctx context.Context, db orm.Context, c core.ProjectOrgMoveCo
 	}
 	counts.Runs = int(runs)
 
+	// Their threads' sticky accounts another org funds.
+	if _, err := db.Bun().NewRaw(moveProjectOrgAccountAssignmentsSQL, move.ProjectID, move.ToOrgID).Exec(ctx); err != nil {
+		return nil, fmt.Errorf("clear the moved chats' org account assignments: %w", err)
+	}
+
 	// Its triggers.
 	if err := moveProjectOrgTriggers(ctx, db, move, &counts); err != nil {
 		return nil, err
+	}
+	if err := restampMovedTriggerFunding(ctx, db, c, move); err != nil {
+		return nil, fmt.Errorf("re-stamp the moved triggers' unattended funding: %w", err)
 	}
 
 	moved, err := TransitionProjectOrgMove(ctx, db, move.ID,
@@ -492,6 +515,24 @@ func moveProjectOrgTriggers(ctx context.Context, db orm.Context, move *core.Proj
 		}
 	}
 	counts.Triggers = len(before)
+	return nil
+}
+
+// restampMovedTriggerFunding is where the move re-stamps each moved trigger's
+// unattended funding for the target org (org-provider-accounts.md §11.3 and
+// the P8 row of §14): the triggers were paused by the move and re-enabled
+// under the target's rules, so their stamp is the target's — org_only when the
+// target has two or more live members, else any, and any when the count is
+// unknown — as if they were created there. triggers.unattended_funding arrives
+// with P11, which fills this in (and adds the target's member count to
+// core.ProjectOrgMoveCommit); until then there is no stamp to write.
+//
+// It runs inside the move's transaction, after every trigger of the project is
+// restamped and paused (moveProjectOrgTriggers), so an error rolls the whole
+// move back. It is a variable only so the move's test pins that call
+// (TestMoveProjectOrgCallsTheTriggerFundingSeam); P11 replaces the body, not
+// the call.
+var restampMovedTriggerFunding = func(context.Context, orm.Context, core.ProjectOrgMoveCommit, *core.ProjectOrgMove) error {
 	return nil
 }
 

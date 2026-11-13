@@ -73,6 +73,10 @@ type Service interface {
 	// Member=false; an error is never a negative. A control plane that
 	// predates the rpc answers ErrUnsupported.
 	ResolveOrgMembership(ctx context.Context, userID, orgID string) (OrgMembership, error)
+	// ResolveGoneOrgs reports which of orgIDs (at most MaxResolveGoneOrgs)
+	// are gone, and since when. An org not reported is live or unknown. A
+	// control plane that predates the rpc answers ErrUnsupported.
+	ResolveGoneOrgs(ctx context.Context, orgIDs []string) ([]GoneOrg, error)
 }
 
 // Introspector is what a validator needs. *Client and *CachedIntrospector
