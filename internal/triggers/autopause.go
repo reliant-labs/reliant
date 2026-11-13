@@ -11,6 +11,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/orgpolicy"
 	"github.com/reliant-labs/reliant/internal/ptr"
 )
 
@@ -80,6 +81,47 @@ func (p *AutoPause) Refuse(ctx context.Context, t *core.Trigger) (core.TriggerEv
 		}
 	}
 	return core.TriggerEventFailed, creatorLeftOrgDetail, nil
+}
+
+// IntegrationRefused applies t's org's integrations policy to integration,
+// the one t listens to (control-plane docs/design/org-policies.md §4.3, §5):
+// true when the policy refuses it, and t is then paused, once, with
+// core.TriggerPausedOrgPolicy, so routing and polling stop instead of
+// recording a refusal on every event or tick. It resumes when its owner
+// re-enables it. A nil AutoPause judges without pausing (the event is still
+// not routed).
+//
+// The error is the policy that cannot be read where the point enforces (the
+// caller retries; nothing is decided), or the pause's write (the caller still
+// drops the event: the next one pauses again). A trigger of no org, an org
+// with no integrations policy, and audit mode are never refused.
+func (p *AutoPause) IntegrationRefused(ctx context.Context, t *core.Trigger, integration string) (bool, error) {
+	d, err := orgpolicy.JudgeIntegration(ctx, ptr.From(t.OrgID), integration, false)
+	if err != nil {
+		return false, fmt.Errorf("read the integrations policy of trigger %s's organization: %w", t.ID, err)
+	}
+	if !d.Refused {
+		return false, nil
+	}
+	if p == nil {
+		return true, nil
+	}
+	paused, err := p.store.PauseTrigger(ctx, t.ID, core.TriggerPausedOrgPolicy)
+	if err != nil {
+		return true, fmt.Errorf("pause trigger %s whose integration its organization's policy does not allow: %w", t.ID, err)
+	}
+	if paused {
+		logging.InfoContext(ctx, "[triggers] paused a trigger whose integration its organization's policy does not allow",
+			"trigger_id", t.ID, "org_id", d.OrgID, "integration", integration, "policy_version", d.Version)
+		if p.schedules != nil {
+			err = p.schedules.GetHandle(ctx, ScheduleID(t.ID)).Pause(ctx, client.SchedulePauseOptions{Note: orgPolicyPausedDetail})
+			if err != nil && !isNotFound(err) {
+				logging.WarnContext(ctx, "[triggers] could not pause the schedule of a trigger paused for an org policy; its fires skip until it converges",
+					"trigger_id", t.ID, "error", err)
+			}
+		}
+	}
+	return true, nil
 }
 
 // CreatorLeftOrg reports whether t's creator is no longer a live member of

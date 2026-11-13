@@ -464,6 +464,32 @@ describe("StepPalette: searching", () => {
     expect(handlers.onConnect).toHaveBeenCalledTimes(2);
   });
 
+  it("marks an integration the org's policy refuses as not allowed, and only when enforced", async () => {
+    // The active org's policy refuses GitHub (enforced) and would refuse
+    // Slack only in audit, which still works; Gmail is not governed.
+    listIntegrations.mockResolvedValue({
+      integrations: [
+        create(IntegrationSchema, { id: "github", displayName: "GitHub", orgPolicy: { allowed: false, enforced: true, policyVersion: 3n } }),
+        create(IntegrationSchema, { id: "slack", displayName: "Slack", orgPolicy: { allowed: false, enforced: false, policyVersion: 3n } }),
+        create(IntegrationSchema, { id: "gmail", displayName: "Gmail" }),
+      ],
+    });
+    listCatalogIntegrations.mockResolvedValue(integrationsPage([listing("github"), listing("slack"), listing("gmail")]));
+    searchCatalog.mockResolvedValue(page([entry("github/issue.create@1", { name: "Create issue", integration: "github" })]));
+    const user = userEvent.setup();
+    renderPalette();
+
+    await waitFor(() => expect(within(optionNamed("GitHub")).getByText("Not allowed in your organization")).toBeInTheDocument());
+    expect(within(optionNamed("Slack")).queryByTestId("palette-not-allowed")).toBeNull();
+    expect(within(optionNamed("Gmail")).queryByTestId("palette-not-allowed")).toBeNull();
+
+    // Searching: the entry row is marked, and the footer says why.
+    await user.type(input(), "issue");
+    await screen.findByText("Create issue");
+    expect(within(optionNamed("Create issue")).getByText("Not allowed in your organization")).toBeInTheDocument();
+    expect(screen.getByText(/your organization's policy doesn't allow GitHub in its workflows/)).toBeInTheDocument();
+  });
+
   it("says an integration no connection method serves here is not available, instead of offering Connect", async () => {
     // Gmail's only method is OAuth, which this deployment has no client for;
     // Slack's API key works.

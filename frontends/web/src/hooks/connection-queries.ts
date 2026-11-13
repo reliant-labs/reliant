@@ -107,6 +107,12 @@ export interface Integration {
   displayName: string;
   methods: AuthMethod[];
   params: ConnectionParam[];
+  /**
+   * How the active org's policy treats it in the org's runs; absent when the
+   * policy does not govern integrations. `enforced` false is audit: a use
+   * still works and is only counted.
+   */
+  orgPolicy?: { allowed: boolean; enforced: boolean };
 }
 
 // ── Proto mapping ───────────────────────────────────────────────────────────
@@ -185,6 +191,7 @@ function integrationFromProto(proto: ProtoIntegration): Integration {
     displayName: proto.displayName || proto.id,
     methods: proto.methods.map(authMethodFromProto),
     params: proto.connectionParams.map(connectionParamFromProto),
+    ...(proto.orgPolicy ? { orgPolicy: { allowed: proto.orgPolicy.allowed, enforced: proto.orgPolicy.enforced } } : {}),
   };
 }
 
@@ -254,6 +261,23 @@ export function useUnavailableIntegrations(): ReadonlySet<string> {
   const query = useListIntegrations({}, { staleTime: 5 * 60_000 });
   const integrations = query.data?.integrations;
   return useMemo(() => unavailableIntegrationIds((integrations ?? []).map(integrationFromProto)), [integrations]);
+}
+
+/**
+ * The integrations the active org's policy refuses in its runs (control-plane
+ * docs/design/org-policies.md §4.3): ListIntegrations answers for the org
+ * the request names (api/orgInterceptor fills it). Only an ENFORCED refusal
+ * is here: under audit the use works. Connecting is never refused — a
+ * person's own connection stays usable in their other orgs — so a picker
+ * marks these rather than hiding them.
+ */
+export function useOrgDisallowedIntegrations(): ReadonlySet<string> {
+  const query = useListIntegrations({}, { staleTime: 5 * 60_000 });
+  const integrations = query.data?.integrations;
+  return useMemo(
+    () => new Set((integrations ?? []).filter((i) => i.orgPolicy && !i.orgPolicy.allowed && i.orgPolicy.enforced).map((i) => i.id)),
+    [integrations],
+  );
 }
 
 // ── Writes ──────────────────────────────────────────────────────────────────

@@ -100,6 +100,10 @@ type CredentialError struct {
 	Code    string
 	Message string
 	Err     error
+	// Reason, when set, names the refusal more precisely than Code, for a
+	// caller that branches on it (connections.ReasonIntegrationNotAllowed:
+	// the run's org's policy does not allow the integration).
+	Reason string
 }
 
 func (e *CredentialError) Error() string { return e.Message }
