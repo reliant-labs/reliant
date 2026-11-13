@@ -43,11 +43,11 @@ func TestScopedLoader_CandidatesAreOnlyTheScopesPersonsAccounts(t *testing.T) {
 	for _, user := range []string{alice, bob} {
 		personal := accountIDs(availableFor(t, repo, user))
 		for name, scope := range map[string]Scope{
-			"personal":                  PersonalScope(user),
-			"in org A":                  {UserID: user, OrgID: "org-a", Attended: true},
-			"in org A, unattended":      {UserID: user, OrgID: "org-a", Attended: false},
-			"in the other person's org": {UserID: user, OrgID: "org-of-" + otherOf(user, alice, bob), Attended: true},
-			"in an org they are not in": {UserID: user, OrgID: "org-nobody", Attended: false},
+			"personal":                   PersonalScope(user),
+			"in org A":                   {UserID: user, OrgID: "org-a", Attended: true},
+			"in org A, unattended (any)": {UserID: user, OrgID: "org-a", Attended: false, UnattendedAnySource: true},
+			"in the other person's org":  {UserID: user, OrgID: "org-of-" + otherOf(user, alice, bob), Attended: true},
+			"in an org they are not in":  {UserID: user, OrgID: "org-nobody", Attended: false, UnattendedAnySource: true},
 		} {
 			t.Run(user+" "+name, func(t *testing.T) {
 				for _, avail := range []models.AvailableDrivers{
@@ -69,7 +69,7 @@ func TestScopedLoader_CandidatesAreOnlyTheScopesPersonsAccounts(t *testing.T) {
 						assert.True(t, own[user][cfg.AccountID], "%s default account %s is not %s's", driver, cfg.AccountID, user)
 						assert.Equal(t, user, cfg.UserID)
 					}
-					assert.Equal(t, personal, accountIDs(avail), "naming an org or attendance changes nothing yet")
+					assert.Equal(t, personal, accountIDs(avail), "naming an org that gave the person nothing changes nothing")
 				}
 			})
 		}

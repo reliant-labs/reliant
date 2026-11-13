@@ -18,8 +18,8 @@ import (
 
 // The scope of an LLM call (org-provider-accounts §4.1) is read off the chat
 // row at the activity edge and reaches every account read the call makes.
-// Nothing reads OrgID or Attended yet, so these pin the propagation, not a
-// behaviour.
+// Every trigger predates the unattended-funding stamp (P11), so an unattended
+// run may still draw on every source (UnattendedAnySource).
 
 func TestChatScope_ReadFromTheChatRow(t *testing.T) {
 	for _, tc := range []struct {
@@ -35,10 +35,10 @@ func TestChatScope_ReadFromTheChatRow(t *testing.T) {
 			drivers.Scope{UserID: "u1", OrgID: "o1", Attended: true}},
 		{"a scheduled trigger's run is unattended",
 			&db.Chat{UserID: "u1", OrgID: strPtr("o1"), LaunchKind: string(core.TriggerEventKindSchedule), TriggerID: strPtr("t1")},
-			drivers.Scope{UserID: "u1", OrgID: "o1", Attended: false}},
+			drivers.Scope{UserID: "u1", OrgID: "o1", Attended: false, UnattendedAnySource: true}},
 		{"a webhook trigger's run is unattended",
 			&db.Chat{UserID: "u1", OrgID: strPtr("o1"), LaunchKind: string(core.TriggerEventKindWebhook), TriggerID: strPtr("t1")},
-			drivers.Scope{UserID: "u1", OrgID: "o1", Attended: false}},
+			drivers.Scope{UserID: "u1", OrgID: "o1", Attended: false, UnattendedAnySource: true}},
 		{"Run now of a workflow is attended",
 			&db.Chat{UserID: "u1", OrgID: strPtr("o1"), LaunchKind: string(core.TriggerEventKindManualRun)},
 			drivers.Scope{UserID: "u1", OrgID: "o1", Attended: true}},
@@ -51,7 +51,8 @@ func TestChatScope_ReadFromTheChatRow(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			assert.Equal(t, tc.want, chatScope(tc.chat))
-			spec := llmCallSpec{UserID: tc.chat.UserID, OrgID: chatOrgID(tc.chat), Attended: chatAttended(tc.chat)}
+			spec := llmCallSpec{UserID: tc.chat.UserID, OrgID: chatOrgID(tc.chat), Attended: chatAttended(tc.chat),
+				UnattendedAnySource: chatUnattendedAnySource(tc.chat)}
 			assert.Equal(t, tc.want, spec.scope(), "a spec built from the row scopes as chatScope does")
 		})
 	}

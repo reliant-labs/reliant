@@ -1434,3 +1434,11 @@ func (g *Graph) newOrgProviderAccount() (*org_provider_account.Service, error) {
 		OrgRollout:  g.ApiServerConfig.GetOrgs(), // NewOrgProviderAccount sets the same, from the config it is given
 	})
 }
+
+// newOrgCredentialSweep constructs the OrgCredentialSweep provider (NewOrgCredentialSweep, internal/app/org_credentials_sweep.go).
+func (g *Graph) newOrgCredentialSweep() (*OrgCredentialSweep, error) {
+	return NewOrgCredentialSweep(OrgCredentialSweepDeps{
+		DB:        g.Database(),
+		Authority: g.TokenAuthority(),
+	})
+}

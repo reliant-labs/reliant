@@ -93,6 +93,16 @@ type LLMCallUsageRecord struct {
 	// AccountID is the provider account that served the call
 	// (provider_accounts.id); "" when the call was not routed to one.
 	AccountID string
+	// Funding is who paid for the call (llm_call_usage.funding: org_key,
+	// org_seat, org_wallet, personal, local); "" when unknown. An org-funded
+	// call also folds into llm_org_usage_daily, under FundingOrgID.
+	Funding string
+	// FundingOrgID is the org that paid: the org that owns the account, or
+	// the org the account is attributed to. "" when no org is known to have
+	// paid (a person's own account, or the org-less managed key, whose wallet
+	// is the person's default org rather than necessarily the chat's). Only
+	// what an org is known to have paid for reaches that org's rollup.
+	FundingOrgID string
 }
 
 // RecordLLMCallUsage writes one provider request and folds it into its day's
@@ -139,12 +149,12 @@ func RecordLLMCallUsage(ctx context.Context, db orm.Context, rec LLMCallUsageRec
 
 	res, err := db.Bun().NewRaw(`INSERT INTO llm_call_usage (id, user_id, org_id, chat_id, run_id, provider, model, auth_mode, purpose,
 		input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, outcome, error_class, latency_ms, attempt, created_at,
-		account_id)
-		VALUES (?0, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)
+		account_id, funding)
+		VALUES (?0, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19)
 		ON CONFLICT (id, attempt) DO NOTHING`,
 		rec.ID, rec.UserID, rec.OrgID, rec.ChatID, rec.RunID, rec.Provider, rec.Model, rec.AuthMode, rec.Purpose,
 		rec.InputTokens, rec.OutputTokens, rec.CacheReadTokens, rec.CacheWriteTokens, rec.Outcome, rec.ErrorClass,
-		rec.LatencyMs, rec.Attempt, rec.CreatedAt, rec.AccountID).Exec(ctx)
+		rec.LatencyMs, rec.Attempt, rec.CreatedAt, rec.AccountID, rec.Funding).Exec(ctx)
 	if err != nil {
 		return false, fmt.Errorf("insert llm call usage %s: %w", rec.ID, err)
 	}
@@ -156,7 +166,48 @@ func RecordLLMCallUsage(ctx context.Context, db orm.Context, rec LLMCallUsageRec
 	if err := addLLMUsageDaily(ctx, db, rec); err != nil {
 		return false, err
 	}
+	if err := addLLMOrgUsageDaily(ctx, db, rec); err != nil {
+		return false, err
+	}
 	return true, nil
+}
+
+// orgFunded is the funding classes llm_org_usage_daily holds: what an org pays for.
+func orgFunded(funding string) bool {
+	switch funding {
+	case "org_key", "org_seat", "org_wallet":
+		return true
+	}
+	return false
+}
+
+// addLLMOrgUsageDaily folds an org-funded call into the rollup of the org that paid for it, the
+// only usage an org admin reads (org-provider-accounts §3.7, §5). A personal or unknown funding,
+// or a call no org is known to have paid for, writes nothing there: a member's own-account usage
+// never reaches it, and one org's spend never lands in another's.
+func addLLMOrgUsageDaily(ctx context.Context, db orm.Context, rec LLMCallUsageRecord) error {
+	if rec.FundingOrgID == "" || !orgFunded(rec.Funding) {
+		return nil
+	}
+	_, err := db.Bun().NewRaw(`INSERT INTO llm_org_usage_daily AS d (day, org_id, account_id, user_id, provider, model, funding, purpose,
+		calls, error_calls, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, latency_ms_total, updated_at)
+		VALUES ((?0::timestamptz AT TIME ZONE 'UTC')::date, ?1, ?2, ?3, ?4, ?5, ?6, ?7, 1, ?8, ?9, ?10, ?11, ?12, ?13, now())
+		ON CONFLICT (org_id, day, account_id, user_id, provider, model, funding, purpose) DO UPDATE SET
+		    calls = d.calls + EXCLUDED.calls,
+		    error_calls = d.error_calls + EXCLUDED.error_calls,
+		    input_tokens = d.input_tokens + EXCLUDED.input_tokens,
+		    output_tokens = d.output_tokens + EXCLUDED.output_tokens,
+		    cache_read_tokens = d.cache_read_tokens + EXCLUDED.cache_read_tokens,
+		    cache_write_tokens = d.cache_write_tokens + EXCLUDED.cache_write_tokens,
+		    latency_ms_total = d.latency_ms_total + EXCLUDED.latency_ms_total,
+		    updated_at = now()`,
+		rec.CreatedAt.UTC(), rec.FundingOrgID, rec.AccountID, rec.UserID, rec.Provider, rec.Model, rec.Funding, rec.Purpose,
+		llmErrorCalls(rec), rec.InputTokens, rec.OutputTokens, rec.CacheReadTokens,
+		rec.CacheWriteTokens, rec.LatencyMs).Exec(ctx)
+	if err != nil {
+		return fmt.Errorf("update org llm usage rollup: %w", err)
+	}
+	return nil
 }
 
 // LLMUsageUserLockKey is the advisory-lock key that serializes usage writes

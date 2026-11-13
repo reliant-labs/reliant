@@ -247,6 +247,10 @@ func NewOrgResolver(d OrgResolverDeps) (*orgs.Resolver, error) {
 	}
 	resolver := orgs.New(src)
 	authz.SetProcessMembership(resolver)
+	// The account loader asks the same resolver which of an org's accounts,
+	// and which of a person's org-paid seats, a run of that org may use
+	// (org-provider-accounts §4.1). Without it no org account is a candidate.
+	drivers.InitializeOrgMembership(resolver)
 	return resolver, nil
 }
 

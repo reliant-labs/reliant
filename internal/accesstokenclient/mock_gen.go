@@ -17,7 +17,7 @@ import (
 )
 
 // forge:section MockService
-// forge:hash=3c1071fa9de9723b04928bc4cb776ff7d63bdf7370e5eee48decef3a87b27430
+// forge:hash=b193e9e36e5926674f0d5d212954efe3e469421e597ec646457eec67393137c7
 
 // MockService is a test mock for the Service interface.
 //
@@ -36,6 +36,7 @@ type MockService struct {
 	RevokeResourceFunc       func(context.Context, fat.Resource) (int64, error)
 	RevokeEphemeralFunc      func(context.Context, string) (int64, error)
 	ResolveOrgMembershipFunc func(context.Context, string, string) (OrgMembership, error)
+	ResolveGoneOrgsFunc      func(context.Context, []string) ([]GoneOrg, error)
 }
 
 // Introspect records the call and delegates to IntrospectFunc when set.
@@ -117,6 +118,15 @@ func (m *MockService) ResolveOrgMembership(ctx context.Context, userID string, o
 		return m.ResolveOrgMembershipFunc(ctx, userID, orgID)
 	}
 	return OrgMembership{}, contractkit.MockNotSet("MockService", "ResolveOrgMembership")
+}
+
+// ResolveGoneOrgs records the call and delegates to ResolveGoneOrgsFunc when set.
+func (m *MockService) ResolveGoneOrgs(ctx context.Context, orgIDs []string) ([]GoneOrg, error) {
+	m.Recorder.Record("ResolveGoneOrgs", ctx, orgIDs)
+	if m.ResolveGoneOrgsFunc != nil {
+		return m.ResolveGoneOrgsFunc(ctx, orgIDs)
+	}
+	return nil, contractkit.MockNotSet("MockService", "ResolveGoneOrgs")
 }
 
 // Compile-time check.

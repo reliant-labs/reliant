@@ -17,7 +17,7 @@ import (
 
 // subscriptionAndKeyRepo is a user with BOTH a Claude subscription (OAuth) and
 // an Anthropic API key connected.
-type subscriptionAndKeyRepo struct{}
+type subscriptionAndKeyRepo struct{ noOrgAccounts }
 
 var _ AvailabilityStore = subscriptionAndKeyRepo{}
 

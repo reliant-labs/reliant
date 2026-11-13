@@ -42,6 +42,10 @@ type llmCallSpec struct {
 	// authority. A call with no chat leaves them unset: the personal scope.
 	OrgID    string
 	Attended bool
+	// UnattendedAnySource lifts the org-funded-only rule of an unattended run
+	// whose automation may use any source (drivers.Scope.UnattendedAnySource),
+	// read through chatUnattendedAnySource.
+	UnattendedAnySource bool
 
 	// Selector picks the model via the registry. Ignored when an injected
 	// resolver (tests) supplies its own driver/model, mirroring CallLLM.
@@ -132,13 +136,14 @@ func (s llmCallSpec) scope() drivers.Scope {
 	if s.OrgID == "" {
 		return drivers.PersonalScope(s.UserID)
 	}
-	return drivers.Scope{UserID: s.UserID, OrgID: s.OrgID, Attended: s.Attended}
+	return drivers.Scope{UserID: s.UserID, OrgID: s.OrgID, Attended: s.Attended, UnattendedAnySource: s.UnattendedAnySource}
 }
 
 // chatScope is the scope of a call made for chat, as a spec built from the
 // chat row (chatOrgID, chatAttended) scopes it.
 func chatScope(chat *db.Chat) drivers.Scope {
-	return llmCallSpec{UserID: chat.UserID, OrgID: chatOrgID(chat), Attended: chatAttended(chat)}.scope()
+	return llmCallSpec{UserID: chat.UserID, OrgID: chatOrgID(chat), Attended: chatAttended(chat),
+		UnattendedAnySource: chatUnattendedAnySource(chat)}.scope()
 }
 
 // chatOrgID is the org a call made for chat is scoped to: the chat row's
@@ -161,6 +166,16 @@ func chatAttended(chat *db.Chat) bool {
 		return true
 	}
 	return !core.TriggerEventKind(chat.LaunchKind).Unattended()
+}
+
+// chatUnattendedAnySource reports whether an unattended run of chat may draw
+// on every source, as its owner's own run would (org-provider-accounts §11.3,
+// I4): true for an automation stamped "any" and for one that predates the
+// stamp, whose NULL reads as "any". No automation carries a stamp yet (P11
+// adds triggers.unattended_funding), so every unattended run keeps today's
+// sources. An attended run is never asked: false.
+func chatUnattendedAnySource(chat *db.Chat) bool {
+	return !chatAttended(chat)
 }
 
 // LocalModelSpec is what resolving a local model needs beyond the selector.
@@ -213,6 +228,10 @@ type resolvedLLMCall struct {
 	// the call was not routed (local, injected resolver, a provider with no
 	// accounts, routing off).
 	Account *routedAccount
+
+	// OrgID is the org whose work the call was (llmCallSpec.OrgID): the org
+	// its usage row is recorded against.
+	OrgID string
 
 	// TagCompactionThreshold is the tag preference's compaction threshold, 0
 	// when none applied. The caller uses it only when neither the node arg
@@ -351,7 +370,13 @@ func resolveLLMCallOnce(ctx context.Context, resolver drivers.DriverResolver, sp
 			}
 		}
 
+		// The driver rank is the weakest rule: among the drivers serving the
+		// model resolution picks, the one with the run's org-paid account wins
+		// (org-provider-accounts §4.3). It never changes the model.
 		registry := models.MustGetRegistry().WithAvailability(availableDrivers.Availability)
+		if availableDrivers.DriverRank != nil {
+			registry = registry.WithDriverRank(availableDrivers.TierFor)
+		}
 		resolve := registry.Resolve
 		if len(spec.FallbackSelector.Tags) > 0 || spec.FallbackSelector.ID != "" {
 			resolve = func(selector models.ModelSelector, providers []string) (*models.ResolvedModel, error) {
@@ -503,6 +528,14 @@ func resolveLLMCallOnce(ctx context.Context, resolver drivers.DriverResolver, sp
 		}
 	} else {
 		if account != nil {
+			// The re-check at the driver build (org-provider-accounts §8.1 point
+			// 3): an account of another org never serves this run. Refused, the
+			// call falls to the default account of the same scope, never fails.
+			if serr := drivers.CheckAccountScope(ctx, spec.scope(), account.Config.DriverConfig); serr != nil {
+				account = nil
+			}
+		}
+		if account != nil {
 			if d, aerr := spec.Routing.DriverFor(ctx, spec.UserID, account.Config.DriverConfig, legacyModel, append(drivers.PreferenceDriverOptions(legacyModel, preferences[0]), driverOpts...)...); aerr != nil {
 				// A driver for the chosen account that cannot be built is not
 				// worth a failed turn: the provider's default account serves.
@@ -538,6 +571,7 @@ func resolveLLMCallOnce(ctx context.Context, resolver drivers.DriverResolver, sp
 		Account:        account,
 		ThinkingLevel:  effectiveThinkingLevel,
 		Temperature:    effectiveTemperature,
+		OrgID:          spec.OrgID,
 
 		TagCompactionThreshold: tagCompactionThreshold,
 	}, nil

@@ -70,3 +70,9 @@ func (r *Repo) MoveProjectOrg(ctx context.Context, c core.ProjectOrgMoveCommit) 
 	})
 	return result, err
 }
+
+// ProjectOrgMoveEffects reads what moving the project to toOrgID would do,
+// as reliant can tell it: the preview's effects (store.ProjectOrgMoveEffects).
+func (r *Repo) ProjectOrgMoveEffects(ctx context.Context, projectID, toOrgID string) (*core.ProjectOrgMoveEffects, error) {
+	return store.ProjectOrgMoveEffects(ctx, r.ORM(), projectID, toOrgID)
+}

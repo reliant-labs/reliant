@@ -586,3 +586,63 @@ func TestMoveProjectOrg_KeepsAPauseCommittedWhileItWaits(t *testing.T) {
 	require.NoError(t, err)
 	assert.Zero(t, got.Counts.TriggersPaused, "the move paused nothing: the trigger was already paused when it read it")
 }
+
+// The preview's effects count what the commit would change, name the
+// triggers it leaves needing setup, and list the machines the project keeps.
+func TestProjectOrgMoveEffects_CountWhatTheMoveChanges(t *testing.T) {
+	f := newMoveFixture(t)
+	ctx := context.Background()
+	src := strp(moveSrc)
+	f.project("p-fx", src)
+	f.exec(`UPDATE projects SET forge_project_name = 'shop' WHERE id = 'p-fx'`)
+	f.chat("c-shared", "p-fx", src)
+	f.chat("c-pinned", "p-fx", src)
+	f.chat("c-archived", "p-fx", src)
+	f.exec(`UPDATE chats SET state = $1 WHERE id = 'c-archived'`, ChatStateArchived)
+	f.run("r-1", "c-shared", core.Completed())
+	f.run("r-2", "c-pinned", core.Failed())
+	f.share(core.ShareKindProject, "p-fx")
+	f.share(core.ShareKindChat, "c-shared")
+	f.exec(`INSERT INTO connections (id, owner_kind, user_id, org_id, integration_id, auth_kind, name, status)
+		VALUES ('conn-org', 'org', $1, $2, 'slack', 'api_key', 'Source bot', 'active'),
+		       ('conn-dst', 'org', $1, $3, 'slack', 'api_key', 'Target bot', 'active'),
+		       ('conn-mine', 'user', $1, NULL, 'slack', 'api_key', 'Mine', 'active')`, moveOwner, moveSrc, moveDst)
+	f.trigger("t-a-org", "p-fx", true, strp("conn-org"))
+	f.trigger("t-b-dst", "p-fx", true, strp("conn-dst"))
+	f.trigger("t-c-mine", "p-fx", false, strp("conn-mine"))
+	f.trigger("t-d-installation", "p-fx", false, nil)
+	f.exec(`UPDATE triggers SET config = config || '{"installation": "4242"}'::jsonb WHERE id = 't-d-installation'`)
+	f.exec(`INSERT INTO daemons (id, user_id, name, hostname) VALUES ('d-box', $1, 'Dev box', 'box'), ('d-laptop', $1, '', 'laptop')`, moveOwner)
+	f.exec(`INSERT INTO project_daemons (project_id, daemon_id, path) VALUES ('p-fx', 'd-box', '/w/p-fx')`)
+	f.exec(`UPDATE chats SET active_daemon_id = 'd-laptop' WHERE id IN ('c-pinned', 'c-archived')`)
+	f.exec(`UPDATE chats SET active_daemon_id = 'd-box' WHERE id = 'c-shared'`)
+
+	e, err := f.repo.ProjectOrgMoveEffects(ctx, "p-fx", moveDst)
+	require.NoError(t, err)
+	assert.Equal(t, 3, e.Chats)
+	assert.Equal(t, 2, e.Runs)
+	assert.Equal(t, 4, e.Triggers)
+	assert.Equal(t, 2, e.TriggersToPause)
+	assert.Equal(t, 2, e.SharesToClear)
+	assert.Equal(t, 1, e.OrgBindingsToClear, "the target's own connection is not the source's to clear")
+	assert.Equal(t, []core.ProjectOrgMoveTriggerSetup{
+		{TriggerID: "t-a-org", Name: "t-a-org", Reason: core.ProjectOrgMoveSetupOrgConnection},
+		{TriggerID: "t-d-installation", Name: "t-d-installation", Reason: core.ProjectOrgMoveSetupOrgGitHubInstallation},
+	}, e.TriggersNeedingSetup)
+	assert.Equal(t, []core.ProjectOrgMoveMachine{
+		{DaemonID: "d-box", Name: "Dev box", Attached: true, PinnedChats: 1},
+		{DaemonID: "d-laptop", Name: "laptop", PinnedChats: 2},
+	}, e.Machines)
+	assert.Equal(t, "shop", e.ForgeProjectName)
+
+	// The preview reads what the commit then does.
+	move := f.prepared("p-fx")
+	res, err := f.repo.MoveProjectOrg(ctx, core.ProjectOrgMoveCommit{MoveID: move.ID})
+	require.NoError(t, err)
+	assert.Equal(t, e.Chats, res.Move.Counts.Chats)
+	assert.Equal(t, e.Runs, res.Move.Counts.Runs)
+	assert.Equal(t, e.Triggers, res.Move.Counts.Triggers)
+	assert.Equal(t, e.TriggersToPause, res.Move.Counts.TriggersPaused)
+	assert.Equal(t, e.SharesToClear, res.Move.Counts.SharesCleared)
+	assert.Equal(t, e.OrgBindingsToClear, res.Move.Counts.BindingsCleared)
+}

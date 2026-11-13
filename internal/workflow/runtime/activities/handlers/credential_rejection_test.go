@@ -48,8 +48,9 @@ func apiKeyAccount(id, email string, priority int) models.AccountConfig {
 
 func resolveOnAnthropic(t *testing.T, env *routingEnv, thread string) *resolvedLLMCall {
 	t.Helper()
+	// A run of org-1, whose keys some of these tests route to.
 	res, err := resolveLLMCall(context.Background(), nil, llmCallSpec{
-		UserID: "u1", SessionID: "s", ThreadID: thread,
+		UserID: "u1", OrgID: "org-1", Attended: true, SessionID: "s", ThreadID: thread,
 		Selector: models.ModelSelector{ID: routeModel + "@anthropic"}, Routing: env.routing,
 	})
 	require.NoError(t, err)
