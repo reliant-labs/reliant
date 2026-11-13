@@ -150,6 +150,29 @@ func (r *Resolver) IsMember(ctx context.Context, userID, orgID string) (member, 
 	return m.Member && m.OrgID == orgID, true, nil
 }
 
+// Membership is control-plane's whole answer about userID in orgID (member,
+// role, when the current membership began, the org's live member count),
+// cached like IsMember. ok is false when the deployment has no orgs; err is an
+// outage. A caller deciding access from it fails closed on both: a negative,
+// an unknown and an error all grant nothing.
+func (r *Resolver) Membership(ctx context.Context, userID, orgID string) (m accesstokenclient.OrgMembership, ok bool, err error) {
+	if r == nil || userID == "" || orgID == "" {
+		return accesstokenclient.OrgMembership{}, false, nil
+	}
+	m, err = r.resolve(ctx, userID, orgID)
+	if errors.Is(err, errUnsupported) {
+		return accesstokenclient.OrgMembership{}, false, nil
+	}
+	if err != nil {
+		return accesstokenclient.OrgMembership{}, true, err
+	}
+	if m.OrgID != orgID {
+		// An answer about another org says nothing about this one.
+		return accesstokenclient.OrgMembership{OrgID: orgID}, true, nil
+	}
+	return m, true, nil
+}
+
 // The roles control-plane answers (its org_memberships.role). Authority to
 // administer an org is RoleOwner or RoleAdmin (docs/design/org-sharing.md
 // §3.4 in control-plane).

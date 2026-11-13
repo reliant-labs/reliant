@@ -175,7 +175,13 @@ func (s *accountStore) ListOwnedProviderAccounts(ctx context.Context, owner core
 }
 
 func (s *accountStore) ListProviderAccountsWithSecrets(ctx context.Context, userID string) ([]core.AccountWithSecrets, error) {
-	rows, err := store.ListOwnerProviderAccountsSealed(ctx, s.db, core.UserAccountOwner(userID))
+	return s.ListOwnedProviderAccountsWithSecrets(ctx, core.UserAccountOwner(userID))
+}
+
+// ListOwnedProviderAccountsWithSecrets opens every account of the owner, each under the owner's
+// tenant. An invalid owner lists nothing.
+func (s *accountStore) ListOwnedProviderAccountsWithSecrets(ctx context.Context, owner core.AccountOwner) ([]core.AccountWithSecrets, error) {
+	rows, err := store.ListOwnerProviderAccountsSealed(ctx, s.db, owner)
 	if err != nil {
 		return nil, err
 	}

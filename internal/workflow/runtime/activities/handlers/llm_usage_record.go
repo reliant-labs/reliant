@@ -13,6 +13,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/llm"
 	"github.com/reliant-labs/reliant/internal/llm/accumulator"
+	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/llm/ratelimit"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -46,11 +47,18 @@ type llmUsageCall struct {
 	Model    string
 	// AccountID is the provider account that served the request
 	// (usageAccountID); "" when it was not routed to one.
-	AccountID   string
-	LatencyMs   int64
-	Usage       llm.TokenUsage
-	Err         error
-	Interrupted bool
+	AccountID string
+	// OrgID is the org whose work the call was; Funding is who paid for it
+	// (usageFunding). An org-funded call is also counted in the org's rollup.
+	OrgID   string
+	Funding string
+	// FundingOrgID is the org that paid (usageFundingOrg); "" when no org is
+	// known to have.
+	FundingOrgID string
+	LatencyMs    int64
+	Usage        llm.TokenUsage
+	Err          error
+	Interrupted  bool
 }
 
 // recordLLMUsage writes the count-only service record of one model request. It
@@ -84,6 +92,9 @@ func recordLLMUsage(ctx context.Context, c llmUsageCall) {
 		Provider:         c.Provider,
 		Model:            c.Model,
 		AccountID:        c.AccountID,
+		OrgID:            c.OrgID,
+		Funding:          c.Funding,
+		FundingOrgID:     c.FundingOrgID,
 		AuthMode:         llmUsageAuthMode(c.Provider),
 		Purpose:          c.Purpose,
 		InputTokens:      c.Usage.InputTokens,
@@ -196,11 +207,12 @@ func recordDriverRetries(ctx context.Context, call llmUsageCall, retries *driver
 
 // recordLLMCallUsage is CallLLM's turn: the streamed request it makes, plus
 // every request its driver failed and retried along the way.
-func (a *CallLLMActivity) recordLLMCallUsage(ctx context.Context, chat *db.Chat, provider, modelID, accountID string, latencyMs int64, usage llm.TokenUsage, callErr error, interrupted bool, retries *driverRetries) {
+func (a *CallLLMActivity) recordLLMCallUsage(ctx context.Context, chat *db.Chat, provider, modelID string, resolved *resolvedLLMCall, latencyMs int64, usage llm.TokenUsage, callErr error, interrupted bool, retries *driverRetries) {
 	call := llmUsageCall{
 		Recorder: a.repo, UserID: chat.UserID, ChatID: chat.ID,
 		Purpose: store.LLMPurposeChat, Ordinal: 1,
-		Provider: provider, Model: modelID, AccountID: accountID, LatencyMs: latencyMs,
+		Provider: provider, Model: modelID, AccountID: usageAccountID(resolved), LatencyMs: latencyMs,
+		OrgID: chatOrgID(chat), Funding: usageFunding(resolved, provider), FundingOrgID: usageFundingOrg(resolved),
 		Usage: usage, Err: callErr, Interrupted: interrupted,
 	}
 	if retries != nil {
@@ -248,6 +260,8 @@ func (m *usageMeter) streamAndAccumulate(ctx context.Context, resolved *resolved
 		Purpose: m.purpose, Ordinal: m.n,
 		Provider: usageProvider(resolved, resolved.Driver), Model: resolvedUsageModel(resolved),
 		AccountID: usageAccountID(resolved),
+		OrgID:     resolved.OrgID, Funding: usageFunding(resolved, usageProvider(resolved, resolved.Driver)),
+		FundingOrgID: usageFundingOrg(resolved),
 	}
 	recordDriverRetries(ctx, call, retries)
 	call.LatencyMs = retries.finalLatencyMs(callLatencyMs)
@@ -348,6 +362,34 @@ func usageAccountID(resolved *resolvedLLMCall) string {
 		return ""
 	}
 	return resolved.Account.Config.AccountID
+}
+
+// usageFunding is who paid for a call (llm_call_usage.funding): the routed
+// account's funding class, "local" for a model on the person's own hardware,
+// and "" when it is not known (an unrouted call of a provider with accounts).
+func usageFunding(resolved *resolvedLLMCall, provider string) string {
+	switch {
+	case resolved != nil && resolved.Account != nil:
+		return resolved.Account.Config.Funding
+	case provider == "local":
+		return models.FundingLocal
+	}
+	return ""
+}
+
+// usageFundingOrg is the org that paid for a call: the org owning the routed
+// account, or the org it is attributed to (a seat, the managed key minted in
+// that org). "" for a person's own account and for the org-less managed key,
+// which bills the person's default org, not necessarily the chat's.
+func usageFundingOrg(resolved *resolvedLLMCall) string {
+	if resolved == nil || resolved.Account == nil {
+		return ""
+	}
+	cfg := resolved.Account.Config
+	if cfg.AccountOrgID != "" {
+		return cfg.AccountOrgID
+	}
+	return cfg.AttributedOrgID
 }
 
 func usageProvider(resolved *resolvedLLMCall, driver llm.Driver) string {

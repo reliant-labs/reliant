@@ -15,6 +15,11 @@
 // within a near-equal band and discounting accounts that just received many
 // threads; In order takes the account with the lowest priority number.
 //
+// In an org's run the accounts come in tiers (models.AccountConfig.Tier: the
+// org-paid ones first by default). A thread is placed only on the best tier
+// that has an account serving the model, and a limited tier makes it wait
+// rather than spill to the next: who pays is never changed by a limit alone.
+//
 // The package is pure decision logic over a thin, consumer-declared Store.
 // Persisting limits and benching accounts is the account-limits recorder's job
 // (a later package), not this one's.
@@ -60,6 +65,9 @@ type Store interface {
 	// false when another writer got there first.
 	SetThreadAssignment(ctx context.Context, a Assignment, expectedAccountID string) (applied bool, err error)
 	ListAccountLimits(ctx context.Context, userID string) (map[string]LimitState, error)
+	// ListOrgAccountLimits is the limit state of orgID's own accounts, kept
+	// under the org's owner key and shared by every member who uses them.
+	ListOrgAccountLimits(ctx context.Context, orgID string) (map[string]LimitState, error)
 	RecentAssignmentCounts(ctx context.Context, accountIDs []string, since time.Time) (map[string]int, error)
 }
 

@@ -12,9 +12,11 @@ package drivers
 // allowed_sources) are all decided by the one loader beneath it from these
 // fields, never by a second loader or a per-call-site filter.
 //
-// Today the loader reads the person's own accounts whatever the scope names:
-// no org-owned or org-attributed account exists yet, so every scope resolves
-// exactly as before.
+// The loader (configuredAccounts) returns, for person u in org X: u's own
+// unattributed accounts; u's accounts attributed to X (org-paid seats, the
+// managed key minted in X); and X's own accounts u may use (§3.3). An account
+// attributed to, or owned by, any other org is never a candidate. With no org
+// account and no attribution, every scope resolves exactly as before orgs.
 type Scope struct {
 	// UserID is the person the call acts as. Required.
 	UserID string
@@ -24,8 +26,21 @@ type Scope struct {
 	// no run, or a chat that predates orgs.
 	OrgID string
 	// Attended reports that a person is behind the run. An unattended run (a
-	// stored trigger fired) may spend only org-funded accounts (§11).
+	// stored trigger fired) may spend only org-funded accounts (§11): the org's
+	// keys and the org's Reliant credits, never the person's own accounts and
+	// never their org-paid seat (§11.2, I3).
 	Attended bool
+	// UnattendedAnySource lifts that rule for an unattended run whose
+	// automation is stamped "any", or predates the stamp (§11.3, I4: NULL
+	// reads as "any", today's behaviour): it may draw on every source, as a
+	// person's run does. It never widens an attended scope.
+	UnattendedAnySource bool
+}
+
+// OrgFundedOnly reports that the scope may draw only on org-funded accounts:
+// an unattended run in an org whose automation is not stamped "any".
+func (s Scope) OrgFundedOnly() bool {
+	return s.OrgID != "" && !s.Attended && !s.UnattendedAnySource
 }
 
 // PersonalScope is the scope of a call that belongs to no run: key
