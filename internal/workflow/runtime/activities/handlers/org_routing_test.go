@@ -62,3 +62,26 @@ func TestOrgRouting_TheDriverBuildRefusesAnotherOrgsAccount(t *testing.T) {
 	})
 	assert.NotContains(t, env.built, "globex-key", "the routed account of another org was never built")
 }
+
+// A seat that cannot serve the model does not draw the model to its provider:
+// the org's key that serves it wins over the person's own sign-in of the
+// seat's provider (review B1 of reliant#2689).
+func TestOrgRouting_AnUnservingSeatDoesNotRankItsProvider(t *testing.T) {
+	seat := claudeAccount("seat", "me@acme.com", 0)
+	seat.Tier, seat.Funding, seat.AttributedOrgID = models.TierFirst, models.FundingOrgSeat, "org-acme"
+	seat.Serves = func(m string) bool { return m != routeModel }
+	mine := claudeAccount("mine", "me@example.com", 1)
+	mine.Funding = models.FundingPersonal
+	avail := driversWith(seat, mine, orgAnthropicKey("acme-key", "org-acme"))
+	avail.DriverRank = map[models.DriverID]models.AccountTier{"claude": models.TierFirst, "anthropic": models.TierFirst}
+	withAvailableDrivers(t, avail)
+	env := newRoutingEnv(t)
+
+	res, err := resolveLLMCall(context.Background(), nil, llmCallSpec{
+		UserID: "u1", OrgID: "org-acme", Attended: true, SessionID: "s", ThreadID: "t1",
+		Selector: models.ModelSelector{ID: routeModel}, Routing: env.routing,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "anthropic", res.ProviderDriver)
+	assert.Equal(t, "acme-key", res.Account.Config.AccountID)
+}

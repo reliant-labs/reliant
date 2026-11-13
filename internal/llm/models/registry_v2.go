@@ -36,21 +36,21 @@ type ModelRegistry struct {
 	// Nil on the shared global registry.
 	avail AvailabilityFunc
 
-	// rank is the per-run driver tier set by WithDriverRank. Nil on the
-	// shared global registry.
-	rank map[DriverID]AccountTier
+	// rank is the per-run driver tier set by WithDriverRank, per model. Nil on
+	// the shared global registry.
+	rank func(driver DriverID, modelID string) AccountTier
 }
 
 // WithDriverRank returns a view of the registry whose provider choice, among
 // the drivers that serve the model resolution already picked, prefers the
-// driver with the better account tier (AvailableDrivers.DriverRank) before
-// the system priority. It is the weakest rule: an explicit "@driver", a
-// selector's or run's providers, and the chat's provider switch all decide
-// first, and it never changes which model a selector resolves to (control-plane
-// docs/design/org-provider-accounts.md §4.3). A nil or empty rank returns the
-// registry unchanged.
-func (r *ModelRegistry) WithDriverRank(rank map[DriverID]AccountTier) *ModelRegistry {
-	if len(rank) == 0 {
+// driver with the better account tier for that model
+// (AvailableDrivers.TierFor) before the system priority. It is the weakest
+// rule: an explicit "@driver", a selector's or run's providers, and the
+// chat's provider switch all decide first, and it never changes which model
+// a selector resolves to (control-plane docs/design/org-provider-accounts.md
+// §4.3). A nil rank returns the registry unchanged.
+func (r *ModelRegistry) WithDriverRank(rank func(driver DriverID, modelID string) AccountTier) *ModelRegistry {
+	if rank == nil {
 		return r
 	}
 	view := *r
@@ -648,7 +648,10 @@ func (r *ModelRegistry) findBestProvider(model *ModelDefinition, preferredProvid
 		if !ok {
 			priority = 5 // Default priority for unknown providers
 		}
-		tier := r.rank[DriverID(p.Driver)] // TierSecond when unranked
+		tier := TierSecond
+		if r.rank != nil {
+			tier = r.rank(DriverID(p.Driver), model.ID)
+		}
 
 		switch {
 		case bestProvider == nil || tier < bestTier:

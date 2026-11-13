@@ -373,7 +373,10 @@ func resolveLLMCallOnce(ctx context.Context, resolver drivers.DriverResolver, sp
 		// The driver rank is the weakest rule: among the drivers serving the
 		// model resolution picks, the one with the run's org-paid account wins
 		// (org-provider-accounts §4.3). It never changes the model.
-		registry := models.MustGetRegistry().WithAvailability(availableDrivers.Availability).WithDriverRank(availableDrivers.DriverRank)
+		registry := models.MustGetRegistry().WithAvailability(availableDrivers.Availability)
+		if availableDrivers.DriverRank != nil {
+			registry = registry.WithDriverRank(availableDrivers.TierFor)
+		}
 		resolve := registry.Resolve
 		if len(spec.FallbackSelector.Tags) > 0 || spec.FallbackSelector.ID != "" {
 			resolve = func(selector models.ModelSelector, providers []string) (*models.ResolvedModel, error) {

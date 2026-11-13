@@ -65,6 +65,9 @@ type Store interface {
 	// false when another writer got there first.
 	SetThreadAssignment(ctx context.Context, a Assignment, expectedAccountID string) (applied bool, err error)
 	ListAccountLimits(ctx context.Context, userID string) (map[string]LimitState, error)
+	// ListOrgAccountLimits is the limit state of orgID's own accounts, kept
+	// under the org's owner key and shared by every member who uses them.
+	ListOrgAccountLimits(ctx context.Context, orgID string) (map[string]LimitState, error)
 	RecentAssignmentCounts(ctx context.Context, accountIDs []string, since time.Time) (map[string]int, error)
 }
 

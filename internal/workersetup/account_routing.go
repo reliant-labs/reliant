@@ -36,6 +36,19 @@ func (s accountRouterStore) ListAccountLimits(ctx context.Context, userID string
 	if err != nil {
 		return nil, err
 	}
+	return routerLimits(limits), nil
+}
+
+func (s accountRouterStore) ListOrgAccountLimits(ctx context.Context, orgID string) (map[string]accountrouter.LimitState, error) {
+	limits, err := s.repo.ListOwnedAccountLimits(ctx, core.OrgAccountOwner(orgID))
+	if err != nil {
+		return nil, err
+	}
+	return routerLimits(limits), nil
+}
+
+// routerLimits translates the store's limit rows for the router.
+func routerLimits(limits map[string]core.LimitState) map[string]accountrouter.LimitState {
 	out := make(map[string]accountrouter.LimitState, len(limits))
 	for id, l := range limits {
 		ls := accountrouter.LimitState{
@@ -49,7 +62,7 @@ func (s accountRouterStore) ListAccountLimits(ctx context.Context, userID string
 		}
 		out[id] = ls
 	}
-	return out, nil
+	return out
 }
 
 func (s accountRouterStore) RecentAssignmentCounts(ctx context.Context, accountIDs []string, since time.Time) (map[string]int, error) {

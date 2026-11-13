@@ -26,6 +26,7 @@ type AccountAssignmentStore interface {
 	GetThreadAssignment(ctx context.Context, threadID, provider string) (*core.Assignment, error)
 	SetThreadAssignment(ctx context.Context, a core.Assignment, expectedAccountID string) (applied bool, err error)
 	ListAccountLimits(ctx context.Context, userID string) (map[string]core.LimitState, error)
+	ListOwnedAccountLimits(ctx context.Context, owner core.AccountOwner) (map[string]core.LimitState, error)
 	RecentAssignmentCounts(ctx context.Context, accountIDs []string, since time.Time) (map[string]int, error)
 }
 

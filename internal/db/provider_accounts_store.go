@@ -626,16 +626,6 @@ func (s *accountStore) ListAccountLimits(ctx context.Context, userID string) (ma
 	return store.ListUserAccountLimits(ctx, s.db, userID)
 }
 
-// ListOwnedAccountLimits returns the limit state of the owner's accounts: an org key's limits
-// are kept under the org's owner key, shared by every member who uses it.
-func (s *accountStore) ListOwnedAccountLimits(ctx context.Context, owner core.AccountOwner) (map[string]core.LimitState, error) {
-	key := owner.Key()
-	if key == "" {
-		return map[string]core.LimitState{}, nil
-	}
-	return store.ListUserAccountLimits(ctx, s.db, key)
-}
-
 // GetAccountLimits returns one account's limit state, or (nil, nil) when it has none. Unlike
 // ListAccountLimits it is not scoped to a user: the usage poller leases bare account ids.
 func (s *accountStore) GetAccountLimits(ctx context.Context, accountID string) (*core.LimitState, error) {

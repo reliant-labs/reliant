@@ -48,11 +48,6 @@ func (r *Repo) ListOwnedProviderAccountsWithSecrets(ctx context.Context, owner c
 	return r.accounts.ListOwnedProviderAccountsWithSecrets(ctx, owner)
 }
 
-// ListOwnedAccountLimits returns the limit state of the owner's accounts.
-func (r *Repo) ListOwnedAccountLimits(ctx context.Context, owner core.AccountOwner) (map[string]core.LimitState, error) {
-	return r.accounts.ListOwnedAccountLimits(ctx, owner)
-}
-
 // ListMemberAccountGrants returns when each of orgID's accounts was granted to userID, by
 // account id. The caller decides whether a grant still counts (control-plane
 // docs/design/org-provider-accounts.md §3.3: only one made in the current membership).

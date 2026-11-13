@@ -105,6 +105,10 @@ func (f *routerFake) ListAccountLimits(context.Context, string) (map[string]acco
 	return out, nil
 }
 
+func (f *routerFake) ListOrgAccountLimits(context.Context, string) (map[string]accountrouter.LimitState, error) {
+	return nil, nil
+}
+
 func (f *routerFake) RecentAssignmentCounts(context.Context, []string, time.Time) (map[string]int, error) {
 	return nil, nil
 }

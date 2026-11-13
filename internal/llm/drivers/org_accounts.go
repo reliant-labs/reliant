@@ -220,30 +220,26 @@ func memberGrants(ctx context.Context, repo OrgAccountStore, scope Scope, facts 
 	return out
 }
 
-// driverRank is each driver's best tier, or nil when every driver is on the
-// same tier (no tie-break to make, so resolution is exactly as before).
+// driverRank is each driver's best tier over all its accounts, or nil when no
+// account is on the first tier: nothing is tiered, so resolution is exactly
+// as before. The per-model tie-break is AvailableDrivers.TierFor.
 func driverRank(accounts map[models.DriverID][]models.AccountConfig) map[models.DriverID]models.AccountTier {
 	rank := make(map[models.DriverID]models.AccountTier, len(accounts))
-	mixed := false
-	var seen *models.AccountTier
+	tiered := false
 	for driverID, list := range accounts {
 		if len(list) == 0 {
 			continue
 		}
-		best := list[0].Tier
-		for _, a := range list[1:] {
+		best := models.TierSecond
+		for _, a := range list {
 			if a.Tier < best {
 				best = a.Tier
 			}
 		}
 		rank[driverID] = best
-		if seen == nil {
-			seen = &best
-		} else if *seen != best {
-			mixed = true
-		}
+		tiered = tiered || best == models.TierFirst
 	}
-	if !mixed {
+	if !tiered {
 		return nil
 	}
 	return rank

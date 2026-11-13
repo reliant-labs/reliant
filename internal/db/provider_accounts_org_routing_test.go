@@ -34,7 +34,8 @@ func TestOrgAccountReadsForTheLoader(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, none, "an owner key handed over as a person reads nothing")
 
-	until := time.Now().Add(time.Hour).UTC().Truncate(time.Second)
+	// A fixed instant far ahead of any test run, so the bench is live whenever this runs.
+	until := time.Date(2099, 1, 2, 3, 4, 5, 0, time.UTC)
 	require.NoError(t, repo.BenchAccount(ctx, core.OrgAccountOwner("org-1"), acme.ID, until, "five_hour", false))
 	limits, err := repo.ListOwnedAccountLimits(ctx, core.OrgAccountOwner("org-1"))
 	require.NoError(t, err)

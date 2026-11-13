@@ -61,6 +61,10 @@ func TestUsageMeter_RecordsTheServingAccount(t *testing.T) {
 
 	assert.Equal(t, "", usageFunding(nil, "anthropic"))
 	assert.Equal(t, models.FundingLocal, usageFunding(unrouted, "local"))
+	assert.Equal(t, "", usageFundingOrg(nil))
+	assert.Equal(t, "", usageFundingOrg(unrouted))
+	seat := &resolvedLLMCall{Account: &routedAccount{Config: models.AccountConfig{DriverConfig: models.DriverConfig{AttributedOrgID: "org-x"}}}}
+	assert.Equal(t, "org-x", usageFundingOrg(seat))
 
 	assert.Equal(t, "", usageAccountID(nil))
 	assert.Equal(t, "", usageAccountID(unrouted))
@@ -89,10 +93,14 @@ func TestUsageMeter_RecordsFundingAndTheOrgRollup(t *testing.T) {
 	}
 	exec := func(ctx context.Context, _ string) (string, error) {
 		meter := newUsageMeter(h.Repo(), project.UserID, chat.ID, "title")
+		// The org-less managed key bills the person's default org, which is not
+		// necessarily the chat's: it never lands in the chat org's rollup.
+		managed := served("managed", "", models.FundingOrgWallet)
 		for _, r := range []*resolvedLLMCall{
 			served("org-key", "org-acme", models.FundingOrgKey),
 			served("mine", "", models.FundingPersonal),
 			served("org-key", "org-acme", models.FundingOrgKey),
+			managed,
 		} {
 			if _, err := meter.streamAndAccumulate(ctx, r, nil, nil, nil); err != nil {
 				return "", err
@@ -119,12 +127,13 @@ func TestUsageMeter_RecordsFundingAndTheOrgRollup(t *testing.T) {
 	require.NoError(t, rows.Err())
 	assert.Equal(t, []row{
 		{"org-key", "org-acme", "org_key"}, {"mine", "org-acme", "personal"}, {"org-key", "org-acme", "org_key"},
+		{"managed", "org-acme", "org_wallet"},
 	}, got)
 
 	var orgRows, orgCalls int
 	require.NoError(t, h.DB().QueryRowContext(ctx,
 		`SELECT count(*), coalesce(sum(calls), 0) FROM llm_org_usage_daily WHERE org_id = 'org-acme'`).Scan(&orgRows, &orgCalls))
-	assert.Equal(t, 1, orgRows, "one rollup row: the org key, never the personal account")
+	assert.Equal(t, 1, orgRows, "one rollup row: the org key, never the personal account nor a wallet of unknown org")
 	assert.Equal(t, 2, orgCalls)
 	var accountInRollup string
 	require.NoError(t, h.DB().QueryRowContext(ctx, `SELECT account_id FROM llm_org_usage_daily WHERE org_id = 'org-acme'`).Scan(&accountInRollup))

@@ -112,3 +112,18 @@ func TestTier_PreferredAccountWinsAcrossTiers(t *testing.T) {
 	assert.Equal(t, "mine", res.Account.AccountID)
 	assert.Equal(t, ReasonPinned, res.Reason)
 }
+
+// Balance scores an org's accounts by their own usage, kept under the org's
+// owner key: the less used of two org keys takes the new thread.
+func TestTier_BalanceReadsOrgAccountUsage(t *testing.T) {
+	s := newStore()
+	s.orgLimits = map[string]LimitState{
+		"org-1": usage("org-1", window("5h", 0.90, time.Hour, 5*time.Hour)),
+		"org-2": usage("org-2", window("5h", 0.10, time.Hour, 5*time.Hour)),
+	}
+	a, b := tiered("org-1", 0, models.TierFirst), tiered("org-2", 1, models.TierFirst)
+	a.AccountOrgID, b.AccountOrgID = "org-acme", "org-acme"
+	res, err := newRouter(t, s, first).Assign(context.Background(), req("th", a, b))
+	require.NoError(t, err)
+	assert.Equal(t, "org-2", res.Account.AccountID)
+}

@@ -44,7 +44,7 @@ func (m *MockChatWorkflowReader) GetChat(ctx context.Context, id string) (*db.Ch
 var _ ChatWorkflowReader = (*MockChatWorkflowReader)(nil)
 
 // forge:section MockAccountAssignmentStore
-// forge:hash=f74dea44eb4d7454b5d9ad98ed344f6708b665c4b6e422d26176190e738c0e37
+// forge:hash=1e9d5fda7df782faedff734a1422447f60e6f9de263dd39bba229dac8d3c2d3c
 
 // MockAccountAssignmentStore is a test mock for the AccountAssignmentStore interface.
 //
@@ -57,6 +57,7 @@ type MockAccountAssignmentStore struct {
 	GetThreadAssignmentFunc    func(context.Context, string, string) (*core.Assignment, error)
 	SetThreadAssignmentFunc    func(context.Context, core.Assignment, string) (bool, error)
 	ListAccountLimitsFunc      func(context.Context, string) (map[string]core.LimitState, error)
+	ListOwnedAccountLimitsFunc func(context.Context, core.AccountOwner) (map[string]core.LimitState, error)
 	RecentAssignmentCountsFunc func(context.Context, []string, time.Time) (map[string]int, error)
 }
 
@@ -85,6 +86,15 @@ func (m *MockAccountAssignmentStore) ListAccountLimits(ctx context.Context, user
 		return m.ListAccountLimitsFunc(ctx, userID)
 	}
 	return nil, contractkit.MockNotSet("MockAccountAssignmentStore", "ListAccountLimits")
+}
+
+// ListOwnedAccountLimits records the call and delegates to ListOwnedAccountLimitsFunc when set.
+func (m *MockAccountAssignmentStore) ListOwnedAccountLimits(ctx context.Context, owner core.AccountOwner) (map[string]core.LimitState, error) {
+	m.Recorder.Record("ListOwnedAccountLimits", ctx, owner)
+	if m.ListOwnedAccountLimitsFunc != nil {
+		return m.ListOwnedAccountLimitsFunc(ctx, owner)
+	}
+	return nil, contractkit.MockNotSet("MockAccountAssignmentStore", "ListOwnedAccountLimits")
 }
 
 // RecentAssignmentCounts records the call and delegates to RecentAssignmentCountsFunc when set.
@@ -126,7 +136,7 @@ func (m *MockAccountCredentialStore) PatchOwnedProviderAccount(ctx context.Conte
 var _ AccountCredentialStore = (*MockAccountCredentialStore)(nil)
 
 // forge:section MockAccountRoutingStore
-// forge:hash=41c71a59bedda540dda221c74150dc16f040daf60f38b342b835c474d439c263
+// forge:hash=addcc8d93204f4a1a84db48a83b048a5e522c65b07d3737907b2e2eff8f284ec
 
 // MockAccountRoutingStore is a test mock for the AccountRoutingStore interface.
 //
@@ -141,6 +151,7 @@ type MockAccountRoutingStore struct {
 	GetThreadAssignmentFunc         func(context.Context, string, string) (*core.Assignment, error)
 	SetThreadAssignmentFunc         func(context.Context, core.Assignment, string) (bool, error)
 	ListAccountLimitsFunc           func(context.Context, string) (map[string]core.LimitState, error)
+	ListOwnedAccountLimitsFunc      func(context.Context, core.AccountOwner) (map[string]core.LimitState, error)
 	RecentAssignmentCountsFunc      func(context.Context, []string, time.Time) (map[string]int, error)
 	PatchOwnedProviderAccountFunc   func(context.Context, core.AccountOwner, string, core.AccountPatch) (core.ProviderAccount, error)
 }
@@ -188,6 +199,15 @@ func (m *MockAccountRoutingStore) ListAccountLimits(ctx context.Context, userID 
 		return m.ListAccountLimitsFunc(ctx, userID)
 	}
 	return nil, contractkit.MockNotSet("MockAccountRoutingStore", "ListAccountLimits")
+}
+
+// ListOwnedAccountLimits records the call and delegates to ListOwnedAccountLimitsFunc when set.
+func (m *MockAccountRoutingStore) ListOwnedAccountLimits(ctx context.Context, owner core.AccountOwner) (map[string]core.LimitState, error) {
+	m.Recorder.Record("ListOwnedAccountLimits", ctx, owner)
+	if m.ListOwnedAccountLimitsFunc != nil {
+		return m.ListOwnedAccountLimitsFunc(ctx, owner)
+	}
+	return nil, contractkit.MockNotSet("MockAccountRoutingStore", "ListOwnedAccountLimits")
 }
 
 // RecentAssignmentCounts records the call and delegates to RecentAssignmentCountsFunc when set.

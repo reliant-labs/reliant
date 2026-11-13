@@ -106,6 +106,9 @@ func (f *fakeMembers) DefaultOrg(context.Context, string) (string, error) {
 }
 
 var (
+	// farFuture is a fixed instant ahead of any run of these tests: a token
+	// that expires then is live, a bench that ends then is in force.
+	farFuture   = time.Date(2099, 1, 2, 3, 4, 5, 0, time.UTC)
 	memberSince = time.Date(2026, 11, 10, 8, 0, 0, 0, time.UTC)
 	afterJoin   = memberSince.Add(time.Hour)
 	beforeJoin  = memberSince.Add(-time.Hour)
@@ -121,7 +124,7 @@ func personalKey(id, user, provider string) core.AccountWithSecrets {
 func claudeSignIn(id, user, attributedOrg string) core.AccountWithSecrets {
 	a := core.AccountWithSecrets{
 		ProviderAccount: core.ProviderAccount{ID: id, UserID: user, OwnerKind: core.AccountOwnerUser, Provider: "claude",
-			AuthKind: core.AuthKindOAuth, ExpiresAt: time.Now().Add(time.Hour)},
+			AuthKind: core.AuthKindOAuth, ExpiresAt: farFuture},
 		Secrets: core.AccountSecrets{Secret: "sk-ant-oat01-" + id, Refresh: "r-" + id},
 	}
 	if attributedOrg != "" {
@@ -337,8 +340,8 @@ func TestLoader_NothingFromTheOrgChangesNothing(t *testing.T) {
 // reason a member could act on.
 func TestLoader_OrgKeyLimitsAndStatus(t *testing.T) {
 	t.Parallel()
-	until := time.Now().Add(time.Hour)
-	paused := time.Now()
+	until := farFuture
+	paused := memberSince
 	repo := &orgFakeRepo{user: "u",
 		orgs: map[string][]core.AccountWithSecrets{"org-x": {
 			orgKey("limited", "org-x", core.OrgAccessMembers, 0),
@@ -355,7 +358,7 @@ func TestLoader_OrgKeyLimitsAndStatus(t *testing.T) {
 	got := avail.Accounts["anthropic"][0]
 	assert.Equal(t, "limited", got.AccountID)
 	assert.Equal(t, models.AccountLimited, got.Status)
-	assert.WithinDuration(t, until, got.LimitedUntil, time.Second)
+	assert.True(t, until.Equal(got.LimitedUntil))
 	assert.Empty(t, avail.Unavailable, "an org key needing attention is the admins' to fix")
 }
 

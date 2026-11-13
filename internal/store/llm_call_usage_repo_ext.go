@@ -95,8 +95,14 @@ type LLMCallUsageRecord struct {
 	AccountID string
 	// Funding is who paid for the call (llm_call_usage.funding: org_key,
 	// org_seat, org_wallet, personal, local); "" when unknown. An org-funded
-	// call with an org also folds into llm_org_usage_daily.
+	// call also folds into llm_org_usage_daily, under FundingOrgID.
 	Funding string
+	// FundingOrgID is the org that paid: the org that owns the account, or
+	// the org the account is attributed to. "" when no org is known to have
+	// paid (a person's own account, or the org-less managed key, whose wallet
+	// is the person's default org rather than necessarily the chat's). Only
+	// what an org is known to have paid for reaches that org's rollup.
+	FundingOrgID string
 }
 
 // RecordLLMCallUsage writes one provider request and folds it into its day's
@@ -175,11 +181,12 @@ func orgFunded(funding string) bool {
 	return false
 }
 
-// addLLMOrgUsageDaily folds an org-funded call into the org's rollup, the only usage an org admin
-// reads (org-provider-accounts §3.7, §5). A personal or unknown funding, or a call with no org,
-// writes nothing there: a member's own-account usage never reaches it.
+// addLLMOrgUsageDaily folds an org-funded call into the rollup of the org that paid for it, the
+// only usage an org admin reads (org-provider-accounts §3.7, §5). A personal or unknown funding,
+// or a call no org is known to have paid for, writes nothing there: a member's own-account usage
+// never reaches it, and one org's spend never lands in another's.
 func addLLMOrgUsageDaily(ctx context.Context, db orm.Context, rec LLMCallUsageRecord) error {
-	if rec.OrgID == "" || !orgFunded(rec.Funding) {
+	if rec.FundingOrgID == "" || !orgFunded(rec.Funding) {
 		return nil
 	}
 	_, err := db.Bun().NewRaw(`INSERT INTO llm_org_usage_daily AS d (day, org_id, account_id, user_id, provider, model, funding, purpose,
@@ -194,7 +201,7 @@ func addLLMOrgUsageDaily(ctx context.Context, db orm.Context, rec LLMCallUsageRe
 		    cache_write_tokens = d.cache_write_tokens + EXCLUDED.cache_write_tokens,
 		    latency_ms_total = d.latency_ms_total + EXCLUDED.latency_ms_total,
 		    updated_at = now()`,
-		rec.CreatedAt.UTC(), rec.OrgID, rec.AccountID, rec.UserID, rec.Provider, rec.Model, rec.Funding, rec.Purpose,
+		rec.CreatedAt.UTC(), rec.FundingOrgID, rec.AccountID, rec.UserID, rec.Provider, rec.Model, rec.Funding, rec.Purpose,
 		llmErrorCalls(rec), rec.InputTokens, rec.OutputTokens, rec.CacheReadTokens,
 		rec.CacheWriteTokens, rec.LatencyMs).Exec(ctx)
 	if err != nil {

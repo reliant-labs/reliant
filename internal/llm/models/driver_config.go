@@ -177,12 +177,30 @@ type AvailableDrivers struct {
 	// say WHY a pinned provider cannot serve, not just that it cannot.
 	Unavailable map[DriverID]string
 
-	// DriverRank is each driver's best account tier (AccountConfig.Tier),
-	// the tie-break the registry uses among drivers that serve the model it
-	// already chose (ModelRegistry.WithDriverRank): it decides who pays for a
-	// model, never which model. Nil when every driver is on one tier, which is
-	// every run whose org gave the person no account.
+	// DriverRank is each driver's best account tier (AccountConfig.Tier) over
+	// all its accounts. Nil when no account is on TierFirst, which is every
+	// run whose org gave the person no account: then nothing is tiered and
+	// resolution is exactly as before. The registry's tie-break is TierFor,
+	// per model.
 	DriverRank map[DriverID]AccountTier
+}
+
+// TierFor is driver's best tier among its accounts that serve modelID
+// (AccountConfig.Serves): the tie-break the registry uses among the drivers
+// serving the model it already chose (ModelRegistry.WithDriverRank). A
+// driver's account that cannot serve the model does not lift the driver for
+// it. TierSecond when the driver has no account serving it.
+func (a AvailableDrivers) TierFor(driver DriverID, modelID string) AccountTier {
+	best := TierSecond
+	for _, acct := range a.Accounts[driver] {
+		if acct.Serves != nil && !acct.Serves(modelID) {
+			continue
+		}
+		if acct.Tier < best {
+			best = acct.Tier
+		}
+	}
+	return best
 }
 
 // GetAvailableDriversForModel returns the list of drivers that support a model AND are properly configured.
@@ -261,7 +279,8 @@ func SelectBestDriver(modelID ModelID, availableDrivers AvailableDrivers) (Drive
 	// priority, as in ModelRegistry.findBestProvider.
 	bestConfig := availableConfigs[0]
 	for _, config := range availableConfigs[1:] {
-		tier, bestTier := availableDrivers.DriverRank[config.DriverID], availableDrivers.DriverRank[bestConfig.DriverID]
+		tier := availableDrivers.TierFor(config.DriverID, string(modelID))
+		bestTier := availableDrivers.TierFor(bestConfig.DriverID, string(modelID))
 		if tier < bestTier || (tier == bestTier && preferDriver(config.DriverID, bestConfig.DriverID)) {
 			bestConfig = config
 		}
