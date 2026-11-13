@@ -464,6 +464,7 @@
         "LedgerRetention",
         "NATSConn",
         "OrgPolicyResolver",
+        "OrgPolicyWatcher",
         "OrgResolver",
         "PauseService",
         "PayloadStore",
@@ -51379,6 +51380,18 @@
       "source": {
         "path": "internal/app/providers.go",
         "symbol": "NewOrgPolicyResolver"
+      },
+      "methods": [],
+      "implementation_candidates": []
+    },
+    {
+      "id": "OrgPolicyWatcher",
+      "name": "OrgPolicyWatcher",
+      "kind": "provider",
+      "type": "*github.com/reliant-labs/reliant/internal/app.OrgPolicyWatcher",
+      "source": {
+        "path": "internal/app/org_policy_watcher.go",
+        "symbol": "NewOrgPolicyWatcher"
       },
       "methods": [],
       "implementation_candidates": []

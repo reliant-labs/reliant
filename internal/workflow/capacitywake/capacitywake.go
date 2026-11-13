@@ -80,3 +80,35 @@ func WakeUser(ctx context.Context, targets TargetLister, signals Signaler, userI
 	}
 	return woken
 }
+
+// OrgTargetLister lists the root workflow ids of an org's chats a capacity
+// wake can matter to (db.Repo.ListOrgCapacityWakeTargets).
+type OrgTargetLister interface {
+	ListOrgCapacityWakeTargets(ctx context.Context, orgID string) ([]string, error)
+}
+
+// WakeOrg sends a capacity wake to every chat of orgID whose run may have a
+// thread blocked, and reports how many it reached: what an org policy change
+// does for the chats a policy refusal paused (internal/orgpolicy.Watcher).
+func WakeOrg(ctx context.Context, targets OrgTargetLister, signals Signaler, orgID, why string) int {
+	if targets == nil || signals == nil || orgID == "" {
+		return 0
+	}
+	ids, err := targets.ListOrgCapacityWakeTargets(ctx, orgID)
+	if err != nil {
+		logging.WarnContext(ctx, "Could not list the org's chats to wake", "orgID", orgID, "why", why, "error", err)
+		return 0
+	}
+	woken := 0
+	for _, workflowID := range ids {
+		if err := signals.SignalWorkflow(ctx, workflowID, "", SignalName, Signal{}); err != nil {
+			logging.InfoContext(ctx, "Could not wake an org chat's run", "workflowID", workflowID, "why", why, "error", err)
+			continue
+		}
+		woken++
+	}
+	if len(ids) > 0 {
+		logging.InfoContext(ctx, "Woke the org's blocked chats", "orgID", orgID, "why", why, "woken", woken, "candidates", len(ids))
+	}
+	return woken
+}

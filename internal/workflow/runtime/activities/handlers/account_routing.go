@@ -15,6 +15,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/llm/ratelimit"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/orgpolicy"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 )
 
@@ -329,6 +330,19 @@ func (r *AccountRouting) usageLimitFailure(ctx context.Context, err error, uc us
 // comes back unchanged. The next request, from any activity, then routes
 // around the account instead of meeting it first again.
 func (r *AccountRouting) providerFailure(ctx context.Context, err error, uc usageLimitContext) error {
+	// An org policy's verdict is the org's, not the account's: it never
+	// marks a credential, never benches an account and never fails over
+	// (control-plane docs/design/org-policies.md §5.1). It is stamped with
+	// whether a person is behind the run, which decides between pausing the
+	// turn and ending an unattended run, and the org is watched so its chats
+	// wake when the policy changes.
+	if refusal, ok := orgpolicy.RefusalOf(err); ok {
+		refusal.Unattended = !uc.Scope.Attended
+		orgpolicy.WatchRefused(ctx, uc.Scope.OrgID)
+		logging.InfoContext(ctx, "[OrgPolicy] An org policy refused the call; the turn stops with the reason",
+			"userID", uc.Scope.UserID, "orgID", uc.Scope.OrgID, "provider", string(uc.Driver), "reason", refusal.Reason, "unattended", refusal.Unattended)
+		return err
+	}
 	if rejected := r.credentialRejection(ctx, err, uc); rejected != nil {
 		return rejected
 	}

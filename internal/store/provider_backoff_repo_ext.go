@@ -37,6 +37,7 @@ package store
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/reliant-labs/forge/pkg/orm"
@@ -224,6 +225,20 @@ WHERE c.user_id = ?0
               AND s.state = 3 AND s.stop_reason = 2)
   )
 ORDER BY c.workflow_id`
+
+// listOrgCapacityWakeTargetsSQL is listCapacityWakeTargetsSQL over every chat
+// of an org instead of a user's: the chats an org policy change wakes.
+var listOrgCapacityWakeTargetsSQL = strings.Replace(listCapacityWakeTargetsSQL, "WHERE c.user_id = ?0", "WHERE c.org_id = ?0", 1)
+
+// ListOrgCapacityWakeTargets returns the root workflow ids of orgID's chats a
+// capacity wake can matter to (listOrgCapacityWakeTargetsSQL).
+func ListOrgCapacityWakeTargets(ctx context.Context, db orm.Context, orgID string) ([]string, error) {
+	var ids []string
+	if err := db.Bun().NewRaw(listOrgCapacityWakeTargetsSQL, orgID).Scan(ctx, &ids); err != nil {
+		return nil, err
+	}
+	return ids, nil
+}
 
 // ListCapacityWakeTargets returns the root workflow ids of userID's chats a
 // capacity wake can matter to (listCapacityWakeTargetsSQL).

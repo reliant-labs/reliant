@@ -11,6 +11,7 @@ import (
 	"google.golang.org/genai"
 
 	"github.com/reliant-labs/reliant/internal/llm/drivererrors"
+	"github.com/reliant-labs/reliant/internal/orgpolicy"
 )
 
 // openrouterStatusRE matches the status the OpenRouter driver puts in its error text, which
@@ -23,7 +24,9 @@ var openrouterStatusRE = regexp.MustCompile(`status (401|403)\b`)
 // A 401 that an OAuth session recovers by refreshing is the token coordinator's to judge, not
 // this function's: callers apply it to API-key accounts.
 func CredentialRejected(err error) bool {
-	if err == nil || drivererrors.IsProviderCreditExhaustion(err) {
+	// An org policy's verdict (orgpolicy.Refusal) is the org's, never the
+	// key's: a member's key is not rejected because their org forbids it.
+	if err == nil || drivererrors.IsProviderCreditExhaustion(err) || orgpolicy.IsRefusal(err) {
 		return false
 	}
 	var anth *anthropic.Error
