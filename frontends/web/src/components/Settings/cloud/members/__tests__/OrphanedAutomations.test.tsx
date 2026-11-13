@@ -44,7 +44,7 @@ import { OrphanedAutomations } from "../OrphanedAutomations";
 
 const org: MyOrg = { id: "org-a", name: "Acme", slug: "acme", role: "admin", isOwner: false, isDefault: true };
 const member = (userId: string, email: string): OrgMember => ({
-  userId, email, name: "", avatarUrl: "", role: "member", joinedAt: null, isFounder: false,
+  userId, email, name: "", avatarUrl: "", role: "member", joinedAt: null, isFounder: false, externalId: "",
 });
 const members = [member("u-bob", "bob@acme.test"), member("u-carol", "carol@acme.test")];
 

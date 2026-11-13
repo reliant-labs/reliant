@@ -82,6 +82,18 @@ const (
 	// OrganizationServiceUpdateMemberRoleProcedure is the fully-qualified name of the
 	// OrganizationService's UpdateMemberRole RPC.
 	OrganizationServiceUpdateMemberRoleProcedure = "/controlplane.v1.OrganizationService/UpdateMemberRole"
+	// OrganizationServiceStartGitHubAppInstallProcedure is the fully-qualified name of the
+	// OrganizationService's StartGitHubAppInstall RPC.
+	OrganizationServiceStartGitHubAppInstallProcedure = "/controlplane.v1.OrganizationService/StartGitHubAppInstall"
+	// OrganizationServiceLinkGitHubAppInstallationProcedure is the fully-qualified name of the
+	// OrganizationService's LinkGitHubAppInstallation RPC.
+	OrganizationServiceLinkGitHubAppInstallationProcedure = "/controlplane.v1.OrganizationService/LinkGitHubAppInstallation"
+	// OrganizationServiceListGitHubAppInstallationsProcedure is the fully-qualified name of the
+	// OrganizationService's ListGitHubAppInstallations RPC.
+	OrganizationServiceListGitHubAppInstallationsProcedure = "/controlplane.v1.OrganizationService/ListGitHubAppInstallations"
+	// OrganizationServiceUnlinkGitHubAppInstallationProcedure is the fully-qualified name of the
+	// OrganizationService's UnlinkGitHubAppInstallation RPC.
+	OrganizationServiceUnlinkGitHubAppInstallationProcedure = "/controlplane.v1.OrganizationService/UnlinkGitHubAppInstallation"
 )
 
 // OrganizationServiceClient is a client for the controlplane.v1.OrganizationService service.
@@ -154,6 +166,32 @@ type OrganizationServiceClient interface {
 	// role's preset, and scopes says what they hold now. Demoting the last
 	// owner is refused ("last_owner").
 	UpdateMemberRole(context.Context, *connect.Request[v1.UpdateMemberRoleRequest]) (*connect.Response[v1.UpdateMemberRoleResponse], error)
+	// StartGitHubAppInstall returns the GitHub URL that installs the App (or
+	// lets the caller pick an existing installation) carrying a signed state
+	// that names this org and the caller. GitHub sends the browser back to the
+	// App's setup URL with installation_id and that state, which the client
+	// passes to LinkGitHubAppInstallation. FAILED_PRECONDITION
+	// "github_app_not_configured" when the deployment has no App.
+	StartGitHubAppInstall(context.Context, *connect.Request[v1.StartGitHubAppInstallRequest]) (*connect.Response[v1.StartGitHubAppInstallResponse], error)
+	// LinkGitHubAppInstallation links installation_id to the org the signed
+	// state names. The caller must be the person the state was issued to, and
+	// STILL an admin or owner of that org (read now, not when the link was
+	// issued); the installation must be one the caller's own GitHub account can
+	// reach. Errors: INVALID_ARGUMENT "github_install_state_invalid" (a
+	// tampered, expired or someone else's state); PERMISSION_DENIED
+	// "admin_required" / "not_org_member"; FAILED_PRECONDITION
+	// "github_installation_not_visible" (the caller's GitHub account cannot see
+	// it), "github_installation_linked_elsewhere" (another org has it), or the
+	// git credential reasons when the caller has not connected GitHub.
+	LinkGitHubAppInstallation(context.Context, *connect.Request[v1.LinkGitHubAppInstallationRequest]) (*connect.Response[v1.LinkGitHubAppInstallationResponse], error)
+	// ListGitHubAppInstallations lists the installations linked to the org. Any
+	// member may call it.
+	ListGitHubAppInstallations(context.Context, *connect.Request[v1.ListGitHubAppInstallationsRequest]) (*connect.Response[v1.ListGitHubAppInstallationsResponse], error)
+	// UnlinkGitHubAppInstallation removes the link: the org's runs can no
+	// longer mint bot tokens through it. The installation itself stays on
+	// GitHub. Admin or owner. Unlinking one that is not linked to the org is
+	// NOT_FOUND.
+	UnlinkGitHubAppInstallation(context.Context, *connect.Request[v1.UnlinkGitHubAppInstallationRequest]) (*connect.Response[v1.UnlinkGitHubAppInstallationResponse], error)
 }
 
 // NewOrganizationServiceClient constructs a client for the controlplane.v1.OrganizationService
@@ -239,23 +277,51 @@ func NewOrganizationServiceClient(httpClient connect.HTTPClient, baseURL string,
 			connect.WithSchema(organizationServiceMethods.ByName("UpdateMemberRole")),
 			connect.WithClientOptions(opts...),
 		),
+		startGitHubAppInstall: connect.NewClient[v1.StartGitHubAppInstallRequest, v1.StartGitHubAppInstallResponse](
+			httpClient,
+			baseURL+OrganizationServiceStartGitHubAppInstallProcedure,
+			connect.WithSchema(organizationServiceMethods.ByName("StartGitHubAppInstall")),
+			connect.WithClientOptions(opts...),
+		),
+		linkGitHubAppInstallation: connect.NewClient[v1.LinkGitHubAppInstallationRequest, v1.LinkGitHubAppInstallationResponse](
+			httpClient,
+			baseURL+OrganizationServiceLinkGitHubAppInstallationProcedure,
+			connect.WithSchema(organizationServiceMethods.ByName("LinkGitHubAppInstallation")),
+			connect.WithClientOptions(opts...),
+		),
+		listGitHubAppInstallations: connect.NewClient[v1.ListGitHubAppInstallationsRequest, v1.ListGitHubAppInstallationsResponse](
+			httpClient,
+			baseURL+OrganizationServiceListGitHubAppInstallationsProcedure,
+			connect.WithSchema(organizationServiceMethods.ByName("ListGitHubAppInstallations")),
+			connect.WithClientOptions(opts...),
+		),
+		unlinkGitHubAppInstallation: connect.NewClient[v1.UnlinkGitHubAppInstallationRequest, v1.UnlinkGitHubAppInstallationResponse](
+			httpClient,
+			baseURL+OrganizationServiceUnlinkGitHubAppInstallationProcedure,
+			connect.WithSchema(organizationServiceMethods.ByName("UnlinkGitHubAppInstallation")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // organizationServiceClient implements OrganizationServiceClient.
 type organizationServiceClient struct {
-	listMyOrganizations    *connect.Client[v1.ListMyOrganizationsRequest, v1.ListMyOrganizationsResponse]
-	setDefaultOrganization *connect.Client[v1.SetDefaultOrganizationRequest, v1.SetDefaultOrganizationResponse]
-	createOrganization     *connect.Client[v1.CreateOrganizationRequest, v1.CreateOrganizationResponse]
-	listMembers            *connect.Client[v1.ListMembersRequest, v1.ListMembersResponse]
-	inviteMember           *connect.Client[v1.InviteMemberRequest, v1.InviteMemberResponse]
-	listInvitations        *connect.Client[v1.ListInvitationsRequest, v1.ListInvitationsResponse]
-	revokeInvitation       *connect.Client[v1.RevokeInvitationRequest, v1.RevokeInvitationResponse]
-	getInvitation          *connect.Client[v1.GetInvitationRequest, v1.GetInvitationResponse]
-	acceptInvitation       *connect.Client[v1.AcceptInvitationRequest, v1.AcceptInvitationResponse]
-	removeMember           *connect.Client[v1.RemoveMemberRequest, v1.RemoveMemberResponse]
-	leaveOrganization      *connect.Client[v1.LeaveOrganizationRequest, v1.LeaveOrganizationResponse]
-	updateMemberRole       *connect.Client[v1.UpdateMemberRoleRequest, v1.UpdateMemberRoleResponse]
+	listMyOrganizations         *connect.Client[v1.ListMyOrganizationsRequest, v1.ListMyOrganizationsResponse]
+	setDefaultOrganization      *connect.Client[v1.SetDefaultOrganizationRequest, v1.SetDefaultOrganizationResponse]
+	createOrganization          *connect.Client[v1.CreateOrganizationRequest, v1.CreateOrganizationResponse]
+	listMembers                 *connect.Client[v1.ListMembersRequest, v1.ListMembersResponse]
+	inviteMember                *connect.Client[v1.InviteMemberRequest, v1.InviteMemberResponse]
+	listInvitations             *connect.Client[v1.ListInvitationsRequest, v1.ListInvitationsResponse]
+	revokeInvitation            *connect.Client[v1.RevokeInvitationRequest, v1.RevokeInvitationResponse]
+	getInvitation               *connect.Client[v1.GetInvitationRequest, v1.GetInvitationResponse]
+	acceptInvitation            *connect.Client[v1.AcceptInvitationRequest, v1.AcceptInvitationResponse]
+	removeMember                *connect.Client[v1.RemoveMemberRequest, v1.RemoveMemberResponse]
+	leaveOrganization           *connect.Client[v1.LeaveOrganizationRequest, v1.LeaveOrganizationResponse]
+	updateMemberRole            *connect.Client[v1.UpdateMemberRoleRequest, v1.UpdateMemberRoleResponse]
+	startGitHubAppInstall       *connect.Client[v1.StartGitHubAppInstallRequest, v1.StartGitHubAppInstallResponse]
+	linkGitHubAppInstallation   *connect.Client[v1.LinkGitHubAppInstallationRequest, v1.LinkGitHubAppInstallationResponse]
+	listGitHubAppInstallations  *connect.Client[v1.ListGitHubAppInstallationsRequest, v1.ListGitHubAppInstallationsResponse]
+	unlinkGitHubAppInstallation *connect.Client[v1.UnlinkGitHubAppInstallationRequest, v1.UnlinkGitHubAppInstallationResponse]
 }
 
 // ListMyOrganizations calls controlplane.v1.OrganizationService.ListMyOrganizations.
@@ -316,6 +382,27 @@ func (c *organizationServiceClient) LeaveOrganization(ctx context.Context, req *
 // UpdateMemberRole calls controlplane.v1.OrganizationService.UpdateMemberRole.
 func (c *organizationServiceClient) UpdateMemberRole(ctx context.Context, req *connect.Request[v1.UpdateMemberRoleRequest]) (*connect.Response[v1.UpdateMemberRoleResponse], error) {
 	return c.updateMemberRole.CallUnary(ctx, req)
+}
+
+// StartGitHubAppInstall calls controlplane.v1.OrganizationService.StartGitHubAppInstall.
+func (c *organizationServiceClient) StartGitHubAppInstall(ctx context.Context, req *connect.Request[v1.StartGitHubAppInstallRequest]) (*connect.Response[v1.StartGitHubAppInstallResponse], error) {
+	return c.startGitHubAppInstall.CallUnary(ctx, req)
+}
+
+// LinkGitHubAppInstallation calls controlplane.v1.OrganizationService.LinkGitHubAppInstallation.
+func (c *organizationServiceClient) LinkGitHubAppInstallation(ctx context.Context, req *connect.Request[v1.LinkGitHubAppInstallationRequest]) (*connect.Response[v1.LinkGitHubAppInstallationResponse], error) {
+	return c.linkGitHubAppInstallation.CallUnary(ctx, req)
+}
+
+// ListGitHubAppInstallations calls controlplane.v1.OrganizationService.ListGitHubAppInstallations.
+func (c *organizationServiceClient) ListGitHubAppInstallations(ctx context.Context, req *connect.Request[v1.ListGitHubAppInstallationsRequest]) (*connect.Response[v1.ListGitHubAppInstallationsResponse], error) {
+	return c.listGitHubAppInstallations.CallUnary(ctx, req)
+}
+
+// UnlinkGitHubAppInstallation calls
+// controlplane.v1.OrganizationService.UnlinkGitHubAppInstallation.
+func (c *organizationServiceClient) UnlinkGitHubAppInstallation(ctx context.Context, req *connect.Request[v1.UnlinkGitHubAppInstallationRequest]) (*connect.Response[v1.UnlinkGitHubAppInstallationResponse], error) {
+	return c.unlinkGitHubAppInstallation.CallUnary(ctx, req)
 }
 
 // OrganizationServiceHandler is an implementation of the controlplane.v1.OrganizationService
@@ -389,6 +476,32 @@ type OrganizationServiceHandler interface {
 	// role's preset, and scopes says what they hold now. Demoting the last
 	// owner is refused ("last_owner").
 	UpdateMemberRole(context.Context, *connect.Request[v1.UpdateMemberRoleRequest]) (*connect.Response[v1.UpdateMemberRoleResponse], error)
+	// StartGitHubAppInstall returns the GitHub URL that installs the App (or
+	// lets the caller pick an existing installation) carrying a signed state
+	// that names this org and the caller. GitHub sends the browser back to the
+	// App's setup URL with installation_id and that state, which the client
+	// passes to LinkGitHubAppInstallation. FAILED_PRECONDITION
+	// "github_app_not_configured" when the deployment has no App.
+	StartGitHubAppInstall(context.Context, *connect.Request[v1.StartGitHubAppInstallRequest]) (*connect.Response[v1.StartGitHubAppInstallResponse], error)
+	// LinkGitHubAppInstallation links installation_id to the org the signed
+	// state names. The caller must be the person the state was issued to, and
+	// STILL an admin or owner of that org (read now, not when the link was
+	// issued); the installation must be one the caller's own GitHub account can
+	// reach. Errors: INVALID_ARGUMENT "github_install_state_invalid" (a
+	// tampered, expired or someone else's state); PERMISSION_DENIED
+	// "admin_required" / "not_org_member"; FAILED_PRECONDITION
+	// "github_installation_not_visible" (the caller's GitHub account cannot see
+	// it), "github_installation_linked_elsewhere" (another org has it), or the
+	// git credential reasons when the caller has not connected GitHub.
+	LinkGitHubAppInstallation(context.Context, *connect.Request[v1.LinkGitHubAppInstallationRequest]) (*connect.Response[v1.LinkGitHubAppInstallationResponse], error)
+	// ListGitHubAppInstallations lists the installations linked to the org. Any
+	// member may call it.
+	ListGitHubAppInstallations(context.Context, *connect.Request[v1.ListGitHubAppInstallationsRequest]) (*connect.Response[v1.ListGitHubAppInstallationsResponse], error)
+	// UnlinkGitHubAppInstallation removes the link: the org's runs can no
+	// longer mint bot tokens through it. The installation itself stays on
+	// GitHub. Admin or owner. Unlinking one that is not linked to the org is
+	// NOT_FOUND.
+	UnlinkGitHubAppInstallation(context.Context, *connect.Request[v1.UnlinkGitHubAppInstallationRequest]) (*connect.Response[v1.UnlinkGitHubAppInstallationResponse], error)
 }
 
 // NewOrganizationServiceHandler builds an HTTP handler from the service implementation. It returns
@@ -470,6 +583,30 @@ func NewOrganizationServiceHandler(svc OrganizationServiceHandler, opts ...conne
 		connect.WithSchema(organizationServiceMethods.ByName("UpdateMemberRole")),
 		connect.WithHandlerOptions(opts...),
 	)
+	organizationServiceStartGitHubAppInstallHandler := connect.NewUnaryHandler(
+		OrganizationServiceStartGitHubAppInstallProcedure,
+		svc.StartGitHubAppInstall,
+		connect.WithSchema(organizationServiceMethods.ByName("StartGitHubAppInstall")),
+		connect.WithHandlerOptions(opts...),
+	)
+	organizationServiceLinkGitHubAppInstallationHandler := connect.NewUnaryHandler(
+		OrganizationServiceLinkGitHubAppInstallationProcedure,
+		svc.LinkGitHubAppInstallation,
+		connect.WithSchema(organizationServiceMethods.ByName("LinkGitHubAppInstallation")),
+		connect.WithHandlerOptions(opts...),
+	)
+	organizationServiceListGitHubAppInstallationsHandler := connect.NewUnaryHandler(
+		OrganizationServiceListGitHubAppInstallationsProcedure,
+		svc.ListGitHubAppInstallations,
+		connect.WithSchema(organizationServiceMethods.ByName("ListGitHubAppInstallations")),
+		connect.WithHandlerOptions(opts...),
+	)
+	organizationServiceUnlinkGitHubAppInstallationHandler := connect.NewUnaryHandler(
+		OrganizationServiceUnlinkGitHubAppInstallationProcedure,
+		svc.UnlinkGitHubAppInstallation,
+		connect.WithSchema(organizationServiceMethods.ByName("UnlinkGitHubAppInstallation")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/controlplane.v1.OrganizationService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case OrganizationServiceListMyOrganizationsProcedure:
@@ -496,6 +633,14 @@ func NewOrganizationServiceHandler(svc OrganizationServiceHandler, opts ...conne
 			organizationServiceLeaveOrganizationHandler.ServeHTTP(w, r)
 		case OrganizationServiceUpdateMemberRoleProcedure:
 			organizationServiceUpdateMemberRoleHandler.ServeHTTP(w, r)
+		case OrganizationServiceStartGitHubAppInstallProcedure:
+			organizationServiceStartGitHubAppInstallHandler.ServeHTTP(w, r)
+		case OrganizationServiceLinkGitHubAppInstallationProcedure:
+			organizationServiceLinkGitHubAppInstallationHandler.ServeHTTP(w, r)
+		case OrganizationServiceListGitHubAppInstallationsProcedure:
+			organizationServiceListGitHubAppInstallationsHandler.ServeHTTP(w, r)
+		case OrganizationServiceUnlinkGitHubAppInstallationProcedure:
+			organizationServiceUnlinkGitHubAppInstallationHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -551,4 +696,20 @@ func (UnimplementedOrganizationServiceHandler) LeaveOrganization(context.Context
 
 func (UnimplementedOrganizationServiceHandler) UpdateMemberRole(context.Context, *connect.Request[v1.UpdateMemberRoleRequest]) (*connect.Response[v1.UpdateMemberRoleResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.OrganizationService.UpdateMemberRole is not implemented"))
+}
+
+func (UnimplementedOrganizationServiceHandler) StartGitHubAppInstall(context.Context, *connect.Request[v1.StartGitHubAppInstallRequest]) (*connect.Response[v1.StartGitHubAppInstallResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.OrganizationService.StartGitHubAppInstall is not implemented"))
+}
+
+func (UnimplementedOrganizationServiceHandler) LinkGitHubAppInstallation(context.Context, *connect.Request[v1.LinkGitHubAppInstallationRequest]) (*connect.Response[v1.LinkGitHubAppInstallationResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.OrganizationService.LinkGitHubAppInstallation is not implemented"))
+}
+
+func (UnimplementedOrganizationServiceHandler) ListGitHubAppInstallations(context.Context, *connect.Request[v1.ListGitHubAppInstallationsRequest]) (*connect.Response[v1.ListGitHubAppInstallationsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.OrganizationService.ListGitHubAppInstallations is not implemented"))
+}
+
+func (UnimplementedOrganizationServiceHandler) UnlinkGitHubAppInstallation(context.Context, *connect.Request[v1.UnlinkGitHubAppInstallationRequest]) (*connect.Response[v1.UnlinkGitHubAppInstallationResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.OrganizationService.UnlinkGitHubAppInstallation is not implemented"))
 }

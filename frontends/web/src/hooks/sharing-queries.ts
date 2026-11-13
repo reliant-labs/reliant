@@ -23,6 +23,7 @@ import {
   useSetChatVisibility,
 } from "@/hooks/sharing-service-hooks_gen";
 import { useMembers } from "@/components/Settings/cloud/members/useMembers";
+import { memberNamesBySubject } from "@/services/controlPlane/members";
 import { hasControlPlane } from "@/services/controlPlane/config";
 
 /** How long a burst of feed rows may wait before the list is re-read. */
@@ -97,18 +98,15 @@ export function useOrgFeed(orgId: string | null): void {
 }
 
 /**
- * Display names of `orgId`'s members by user id: the name they set, else their
- * email. Any member may read the roster (ListMembers).
+ * Display names of `orgId`'s members, keyed as a chat's `userId` is
+ * (memberNamesBySubject). Any member may read the roster (ListMembers).
  */
 export function useOrgMemberNames(orgId: string | null): ReadonlyMap<string, string> {
   const members = useMembers(hasControlPlane && orgId ? orgId : "");
-  return useMemo(() => {
-    const names = new Map<string, string>();
-    for (const page of members.data?.pages ?? []) {
-      for (const m of page.members) names.set(m.userId, m.name || m.email);
-    }
-    return names;
-  }, [members.data]);
+  return useMemo(
+    () => memberNamesBySubject((members.data?.pages ?? []).flatMap((page) => page.members)),
+    [members.data],
+  );
 }
 
 /**
