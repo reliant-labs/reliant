@@ -1,7 +1,7 @@
 -- forge:backward-compatible — adds a new table the previous release never reads or writes.
 
 -- Migration: chat_person_turns
--- Created: 2026-11-13T12:39:25Z
+-- Created: 2026-11-13T13:46:09Z
 --
 -- When a person last sent a message into a chat that a stored trigger or an
 -- agent launched (org-provider-accounts.md §11.1, I2: attendance is per
