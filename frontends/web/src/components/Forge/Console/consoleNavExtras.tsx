@@ -46,6 +46,17 @@ export interface ConsoleNavExtras {
   intro?: (key: string) => ReactNode | null;
   /** Another page body for `page` (it may wrap the console's own, `children`), or null to keep it. */
   page?: (page: ConsolePage, children: ReactNode) => ReactNode | null;
+  /**
+   * Leave the Users card off the Overview's rail (the demo has a Product
+   * analytics page of its own), so the services list starts above the fold.
+   */
+  overviewWithoutUsers?: boolean;
+  /**
+   * A calmer Releases page: one "Live in" column instead of the commit and a
+   * column per environment, no symbol legend, and the deploy log left to each
+   * environment's page.
+   */
+  calmReleases?: boolean;
 }
 
 const ConsoleNavExtrasContext = createContext<ConsoleNavExtras>({});

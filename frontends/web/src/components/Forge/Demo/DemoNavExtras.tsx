@@ -2,7 +2,7 @@
 
 /**
  * The public demo's additions to the console (Console/consoleNavExtras), at
- * the "50" density (balanced/):
+ * the "62" density (balanced/):
  *
  *  - the nav grouped by what a reader is after (Issues, Performance,
  *    Sessions, Product analytics…) with the rarer tools under "More tools",
@@ -11,7 +11,9 @@
  *  - Errors, Traces and Sessions lead with a sentence and their most
  *    important item (balanced/BalancedPages.tsx), and the console's own list
  *    is one click away; one issue, trace or session is the console's page
- *    with "What happened" on top;
+ *    with a compact "What happened" block and its key facts on top, and its
+ *    less-used panels folded (detailDensity);
+ *  - the Overview's rail without the Users card (Product analytics has it);
  *  - charts draw at most two series, under a headline figure (chartDensity);
  *  - the environments in promotion order (dev, staging, prod), and on a phone
  *    the tour, Install Forge and the telemetry notice in the drawer.
@@ -27,6 +29,7 @@ import { Hammer } from "lucide-react";
 import { ConsoleNavExtrasProvider, type ConsoleNavExtras } from "../Console/consoleNavExtras";
 import type { ConsolePage } from "../Console/paths";
 import { ChartDensityProvider, type ChartDensity } from "../Observability/charts/chartDensity";
+import { DetailDensityProvider, type DetailDensity } from "../Observability/detailDensity";
 import { PageAgentStrip } from "./approachable/AgentCards";
 import { balancedCrumbs, balancedNav, SUBTITLES } from "./balanced/balancedNav";
 import {
@@ -47,8 +50,28 @@ export const HOW_BUILT_LABEL = "How it was built";
 export const HOW_BUILT_HREF = `${FORGE_DEMO_PATH}?section=${DEMO_SECTION_BUILT}`;
 export const DEMO_ENV_ORDER = ["dev", "staging", "prod"] as const;
 
-/** Two series and a headline per chart: the "50" chart. */
+/** Two series and a headline per chart. */
 const CHART_DENSITY: ChartDensity = { maxSeries: 2, headline: true };
+
+/**
+ * One issue, trace or session at "62": the compact "What happened" block
+ * leads (balanced/BalancedPages), so the panels a first look does not need
+ * fold behind their titles, and the triage controls share one row.
+ */
+const DETAIL_DENSITY: DetailDensity = {
+  folded: ["issue-discussion", "issue-events", "issue-release", "issue-versions", "issue-related", "issue-history", "trace-related", "session-details"],
+  inlineTriage: true,
+};
+
+/**
+ * The "62" spacing on the console's own chrome: a shorter gap above each
+ * page, and the compact page heading a step smaller. Scoped to this wrapper
+ * (display: contents), so it reaches nothing outside the demo.
+ */
+const DENSITY_62 = "contents md:[&_main]:pt-4 [&_[data-density=compact]_h1]:text-base";
+
+/** Search keys that open one item: its page leads with the "What happened" block, not the list's subtitle. */
+const DETAIL_KEYS = ["issue", "trace", "session"] as const;
 
 /** The search keys that make a list the console's own (a filter was chosen, or "All filters"). */
 const LIST_KEYS: Record<"errors" | "traces" | "sessions", readonly string[]> = {
@@ -114,14 +137,20 @@ export function DemoNavExtras({ builtActive = false, section, children }: { buil
       nav: (page, alertsFiring) => balancedNav(page, current, alertsFiring, env),
       crumbs: (page, own) => balancedCrumbs(page, own, current, env),
       // A section page (Home, How releases work…) is DemoConsole's own body: nothing added or replaced.
-      subtitle: (key) => (current ? null : (SUBTITLES[key] ?? null)),
+      subtitle: (key) => (current || DETAIL_KEYS.some((k) => search[k]) ? null : (SUBTITLES[key] ?? null)),
       intro: (key) => (current ? null : balancedIntro(key, search)),
       page: (page) => (current ? null : balancedPage(page, search)),
+      overviewWithoutUsers: true,
+      calmReleases: true,
     };
   }, [current, search, env]);
   return (
     <ConsoleNavExtrasProvider value={value}>
-      <ChartDensityProvider value={search.tour ? {} : CHART_DENSITY}>{children}</ChartDensityProvider>
+      <ChartDensityProvider value={search.tour ? {} : CHART_DENSITY}>
+        <DetailDensityProvider value={search.tour ? {} : DETAIL_DENSITY}>
+          <div className={search.tour ? "contents" : DENSITY_62}>{children}</div>
+        </DetailDensityProvider>
+      </ChartDensityProvider>
     </ConsoleNavExtrasProvider>
   );
 }

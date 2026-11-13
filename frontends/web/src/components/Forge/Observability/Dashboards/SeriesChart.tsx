@@ -258,8 +258,8 @@ function ChartHeadline({
           ? `below its average of ${formatValue(avg, unit)} for this window`
           : "about the same as its average for this window";
   return (
-    <div className="mb-3" data-testid="chart-headline">
-      <p className="text-2xl font-semibold tabular-nums text-ink">{formatValue(now, unit)}</p>
+    <div className="mb-2" data-testid="chart-headline">
+      <p className="text-xl font-semibold tabular-nums text-ink">{formatValue(now, unit)}</p>
       <p className="text-sm text-ink-muted">{`${subject}: ${compared}.`}</p>
     </div>
   );

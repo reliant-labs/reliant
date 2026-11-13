@@ -376,7 +376,7 @@ export function OverviewHome({
         {/* What changed, then who uses the app. */}
         <aside className="min-w-0 space-y-4" aria-label="Recent changes" data-testid="overview-rail">
           <RecentReleases project={project} envs={envs} hrefs={hrefs} />
-          {!unrecorded && <UsersCard scope={kpiScope} project={project} range={range} usersHref={hrefs.users} dashboardHref={hrefs.dashboard} />}
+          {!unrecorded && !extras.overviewWithoutUsers && <UsersCard scope={kpiScope} project={project} range={range} usersHref={hrefs.users} dashboardHref={hrefs.dashboard} />}
         </aside>
       </div>
 

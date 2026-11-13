@@ -43,6 +43,7 @@ import { chatLabel, latestChatLink, mergeTimelinePages } from "./issueTimelineMo
 import { IssueTriage } from "./IssueTriage";
 import { linkChatToIssue } from "./linkIssueChat";
 import { ClientSummary } from "../Client";
+import { Foldable, useDetailDensity } from "../detailDensity";
 
 export function IssueDetail({
   issueId,
@@ -165,6 +166,7 @@ function IssueBody({
   const linked = useMemo(() => latestChatLink(mergeTimelinePages(timeline.data?.pages ?? [])), [timeline.data]);
   const openChat = useOpenChat();
   const historyScope = useMemo(() => ({ orgId: scope.orgId, projectId: scope.projectId, envIds: issue.envId ? [issue.envId] : [] }), [scope.orgId, scope.projectId, issue.envId]);
+  const density = useDetailDensity();
   return (
     <div className="space-y-4" data-testid="obs-issue" data-state="ready" data-status={issue.status ?? ""}>
       {back}
@@ -197,16 +199,27 @@ function IssueBody({
         </p>
       </header>
 
-      <IssueTriage issue={issue} />
-      <IssueAssignee issue={issue} orgId={scope.orgId} />
+      {density.inlineTriage ? (
+        <div className="flex flex-wrap items-center gap-x-6 gap-y-2" data-testid="obs-issue-triage-row">
+          <IssueTriage issue={issue} />
+          <IssueAssignee issue={issue} orgId={scope.orgId} />
+        </div>
+      ) : (
+        <>
+          <IssueTriage issue={issue} />
+          <IssueAssignee issue={issue} orgId={scope.orgId} />
+        </>
+      )}
       {issue.relatedCount > 0 && <Incident issue={issue} detail={detail} openIssue={openIssue} />}
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
         <div className="min-w-0 space-y-4">
-          <Card padding="none" data-testid="obs-issue-discussion">
-            <Section title="Discussion" note="Status changes, comments, assignments and chats, oldest first." />
-            <IssueTimeline key={`${scope.orgId}:${issue.id}`} issueId={issue.id} orgId={scope.orgId} />
-          </Card>
+          <Foldable id="issue-discussion" title="Discussion" hint="Status changes, comments, assignments and chats">
+            <Card padding="none" data-testid="obs-issue-discussion">
+              <Section title="Discussion" note="Status changes, comments, assignments and chats, oldest first." />
+              <IssueTimeline key={`${scope.orgId}:${issue.id}`} issueId={issue.id} orgId={scope.orgId} />
+            </Card>
+          </Foldable>
           <Card padding="none" data-testid="obs-issue-latest">
             <Section title="Latest event" note={detail.latestEvent ? formatTimestamp(detail.latestEvent.timeMs, now) : undefined} />
             {detail.latestEvent ? (
@@ -222,10 +235,12 @@ function IssueBody({
             />
             <Frames frames={detail.frames} />
           </Card>
-          <Card padding="none" data-testid="obs-issue-events">
-            <Section title="Recent events" note="Newest first." />
-            <RecentEvents issueId={issue.id} onTrace={openTrace} onSession={openSession} />
-          </Card>
+          <Foldable id="issue-events" title="Recent events" hint="Every occurrence, newest first">
+            <Card padding="none" data-testid="obs-issue-events">
+              <Section title="Recent events" note="Newest first." />
+              <RecentEvents issueId={issue.id} onTrace={openTrace} onSession={openSession} />
+            </Card>
+          </Foldable>
         </div>
         <div className="min-w-0 space-y-4">
           <Card padding="none" data-testid="obs-issue-counts">
@@ -244,6 +259,7 @@ function IssueBody({
               <Trend points={issue.trend} label={`${formatCount(issue.events)} events, by hour`} />
             </div>
           </Card>
+          <Foldable id="issue-release" title="First release" hint={detail.firstRelease?.version ?? issue.firstVersion}>
           <Card padding="none" data-testid="obs-issue-release">
             <Section title="First release" />
             {detail.firstRelease ? (
@@ -264,10 +280,14 @@ function IssueBody({
               </p>
             )}
           </Card>
-          <Card padding="none" data-testid="obs-issue-versions">
-            <Section title="By version" note="Newest version first." />
-            <Versions detail={detail} />
-          </Card>
+          </Foldable>
+          <Foldable id="issue-versions" title="By version" hint="Events and affected, per build">
+            <Card padding="none" data-testid="obs-issue-versions">
+              <Section title="By version" note="Newest version first." />
+              <Versions detail={detail} />
+            </Card>
+          </Foldable>
+          <Foldable id="issue-related" title="Fires with" hint={detail.coOccurringIssueIds.length ? `${detail.coOccurringIssueIds.length} other issues` : "Nothing else"}>
           <Card padding="none" data-testid="obs-issue-related">
             <Section title="Fires with" note="Issues seen in the same traces or sessions." />
             {detail.coOccurringIssueIds.length === 0 ? (
@@ -289,10 +309,13 @@ function IssueBody({
               </ul>
             )}
           </Card>
-          <Card padding="none" data-testid="obs-issue-history">
-            <Section title="History" note="Who triaged it, and when it opened or regressed." />
-            <ActivityFeed scope={historyScope} target={{ kind: "issue", id: issue.id }} subject={subject} empty="No triage yet." testId="obs-issue-history-feed" />
-          </Card>
+          </Foldable>
+          <Foldable id="issue-history" title="History" hint="Who triaged it, and when">
+            <Card padding="none" data-testid="obs-issue-history">
+              <Section title="History" note="Who triaged it, and when it opened or regressed." />
+              <ActivityFeed scope={historyScope} target={{ kind: "issue", id: issue.id }} subject={subject} empty="No triage yet." testId="obs-issue-history-feed" />
+            </Card>
+          </Foldable>
         </div>
       </div>
     </div>

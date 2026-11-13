@@ -133,10 +133,10 @@ export function ReleasesList({ project, env, envs, envsLoading, search, onSearch
   // `forge env deploy` / `forge release cut` from the checkout, and there is no
   // console flow that cuts without deploying (the mockup's button only says so
   // in a toast). Deploying lives on each environment's page.
-  const { subtitle, intro } = useConsoleNavExtras();
+  const { subtitle, intro, calmReleases } = useConsoleNavExtras();
   const header = (
     <>
-      <PageHeader title="Releases" subtitle={subtitle?.("releases") ?? undefined} meta={<DeliveryFacts project={project} env={env} scopedEnv={scopedEnv} />} className="mb-0" />
+      <PageHeader density={calmReleases ? "compact" : undefined} title="Releases" subtitle={subtitle?.("releases") ?? undefined} meta={calmReleases ? undefined : <DeliveryFacts project={project} env={env} scopedEnv={scopedEnv} />} className="mb-0" />
       {intro?.("releases")}
     </>
   );
@@ -203,7 +203,7 @@ export function ReleasesList({ project, env, envs, envsLoading, search, onSearch
       : 0;
 
   return (
-    <div className="space-y-6" data-testid="releases" data-state={loading ? "loading" : "ready"}>
+    <div className={calmReleases ? "space-y-4" : "space-y-6"} data-testid="releases" data-state={loading ? "loading" : "ready"}>
       {header}
 
       {loading || !model ? <PipelineSkeleton /> : <Pipeline model={model} env={env} releaseHref={releaseHref} />}
@@ -230,7 +230,7 @@ export function ReleasesList({ project, env, envs, envsLoading, search, onSearch
             className="min-w-72"
             testId="releases-filter"
           />
-          {env !== ENV_ALL && (
+          {env !== ENV_ALL && !calmReleases && (
             <FilterChip
               on={!search.every}
               onClick={() => onSearch({ every: search.every ? undefined : true })}
@@ -240,20 +240,20 @@ export function ReleasesList({ project, env, envs, envsLoading, search, onSearch
               Ran in {env}
             </FilterChip>
           )}
-          <FilterMenu
+          {!calmReleases && <FilterMenu
             label="Author"
             value={search.author}
             options={authors.map((author) => ({ value: author, label: author, count: countWith({ author }) }))}
             onChange={(author) => onSearch({ author })}
             testId="releases-chip-author"
-          />
-          <FilterMenu
+          />}
+          {!calmReleases && <FilterMenu
             label="Status"
             value={search.status}
             options={(Object.keys(STATUS_FILTER_LABELS) as StatusFilter[]).map((status) => ({ value: status, label: STATUS_FILTER_LABELS[status], count: countWith({ status }) }))}
             onChange={(status) => onSearch({ status: status as StatusFilter | undefined })}
             testId="releases-chip-status"
-          />
+          />}
         </FilterBar>
 
         <ReleaseTable
@@ -262,6 +262,7 @@ export function ReleasesList({ project, env, envs, envsLoading, search, onSearch
           loading={loading}
           env={env}
           releaseHref={releaseHref}
+          calm={!!calmReleases}
           menuFor={(row) => (model ? rowMenu(row, model, env, bases, promote, setPromoting, releaseHref) : [])}
           empty={
             filtered ? (
@@ -289,7 +290,7 @@ export function ReleasesList({ project, env, envs, envsLoading, search, onSearch
           }
           footer={
             <>
-              <span aria-hidden="true">● live · ◐ live for some components (scoped) · ○ ran before · · never.</span>{" "}
+              {!calmReleases && <><span aria-hidden="true">● live · ◐ live for some components (scoped) · ○ ran before · · never.</span>{" "}</>}
               {!everyRelease && (
                 <>
                   Showing the releases that ran in {env}.
@@ -546,6 +547,7 @@ function ReleaseTable({
   menuFor,
   empty,
   footer,
+  calm = false,
 }: {
   model: ReleaseModel | null;
   rows: ReleaseRow[];
@@ -555,6 +557,8 @@ function ReleaseTable({
   menuFor: (row: ReleaseRow) => MenuItem[];
   empty: ReactNode;
   footer: ReactNode;
+  /** One "Live in" column instead of the commit and a column per environment. */
+  calm?: boolean;
 }) {
   const longEnvs = model?.longEnvs ?? [];
   const hasPreviews = (model?.previews.length ?? 0) > 0;
@@ -564,7 +568,7 @@ function ReleaseTable({
   // the column in dark and tints it in light, as the mockup's muted-55% does.
   // `bg-surface-muted` (= --background) would recess it into a black stripe.
   const sel = (on: boolean) => (on ? "bg-surface-sunken" : "");
-  const columns: DataTableColumn<ReleaseTableRow>[] = [
+  const all: DataTableColumn<ReleaseTableRow>[] = [
     {
       key: "release",
       header: "Release",
@@ -576,7 +580,7 @@ function ReleaseTable({
           </span>
           <span className="mt-1 flex items-center gap-2 text-xs font-normal text-ink-muted">
             <span title={version}>{shortVersion(version)}</span>
-            <ReleaseTags row={row} />
+            {!calm && <ReleaseTags row={row} />}
           </span>
         </>
       ),
@@ -632,6 +636,19 @@ function ReleaseTable({
       render: (_, { row, version }) => <RowMenu label={`Actions for ${version}`} items={menuFor(row)} testId={`release-menu-${version}`} />,
     },
   ];
+  const liveIn: DataTableColumn<ReleaseTableRow> = {
+    key: "live",
+    header: "Live in",
+    render: (_, { row }) => {
+      const live = longEnvs.filter((candidate) => row.cells[candidate.name]?.state === "live" || row.cells[candidate.name]?.state === "partial").map((candidate) => candidate.name);
+      const names = [...live, ...row.previewsLive];
+      return names.length ? <span className="whitespace-nowrap text-ink">{names.join(", ")}</span> : <span className="text-ink-muted">not live</span>;
+    },
+  };
+  // The calm table: what it is, its checks, where it runs now, who shipped it.
+  const columns = calm
+    ? [...all.filter((column) => column.key === "release" || column.key === "checks"), liveIn, ...all.filter((column) => column.key === "author" || column.key === "actions")]
+    : all;
   return (
     <Card padding="none" className="overflow-hidden">
       <div data-testid="releases-table">

@@ -163,8 +163,47 @@ export function AgentCardGrid({ placement, ids = AGENT_WORKFLOW_ORDER }: { place
   );
 }
 
-/** "Chat with an agent about this app": wide, with sample questions. */
-export function ChatWithAgentCard({ placement }: { placement: string }) {
+/**
+ * The workflows as a plain list, one row each: when it runs, what it does,
+ * and its own call to action (the same words as on the pages). The landing's
+ * editorial alternative to the card grid.
+ */
+export function AgentWorkflowList({ placement, ids = AGENT_WORKFLOW_ORDER }: { placement: string; ids?: AgentWorkflowId[] }) {
+  return (
+    <ul className="divide-y divide-border border-y border-border" data-testid="agent-workflow-list">
+      {ids.map((id) => (
+        <AgentWorkflowRow key={id} id={id} placement={placement} />
+      ))}
+    </ul>
+  );
+}
+
+function AgentWorkflowRow({ id, placement }: { id: AgentWorkflowId; placement: string }) {
+  const workflow = AGENT_WORKFLOWS[id];
+  const sheet = useSheet(id, placement);
+  return (
+    <li className="grid gap-x-6 gap-y-2 py-3 sm:grid-cols-[10rem_minmax(0,1fr)_auto] sm:items-center" data-testid={`agent-card-${id}`}>
+      <span className="text-xs font-medium text-ink-muted">{workflow.when}</span>
+      <span className="min-w-0">
+        <span className="block text-sm font-semibold text-ink">{capitalize(workflow.title)}</span>
+        <span className="block text-sm text-ink-muted">{workflow.outcome}</span>
+      </span>
+      <button
+        type="button"
+        onClick={sheet.show}
+        className="inline-flex min-h-9 items-center justify-center gap-1.5 justify-self-start rounded-lg border border-border bg-surface px-3 text-sm font-semibold text-ink hover:border-primary/50 hover:bg-ink/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:justify-self-end"
+        data-testid={`agent-card-open-${id}`}
+      >
+        {workflow.cta}
+        <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
+      </button>
+      <AgentWorkflowSheet workflow={workflow} open={sheet.open} onClose={sheet.close} />
+    </li>
+  );
+}
+
+/** "Chat with an agent about this app": wide, with sample questions. `bare` drops the icon tile. */
+export function ChatWithAgentCard({ placement, bare = false }: { placement: string; bare?: boolean }) {
   const workflow = AGENT_WORKFLOWS.chat;
   const sheet = useSheet("chat", placement);
   return (
@@ -175,7 +214,7 @@ export function ChatWithAgentCard({ placement }: { placement: string }) {
         className="group flex w-full flex-col gap-4 rounded-2xl border border-primary/40 bg-primary/5 p-5 text-left transition-colors hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:flex-row sm:items-center sm:p-6"
         data-testid="agent-card-chat"
       >
-        <WorkflowIcon id="chat" className="bg-primary/15" />
+        {!bare && <WorkflowIcon id="chat" className="bg-primary/15" />}
         <span className="min-w-0 flex-1 space-y-1">
           <span className="block text-lg font-semibold text-ink">{workflow.title}</span>
           <span className="block text-base leading-relaxed text-ink-muted">“{CHAT_PROMPTS[0]}” — ask it the way you'd ask a colleague.</span>
