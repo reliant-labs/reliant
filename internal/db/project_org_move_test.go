@@ -15,6 +15,7 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // Moving a project to another org (control-plane
@@ -524,4 +525,64 @@ func TestShareEventsActionCheckAdmitsMoved(t *testing.T) {
 	_, err := f.raw.Exec(`INSERT INTO share_events (id, org_id, resource_kind, resource_id, owner_user_id, actor_user_id, action)
 		VALUES ('se-bogus', 'o', 'chat', 'c', 'u', 'u', 'bogus')`)
 	require.Error(t, err)
+}
+
+// A system pause that commits while the move waits on the trigger's row lock
+// is kept: the move reads the trigger under its lock, so it sees the pause and
+// neither claims it (org_move) nor counts it, rather than overwriting it from
+// a snapshot read before the pause committed.
+func TestMoveProjectOrg_KeepsAPauseCommittedWhileItWaits(t *testing.T) {
+	f := newMoveFixture(t)
+	ctx := context.Background()
+	f.project("p-pause", strp(moveSrc))
+	f.chat("c-pause", "p-pause", strp(moveSrc))
+	f.trigger("t-pause", "p-pause", true, nil)
+	move := f.prepared("p-pause")
+
+	// A system pause (Repo.PauseTrigger's shape) holds the trigger's row
+	// lock, and commits only once the move is waiting behind it.
+	locked, release := make(chan struct{}), make(chan struct{})
+	pauseDone := make(chan error, 1)
+	go func() {
+		pauseDone <- f.repo.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
+			if err := store.LockTrigger(ctx, f.repo.ORM(), "t-pause"); err != nil {
+				return err
+			}
+			close(locked)
+			<-release
+			return store.PauseTrigger(ctx, f.repo.ORM(), "t-pause", core.TriggerPausedCreatorLeftOrg)
+		})
+	}()
+	select {
+	case <-locked:
+	case err := <-pauseDone:
+		t.Fatalf("the pause ended before it held the trigger: %v", err)
+	case <-time.After(10 * time.Second):
+		t.Fatal("the pause never locked the trigger")
+	}
+
+	moveDone := make(chan error, 1)
+	go func() {
+		_, err := f.repo.MoveProjectOrg(ctx, core.ProjectOrgMoveCommit{MoveID: move.ID})
+		moveDone <- err
+	}()
+	require.Eventually(t, func() bool {
+		var waiting int
+		err := f.repo.ORM().Bun().NewRaw(`SELECT count(*) FROM pg_locks l JOIN pg_stat_activity a ON a.pid = l.pid
+			WHERE l.locktype IN ('transactionid', 'tuple') AND NOT l.granted AND a.datname = current_database()`).Scan(ctx, &waiting)
+		return err == nil && waiting > 0
+	}, 10*time.Second, 5*time.Millisecond, "the move never waited on the trigger's row lock")
+
+	close(release)
+	require.NoError(t, <-pauseDone)
+	require.NoError(t, <-moveDone)
+
+	tr, err := f.repo.GetTrigger(ctx, "t-pause")
+	require.NoError(t, err)
+	assert.Equal(t, strp(moveDst), tr.OrgID)
+	assert.False(t, tr.Enabled)
+	assert.Equal(t, core.TriggerPausedCreatorLeftOrg, tr.PausedReason, "the system's pause is kept, not claimed by the move")
+	got, err := f.repo.GetProjectOrgMove(ctx, move.ID)
+	require.NoError(t, err)
+	assert.Zero(t, got.Counts.TriggersPaused, "the move paused nothing: the trigger was already paused when it read it")
 }

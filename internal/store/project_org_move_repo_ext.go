@@ -286,7 +286,15 @@ WHERE id = ?0`
 //     restamped; shares cleared with a share_events row each; enabled
 //     triggers paused (TriggerPausedOrgMove); org-connection bindings
 //     cleared; one trigger_changes row per trigger; the move row to moved,
-//     with its counts.
+//     with its counts. The triggers are locked FOR NO KEY UPDATE, in id
+//     order, before they are read (moveProjectOrgTriggers), so a pause
+//     committed meanwhile is decided on, not overwritten.
+//
+// Background processes are the one blocker no lock here serializes: a daemon
+// records them, with no chat or project row lock. The check is a guard, not
+// a fence, for them, and nothing depends on it: a process carries no org, so
+// one that starts after the check keeps running in the moved project and
+// decides nothing under the old org.
 //
 // FOR NO KEY UPDATE, not FOR UPDATE: it excludes every writer of the rows and
 // every admission, but not the FOR KEY SHARE of a foreign-key check, so a
@@ -423,11 +431,17 @@ func MoveProjectOrg(ctx context.Context, db orm.Context, c core.ProjectOrgMoveCo
 // stays. Each change is recorded in trigger_changes, as every trigger write
 // is.
 func moveProjectOrgTriggers(ctx context.Context, db orm.Context, move *core.ProjectOrgMove, counts *core.ProjectOrgMoveCounts) error {
-	rows, err := ListTrigger(ctx, db,
-		orm.WhereEq(TriggerFieldProjectID, move.ProjectID),
-		orm.WithOrderBy(TriggerFieldID, orm.Asc))
-	if err != nil {
-		return fmt.Errorf("read the project's triggers: %w", err)
+	// Locked before they are read, in id order: every other writer of a
+	// trigger's state (PauseTrigger, SetTriggerEnabled, a definition write)
+	// locks its row first too, so a pause that commits while the move runs is
+	// read here and kept, never overwritten from a stale snapshot.
+	var rows []*Trigger
+	if err := db.Bun().NewSelect().Model(&rows).
+		Where("project_id = ?", move.ProjectID).
+		Order("id").
+		For("NO KEY UPDATE").
+		Scan(ctx); err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return fmt.Errorf("lock the project's triggers: %w", err)
 	}
 	before, err := triggersToCore(rows)
 	if err != nil {
