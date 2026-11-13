@@ -14,6 +14,7 @@ import (
 	v1 "github.com/reliant-labs/reliant/sdk/go/gen/reliant/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
+	structpb "google.golang.org/protobuf/types/known/structpb"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
@@ -60,8 +61,15 @@ type TriggerRebinding struct {
 	// because the old secret was sealed under the departed owner's key and is
 	// not carried; the sender must be given the new one too.
 	WebhookHmacSecret *string `protobuf:"bytes,9,opt,name=webhook_hmac_secret,json=webhookHmacSecret,proto3,oneof" json:"webhook_hmac_secret,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	// Workflow input values for the runs, as in TriggerDefinition.params. The
+	// departed owner's values are never carried (they may hold their tokens or
+	// addresses; OrphanedTrigger.param_names says which were set), so the
+	// adopter supplies each one they want. They are validated as the
+	// adopter's, exactly as on create: a required input left out refuses the
+	// adoption, naming it.
+	Params        map[string]*structpb.Value `protobuf:"bytes,10,rep,name=params,proto3" json:"params,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *TriggerRebinding) Reset() {
@@ -155,6 +163,13 @@ func (x *TriggerRebinding) GetWebhookHmacSecret() string {
 		return *x.WebhookHmacSecret
 	}
 	return ""
+}
+
+func (x *TriggerRebinding) GetParams() map[string]*structpb.Value {
+	if x != nil {
+		return x.Params
+	}
+	return nil
 }
 
 // OrphanedTrigger is a trigger whose creator left its organization, as an
@@ -1007,7 +1022,7 @@ var File_reliant_v1_automation_takeover_proto protoreflect.FileDescriptor
 const file_reliant_v1_automation_takeover_proto_rawDesc = "" +
 	"\n" +
 	"$reliant/v1/automation_takeover.proto\x12\n" +
-	"reliant.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\x1a\x18reliant/v1/trigger.proto\"\x83\x04\n" +
+	"reliant.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x18reliant/v1/trigger.proto\"\x98\x05\n" +
 	"\x10TriggerRebinding\x12\x1d\n" +
 	"\n" +
 	"project_id\x18\x01 \x01(\tR\tprojectId\x12$\n" +
@@ -1020,10 +1035,15 @@ const file_reliant_v1_automation_takeover_proto_rawDesc = "" +
 	"\rconnection_id\x18\x06 \x01(\tH\x01R\fconnectionId\x88\x01\x01\x12C\n" +
 	"\apresets\x18\a \x03(\v2).reliant.v1.TriggerRebinding.PresetsEntryR\apresets\x12\x1f\n" +
 	"\bworkflow\x18\b \x01(\tH\x02R\bworkflow\x88\x01\x01\x123\n" +
-	"\x13webhook_hmac_secret\x18\t \x01(\tH\x03R\x11webhookHmacSecret\x88\x01\x01\x1a:\n" +
+	"\x13webhook_hmac_secret\x18\t \x01(\tH\x03R\x11webhookHmacSecret\x88\x01\x01\x12@\n" +
+	"\x06params\x18\n" +
+	" \x03(\v2(.reliant.v1.TriggerRebinding.ParamsEntryR\x06params\x1a:\n" +
 	"\fPresetsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01B\x0e\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\x1aQ\n" +
+	"\vParamsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12,\n" +
+	"\x05value\x18\x02 \x01(\v2\x16.google.protobuf.ValueR\x05value:\x028\x01B\x0e\n" +
 	"\f_worktree_idB\x10\n" +
 	"\x0e_connection_idB\v\n" +
 	"\t_workflowB\x16\n" +
@@ -1125,7 +1145,7 @@ func file_reliant_v1_automation_takeover_proto_rawDescGZIP() []byte {
 	return file_reliant_v1_automation_takeover_proto_rawDescData
 }
 
-var file_reliant_v1_automation_takeover_proto_msgTypes = make([]protoimpl.MessageInfo, 15)
+var file_reliant_v1_automation_takeover_proto_msgTypes = make([]protoimpl.MessageInfo, 16)
 var file_reliant_v1_automation_takeover_proto_goTypes = []any{
 	(*TriggerRebinding)(nil),                // 0: reliant.v1.TriggerRebinding
 	(*OrphanedTrigger)(nil),                 // 1: reliant.v1.OrphanedTrigger
@@ -1142,40 +1162,44 @@ var file_reliant_v1_automation_takeover_proto_goTypes = []any{
 	(*RevokeTriggerOfferRequest)(nil),       // 12: reliant.v1.RevokeTriggerOfferRequest
 	(*RevokeTriggerOfferResponse)(nil),      // 13: reliant.v1.RevokeTriggerOfferResponse
 	nil,                                     // 14: reliant.v1.TriggerRebinding.PresetsEntry
-	(*v1.Trigger)(nil),                      // 15: reliant.v1.Trigger
-	(*v1.WebhookCredential)(nil),            // 16: reliant.v1.WebhookCredential
+	nil,                                     // 15: reliant.v1.TriggerRebinding.ParamsEntry
+	(*v1.Trigger)(nil),                      // 16: reliant.v1.Trigger
+	(*v1.WebhookCredential)(nil),            // 17: reliant.v1.WebhookCredential
+	(*structpb.Value)(nil),                  // 18: google.protobuf.Value
 }
 var file_reliant_v1_automation_takeover_proto_depIdxs = []int32{
 	14, // 0: reliant.v1.TriggerRebinding.presets:type_name -> reliant.v1.TriggerRebinding.PresetsEntry
-	15, // 1: reliant.v1.OrphanedTrigger.trigger:type_name -> reliant.v1.Trigger
-	3,  // 2: reliant.v1.OrphanedTrigger.pending_offer:type_name -> reliant.v1.TriggerOffer
-	15, // 3: reliant.v1.TriggerOffer.trigger:type_name -> reliant.v1.Trigger
-	1,  // 4: reliant.v1.ListOrphanedAutomationsResponse.triggers:type_name -> reliant.v1.OrphanedTrigger
-	2,  // 5: reliant.v1.ListOrphanedAutomationsResponse.workflows:type_name -> reliant.v1.OrphanedWorkflow
-	0,  // 6: reliant.v1.AdoptTriggerRequest.rebinding:type_name -> reliant.v1.TriggerRebinding
-	15, // 7: reliant.v1.AdoptTriggerResponse.trigger:type_name -> reliant.v1.Trigger
-	16, // 8: reliant.v1.AdoptTriggerResponse.webhook:type_name -> reliant.v1.WebhookCredential
-	3,  // 9: reliant.v1.AdoptTriggerResponse.offer:type_name -> reliant.v1.TriggerOffer
-	0,  // 10: reliant.v1.AcceptTriggerOfferRequest.rebinding:type_name -> reliant.v1.TriggerRebinding
-	15, // 11: reliant.v1.AcceptTriggerOfferResponse.trigger:type_name -> reliant.v1.Trigger
-	16, // 12: reliant.v1.AcceptTriggerOfferResponse.webhook:type_name -> reliant.v1.WebhookCredential
-	3,  // 13: reliant.v1.ListTriggerOffersResponse.offers:type_name -> reliant.v1.TriggerOffer
-	3,  // 14: reliant.v1.RevokeTriggerOfferResponse.offer:type_name -> reliant.v1.TriggerOffer
-	4,  // 15: reliant.v1.AutomationTakeoverService.ListOrphanedAutomations:input_type -> reliant.v1.ListOrphanedAutomationsRequest
-	6,  // 16: reliant.v1.AutomationTakeoverService.AdoptTrigger:input_type -> reliant.v1.AdoptTriggerRequest
-	8,  // 17: reliant.v1.AutomationTakeoverService.AcceptTriggerOffer:input_type -> reliant.v1.AcceptTriggerOfferRequest
-	10, // 18: reliant.v1.AutomationTakeoverService.ListTriggerOffers:input_type -> reliant.v1.ListTriggerOffersRequest
-	12, // 19: reliant.v1.AutomationTakeoverService.RevokeTriggerOffer:input_type -> reliant.v1.RevokeTriggerOfferRequest
-	5,  // 20: reliant.v1.AutomationTakeoverService.ListOrphanedAutomations:output_type -> reliant.v1.ListOrphanedAutomationsResponse
-	7,  // 21: reliant.v1.AutomationTakeoverService.AdoptTrigger:output_type -> reliant.v1.AdoptTriggerResponse
-	9,  // 22: reliant.v1.AutomationTakeoverService.AcceptTriggerOffer:output_type -> reliant.v1.AcceptTriggerOfferResponse
-	11, // 23: reliant.v1.AutomationTakeoverService.ListTriggerOffers:output_type -> reliant.v1.ListTriggerOffersResponse
-	13, // 24: reliant.v1.AutomationTakeoverService.RevokeTriggerOffer:output_type -> reliant.v1.RevokeTriggerOfferResponse
-	20, // [20:25] is the sub-list for method output_type
-	15, // [15:20] is the sub-list for method input_type
-	15, // [15:15] is the sub-list for extension type_name
-	15, // [15:15] is the sub-list for extension extendee
-	0,  // [0:15] is the sub-list for field type_name
+	15, // 1: reliant.v1.TriggerRebinding.params:type_name -> reliant.v1.TriggerRebinding.ParamsEntry
+	16, // 2: reliant.v1.OrphanedTrigger.trigger:type_name -> reliant.v1.Trigger
+	3,  // 3: reliant.v1.OrphanedTrigger.pending_offer:type_name -> reliant.v1.TriggerOffer
+	16, // 4: reliant.v1.TriggerOffer.trigger:type_name -> reliant.v1.Trigger
+	1,  // 5: reliant.v1.ListOrphanedAutomationsResponse.triggers:type_name -> reliant.v1.OrphanedTrigger
+	2,  // 6: reliant.v1.ListOrphanedAutomationsResponse.workflows:type_name -> reliant.v1.OrphanedWorkflow
+	0,  // 7: reliant.v1.AdoptTriggerRequest.rebinding:type_name -> reliant.v1.TriggerRebinding
+	16, // 8: reliant.v1.AdoptTriggerResponse.trigger:type_name -> reliant.v1.Trigger
+	17, // 9: reliant.v1.AdoptTriggerResponse.webhook:type_name -> reliant.v1.WebhookCredential
+	3,  // 10: reliant.v1.AdoptTriggerResponse.offer:type_name -> reliant.v1.TriggerOffer
+	0,  // 11: reliant.v1.AcceptTriggerOfferRequest.rebinding:type_name -> reliant.v1.TriggerRebinding
+	16, // 12: reliant.v1.AcceptTriggerOfferResponse.trigger:type_name -> reliant.v1.Trigger
+	17, // 13: reliant.v1.AcceptTriggerOfferResponse.webhook:type_name -> reliant.v1.WebhookCredential
+	3,  // 14: reliant.v1.ListTriggerOffersResponse.offers:type_name -> reliant.v1.TriggerOffer
+	3,  // 15: reliant.v1.RevokeTriggerOfferResponse.offer:type_name -> reliant.v1.TriggerOffer
+	18, // 16: reliant.v1.TriggerRebinding.ParamsEntry.value:type_name -> google.protobuf.Value
+	4,  // 17: reliant.v1.AutomationTakeoverService.ListOrphanedAutomations:input_type -> reliant.v1.ListOrphanedAutomationsRequest
+	6,  // 18: reliant.v1.AutomationTakeoverService.AdoptTrigger:input_type -> reliant.v1.AdoptTriggerRequest
+	8,  // 19: reliant.v1.AutomationTakeoverService.AcceptTriggerOffer:input_type -> reliant.v1.AcceptTriggerOfferRequest
+	10, // 20: reliant.v1.AutomationTakeoverService.ListTriggerOffers:input_type -> reliant.v1.ListTriggerOffersRequest
+	12, // 21: reliant.v1.AutomationTakeoverService.RevokeTriggerOffer:input_type -> reliant.v1.RevokeTriggerOfferRequest
+	5,  // 22: reliant.v1.AutomationTakeoverService.ListOrphanedAutomations:output_type -> reliant.v1.ListOrphanedAutomationsResponse
+	7,  // 23: reliant.v1.AutomationTakeoverService.AdoptTrigger:output_type -> reliant.v1.AdoptTriggerResponse
+	9,  // 24: reliant.v1.AutomationTakeoverService.AcceptTriggerOffer:output_type -> reliant.v1.AcceptTriggerOfferResponse
+	11, // 25: reliant.v1.AutomationTakeoverService.ListTriggerOffers:output_type -> reliant.v1.ListTriggerOffersResponse
+	13, // 26: reliant.v1.AutomationTakeoverService.RevokeTriggerOffer:output_type -> reliant.v1.RevokeTriggerOfferResponse
+	22, // [22:27] is the sub-list for method output_type
+	17, // [17:22] is the sub-list for method input_type
+	17, // [17:17] is the sub-list for extension type_name
+	17, // [17:17] is the sub-list for extension extendee
+	0,  // [0:17] is the sub-list for field type_name
 }
 
 func init() { file_reliant_v1_automation_takeover_proto_init() }
@@ -1194,7 +1218,7 @@ func file_reliant_v1_automation_takeover_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_reliant_v1_automation_takeover_proto_rawDesc), len(file_reliant_v1_automation_takeover_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   15,
+			NumMessages:   16,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

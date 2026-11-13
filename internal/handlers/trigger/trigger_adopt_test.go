@@ -22,6 +22,9 @@ import (
 	"github.com/reliant-labs/reliant/internal/triggers"
 )
 
+// adoptClock stamps the fixtures: no assertion reads the time.
+var adoptClock = time.Date(2026, 11, 12, 9, 0, 0, 0, time.UTC)
+
 // adoptMembers is membership where everyone belongs to acme and globex except
 // the users in left.
 type adoptMembers struct{ left map[string]bool }
@@ -70,7 +73,7 @@ func setupAdoption(t *testing.T) *adoptEnv {
 func (e *adoptEnv) project(t *testing.T, userID string, org *string) string {
 	t.Helper()
 	id := uuid.NewString()
-	now := time.Now().UTC()
+	now := adoptClock
 	require.NoError(t, e.repo.CreateProject(context.Background(), &db.Project{
 		ID: id, UserID: userID, OrgID: org, Name: "p-" + id[:6], Path: t.TempDir(), IsGitRepo: true,
 		CreatedAt: now, UpdatedAt: now, LastActive: now,
@@ -228,7 +231,7 @@ func TestAdoptAs_EveryCredentialBearingReferenceIsClearedOrReResolved(t *testing
 			make: func(t *testing.T, e *adoptEnv) (*core.Trigger, string) {
 				_, err := e.repo.CreatePreset(context.Background(), &db.Preset{
 					ID: uuid.NewString(), UserID: e.userID, Name: "Creators Review", Slug: "creators-review", Tag: "agent",
-					Params: map[string]any{}, CreatedAt: time.Now(), UpdatedAt: time.Now(),
+					Params: map[string]any{}, CreatedAt: adoptClock, UpdatedAt: adoptClock,
 				})
 				require.NoError(t, err)
 				row, _ := e.made(t, e.definition(func(d *reliantv1.TriggerDefinition) {
@@ -247,6 +250,31 @@ func TestAdoptAs_EveryCredentialBearingReferenceIsClearedOrReResolved(t *testing
 			},
 			check: func(t *testing.T, _ *adoptEnv, _, adopted *core.Trigger, _ *reliantv1.AcceptTriggerOfferResponse, _ string) {
 				assert.Equal(t, map[string]string{"": "general"}, adopted.Presets)
+			},
+		},
+		{
+			row: "params: the departed owner's values are cleared; the adopter supplies their own",
+			make: func(t *testing.T, e *adoptEnv) (*core.Trigger, string) {
+				row, _ := e.made(t, e.definition(func(d *reliantv1.TriggerDefinition) {
+					d.Params = map[string]*structpb.Value{"api_token": structpb.NewStringValue("creators-token-hunter2"), "channel": structpb.NewStringValue("#ops")}
+				}))
+				return row, ""
+			},
+			rebind: func(_ *testing.T, _ *adoptEnv, rb *reliantv1.TriggerRebinding) {
+				rb.Params = map[string]*structpb.Value{"channel": structpb.NewStringValue("#bob")}
+			},
+			check: func(t *testing.T, e *adoptEnv, old, adopted *core.Trigger, resp *reliantv1.AcceptTriggerOfferResponse, _ string) {
+				assert.Equal(t, "creators-token-hunter2", old.Params["api_token"])
+				// The row is what every run of it launches with: the fire path
+				// re-reads it and applies its params as the run's inputs.
+				assert.Equal(t, map[string]any{"channel": "#bob"}, adopted.Params, "only the adopter's values")
+				assert.NotContains(t, resp.GetTrigger().String(), "hunter2", "the response carries none of the old owner's values")
+				got, err := e.svc.GetTrigger(e.bobCtx, connect.NewRequest(&reliantv1.GetTriggerRequest{Id: adopted.ID}))
+				require.NoError(t, err)
+				assert.NotContains(t, got.Msg.GetTrigger().String(), "hunter2", "nor does the adopter's own read of it")
+				var stored string
+				require.NoError(t, e.repo.ORM().Bun().NewRaw(`SELECT params::text FROM triggers WHERE id = ?`, adopted.ID).Scan(context.Background(), &stored))
+				assert.NotContains(t, stored, "hunter2", "the value is gone from the row itself")
 			},
 		},
 		{

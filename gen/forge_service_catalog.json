@@ -2732,6 +2732,13 @@
               "name": "webhook_hmac_secret",
               "kind": "string",
               "optional": true
+            },
+            {
+              "name": "params",
+              "kind": "map",
+              "map_key_kind": "string",
+              "map_value_kind": "message",
+              "map_value_type_name": "google.protobuf.Value"
             }
           ],
           "reliant.v1.TriggerSender": [

@@ -36,6 +36,7 @@ import (
 //	webhook token            rotated: the old hash is cleared, a new token issued
 //	webhook HMAC secret      cleared; the new owner supplies one (sealed as theirs)
 //	presets                  re-resolved as the new owner's; one that is not refuses
+//	params                   cleared; the new owner supplies their own values
 //	provider account, scopes not stored on the trigger: runs mint for the owner
 //
 // The trigger is left disabled. SetTriggerEnabled, run by its new owner, is
@@ -154,8 +155,9 @@ func (s *Service) reissueWebhookCredentials(ctx context.Context, before, adopted
 
 // adoptionDefinition is t's definition with rb in place of every reference
 // that was its old owner's. What carries over is configuration with no
-// credential in it: name, source, filter, workflow, params, prompt,
-// notification and acting identity.
+// credential in it: name, source, filter, workflow, prompt, notification and
+// acting identity. Param values are the adopter's (rb.params), never the old
+// owner's: a value is whatever its owner typed, an API token included.
 func adoptionDefinition(t *core.Trigger, rb *reliantv1.TriggerRebinding) (*reliantv1.TriggerDefinition, error) {
 	pt, err := triggers.ToProto(t, nil, nil, nil)
 	if err != nil {
@@ -163,13 +165,15 @@ func adoptionDefinition(t *core.Trigger, rb *reliantv1.TriggerRebinding) (*relia
 	}
 	disabled := false
 	def := &reliantv1.TriggerDefinition{
-		Name:              t.Name,
-		ProjectId:         rb.GetProjectId(),
-		WorktreeId:        rb.WorktreeId,
-		Enabled:           &disabled,
-		Workflow:          t.Workflow,
-		Presets:           map[string]string{},
-		Params:            pt.GetParams(),
+		Name:       t.Name,
+		ProjectId:  rb.GetProjectId(),
+		WorktreeId: rb.WorktreeId,
+		Enabled:    &disabled,
+		Workflow:   t.Workflow,
+		Presets:    map[string]string{},
+		// Never the departed owner's values: they may be their tokens. The
+		// adopter's own, validated as theirs by triggerFromDefinition.
+		Params:            rb.GetParams(),
 		Message:           t.Message,
 		DaemonId:          rb.GetDaemonId(),
 		NoMachine:         rb.GetNoMachine(),

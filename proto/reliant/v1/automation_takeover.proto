@@ -5,6 +5,7 @@ package reliant.v1;
 
 import "buf/validate/validate.proto";
 import "forge/v1/forge.proto";
+import "google/protobuf/struct.proto";
 import "reliant/v1/trigger.proto";
 
 option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
@@ -136,6 +137,14 @@ message TriggerRebinding {
   // because the old secret was sealed under the departed owner's key and is
   // not carried; the sender must be given the new one too.
   optional string webhook_hmac_secret = 9;
+
+  // Workflow input values for the runs, as in TriggerDefinition.params. The
+  // departed owner's values are never carried (they may hold their tokens or
+  // addresses; OrphanedTrigger.param_names says which were set), so the
+  // adopter supplies each one they want. They are validated as the
+  // adopter's, exactly as on create: a required input left out refuses the
+  // adoption, naming it.
+  map<string, google.protobuf.Value> params = 10;
 }
 
 // OrphanedTrigger is a trigger whose creator left its organization, as an

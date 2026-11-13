@@ -90,12 +90,26 @@ func (r *Repo) AdoptTrigger(ctx context.Context, t *core.Trigger, previousOwner,
 }
 
 // CreateTriggerOffer stores a pending offer, superseding any offer of the
-// same trigger still pending.
+// same trigger still pending. The trigger's row lock serializes offers of one
+// trigger (and an offer against an adoption, which takes the same lock), so
+// two concurrent offers both complete and exactly one stays pending: the
+// later one, which supersedes the first. A trigger re-owned since the offer
+// was decided on is core.ErrTriggerOwnerChanged.
 func (r *Repo) CreateTriggerOffer(ctx context.Context, o *core.TriggerOffer) error {
 	if o == nil || o.ID == "" || o.TriggerID == "" {
 		return fmt.Errorf("trigger offer: id and trigger are required")
 	}
 	return r.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
+		if err := store.LockTrigger(ctx, r.ORM(), o.TriggerID); err != nil {
+			return err
+		}
+		current, err := store.GetTrigger(ctx, r.ORM(), o.TriggerID)
+		if err != nil {
+			return err
+		}
+		if current.UserID != o.PreviousOwnerUserID {
+			return core.ErrTriggerOwnerChanged
+		}
 		return store.InsertTriggerOffer(ctx, r.ORM(), o)
 	})
 }
