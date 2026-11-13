@@ -74,6 +74,12 @@ type ControlPlane interface {
 	RecordProjectOrgMove(ctx context.Context, s controlplane.ProjectOrgMoveStep, projectName string, counts map[string]int64) error
 }
 
+// Members counts an org's live members, asked of control-plane now as a member
+// (*orgs.Resolver is one). known is false when it gives no count.
+type Members interface {
+	LiveMembersFresh(ctx context.Context, userID, orgID string) (n int, known bool, err error)
+}
+
 // Triggers turns a trigger the move paused back on, as its owner, when it
 // checks out in its new org, and converges its schedule. The trigger handler
 // (*trigger.Service) is one.
