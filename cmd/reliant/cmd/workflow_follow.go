@@ -10,6 +10,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/execfollow"
 	"github.com/reliant-labs/reliant/sdk/go/reliant"
 )
@@ -109,8 +110,9 @@ func runWorkflowFollow(cmd *cobra.Command, executionID string, flags *followFlag
 			Tail:       flags.tail,
 			StopOnGate: flags.exitOnGate,
 		},
-		out:   cmd.OutOrStdout(),
-		hooks: hooks,
+		out:     cmd.OutOrStdout(),
+		hooks:   hooks,
+		funding: reliantv1connect.NewProviderAccountServiceClient(conn.httpClient(), conn.ServerURL),
 	})
 	if err != nil {
 		return err
@@ -131,6 +133,10 @@ type followSettings struct {
 	// Hooks always receive the NDJSON form.
 	render func(execfollow.Event) string
 	hooks  []execfollow.Hook
+	// funding reads the chat's question before it spends the person's own
+	// AI account (workflow_funding.go); nil reads none. The follow prints one
+	// line to stderr each time the run starts waiting on it.
+	funding fundingQuestionReader
 }
 
 // followExecution follows the chat/execution id through the SDK and relays its
@@ -144,6 +150,8 @@ func followExecution(cmd *cobra.Command, client *reliant.Client, executionID str
 		return reliant.FollowResult{}, err
 	}
 	defer f.Close()
+	stopFunding := startFundingWatch(cmd.Context(), set.funding, executionID, cmd.ErrOrStderr())
+	defer stopFunding()
 
 	runner := &execfollow.HookRunner{Stderr: cmd.ErrOrStderr()}
 	for ev := range f.Events() {
