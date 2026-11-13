@@ -775,9 +775,10 @@ func TestPersonalFunding_ProvenanceWriteFailsClosed(t *testing.T) {
 // (or answer) goes on without a question.
 func TestPersonalFunding_NamedProviderIsNotConsent(t *testing.T) {
 	for name, mutate := range map[string]func(*llmCallSpec){
-		"a model@driver selector":  func(s *llmCallSpec) { s.Selector.ID = "gpt-5.6-sol@codex" },
-		"the run's providers":      func(s *llmCallSpec) { s.RunProviders = []string{"codex"} },
-		"the selector's providers": func(s *llmCallSpec) { s.Selector.Providers = []string{"codex"} },
+		"a model@driver selector":    func(s *llmCallSpec) { s.Selector.ID = "gpt-5.6-sol@codex" },
+		"the run's providers":        func(s *llmCallSpec) { s.RunProviders = []string{"codex"} },
+		"the selector's providers":   func(s *llmCallSpec) { s.Selector.Providers = []string{"codex"} },
+		"the chat's provider switch": func(s *llmCallSpec) { s.ChatProvider = "codex" },
 		"a spawned agent's pick": func(s *llmCallSpec) {
 			s.Selector.ID, s.Descendant, s.TurnStart = "gpt-5.6-sol@codex", true, false
 		},
