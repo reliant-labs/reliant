@@ -120,3 +120,73 @@ func TestAdoptAs_RestampsUnattendedFunding(t *testing.T) {
 	assert.Equal(t, core.UnattendedFundingOrgOnly, stampOf(t, e, old.ID))
 	assert.Equal(t, reliantv1.UnattendedFunding_UNATTENDED_FUNDING_ORG_ONLY, resp.GetTrigger().GetUnattendedFunding())
 }
+
+// Enabling a workflow again with only a different stamp is a change, not
+// ALREADY_ENABLED or a bare resume: a tightening is written, and a loosening
+// in a team org is refused and reported, never silently ignored. Both for an
+// activation that is on and for one that is paused.
+func TestEnableWorkflow_AFundingOnlyChangeIsNotANoOp(t *testing.T) {
+	t.Parallel()
+	for name, paused := range map[string]bool{"an enabled activation": false, "a paused activation": true} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			env := setupTriggerTest(t).withOrgs(t)
+			members := &countedOrgs{members: 1, known: true}
+			env.configure(t, func(d *Deps) { d.Orgs = members })
+			acme := "acme"
+			project := env.orgProject(t, &acme)
+			env.saveWorkflow(t, "nightly", scheduledWorkflowYAML)
+
+			enable := func(f reliantv1.UnattendedFunding) *reliantv1.WorkflowTriggerResult {
+				t.Helper()
+				resp, err := env.svc.EnableWorkflow(env.ctx, connect.NewRequest(&reliantv1.EnableWorkflowRequest{
+					Workflow: "nightly", ProjectId: project, DaemonId: env.daemonID, Message: "Run the nightly job.",
+					UnattendedFunding: f,
+				}))
+				require.NoError(t, err)
+				require.Len(t, resp.Msg.GetResults(), 1)
+				return resp.Msg.GetResults()[0]
+			}
+			row := func(id string) *core.Trigger {
+				t.Helper()
+				r, err := env.repo.GetTrigger(context.Background(), id)
+				require.NoError(t, err)
+				return r
+			}
+			pause := func(id string) {
+				t.Helper()
+				if !paused {
+					return
+				}
+				_, err := env.svc.SetTriggerEnabled(env.ctx, connect.NewRequest(&reliantv1.SetTriggerEnabledRequest{Id: id, Enabled: false}))
+				require.NoError(t, err)
+			}
+
+			first := enable(reliantv1.UnattendedFunding_UNATTENDED_FUNDING_UNSPECIFIED)
+			id := first.GetActivation().GetId()
+			require.NotEmpty(t, id, "%v", first)
+			require.Equal(t, core.UnattendedFundingAny, row(id).UnattendedFunding, "made in a solo org")
+
+			pause(id)
+			tightened := enable(reliantv1.UnattendedFunding_UNATTENDED_FUNDING_ORG_ONLY)
+			assert.NotEqual(t, reliantv1.WorkflowTriggerOutcome_WORKFLOW_TRIGGER_OUTCOME_ALREADY_ENABLED, tightened.GetOutcome())
+			assert.NotEqual(t, reliantv1.WorkflowTriggerOutcome_WORKFLOW_TRIGGER_OUTCOME_FAILED, tightened.GetOutcome(), tightened.GetMessage())
+			assert.Equal(t, core.UnattendedFundingOrgOnly, row(id).UnattendedFunding, "the tightening is written")
+			assert.True(t, row(id).Enabled)
+
+			members.members = 2
+			pause(id)
+			loosened := enable(reliantv1.UnattendedFunding_UNATTENDED_FUNDING_ANY)
+			assert.Equal(t, reliantv1.WorkflowTriggerOutcome_WORKFLOW_TRIGGER_OUTCOME_FAILED, loosened.GetOutcome(), "a refused loosening is reported")
+			assert.Contains(t, loosened.GetMessage(), "own AI accounts")
+			assert.Equal(t, core.UnattendedFundingOrgOnly, row(id).UnattendedFunding, "and writes nothing")
+			assert.Equal(t, !paused, row(id).Enabled, "nothing else changes either")
+
+			again := enable(reliantv1.UnattendedFunding_UNATTENDED_FUNDING_UNSPECIFIED)
+			if !paused {
+				assert.Equal(t, reliantv1.WorkflowTriggerOutcome_WORKFLOW_TRIGGER_OUTCOME_ALREADY_ENABLED, again.GetOutcome(), "naming no stamp keeps it")
+			}
+			assert.Equal(t, core.UnattendedFundingOrgOnly, row(id).UnattendedFunding)
+		})
+	}
+}

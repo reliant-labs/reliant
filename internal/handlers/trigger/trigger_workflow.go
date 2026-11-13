@@ -254,6 +254,12 @@ func (s *Service) existingActivationStep(
 		return nil, err
 	}
 	row.Enabled = true
+	// The stamp the request asks for, decided as UpdateTrigger decides it
+	// (UNSPECIFIED keeps the stored one), so a funding-only change is a
+	// change, and a loosening it refuses refuses the enable here, in phase 1.
+	if row.UnattendedFunding, err = s.unattendedFundingFor(ctx, existing.UserID, existing.OrgID, def.UnattendedFunding, existing); err != nil {
+		return nil, err
+	}
 	if err := s.refreshTriggerAccess(ctx, row); err != nil {
 		return nil, err
 	}
@@ -284,6 +290,8 @@ func sameActivationSettings(a, b *core.Trigger) bool {
 		a.MachinePoolID == b.MachinePoolID &&
 		a.NotifyOnComplete == b.NotifyOnComplete &&
 		a.ActingIdentity.OrOwner() == b.ActingIdentity.OrOwner() &&
+		// Unstamped reads as any (§11.3), so only org_only differs.
+		a.UnattendedFunding.OrgOnly() == b.UnattendedFunding.OrgOnly() &&
 		ptrValue(effectiveConnectionID(a)) == ptrValue(effectiveConnectionID(b)) &&
 		sameJSON(a.Presets, b.Presets) &&
 		sameJSON(a.Params, b.Params)
