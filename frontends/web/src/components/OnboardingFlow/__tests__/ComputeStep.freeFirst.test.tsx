@@ -2,10 +2,8 @@
  * The free first run leads. 7 of 9 new users picked cloud, hit the payment
  * wall and left (onboarding-stalls-2026-11-12), so wherever the desktop app or
  * CLI can run, "Your own computer" is preselected and first, and the hosted
- * machines follow with their price read from the plan catalog. On a phone the
- * free option still leads and is the default, but pairing cannot be finished
- * there, so it shows laptop instructions and the copy-link / email handoff
- * instead of a download, and keeps waiting for the laptop to connect.
+ * machines follow with their price read from the plan catalog. On a phone,
+ * where it cannot run, cloud stays and says it is paid.
  */
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -14,10 +12,13 @@ import type { ReactNode } from "react";
 
 import type { LaunchPlan } from "../types";
 
-const NO_DAEMON = { daemons: [], activeDaemon: undefined, loading: false, refresh: vi.fn() };
-const mockDaemons = vi.fn((): Record<string, unknown> => NO_DAEMON);
 vi.mock("@/hooks/useDaemonStatus", () => ({
-  useDaemonStatus: () => mockDaemons(),
+  useDaemonStatus: () => ({
+    daemons: [],
+    activeDaemon: undefined,
+    loading: false,
+    refresh: vi.fn(),
+  }),
 }));
 const mockEligible = vi.fn(() => false);
 vi.mock("@/hooks/useOnboardingQueries", () => ({
@@ -91,7 +92,6 @@ beforeEach(() => {
   vi.clearAllMocks();
   mockIsPhone.mockReturnValue(false);
   mockEligible.mockReturnValue(false);
-  mockDaemons.mockReturnValue(NO_DAEMON);
 });
 
 describe("ComputeStep — your own computer leads on a computer", () => {
@@ -162,44 +162,18 @@ describe("ComputeStep — your own computer leads on a computer", () => {
 describe("ComputeStep — on a phone", () => {
   beforeEach(() => mockIsPhone.mockReturnValue(true));
 
-  it("shows your own computer first and preselected, with cloud second and marked paid", () => {
+  it("leads with cloud, offers no free row, and says cloud is paid", () => {
     renderStep();
 
-    const own = ownComputer();
-    expect(own).toHaveAttribute("aria-pressed", "true");
-    expect(own).toHaveTextContent("Free");
-    expect(screen.getByRole("group").firstElementChild).toBe(own);
-
-    const toggle = screen.getByTestId("compute-cloud-toggle");
-    expect(toggle).toHaveTextContent(/from \$20\/mo/);
-    expect(toggle).toHaveTextContent(/paid/i);
-    expect(own.compareDocumentPosition(toggle)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
-  });
-
-  it("gives laptop instructions instead of a pairing panel, download link or install button", () => {
-    renderStep();
-
+    expect(screen.queryByRole("button", { name: /Your own computer/ })).toBeNull();
     expect(screen.queryByTestId("self-hosted-connect")).toBeNull();
-    const steps = screen.getByTestId("compute-step-phone-local");
-    expect(steps).toHaveTextContent(/On your laptop, open .+ and sign in\./);
-    expect(steps).toHaveTextContent(/Install the Reliant desktop app \(or run the CLI command shown there\)\./);
-    expect(steps).toHaveTextContent(/Your computer connects to this account\. Come back here, or keep going on the laptop\./);
-    expect(steps).toHaveTextContent(window.location.origin);
-    expect(steps.querySelectorAll("li")).toHaveLength(3);
-    expect(screen.queryByRole("link", { name: /download/i })).toBeNull();
-    expect(screen.queryByRole("button", { name: /download|install/i })).toBeNull();
+    expect(screen.getByText("M")).toBeVisible();
+    const note = screen.getByTestId("compute-step-phone-handoff");
+    expect(note).toHaveTextContent(/free, but it needs the Reliant desktop app or CLI/i);
+    expect(note).toHaveTextContent(/cloud machines work here and are paid/i);
   });
 
-  it("does not dead-end: waits for the computer and keeps the handoff visible", () => {
-    renderStep();
-
-    expect(screen.getByRole("button", { name: /Waiting for your computer to connect/ })).toBeDisabled();
-    expect(screen.getByText(/looking for your computer/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Continue on your computer: copy link/ })).toBeVisible();
-    expect(screen.getByRole("link", { name: /Email it to myself/ })).toBeVisible();
-  });
-
-  it("copies the link as the action, and the email link carries it", async () => {
+  it("offers Continue on your computer: copy the link, and an email to yourself", async () => {
     const writeText = vi.fn(async () => {});
     Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
     renderStep();
@@ -223,39 +197,12 @@ describe("ComputeStep — on a phone", () => {
     expect(await screen.findByText(/couldn.t copy/i)).toBeInTheDocument();
   });
 
-  it("advances by itself once the laptop's machine connects to the account", async () => {
-    const onNext = vi.fn();
-    mockDaemons.mockReturnValue({
-      daemons: [{ status: 1 } as never],
-      activeDaemon: { status: 1 } as never,
-      loading: false,
-      refresh: vi.fn(),
-    });
-    const updatePlan = vi.fn(async () => {});
-    const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
-    render(
-      <QueryClientProvider client={client}>
-        <ComputeStep plan={{}} updatePlan={updatePlan} onNext={onNext} onBack={vi.fn()} />
-      </QueryClientProvider>,
-    );
+  it("does not call cloud paid when a code already covers the machine", () => {
+    mockEligible.mockReturnValue(true);
+    renderStep();
 
-    await waitFor(() => expect(onNext).toHaveBeenCalled());
-    expect(updatePlan).toHaveBeenCalledWith(expect.objectContaining({ compute: "local_daemon" }));
-  });
-
-  it("switches to cloud when a hosted row is picked, and the instructions go away", () => {
-    const updatePlan = renderStep();
-    fireEvent.click(screen.getByTestId("compute-cloud-toggle"));
-    fireEvent.click(screen.getByText("M"));
-
-    expect(updatePlan).toHaveBeenCalledWith({ computePlanId: "plan_compute_m" });
-    expect(screen.queryByTestId("compute-step-phone-local")).toBeNull();
-    expect(ownComputer()).toHaveAttribute("aria-pressed", "false");
-  });
-
-  it("keeps a hosted choice already in the plan (Back from checkout)", () => {
-    renderStep({ compute: "cloud_paid", computePlanId: "plan_compute_m" });
-    expect(ownComputer()).toHaveAttribute("aria-pressed", "false");
-    expect(screen.queryByTestId("compute-step-phone-local")).toBeNull();
+    const note = screen.getByTestId("compute-step-phone-handoff");
+    expect(note).not.toHaveTextContent(/are paid/i);
+    expect(note).toHaveTextContent(/cloud machines work here/i);
   });
 });

@@ -101,18 +101,19 @@ export function ComputeStep({
   updatePlan,
   onNext,
 }: StepProps & { hideHeader?: boolean }) {
-  // A phone cannot run the desktop app or the CLI, so it cannot finish pairing
-  // a machine, but the free answer still leads and is still the default: the
-  // user sets it up from a laptop (see PhoneLocalSteps) and this step advances
-  // on its own once that computer connects. Read once at mount so a resize
-  // cannot swap the list under the user.
+  // A phone cannot run the desktop app or the CLI, so the free answer is not on
+  // offer there; the desktop app and a browser on a computer can both install
+  // it. Read once at mount so a resize cannot swap the list under the user.
+  // Without hosted machines in this build there is nothing else to lead with,
+  // so the free answer stays even on a phone.
   const [onPhone] = useState(() => HAS_CLOUD_DAEMONS && isPhoneViewport());
-  // The free answer is the preselected one, unless the user already chose a
-  // hosted machine (Back from checkout lands here with that recorded, and a
-  // size picked before a reload is in the plan too; neither must be flipped).
+  // The free answer is the preselected one wherever it can run, unless the
+  // user already chose a hosted machine (Back from checkout lands here with
+  // that recorded, and a size picked before a reload is in the plan too; neither
+  // must be flipped).
   const [showLocal, setShowLocal] = useState(
     plan.compute === "local_daemon" ||
-      (!isCloudCompute(plan.compute) && !plan.computePlanId),
+      (!onPhone && !isCloudCompute(plan.compute) && !plan.computePlanId),
   );
   // While the free option is chosen the hosted rows fold into one disclosure so
   // the connect instructions sit right under the list. This is only the user's
@@ -574,6 +575,7 @@ export function ComputeStep({
               column as PlanTileRow (keep the two in step). It is still NOT a
               plan: it writes no `computePlanId`, and picking it opens the
               connect instructions at the bottom of the step. */}
+          {!onPhone && (
           <button
             type="button"
             onClick={handleLocal}
@@ -599,6 +601,7 @@ export function ComputeStep({
               Free
             </span>
           </button>
+          )}
 
           {/* The hosted machines — the REST of the same list, with no header
               of their own (a header would re-divide the list into "yours" and
@@ -655,6 +658,10 @@ export function ComputeStep({
             cloudRows
           )}
         </div>
+
+        {onPhone && (
+          <PhoneHandoff machineCovered={machineCovered} />
+        )}
 
         {/* The fine print under the list — at most two short muted lines,
             not the four stacked paragraphs it used to be. Only what changes a
@@ -796,11 +803,7 @@ export function ComputeStep({
           failures surface at the commit point, where the retry lives. */}
       {showLocal && !activeDaemon && (
         <>
-          {onPhone ? (
-            <PhoneLocalSteps />
-          ) : (
-            <PairMachinePanel mode="bootstrap" onConnected={handleLocalContinue} />
-          )}
+          <PairMachinePanel mode="bootstrap" onConnected={handleLocalContinue} />
           <ConnectWait
             label="Looking for your computer"
             onRetry={() => refreshDaemons?.()}
@@ -849,15 +852,14 @@ export function ComputeStep({
   );
 }
 
-// What "your own computer" means on a phone: the phone cannot install or pair
-// anything, so this says how to do it from a laptop and offers the handoff as
-// the action. It deliberately has no download link or install button. The step
-// keeps waiting underneath (ConnectWait and the footer) and advances by itself
-// when the laptop connects to this account, so choosing this never dead-ends.
-function PhoneLocalSteps() {
+// A phone cannot run the free answer, so say so plainly, say that the hosted
+// answer is paid, and offer the way to carry on at a computer. The link is the
+// current /onboarding URL: the plan lives in its search params, so the computer
+// picks up where the phone stopped. There is no server-side handoff to call, so
+// this is a copy button and a mailto, nothing more.
+function PhoneHandoff({ machineCovered }: { machineCovered: boolean }) {
   const [copied, setCopied] = useState<"idle" | "copied" | "failed">("idle");
   const link = typeof window === "undefined" ? "" : window.location.href;
-  const appUrl = typeof window === "undefined" ? "" : window.location.origin;
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(link);
@@ -869,23 +871,18 @@ function PhoneLocalSteps() {
   const mailto = `mailto:?subject=${encodeURIComponent("Continue setting up Reliant")}&body=${encodeURIComponent(link)}`;
   return (
     <div
-      className="space-y-3 rounded-lg border border-border bg-muted/30 px-4 py-3"
-      data-testid="compute-step-phone-local"
+      className="space-y-2 rounded-lg border border-border bg-muted/30 px-4 py-3"
+      data-testid="compute-step-phone-handoff"
     >
       <p className="flex items-start gap-2 text-sm font-medium text-foreground">
         <Smartphone className="mt-0.5 h-4 w-4 flex-shrink-0" aria-hidden />
-        Set up your own computer from a laptop
+        Free setup needs a computer
       </p>
-      <ol className="list-decimal space-y-1.5 pl-5 text-xs leading-relaxed text-muted-foreground">
-        <li>
-          On your laptop, open{" "}
-          <span className="break-all font-medium text-foreground">{appUrl}</span> and sign in.
-        </li>
-        <li>Install the Reliant desktop app (or run the CLI command shown there).</li>
-        <li>
-          Your computer connects to this account. Come back here, or keep going on the laptop.
-        </li>
-      </ol>
+      <p className="text-xs leading-relaxed text-muted-foreground">
+        {machineCovered
+          ? "Your own computer is free (it needs the Reliant desktop app or CLI, which can\u2019t run on a phone). Reliant Cloud machines work here."
+          : "Your own computer is free, but it needs the Reliant desktop app or CLI, which can\u2019t run on a phone. Reliant Cloud machines work here and are paid."}
+      </p>
       <div className="flex flex-wrap items-center gap-3 text-xs">
         <button
           type="button"
