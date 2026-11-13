@@ -35,6 +35,7 @@ import { cn } from "@/lib/utils";
 
 import { formatPerDay, formatSpan } from "../Observability/deliveryScope";
 import { ENV_ALL } from "../Console/envScope";
+import { useConsoleNavExtras } from "../Console/consoleNavExtras";
 import { DeployWithAgentButton } from "../Observability/AskReliant/AskReliant";
 import {
   Ago,
@@ -132,7 +133,13 @@ export function ReleasesList({ project, env, envs, envsLoading, search, onSearch
   // `forge env deploy` / `forge release cut` from the checkout, and there is no
   // console flow that cuts without deploying (the mockup's button only says so
   // in a toast). Deploying lives on each environment's page.
-  const header = <PageHeader title="Releases" meta={<DeliveryFacts project={project} env={env} scopedEnv={scopedEnv} />} className="mb-0" />;
+  const { subtitle, intro } = useConsoleNavExtras();
+  const header = (
+    <>
+      <PageHeader title="Releases" subtitle={subtitle?.("releases") ?? undefined} meta={<DeliveryFacts project={project} env={env} scopedEnv={scopedEnv} />} className="mb-0" />
+      {intro?.("releases")}
+    </>
+  );
 
   if (data.releases.error) {
     return (

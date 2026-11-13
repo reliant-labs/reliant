@@ -64,6 +64,7 @@ import { cn } from "@/lib/utils";
 
 import { DeployStatusUnread, type DeployStatusUnreadState } from "../Console/DeployStatusUnread";
 import { ENV_ALL } from "../Console/envScope";
+import { useConsoleNavExtras } from "../Console/consoleNavExtras";
 import { consolePath, withSearch } from "../Console/paths";
 import { AskReliantMenu, DeployWithAgentButton } from "../Observability/AskReliant/AskReliant";
 import type { AskSubject } from "../Observability/AskReliant/askReliantPrompt";
@@ -266,6 +267,8 @@ export function OverviewHome({
   const empty = !envsLoading && envs.length === 0;
   // An empty list from a failed read says nothing about what is deployed.
   const unread = empty && !!envsUnread;
+  const extras = useConsoleNavExtras();
+  const overviewSubtitle = extras.subtitle?.("overview");
   const rangeControl = (
     <VariableSelect
       id="overview-range"
@@ -277,9 +280,11 @@ export function OverviewHome({
   );
   // One compact row: the title, its counts inline, the window on the right.
   const header = (
+    <>
     <PageHeader
       density="compact"
       title="Overview"
+      subtitle={overviewSubtitle ?? undefined}
       meta={
         unread ? undefined : empty ? (
           <span data-testid="overview-counts">Not deployed</span>
@@ -298,6 +303,8 @@ export function OverviewHome({
       controls={empty ? undefined : rangeControl}
       className="mb-0"
     />
+    {extras.intro?.("overview")}
+    </>
   );
 
   if (empty) {

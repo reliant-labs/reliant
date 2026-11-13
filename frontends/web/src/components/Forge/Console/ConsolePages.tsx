@@ -37,6 +37,7 @@ import { DeployStatusUnread, deployStatusUnread } from "./DeployStatusUnread";
 import { DashboardsPage } from "../Observability/Dashboards/DashboardsPages";
 import { MetricsExplorerPage } from "../Observability/Metrics/MetricsExplorerPage";
 import { ObservabilityHost } from "./ObservabilityHost";
+import { useConsoleNavExtras } from "./consoleNavExtras";
 import { OBS_NAV_LABELS } from "./paths";
 
 // ── Shared pieces ───────────────────────────────────────────────────────────
@@ -48,8 +49,8 @@ import { OBS_NAV_LABELS } from "./paths";
  * one place that says it, and a second line saying "All environments" under
  * every title was empty space above every page.
  */
-function Header({ title, meta, actions }: { title: string; meta?: ReactNode; actions?: PageHeaderAction[] }) {
-  return <PageHeader density="compact" title={title} meta={meta} actions={actions} className="mb-0" />;
+function Header({ title, subtitle, meta, actions }: { title: string; subtitle?: ReactNode; meta?: ReactNode; actions?: PageHeaderAction[] }) {
+  return <PageHeader density="compact" title={title} subtitle={subtitle} meta={meta} actions={actions} className="mb-0" />;
 }
 
 function Page({ testId, children }: { testId: string; children: ReactNode }) {
@@ -149,6 +150,7 @@ function NothingDeployed({ what, about }: { what: string; about: string }) {
  */
 export function ObservabilityViewPage() {
   const { page } = useForgeConsole();
+  const { title: titleOverride, subtitle, intro } = useConsoleNavExtras();
   if (page.kind !== "obs-view") return null;
   if (page.view === "dashboards") return <DashboardsPage />;
   if (page.view === "metrics") {
@@ -161,7 +163,8 @@ export function ObservabilityViewPage() {
   }
   return (
     <Page testId={`console-${page.view}`}>
-      <Header title={OBS_NAV_LABELS[page.view]} />
+      <Header title={titleOverride?.(page) ?? OBS_NAV_LABELS[page.view]} subtitle={subtitle?.(page.view) ?? undefined} />
+      {intro?.(page.view)}
       <ObservabilityHost key={page.view} view={page.view} />
     </Page>
   );

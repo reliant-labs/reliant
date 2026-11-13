@@ -275,10 +275,12 @@ export function ConsoleShell({
   children,
   ...nav
 }: ConsoleShellProps) {
-  const { lead, drawerAppendix, envOrder } = useConsoleNavExtras();
+  const { lead, drawerAppendix, navAppendix, envOrder, hideScope, nav: navOverride, crumbs: crumbsOverride, page: pageOverride } = useConsoleNavExtras();
   const rank = (name: string) => (envOrder?.includes(name) ? envOrder.indexOf(name) : (envOrder?.length ?? 0));
   const long = envOrder ? [...scope.long].sort((a, b) => rank(a.name) - rank(b.name)) : scope.long;
-  const built = buildConsoleNav(nav);
+  // A host's own rows (the demo's simple view) replace the console's; null keeps them.
+  const built = navOverride?.(nav.page, nav.alertsFiring ?? 0) ?? buildConsoleNav(nav);
+  const replacement = pageOverride?.(nav.page, children) ?? null;
   // A host's lead row (the demo's "How it was built") is the current page when active, not the console page under it.
   const items = lead
     ? [
@@ -287,7 +289,8 @@ export function ConsoleShell({
       ]
     : built.items;
   const footer = built.footer;
-  const crumbs = lead?.active ? [{ label: lead.label }] : consoleCrumbs(nav.project, nav.page, nav.env, nav.dashboardTitle, nav.linkTo);
+  const ownCrumbs = consoleCrumbs(nav.project, nav.page, nav.env, nav.dashboardTitle, nav.linkTo);
+  const crumbs = lead?.active ? [{ label: lead.label }] : (crumbsOverride?.(nav.page, ownCrumbs) ?? ownCrumbs);
 
   return (
     /*
@@ -310,7 +313,14 @@ export function ConsoleShell({
         collapsed={collapsed}
         onToggle={onToggleCollapsed}
         contentLayout={contentLayout}
-        navAppendix={drawerAppendix ? <div className="md:hidden">{drawerAppendix}</div> : undefined}
+        navAppendix={
+          drawerAppendix || navAppendix ? (
+            <>
+              {navAppendix}
+              {drawerAppendix && <div className="md:hidden">{drawerAppendix}</div>}
+            </>
+          ) : undefined
+        }
         headerContent={
           <>
             <nav aria-label="Breadcrumb" className="flex min-w-0 flex-1 items-center gap-1.5 text-sm text-ink-muted">
@@ -338,18 +348,18 @@ export function ConsoleShell({
               ))}
             </nav>
             {orgSwitcher}
-            <EnvScopeControl
+            {!hideScope && <EnvScopeControl
               value={nav.env}
               long={long}
               previews={scope.previews}
               onChange={onEnvChange}
               pinnedEnv={pinnedEnvOf(nav.page)}
               platformWide={platformWide}
-            />
+            />}
           </>
         }
       >
-        {children}
+        {replacement ?? children}
       </SidebarLayout>
     </div>
   );

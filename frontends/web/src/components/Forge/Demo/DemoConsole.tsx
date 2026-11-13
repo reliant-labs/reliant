@@ -57,8 +57,10 @@ import { StorageBrowser } from "../Storage/StorageBrowser";
 import type { StorageSearch } from "../Storage/storageUrl-model";
 import { DemoBanner } from "./DemoBanner";
 import { DemoNavExtras } from "./DemoNavExtras";
-import { DemoWelcome } from "./DemoWelcome";
-import { DEMO_SECTION_BUILT, FORGE_DEMO_PATH } from "./demoPath";
+import { DEMO_SECTION_AGENTS, DEMO_SECTION_BUILT, DEMO_SECTION_HOME, DEMO_SECTION_RELEASES, FORGE_DEMO_PATH, type DemoSection } from "./demoPath";
+import { AgentsPage } from "./approachable/AgentsPage";
+import { DemoHome } from "./approachable/DemoHome";
+import { ReleasesExplained } from "./approachable/ReleasesExplained";
 import { HowBuiltLink } from "./howBuilt/HowBuiltLink";
 
 // The recorded forge run and its fixtures: a chunk of their own, loaded when the section opens.
@@ -101,8 +103,8 @@ function pageOf(view: ObsView): ConsolePage {
 }
 
 /** The public demo's nav additions (DemoNavExtras); the other shells keep the console's own nav. */
-function MaybeDemoNav({ builtActive, children }: { builtActive: boolean; children: ReactNode }) {
-  return isDemoShell() ? <DemoNavExtras builtActive={builtActive}>{children}</DemoNavExtras> : <>{children}</>;
+function MaybeDemoNav({ section, children }: { section: DemoSection | undefined; children: ReactNode }) {
+  return isDemoShell() ? <DemoNavExtras section={section}>{children}</DemoNavExtras> : <>{children}</>;
 }
 
 export interface DemoConsoleProps {
@@ -160,7 +162,7 @@ export function DemoConsole({ shell: shellProp }: DemoConsoleProps = {}) {
           <DemoBrowserProviders>
           <ObservabilityApiProvider api={api}>
             <ObservabilityBillingApiContext.Provider value={legacyBillingApi}>
-              <MaybeDemoNav builtActive={search.section === DEMO_SECTION_BUILT}>
+              <MaybeDemoNav section={search.section as DemoSection | undefined}>
               <ConsoleShell
                 project={FIXTURE_PROJECT}
                 page={search.browser ? { kind: search.browser } : pageOf(view)}
@@ -183,9 +185,15 @@ export function DemoConsole({ shell: shellProp }: DemoConsoleProps = {}) {
                 {/* The public demo says "sample, read-only" once, in its action row (DemoScreenActions). */}
                 {!isDemoShell() && <DemoBanner shell={shell} />}
                 <div className="space-y-4" data-testid="forge-demo">
-                  {search.section === DEMO_SECTION_BUILT ? (
+                  {isDemoShell() && search.section === DEMO_SECTION_HOME ? (
+                    <DemoHome />
+                  ) : isDemoShell() && search.section === DEMO_SECTION_RELEASES ? (
+                    <ReleasesExplained />
+                  ) : isDemoShell() && search.section === DEMO_SECTION_AGENTS ? (
+                    <AgentsPage />
+                  ) : search.section === DEMO_SECTION_BUILT ? (
                     <>
-                      {isDemoShell() ? <DemoWelcome /> : <PageHeader density="compact" title="How this app was built" className="mb-0" />}
+                      <PageHeader density="compact" title={isDemoShell() ? "How this shop was built" : "How this app was built"} className="mb-0" />
                       <Suspense fallback={<p className="text-sm text-ink-muted">Loading the recorded run…</p>}>
                         <HowThisAppWasBuilt onBack={isDemoShell() ? undefined : leaveBuilt} autoPlay={false} leadWithRecording={isDemoShell()} />
                       </Suspense>

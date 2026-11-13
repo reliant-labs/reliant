@@ -55,8 +55,9 @@ export function PageEntryTour() {
 }
 
 function VisitTour({ tipKey, section }: { tipKey: DemoTipKey; section: boolean }) {
-  // A section's first visit this session: open by itself. A reload, coming back, or a sub-page does not.
-  const [open, setOpen] = useState(() => section && !demoSession.hasSeenTip(tipKey));
+  // Every page names itself in a plain subtitle (balanced/balancedNav.tsx), so no card opens by
+  // itself, even on a section's first visit; "?" still explains the page.
+  const [open, setOpen] = useState(false);
   // Opened from "?": the reader asked, so the page may scroll to the tip's anchor.
   const [requested, setRequested] = useState(false);
   const restoreFocus = useRef(false);
