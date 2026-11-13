@@ -70,9 +70,13 @@ func ListOrgProviderAccountGrants(ctx context.Context, db orm.Context, orgID str
 	return out, nil
 }
 
-// ReplaceProviderAccountGrants makes userIDs exactly the members granted accountID (of orgID): a
-// member already granted keeps their row, and its granted_at, untouched; one not listed loses it;
-// a new one is granted by grantedBy at now.
+// ReplaceProviderAccountGrants makes userIDs exactly the members granted accountID (of orgID),
+// each granted by grantedBy at now; a member not listed loses their grant. A listed member's
+// existing row is RENEWED (granted_at = now), not kept: a grant counts only from the membership
+// it was made in (granted_at >= member_since), and the row may be a stale one from before the
+// member left and rejoined. The caller has just checked every listed user is a live member, so
+// now is within their current membership; renewing a continuing member's grant changes nothing
+// about whether it counts.
 func ReplaceProviderAccountGrants(ctx context.Context, db orm.Context, orgID, accountID string, userIDs []string, grantedBy string, now time.Time) error {
 	del := db.Bun().NewDelete().Model((*ProviderAccountGrant)(nil)).Where("account_id = ?", accountID)
 	if len(userIDs) > 0 {
@@ -88,7 +92,9 @@ func ReplaceProviderAccountGrants(ctx context.Context, db orm.Context, orgID, ac
 	for _, u := range userIDs {
 		rows = append(rows, ProviderAccountGrant{AccountID: accountID, OrgID: orgID, UserID: u, GrantedByUserID: grantedBy, GrantedAt: now.UTC()})
 	}
-	_, err := db.Bun().NewInsert().Model(&rows).On("CONFLICT (account_id, user_id) DO NOTHING").Exec(ctx)
+	_, err := db.Bun().NewInsert().Model(&rows).On("CONFLICT (account_id, user_id) DO UPDATE").
+		Set("org_id = EXCLUDED.org_id").Set("granted_by_user_id = EXCLUDED.granted_by_user_id").
+		Set("granted_at = EXCLUDED.granted_at").Exec(ctx)
 	return err
 }
 

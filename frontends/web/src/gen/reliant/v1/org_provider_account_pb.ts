@@ -857,7 +857,8 @@ export const OrgProviderAccountService: GenService<{
   /**
    * SetOrgProviderAccountGrants sets the members an org account is granted to
    * (who may use it while its access is SELECTED). user_ids replaces the
-   * whole set: a member already granted keeps their grant, one left out
+   * whole set: each listed member is granted as of this call (which renews a
+   * grant left from before they left and rejoined the org), one left out
    * loses it. Every user must be a live member of the org.
    *
    * @generated from rpc reliant.v1.OrgProviderAccountService.SetOrgProviderAccountGrants

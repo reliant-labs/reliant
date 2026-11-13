@@ -56,7 +56,8 @@ func (r *Repo) ListOrgAccountGrants(ctx context.Context, orgID string) ([]core.O
 	return store.ListOrgProviderAccountGrants(ctx, r.ORM(), orgID)
 }
 
-// SetOrgAccountGrants makes userIDs exactly the members granted one of orgID's accounts.
+// SetOrgAccountGrants makes userIDs exactly the members granted one of orgID's accounts, each
+// granted (or re-granted) now: a re-grant renews a grant left from an earlier membership.
 func (r *Repo) SetOrgAccountGrants(ctx context.Context, orgID, accountID string, userIDs []string, grantedBy string) error {
 	return r.accounts.SetOrgAccountGrants(ctx, orgID, accountID, userIDs, grantedBy)
 }

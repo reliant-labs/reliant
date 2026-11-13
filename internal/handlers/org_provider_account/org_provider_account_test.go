@@ -30,7 +30,7 @@ import (
 
 const (
 	org      = "org-1"
-	orgKey   = "sk-ant-org-plaintext-key-a1b2"
+	orgKey   = "sk-ant-org-plaintext-key-qzwx" // its hint, "qzwx", is not hex: no generated id contains it
 	newKey   = "sk-ant-org-rotated-key-c3d4"
 	adminID  = "ada"
 	memberID = "mia"
@@ -371,8 +371,14 @@ func TestPlaintextNeverInAnyResponse(t *testing.T) {
 		listed++
 	}
 	require.Positive(t, listed)
-	for _, a := range memberList.(*pb.ListOrgProviderAccountsResponse).Accounts {
+	// And on the fields that could carry it: never the masked key, and never a label
+	// (core.ProviderAccount.DisplayLabel's fallback is "<Provider> key …<hint>").
+	members := memberList.(*pb.ListOrgProviderAccountsResponse).Accounts
+	require.NotEmpty(t, members)
+	for _, a := range members {
 		assert.Nil(t, a.Account.MaskedKey)
+		assert.NotContains(t, a.Account.Label, "…")
+		assert.NotContains(t, a.Account.Label, hint)
 		assert.Empty(t, a.Grants)
 		assert.Nil(t, a.CreatedByUserId)
 		assert.Empty(t, a.Account.Windows)

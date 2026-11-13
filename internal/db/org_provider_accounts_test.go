@@ -66,7 +66,7 @@ func TestRotateOrgAPIKeyKeepsTheAccountAndItsAssignments(t *testing.T) {
 	ok, err := repo.SetThreadAssignment(ctx, core.Assignment{ThreadID: "th-rot", Provider: "anthropic", AccountID: acct.ID, Reason: "initial"}, "")
 	require.NoError(t, err)
 	require.True(t, ok)
-	until := time.Now().Add(time.Hour)
+	until := time.Date(2100, 1, 1, 0, 0, 0, 0, time.UTC) // a bench to carry over, not a clock
 	require.NoError(t, repo.BenchAccount(ctx, owner, acct.ID, until, "minute", false))
 
 	got, err := repo.RotateOrgAPIKey(ctx, "org-1", acct.ID, orgKey("org-1", "sk-ant-new-key-0003"))
@@ -108,13 +108,16 @@ func TestRotateOrgAPIKeyKeepsTheAccountAndItsAssignments(t *testing.T) {
 	assert.ErrorIs(t, err, core.ErrProviderAccountNotFound)
 }
 
-// Grants replace as a set: a member kept keeps their grant (and its time, which is what binds it
-// to their membership), one left out loses it; a delete takes every grant with the account.
+// Grants replace as a set: every listed member is granted as of the call, one left out loses
+// theirs; a delete takes every grant with the account.
 func TestOrgAccountGrantsReplaceAsASetAndCascade(t *testing.T) {
 	t.Parallel()
 	repo, raw, cleanup := SetupTestDBWithRawDB(t)
 	defer cleanup()
 	ctx := context.Background()
+	t0 := time.Date(2026, 11, 1, 9, 0, 0, 0, time.UTC)
+	t1 := t0.Add(24 * time.Hour)
+	repo.accounts.SetClock(func() time.Time { return t0 })
 	acct := mustUpsert(t, repo, orgKeyRow("org-1", "ada", "sk-ant-org-key-0001"))
 	other := mustUpsert(t, repo, orgKeyRow("org-2", "ben", "sk-ant-org-key-0002"))
 
@@ -122,7 +125,11 @@ func TestOrgAccountGrantsReplaceAsASetAndCascade(t *testing.T) {
 	before, err := repo.ListOrgAccountGrants(ctx, "org-1")
 	require.NoError(t, err)
 	require.Len(t, before, 2)
+	for _, g := range before {
+		assert.True(t, g.GrantedAt.Equal(t0), "%+v", g)
+	}
 
+	repo.accounts.SetClock(func() time.Time { return t1 })
 	require.NoError(t, repo.SetOrgAccountGrants(ctx, "org-1", acct.ID, []string{"eve", "fay"}, "ben"))
 	after, err := repo.ListOrgAccountGrants(ctx, "org-1")
 	require.NoError(t, err)
@@ -130,11 +137,10 @@ func TestOrgAccountGrantsReplaceAsASetAndCascade(t *testing.T) {
 	for _, g := range after {
 		byUser[g.UserID] = g
 		assert.Equal(t, "org-1", g.OrgID)
+		assert.Equal(t, "ben", g.GrantedByUserID)
+		assert.True(t, g.GrantedAt.Equal(t1), "every listed member is granted as of the call: %+v", g)
 	}
-	require.Len(t, byUser, 2)
-	assert.Contains(t, byUser, "fay")
-	assert.Equal(t, before[1], byUser["eve"], "eve's grant, its time and granter, is untouched")
-	assert.Equal(t, "ben", byUser["fay"].GrantedByUserID)
+	assert.ElementsMatch(t, []string{"eve", "fay"}, keys(byUser), "dana, left out, lost hers")
 
 	// Another org's account is not found, and its grants are not this org's.
 	assert.ErrorIs(t, repo.SetOrgAccountGrants(ctx, "org-1", other.ID, []string{"dana"}, "ada"), core.ErrProviderAccountNotFound)
@@ -149,6 +155,43 @@ func TestOrgAccountGrantsReplaceAsASetAndCascade(t *testing.T) {
 	var n int
 	require.NoError(t, raw.QueryRowContext(ctx, `SELECT count(*) FROM provider_account_grants WHERE account_id=$1`, acct.ID).Scan(&n))
 	assert.Zero(t, n, "grants cascade with the account")
+}
+
+// A grant counts only from the membership it was made in (granted_at >= member_since). A member
+// who left keeps an inert row; when they rejoin and an admin grants them again, the grant is
+// renewed to the new membership, never left at its stale time.
+func TestRegrantAfterLeaveAndRejoinRenewsTheGrant(t *testing.T) {
+	t.Parallel()
+	repo, cleanup := SetupTestDB(t)
+	defer cleanup()
+	ctx := context.Background()
+	joined := time.Date(2026, 11, 1, 9, 0, 0, 0, time.UTC)
+	repo.accounts.SetClock(func() time.Time { return joined.Add(time.Hour) })
+	acct := mustUpsert(t, repo, orgKeyRow("org-1", "ada", "sk-ant-org-key-0001"))
+	require.NoError(t, repo.SetOrgAccountGrants(ctx, "org-1", acct.ID, []string{"dana"}, "ada"))
+
+	// dana leaves (her row stays, inert) and rejoins: her new membership starts at rejoined.
+	rejoined := joined.Add(7 * 24 * time.Hour)
+	stale, err := repo.ListOrgAccountGrants(ctx, "org-1")
+	require.NoError(t, err)
+	require.Len(t, stale, 1)
+	require.True(t, stale[0].GrantedAt.Before(rejoined), "the old grant predates the new membership")
+
+	repo.accounts.SetClock(func() time.Time { return rejoined.Add(time.Minute) })
+	require.NoError(t, repo.SetOrgAccountGrants(ctx, "org-1", acct.ID, []string{"dana"}, "olga"))
+	renewed, err := repo.ListOrgAccountGrants(ctx, "org-1")
+	require.NoError(t, err)
+	require.Len(t, renewed, 1)
+	assert.False(t, renewed[0].GrantedAt.Before(rejoined), "the re-grant counts in the new membership: %+v", renewed[0])
+	assert.Equal(t, "olga", renewed[0].GrantedByUserID)
+}
+
+func keys[V any](m map[string]V) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	return out
 }
 
 // Access, order and delete act on the org's own rows only.
