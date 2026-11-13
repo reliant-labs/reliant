@@ -25,9 +25,10 @@ fail() { echo "FAIL: $*" >&2; exit 1; }
 head=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 pass="[{\"user\":{\"id\":186876276},\"commit_id\":\"$head\",\"body\":\"<!-- review-passed sha=$head -->\"}]"
 # check <want exit> <name> <head repo json> <reviews json>
+# LABELS: the pull request's labels, as GitHub lists them (default none).
 check() {
   local got=0
-  PR="{\"head\":{\"sha\":\"$head\",\"repo\":$3}}" REVIEWS="$4" bash "$src" pr 7 > "$fx/out" 2>&1 || got=$?
+  PR="{\"head\":{\"sha\":\"$head\",\"repo\":$3},\"labels\":${LABELS:-[]}}" REVIEWS="$4" bash "$src" pr 7 > "$fx/out" 2>&1 || got=$?
   [ "$got" = "$1" ] || fail "$2: exit $got, want $1: $(cat "$fx/out")"
   echo "ok: $2"
 }
@@ -56,3 +57,11 @@ check 0 "an owner-account re-review changes marker is ignored" '{"full_name":"ac
 check 1 "a re-review marker naming another sha is not a re-review of this head" '{"full_name":"acme/app"}' "[$changes,$(rr 186876276 review-passed bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb)]"
 stale="{\"user\":{\"id\":186876276},\"commit_id\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"body\":\"<!-- review-passed sha=$head -->\\n<!-- review-rereview sha=$head of=1 -->\"}"
 check 1 "a re-review on another commit is not a verdict of this head" '{"full_name":"acme/app"}' "[$changes,$stale]"
+# hold and needs:human: a person owns the PR, so its pass never merges it, read live at the
+# merge (forge #2166 merged two minutes after hold was added, 2026-11-12). Any other label
+# changes nothing.
+LABELS='[{"name":"hold"}]' check 1 "a passed head labelled hold fails" '{"full_name":"acme/app"}' "$pass"
+grep -q 'is held (hold)' "$fx/out" || fail "the hold refusal does not say why: $(cat "$fx/out")"
+LABELS='[{"name":"review:passed"},{"name":"needs:human"}]' check 1 "a passed head labelled needs:human fails" '{"full_name":"acme/app"}' "$pass"
+LABELS='[{"name":"review:passed"},{"name":"merge:queue"}]' check 0 "a passed head with only pipeline labels passes" '{"full_name":"acme/app"}' "$pass"
+LABELS='[{"name":"hold-on"},{"name":"hold:pin"}]' check 0 "a label that only starts with hold is not hold" '{"full_name":"acme/app"}' "$pass"
