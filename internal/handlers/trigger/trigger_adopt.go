@@ -97,6 +97,11 @@ func (s *Service) AdoptAs(ctx context.Context, t *core.Trigger, adopterID string
 	adopted.ID = t.ID
 	adopted.CreatedAt = t.CreatedAt
 	adopted.OrgID = t.OrgID
+	// Re-stamped for the adopter from the org's shape now, as if they
+	// created it (org-provider-accounts §11.3): never the old owner's choice.
+	if adopted.UnattendedFunding, err = s.unattendedFundingFor(ctx, adopterID, t.OrgID, reliantv1.UnattendedFunding_UNATTENDED_FUNDING_UNSPECIFIED, nil); err != nil {
+		return nil, err
+	}
 	adopted.Enabled = false
 	adopted.PausedReason = ""
 	// An org GitHub App installation the adopter names is validated and

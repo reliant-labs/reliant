@@ -24,6 +24,9 @@ type Deps struct {
 	ControlPlane ControlPlane
 	// Triggers turns the triggers the move paused back on.
 	Triggers Triggers
+	// Members counts the target org's live members, which re-stamp the moved
+	// triggers' unattended funding. Nil: the count is unknown (any).
+	Members Members
 }
 
 // Details a move ends aborted with (project_org_moves.detail), beyond
@@ -109,7 +112,22 @@ func (s *service) Prepare(ctx context.Context, moveID string) (Outcome, error) {
 }
 
 func (s *service) Commit(ctx context.Context, moveID string) (Outcome, error) {
-	res, err := s.deps.Store.MoveProjectOrg(ctx, core.ProjectOrgMoveCommit{MoveID: moveID})
+	commit := core.ProjectOrgMoveCommit{MoveID: moveID}
+	if s.deps.Members != nil {
+		// The moved triggers are re-stamped from the target org's shape
+		// (org-provider-accounts §11.3), asked as the project's owner, before
+		// the transaction: a failed read is retried, never stamped as "any".
+		m, err := s.deps.Store.GetProjectOrgMove(ctx, moveID)
+		if err != nil {
+			return Outcome{}, err
+		}
+		n, known, err := s.deps.Members.LiveMembersFresh(ctx, m.OwnerUserID, m.ToOrgID)
+		if err != nil {
+			return Outcome{}, fmt.Errorf("count the target org's members: %w", err)
+		}
+		commit.TargetLiveMembers, commit.TargetLiveMembersKnown = n, known
+	}
+	res, err := s.deps.Store.MoveProjectOrg(ctx, commit)
 	switch {
 	case err == nil:
 		return Outcome{}, nil

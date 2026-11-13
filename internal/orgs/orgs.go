@@ -217,6 +217,29 @@ func (r *Resolver) RoleFresh(ctx context.Context, userID, orgID string) (role st
 	return roleOf(m, orgID, err)
 }
 
+// LiveMembersFresh is how many live members orgID has, asked of control-plane
+// now as userID (only a member is told). known is false when the answer has
+// no count: userID is not a member, or the control plane predates the field
+// (an unsupported one included). It only ever chooses a default or refuses a
+// loosening, never grants anything (org-provider-accounts §11.3).
+func (r *Resolver) LiveMembersFresh(ctx context.Context, userID, orgID string) (n int, known bool, err error) {
+	if r == nil || userID == "" || orgID == "" {
+		return 0, false, nil
+	}
+	m, err := r.src.ResolveOrgMembership(ctx, userID, orgID)
+	if errors.Is(err, errUnsupported) {
+		return 0, false, nil
+	}
+	if err != nil {
+		return 0, false, err
+	}
+	r.remember(key{userID, orgID}, m)
+	if !m.Member || m.OrgID != orgID || !m.OrgLiveMembersKnown {
+		return 0, false, nil
+	}
+	return int(m.OrgLiveMembers), true, nil
+}
+
 // roleOf reads Role's answer from one membership answer about orgID.
 func roleOf(m accesstokenclient.OrgMembership, orgID string, err error) (string, bool, error) {
 	if errors.Is(err, errUnsupported) {

@@ -206,6 +206,13 @@ type ProjectOrgMoveCommit struct {
 	// "" when the owner has none, which leaves such a project unmovable.
 	DefaultOrgID string
 	At           time.Time
+	// TargetLiveMembers is how many live members the target org has, read
+	// by the caller, valid only when TargetLiveMembersKnown. The moved
+	// triggers are re-stamped from it as if created there: org_only with two
+	// or more, else any, and any when it is unknown (org-provider-accounts
+	// §11.3).
+	TargetLiveMembers      int
+	TargetLiveMembersKnown bool
 }
 
 // ProjectOrgMoveResult is what the move's transaction did.
