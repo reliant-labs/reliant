@@ -34,15 +34,17 @@ type fundingFake struct {
 	assignments map[string][]core.Assignment
 	orgs        map[string][2]string // account -> {owner org, attributed org}
 	serving     map[string]string    // thread -> account
-	// lastCall is who paid for the chat's newest call: {funding, org}.
-	lastCall map[string][2]string
-	// lastCallErr fails LatestChatCallFunding.
-	lastCallErr error
+	// threadFunding is who pays for each thread: {funding, org, account}.
+	threadFunding map[string][3]string
+	// threadFundingErr fails ThreadFunding.
+	threadFundingErr error
+	// chatOrder is the order a person chose for each chat.
+	chatOrder map[string]string
 }
 
 func newFundingFake() *fundingFake {
 	return &fundingFake{rows: map[string]*core.PersonalFunding{}, assignments: map[string][]core.Assignment{},
-		orgs: map[string][2]string{}, serving: map[string]string{}, lastCall: map[string][2]string{}}
+		orgs: map[string][2]string{}, serving: map[string]string{}, threadFunding: map[string][3]string{}, chatOrder: map[string]string{}}
 }
 
 func (f *fundingFake) GetChatPersonalFunding(_ context.Context, chatID string) (*core.PersonalFunding, error) {
@@ -107,12 +109,27 @@ func (f *fundingFake) LatestServingAccount(_ context.Context, threadID string) (
 	return f.serving[threadID], nil
 }
 
-func (f *fundingFake) LatestChatCallFunding(_ context.Context, _, chatID string) (string, string, bool, error) {
-	if f.lastCallErr != nil {
-		return "", "", false, f.lastCallErr
+func (f *fundingFake) ThreadFunding(_ context.Context, threadID string) (string, string, string, bool, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.threadFundingErr != nil {
+		return "", "", "", false, f.threadFundingErr
 	}
-	c, ok := f.lastCall[chatID]
-	return c[0], c[1], ok, nil
+	c, ok := f.threadFunding[threadID]
+	return c[0], c[1], c[2], ok, nil
+}
+
+func (f *fundingFake) RecordThreadFunding(_ context.Context, threadID, orgID, funding, accountID string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.threadFunding[threadID] = [3]string{funding, orgID, accountID}
+	return nil
+}
+
+func (f *fundingFake) ChatFundingOrder(_ context.Context, chatID string) (string, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.chatOrder[chatID], nil
 }
 
 func (f *fundingFake) answer(chatID, state string, until *time.Time) {
@@ -511,7 +528,7 @@ func TestPersonalFunding_OrgOnlyIsAbsolute(t *testing.T) {
 // by the time the call is checked the router has already stored the person's
 // account as the thread's, and the org has nothing left (B2). The provenance
 // is the account the assignment left, or, once that account is deleted, who
-// paid for the chat's last call.
+// paid for this thread's calls (thread_funding).
 func TestPersonalFunding_ReplacedOnTheSameProvider(t *testing.T) {
 	for _, tc := range []struct {
 		name    string
@@ -522,10 +539,10 @@ func TestPersonalFunding_ReplacedOnTheSameProvider(t *testing.T) {
 			env.store.orgs["acme-key"] = [2]string{fundOrg, ""}
 		}},
 		{name: "the org's key, deleted", setup: func(env *fundingEnv) {
-			env.store.lastCall["chat-1"] = [2]string{models.FundingOrgKey, fundOrg}
+			env.store.threadFunding["root"] = [3]string{models.FundingOrgKey, fundOrg, "acme-key"}
 		}},
-		{name: "the chat's history cannot be read", setup: func(env *fundingEnv) {
-			env.store.lastCallErr = errors.New("db down")
+		{name: "the thread's history cannot be read", setup: func(env *fundingEnv) {
+			env.store.threadFundingErr = errors.New("db down")
 		}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -543,13 +560,82 @@ func TestPersonalFunding_ReplacedOnTheSameProvider(t *testing.T) {
 			assert.Equal(t, core.PersonalFundingUnusable, q.Reason)
 		})
 	}
-	t.Run("a chat whose last call was the person's own goes on", func(t *testing.T) {
+	t.Run("a thread whose calls were the person's own goes on", func(t *testing.T) {
 		withAvailableDrivers(t, tiered(personal(claudeAccount("my-claude", "me@me.com", 0))))
 		env := newFundingEnv(t, "", "")
-		env.store.lastCall["chat-1"] = [2]string{models.FundingPersonal, fundOrg}
+		env.store.threadFunding["root"] = [3]string{models.FundingPersonal, fundOrg, "my-claude"}
 		res, err := env.resolve(t, "root", routeModel)
 		require.NoError(t, err)
 		assert.Equal(t, "my-claude", res.Account.Config.AccountID)
+	})
+}
+
+// Provenance is per thread (review round 2, B2): thread A ran on the org's
+// key, thread B on the person's own through an explicit pick; then the org's
+// last key is deleted. A must ask, whatever B did last.
+func TestPersonalFunding_ProvenanceIsPerThread(t *testing.T) {
+	withAvailableDrivers(t, tiered(acmeKey("acme-key"), personal(claudeAccount("my-claude", "me@me.com", 0))))
+	env := newFundingEnv(t, "", "")
+	res, err := env.resolve(t, "thread-a", routeModel+"@anthropic")
+	require.NoError(t, err)
+	require.Equal(t, "acme-key", res.Account.Config.AccountID)
+	res, err = env.resolve(t, "thread-b", routeModel+"@claude")
+	require.NoError(t, err, "an explicit pick of the person's provider is their consent")
+	require.Equal(t, "my-claude", res.Account.Config.AccountID)
+	assert.Equal(t, [3]string{models.FundingOrgKey, fundOrg, "acme-key"}, env.store.threadFunding["thread-a"], "recorded when the call went ahead")
+	assert.Equal(t, models.FundingPersonal, env.store.threadFunding["thread-b"][0])
+
+	// The org deletes its last key: the account, its assignments and its
+	// metadata are gone; only the thread's own provenance remains.
+	withAvailableDrivers(t, tiered(personal(claudeAccount("my-claude", "me@me.com", 0))))
+	env.routing.Store.(*routerFake).assignments = map[string]string{}
+	_, err = env.resolve(t, "thread-a", routeModel)
+	isWait(t, err)
+	q := env.store.row("chat-1")
+	require.NotNil(t, q, "thread A asks")
+	assert.Equal(t, core.PersonalFundingUnusable, q.Reason)
+	assert.Equal(t, models.FundingOrgKey, env.store.threadFunding["thread-a"][0], "a held call keeps the org's provenance")
+}
+
+// The chat's funding order is read from the person-set chat policy, never
+// from the run: a preset's, a workflow's or a spawn's personal_first is no
+// consent to spend, while their org_first and org_only still tighten (B1).
+func TestPersonalFunding_RunOrderOnlyTightens(t *testing.T) {
+	avail := tiered(acmeKey("acme-key"), myCodex("my-codex"))
+	runOrder := func(order string) func(*llmCallSpec) {
+		return func(s *llmCallSpec) { s.Failover.Funding = order }
+	}
+
+	t.Run("a run's personal_first is not consent", func(t *testing.T) {
+		withAvailableDrivers(t, avail)
+		env := newFundingEnv(t, "", "")
+		_, err := env.resolve(t, "root", "gpt-5.6-sol", runOrder(types.FundingPersonalFirst))
+		isWait(t, err)
+		require.NotNil(t, env.store.row("chat-1"), "it asks")
+		assert.NotContains(t, env.built, "my-codex")
+	})
+	t.Run("the person's chat order is", func(t *testing.T) {
+		withAvailableDrivers(t, avail)
+		env := newFundingEnv(t, "", "")
+		env.store.chatOrder["chat-1"] = types.FundingPersonalFirst
+		res, err := env.resolve(t, "root", "gpt-5.6-sol")
+		require.NoError(t, err)
+		assert.Equal(t, "my-codex", res.Account.Config.AccountID)
+	})
+	t.Run("a run's org_first undoes the person's personal_first", func(t *testing.T) {
+		withAvailableDrivers(t, avail)
+		env := newFundingEnv(t, "", "")
+		env.store.chatOrder["chat-1"] = types.FundingPersonalFirst
+		_, err := env.resolve(t, "root", "gpt-5.6-sol", runOrder(types.FundingOrgFirst))
+		isWait(t, err)
+	})
+	t.Run("a run's org_only holds over the person's personal_first", func(t *testing.T) {
+		withAvailableDrivers(t, avail)
+		env := newFundingEnv(t, orgfunding.OnOrgLimitUsePersonal, orgfunding.OrderPersonalFirst)
+		env.store.chatOrder["chat-1"] = types.FundingPersonalFirst
+		_, err := env.resolve(t, "root", "gpt-5.6-sol", runOrder(types.FundingOrgOnly))
+		isWait(t, err)
+		assert.Nil(t, env.store.row("chat-1"), "org_only never asks")
 	})
 }
 

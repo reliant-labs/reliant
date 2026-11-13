@@ -136,7 +136,7 @@ func (m *MockAccountCredentialStore) PatchOwnedProviderAccount(ctx context.Conte
 var _ AccountCredentialStore = (*MockAccountCredentialStore)(nil)
 
 // forge:section MockAccountRoutingStore
-// forge:hash=1c4026ab07175ea5c113cd99c62e9e3d5d9a239bd66a8599ef5584cfebfa27f3
+// forge:hash=04840decdc501c2abce03a038ee8421d2c23d5413563067f1f4dffb9e871693d
 
 // MockAccountRoutingStore is a test mock for the AccountRoutingStore interface.
 //
@@ -154,7 +154,9 @@ type MockAccountRoutingStore struct {
 	ClearPersonalFundingFunc         func(context.Context, string) (bool, error)
 	MarkPersonalFundingAnnouncedFunc func(context.Context, string) (bool, error)
 	ProviderAccountOrgsFunc          func(context.Context, string) (string, string, bool, error)
-	LatestChatCallFundingFunc        func(context.Context, string, string) (string, string, bool, error)
+	ThreadFundingFunc                func(context.Context, string) (string, string, string, bool, error)
+	RecordThreadFundingFunc          func(context.Context, string, string, string, string) error
+	ChatFundingOrderFunc             func(context.Context, string) (string, error)
 	ListThreadAssignmentsFunc        func(context.Context, string) ([]core.Assignment, error)
 	LatestServingAccountFunc         func(context.Context, string) (string, error)
 	GetThreadAssignmentFunc          func(context.Context, string, string) (*core.Assignment, error)
@@ -237,13 +239,31 @@ func (m *MockAccountRoutingStore) ProviderAccountOrgs(ctx context.Context, accou
 	return "", "", false, contractkit.MockNotSet("MockAccountRoutingStore", "ProviderAccountOrgs")
 }
 
-// LatestChatCallFunding records the call and delegates to LatestChatCallFundingFunc when set.
-func (m *MockAccountRoutingStore) LatestChatCallFunding(ctx context.Context, userID string, chatID string) (string, string, bool, error) {
-	m.Recorder.Record("LatestChatCallFunding", ctx, userID, chatID)
-	if m.LatestChatCallFundingFunc != nil {
-		return m.LatestChatCallFundingFunc(ctx, userID, chatID)
+// ThreadFunding records the call and delegates to ThreadFundingFunc when set.
+func (m *MockAccountRoutingStore) ThreadFunding(ctx context.Context, threadID string) (string, string, string, bool, error) {
+	m.Recorder.Record("ThreadFunding", ctx, threadID)
+	if m.ThreadFundingFunc != nil {
+		return m.ThreadFundingFunc(ctx, threadID)
 	}
-	return "", "", false, contractkit.MockNotSet("MockAccountRoutingStore", "LatestChatCallFunding")
+	return "", "", "", false, contractkit.MockNotSet("MockAccountRoutingStore", "ThreadFunding")
+}
+
+// RecordThreadFunding records the call and delegates to RecordThreadFundingFunc when set.
+func (m *MockAccountRoutingStore) RecordThreadFunding(ctx context.Context, threadID string, orgID string, funding string, accountID string) error {
+	m.Recorder.Record("RecordThreadFunding", ctx, threadID, orgID, funding, accountID)
+	if m.RecordThreadFundingFunc != nil {
+		return m.RecordThreadFundingFunc(ctx, threadID, orgID, funding, accountID)
+	}
+	return contractkit.MockNotSet("MockAccountRoutingStore", "RecordThreadFunding")
+}
+
+// ChatFundingOrder records the call and delegates to ChatFundingOrderFunc when set.
+func (m *MockAccountRoutingStore) ChatFundingOrder(ctx context.Context, chatID string) (string, error) {
+	m.Recorder.Record("ChatFundingOrder", ctx, chatID)
+	if m.ChatFundingOrderFunc != nil {
+		return m.ChatFundingOrderFunc(ctx, chatID)
+	}
+	return "", contractkit.MockNotSet("MockAccountRoutingStore", "ChatFundingOrder")
 }
 
 // ListThreadAssignments records the call and delegates to ListThreadAssignmentsFunc when set.

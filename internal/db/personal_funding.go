@@ -123,8 +123,22 @@ func (r *Repo) ProviderAccountOrgs(ctx context.Context, accountID string) (owner
 	return store.ProviderAccountOrgs(ctx, r.ORM(), accountID)
 }
 
-// LatestChatCallFunding is who paid for userID's newest successful call in chatID, and the
-// chat's org at the time; found is false when there is none.
-func (r *Repo) LatestChatCallFunding(ctx context.Context, userID, chatID string) (funding, orgID string, found bool, err error) {
-	return store.LatestChatCallFunding(ctx, r.ORM(), userID, chatID)
+// ThreadFunding is who paid for threadID's calls on its current account, and the run's org.
+func (r *Repo) ThreadFunding(ctx context.Context, threadID string) (funding, orgID, accountID string, found bool, err error) {
+	return store.GetThreadFunding(ctx, r.ORM(), threadID)
+}
+
+// RecordThreadFunding records who pays for threadID's calls from now on (a no-op when unchanged).
+func (r *Repo) RecordThreadFunding(ctx context.Context, threadID, orgID, funding, accountID string) error {
+	return store.PutThreadFunding(ctx, r.ORM(), threadID, orgID, funding, accountID, time.Now())
+}
+
+// ChatFundingOrder is the funding order a person chose for chatID (the chat's provider policy,
+// which only a person may change), "" when it inherits.
+func (r *Repo) ChatFundingOrder(ctx context.Context, chatID string) (string, error) {
+	sel, err := r.GetChatSelection(ctx, chatID)
+	if err != nil || sel == nil {
+		return "", err
+	}
+	return string(sel.Policy.Funding), nil
 }

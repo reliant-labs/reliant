@@ -17,6 +17,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/launch"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/orgs"
 )
 
 // selections is the chat selection service over the repository. Built per use,
@@ -285,6 +286,28 @@ func validatePolicy(p chatselection.ProviderPolicy) error {
 	return nil
 }
 
+// fundingChangeByPerson keeps a chat's funding order a person's decision: it is
+// consent to spend their own AI accounts in the chat's org (org-provider-accounts
+// §4.4, §10), like ResolvePersonalFundingChoice. A caller that is not a person
+// (an agent's or a script's credential) may change every other field of the
+// policy. A request that leaves funding unspecified keeps the stored order, as an
+// older client that has never heard of the field does; one that names a
+// different order is refused.
+func fundingChangeByPerson(ctx context.Context, before *chatselection.Selection, policy chatselection.ProviderPolicy) (chatselection.ProviderPolicy, error) {
+	stored := chatselection.FundingInherit
+	if before != nil {
+		stored = before.Policy.Funding
+	}
+	if policy.Funding == stored || orgs.RequirePerson(ctx, "change whose AI accounts pay for this chat") == nil {
+		return policy, nil
+	}
+	if policy.Funding == chatselection.FundingInherit {
+		policy.Funding = stored
+		return policy, nil
+	}
+	return policy, orgs.RequirePerson(ctx, "change whose AI accounts pay for this chat")
+}
+
 // UpdateChatProviderPolicy stores what the chat does when its provider is
 // rate-limited, and hands it to the chat's live root run (see
 // signalProviderPolicy), so the next limit the run meets follows it. The run's
@@ -310,6 +333,9 @@ func (s *Service) UpdateChatProviderPolicy(
 		workflowName = *chat.WorkflowName
 	}
 	before, _ := s.selections().Get(ctx, chat.ID)
+	if policy, err = fundingChangeByPerson(ctx, before, policy); err != nil {
+		return nil, err
+	}
 	sel, err := s.selections().SetPolicy(ctx, chat.ID, userID, workflowName, policy, req.Msg.GetExpectedVersion())
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to update provider policy"))
