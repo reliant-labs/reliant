@@ -1,6 +1,7 @@
 ---
-title: "Deploy without an account"
-description: "How to deploy a static site, a Vite or Next.js app, or a Go API with Postgres with no account: forge env deploy prod --claimable, the claim link, the limits and the exit codes"
+title: "Deploy a Vite or Next.js app without an account"
+sidebarTitle: "Deploy without an account"
+description: "Deploy a Vite or Next.js app, static site or Go API with no account or signup: forge env deploy prod --claimable returns a live URL and a claim link. Limits and exit codes"
 ---
 
 Any coding agent that can run a shell command can put a project online with no Reliant account, token or card. `forge env deploy prod --claimable` builds the project, publishes it to [Reliant hosting](/forge/hosting) under a temporary anonymous identity, and prints a live URL and a **claim link**. The deploy stays online for 72 hours. If someone opens the claim link and signs up (free) in that time, the deploy becomes theirs.
@@ -29,24 +30,41 @@ brew install reliant-labs/reliant/forge                                         
 Run this at the app's root, where its `package.json` is:
 
 ```bash
-forge project new --in-place --kind site --name my-site   # adds forge.yaml and deploy/kcl/; your files are untouched
-git add -A && git commit -m "Add forge deploy config"     # so the release records a commit
-forge env deploy prod --claimable --plan-only             # checks locally and asks the platform; creates nothing
-forge env deploy prod --claimable                         # build, publish, print the URL and the claim link
+npx -y @reliantlabs/forge@latest env deploy prod --claimable
 ```
+
+That one command adopts the app where it stands, then builds and publishes it. It adds `forge.yaml`, `deploy/kcl/`, `AGENTS.md` and forge's `.gitignore` entries, and leaves the app's own files alone. No git repository or commit is needed. It needs forge v1.5.0 or later: use `@latest`, because an older cached forge refuses with "add forge first" instead of adopting the app.
+
+To check before you deploy, add `--plan-only`:
+
+```bash
+npx -y @reliantlabs/forge@latest env deploy prod --claimable --plan-only
+```
+
+It checks locally and creates nothing on the platform; it does adopt the app (adds `forge.yaml`, `deploy/kcl/`, `AGENTS.md` and the `.gitignore` entries). Run it first and the app is already a forge project when you deploy.
 
 A Next.js app must build as a static export: set `output: "export"` in `next.config.*`. `forge lint --static-export` lists, with file and line, anything an export can't serve, such as a dynamic route without `generateStaticParams`, a server action or `cookies()`. An app that needs a server at request time can't use this path.
 
-To deploy a folder of plain HTML, first add a `package.json` with `"scripts": {"build": "vite build"}` and `vite` as a devDependency, run `npm install`, then follow the steps above.
+To deploy a folder of plain HTML, first add a `package.json` with `"scripts": {"build": "vite build"}` and `vite` as a devDependency, run `npm install`, then run the command above.
+
+<Note>
+On forge v1.4.0 or earlier, adopt the app first with `forge project new --in-place --kind site --name my-site` (commit the new files if you want the release to record a commit), then run `forge env deploy prod --claimable`.
+</Note>
 
 ## Deploy a new static site
 
+Start from an empty folder, or create one:
+
 ```bash
-forge project new my-site --kind site                           # a Next.js static export
-forge project new my-site --kind site --frontend-kind vite-spa  # or a Vite single-page app
+npx -y @reliantlabs/forge@latest project new my-site --kind site                           # a Next.js static export
+npx -y @reliantlabs/forge@latest project new my-site --kind site --frontend-kind vite-spa  # or a Vite single-page app
 cd my-site
-forge env deploy prod --claimable
+npx -y @reliantlabs/forge@latest env deploy prod --claimable
 ```
+
+In an empty folder you're already in, add `--in-place` and leave out the name and the `cd`. A new site starts as a placeholder page: build what you want in it, then deploy.
+
+[`forge start`](/reference/cli#reliant-forge-start) prints this same split for the folder you run it in: an app that's already there deploys with one command, and an empty folder starts with `forge project new`.
 
 ## Deploy a Go API with Postgres
 
@@ -102,6 +120,8 @@ Opening the claim link signs you up for free, or signs you in, and moves the dep
 - The deploy stops expiring. Later deploys run as you: `forge login`, then `forge env deploy prod` without `--claimable`.
 - A static site stays free: one hosted static site per account, under the [static free tier](/forge/hosting#billing).
 - A backend gets its outbound internet back. A service and its managed Postgres need [paid app hosting](/forge/hosting#billing) to keep running long term.
+
+For failed model calls, claim first, sign in with `forge login`, keep the provider key in a backend [managed secret](/forge/secrets), then redeploy without `--claimable` and verify an actual server-side model request. Never ship a provider key in a static site. Do not assume an unclaimed deploy can reach Reliant's gateway: its credentials may remain blank. [LLM provider & recovery](/forge/llm-provider) covers the tested configuration, the gateway's limitations and the final request you must verify.
 
 ## Limits
 

@@ -36,6 +36,19 @@ func (s accountRouterStore) ListAccountLimits(ctx context.Context, userID string
 	if err != nil {
 		return nil, err
 	}
+	return routerLimits(limits), nil
+}
+
+func (s accountRouterStore) ListOrgAccountLimits(ctx context.Context, orgID string) (map[string]accountrouter.LimitState, error) {
+	limits, err := s.repo.ListOwnedAccountLimits(ctx, core.OrgAccountOwner(orgID))
+	if err != nil {
+		return nil, err
+	}
+	return routerLimits(limits), nil
+}
+
+// routerLimits translates the store's limit rows for the router.
+func routerLimits(limits map[string]core.LimitState) map[string]accountrouter.LimitState {
 	out := make(map[string]accountrouter.LimitState, len(limits))
 	for id, l := range limits {
 		ls := accountrouter.LimitState{
@@ -49,7 +62,7 @@ func (s accountRouterStore) ListAccountLimits(ctx context.Context, userID string
 		}
 		out[id] = ls
 	}
-	return out, nil
+	return out
 }
 
 func (s accountRouterStore) RecentAssignmentCounts(ctx context.Context, accountIDs []string, since time.Time) (map[string]int, error) {
@@ -77,7 +90,9 @@ func accountRouting(repo AccountRoutingStore, recorder handlers.AccountLimitReco
 // way the token refresh coordinator retires one whose refresh token it did.
 type credentialMarker struct{ repo AccountCredentialStore }
 
-func (m credentialMarker) MarkNeedsSignIn(ctx context.Context, userID, accountID, reason string) error {
-	_, err := m.repo.PatchProviderAccount(ctx, userID, accountID, core.AccountPatch{NeedsReauth: &reason})
+// MarkNeedsSignIn marks the account on its owner's row: a person's own, or the
+// org's for an org key.
+func (m credentialMarker) MarkNeedsSignIn(ctx context.Context, owner core.AccountOwner, accountID, reason string) error {
+	_, err := m.repo.PatchOwnedProviderAccount(ctx, owner, accountID, core.AccountPatch{NeedsReauth: &reason})
 	return err
 }

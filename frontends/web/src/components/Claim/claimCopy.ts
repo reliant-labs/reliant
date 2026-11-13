@@ -34,10 +34,12 @@ export const REFUSAL_COPY: Record<ClaimRefusal, RefusalCopy> = {
   },
   claimable_session_released: {
     title: "This claim is open in another browser",
-    body: "A claim can be started in one browser only. Continue there, or sign in to an account you already have and claim it into that.",
-    // Returns here, where the claim is still in storage; the site is claimed
-    // into the account that signs in, which needs no session from this link.
-    next: { label: "Sign in to claim", href: "/auth?redirect=%2Fclaim" },
+    body: "A claim can be started in one browser only, so you can keep going in that one. You can also claim it from here: enter your email and we'll send a code. That creates your account, or signs you in if you have one, and the site is added to it.",
+    // Returns here, where the claim is still in storage. The site is claimed
+    // into the account that signs in or is created (CompleteClaim's membership
+    // path), which needs no session from this link: the token still has to be
+    // in this browser, so only the holder of the claim link can do this.
+    next: { label: "Create an account or sign in to claim", href: "/auth?redirect=%2Fclaim" },
   },
 };
 

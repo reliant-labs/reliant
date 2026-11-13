@@ -142,7 +142,7 @@ func TestProviderSwitchCompaction_OffProviderPresetDescendantUsesTheChatModel(t 
 
 	spec := compactSpec("anthropic", true)
 	spec.ChatModel = models.ModelSelector{ID: "claude-4.5-haiku@anthropic"}
-	selector, reason, err := resolveCompactionModelForCall(ctx, "u", preset, spec)
+	selector, reason, err := resolveCompactionModelForCall(ctx, preset, spec)
 	require.NoError(t, err)
 	assert.Equal(t, "claude-4.5-haiku@anthropic", selector.ID)
 	assert.Equal(t, []string{"anthropic"}, selector.Providers)
@@ -151,7 +151,7 @@ func TestProviderSwitchCompaction_OffProviderPresetDescendantUsesTheChatModel(t 
 	t.Run("a model the user chose still holds", func(t *testing.T) {
 		chosen := spec
 		chosen.ThreadModelChosen = true
-		_, _, err := resolveCompactionModelForCall(ctx, "u", preset, chosen)
+		_, _, err := resolveCompactionModelForCall(ctx, preset, chosen)
 		requireProviderSwitchHold(t, nil, err)
 	})
 }

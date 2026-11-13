@@ -24,6 +24,10 @@ var rawComparisonAllowed = map[string]string{
 	"internal/triggers/origin.go:fromWrite":                                           "matches two rows' owners (an integration write and its trigger), no caller",
 	"internal/triggers/workflowevent/dispatch.go:Dispatch":                            "matches a run event to the triggers of the same user, no caller",
 	"internal/db/repository_impl.go:UpsertDaemon":                                     "re-registration consistency: the same user re-registering the same daemon",
+	"internal/db/trigger_takeover.go:AdoptTrigger":                                    "compare-and-swap: the locked row still has the owner the adoption decided on, no caller",
+	"internal/db/trigger_takeover.go:CreateTriggerOffer":                              "compare-and-swap: the locked row still has the owner the offer was made for, no caller",
+	"internal/handlers/automation_takeover/takeover.go:offerState":                    "matches a trigger to the owner its offer was made for (adopted or not since), no caller",
+	"internal/handlers/streaming/org_stream.go:sendOrgUpdates":                        "leaves the caller's own rows out of the org feed they may already read in full; not an access decision",
 	"internal/tokenauthority/localstore.go:MintForUser":                               "self-hosted orgs: the only org a user has is their own id",
 	"internal/tokenauthority/memory.go:MintForUser":                                   "self-hosted orgs: the only org a user has is their own id",
 	"internal/workflow/workflowlisttest/workflowlisttest.go:GetProjectWithUserCheck":  "test fake of the store's owner-filtered read",
@@ -252,6 +256,8 @@ var shareGuard = struct {
 	visibilityWriters: map[string]string{
 		"internal/store/share_event_repo_ext.go": "ApplyShareChange, the one writer, and the shared lists' read predicates",
 		"internal/viewertest/viewertest.go":      "the viewer-matrix fixture seeds a shared row; imported by _test.go files only",
+		// control-plane docs/design/org-project-move.md §1.2, D7.
+		"internal/store/project_org_move_repo_ext.go": "MoveProjectOrg clears every share of a project moving to another org, with a share_events row (moved) each; it never shares",
 	},
 	applyCallers: []string{"internal/db/", "internal/store/", "internal/handlers/sharing/"},
 	viewerReadSites: map[string]string{
@@ -270,12 +276,14 @@ var shareGuard = struct {
 		"internal/handlers/sharing/rpc_set_project_visibility.go": "decides who may change a shared project",
 		"internal/handlers/sharing/rpc_list_shared_chats.go":      "the shared list, in the viewer's shape",
 		"internal/handlers/sharing/rpc_list_shared_projects.go":   "the shared list, in the viewer's shape",
+		"internal/handlers/streaming/chat_stream.go":              "StreamChatUpdates (messageproto.ViewerChatUpdate; re-reads the row every tick)",
 	},
 	shareRPCs: []string{
 		"sharing.proto:ListSharedChats",
 		"sharing.proto:ListSharedProjects",
 		"sharing.proto:SetChatVisibility",
 		"sharing.proto:SetProjectVisibility",
+		"streaming.proto:StreamOrgUpdates",
 	},
 }
 
@@ -313,7 +321,7 @@ func goSources(t *testing.T, fn func(rel string, src []byte)) {
 
 // TestSharingReachesOnlyWhatIsListed pins where sharing reaches: the one
 // writer of a visibility column is store.ApplyShareChange, only SharingService
-// calls it, the share rpcs are SharingService's four, and the read sites that
+// calls it, the share rpcs are SharingService's four and StreamOrgUpdates, and the read sites that
 // serve viewers are exactly shareGuard.viewerReadSites. A new one is a
 // deliberate change here, with its redaction and its viewer-matrix row.
 func TestSharingReachesOnlyWhatIsListed(t *testing.T) {

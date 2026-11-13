@@ -28,6 +28,7 @@ import (
 	"net/http"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
+	"github.com/reliant-labs/reliant/internal/orgs"
 	"github.com/reliant-labs/reliant/internal/vault"
 )
 
@@ -56,7 +57,29 @@ const (
 	// CodePermissionDenied: the caller is signed in but may not do this (not
 	// a live member of the organization a request names).
 	CodePermissionDenied
+	// CodeHumanOnly: only a person signed in to the app may do this, and the
+	// request came with a credential an agent or a script can hold. It is
+	// PermissionDenied with reason ReasonHumanOnly.
+	CodeHumanOnly
 )
+
+// ReasonHumanOnly is the error reason of an org connection's administration
+// refused to a credential that is not a person's (the members rpcs' reason in
+// control-plane, orgs-and-members.md §2.3).
+const ReasonHumanOnly = orgs.ReasonHumanOnly
+
+// ReasonOrgConnectionsDisabled is the error reason of creating or
+// reconnecting an org-owned connection on a deployment that has not enabled
+// org connections (ApiServerConfig orgs.connections_enabled): the client
+// shows the org's connections read-only and says why it cannot add one.
+const ReasonOrgConnectionsDisabled = "org_connections_disabled"
+
+// HumanOnly is the refusal of an org connection's administration to a
+// credential an agent can hold: a CLI login, an access token, a daemon's.
+func HumanOnly() error {
+	return newError(CodeHumanOnly, "only a person signed in to the Reliant app can manage an organization's connections; "+
+		"this request was made with a credential an agent or a script can hold (such as the CLI login)")
+}
 
 // Error is a typed failure. Message is safe to show a user; it never contains a
 // provider response body, a token, or an authorization code.
@@ -64,6 +87,10 @@ type Error struct {
 	Code    ErrorCode
 	Message string
 	Err     error
+	// Reason, when set, is the x-forge-error-reason the caller branches on
+	// (ReasonOrgConnectionsDisabled), so a client never reads Message to
+	// decide. It does not change Code, or what errors.Is matches.
+	Reason string
 }
 
 func (e *Error) Error() string {
@@ -93,10 +120,16 @@ func (e *Error) Unwrap() error {
 		kind = svcerr.ErrUnavailable
 	case CodePermissionDenied:
 		kind = svcerr.ErrPermissionDenied
+	case CodeHumanOnly:
+		return svcerr.WithCause(svcerr.WithReason(svcerr.WithMessage(svcerr.ErrPermissionDenied, e.Message), ReasonHumanOnly), e.Err)
 	default:
 		return e.Err
 	}
-	return svcerr.WithCause(svcerr.WithMessage(kind, e.Message), e.Err)
+	out := svcerr.WithMessage(kind, e.Message)
+	if e.Reason != "" {
+		out = svcerr.WithReason(out, e.Reason)
+	}
+	return svcerr.WithCause(out, e.Err)
 }
 
 // Is matches by code, so errors.Is(err, connections.ErrNeedsReauth) works

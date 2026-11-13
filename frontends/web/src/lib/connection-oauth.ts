@@ -71,6 +71,8 @@ export interface ConnectionOAuthInput {
   /** Relative path to land on afterwards (web). */
   redirectAfter: string
   params?: Record<string, string>
+  /** Connect it for this organization instead of the caller (its admins only). */
+  ownerOrgId?: string
 }
 
 /**
@@ -86,6 +88,7 @@ async function startOAuth(input: ConnectionOAuthInput & { loopbackRedirect?: str
     redirectAfter: input.redirectAfter,
     params: input.params ?? {},
     loopbackRedirect: input.loopbackRedirect ?? '',
+    ownerOrgId: input.ownerOrgId || undefined,
   })
   if (!response.authorizeUrl) throw new Error('The server did not return an authorization URL')
   return response.authorizeUrl

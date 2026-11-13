@@ -328,6 +328,17 @@ export class ChatStream extends ReconnectingStream<ChatStreamEvent> {
     this.close(true);
   }
 
+  /**
+   * Let the next subscribeToChat(chatId) ask the server again, though it
+   * refused the chat before. For an explicit open by the person, never for
+   * the self-healing reconcile: access can come back (a chat shared with
+   * their org again), and only someone choosing the chat should spend the
+   * request on finding out.
+   */
+  forgetRefusal(chatId: string): void {
+    this.rejectedChatIds.delete(chatId);
+  }
+
   getChatId(): string | undefined {
     return this.chatId;
   }

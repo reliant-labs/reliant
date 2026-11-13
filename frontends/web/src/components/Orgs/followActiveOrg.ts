@@ -7,6 +7,7 @@ import { chatServiceKeys } from "@/hooks/chat-service-hooks_gen";
 import { inboxServiceKeys } from "@/hooks/inbox-service-hooks_gen";
 import { projectServiceKeys } from "@/hooks/project-service-hooks_gen";
 import { runServiceKeys } from "@/hooks/run-service-hooks_gen";
+import { sharingServiceKeys } from "@/hooks/sharing-service-hooks_gen";
 import { triggerServiceKeys } from "@/hooks/trigger-service-hooks_gen";
 import { workflowServiceKeys } from "@/hooks/workflow-service-hooks_gen";
 import { useProjectStore } from "@/store/projectStore";
@@ -32,6 +33,8 @@ export const ORG_SCOPED_PRODUCT_QUERIES: readonly QueryKey[] = [
   workflowServiceKeys.all,
   triggerServiceKeys.all,
   runServiceKeys.all,
+  // The shared lists name their org, but a switch drops another org's anyway.
+  sharingServiceKeys.all,
 ];
 
 /** Kept, but re-read when next observed: a chat's own reads. */

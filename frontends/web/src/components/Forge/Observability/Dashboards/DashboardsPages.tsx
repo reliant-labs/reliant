@@ -34,6 +34,7 @@ import { useDeclaredEnvironments } from "../useDeclaredEnvironments";
 import { builtinPageRef, compareParam, isDashboardPageKind, isStandardBuiltinRef, rangeParam, refreshParam, type DashboardSearch } from "./dashboardModel";
 import { DashboardsList, type DashboardsSearch } from "./DashboardsList";
 import { DashboardView, type DashboardHrefs } from "./DashboardView";
+import { useDashboardHub } from "./useDashboardHub";
 
 /** The roster's recorded environments, as the observability pages address them (control-plane id ↔ name). */
 function useRecordedEnvs(): ObsEnvironment[] {
@@ -199,6 +200,8 @@ export function DashboardPage() {
     release: typeof raw.release === "string" ? raw.release : undefined,
     orgEnvs: Array.isArray(raw.orgEnvs) ? raw.orgEnvs.filter((name): name is string => typeof name === "string") : undefined,
   };
+  // The hub the dashboard is a tab of, from the index the nav already reads for this scope (one cache entry).
+  const hub = useDashboardHub(forgeProject, env === ENV_ALL ? undefined : environments.find((candidate) => candidate.name === env)?.id, dashRef);
   if (!dashRef) return null;
   // Organization accounting is discoverable without a deployed environment. A
   // project's standard built-ins read its environments, like any dashboard.
@@ -218,6 +221,7 @@ export function DashboardPage() {
         onEnvChange={setEnv}
         hrefs={hrefs}
         navigateTo={navigateTo}
+        hub={hub}
       />
     </RosterGate>
   );

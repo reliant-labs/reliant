@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 // with the two-card layout — an icon on one row and none on the others is the
 // shape difference that made the free option read as a different kind of
 // answer.
-import { Check, CheckCircle2, ChevronDown, Loader2, Smartphone } from "lucide-react";
+import { Check, CheckCircle2, ChevronDown, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   PlanTileRow,
@@ -44,7 +44,6 @@ import { trackEvent } from "@/lib/analytics";
 import { capabilities } from "@/services/controlPlane/capabilities";
 import { formatPrice } from "@/components/Billing/priceFormat";
 import { formatMachineSeconds } from "@/lib/formatMachineMinutes";
-import { isPhoneViewport } from "@/lib/mobileRedirect";
 
 const HAS_CLOUD_DAEMONS = capabilities.cloudDaemons;
 
@@ -101,20 +100,7 @@ export function ComputeStep({
   updatePlan,
   onNext,
 }: StepProps & { hideHeader?: boolean }) {
-  // A phone cannot run the desktop app or the CLI, so the free answer is not on
-  // offer there; the desktop app and a browser on a computer can both install
-  // it. Read once at mount so a resize cannot swap the list under the user.
-  // Without hosted machines in this build there is nothing else to lead with,
-  // so the free answer stays even on a phone.
-  const [onPhone] = useState(() => HAS_CLOUD_DAEMONS && isPhoneViewport());
-  // The free answer is the preselected one wherever it can run, unless the
-  // user already chose a hosted machine (Back from checkout lands here with
-  // that recorded, and a size picked before a reload is in the plan too; neither
-  // must be flipped).
-  const [showLocal, setShowLocal] = useState(
-    plan.compute === "local_daemon" ||
-      (!onPhone && !isCloudCompute(plan.compute) && !plan.computePlanId),
-  );
+  const [showLocal, setShowLocal] = useState(plan.compute === "local_daemon");
   // While the free option is chosen the hosted rows fold into one disclosure so
   // the connect instructions sit right under the list. This is only the user's
   // wish to look at them again; it is meaningless (and ignored) otherwise.
@@ -575,7 +561,6 @@ export function ComputeStep({
               column as PlanTileRow (keep the two in step). It is still NOT a
               plan: it writes no `computePlanId`, and picking it opens the
               connect instructions at the bottom of the step. */}
-          {!onPhone && (
           <button
             type="button"
             onClick={handleLocal}
@@ -589,19 +574,17 @@ export function ComputeStep({
           >
             <span className="min-w-0">
               <span className="flex items-center gap-2 text-sm font-medium text-foreground">
-                Your own computer
+                Use your own computer
                 {showLocal && <CheckCircle2 className="h-4 w-4 text-primary-ink" />}
               </span>
               <span className="block text-xs text-muted-foreground">
-                Runs on your machine, so it&apos;s free. Bring your own model
-                key or subscription. Needs the Reliant desktop app or CLI.
+                Your laptop or server
               </span>
             </span>
             <span className="flex-shrink-0 text-sm font-medium tabular-nums text-foreground">
               Free
             </span>
           </button>
-          )}
 
           {/* The hosted machines — the REST of the same list, with no header
               of their own (a header would re-divide the list into "yours" and
@@ -629,9 +612,7 @@ export function ComputeStep({
                     ` · from ${formatPrice(cheapestMonthlyCents)}/mo`}
                 </span>
                 <span className="block text-xs text-muted-foreground">
-                  {machineCovered
-                    ? "Keeps running after you close your laptop."
-                    : "Paid. Keeps running after you close your laptop."}
+                  Hosted, nothing to install
                 </span>
               </span>
               <span className="flex flex-shrink-0 items-center gap-1 text-xs text-muted-foreground">
@@ -658,10 +639,6 @@ export function ComputeStep({
             cloudRows
           )}
         </div>
-
-        {onPhone && (
-          <PhoneHandoff machineCovered={machineCovered} />
-        )}
 
         {/* The fine print under the list — at most two short muted lines,
             not the four stacked paragraphs it used to be. Only what changes a
@@ -848,63 +825,6 @@ export function ComputeStep({
           </button>
         ) : null}
       </StepFooterAction>
-    </div>
-  );
-}
-
-// A phone cannot run the free answer, so say so plainly, say that the hosted
-// answer is paid, and offer the way to carry on at a computer. The link is the
-// current /onboarding URL: the plan lives in its search params, so the computer
-// picks up where the phone stopped. There is no server-side handoff to call, so
-// this is a copy button and a mailto, nothing more.
-function PhoneHandoff({ machineCovered }: { machineCovered: boolean }) {
-  const [copied, setCopied] = useState<"idle" | "copied" | "failed">("idle");
-  const link = typeof window === "undefined" ? "" : window.location.href;
-  const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(link);
-      setCopied("copied");
-    } catch {
-      setCopied("failed");
-    }
-  };
-  const mailto = `mailto:?subject=${encodeURIComponent("Continue setting up Reliant")}&body=${encodeURIComponent(link)}`;
-  return (
-    <div
-      className="space-y-2 rounded-lg border border-border bg-muted/30 px-4 py-3"
-      data-testid="compute-step-phone-handoff"
-    >
-      <p className="flex items-start gap-2 text-sm font-medium text-foreground">
-        <Smartphone className="mt-0.5 h-4 w-4 flex-shrink-0" aria-hidden />
-        Free setup needs a computer
-      </p>
-      <p className="text-xs leading-relaxed text-muted-foreground">
-        {machineCovered
-          ? "Your own computer is free (it needs the Reliant desktop app or CLI, which can\u2019t run on a phone). Reliant Cloud machines work here."
-          : "Your own computer is free, but it needs the Reliant desktop app or CLI, which can\u2019t run on a phone. Reliant Cloud machines work here and are paid."}
-      </p>
-      <div className="flex flex-wrap items-center gap-3 text-xs">
-        <button
-          type="button"
-          onClick={() => void copy()}
-          className="font-medium text-primary-ink underline-offset-2 hover:underline"
-        >
-          Continue on your computer: copy link
-        </button>
-        <a
-          href={mailto}
-          className="font-medium text-primary-ink underline-offset-2 hover:underline"
-        >
-          Email it to myself
-        </a>
-        <span role="status" aria-live="polite" className="text-muted-foreground">
-          {copied === "copied"
-            ? "Link copied"
-            : copied === "failed"
-              ? "Couldn\u2019t copy. Use the email link."
-              : ""}
-        </span>
-      </div>
     </div>
   );
 }

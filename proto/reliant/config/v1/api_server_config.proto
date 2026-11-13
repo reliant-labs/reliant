@@ -308,6 +308,17 @@ message ApiServerConfig {
 // writes them. The rules every config here follows are in config.proto's
 // header.
 message OrgsConfig {
+  // Lets an org's owners and admins create and reconnect org-owned
+  // connections (control-plane docs/design/org-sharing.md §7, D13). Off by
+  // default: turn it on only once every API server and worker, and the
+  // release a rollback would return to, read org connections; an older
+  // replica routes no event through one. Using, listing, renaming and
+  // deleting an org connection that exists are not gated.
+  bool connections_enabled = 1 [(forge.v1.config) = {
+    env_var: "RELIANT_ORGS_CONNECTIONS_ENABLED"
+    description: "Let org owners and admins create org-owned integration connections"
+  }];
+
   // Lets a GitHub trigger of an org listen through one of the org's linked
   // GitHub App installations (control-plane docs/design/org-sharing.md §7.1):
   // only that installation's events reach it. Off by default: a release
@@ -319,5 +330,19 @@ message OrgsConfig {
   bool github_installation_triggers_enabled = 2 [(forge.v1.config) = {
     env_var: "RELIANT_ORGS_GITHUB_INSTALLATION_TRIGGERS_ENABLED"
     description: "Let an org's GitHub triggers listen through one of the org's linked GitHub App installations"
+  }];
+
+  // Lets an org's owners and admins add org-owned AI provider accounts (API
+  // keys) and bind a provider workspace whose members' seats the org pays for
+  // (control-plane docs/design/org-provider-accounts.md §3.5, §14 P4). Off by
+  // default. A release before this one is blind to org accounts (no person's
+  // id is an org's owner key), so a rollback narrows what serves, never
+  // widens it; turn it on once the routing that serves them (P5) is in every
+  // API server and worker. Listing, editing, pausing, rotating and deleting an
+  // org account, unbinding a workspace and releasing a seat are never gated,
+  // so an admin can always stop the org's spend.
+  bool provider_accounts_enabled = 3 [(forge.v1.config) = {
+    env_var: "RELIANT_ORGS_PROVIDER_ACCOUNTS_ENABLED"
+    description: "Let org owners and admins add org-owned AI provider accounts and bind provider workspaces"
   }];
 }

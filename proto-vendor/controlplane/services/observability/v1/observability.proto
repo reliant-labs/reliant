@@ -2355,6 +2355,16 @@ message ReleasePromotionRef {
   google.protobuf.Timestamp promoted_at = 4;
   // The release it replaced, empty for the first.
   string previous_release_version = 5;
+  // True when the deploy ledger holds no promotion of release_version and the
+  // marker is INFERRED: promoted_at is the first time the environment's
+  // telemetry showed service.version = release_version (an app whose deploys
+  // nothing records). id and git_commit are empty then, and
+  // previous_release_version is the version first seen before it.
+  bool inferred = 6;
+  // Where promoted_at came from: "promotion" (the deploy ledger) or
+  // "telemetry_first_seen" (inferred). Always set by a server that knows the
+  // field; an older server leaves it empty, which means "promotion".
+  string marker_source = 7;
 }
 
 // ServiceHealthDelta is one service's before and after, over weighted server

@@ -183,3 +183,197 @@ func ViewerMessageUpdate(raw []byte) []byte {
 	}
 	return out
 }
+
+// ViewerChatUpdate is what a viewer is sent of one chat update's data (a
+// replay, a snapshot's other updates, a live frame), by the update's type.
+// Every type is classified in viewerChatUpdates; one that is not (a type
+// added later) is sent as {}, so a new payload reaches a viewer only once
+// someone decided it may (TestEveryChatUpdateTypeIsClassifiedForViewers).
+//
+// A payload of a redacted type that is not a JSON object (null, an array, a
+// malformed body) is sent as {}: there is nothing to keep of it.
+func ViewerChatUpdate(t reliantv1.ChatUpdateType, data string) string {
+	switch viewerChatUpdates[t] {
+	case viewerPass:
+		return data
+	case viewerMessage:
+		return string(ViewerMessageUpdate([]byte(data)))
+	case viewerKeepOnly:
+		payload := decodeObject(data)
+		if payload == nil {
+			return `{}`
+		}
+		for k := range payload {
+			if !runOutputViewerKeys[k] {
+				delete(payload, k)
+			}
+		}
+		payload["body_elided"] = true
+		return marshalOrEmpty(payload)
+	case viewerDropOutputs:
+		// An object, whose nested values are walked; a bare string or array
+		// at the top is a value with no keys to judge it by.
+		payload := decodeObject(data)
+		if payload == nil {
+			return `{}`
+		}
+		dropKeys(payload, nodeOutputKeys)
+		return marshalOrEmpty(payload)
+	case viewerError:
+		payload := decodeObject(data)
+		if payload == nil {
+			return `{}`
+		}
+		delete(payload, "error_message")
+		delete(payload, "error_summary")
+		payload["body_elided"] = true
+		return marshalOrEmpty(payload)
+	case viewerQuestion:
+		payload := decodeObject(data)
+		if payload == nil {
+			return `{}`
+		}
+		if id, _ := payload["tool_call_id"].(string); id == "" {
+			delete(payload, "metadata")
+			delete(payload, "response_data")
+		}
+		return marshalOrEmpty(payload)
+	default:
+		return `{}`
+	}
+}
+
+// viewerRule is how a chat update of one type is shaped for a viewer.
+type viewerRule uint8
+
+const (
+	// viewerWithhold: the type is not classified; sent as {}.
+	viewerWithhold viewerRule = iota
+	// viewerPass: the payload carries nothing a tool read, a command printed
+	// or the engine resolved, and is sent as it is.
+	viewerPass
+	// viewerMessage: ViewerMessageUpdate (tool results out).
+	viewerMessage
+	// viewerKeepOnly: only the step's identity, its command and how it
+	// ended (runOutputViewerKeys); stdout, stderr, output, working directory
+	// and log file are left out.
+	viewerKeepOnly
+	// viewerDropOutputs: without what a node produced or why it failed
+	// (nodeOutputKeys), at any depth.
+	viewerDropOutputs
+	// viewerError: an error's raw text (error_message, error_summary) is the
+	// failure as it happened, which embeds what a command or tool printed;
+	// a viewer is told that it failed, where and when.
+	viewerError
+	// viewerQuestion: a workflow step's question (no tool_call_id) is a
+	// resolved prompt, which can carry an earlier result: sent without its
+	// metadata. An agent's ask_user is the model's own words and stays.
+	viewerQuestion
+)
+
+// viewerChatUpdates classifies every ChatUpdateType for viewers.
+var viewerChatUpdates = map[reliantv1.ChatUpdateType]viewerRule{
+	reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_MESSAGE:            viewerMessage,
+	reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_RUN_OUTPUT:         viewerKeepOnly,
+	reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_EXECUTION_LOG:      viewerKeepOnly,
+	reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_NODE_EXECUTION:     viewerDropOutputs,
+	reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_WORKFLOW_EXECUTION: viewerDropOutputs,
+	reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_ERROR:              viewerError,
+	reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_QUESTION:           viewerQuestion,
+
+	// id, type, status, title (the tool call's own summary, whose input
+	// the viewer reads), denial reason, timestamps, workflow and thread.
+	reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_APPROVAL: viewerPass,
+	// id, title, status, origin, parent, router decision (workflow, preset).
+	reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_THREAD: viewerPass,
+	// tool call id, name, status, timestamps, node, child workflow.
+	reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_TOOL_CALL: viewerPass,
+	// workflow id, name, status, outcome, parent.
+	reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_WORKFLOW_STATUS: viewerPass,
+	// chat id, title, state, workflow name.
+	reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_CHAT: viewerPass,
+	// what to re-read, and its scope.
+	reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_REFETCH: viewerPass,
+	// the model's own streamed output (text, thinking, a tool call's input
+	// as it is written), as the viewer's transcript keeps it.
+	reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_STREAMING_DELTA: viewerPass,
+	// message id, thread, reason, last stream sequence.
+	reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_STREAM_FINALIZED: viewerPass,
+	// thread and the drained messages' ids.
+	reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_AGENT_MESSAGES_DRAINED: viewerPass,
+
+	// No production writer; withheld until one is classified.
+	reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_UNSPECIFIED:      viewerWithhold,
+	reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_INFO:             viewerWithhold,
+	reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_WARNING:          viewerWithhold,
+	reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_SKILL_INVOCATION: viewerWithhold,
+}
+
+// decodeObject is data as a JSON object, nil when it is not one (null, an
+// array, a scalar, malformed).
+func decodeObject(data string) map[string]any {
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(data), &payload); err != nil {
+		return nil
+	}
+	return payload
+}
+
+// runOutputViewerKeys is what a viewer keeps of a run step's output update.
+var runOutputViewerKeys = map[string]bool{
+	"update_type": true, "id": true, "step_id": true, "command": true, "exit_code": true,
+	"interrupted": true, "duration": true, "workflow_id": true, "unique_activity_id": true, "timestamp": true,
+}
+
+// nodeOutputKeys are a run's or node's resolved values: what it produced, why
+// it failed, and what it was given (params and inputs are resolved from
+// earlier steps' results).
+var nodeOutputKeys = map[string]bool{
+	"output": true, "outputs": true, "output_json": true, "result": true,
+	"error_message": true, "error": true, "metadata": true, "stdout": true, "stderr": true,
+	"params": true, "inputs": true, "input": true, "input_json": true, "variables": true,
+}
+
+func dropKeys(v any, keys map[string]bool) {
+	switch x := v.(type) {
+	case map[string]any:
+		for k, child := range x {
+			if keys[k] {
+				delete(x, k)
+				continue
+			}
+			dropKeys(child, keys)
+		}
+	case []any:
+		for _, child := range x {
+			dropKeys(child, keys)
+		}
+	}
+}
+
+func marshalOrEmpty(v any) string {
+	out, err := json.Marshal(v)
+	if err != nil {
+		return `{}`
+	}
+	return string(out)
+}
+
+// ElideWorkflowStatesForViewer leaves every resolved value out of a chat
+// snapshot's live workflow states, in place: each run's params (a child's are
+// resolved from earlier steps' results) and outputs, and each node's error
+// and metadata. What ran, its status and its timing stay.
+func ElideWorkflowStatesForViewer(states []*reliantv1.WorkflowExecutionState) {
+	for _, w := range states {
+		if w == nil {
+			continue
+		}
+		w.Params = nil
+		w.Outputs = nil
+		for _, n := range w.GetNodes() {
+			n.ErrorMessage = nil
+			n.Metadata = nil
+		}
+		ElideWorkflowStatesForViewer(w.GetChildren())
+	}
+}

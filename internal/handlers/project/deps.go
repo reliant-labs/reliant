@@ -35,6 +35,10 @@ type Repository interface {
 	SetProjectForgeName(ctx context.Context, id, userID, forgeProjectName string) (bool, error)
 	TouchProject(ctx context.Context, id string, userID string) error
 	DeleteProject(ctx context.Context, id string, userID string) error
+	// ProjectOrgMoveBlockers and ProjectOrgMoveEffects are a move's preview:
+	// the running work that refuses it now, and what it would change.
+	ProjectOrgMoveBlockers(ctx context.Context, projectID string) (*core.ProjectOrgMoveBlockers, error)
+	ProjectOrgMoveEffects(ctx context.Context, projectID, toOrgID string) (*core.ProjectOrgMoveEffects, error)
 
 	UpsertProjectDaemon(ctx context.Context, projectID, daemonID, path string, defaultBranch *string) error
 	RecordObservedProjectDaemon(ctx context.Context, projectID, daemonID, path string, defaultBranch *string) (bool, error)

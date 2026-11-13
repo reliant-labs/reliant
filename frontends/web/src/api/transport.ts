@@ -226,6 +226,7 @@ const LONG_TIMEOUT_METHODS: Record<string, number> = {
   StreamUserUpdates: 0,
   StreamChatUpdates: 0,
   StreamProcessOutput: 0,
+  StreamOrgUpdates: 0,
 };
 
 /**
@@ -440,6 +441,18 @@ const errorInterceptor: Interceptor = (next) => async (req) => {
       // Retryable, and the server already logged it at WARN. Visible here
       // too, but not an exception: the caller's retry is the remedy.
       logger.warn("[gRPC Client] Server deadline exceeded", context);
+      throw error;
+    }
+
+    if (
+      error instanceof ConnectError &&
+      error.code === Code.Unauthenticated &&
+      !req.header.has(AUTH_HEADER)
+    ) {
+      // Sent with no credentials (a signed-out page): the 401 is the answer,
+      // and missingTokenInterceptor already warned. A 401 that carried a
+      // token still falls through to the error log below.
+      logger.debug("[gRPC Client] Unauthenticated request without a token", context);
       throw error;
     }
 

@@ -39,6 +39,10 @@ type Repository interface {
 	GetProject(ctx context.Context, id string) (*db.Project, error)
 	GetWorkflowDraft(ctx context.Context, id string) (*db.WorkflowDraft, error)
 
+	// An org's feed of what its members shared (StreamOrgUpdates).
+	LatestOrgUpdateSequence(ctx context.Context, orgID string) (int64, error)
+	OrgUpdatesSince(ctx context.Context, orgID string, sinceSeq int64, limit int) ([]core.OrgUpdate, error)
+
 	// What a chat snapshot is assembled from.
 	ListThreadsByConversation(ctx context.Context, chatID string) ([]*db.Thread, error)
 	CountMessagesInChat(ctx context.Context, chatID string) (int, error)

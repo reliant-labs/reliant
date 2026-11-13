@@ -28,6 +28,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/gitcredentialclient"
 	grpcserver "github.com/reliant-labs/reliant/internal/grpc"
 	"github.com/reliant-labs/reliant/internal/handlers/chat"
+	"github.com/reliant-labs/reliant/internal/handlers/org_provider_account"
 	"github.com/reliant-labs/reliant/internal/handlers/project"
 	"github.com/reliant-labs/reliant/internal/handlers/trigger"
 	"github.com/reliant-labs/reliant/internal/integrations/catalog"
@@ -406,6 +407,9 @@ type APIConnectionsDeps struct {
 	Integrations *IntegrationSettings
 	AppOrigins   []string
 	ControlPlane *configv1.ControlPlaneConfig
+	// OrgConnections lets org owners and admins create org-owned connections
+	// (ApiServerConfig orgs.connections_enabled; off by default).
+	OrgConnections bool
 }
 
 // NewAPIConnections builds the connection service, the token source and the
@@ -426,7 +430,8 @@ func NewAPIConnections(d APIConnectionsDeps) (*APIConnections, error) {
 	tokens := connections.NewTokenSource(store, d.Vault, providers, nil)
 	broker := connections.NewBroker(store, d.Vault, providers, nil, d.Integrations.PublicURL).WithAppOrigins(d.AppOrigins)
 	svc := connections.NewService(store, d.Vault, providers, tokens, broker, nil).
-		WithDelegated(delegatedAvailable(ControlPlaneEndpoint(d.ControlPlane).Hosted()))
+		WithDelegated(delegatedAvailable(ControlPlaneEndpoint(d.ControlPlane).Hosted())).
+		WithOrgConnections(d.OrgConnections)
 	for _, in := range svc.ListIntegrations() {
 		for _, m := range in.Methods {
 			if !m.Available {
@@ -1439,4 +1444,31 @@ func gitTokens(cfg *configv1.ControlPlaneConfig) (gitcredentialclient.Service, e
 // function, so the config-path test proves what newTrigger hands the handler.
 func TriggerOrgRollout(api *configv1.ApiServerConfig) *configv1.OrgsConfig {
 	return api.GetOrgs()
+}
+
+// APIOrgConnections is whether the API server lets org owners and admins
+// create org-owned connections: ApiServerConfig orgs.connections_enabled, off
+// when unset. One function, so the config-path test proves what
+// newAPIConnections hands the connection service.
+func APIOrgConnections(api *configv1.ApiServerConfig) bool {
+	return api.GetOrgs().GetConnectionsEnabled()
+}
+
+// APIOrgProviderAccounts is whether the API server lets org owners and admins
+// add org-owned AI provider accounts and bind provider workspaces:
+// ApiServerConfig orgs.provider_accounts_enabled, off when unset. One
+// function, so the config-path test proves what newOrgProviderAccount hands
+// the service.
+func APIOrgProviderAccounts(api *configv1.ApiServerConfig) bool {
+	return api.GetOrgs().GetProviderAccountsEnabled()
+}
+
+// NewOrgProviderAccount builds the API server's OrgProviderAccountService
+// from d, with its rollout gates (Deps.OrgRollout) read from api: ApiServerConfig
+// orgs, whose provider_accounts_enabled is APIOrgProviderAccounts.
+// newOrgProviderAccount and the config-path test both build it here, so the
+// test proves the wiring production runs.
+func NewOrgProviderAccount(api *configv1.ApiServerConfig, d org_provider_account.Deps) (*org_provider_account.Service, error) {
+	d.OrgRollout = api.GetOrgs()
+	return org_provider_account.New(d)
 }

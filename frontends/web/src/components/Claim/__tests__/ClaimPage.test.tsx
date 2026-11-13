@@ -202,8 +202,24 @@ describe('every refusal the proto names', () => {
 
     const card = await screen.findByTestId('claim-refused-claimable_session_released')
     expect(card).toHaveTextContent(/another browser/i)
-    expect(card.querySelector('a')?.getAttribute('href')).toBe('/auth?redirect=%2Fclaim')
+    // Someone who tapped Claim on their phone can make the account here: the
+    // one link goes to the email-code screen, which creates an account for a
+    // new address and signs in an existing one, then returns to /claim.
+    expect(card).toHaveTextContent(/creates your account/i)
+    const next = card.querySelector('a')
+    expect(next).toHaveTextContent(/create an account or sign in to claim/i)
+    expect(next?.getAttribute('href')).toBe('/auth?redirect=%2Fclaim')
     expect(auth.adoptSession).not.toHaveBeenCalled()
+  })
+
+  it('without the claim link in this browser there is nothing to claim, signed in or not', async () => {
+    window.localStorage.clear()
+    resetClaimLinkMemoryForTests()
+    auth.user = { id: 'new-human', email: 'me@example.com', is_anonymous: false }
+    const complete = vi.fn()
+    arrive({ 'ClaimableService.CompleteClaim': () => (complete(), {}) })
+    expect(await screen.findByText(/Open the claim link from your agent/i)).toBeInTheDocument()
+    expect(complete).not.toHaveBeenCalled()
   })
 
   it('a link opened without its fragment explains what to do', async () => {

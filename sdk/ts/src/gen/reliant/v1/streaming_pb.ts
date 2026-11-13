@@ -7,7 +7,7 @@
 
 import type { GenEnum, GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
 import { enumDesc, fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
-import type { Message as Message$1, ToolBodyMode } from "./chat_pb.js";
+import type { ChatActivity, Message as Message$1, ToolBodyMode } from "./chat_pb.js";
 import { file_reliant_v1_chat } from "./chat_pb.js";
 import type { Message } from "@bufbuild/protobuf";
 
@@ -15,7 +15,180 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file reliant/v1/streaming.proto.
  */
 export const file_reliant_v1_streaming: GenFile = /*@__PURE__*/
-  fileDesc("ChpyZWxpYW50L3YxL3N0cmVhbWluZy5wcm90bxIKcmVsaWFudC52MSKqAQoYU3RyZWFtQ2hhdFVwZGF0ZXNSZXF1ZXN0Eg8KB2NoYXRfaWQYASABKAkSEQoJc2luY2Vfc2VxGAIgASgDEhcKCnByb2plY3RfaWQYAyABKAlIAIgBARIyCgt0b29sX2JvZGllcxgEIAEoDjIYLnJlbGlhbnQudjEuVG9vbEJvZHlNb2RlSAGIAQFCDQoLX3Byb2plY3RfaWRCDgoMX3Rvb2xfYm9kaWVzIowCCg9DaGF0U3RyZWFtRXZlbnQSMAoIc25hcHNob3QYASABKAsyHC5yZWxpYW50LnYxLkNoYXRTeW5jU25hcHNob3RIABIuCgd1cGRhdGVzGAIgASgLMhsucmVsaWFudC52MS5DaGF0VXBkYXRlQmF0Y2hIABItCgljYXVnaHRfdXAYAyABKAsyGC5yZWxpYW50LnYxLkNoYXRDYXVnaHRVcEgAEioKCWhlYXJ0YmVhdBgEIAEoCzIVLnJlbGlhbnQudjEuSGVhcnRiZWF0SAASMwoMdXNlcl91cGRhdGVzGAUgASgLMhsucmVsaWFudC52MS5DaGF0VXNlclVwZGF0ZXNIAEIHCgVldmVudCI+Cg9DaGF0VXNlclVwZGF0ZXMSKwoHdXBkYXRlcxgBIAMoCzIaLnJlbGlhbnQudjEuVXNlclVwZGF0ZURhdGEisgIKEENoYXRTeW5jU25hcHNob3QSJQoIbWVzc2FnZXMYASADKAsyEy5yZWxpYW50LnYxLk1lc3NhZ2USMQoNb3RoZXJfdXBkYXRlcxgCIAMoCzIaLnJlbGlhbnQudjEuQ2hhdFVwZGF0ZURhdGESFwoPbGF0ZXN0X3NlcXVlbmNlGAMgASgDEg0KBXRvdGFsGAQgASgFEhAKCGhhc19tb3JlGAUgASgIEhIKCm9sZGVzdF9zZXEYBiABKAMSGgoSdGhyZWFkX3Rva2VuX2NvdW50GAcgASgDEhwKFGNvbXBhY3Rpb25fdGhyZXNob2xkGAggASgDEjwKEGFjdGl2ZV93b3JrZmxvd3MYCSADKAsyIi5yZWxpYW50LnYxLldvcmtmbG93RXhlY3V0aW9uU3RhdGUiVwoPQ2hhdFVwZGF0ZUJhdGNoEisKB3VwZGF0ZXMYASADKAsyGi5yZWxpYW50LnYxLkNoYXRVcGRhdGVEYXRhEhcKD2xhdGVzdF9zZXF1ZW5jZRgCIAEoAyKlAQoOQ2hhdFVwZGF0ZURhdGESLwoLdXBkYXRlX3R5cGUYASABKA4yGi5yZWxpYW50LnYxLkNoYXRVcGRhdGVUeXBlEhcKD3NlcXVlbmNlX251bWJlchgCIAEoAxIRCgllbnRpdHlfaWQYAyABKAkSDwoHY2hhdF9pZBgEIAEoCRIRCglkYXRhX2pzb24YBSABKAkSEgoKY3JlYXRlZF9hdBgGIAEoCSKEAQoYU3RyZWFtVXNlclVwZGF0ZXNSZXF1ZXN0EhEKCXNpbmNlX3NlcRgBIAEoAxIXCgpwcm9qZWN0X2lkGAQgASgJSACIAQFCDQoLX3Byb2plY3RfaWRKBAgCEANKBAgDEARSEXN1YnNjcmliZV9jaGF0X2lkUg5jaGF0X3NpbmNlX3NlcSKDAgoPVXNlclN0cmVhbUV2ZW50EigKBHN5bmMYASABKAsyGC5yZWxpYW50LnYxLlVzZXJTeW5jSW5mb0gAEi4KB3VwZGF0ZXMYAiABKAsyGy5yZWxpYW50LnYxLlVzZXJVcGRhdGVCYXRjaEgAEioKCWhlYXJ0YmVhdBgDIAEoCzIVLnJlbGlhbnQudjEuSGVhcnRiZWF0SABCBwoFZXZlbnRKBAgEEApSEmNoYXRfc3luY19zbmFwc2hvdFIMY2hhdF91cGRhdGVzUg53b3JrZmxvd19ldmVudFIKbm9kZV9ldmVudFINZXhlY3V0aW9uX2xvZ1IOY2hhdF9jYXVnaHRfdXAiJwoMQ2hhdENhdWdodFVwEhcKD2xhdGVzdF9zZXF1ZW5jZRgBIAEoAyIlCgxVc2VyU3luY0luZm8SFQoNbGFzdF9zZXF1ZW5jZRgBIAEoAyJXCg9Vc2VyVXBkYXRlQmF0Y2gSKwoHdXBkYXRlcxgBIAMoCzIaLnJlbGlhbnQudjEuVXNlclVwZGF0ZURhdGESFwoPbGF0ZXN0X3NlcXVlbmNlGAIgASgDIvICCg5Vc2VyVXBkYXRlRGF0YRIKCgJpZBgBIAEoCRIPCgd1c2VyX2lkGAIgASgJEhcKD3NlcXVlbmNlX251bWJlchgDIAEoAxIXCgpwcm9qZWN0X2lkGAQgASgJSACIAQESGAoLd29ya3RyZWVfaWQYBSABKAlIAYgBARIUCgdjaGF0X2lkGAYgASgJSAKIAQESLwoLdXBkYXRlX3R5cGUYByABKA4yGi5yZWxpYW50LnYxLlVzZXJVcGRhdGVUeXBlEisKC2VudGl0eV90eXBlGAggASgOMhYucmVsaWFudC52MS5FbnRpdHlUeXBlEhEKCWVudGl0eV9pZBgJIAEoCRIRCglkYXRhX2pzb24YCiABKAkSEgoKY3JlYXRlZF9hdBgLIAEoCRITCgZvcmdfaWQYDCABKAlIA4gBAUINCgtfcHJvamVjdF9pZEIOCgxfd29ya3RyZWVfaWRCCgoIX2NoYXRfaWRCCQoHX29yZ19pZCIeCglIZWFydGJlYXQSEQoJdGltZXN0YW1wGAEgASgDIvEEChJOb2RlRXhlY3V0aW9uU3RhdGUSDwoHbm9kZV9pZBgBIAEoCRIRCglub2RlX3R5cGUYAiABKAkSLwoGc3RhdHVzGAMgASgOMh8ucmVsaWFudC52MS5Ob2RlRXhlY3V0aW9uU3RhdHVzEhMKC3dvcmtmbG93X2lkGAQgASgJEhsKDnBhcmVudF9ub2RlX2lkGAUgASgJSACIAQESGAoLYWN0aXZpdHlfaWQYBiABKAlIAYgBARIXCgpzdGFydGVkX2F0GAcgASgDSAKIAQESGQoMY29tcGxldGVkX2F0GAggASgDSAOIAQESGAoLZHVyYXRpb25fbXMYCSABKANIBIgBARIWCglleGl0X2NvZGUYCiABKAVIBYgBARIaCg1lcnJvcl9tZXNzYWdlGAsgASgJSAaIAQESFgoJaXRlcmF0aW9uGAwgASgFSAeIAQESGwoObWF4X2l0ZXJhdGlvbnMYDSABKAVICIgBARI+CghtZXRhZGF0YRgOIAMoCzIsLnJlbGlhbnQudjEuTm9kZUV4ZWN1dGlvblN0YXRlLk1ldGFkYXRhRW50cnkaLwoNTWV0YWRhdGFFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBQhEKD19wYXJlbnRfbm9kZV9pZEIOCgxfYWN0aXZpdHlfaWRCDQoLX3N0YXJ0ZWRfYXRCDwoNX2NvbXBsZXRlZF9hdEIOCgxfZHVyYXRpb25fbXNCDAoKX2V4aXRfY29kZUIQCg5fZXJyb3JfbWVzc2FnZUIMCgpfaXRlcmF0aW9uQhEKD19tYXhfaXRlcmF0aW9ucyKCBQoWV29ya2Zsb3dFeGVjdXRpb25TdGF0ZRITCgt3b3JrZmxvd19pZBgBIAEoCRIVCg13b3JrZmxvd19uYW1lGAIgASgJEg8KB2NoYXRfaWQYAyABKAkSMwoGc3RhdHVzGAQgASgOMiMucmVsaWFudC52MS5Xb3JrZmxvd0V4ZWN1dGlvblN0YXR1cxIfChJwYXJlbnRfd29ya2Zsb3dfaWQYBSABKAlIAIgBARIOCgZ0aHJlYWQYBiABKAkSFAoMYWN0aXZlX25vZGVzGAcgAygJEi0KBW5vZGVzGAggAygLMh4ucmVsaWFudC52MS5Ob2RlRXhlY3V0aW9uU3RhdGUSNAoIY2hpbGRyZW4YCSADKAsyIi5yZWxpYW50LnYxLldvcmtmbG93RXhlY3V0aW9uU3RhdGUSFwoKc3RhcnRlZF9hdBgKIAEoA0gBiAEBEhkKDGNvbXBsZXRlZF9hdBgLIAEoA0gCiAEBEj4KBnBhcmFtcxgMIAMoCzIuLnJlbGlhbnQudjEuV29ya2Zsb3dFeGVjdXRpb25TdGF0ZS5QYXJhbXNFbnRyeRJACgdvdXRwdXRzGA0gAygLMi8ucmVsaWFudC52MS5Xb3JrZmxvd0V4ZWN1dGlvblN0YXRlLk91dHB1dHNFbnRyeRotCgtQYXJhbXNFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBGi4KDE91dHB1dHNFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBQhUKE19wYXJlbnRfd29ya2Zsb3dfaWRCDQoLX3N0YXJ0ZWRfYXRCDwoNX2NvbXBsZXRlZF9hdCqzBQoOQ2hhdFVwZGF0ZVR5cGUSIAocQ0hBVF9VUERBVEVfVFlQRV9VTlNQRUNJRklFRBAAEhwKGENIQVRfVVBEQVRFX1RZUEVfTUVTU0FHRRABEh0KGUNIQVRfVVBEQVRFX1RZUEVfQVBQUk9WQUwQAhIbChdDSEFUX1VQREFURV9UWVBFX1RIUkVBRBADEh4KGkNIQVRfVVBEQVRFX1RZUEVfVE9PTF9DQUxMEAQSJAogQ0hBVF9VUERBVEVfVFlQRV9XT1JLRkxPV19TVEFUVVMQBRIaChZDSEFUX1VQREFURV9UWVBFX0VSUk9SEAYSGQoVQ0hBVF9VUERBVEVfVFlQRV9DSEFUEAcSHwobQ0hBVF9VUERBVEVfVFlQRV9SVU5fT1VUUFVUEAgSIwofQ0hBVF9VUERBVEVfVFlQRV9OT0RFX0VYRUNVVElPThAJEiIKHkNIQVRfVVBEQVRFX1RZUEVfRVhFQ1VUSU9OX0xPRxAKEicKI0NIQVRfVVBEQVRFX1RZUEVfV09SS0ZMT1dfRVhFQ1VUSU9OEAsSGQoVQ0hBVF9VUERBVEVfVFlQRV9JTkZPEA0SHAoYQ0hBVF9VUERBVEVfVFlQRV9XQVJOSU5HEA4SHAoYQ0hBVF9VUERBVEVfVFlQRV9SRUZFVENIEA8SJAogQ0hBVF9VUERBVEVfVFlQRV9TVFJFQU1JTkdfREVMVEEQEBIlCiFDSEFUX1VQREFURV9UWVBFX1NLSUxMX0lOVk9DQVRJT04QERIdChlDSEFUX1VQREFURV9UWVBFX1FVRVNUSU9OEBISJQohQ0hBVF9VUERBVEVfVFlQRV9TVFJFQU1fRklOQUxJWkVEEBMSKwonQ0hBVF9VUERBVEVfVFlQRV9BR0VOVF9NRVNTQUdFU19EUkFJTkVEEBQq7gYKDlVzZXJVcGRhdGVUeXBlEiAKHFVTRVJfVVBEQVRFX1RZUEVfVU5TUEVDSUZJRUQQABImCiJVU0VSX1VQREFURV9UWVBFX0NIQVRfU1RBVEVfQ0hBTkdFEAESKAokVVNFUl9VUERBVEVfVFlQRV9DSEFUX0NPTkZJR19DSEFOR0VEEAISIQodVVNFUl9VUERBVEVfVFlQRV9DSEFUX0NSRUFURUQQAxInCiNVU0VSX1VQREFURV9UWVBFX0NIQVRfVElUTEVfQ0hBTkdFRBAEEiEKHVVTRVJfVVBEQVRFX1RZUEVfQ0hBVF9ERUxFVEVEEAUSKgomVVNFUl9VUERBVEVfVFlQRV9DSEFUX0FDVElWSVRZX0NIQU5HRUQQBhIkCiBVU0VSX1VQREFURV9UWVBFX1BST0pFQ1RfQ1JFQVRFRBAHEiQKIFVTRVJfVVBEQVRFX1RZUEVfUFJPSkVDVF9ERUxFVEVEEAgSLQopVVNFUl9VUERBVEVfVFlQRV9QUk9KRUNUX1NFVFRJTkdTX0NIQU5HRUQQCRIlCiFVU0VSX1VQREFURV9UWVBFX1dPUktUUkVFX0NSRUFURUQQChIlCiFVU0VSX1VQREFURV9UWVBFX1dPUktUUkVFX0RFTEVURUQQCxIsCihVU0VSX1VQREFURV9UWVBFX1dPUktUUkVFX1NUQVRVU19DSEFOR0VEEAwSJAogVVNFUl9VUERBVEVfVFlQRV9QUk9DRVNTX1NUQVJURUQQDRIjCh9VU0VSX1VQREFURV9UWVBFX1BST0NFU1NfT1VUUFVUEA4SJgoiVVNFUl9VUERBVEVfVFlQRV9QUk9DRVNTX0NPTVBMRVRFRBAPEiMKH1VTRVJfVVBEQVRFX1RZUEVfUFJPQ0VTU19GQUlMRUQQEBIpCiVVU0VSX1VQREFURV9UWVBFX1BST0NFU1NfUE9SVF9DSEFOR0VEEBESIQodVVNFUl9VUERBVEVfVFlQRV9OT1RJRklDQVRJT04QEhIcChhVU0VSX1VQREFURV9UWVBFX1JFRkVUQ0gQExIlCiFVU0VSX1VQREFURV9UWVBFX0RBRU1PTl9IRUFSVEJFQVQQFBIrCidVU0VSX1VQREFURV9UWVBFX1dPUktGTE9XX0RSQUZUX1VQREFURUQQFSrOAQoKRW50aXR5VHlwZRIbChdFTlRJVFlfVFlQRV9VTlNQRUNJRklFRBAAEhQKEEVOVElUWV9UWVBFX0NIQVQQARIXChNFTlRJVFlfVFlQRV9QUk9KRUNUEAISGAoURU5USVRZX1RZUEVfV09SS1RSRUUQAxIiCh5FTlRJVFlfVFlQRV9CQUNLR1JPVU5EX1BST0NFU1MQBBIWChJFTlRJVFlfVFlQRV9TWVNURU0QBRIeChpFTlRJVFlfVFlQRV9XT1JLRkxPV19EUkFGVBAGKuEBChZOb2RlRXhlY3V0aW9uRXZlbnRUeXBlEikKJU5PREVfRVhFQ1VUSU9OX0VWRU5UX1RZUEVfVU5TUEVDSUZJRUQQABIlCiFOT0RFX0VYRUNVVElPTl9FVkVOVF9UWVBFX1NUQVJURUQQARImCiJOT0RFX0VYRUNVVElPTl9FVkVOVF9UWVBFX1BST0dSRVNTEAISJwojTk9ERV9FWEVDVVRJT05fRVZFTlRfVFlQRV9DT01QTEVURUQQAxIkCiBOT0RFX0VYRUNVVElPTl9FVkVOVF9UWVBFX0ZBSUxFRBAEKvoBChpXb3JrZmxvd0V4ZWN1dGlvbkV2ZW50VHlwZRItCilXT1JLRkxPV19FWEVDVVRJT05fRVZFTlRfVFlQRV9VTlNQRUNJRklFRBAAEikKJVdPUktGTE9XX0VYRUNVVElPTl9FVkVOVF9UWVBFX1NUQVJURUQQARIrCidXT1JLRkxPV19FWEVDVVRJT05fRVZFTlRfVFlQRV9DT01QTEVURUQQAhIoCiRXT1JLRkxPV19FWEVDVVRJT05fRVZFTlRfVFlQRV9GQUlMRUQQAxIrCidXT1JLRkxPV19FWEVDVVRJT05fRVZFTlRfVFlQRV9DQU5DRUxMRUQQBCqRAgoTTm9kZUV4ZWN1dGlvblN0YXR1cxIlCiFOT0RFX0VYRUNVVElPTl9TVEFUVVNfVU5TUEVDSUZJRUQQABIhCh1OT0RFX0VYRUNVVElPTl9TVEFUVVNfUEVORElORxABEiEKHU5PREVfRVhFQ1VUSU9OX1NUQVRVU19SVU5OSU5HEAISIwofTk9ERV9FWEVDVVRJT05fU1RBVFVTX0NPTVBMRVRFRBADEiAKHE5PREVfRVhFQ1VUSU9OX1NUQVRVU19GQUlMRUQQBBIjCh9OT0RFX0VYRUNVVElPTl9TVEFUVVNfQ0FOQ0VMTEVEEAUSIQodTk9ERV9FWEVDVVRJT05fU1RBVFVTX1NLSVBQRUQQBirjAQoXV29ya2Zsb3dFeGVjdXRpb25TdGF0dXMSKQolV09SS0ZMT1dfRVhFQ1VUSU9OX1NUQVRVU19VTlNQRUNJRklFRBAAEiUKIVdPUktGTE9XX0VYRUNVVElPTl9TVEFUVVNfUlVOTklORxABEicKI1dPUktGTE9XX0VYRUNVVElPTl9TVEFUVVNfQ09NUExFVEVEEAISJAogV09SS0ZMT1dfRVhFQ1VUSU9OX1NUQVRVU19GQUlMRUQQAxInCiNXT1JLRkxPV19FWEVDVVRJT05fU1RBVFVTX0NBTkNFTExFRBAEKrIBChFFeGVjdXRpb25Mb2dMZXZlbBIjCh9FWEVDVVRJT05fTE9HX0xFVkVMX1VOU1BFQ0lGSUVEEAASHQoZRVhFQ1VUSU9OX0xPR19MRVZFTF9ERUJVRxABEhwKGEVYRUNVVElPTl9MT0dfTEVWRUxfSU5GTxACEhwKGEVYRUNVVElPTl9MT0dfTEVWRUxfV0FSThADEh0KGUVYRUNVVElPTl9MT0dfTEVWRUxfRVJST1IQBDLQAQoQU3RyZWFtaW5nU2VydmljZRJdChFTdHJlYW1Vc2VyVXBkYXRlcxIkLnJlbGlhbnQudjEuU3RyZWFtVXNlclVwZGF0ZXNSZXF1ZXN0GhsucmVsaWFudC52MS5Vc2VyU3RyZWFtRXZlbnQiA5ACATABEl0KEVN0cmVhbUNoYXRVcGRhdGVzEiQucmVsaWFudC52MS5TdHJlYW1DaGF0VXBkYXRlc1JlcXVlc3QaGy5yZWxpYW50LnYxLkNoYXRTdHJlYW1FdmVudCIDkAIBMAFCOlo4Z2l0aHViLmNvbS9yZWxpYW50LWxhYnMvcmVsaWFudC9nZW4vcmVsaWFudC92MTtyZWxpYW50djFiBnByb3RvMw", [file_reliant_v1_chat]);
+  fileDesc("ChpyZWxpYW50L3YxL3N0cmVhbWluZy5wcm90bxIKcmVsaWFudC52MSJMChdTdHJlYW1PcmdVcGRhdGVzUmVxdWVzdBITCgZvcmdfaWQYASABKAlIAIgBARIRCglzaW5jZV9zZXEYAiABKANCCQoHX29yZ19pZCKoAgoJT3JnVXBkYXRlEhcKD3NlcXVlbmNlX251bWJlchgBIAEoAxInCgR0eXBlGAIgASgOMhkucmVsaWFudC52MS5PcmdVcGRhdGVUeXBlEhUKDXJlc291cmNlX2tpbmQYAyABKAkSEwoLcmVzb3VyY2VfaWQYBCABKAkSFQoNb3duZXJfdXNlcl9pZBgFIAEoCRIXCgpwcm9qZWN0X2lkGAYgASgJSACIAQESEgoFdGl0bGUYByABKAlIAYgBARIvCghhY3Rpdml0eRgIIAEoDjIYLnJlbGlhbnQudjEuQ2hhdEFjdGl2aXR5SAKIAQESEgoKY3JlYXRlZF9hdBgJIAEoCUINCgtfcHJvamVjdF9pZEIICgZfdGl0bGVCCwoJX2FjdGl2aXR5IlEKDk9yZ1VwZGF0ZUJhdGNoEiYKB3VwZGF0ZXMYASADKAsyFS5yZWxpYW50LnYxLk9yZ1VwZGF0ZRIXCg9sYXRlc3Rfc2VxdWVuY2UYAiABKAMiJgoLT3JnQ2F1Z2h0VXASFwoPbGF0ZXN0X3NlcXVlbmNlGAEgASgDIqIBCg5PcmdTdHJlYW1FdmVudBItCgd1cGRhdGVzGAEgASgLMhoucmVsaWFudC52MS5PcmdVcGRhdGVCYXRjaEgAEiwKCWNhdWdodF91cBgCIAEoCzIXLnJlbGlhbnQudjEuT3JnQ2F1Z2h0VXBIABIqCgloZWFydGJlYXQYAyABKAsyFS5yZWxpYW50LnYxLkhlYXJ0YmVhdEgAQgcKBWV2ZW50IqoBChhTdHJlYW1DaGF0VXBkYXRlc1JlcXVlc3QSDwoHY2hhdF9pZBgBIAEoCRIRCglzaW5jZV9zZXEYAiABKAMSFwoKcHJvamVjdF9pZBgDIAEoCUgAiAEBEjIKC3Rvb2xfYm9kaWVzGAQgASgOMhgucmVsaWFudC52MS5Ub29sQm9keU1vZGVIAYgBAUINCgtfcHJvamVjdF9pZEIOCgxfdG9vbF9ib2RpZXMijAIKD0NoYXRTdHJlYW1FdmVudBIwCghzbmFwc2hvdBgBIAEoCzIcLnJlbGlhbnQudjEuQ2hhdFN5bmNTbmFwc2hvdEgAEi4KB3VwZGF0ZXMYAiABKAsyGy5yZWxpYW50LnYxLkNoYXRVcGRhdGVCYXRjaEgAEi0KCWNhdWdodF91cBgDIAEoCzIYLnJlbGlhbnQudjEuQ2hhdENhdWdodFVwSAASKgoJaGVhcnRiZWF0GAQgASgLMhUucmVsaWFudC52MS5IZWFydGJlYXRIABIzCgx1c2VyX3VwZGF0ZXMYBSABKAsyGy5yZWxpYW50LnYxLkNoYXRVc2VyVXBkYXRlc0gAQgcKBWV2ZW50Ij4KD0NoYXRVc2VyVXBkYXRlcxIrCgd1cGRhdGVzGAEgAygLMhoucmVsaWFudC52MS5Vc2VyVXBkYXRlRGF0YSKyAgoQQ2hhdFN5bmNTbmFwc2hvdBIlCghtZXNzYWdlcxgBIAMoCzITLnJlbGlhbnQudjEuTWVzc2FnZRIxCg1vdGhlcl91cGRhdGVzGAIgAygLMhoucmVsaWFudC52MS5DaGF0VXBkYXRlRGF0YRIXCg9sYXRlc3Rfc2VxdWVuY2UYAyABKAMSDQoFdG90YWwYBCABKAUSEAoIaGFzX21vcmUYBSABKAgSEgoKb2xkZXN0X3NlcRgGIAEoAxIaChJ0aHJlYWRfdG9rZW5fY291bnQYByABKAMSHAoUY29tcGFjdGlvbl90aHJlc2hvbGQYCCABKAMSPAoQYWN0aXZlX3dvcmtmbG93cxgJIAMoCzIiLnJlbGlhbnQudjEuV29ya2Zsb3dFeGVjdXRpb25TdGF0ZSJXCg9DaGF0VXBkYXRlQmF0Y2gSKwoHdXBkYXRlcxgBIAMoCzIaLnJlbGlhbnQudjEuQ2hhdFVwZGF0ZURhdGESFwoPbGF0ZXN0X3NlcXVlbmNlGAIgASgDIqUBCg5DaGF0VXBkYXRlRGF0YRIvCgt1cGRhdGVfdHlwZRgBIAEoDjIaLnJlbGlhbnQudjEuQ2hhdFVwZGF0ZVR5cGUSFwoPc2VxdWVuY2VfbnVtYmVyGAIgASgDEhEKCWVudGl0eV9pZBgDIAEoCRIPCgdjaGF0X2lkGAQgASgJEhEKCWRhdGFfanNvbhgFIAEoCRISCgpjcmVhdGVkX2F0GAYgASgJIoQBChhTdHJlYW1Vc2VyVXBkYXRlc1JlcXVlc3QSEQoJc2luY2Vfc2VxGAEgASgDEhcKCnByb2plY3RfaWQYBCABKAlIAIgBAUINCgtfcHJvamVjdF9pZEoECAIQA0oECAMQBFIRc3Vic2NyaWJlX2NoYXRfaWRSDmNoYXRfc2luY2Vfc2VxIoMCCg9Vc2VyU3RyZWFtRXZlbnQSKAoEc3luYxgBIAEoCzIYLnJlbGlhbnQudjEuVXNlclN5bmNJbmZvSAASLgoHdXBkYXRlcxgCIAEoCzIbLnJlbGlhbnQudjEuVXNlclVwZGF0ZUJhdGNoSAASKgoJaGVhcnRiZWF0GAMgASgLMhUucmVsaWFudC52MS5IZWFydGJlYXRIAEIHCgVldmVudEoECAQQClISY2hhdF9zeW5jX3NuYXBzaG90UgxjaGF0X3VwZGF0ZXNSDndvcmtmbG93X2V2ZW50Ugpub2RlX2V2ZW50Ug1leGVjdXRpb25fbG9nUg5jaGF0X2NhdWdodF91cCInCgxDaGF0Q2F1Z2h0VXASFwoPbGF0ZXN0X3NlcXVlbmNlGAEgASgDIiUKDFVzZXJTeW5jSW5mbxIVCg1sYXN0X3NlcXVlbmNlGAEgASgDIlcKD1VzZXJVcGRhdGVCYXRjaBIrCgd1cGRhdGVzGAEgAygLMhoucmVsaWFudC52MS5Vc2VyVXBkYXRlRGF0YRIXCg9sYXRlc3Rfc2VxdWVuY2UYAiABKAMi8gIKDlVzZXJVcGRhdGVEYXRhEgoKAmlkGAEgASgJEg8KB3VzZXJfaWQYAiABKAkSFwoPc2VxdWVuY2VfbnVtYmVyGAMgASgDEhcKCnByb2plY3RfaWQYBCABKAlIAIgBARIYCgt3b3JrdHJlZV9pZBgFIAEoCUgBiAEBEhQKB2NoYXRfaWQYBiABKAlIAogBARIvCgt1cGRhdGVfdHlwZRgHIAEoDjIaLnJlbGlhbnQudjEuVXNlclVwZGF0ZVR5cGUSKwoLZW50aXR5X3R5cGUYCCABKA4yFi5yZWxpYW50LnYxLkVudGl0eVR5cGUSEQoJZW50aXR5X2lkGAkgASgJEhEKCWRhdGFfanNvbhgKIAEoCRISCgpjcmVhdGVkX2F0GAsgASgJEhMKBm9yZ19pZBgMIAEoCUgDiAEBQg0KC19wcm9qZWN0X2lkQg4KDF93b3JrdHJlZV9pZEIKCghfY2hhdF9pZEIJCgdfb3JnX2lkIh4KCUhlYXJ0YmVhdBIRCgl0aW1lc3RhbXAYASABKAMi8QQKEk5vZGVFeGVjdXRpb25TdGF0ZRIPCgdub2RlX2lkGAEgASgJEhEKCW5vZGVfdHlwZRgCIAEoCRIvCgZzdGF0dXMYAyABKA4yHy5yZWxpYW50LnYxLk5vZGVFeGVjdXRpb25TdGF0dXMSEwoLd29ya2Zsb3dfaWQYBCABKAkSGwoOcGFyZW50X25vZGVfaWQYBSABKAlIAIgBARIYCgthY3Rpdml0eV9pZBgGIAEoCUgBiAEBEhcKCnN0YXJ0ZWRfYXQYByABKANIAogBARIZCgxjb21wbGV0ZWRfYXQYCCABKANIA4gBARIYCgtkdXJhdGlvbl9tcxgJIAEoA0gEiAEBEhYKCWV4aXRfY29kZRgKIAEoBUgFiAEBEhoKDWVycm9yX21lc3NhZ2UYCyABKAlIBogBARIWCglpdGVyYXRpb24YDCABKAVIB4gBARIbCg5tYXhfaXRlcmF0aW9ucxgNIAEoBUgIiAEBEj4KCG1ldGFkYXRhGA4gAygLMiwucmVsaWFudC52MS5Ob2RlRXhlY3V0aW9uU3RhdGUuTWV0YWRhdGFFbnRyeRovCg1NZXRhZGF0YUVudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAFCEQoPX3BhcmVudF9ub2RlX2lkQg4KDF9hY3Rpdml0eV9pZEINCgtfc3RhcnRlZF9hdEIPCg1fY29tcGxldGVkX2F0Qg4KDF9kdXJhdGlvbl9tc0IMCgpfZXhpdF9jb2RlQhAKDl9lcnJvcl9tZXNzYWdlQgwKCl9pdGVyYXRpb25CEQoPX21heF9pdGVyYXRpb25zIoIFChZXb3JrZmxvd0V4ZWN1dGlvblN0YXRlEhMKC3dvcmtmbG93X2lkGAEgASgJEhUKDXdvcmtmbG93X25hbWUYAiABKAkSDwoHY2hhdF9pZBgDIAEoCRIzCgZzdGF0dXMYBCABKA4yIy5yZWxpYW50LnYxLldvcmtmbG93RXhlY3V0aW9uU3RhdHVzEh8KEnBhcmVudF93b3JrZmxvd19pZBgFIAEoCUgAiAEBEg4KBnRocmVhZBgGIAEoCRIUCgxhY3RpdmVfbm9kZXMYByADKAkSLQoFbm9kZXMYCCADKAsyHi5yZWxpYW50LnYxLk5vZGVFeGVjdXRpb25TdGF0ZRI0CghjaGlsZHJlbhgJIAMoCzIiLnJlbGlhbnQudjEuV29ya2Zsb3dFeGVjdXRpb25TdGF0ZRIXCgpzdGFydGVkX2F0GAogASgDSAGIAQESGQoMY29tcGxldGVkX2F0GAsgASgDSAKIAQESPgoGcGFyYW1zGAwgAygLMi4ucmVsaWFudC52MS5Xb3JrZmxvd0V4ZWN1dGlvblN0YXRlLlBhcmFtc0VudHJ5EkAKB291dHB1dHMYDSADKAsyLy5yZWxpYW50LnYxLldvcmtmbG93RXhlY3V0aW9uU3RhdGUuT3V0cHV0c0VudHJ5Gi0KC1BhcmFtc0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEaLgoMT3V0cHV0c0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAFCFQoTX3BhcmVudF93b3JrZmxvd19pZEINCgtfc3RhcnRlZF9hdEIPCg1fY29tcGxldGVkX2F0KrMFCg5DaGF0VXBkYXRlVHlwZRIgChxDSEFUX1VQREFURV9UWVBFX1VOU1BFQ0lGSUVEEAASHAoYQ0hBVF9VUERBVEVfVFlQRV9NRVNTQUdFEAESHQoZQ0hBVF9VUERBVEVfVFlQRV9BUFBST1ZBTBACEhsKF0NIQVRfVVBEQVRFX1RZUEVfVEhSRUFEEAMSHgoaQ0hBVF9VUERBVEVfVFlQRV9UT09MX0NBTEwQBBIkCiBDSEFUX1VQREFURV9UWVBFX1dPUktGTE9XX1NUQVRVUxAFEhoKFkNIQVRfVVBEQVRFX1RZUEVfRVJST1IQBhIZChVDSEFUX1VQREFURV9UWVBFX0NIQVQQBxIfChtDSEFUX1VQREFURV9UWVBFX1JVTl9PVVRQVVQQCBIjCh9DSEFUX1VQREFURV9UWVBFX05PREVfRVhFQ1VUSU9OEAkSIgoeQ0hBVF9VUERBVEVfVFlQRV9FWEVDVVRJT05fTE9HEAoSJwojQ0hBVF9VUERBVEVfVFlQRV9XT1JLRkxPV19FWEVDVVRJT04QCxIZChVDSEFUX1VQREFURV9UWVBFX0lORk8QDRIcChhDSEFUX1VQREFURV9UWVBFX1dBUk5JTkcQDhIcChhDSEFUX1VQREFURV9UWVBFX1JFRkVUQ0gQDxIkCiBDSEFUX1VQREFURV9UWVBFX1NUUkVBTUlOR19ERUxUQRAQEiUKIUNIQVRfVVBEQVRFX1RZUEVfU0tJTExfSU5WT0NBVElPThAREh0KGUNIQVRfVVBEQVRFX1RZUEVfUVVFU1RJT04QEhIlCiFDSEFUX1VQREFURV9UWVBFX1NUUkVBTV9GSU5BTElaRUQQExIrCidDSEFUX1VQREFURV9UWVBFX0FHRU5UX01FU1NBR0VTX0RSQUlORUQQFCruBgoOVXNlclVwZGF0ZVR5cGUSIAocVVNFUl9VUERBVEVfVFlQRV9VTlNQRUNJRklFRBAAEiYKIlVTRVJfVVBEQVRFX1RZUEVfQ0hBVF9TVEFURV9DSEFOR0UQARIoCiRVU0VSX1VQREFURV9UWVBFX0NIQVRfQ09ORklHX0NIQU5HRUQQAhIhCh1VU0VSX1VQREFURV9UWVBFX0NIQVRfQ1JFQVRFRBADEicKI1VTRVJfVVBEQVRFX1RZUEVfQ0hBVF9USVRMRV9DSEFOR0VEEAQSIQodVVNFUl9VUERBVEVfVFlQRV9DSEFUX0RFTEVURUQQBRIqCiZVU0VSX1VQREFURV9UWVBFX0NIQVRfQUNUSVZJVFlfQ0hBTkdFRBAGEiQKIFVTRVJfVVBEQVRFX1RZUEVfUFJPSkVDVF9DUkVBVEVEEAcSJAogVVNFUl9VUERBVEVfVFlQRV9QUk9KRUNUX0RFTEVURUQQCBItCilVU0VSX1VQREFURV9UWVBFX1BST0pFQ1RfU0VUVElOR1NfQ0hBTkdFRBAJEiUKIVVTRVJfVVBEQVRFX1RZUEVfV09SS1RSRUVfQ1JFQVRFRBAKEiUKIVVTRVJfVVBEQVRFX1RZUEVfV09SS1RSRUVfREVMRVRFRBALEiwKKFVTRVJfVVBEQVRFX1RZUEVfV09SS1RSRUVfU1RBVFVTX0NIQU5HRUQQDBIkCiBVU0VSX1VQREFURV9UWVBFX1BST0NFU1NfU1RBUlRFRBANEiMKH1VTRVJfVVBEQVRFX1RZUEVfUFJPQ0VTU19PVVRQVVQQDhImCiJVU0VSX1VQREFURV9UWVBFX1BST0NFU1NfQ09NUExFVEVEEA8SIwofVVNFUl9VUERBVEVfVFlQRV9QUk9DRVNTX0ZBSUxFRBAQEikKJVVTRVJfVVBEQVRFX1RZUEVfUFJPQ0VTU19QT1JUX0NIQU5HRUQQERIhCh1VU0VSX1VQREFURV9UWVBFX05PVElGSUNBVElPThASEhwKGFVTRVJfVVBEQVRFX1RZUEVfUkVGRVRDSBATEiUKIVVTRVJfVVBEQVRFX1RZUEVfREFFTU9OX0hFQVJUQkVBVBAUEisKJ1VTRVJfVVBEQVRFX1RZUEVfV09SS0ZMT1dfRFJBRlRfVVBEQVRFRBAVKs4BCgpFbnRpdHlUeXBlEhsKF0VOVElUWV9UWVBFX1VOU1BFQ0lGSUVEEAASFAoQRU5USVRZX1RZUEVfQ0hBVBABEhcKE0VOVElUWV9UWVBFX1BST0pFQ1QQAhIYChRFTlRJVFlfVFlQRV9XT1JLVFJFRRADEiIKHkVOVElUWV9UWVBFX0JBQ0tHUk9VTkRfUFJPQ0VTUxAEEhYKEkVOVElUWV9UWVBFX1NZU1RFTRAFEh4KGkVOVElUWV9UWVBFX1dPUktGTE9XX0RSQUZUEAYq4QEKFk5vZGVFeGVjdXRpb25FdmVudFR5cGUSKQolTk9ERV9FWEVDVVRJT05fRVZFTlRfVFlQRV9VTlNQRUNJRklFRBAAEiUKIU5PREVfRVhFQ1VUSU9OX0VWRU5UX1RZUEVfU1RBUlRFRBABEiYKIk5PREVfRVhFQ1VUSU9OX0VWRU5UX1RZUEVfUFJPR1JFU1MQAhInCiNOT0RFX0VYRUNVVElPTl9FVkVOVF9UWVBFX0NPTVBMRVRFRBADEiQKIE5PREVfRVhFQ1VUSU9OX0VWRU5UX1RZUEVfRkFJTEVEEAQq+gEKGldvcmtmbG93RXhlY3V0aW9uRXZlbnRUeXBlEi0KKVdPUktGTE9XX0VYRUNVVElPTl9FVkVOVF9UWVBFX1VOU1BFQ0lGSUVEEAASKQolV09SS0ZMT1dfRVhFQ1VUSU9OX0VWRU5UX1RZUEVfU1RBUlRFRBABEisKJ1dPUktGTE9XX0VYRUNVVElPTl9FVkVOVF9UWVBFX0NPTVBMRVRFRBACEigKJFdPUktGTE9XX0VYRUNVVElPTl9FVkVOVF9UWVBFX0ZBSUxFRBADEisKJ1dPUktGTE9XX0VYRUNVVElPTl9FVkVOVF9UWVBFX0NBTkNFTExFRBAEKqQBCg1PcmdVcGRhdGVUeXBlEh8KG09SR19VUERBVEVfVFlQRV9VTlNQRUNJRklFRBAAEhoKFk9SR19VUERBVEVfVFlQRV9TSEFSRUQQARIcChhPUkdfVVBEQVRFX1RZUEVfVU5TSEFSRUQQAhIbChdPUkdfVVBEQVRFX1RZUEVfQ0hBTkdFRBADEhsKF09SR19VUERBVEVfVFlQRV9ERUxFVEVEEAQqkQIKE05vZGVFeGVjdXRpb25TdGF0dXMSJQohTk9ERV9FWEVDVVRJT05fU1RBVFVTX1VOU1BFQ0lGSUVEEAASIQodTk9ERV9FWEVDVVRJT05fU1RBVFVTX1BFTkRJTkcQARIhCh1OT0RFX0VYRUNVVElPTl9TVEFUVVNfUlVOTklORxACEiMKH05PREVfRVhFQ1VUSU9OX1NUQVRVU19DT01QTEVURUQQAxIgChxOT0RFX0VYRUNVVElPTl9TVEFUVVNfRkFJTEVEEAQSIwofTk9ERV9FWEVDVVRJT05fU1RBVFVTX0NBTkNFTExFRBAFEiEKHU5PREVfRVhFQ1VUSU9OX1NUQVRVU19TS0lQUEVEEAYq4wEKF1dvcmtmbG93RXhlY3V0aW9uU3RhdHVzEikKJVdPUktGTE9XX0VYRUNVVElPTl9TVEFUVVNfVU5TUEVDSUZJRUQQABIlCiFXT1JLRkxPV19FWEVDVVRJT05fU1RBVFVTX1JVTk5JTkcQARInCiNXT1JLRkxPV19FWEVDVVRJT05fU1RBVFVTX0NPTVBMRVRFRBACEiQKIFdPUktGTE9XX0VYRUNVVElPTl9TVEFUVVNfRkFJTEVEEAMSJwojV09SS0ZMT1dfRVhFQ1VUSU9OX1NUQVRVU19DQU5DRUxMRUQQBCqyAQoRRXhlY3V0aW9uTG9nTGV2ZWwSIwofRVhFQ1VUSU9OX0xPR19MRVZFTF9VTlNQRUNJRklFRBAAEh0KGUVYRUNVVElPTl9MT0dfTEVWRUxfREVCVUcQARIcChhFWEVDVVRJT05fTE9HX0xFVkVMX0lORk8QAhIcChhFWEVDVVRJT05fTE9HX0xFVkVMX1dBUk4QAxIdChlFWEVDVVRJT05fTE9HX0xFVkVMX0VSUk9SEAQyrAIKEFN0cmVhbWluZ1NlcnZpY2USXQoRU3RyZWFtVXNlclVwZGF0ZXMSJC5yZWxpYW50LnYxLlN0cmVhbVVzZXJVcGRhdGVzUmVxdWVzdBobLnJlbGlhbnQudjEuVXNlclN0cmVhbUV2ZW50IgOQAgEwARJdChFTdHJlYW1DaGF0VXBkYXRlcxIkLnJlbGlhbnQudjEuU3RyZWFtQ2hhdFVwZGF0ZXNSZXF1ZXN0GhsucmVsaWFudC52MS5DaGF0U3RyZWFtRXZlbnQiA5ACATABEloKEFN0cmVhbU9yZ1VwZGF0ZXMSIy5yZWxpYW50LnYxLlN0cmVhbU9yZ1VwZGF0ZXNSZXF1ZXN0GhoucmVsaWFudC52MS5PcmdTdHJlYW1FdmVudCIDkAIBMAFCOlo4Z2l0aHViLmNvbS9yZWxpYW50LWxhYnMvcmVsaWFudC9nZW4vcmVsaWFudC92MTtyZWxpYW50djFiBnByb3RvMw", [file_reliant_v1_chat]);
+
+/**
+ * @generated from message reliant.v1.StreamOrgUpdatesRequest
+ */
+export type StreamOrgUpdatesRequest = Message<"reliant.v1.StreamOrgUpdatesRequest"> & {
+  /**
+   * The org to follow; unset is the caller's default org.
+   *
+   * @generated from field: optional string org_id = 1;
+   */
+  orgId?: string | undefined;
+
+  /**
+   * The org-feed sequence to resume after (OrgUpdate.sequence_number). 0 is
+   * a fresh start: nothing is replayed.
+   *
+   * @generated from field: int64 since_seq = 2;
+   */
+  sinceSeq: bigint;
+};
+
+/**
+ * Describes the message reliant.v1.StreamOrgUpdatesRequest.
+ * Use `create(StreamOrgUpdatesRequestSchema)` to create a new message.
+ */
+export const StreamOrgUpdatesRequestSchema: GenMessage<StreamOrgUpdatesRequest> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_streaming, 0);
+
+/**
+ * OrgUpdate is one coarse event about a chat or project shared with an org.
+ *
+ * @generated from message reliant.v1.OrgUpdate
+ */
+export type OrgUpdate = Message<"reliant.v1.OrgUpdate"> & {
+  /**
+   * @generated from field: int64 sequence_number = 1;
+   */
+  sequenceNumber: bigint;
+
+  /**
+   * @generated from field: reliant.v1.OrgUpdateType type = 2;
+   */
+  type: OrgUpdateType;
+
+  /**
+   * "chat" or "project".
+   *
+   * @generated from field: string resource_kind = 3;
+   */
+  resourceKind: string;
+
+  /**
+   * @generated from field: string resource_id = 4;
+   */
+  resourceId: string;
+
+  /**
+   * Whose it is.
+   *
+   * @generated from field: string owner_user_id = 5;
+   */
+  ownerUserId: string;
+
+  /**
+   * The project a chat is in.
+   *
+   * @generated from field: optional string project_id = 6;
+   */
+  projectId?: string | undefined;
+
+  /**
+   * Unset on UNSHARED and DELETED.
+   *
+   * @generated from field: optional string title = 7;
+   */
+  title?: string | undefined;
+
+  /**
+   * A chat's coarse activity; unset for a project and on a marker.
+   *
+   * @generated from field: optional reliant.v1.ChatActivity activity = 8;
+   */
+  activity?: ChatActivity | undefined;
+
+  /**
+   * @generated from field: string created_at = 9;
+   */
+  createdAt: string;
+};
+
+/**
+ * Describes the message reliant.v1.OrgUpdate.
+ * Use `create(OrgUpdateSchema)` to create a new message.
+ */
+export const OrgUpdateSchema: GenMessage<OrgUpdate> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_streaming, 1);
+
+/**
+ * @generated from message reliant.v1.OrgUpdateBatch
+ */
+export type OrgUpdateBatch = Message<"reliant.v1.OrgUpdateBatch"> & {
+  /**
+   * @generated from field: repeated reliant.v1.OrgUpdate updates = 1;
+   */
+  updates: OrgUpdate[];
+
+  /**
+   * @generated from field: int64 latest_sequence = 2;
+   */
+  latestSequence: bigint;
+};
+
+/**
+ * Describes the message reliant.v1.OrgUpdateBatch.
+ * Use `create(OrgUpdateBatchSchema)` to create a new message.
+ */
+export const OrgUpdateBatchSchema: GenMessage<OrgUpdateBatch> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_streaming, 2);
+
+/**
+ * @generated from message reliant.v1.OrgCaughtUp
+ */
+export type OrgCaughtUp = Message<"reliant.v1.OrgCaughtUp"> & {
+  /**
+   * The org feed's sequence the replay delivered through: the cursor to
+   * resume from.
+   *
+   * @generated from field: int64 latest_sequence = 1;
+   */
+  latestSequence: bigint;
+};
+
+/**
+ * Describes the message reliant.v1.OrgCaughtUp.
+ * Use `create(OrgCaughtUpSchema)` to create a new message.
+ */
+export const OrgCaughtUpSchema: GenMessage<OrgCaughtUp> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_streaming, 3);
+
+/**
+ * @generated from message reliant.v1.OrgStreamEvent
+ */
+export type OrgStreamEvent = Message<"reliant.v1.OrgStreamEvent"> & {
+  /**
+   * @generated from oneof reliant.v1.OrgStreamEvent.event
+   */
+  event: {
+    /**
+     * @generated from field: reliant.v1.OrgUpdateBatch updates = 1;
+     */
+    value: OrgUpdateBatch;
+    case: "updates";
+  } | {
+    /**
+     * @generated from field: reliant.v1.OrgCaughtUp caught_up = 2;
+     */
+    value: OrgCaughtUp;
+    case: "caughtUp";
+  } | {
+    /**
+     * @generated from field: reliant.v1.Heartbeat heartbeat = 3;
+     */
+    value: Heartbeat;
+    case: "heartbeat";
+  } | { case: undefined; value?: undefined };
+};
+
+/**
+ * Describes the message reliant.v1.OrgStreamEvent.
+ * Use `create(OrgStreamEventSchema)` to create a new message.
+ */
+export const OrgStreamEventSchema: GenMessage<OrgStreamEvent> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_streaming, 4);
 
 /**
  * StreamChatUpdatesRequest opens one chat's detail stream.
@@ -60,7 +233,7 @@ export type StreamChatUpdatesRequest = Message<"reliant.v1.StreamChatUpdatesRequ
  * Use `create(StreamChatUpdatesRequestSchema)` to create a new message.
  */
 export const StreamChatUpdatesRequestSchema: GenMessage<StreamChatUpdatesRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_streaming, 0);
+  messageDesc(file_reliant_v1_streaming, 5);
 
 /**
  * ChatStreamEvent is one frame of a chat's detail stream.
@@ -119,7 +292,7 @@ export type ChatStreamEvent = Message<"reliant.v1.ChatStreamEvent"> & {
  * Use `create(ChatStreamEventSchema)` to create a new message.
  */
 export const ChatStreamEventSchema: GenMessage<ChatStreamEvent> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_streaming, 1);
+  messageDesc(file_reliant_v1_streaming, 6);
 
 /**
  * ChatUserUpdates carries user-level updates about the streamed chat, or about
@@ -145,7 +318,7 @@ export type ChatUserUpdates = Message<"reliant.v1.ChatUserUpdates"> & {
  * Use `create(ChatUserUpdatesSchema)` to create a new message.
  */
 export const ChatUserUpdatesSchema: GenMessage<ChatUserUpdates> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_streaming, 2);
+  messageDesc(file_reliant_v1_streaming, 7);
 
 /**
  * ChatSyncSnapshot provides the initial sync with pre-assembled messages.
@@ -226,7 +399,7 @@ export type ChatSyncSnapshot = Message<"reliant.v1.ChatSyncSnapshot"> & {
  * Use `create(ChatSyncSnapshotSchema)` to create a new message.
  */
 export const ChatSyncSnapshotSchema: GenMessage<ChatSyncSnapshot> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_streaming, 3);
+  messageDesc(file_reliant_v1_streaming, 8);
 
 /**
  * ChatUpdateBatch contains a batch of incremental chat updates
@@ -250,7 +423,7 @@ export type ChatUpdateBatch = Message<"reliant.v1.ChatUpdateBatch"> & {
  * Use `create(ChatUpdateBatchSchema)` to create a new message.
  */
 export const ChatUpdateBatchSchema: GenMessage<ChatUpdateBatch> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_streaming, 4);
+  messageDesc(file_reliant_v1_streaming, 9);
 
 /**
  * ChatUpdateData represents a single chat update event (generic JSON-like structure)
@@ -296,7 +469,7 @@ export type ChatUpdateData = Message<"reliant.v1.ChatUpdateData"> & {
  * Use `create(ChatUpdateDataSchema)` to create a new message.
  */
 export const ChatUpdateDataSchema: GenMessage<ChatUpdateData> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_streaming, 5);
+  messageDesc(file_reliant_v1_streaming, 10);
 
 /**
  * StreamUserUpdatesRequest initiates the user-wide update stream
@@ -324,7 +497,7 @@ export type StreamUserUpdatesRequest = Message<"reliant.v1.StreamUserUpdatesRequ
  * Use `create(StreamUserUpdatesRequestSchema)` to create a new message.
  */
 export const StreamUserUpdatesRequestSchema: GenMessage<StreamUserUpdatesRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_streaming, 6);
+  messageDesc(file_reliant_v1_streaming, 11);
 
 /**
  * UserStreamEvent represents a single event in the user-wide update stream.
@@ -367,7 +540,7 @@ export type UserStreamEvent = Message<"reliant.v1.UserStreamEvent"> & {
  * Use `create(UserStreamEventSchema)` to create a new message.
  */
 export const UserStreamEventSchema: GenMessage<UserStreamEvent> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_streaming, 7);
+  messageDesc(file_reliant_v1_streaming, 12);
 
 /**
  * ChatCaughtUp marks the end of a chat stream's initial sync. It is sent
@@ -394,7 +567,7 @@ export type ChatCaughtUp = Message<"reliant.v1.ChatCaughtUp"> & {
  * Use `create(ChatCaughtUpSchema)` to create a new message.
  */
 export const ChatCaughtUpSchema: GenMessage<ChatCaughtUp> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_streaming, 8);
+  messageDesc(file_reliant_v1_streaming, 13);
 
 /**
  * UserSyncInfo provides initial sync information
@@ -413,7 +586,7 @@ export type UserSyncInfo = Message<"reliant.v1.UserSyncInfo"> & {
  * Use `create(UserSyncInfoSchema)` to create a new message.
  */
 export const UserSyncInfoSchema: GenMessage<UserSyncInfo> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_streaming, 9);
+  messageDesc(file_reliant_v1_streaming, 14);
 
 /**
  * UserUpdateBatch contains a batch of user-level updates
@@ -446,7 +619,7 @@ export type UserUpdateBatch = Message<"reliant.v1.UserUpdateBatch"> & {
  * Use `create(UserUpdateBatchSchema)` to create a new message.
  */
 export const UserUpdateBatchSchema: GenMessage<UserUpdateBatch> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_streaming, 10);
+  messageDesc(file_reliant_v1_streaming, 15);
 
 /**
  * UserUpdateData represents a user-level update
@@ -528,7 +701,7 @@ export type UserUpdateData = Message<"reliant.v1.UserUpdateData"> & {
  * Use `create(UserUpdateDataSchema)` to create a new message.
  */
 export const UserUpdateDataSchema: GenMessage<UserUpdateData> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_streaming, 11);
+  messageDesc(file_reliant_v1_streaming, 16);
 
 /**
  * Heartbeat is sent periodically to keep the connection alive
@@ -547,7 +720,7 @@ export type Heartbeat = Message<"reliant.v1.Heartbeat"> & {
  * Use `create(HeartbeatSchema)` to create a new message.
  */
 export const HeartbeatSchema: GenMessage<Heartbeat> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_streaming, 12);
+  messageDesc(file_reliant_v1_streaming, 17);
 
 /**
  * NodeExecutionState represents the current state of a single workflow node
@@ -659,7 +832,7 @@ export type NodeExecutionState = Message<"reliant.v1.NodeExecutionState"> & {
  * Use `create(NodeExecutionStateSchema)` to create a new message.
  */
 export const NodeExecutionStateSchema: GenMessage<NodeExecutionState> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_streaming, 13);
+  messageDesc(file_reliant_v1_streaming, 18);
 
 /**
  * WorkflowExecutionState represents the complete execution state of a workflow
@@ -764,7 +937,7 @@ export type WorkflowExecutionState = Message<"reliant.v1.WorkflowExecutionState"
  * Use `create(WorkflowExecutionStateSchema)` to create a new message.
  */
 export const WorkflowExecutionStateSchema: GenMessage<WorkflowExecutionState> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_streaming, 14);
+  messageDesc(file_reliant_v1_streaming, 19);
 
 /**
  * ChatUpdateType categorizes real-time chat update events
@@ -1143,6 +1316,52 @@ export const WorkflowExecutionEventTypeSchema: GenEnum<WorkflowExecutionEventTyp
   enumDesc(file_reliant_v1_streaming, 4);
 
 /**
+ * OrgUpdateType is what happened to a shared chat or project.
+ *
+ * @generated from enum reliant.v1.OrgUpdateType
+ */
+export enum OrgUpdateType {
+  /**
+   * @generated from enum value: ORG_UPDATE_TYPE_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * It was shared with the org: add it to the list.
+   *
+   * @generated from enum value: ORG_UPDATE_TYPE_SHARED = 1;
+   */
+  SHARED = 1,
+
+  /**
+   * It was made private: remove it (a bare marker, ids only).
+   *
+   * @generated from enum value: ORG_UPDATE_TYPE_UNSHARED = 2;
+   */
+  UNSHARED = 2,
+
+  /**
+   * Its title, state or activity changed: refresh its row.
+   *
+   * @generated from enum value: ORG_UPDATE_TYPE_CHANGED = 3;
+   */
+  CHANGED = 3,
+
+  /**
+   * It was deleted: remove it (a bare marker, ids only).
+   *
+   * @generated from enum value: ORG_UPDATE_TYPE_DELETED = 4;
+   */
+  DELETED = 4,
+}
+
+/**
+ * Describes the enum reliant.v1.OrgUpdateType.
+ */
+export const OrgUpdateTypeSchema: GenEnum<OrgUpdateType> = /*@__PURE__*/
+  enumDesc(file_reliant_v1_streaming, 5);
+
+/**
  * NodeExecutionStatus represents the lifecycle state of a workflow node
  *
  * @generated from enum reliant.v1.NodeExecutionStatus
@@ -1200,7 +1419,7 @@ export enum NodeExecutionStatus {
  * Describes the enum reliant.v1.NodeExecutionStatus.
  */
 export const NodeExecutionStatusSchema: GenEnum<NodeExecutionStatus> = /*@__PURE__*/
-  enumDesc(file_reliant_v1_streaming, 5);
+  enumDesc(file_reliant_v1_streaming, 6);
 
 /**
  * WorkflowExecutionStatus represents the overall workflow state
@@ -1238,7 +1457,7 @@ export enum WorkflowExecutionStatus {
  * Describes the enum reliant.v1.WorkflowExecutionStatus.
  */
 export const WorkflowExecutionStatusSchema: GenEnum<WorkflowExecutionStatus> = /*@__PURE__*/
-  enumDesc(file_reliant_v1_streaming, 6);
+  enumDesc(file_reliant_v1_streaming, 7);
 
 /**
  * ExecutionLogLevel represents the severity of a log entry
@@ -1276,7 +1495,7 @@ export enum ExecutionLogLevel {
  * Describes the enum reliant.v1.ExecutionLogLevel.
  */
 export const ExecutionLogLevelSchema: GenEnum<ExecutionLogLevel> = /*@__PURE__*/
-  enumDesc(file_reliant_v1_streaming, 7);
+  enumDesc(file_reliant_v1_streaming, 8);
 
 /**
  * StreamingService provides real-time streaming of updates over two
@@ -1312,6 +1531,30 @@ export const StreamingService: GenService<{
     methodKind: "server_streaming";
     input: typeof StreamChatUpdatesRequestSchema;
     output: typeof ChatStreamEventSchema;
+  },
+  /**
+   * StreamOrgUpdates opens an organization's feed of what its members shared
+   * (control-plane docs/design/org-sharing.md §5.2): a replay of the org's
+   * coarse events since since_seq, exactly one caught_up, then live events,
+   * for the "Shared with the org" list. One row per event, never one per
+   * viewer, and never the transcript: a chat's detail is its own
+   * StreamChatUpdates, opened when a viewer opens it. The caller's own
+   * chats and projects are left out (their own list has them).
+   *
+   * The org must be one the caller is a live member of (PERMISSION_DENIED
+   * otherwise; unset: their default org), the caller must be a person signed
+   * in to the app (PERMISSION_DENIED, person_required), and membership is
+   * asked again while the stream is open: a member removed from the org has
+   * the stream ended. since_seq 0 (or a cursor ahead of the feed) replays
+   * nothing: the client reads ListSharedChats/ListSharedProjects and follows
+   * from the caught_up sequence.
+   *
+   * @generated from rpc reliant.v1.StreamingService.StreamOrgUpdates
+   */
+  streamOrgUpdates: {
+    methodKind: "server_streaming";
+    input: typeof StreamOrgUpdatesRequestSchema;
+    output: typeof OrgStreamEventSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_reliant_v1_streaming, 0);

@@ -378,7 +378,8 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant forge project rescaffold`](#reliant-forge-project-rescaffold) | Re-create scaffold-once files you deleted, as forge would scaffold them today |
 | [`reliant forge project scaffolded`](#reliant-forge-project-scaffolded) | List the scaffold-once files forge has written, and which are absent |
 | [`reliant forge project shapes`](#reliant-forge-project-shapes) | List every API shape — RPCs, messages, enums, tables, handlers, hooks — with file:line |
-| [`reliant forge project start`](#reliant-forge-project-start) | Print the greenfield brief: empty directory to authored protos, in one call |
+| [`reliant forge project start`](#reliant-forge-project-start) | Print where to start: deploy the app in this directory, or create one (no account needed) |
+| [`reliant forge project start app`](#reliant-forge-project-start-app) | Print the greenfield brief: empty directory to authored protos, in one call |
 | [`reliant forge project upgrade`](#reliant-forge-project-upgrade) | Move the project to a newer forge and apply every mechanical fix for the range |
 | [`reliant forge project upgrade apply`](#reliant-forge-project-upgrade-apply) | Record a migration as applied (writes .forge/migrations.json) |
 | [`reliant forge project upgrade list`](#reliant-forge-project-upgrade-list) | List pending forge migrations for this project |
@@ -436,7 +437,8 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant forge slot`](#reliant-forge-slot) | Queue heavy work behind host-wide slots: at most N heavy jobs at once on this machine |
 | [`reliant forge slot run`](#reliant-forge-slot-run) | Run a command holding a host slot, waiting while every slot is held |
 | [`reliant forge slot status`](#reliant-forge-slot-status) | Show a slot class's capacity, why, who holds its slots and who waits |
-| [`reliant forge start`](#reliant-forge-start) | Print the greenfield brief: empty directory to authored protos, in one call |
+| [`reliant forge start`](#reliant-forge-start) | Print where to start: deploy the app in this directory, or create one (no account needed) |
+| [`reliant forge start app`](#reliant-forge-start-app) | Print the greenfield brief: empty directory to authored protos, in one call |
 | [`reliant forge storage`](#reliant-forge-storage) | Inspect and bound local caches; preserve persistent application data |
 | [`reliant forge storage check`](#reliant-forge-storage-check) | Refuse a build below the physical host free-space reserve |
 | [`reliant forge storage configure-nodes`](#reliant-forge-storage-configure-nodes) | Preview kubelet GC migration for existing registered nodes; --apply restarts them |
@@ -1208,6 +1210,10 @@ Forge takes a project from an empty directory to production, purpose-built
 for LLM-driven development: environments, build-once releases, hosting,
 observability and linters from day 0.
 
+New here? 'forge start' prints, in about 60 lines, the one command for the
+directory you are in: deploy the app already here with no account
+('forge env deploy prod --claimable'), or create one.
+
 A landing page, docs site, SPA or PWA with no backend is a complete forge
 project: one static frontend on hosted static hosting, no server to run.
 Adopt an existing Vite or Next.js app with
@@ -1216,8 +1222,8 @@ deploy/static-site').
 
 An app with an API adds Go services defined in proto and wired over Connect
 RPC — generated handlers, typed frontend hooks, mocks and middleware, one
-consistent interface pattern through the stack. 'forge start' walks that path
-from an empty directory to authored protos, in one call.
+consistent interface pattern through the stack. 'forge start app' walks that
+path from an empty directory to authored protos, in one call.
 
 ```
 reliant forge
@@ -1261,7 +1267,7 @@ reliant forge
 | [`secret`](#reliant-forge-secret) | Manage an environment's secret store (local file or hosted control plane) |
 | [`skill`](#reliant-forge-skill) | Manage Forge skills — conventions and playbooks for LLM agents |
 | [`slot`](#reliant-forge-slot) | Queue heavy work behind host-wide slots: at most N heavy jobs at once on this machine |
-| [`start`](#reliant-forge-start) | Print the greenfield brief: empty directory to authored protos, in one call |
+| [`start`](#reliant-forge-start) | Print where to start: deploy the app in this directory, or create one (no account needed) |
 | [`storage`](#reliant-forge-storage) | Inspect and bound local caches; preserve persistent application data |
 | [`tools`](#reliant-forge-tools) | Manage developer tooling forge depends on (proto plugins, linters, etc.) |
 | [`ui`](#reliant-forge-ui) | Frontend tooling: the component library and frontend source maps |
@@ -1627,7 +1633,7 @@ reliant forge build [environment] [flags]
 | `--rebuild` | `bool` | - | Run every ShellBuild's command, even one whose declared inputs are unchanged since its last successful build and whose image is still in the registry |
 | `--tag` | `string` | - | Override the image tag of every image this build writes (default: the tag a workload's image pins, else the env's image_tag, else git describe --tags --always --dirty). Refused when it differs from the tag a selected workload's image pins — the deploy pulls the pin. Recorded in .forge/state so forge env deploy uses the same value. |
 | `--target`, `-t` | `string` | `all` | Build target (all | external | a specific service/frontend name). `external` builds only the KCL services declaring build_cmd; requires the environment argument. |
-| `--target-arch` | `string` | - | Override target GOARCH for cross-compilation (default: forge.yaml deploy.target_arch, then amd64 for docker builds) |
+| `--target-arch` | `string` | - | Override target GOARCH for cross-compilation (default: the env's declared platform, then forge.yaml deploy.target_arch, then the host arch) |
 
 ---
 
@@ -3143,10 +3149,14 @@ Mint, list and revoke ORG automation tokens (the CI deploy credential)
 Manage the organization's automation tokens on the hosted control plane.
 
 An org token has no acting user, so it outlives any one person — which is what
-a CI pipeline's FORGE_CONTROL_PLANE_TOKEN must be. Minting needs a human session
-(an org admin, via `forge login`); the control plane refuses a machine credential.
+a CI pipeline's FORGE_CONTROL_PLANE_TOKEN must be. Minting needs a human session;
+the control plane refuses a machine credential.
 
-Typical setup for the scaffolded release workflow:
+On Reliant cloud, mint the CI token in the web app instead:
+https://forge.reliantlabs.io/settings/tokens (Settings → API tokens). It refuses
+token administration to a CLI login (`forge login`), because a token a CLI
+login minted would outlive revoking the login; these commands then say so and
+exit 9. They still work against a control plane that admits a CLI login:
 
   forge cloud token create --env prod --name github-actions \
       --scopes deploy:read,deploy:write --json | jq -r .secret \
@@ -6469,7 +6479,7 @@ reliant forge env build <environment> [flags]
 | `--snapshot-bootstrap` | `bool` | - | Build a complete sealed snapshot selecting all consumers; never use legacy state as a partial base |
 | `--tag` | `string` | - | Override the image tag of every image this build writes (default: the tag a workload's image pins, else the env's image_tag, else git describe --tags --always --dirty). Refused when it differs from the tag a selected workload's image pins, or when it conflicts with --release. Recorded in .forge/state so 'forge env deploy' uses the same value. |
 | `--target`, `-t` | `stringArray` | `[]` | Build target; repeatable for snapshot composition (default all) |
-| `--target-arch` | `string` | - | Override target GOARCH for cross-compilation (default: forge.yaml deploy.target_arch, then amd64 for docker builds) |
+| `--target-arch` | `string` | - | Override target GOARCH for cross-compilation (default: the env's declared platform, then forge.yaml deploy.target_arch, then the host arch) |
 
 ---
 
@@ -12067,8 +12077,14 @@ Exit status:
   1  FAIL: we looked, and the release made things worse
   2  INCONCLUSIVE, or we could not look (control plane unreachable, auth
      refused, telemetry off). Both mean "not proven good"; a gate must not
-     read either as a pass.
-  8  --wait ran out before the after window finished
+     read either as a pass. The document's reason_code says why it is
+     INCONCLUSIVE. low_traffic / thin_baseline: the window closed with too
+     few requests to judge — final for that promotion, since a later check
+     reads the same window; for an env that is always quiet, lower
+     min_requests in its release_health (or --threshold min_requests=N) or
+     widen --window. window_open (no --wait): check again, or use --wait.
+  8  --wait ran out (--timeout) before the after window finished: check
+     again later. Low traffic is never 8.
 
 Thresholds come from the env's release_health declaration (KCL); --threshold
 name=value overrides one for this call (max_error_rate_increase, max_p95_ratio, min_requests, new_issue_min_events, require_baseline).
@@ -15608,7 +15624,7 @@ reliant forge project [flags]
 | [`rescaffold`](#reliant-forge-project-rescaffold) | Re-create scaffold-once files you deleted, as forge would scaffold them today |
 | [`scaffolded`](#reliant-forge-project-scaffolded) | List the scaffold-once files forge has written, and which are absent |
 | [`shapes`](#reliant-forge-project-shapes) | List every API shape — RPCs, messages, enums, tables, handlers, hooks — with file:line |
-| [`start`](#reliant-forge-project-start) | Print the greenfield brief: empty directory to authored protos, in one call |
+| [`start`](#reliant-forge-project-start) | Print where to start: deploy the app in this directory, or create one (no account needed) |
 | [`upgrade`](#reliant-forge-project-upgrade) | Move the project to a newer forge and apply every mechanical fix for the range |
 
 **Flags:**
@@ -16715,6 +16731,38 @@ reliant forge project shapes [flags]
 
 #### reliant forge project start
 
+Print where to start: deploy the app in this directory, or create one (no account needed)
+
+Print where to start, in about 60 lines.
+
+One table for a directory that already holds an app (a Vite or Next.js static
+app, or anything with a Dockerfile, deploys with no account via
+'forge env deploy prod --claimable') and one for an empty directory (a site
+with 'forge project new --in-place --kind site', an app with an API with
+'forge start app'). Depth is named, never inlined.
+
+This command PRINTS. It creates nothing and changes nothing.
+
+```
+reliant forge project start [flags]
+```
+
+**Subcommands:**
+
+| Command | Description |
+|---------|-------------|
+| [`app`](#reliant-forge-project-start-app) | Print the greenfield brief: empty directory to authored protos, in one call |
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+
+---
+
+#### reliant forge project start app
+
 Print the greenfield brief: empty directory to authored protos, in one call
 
 Print the greenfield brief.
@@ -16735,7 +16783,7 @@ copy this binary ships. Three sibling dumps cover the rest of the surface:
   forge skill list            the skill catalog
 
 ```
-reliant forge project start [flags]
+reliant forge project start app [flags]
 ```
 
 **Flags:**
@@ -17834,8 +17882,8 @@ enough (--version, with the commit detected from CI); pass --workload/--image
 pairs to record the digests your pipeline shipped.
 
 Where it records: an env with deploy/kcl uses the ledger its KCL selects.
-Otherwise, signed in (forge login, or a CI token in FORGE_CONTROL_PLANE_TOKEN
-from `forge cloud token create --scopes deploy:write`) it records on Reliant cloud;
+Otherwise, signed in (forge login, or a CI token with deploy:write in
+FORGE_CONTROL_PLANE_TOKEN, minted in the web app's Settings → API tokens) it records on Reliant cloud;
 not signed in, on this machine's ledger, which monitoring cannot see.
 
 Idempotent: a CI retry records once. The same version with different digests
@@ -19404,6 +19452,38 @@ reliant forge slot status [flags]
 
 ### reliant forge start
 
+Print where to start: deploy the app in this directory, or create one (no account needed)
+
+Print where to start, in about 60 lines.
+
+One table for a directory that already holds an app (a Vite or Next.js static
+app, or anything with a Dockerfile, deploys with no account via
+'forge env deploy prod --claimable') and one for an empty directory (a site
+with 'forge project new --in-place --kind site', an app with an API with
+'forge start app'). Depth is named, never inlined.
+
+This command PRINTS. It creates nothing and changes nothing.
+
+```
+reliant forge start [flags]
+```
+
+**Subcommands:**
+
+| Command | Description |
+|---------|-------------|
+| [`app`](#reliant-forge-start-app) | Print the greenfield brief: empty directory to authored protos, in one call |
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+
+---
+
+#### reliant forge start app
+
 Print the greenfield brief: empty directory to authored protos, in one call
 
 Print the greenfield brief.
@@ -19424,7 +19504,7 @@ copy this binary ships. Three sibling dumps cover the rest of the surface:
   forge skill list            the skill catalog
 
 ```
-reliant forge start [flags]
+reliant forge start app [flags]
 ```
 
 **Flags:**

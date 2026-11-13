@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/reliant-labs/forge/pkg/crypto"
 	"github.com/reliant-labs/forge/pkg/orm"
@@ -32,6 +33,14 @@ const (
 	envelopeMagicLen   = 4
 )
 
+// KeyRecheckInterval is how long a cached data key is used before the vault
+// re-reads its row. Deleting a tenant's vault_keys rows (an account purge, a
+// gone org's purge) is the crypto-shred: within one interval, every process
+// that had the key cached refuses it too. It is the same bound as an org
+// membership answer's (orgs.CacheTTL), and the purges delete the ciphertext
+// rows in the same transaction, so within it nothing stored still names the key.
+const KeyRecheckInterval = 30 * time.Second
+
 var (
 	// ErrKeyNotFound: the ciphertext names a vault key id with no row.
 	ErrKeyNotFound = errors.New("vault: ciphertext names an unknown vault key")
@@ -53,6 +62,9 @@ func OrgTenant(orgID string) Tenant { return Tenant{Kind: TenantOrg, ID: orgID} 
 type cachedKey struct {
 	tenant Tenant
 	ring   *crypto.Keyring
+	// checked is when the key's row was last read: a cached key older than
+	// KeyRecheckInterval is re-read before it is used.
+	checked time.Time
 }
 
 // sealer is the Service: it seals and opens values per tenant, caching the
@@ -60,6 +72,7 @@ type cachedKey struct {
 type sealer struct {
 	db      orm.Context
 	wrapper KeyWrapper
+	now     func() time.Time
 
 	mu      sync.RWMutex
 	primary map[Tenant]string
@@ -68,9 +81,14 @@ type sealer struct {
 
 // New builds the vault over deps.DB and deps.Keys.
 func New(deps Deps) Service {
+	now := deps.Now
+	if now == nil {
+		now = time.Now
+	}
 	return &sealer{
 		db:      deps.DB,
 		wrapper: deps.Keys,
+		now:     now,
 		primary: map[Tenant]string{},
 		keys:    map[string]cachedKey{},
 	}
@@ -141,7 +159,14 @@ func (v *sealer) primaryRing(ctx context.Context, tenant Tenant) (string, *crypt
 	v.mu.RUnlock()
 	if ok {
 		ring, err := v.ringByID(ctx, tenant, id)
-		return id, ring, err
+		if !errors.Is(err, ErrKeyNotFound) && !errors.Is(err, ErrKeyDestroyed) {
+			return id, ring, err
+		}
+		// The tenant's key was shredded since it was cached: forget it
+		// and seal under the tenant's current primary, or a new one.
+		v.mu.Lock()
+		delete(v.primary, tenant)
+		v.mu.Unlock()
 	}
 
 	id, wrapped, found, err := v.selectPrimary(ctx, tenant)
@@ -237,7 +262,9 @@ func (v *sealer) ringByID(ctx context.Context, t Tenant, id string) (*crypto.Key
 		if c.tenant != t {
 			return nil, ErrTenantMismatch
 		}
-		return c.ring, nil
+		if v.now().Sub(c.checked) < KeyRecheckInterval {
+			return c.ring, nil
+		}
 	}
 
 	var (
@@ -252,14 +279,28 @@ func (v *sealer) ringByID(ctx context.Context, t Tenant, id string) (*crypto.Key
 	if err != nil {
 		return nil, fmt.Errorf("vault: loading key: %w", err)
 	}
-	if !found {
-		return nil, fmt.Errorf("%w: %s", ErrKeyNotFound, id)
+	if !found || key.State == "destroyed" {
+		// Shredded: a cached copy is forgotten, so it never opens again.
+		v.mu.Lock()
+		delete(v.keys, id)
+		v.mu.Unlock()
+		if !found {
+			return nil, fmt.Errorf("%w: %s", ErrKeyNotFound, id)
+		}
+		return nil, ErrKeyDestroyed
 	}
 	if (Tenant{Kind: key.TenantKind, ID: key.TenantID}) != t {
 		return nil, ErrTenantMismatch
 	}
-	if key.State == "destroyed" {
-		return nil, ErrKeyDestroyed
+	if ok {
+		// Still live: keep the unwrapped ring, and trust it one more interval.
+		v.mu.Lock()
+		if cur, still := v.keys[id]; still {
+			cur.checked = v.now()
+			v.keys[id] = cur
+		}
+		v.mu.Unlock()
+		return c.ring, nil
 	}
 	return v.install(t, id, key.WrappedDEK)
 }
@@ -277,7 +318,7 @@ func (v *sealer) install(t Tenant, id string, wrapped []byte) (*crypto.Keyring, 
 		return nil, fmt.Errorf("vault: building dek ring: %w", err)
 	}
 	v.mu.Lock()
-	v.keys[id] = cachedKey{tenant: t, ring: ring}
+	v.keys[id] = cachedKey{tenant: t, ring: ring, checked: v.now()}
 	v.mu.Unlock()
 	return ring, nil
 }

@@ -127,7 +127,7 @@ function wrapper() {
 function renderStep(updatePlan = vi.fn(async (_updates: Partial<LaunchPlan>) => {})) {
   return render(
     <ComputeStep
-      plan={{ compute: "cloud_paid" } as Partial<LaunchPlan>}
+      plan={{} as Partial<LaunchPlan>}
       updatePlan={updatePlan}
       onNext={vi.fn()}
       onBack={vi.fn()}
@@ -257,7 +257,7 @@ describe("ComputeStep — the free option is a peer, not an afterthought", () =>
   it("gives the local option a price, so it reads against the paid ones", () => {
     renderStep();
 
-    const local = screen.getByRole("button", { name: /your own computer/i });
+    const local = screen.getByRole("button", { name: /use your own computer/i });
     // "Free" is INSIDE the option, not a detached badge elsewhere on the page:
     // that is what puts it in the same column as "$20.00/mo".
     expect(local).toHaveTextContent(/free/i);
@@ -266,7 +266,7 @@ describe("ComputeStep — the free option is a peer, not an afterthought", () =>
   it("marks the local option as selectable state, not a bare link", () => {
     renderStep();
 
-    const local = screen.getByRole("button", { name: /your own computer/i });
+    const local = screen.getByRole("button", { name: /use your own computer/i });
     // Peers in a choice list announce their selected state; the paid tiles
     // already do (aria-pressed), and the free one must not be the odd one out.
     expect(local).toHaveAttribute("aria-pressed", "false");
@@ -294,7 +294,7 @@ describe("ComputeStep — the free option is a peer, not an afterthought", () =>
   it("puts the free option before the paid ones, with no divider between", () => {
     renderStep();
 
-    const local = screen.getByRole("button", { name: /your own computer/i });
+    const local = screen.getByRole("button", { name: /use your own computer/i });
     const paid = screen.getByRole("button", { name: /^M / });
 
     expect(
@@ -310,7 +310,7 @@ describe("ComputeStep — the free option is a peer, not an afterthought", () =>
     const updatePlan = vi.fn(async (_updates: Partial<LaunchPlan>) => {});
     renderStep(updatePlan);
 
-    screen.getByRole("button", { name: /your own computer/i }).click();
+    screen.getByRole("button", { name: /use your own computer/i }).click();
 
     // Picking it only opens the connect instructions; it commits nothing.
     expect(updatePlan).not.toHaveBeenCalled();

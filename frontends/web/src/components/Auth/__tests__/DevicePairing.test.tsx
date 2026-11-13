@@ -7,6 +7,7 @@
  */
 import { act, screen, waitFor } from "@testing-library/react";
 import { useActiveOrgStore } from "@/store/activeOrgStore";
+import { useAuthStore } from "@/store/authStore";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -35,6 +36,9 @@ const TWO_ORGS = { orgs: [org("org-a", "Acme", true), org("org-b", "Side Project
 let href = "";
 const fetchMock = vi.fn();
 beforeEach(() => {
+  // AuthInitializer (App root) installs the session's user on every route,
+  // and useMyOrgs fetches only for a signed-in user (#2669).
+  useAuthStore.setState({ user: { id: "alice" } as never });
   href = "";
   Object.defineProperty(window, "location", {
     configurable: true,
