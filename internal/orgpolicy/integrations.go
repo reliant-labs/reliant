@@ -16,16 +16,24 @@ import (
 // never changes.
 const ReasonIntegrationNotAllowed = "integration_not_allowed"
 
+// GenericHTTPIntegrationID is the generic HTTP integration (http/request@1).
+// It is raw egress, not an integration, and deliberately outside the
+// integrations policy (D14): an allow-list of hosts is a different feature.
+// It is never governed, so an authenticated raw request (a saved HTTP
+// connection, a declared secret) and an unauthenticated one behave alike.
+const GenericHTTPIntegrationID = "http"
+
 // IntegrationAdmission is what doc's integrations section says about
 // integrationID (a catalog id: "github", "slack"). No section governs
-// nothing; allow_all admits every integration; otherwise only the listed ids
-// are admitted, so an empty list admits none.
+// nothing, and neither does the generic HTTP integration
+// (GenericHTTPIntegrationID); allow_all admits every integration; otherwise
+// only the listed ids are admitted, so an empty list admits none.
 func IntegrationAdmission(doc *controlplanev1.OrgPolicy, integrationID string) Admission {
 	sec := doc.GetIntegrations()
-	if sec == nil {
+	id := strings.TrimSpace(integrationID)
+	if sec == nil || id == GenericHTTPIntegrationID {
 		return Admission{}
 	}
-	id := strings.TrimSpace(integrationID)
 	return Admission{
 		Governed: true,
 		Admitted: sec.GetAllowAll() || slices.Contains(sec.GetAllowed(), id),

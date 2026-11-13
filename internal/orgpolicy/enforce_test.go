@@ -158,3 +158,41 @@ func TestEnforced(t *testing.T) {
 		t.Fatal("enforce x mode")
 	}
 }
+
+// The generic HTTP integration (http/request@1) is raw egress, outside the
+// integrations policy (D14), whether or not a saved connection authenticates
+// it.
+func TestIntegrationAdmission_GenericHTTPIsNeverGoverned(t *testing.T) {
+	withSwitch(t, PointIntegrations, EnforcementEnforce)
+	doc := integrationsOnly(controlplanev1.OrgPolicyMode_ORG_POLICY_MODE_ENFORCE, "github")
+	if adm := IntegrationAdmission(doc, GenericHTTPIntegrationID); adm.Governed {
+		t.Fatalf("http is governed: %+v", adm)
+	}
+	ctx := WithResolver(context.Background(), New(policyTable{docs: map[string]*controlplanev1.OrgPolicy{"org-a": doc}}))
+	if d, err := JudgeIntegration(ctx, "org-a", "http", false); err != nil || d.Denied {
+		t.Fatalf("http: %+v, %v", d, err)
+	}
+}
+
+// A use judged upstream (WithJudged) is decided alike below, and counted once.
+func TestJudge_AUseJudgedUpstreamIsNotCountedAgain(t *testing.T) {
+	withSwitch(t, PointIntegrations, EnforcementEnforce)
+	ctx := WithResolver(context.Background(), New(policyTable{docs: map[string]*controlplanev1.OrgPolicy{
+		"org-a": integrationsOnly(controlplanev1.OrgPolicyMode_ORG_POLICY_MODE_ENFORCE, "github"),
+	}}))
+	d, err := JudgeIntegration(ctx, "org-a", "slack", false)
+	if err != nil || !d.Refused {
+		t.Fatalf("first: %+v %v", d, err)
+	}
+	judged := WithJudged(ctx, d)
+	if !judgedOn(judged, d) {
+		t.Fatal("the use is not marked judged")
+	}
+	if judgedOn(judged, Decision{Point: d.Point, OrgID: d.OrgID, Subject: "github"}) {
+		t.Fatal("another subject is not the same use")
+	}
+	again, err := JudgeIntegration(judged, "org-a", "slack", false)
+	if err != nil || !again.Refused {
+		t.Fatalf("below: %+v %v; a judged use is still refused", again, err)
+	}
+}

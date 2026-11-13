@@ -268,21 +268,32 @@ func (s *source) orgActingCredential(ctx context.Context, req httpaction.Credent
 // itself): an identity a delegated authority holds, the org's or the bot's.
 // *connections.Resolver is one.
 type integrationPolicy interface {
-	AdmitIntegration(ctx context.Context, runID, integrationID string) error
+	AdmitIntegration(ctx context.Context, runID, integrationID string) (context.Context, error)
+}
+
+// AdmitIntegration implements Service (and httpaction.IntegrationGate).
+func (s *source) AdmitIntegration(ctx context.Context, runID, integrationID string) (context.Context, error) {
+	if s == nil {
+		return ctx, nil
+	}
+	gate, ok := s.resolver.(integrationPolicy)
+	if !ok || runID == "" {
+		return ctx, nil
+	}
+	ctx, err := gate.AdmitIntegration(ctx, runID, integrationID)
+	if err != nil {
+		return ctx, mapError(err)
+	}
+	return ctx, nil
 }
 
 // admitIntegration refuses req when the run's org's policy does not allow its
 // integration (org-policies §4.3), and lets it through when the resolver
-// cannot judge (a fake without the method).
+// cannot judge (a fake without the method). A use the action runner already
+// judged is refused alike and not counted again.
 func (s *source) admitIntegration(ctx context.Context, req httpaction.CredentialRequest) error {
-	gate, ok := s.resolver.(integrationPolicy)
-	if !ok {
-		return nil
-	}
-	if err := gate.AdmitIntegration(ctx, req.RunID, req.IntegrationID); err != nil {
-		return mapError(err)
-	}
-	return nil
+	_, err := s.AdmitIntegration(ctx, req.RunID, req.IntegrationID)
+	return err
 }
 
 // ownerErr is a failure to read a run's owner or org as a credential error.

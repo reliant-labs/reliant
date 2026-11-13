@@ -34,6 +34,7 @@ import {
   type ListIntegrationsResponse,
 } from "../gen/reliant/v1/connection_pb";
 import { unavailableIntegrationIds } from "../lib/integrationAvailability";
+import { useActiveOrgStore } from "../store/activeOrgStore";
 import { catalogServiceKeys } from "./catalog-service-hooks_gen";
 import {
   connectionServiceKeys,
@@ -238,14 +239,26 @@ export function useAllConnections() {
 
 const integrationsOf = (response: ListIntegrationsResponse) => response.integrations.map(integrationFromProto);
 
+/**
+ * ListIntegrations for the active org, named in the request itself: each
+ * integration's `orgPolicy` is that org's, so the org belongs in the query key
+ * (the request) — filled in on the wire alone, a switch would show the
+ * previous org's markers from the cache under the new org's name. Until the
+ * active org is known the request names none, and nothing is marked.
+ */
+function useActiveOrgListIntegrations<T = ListIntegrationsResponse>(select?: (r: ListIntegrationsResponse) => T) {
+  const orgId = useActiveOrgStore((s) => s.effectiveId);
+  return useListIntegrations(orgId ? { orgId } : {}, { staleTime: 5 * 60_000, ...(select ? { select } : {}) });
+}
+
 /** Every integration this deployment lists, with the ways to connect each (ListIntegrations). */
 export function useIntegrations() {
-  return useListIntegrations({}, { staleTime: 5 * 60_000, select: integrationsOf });
+  return useActiveOrgListIntegrations(integrationsOf);
 }
 
 /** Integration id → its display name ("github" → "GitHub"), from ListIntegrations. */
 export function useIntegrationNames(): ReadonlyMap<string, string> {
-  const query = useListIntegrations({}, { staleTime: 5 * 60_000 });
+  const query = useActiveOrgListIntegrations();
   const integrations = query.data?.integrations;
   return useMemo(() => new Map((integrations ?? []).map((i) => [i.id, i.displayName || i.id])), [integrations]);
 }
@@ -258,7 +271,7 @@ export function useIntegrationNames(): ReadonlyMap<string, string> {
  * and the connect dialog still explains.
  */
 export function useUnavailableIntegrations(): ReadonlySet<string> {
-  const query = useListIntegrations({}, { staleTime: 5 * 60_000 });
+  const query = useActiveOrgListIntegrations();
   const integrations = query.data?.integrations;
   return useMemo(() => unavailableIntegrationIds((integrations ?? []).map(integrationFromProto)), [integrations]);
 }
@@ -266,13 +279,13 @@ export function useUnavailableIntegrations(): ReadonlySet<string> {
 /**
  * The integrations the active org's policy refuses in its runs (control-plane
  * docs/design/org-policies.md §4.3): ListIntegrations answers for the org
- * the request names (api/orgInterceptor fills it). Only an ENFORCED refusal
+ * the request names (the active org). Only an ENFORCED refusal
  * is here: under audit the use works. Connecting is never refused — a
  * person's own connection stays usable in their other orgs — so a picker
  * marks these rather than hiding them.
  */
 export function useOrgDisallowedIntegrations(): ReadonlySet<string> {
-  const query = useListIntegrations({}, { staleTime: 5 * 60_000 });
+  const query = useActiveOrgListIntegrations();
   const integrations = query.data?.integrations;
   return useMemo(
     () => new Set((integrations ?? []).filter((i) => i.orgPolicy && !i.orgPolicy.allowed && i.orgPolicy.enforced).map((i) => i.id)),

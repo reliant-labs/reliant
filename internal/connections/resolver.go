@@ -371,27 +371,31 @@ func (r *Resolver) Usable(ctx context.Context, call CallSite, refs []Ref) (map[R
 // §4.3): nil when it does, or when nothing refuses it (no org, no policy on
 // integrations, audit); the typed refusal IntegrationNotAllowed when the
 // policy refuses it; CodeUnavailable when the policy must be read and cannot
-// be. A use that reaches a credential through lookup is already judged there;
-// this is for the uses that do not (a delegated authority's own identity).
-func (r *Resolver) AdmitIntegration(ctx context.Context, runID, integrationID string) error {
+// be. It is the boundary of one use, before any credential is chosen (a
+// catalog action whatever authenticates it: a saved connection, a declared
+// secret, a delegated identity, nothing at all), and counts the use once: the
+// returned context marks it judged (orgpolicy.WithJudged), so lookup, asked
+// again below it, refuses alike without counting again.
+func (r *Resolver) AdmitIntegration(ctx context.Context, runID, integrationID string) (context.Context, error) {
 	a, err := r.actorOf(ctx, runID)
 	if err != nil {
-		return err
+		return ctx, err
 	}
-	return admitIntegration(ctx, a, integrationID, false)
+	d, err := admitIntegration(ctx, a, integrationID, false)
+	return orgpolicy.WithJudged(ctx, d), err
 }
 
 // admitIntegration applies the org's integrations policy to a use of
 // integrationID that acts as a. quiet judges without counting (Usable).
-func admitIntegration(ctx context.Context, a actor, integrationID string, quiet bool) error {
+func admitIntegration(ctx context.Context, a actor, integrationID string, quiet bool) (orgpolicy.Decision, error) {
 	d, err := orgpolicy.JudgeIntegration(ctx, a.orgID, integrationID, quiet)
 	if err != nil {
-		return &Error{Code: CodeUnavailable, Message: "could not read your organization's policy; try again", Err: err}
+		return d, &Error{Code: CodeUnavailable, Message: "could not read your organization's policy; try again", Err: err}
 	}
 	if d.Refused {
-		return IntegrationNotAllowed(integrationID)
+		return d, IntegrationNotAllowed(integrationID)
 	}
-	return nil
+	return d, nil
 }
 
 // IntegrationNotAllowed is the refusal of a use of integrationID that the
@@ -435,7 +439,7 @@ type usableConnection struct {
 // without counting the decision (Usable).
 func (r *Resolver) lookup(ctx context.Context, a actor, ref Ref, quiet bool) (*usableConnection, error) {
 	if ref.IntegrationID != "" {
-		if err := admitIntegration(ctx, a, ref.IntegrationID, quiet); err != nil {
+		if _, err := admitIntegration(ctx, a, ref.IntegrationID, quiet); err != nil {
 			return nil, err
 		}
 	}
@@ -470,7 +474,7 @@ func (r *Resolver) lookup(ctx context.Context, a actor, ref Ref, quiet bool) (*u
 		return nil, newError(CodeFailedPrecondition, "connection %q is for %q, not %q", conn.Name, conn.IntegrationID, ref.IntegrationID)
 	}
 	if ref.IntegrationID == "" {
-		if err := admitIntegration(ctx, a, conn.IntegrationID, quiet); err != nil {
+		if _, err := admitIntegration(ctx, a, conn.IntegrationID, quiet); err != nil {
 			return nil, err
 		}
 	}

@@ -27,6 +27,7 @@ import { ConnectionAuthKind, IntegrationAuthMethodSchema, IntegrationSchema } fr
 import { renderWithQuery } from "@/test/renderWithQuery";
 import { setTransport } from "@/lib/connect";
 import { mockTransport } from "@/lib/test-utils";
+import { useActiveOrgStore } from "@/store/activeOrgStore";
 
 const searchCatalog = vi.fn();
 const getCatalogEntry = vi.fn();
@@ -488,6 +489,37 @@ describe("StepPalette: searching", () => {
     await screen.findByText("Create issue");
     expect(within(optionNamed("Create issue")).getByText("Not allowed in your organization")).toBeInTheDocument();
     expect(screen.getByText(/your organization's policy doesn't allow GitHub in its workflows/)).toBeInTheDocument();
+  });
+
+  it("shows the markers of the org it acts in, and the new org's after a switch", async () => {
+    // Org A refuses GitHub, org B refuses Slack: the request names the org,
+    // so neither org's answer is shown under the other's name.
+    listIntegrations.mockImplementation((req: { orgId?: string }) => {
+      const refuses = req.orgId === "org-a" ? "github" : req.orgId === "org-b" ? "slack" : "";
+      return Promise.resolve({
+        integrations: ["github", "slack"].map((id) =>
+          create(IntegrationSchema, {
+            id,
+            displayName: DISPLAY[id],
+            ...(refuses ? { orgPolicy: { allowed: id !== refuses, enforced: true, policyVersion: 1n } } : {}),
+          }),
+        ),
+      });
+    });
+    listCatalogIntegrations.mockResolvedValue(integrationsPage([listing("github"), listing("slack")]));
+    useActiveOrgStore.setState({ userId: "u1", chosenId: "org-a", effectiveId: "org-a" });
+    try {
+      renderPalette();
+      await waitFor(() => expect(within(optionNamed("GitHub")).queryByTestId("palette-not-allowed")).not.toBeNull());
+      expect(within(optionNamed("Slack")).queryByTestId("palette-not-allowed")).toBeNull();
+
+      act(() => useActiveOrgStore.setState({ chosenId: "org-b", effectiveId: "org-b" }));
+      await waitFor(() => expect(within(optionNamed("Slack")).queryByTestId("palette-not-allowed")).not.toBeNull());
+      expect(within(optionNamed("GitHub")).queryByTestId("palette-not-allowed")).toBeNull();
+      expect(listIntegrations).toHaveBeenCalledWith(expect.objectContaining({ orgId: "org-b" }));
+    } finally {
+      useActiveOrgStore.setState({ userId: null, chosenId: null, effectiveId: null });
+    }
   });
 
   it("says an integration no connection method serves here is not available, instead of offering Connect", async () => {

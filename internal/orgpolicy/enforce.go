@@ -130,9 +130,11 @@ func Enforced(point Point, mode controlplanev1.OrgPolicyMode) bool {
 //
 // quiet suppresses the count and the log: for a caller that asks often
 // without a use behind each answer (offering tools before every model turn),
-// so audit counts stay one per use.
+// so audit counts stay one per use. A use already judged upstream on ctx
+// (WithJudged) is quiet too: one use, one count, however many layers ask.
 func Judge(ctx context.Context, point Point, orgID, subject, reason string, quiet bool, judge func(*controlplanev1.OrgPolicy) Admission) (Decision, error) {
 	d := Decision{Point: point, OrgID: orgID, Subject: subject, Reason: reason}
+	quiet = quiet || judgedOn(ctx, d)
 	sw := EnforcementOf(point)
 	if orgID == "" || sw == EnforcementOff {
 		return d, nil
@@ -159,6 +161,25 @@ func Judge(ctx context.Context, point Point, orgID, subject, reason string, quie
 		record(ctx, d, pol.Stale)
 	}
 	return d, nil
+}
+
+// judgedKey names one use's decision on a context.
+type judgedKey struct {
+	point          Point
+	orgID, subject string
+}
+
+// WithJudged returns ctx marking d's use (its point, org and subject) as
+// decided and counted: the boundary that judged it hands ctx down, and a
+// layer below that judges the same use again (to refuse it on its own
+// account) does not count it a second time.
+func WithJudged(ctx context.Context, d Decision) context.Context {
+	return context.WithValue(ctx, judgedKey{d.Point, d.OrgID, d.Subject}, true)
+}
+
+func judgedOn(ctx context.Context, d Decision) bool {
+	v, _ := ctx.Value(judgedKey{d.Point, d.OrgID, d.Subject}).(bool)
+	return v
 }
 
 // record counts and logs a denial: the metric is what an alert and the

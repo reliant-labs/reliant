@@ -97,9 +97,17 @@ func TestIntegrationPolicy_PersonalConnectionUsableInOrgBButNotInOrgA(t *testing
 	requireIntegrationNotAllowed(t, usable[connections.Ref{IntegrationID: "github"}])
 
 	// AdmitIntegration, for the uses a delegated authority serves.
-	requireIntegrationNotAllowed(t, e.resolver.AdmitIntegration(ctx, inA, "github"))
-	require.NoError(t, e.resolver.AdmitIntegration(ctx, inA, "slack"))
-	require.NoError(t, e.resolver.AdmitIntegration(ctx, inB, "github"))
+	_, err = e.resolver.AdmitIntegration(ctx, inA, "github")
+	requireIntegrationNotAllowed(t, err)
+	_, err = e.resolver.AdmitIntegration(ctx, inA, "slack")
+	require.NoError(t, err)
+	_, err = e.resolver.AdmitIntegration(ctx, inB, "github")
+	require.NoError(t, err)
+
+	// The generic HTTP integration is raw egress, never governed (D14):
+	// org-a's list leaves it out, and it is admitted all the same.
+	_, err = e.resolver.AdmitIntegration(ctx, inA, orgpolicy.GenericHTTPIntegrationID)
+	require.NoError(t, err)
 }
 
 // requireIntegrationNotAllowed pins the refusal's typed shape: a
