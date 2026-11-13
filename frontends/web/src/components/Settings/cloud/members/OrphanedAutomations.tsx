@@ -134,7 +134,7 @@ export function OrphanedAutomations({ org, members }: { org: MyOrg; members: Org
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => t && setAdopting({ kind: "adopt", trigger: t })}
+                      onClick={() => t && setAdopting({ kind: "adopt", trigger: t, paramNames: o.paramNames })}
                       aria-label={`Adopt ${t?.name}`}
                       data-testid={`orphan-adopt-${t?.id}`}
                     >

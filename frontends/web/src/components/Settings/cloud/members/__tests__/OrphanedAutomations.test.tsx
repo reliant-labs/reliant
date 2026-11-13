@@ -92,13 +92,21 @@ describe("OrphanedAutomations", () => {
     const form = await screen.findByTestId("adopt-form");
     // Only this org's projects are offered.
     expect(within(form).queryByRole("option", { name: "Elsewhere" })).toBeNull();
+    // The old value of each input is never shown; the admin types their own.
+    expect(within(form).getByTestId("adopt-param-api_token")).toHaveValue("");
+    await userEvent.type(within(form).getByTestId("adopt-param-api_token"), "adas-token");
     await userEvent.click(screen.getByTestId("adopt-submit"));
     await waitFor(() =>
       expect(adopt).toHaveBeenCalledWith(
         expect.objectContaining({
           triggerId: "t-nightly",
           newOwnerUserId: "",
-          rebinding: expect.objectContaining({ projectId: "proj-acme", daemonId: "d-laptop", noMachine: false }),
+          rebinding: expect.objectContaining({
+            projectId: "proj-acme",
+            daemonId: "d-laptop",
+            noMachine: false,
+            params: { api_token: expect.objectContaining({ kind: { case: "stringValue", value: "adas-token" } }) },
+          }),
         }),
       ),
     );

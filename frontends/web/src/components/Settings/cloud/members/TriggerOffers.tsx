@@ -85,7 +85,7 @@ export function TriggerOffers({ org, members }: { org: MyOrg; members: OrgMember
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => offer.trigger && setAccepting({ kind: "accept", offerId: offer.id, trigger: offer.trigger })}
+                onClick={() => offer.trigger && setAccepting({ kind: "accept", offerId: offer.id, trigger: offer.trigger, paramNames: offer.paramNames })}
                 aria-label={`Accept ${offer.trigger?.name}`}
                 data-testid={`offer-accept-${offer.id}`}
               >

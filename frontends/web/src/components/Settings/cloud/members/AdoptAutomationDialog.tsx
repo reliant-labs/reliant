@@ -5,11 +5,14 @@
  * yourself (AdoptTrigger), or as the member it was offered to
  * (AcceptTriggerOffer). Either way the new owner chooses everything that
  * was the old owner's: their project in this org, their machine, and a new
- * signing secret for a signed webhook. Nothing of the old owner's is carried,
+ * signing secret for a signed webhook, and their own value for each input it
+ * sets (the old values are never shown or kept). Nothing of the old owner's is carried,
  * and the automation stays paused until its new owner turns it on.
  */
 
 import { useId, useMemo, useState, type FormEvent } from "react";
+import { create } from "@bufbuild/protobuf";
+import { ValueSchema } from "@bufbuild/protobuf/wkt";
 
 import Button from "@/components/forge-ui/button";
 import Input from "@/components/forge-ui/input";
@@ -24,9 +27,10 @@ import { buildDaemonChoices, NO_MACHINE, NO_MACHINE_LABEL } from "../../../Autom
 import { WebhookCredentialPanel } from "../../../Automations/dialog/WebhookCredentialPanel";
 import { needsSigningSecret, SELECT_CLASS, sourceLabel, takeoverErrorMessage } from "./takeover";
 
+/** paramNames are the inputs the trigger sets; their old values are withheld. */
 export type AdoptTarget =
-  | { kind: "adopt"; trigger: ProtoTrigger }
-  | { kind: "accept"; offerId: string; trigger: ProtoTrigger };
+  | { kind: "adopt"; trigger: ProtoTrigger; paramNames: string[] }
+  | { kind: "accept"; offerId: string; trigger: ProtoTrigger; paramNames: string[] };
 
 interface Result {
   trigger?: ProtoTrigger;
@@ -65,6 +69,7 @@ function AdoptForm({ orgId, target, onClose, onDone }: { orgId: string; target: 
   const [machine, setMachine] = useState("");
   const chosenMachine = machine || choices.find((c) => c.eligible)?.daemonId || "";
   const [secret, setSecret] = useState("");
+  const [params, setParams] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<Result | null>(null);
   const adopt = useAdoptTrigger({ meta: { silenceErrorToast: true } });
@@ -104,6 +109,12 @@ function AdoptForm({ orgId, target, onClose, onDone }: { orgId: string; target: 
       daemonId: chosenMachine === NO_MACHINE ? "" : chosenMachine,
       noMachine: chosenMachine === NO_MACHINE,
       webhookHmacSecret: wantsSecret ? secret : undefined,
+      // Only what the adopter typed; an input left blank is not sent.
+      params: Object.fromEntries(
+        Object.entries(params)
+          .filter(([, v]) => v.trim() !== "")
+          .map(([k, v]) => [k, create(ValueSchema, { kind: { case: "stringValue", value: v } })]),
+      ),
     };
     try {
       const resp =
@@ -175,6 +186,17 @@ function AdoptForm({ orgId, target, onClose, onDone }: { orgId: string; target: 
           <p className="text-xs text-muted-foreground">The previous owner&apos;s secret is not carried. Give the sender this one too.</p>
         </div>
       )}
+      {target.paramNames.length > 0 && (
+        <fieldset className="space-y-3" data-testid="adopt-params">
+          <legend className="text-sm font-medium text-foreground">Inputs</legend>
+          <p className="text-xs text-muted-foreground">
+            Its previous owner&apos;s values are not carried: they may have been their tokens or addresses. Enter your own, or leave one blank.
+          </p>
+          {target.paramNames.map((name) => (
+            <ParamField key={name} name={name} value={params[name] ?? ""} onChange={(v) => setParams((p) => ({ ...p, [name]: v }))} />
+          ))}
+        </fieldset>
+      )}
       {error && (
         <p role="alert" className="rounded-md border border-destructive/40 bg-background px-3 py-2 text-sm text-destructive-ink" data-testid="adopt-error">
           {error}
@@ -189,5 +211,17 @@ function AdoptForm({ orgId, target, onClose, onDone }: { orgId: string; target: 
         </Button>
       </div>
     </form>
+  );
+}
+
+function ParamField({ name, value, onChange }: { name: string; value: string; onChange: (v: string) => void }) {
+  const id = useId();
+  return (
+    <div className="space-y-1.5">
+      <label htmlFor={id} className="block text-xs font-medium text-foreground">
+        {name}
+      </label>
+      <Input id={id} value={value} onChange={(e) => onChange(e.target.value)} autoComplete="off" data-testid={`adopt-param-${name}`} />
+    </div>
   );
 }
