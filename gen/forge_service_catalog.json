@@ -17337,6 +17337,38 @@
               "kind": "message",
               "type_name": "reliant.v1.InboxWorktreeMarked",
               "oneof": "payload"
+            },
+            {
+              "name": "org_provider_key_rejected",
+              "kind": "message",
+              "type_name": "reliant.v1.InboxOrgProviderKeyRejected",
+              "oneof": "payload"
+            }
+          ],
+          "reliant.v1.InboxOrgProviderKeyRejected": [
+            {
+              "name": "org_id",
+              "kind": "string"
+            },
+            {
+              "name": "account_id",
+              "kind": "string"
+            },
+            {
+              "name": "provider",
+              "kind": "string"
+            },
+            {
+              "name": "label",
+              "kind": "string"
+            },
+            {
+              "name": "key_hint",
+              "kind": "string"
+            },
+            {
+              "name": "reason",
+              "kind": "string"
             }
           ],
           "reliant.v1.InboxQuestion": [
@@ -17844,6 +17876,7 @@
           "reliant.v1.InboxAutomationNeedsSetup": "reliant/v1/inbox.proto",
           "reliant.v1.InboxAutomationRunPaused": "reliant/v1/inbox.proto",
           "reliant.v1.InboxItem": "reliant/v1/inbox.proto",
+          "reliant.v1.InboxOrgProviderKeyRejected": "reliant/v1/inbox.proto",
           "reliant.v1.InboxQuestion": "reliant/v1/inbox.proto",
           "reliant.v1.InboxRefusedAutomation": "reliant/v1/inbox.proto",
           "reliant.v1.InboxStorage": "reliant/v1/inbox.proto",
@@ -17896,7 +17929,8 @@
             "INBOX_ITEM_KIND_AUTOMATION_DEFINITION_BROKEN",
             "INBOX_ITEM_KIND_WORKTREE_RECLAIM",
             "INBOX_ITEM_KIND_WORKTREE_MARKED",
-            "INBOX_ITEM_KIND_PERSONAL_FUNDING"
+            "INBOX_ITEM_KIND_PERSONAL_FUNDING",
+            "INBOX_ITEM_KIND_ORG_PROVIDER_KEY_REJECTED"
           ],
           "reliant.v1.TriggerHealthStatus": [
             "TRIGGER_HEALTH_STATUS_UNSPECIFIED",
@@ -17938,7 +17972,8 @@
             11,
             12,
             13,
-            14
+            14,
+            15
           ],
           "reliant.v1.TriggerHealthStatus": [
             0,
