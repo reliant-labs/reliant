@@ -114,6 +114,26 @@ describe("OrphanedAutomations", () => {
     expect(screen.getByTestId("adopt-notices")).toHaveTextContent("It is paused.");
   });
 
+  it("sends an input as the type the admin chose, and holds back one that does not parse", async () => {
+    const adopt = vi.fn((_req: unknown) => ({ trigger: { id: "t-nightly" }, notices: [] }));
+    render({ "AutomationTakeoverService.AdoptTrigger": adopt });
+    await userEvent.click(await screen.findByTestId("orphan-adopt-t-nightly"));
+    await userEvent.selectOptions(await screen.findByTestId("adopt-param-kind-api_token"), "number");
+    await userEvent.type(screen.getByTestId("adopt-param-api_token"), "many");
+    expect(screen.getByTestId("adopt-submit")).toBeDisabled();
+    expect(screen.getByText("Not a number.")).toBeInTheDocument();
+    await userEvent.clear(screen.getByTestId("adopt-param-api_token"));
+    await userEvent.type(screen.getByTestId("adopt-param-api_token"), "42");
+    await userEvent.click(screen.getByTestId("adopt-submit"));
+    await waitFor(() =>
+      expect(adopt).toHaveBeenCalledWith(
+        expect.objectContaining({
+          rebinding: expect.objectContaining({ params: { api_token: expect.objectContaining({ kind: { case: "numberValue", value: 42 } }) } }),
+        }),
+      ),
+    );
+  });
+
   it("a signed webhook needs a new secret before it can be adopted", async () => {
     const adopt = vi.fn((_req: unknown) => ({ trigger: { id: "t-hook" }, notices: [] }));
     render({ "AutomationTakeoverService.AdoptTrigger": adopt });

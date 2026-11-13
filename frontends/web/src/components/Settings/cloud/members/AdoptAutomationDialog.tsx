@@ -11,8 +11,8 @@
  */
 
 import { useId, useMemo, useState, type FormEvent } from "react";
-import { create } from "@bufbuild/protobuf";
-import { ValueSchema } from "@bufbuild/protobuf/wkt";
+import { create, fromJson, type JsonValue } from "@bufbuild/protobuf";
+import { ValueSchema, type Value } from "@bufbuild/protobuf/wkt";
 
 import Button from "@/components/forge-ui/button";
 import Input from "@/components/forge-ui/input";
@@ -22,6 +22,7 @@ import { useAcceptTriggerOffer, useAdoptTrigger } from "@/hooks/automation-takeo
 import { useProjectDaemonInstalls, useProjects } from "@/hooks/project-queries";
 import { triggerFromProto } from "@/hooks/trigger-model";
 import { useDaemonStatus } from "@/hooks/useDaemonStatus";
+import { cn } from "@/lib/utils";
 
 import { buildDaemonChoices, NO_MACHINE, NO_MACHINE_LABEL } from "../../../Automations/daemonChoices";
 import { WebhookCredentialPanel } from "../../../Automations/dialog/WebhookCredentialPanel";
@@ -69,7 +70,8 @@ function AdoptForm({ orgId, target, onClose, onDone }: { orgId: string; target: 
   const [machine, setMachine] = useState("");
   const chosenMachine = machine || choices.find((c) => c.eligible)?.daemonId || "";
   const [secret, setSecret] = useState("");
-  const [params, setParams] = useState<Record<string, string>>({});
+  const [params, setParams] = useState<Record<string, ParamInput>>({});
+  const encoded = useMemo(() => encodeParams(params), [params]);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<Result | null>(null);
   const adopt = useAdoptTrigger({ meta: { silenceErrorToast: true } });
@@ -109,12 +111,10 @@ function AdoptForm({ orgId, target, onClose, onDone }: { orgId: string; target: 
       daemonId: chosenMachine === NO_MACHINE ? "" : chosenMachine,
       noMachine: chosenMachine === NO_MACHINE,
       webhookHmacSecret: wantsSecret ? secret : undefined,
-      // Only what the adopter typed; an input left blank is not sent.
-      params: Object.fromEntries(
-        Object.entries(params)
-          .filter(([, v]) => v.trim() !== "")
-          .map(([k, v]) => [k, create(ValueSchema, { kind: { case: "stringValue", value: v } })]),
-      ),
+      // Only what the adopter typed, as the type they chose; an input left
+      // blank is not sent. The server validates each against the workflow's
+      // inputs as theirs, and names one it refuses.
+      params: encoded.values,
     };
     try {
       const resp =
@@ -128,7 +128,7 @@ function AdoptForm({ orgId, target, onClose, onDone }: { orgId: string; target: 
     }
   };
 
-  const ready = !!projectId && !!chosenMachine && (!wantsSecret || secret.trim() !== "");
+  const ready = !!projectId && !!chosenMachine && (!wantsSecret || secret.trim() !== "") && Object.keys(encoded.errors).length === 0;
 
   return (
     <form className="space-y-4" onSubmit={(e) => void submit(e)} data-testid="adopt-form">
@@ -193,7 +193,13 @@ function AdoptForm({ orgId, target, onClose, onDone }: { orgId: string; target: 
             Its previous owner&apos;s values are not carried: they may have been their tokens or addresses. Enter your own, or leave one blank.
           </p>
           {target.paramNames.map((name) => (
-            <ParamField key={name} name={name} value={params[name] ?? ""} onChange={(v) => setParams((p) => ({ ...p, [name]: v }))} />
+            <ParamField
+              key={name}
+              name={name}
+              value={params[name] ?? EMPTY_INPUT}
+              error={encoded.errors[name]}
+              onChange={(v) => setParams((p) => ({ ...p, [name]: v }))}
+            />
           ))}
         </fieldset>
       )}
@@ -214,14 +220,104 @@ function AdoptForm({ orgId, target, onClose, onDone }: { orgId: string; target: 
   );
 }
 
-function ParamField({ name, value, onChange }: { name: string; value: string; onChange: (v: string) => void }) {
+/** One input's value as the adopter typed it, and the type it is sent as. */
+export type ParamKind = "text" | "number" | "boolean" | "json";
+export interface ParamInput {
+  kind: ParamKind;
+  text: string;
+}
+const EMPTY_INPUT: ParamInput = { kind: "text", text: "" };
+
+const KIND_LABEL: Record<ParamKind, string> = { text: "Text", number: "Number", boolean: "Yes / no", json: "JSON" };
+
+/**
+ * The inputs as protobuf Values of the type each was given: an input is not
+ * always a string (a count, a flag, a list of repositories), and sending
+ * "3" for a number would fail the workflow's input check. Blank inputs are
+ * left out; one that does not parse as its type is an error, not sent.
+ */
+export function encodeParams(params: Record<string, ParamInput>): { values: Record<string, Value>; errors: Record<string, string> } {
+  const values: Record<string, Value> = {};
+  const errors: Record<string, string> = {};
+  for (const [name, { kind, text }] of Object.entries(params)) {
+    const raw = text.trim();
+    if (raw === "") continue;
+    switch (kind) {
+      case "text":
+        values[name] = create(ValueSchema, { kind: { case: "stringValue", value: text } });
+        break;
+      case "number": {
+        const n = Number(raw);
+        if (Number.isFinite(n)) values[name] = create(ValueSchema, { kind: { case: "numberValue", value: n } });
+        else errors[name] = "Not a number.";
+        break;
+      }
+      case "boolean":
+        if (raw === "true" || raw === "false") values[name] = create(ValueSchema, { kind: { case: "boolValue", value: raw === "true" } });
+        else errors[name] = "Choose yes or no.";
+        break;
+      case "json":
+        try {
+          values[name] = fromJson(ValueSchema, JSON.parse(raw) as JsonValue);
+        } catch {
+          errors[name] = "Not valid JSON.";
+        }
+        break;
+    }
+  }
+  return { values, errors };
+}
+
+function ParamField({ name, value, error, onChange }: { name: string; value: ParamInput; error?: string; onChange: (v: ParamInput) => void }) {
   const id = useId();
+  const kindId = useId();
+  const errorId = useId();
   return (
     <div className="space-y-1.5">
       <label htmlFor={id} className="block text-xs font-medium text-foreground">
         {name}
       </label>
-      <Input id={id} value={value} onChange={(e) => onChange(e.target.value)} autoComplete="off" data-testid={`adopt-param-${name}`} />
+      <div className="flex gap-2">
+        {value.kind === "boolean" ? (
+          <select id={id} className={SELECT_CLASS} value={value.text} onChange={(e) => onChange({ ...value, text: e.target.value })} data-testid={`adopt-param-${name}`}>
+            <option value="">Not set</option>
+            <option value="true">Yes</option>
+            <option value="false">No</option>
+          </select>
+        ) : (
+          <Input
+            id={id}
+            value={value.text}
+            onChange={(e) => onChange({ ...value, text: e.target.value })}
+            autoComplete="off"
+            inputMode={value.kind === "number" ? "decimal" : undefined}
+            aria-invalid={!!error}
+            aria-describedby={error ? errorId : undefined}
+            data-testid={`adopt-param-${name}`}
+          />
+        )}
+        <label htmlFor={kindId} className="sr-only">
+          {name} type
+        </label>
+        <select
+          id={kindId}
+          className={cn(SELECT_CLASS, "w-28 shrink-0")}
+          value={value.kind}
+          onChange={(e) => onChange({ kind: e.target.value as ParamKind, text: "" })}
+          data-testid={`adopt-param-kind-${name}`}
+        >
+          {(Object.keys(KIND_LABEL) as ParamKind[]).map((k) => (
+            <option key={k} value={k}>
+              {KIND_LABEL[k]}
+            </option>
+          ))}
+        </select>
+      </div>
+      {error && (
+        <p id={errorId} className="text-xs text-destructive-ink" role="alert">
+          {error}
+        </p>
+      )}
     </div>
   );
 }
