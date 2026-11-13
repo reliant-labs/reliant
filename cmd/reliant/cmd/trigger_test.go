@@ -3,6 +3,7 @@ package cmd
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"connectrpc.com/connect"
@@ -140,6 +141,21 @@ func TestScheduleSummaryShowsCronAndIntervalTogether(t *testing.T) {
 
 // The create command must leave enabled UNSET unless the user said something,
 // because the server reads nil as "true on create, unchanged on update".
+// Whose name a trigger's GitHub writes carry is chosen per activation, so
+// `trigger get` must show it: it is how an operator checks an activation
+// will act as the app, not as them.
+func TestTriggerDetailShowsTheActingIdentity(t *testing.T) {
+	for acting, want := range map[reliantv1.ActingIdentity]string{
+		reliantv1.ActingIdentity_ACTING_IDENTITY_APP:         "Acting as:  app (the Reliant GitHub App's bot)",
+		reliantv1.ActingIdentity_ACTING_IDENTITY_OWNER:       "Acting as:  owner (the activation owner's own GitHub account)",
+		reliantv1.ActingIdentity_ACTING_IDENTITY_UNSPECIFIED: "Acting as:  -",
+	} {
+		var out strings.Builder
+		printTriggerDetail(&out, &reliantv1.Trigger{Name: "t", ActingIdentity: acting})
+		assert.Contains(t, out.String(), want, acting.String())
+	}
+}
+
 func TestTriggerCreateLeavesEnabledUnsetByDefault(t *testing.T) {
 	cmd := newTriggerCreateCmd()
 	flags := &triggerDefinitionFlags{
