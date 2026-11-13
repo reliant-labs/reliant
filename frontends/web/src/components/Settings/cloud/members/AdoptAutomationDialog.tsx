@@ -84,7 +84,7 @@ function AdoptForm({ orgId, target, onClose, onDone }: { orgId: string; target: 
   // workflow, not forked yet) does the dialog fall back to typing each
   // input by hand.
   const workflowRef = target.trigger.workflow;
-  const definition = useWorkflowDefinition(projectId || undefined, workflowRef || undefined);
+  const definition = useWorkflowDefinition(projectId || undefined, workflowRef);
   const schemaKnown = !!workflowRef && !!definition.workflowDef && !definition.error;
   const [runValue, setRunValue] = useState<RunWorkflowValue>(EMPTY_RUN_VALUE);
   const [runStatus, setRunStatus] = useState<RunWorkflowFormStatus | null>(null);
