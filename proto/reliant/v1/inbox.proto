@@ -189,6 +189,14 @@ enum InboxItemKind {
   // the person answers (ProviderAccountService.ResolvePersonalFundingChoice).
   // One item per chat per question. Blocks a live run.
   INBOX_ITEM_KIND_PERSONAL_FUNDING = 14;
+  // The provider rejected one of an org's own AI provider keys (control-plane
+  // docs/design/org-provider-accounts.md §4.7): it is out of every member's
+  // routing until an owner or admin rotates or replaces it. Listed to the
+  // org's owners and admins only, one item per key per incident (a key
+  // rejected again after it was fixed is a new item). Informational: the
+  // org's chats route around the key, and nothing waits on the item. A
+  // member who hit the rejection is not shown it: they cannot fix an org key.
+  INBOX_ITEM_KIND_ORG_PROVIDER_KEY_REJECTED = 15;
 }
 
 message ListInboxRequest {
@@ -246,7 +254,8 @@ message InboxItem {
   // set of inputs it is missing, so dismissing it holds until a workflow edit
   // makes it miss something new. A personal-funding item ("personal_funding:")
   // embeds the chat id and when the chat asked, so a later question is a new
-  // item.
+  // item. A rejected org key ("org_provider_key_rejected:") embeds the account
+  // id and when it was rejected, so a later rejection is a new item.
   string item_id = 2;
 
   // The chat the item belongs to. Empty for automation failure kinds that have
@@ -281,10 +290,30 @@ message InboxItem {
     InboxAutomationDefinitionBroken automation_definition_broken = 30;
     InboxWorktreeReclaim worktree_reclaim = 31;
     InboxWorktreeMarked worktree_marked = 32;
+    InboxOrgProviderKeyRejected org_provider_key_rejected = 33;
   }
   // 25 was run_finished (InboxRunFinished); see INBOX_ITEM_KIND 6.
   reserved 25;
   reserved "run_finished";
+}
+
+// InboxOrgProviderKeyRejected is one of an org's own AI provider keys that the
+// provider rejected (INBOX_ITEM_KIND_ORG_PROVIDER_KEY_REJECTED). The item names
+// no chat, run or project; waiting_since is when the key was rejected. Rotate
+// it with OrgProviderAccountService.RotateOrgProviderAPIKey, or delete it.
+message InboxOrgProviderKeyRejected {
+  // The org that owns the key.
+  string org_id = 1;
+  // The org account (provider_accounts.id).
+  string account_id = 2;
+  // The provider the key is for ("anthropic", "openai", ...).
+  string provider = 3;
+  // The account's label, as the org's admins named it.
+  string label = 4;
+  // The key's last four characters, as the org's admins see it.
+  string key_hint = 5;
+  // Why the provider refused it, as recorded.
+  string reason = 6;
 }
 
 // InboxAutomationRunPaused is a paused run of an automation. The item's

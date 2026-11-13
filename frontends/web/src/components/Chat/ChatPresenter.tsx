@@ -33,6 +33,8 @@ import { ResumeDaemonPill } from "./ResumeDaemonPill";
 import { ComposerStatusSlot, RecoveryBanner, StatusSlotItem } from "./ComposerStatusSlot";
 import { OomKillBanner } from "./OomKillBanner";
 import { DiskPressureBanner } from "./DiskPressureBanner";
+import { MachineHealthBanner } from "./MachineHealthBanner";
+import { OrgMovedBanner } from "./OrgMovedBanner";
 import { ComposerWakeStatus } from "./ComposerWakeStatus";
 import { ContinueWithoutMachineButton, NoMachineComposerHint } from "./NoMachine";
 import { continueBranchPoint } from "../../lib/chatMachine";
@@ -918,12 +920,22 @@ export const ChatPresenter = memo(function ChatPresenter({
                     <OomKillBanner />
                   </StatusSlotItem>
                 )}
+                {/* Health banner — the chat's machine is connected but cannot start processes */}
+                {!noMachine && (
+                  <StatusSlotItem id="machine-health">
+                    <MachineHealthBanner daemonId={currentChat?.activeDaemonId} />
+                  </StatusSlotItem>
+                )}
                 {/* Disk banner — a volume on the chat's machine is (nearly) full */}
                 {!noMachine && (
                   <StatusSlotItem id="disk">
                     <DiskPressureBanner daemonId={currentChat?.activeDaemonId} />
                   </StatusSlotItem>
                 )}
+                {/* The chat is in another org than the app acts in (its project moved) */}
+                <StatusSlotItem id="org-moved">
+                  <OrgMovedBanner chatOrgId={currentChat?.orgId} chatUserId={currentChat?.userId} />
+                </StatusSlotItem>
                 {noMachine && chatId ? (
                   <StatusSlotItem id="no-machine">
                     <NoMachineComposerHint chatId={chatId} />

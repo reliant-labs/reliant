@@ -223,7 +223,7 @@ func TestMoveProjectOrg_RestampsWhatMovesAndLeavesWhatStays(t *testing.T) {
 		assert.False(t, tr.Enabled, "trigger %s", id)
 		triggers[id] = tr
 	}
-	assert.Equal(t, core.TriggerPausedOrgMove, triggers["t-org-bound"].PausedReason)
+	assert.Equal(t, core.TriggerPausedOrgMoveSetup, triggers["t-org-bound"].PausedReason, "it needs a new binding before it can run")
 	assert.Nil(t, triggers["t-org-bound"].ConnectionID, "the source org's bot is not carried")
 	assert.Equal(t, core.TriggerPausedOrgMove, triggers["t-personal"].PausedReason)
 	assert.Equal(t, strp("conn-mine"), triggers["t-personal"].ConnectionID, "the owner's own connection stays")
@@ -585,4 +585,186 @@ func TestMoveProjectOrg_KeepsAPauseCommittedWhileItWaits(t *testing.T) {
 	got, err := f.repo.GetProjectOrgMove(ctx, move.ID)
 	require.NoError(t, err)
 	assert.Zero(t, got.Counts.TriggersPaused, "the move paused nothing: the trigger was already paused when it read it")
+}
+
+// The preview's effects count what the commit would change, name the
+// triggers it leaves needing setup, and list the machines the project keeps.
+func TestProjectOrgMoveEffects_CountWhatTheMoveChanges(t *testing.T) {
+	f := newMoveFixture(t)
+	ctx := context.Background()
+	src := strp(moveSrc)
+	f.project("p-fx", src)
+	f.exec(`UPDATE projects SET forge_project_name = 'shop' WHERE id = 'p-fx'`)
+	f.chat("c-shared", "p-fx", src)
+	f.chat("c-pinned", "p-fx", src)
+	f.chat("c-archived", "p-fx", src)
+	f.exec(`UPDATE chats SET state = $1 WHERE id = 'c-archived'`, ChatStateArchived)
+	f.run("r-1", "c-shared", core.Completed())
+	f.run("r-2", "c-pinned", core.Failed())
+	f.share(core.ShareKindProject, "p-fx")
+	f.share(core.ShareKindChat, "c-shared")
+	f.exec(`INSERT INTO connections (id, owner_kind, user_id, org_id, integration_id, auth_kind, name, status)
+		VALUES ('conn-org', 'org', $1, $2, 'slack', 'api_key', 'Source bot', 'active'),
+		       ('conn-dst', 'org', $1, $3, 'slack', 'api_key', 'Target bot', 'active'),
+		       ('conn-mine', 'user', $1, NULL, 'slack', 'api_key', 'Mine', 'active')`, moveOwner, moveSrc, moveDst)
+	f.trigger("t-a-org", "p-fx", true, strp("conn-org"))
+	f.trigger("t-b-dst", "p-fx", true, strp("conn-dst"))
+	f.trigger("t-c-mine", "p-fx", false, strp("conn-mine"))
+	f.trigger("t-d-installation", "p-fx", false, nil)
+	f.exec(`UPDATE triggers SET config = config || '{"installation": "4242"}'::jsonb WHERE id = 't-d-installation'`)
+	f.exec(`INSERT INTO daemons (id, user_id, name, hostname) VALUES ('d-box', $1, 'Dev box', 'box'), ('d-laptop', $1, '', 'laptop')`, moveOwner)
+	f.exec(`INSERT INTO project_daemons (project_id, daemon_id, path) VALUES ('p-fx', 'd-box', '/w/p-fx')`)
+	f.exec(`UPDATE chats SET active_daemon_id = 'd-laptop' WHERE id IN ('c-pinned', 'c-archived')`)
+	f.exec(`UPDATE chats SET active_daemon_id = 'd-box' WHERE id = 'c-shared'`)
+
+	e, err := f.repo.ProjectOrgMoveEffects(ctx, "p-fx", moveDst)
+	require.NoError(t, err)
+	assert.Equal(t, 3, e.Chats)
+	assert.Equal(t, 2, e.Runs)
+	assert.Equal(t, 4, e.Triggers)
+	assert.Equal(t, 2, e.TriggersToPause)
+	assert.Equal(t, 2, e.SharesToClear)
+	assert.Equal(t, 1, e.OrgBindingsToClear, "the target's own connection is not the source's to clear")
+	assert.Equal(t, []core.ProjectOrgMoveTriggerSetup{
+		{TriggerID: "t-a-org", Name: "t-a-org", Reason: core.ProjectOrgMoveSetupOrgConnection},
+		{TriggerID: "t-d-installation", Name: "t-d-installation", Reason: core.ProjectOrgMoveSetupOrgGitHubInstallation},
+	}, e.TriggersNeedingSetup)
+	assert.Equal(t, []core.ProjectOrgMoveMachine{
+		{DaemonID: "d-box", Name: "Dev box", Attached: true, PinnedChats: 1},
+		{DaemonID: "d-laptop", Name: "laptop", PinnedChats: 2},
+	}, e.Machines)
+	assert.Equal(t, "shop", e.ForgeProjectName)
+
+	// The preview reads what the commit then does.
+	move := f.prepared("p-fx")
+	res, err := f.repo.MoveProjectOrg(ctx, core.ProjectOrgMoveCommit{MoveID: move.ID})
+	require.NoError(t, err)
+	assert.Equal(t, e.Chats, res.Move.Counts.Chats)
+	assert.Equal(t, e.Runs, res.Move.Counts.Runs)
+	assert.Equal(t, e.Triggers, res.Move.Counts.Triggers)
+	assert.Equal(t, e.TriggersToPause, res.Move.Counts.TriggersPaused)
+	assert.Equal(t, e.SharesToClear, res.Move.Counts.SharesCleared)
+	assert.Equal(t, e.OrgBindingsToClear, res.Move.Counts.BindingsCleared)
+}
+
+// The commit tells the owner's clients in its own transaction, with one
+// refetch stamped with the target org; a retried commit tells them nothing
+// more.
+func TestMoveProjectOrg_AnnouncesTheMoveToTheOwner(t *testing.T) {
+	f := newMoveFixture(t)
+	ctx := context.Background()
+	f.project("p-say", strp(moveSrc))
+	move := f.prepared("p-say")
+	announced := func() int {
+		return f.count(`SELECT count(*) FROM user_updates WHERE user_id = $1 AND project_id = 'p-say' AND update_type = $2 AND data::jsonb->>'type' = $3 AND org_id = $4`,
+			moveOwner, int32(UserUpdateRefetch), string(RefetchProjectOrgMoved), moveDst)
+	}
+	_, err := f.repo.MoveProjectOrg(ctx, core.ProjectOrgMoveCommit{MoveID: move.ID})
+	require.NoError(t, err)
+	assert.Equal(t, 1, announced())
+	_, err = f.repo.MoveProjectOrg(ctx, core.ProjectOrgMoveCommit{MoveID: move.ID})
+	require.NoError(t, err)
+	assert.Equal(t, 1, announced(), "a retried commit announces nothing")
+}
+
+// A trigger the move paused is turned back on only while the move's pause
+// stands, and the resume is in its change history; a person's pause is not.
+func TestResumeTriggerPausedBy(t *testing.T) {
+	f := newMoveFixture(t)
+	ctx := context.Background()
+	f.project("p-res", strp(moveSrc))
+	f.trigger("t-moved", "p-res", true, nil)
+	f.trigger("t-person", "p-res", false, nil)
+	move := f.prepared("p-res")
+	_, err := f.repo.MoveProjectOrg(ctx, core.ProjectOrgMoveCommit{MoveID: move.ID})
+	require.NoError(t, err)
+
+	paused, err := f.repo.ListProjectTriggersPausedBy(ctx, "p-res", core.TriggerPausedOrgMove)
+	require.NoError(t, err)
+	require.Len(t, paused, 1)
+	assert.Equal(t, "t-moved", paused[0].ID)
+	none, err := f.repo.ListProjectTriggersResumedSince(ctx, "p-res", move.CreatedAt)
+	require.NoError(t, err)
+	assert.Empty(t, none)
+
+	resumed, err := f.repo.ResumeTriggerPausedBy(ctx, "t-moved", core.TriggerPausedOrgMove, paused[0].UpdatedAt)
+	require.NoError(t, err)
+	assert.True(t, resumed)
+	tr, err := f.repo.GetTrigger(ctx, "t-moved")
+	require.NoError(t, err)
+	assert.True(t, tr.Enabled)
+	assert.Empty(t, tr.PausedReason)
+	assert.Equal(t, 1, f.count(`SELECT count(*) FROM trigger_changes WHERE trigger_id = 't-moved' AND operation = $1`, core.TriggerChangeOrgMoveResumed))
+	back, err := f.repo.ListProjectTriggersResumedSince(ctx, "p-res", move.CreatedAt)
+	require.NoError(t, err)
+	require.Len(t, back, 1, "what the move resumed, from the history")
+	assert.Equal(t, "t-moved", back[0].ID)
+
+	person, err := f.repo.GetTrigger(ctx, "t-person")
+	require.NoError(t, err)
+	resumed, err = f.repo.ResumeTriggerPausedBy(ctx, "t-person", core.TriggerPausedOrgMove, person.UpdatedAt)
+	require.NoError(t, err)
+	assert.False(t, resumed, "a person's pause is theirs")
+	resumed, err = f.repo.ResumeTriggerPausedBy(ctx, "t-moved", core.TriggerPausedOrgMove, paused[0].UpdatedAt)
+	require.NoError(t, err)
+	assert.False(t, resumed, "resuming twice resumes once")
+}
+
+// A trigger edited after the move checked it, and kept disabled (so the
+// move's pause stands), is not turned on from the old check: the resume says
+// it changed, and the trigger stays off until it is checked again.
+func TestResumeTriggerPausedBy_AnEditSinceTheCheckWins(t *testing.T) {
+	f := newMoveFixture(t)
+	ctx := context.Background()
+	f.project("p-edit", strp(moveSrc))
+	f.trigger("t-edit", "p-edit", true, nil)
+	move := f.prepared("p-edit")
+	_, err := f.repo.MoveProjectOrg(ctx, core.ProjectOrgMoveCommit{MoveID: move.ID})
+	require.NoError(t, err)
+	paused, err := f.repo.ListProjectTriggersPausedBy(ctx, "p-edit", core.TriggerPausedOrgMove)
+	require.NoError(t, err)
+	require.Len(t, paused, 1)
+	checked := paused[0]
+
+	// The owner edits it, still disabled, between the check and the resume.
+	edited := *checked
+	edited.Name = "edited while the move ran"
+	require.NoError(t, f.repo.UpdateTrigger(ctx, &edited))
+	now, err := f.repo.GetTrigger(ctx, "t-edit")
+	require.NoError(t, err)
+	require.Equal(t, core.TriggerPausedOrgMove, now.PausedReason, "an edit that keeps it disabled keeps the move's pause")
+
+	resumed, err := f.repo.ResumeTriggerPausedBy(ctx, "t-edit", core.TriggerPausedOrgMove, checked.UpdatedAt)
+	require.ErrorIs(t, err, core.ErrTriggerChangedSinceRead)
+	assert.False(t, resumed)
+	now, err = f.repo.GetTrigger(ctx, "t-edit")
+	require.NoError(t, err)
+	assert.False(t, now.Enabled, "the edited definition is not turned on unchecked")
+	assert.Zero(t, f.count(`SELECT count(*) FROM trigger_changes WHERE trigger_id = 't-edit' AND operation = $1`, core.TriggerChangeOrgMoveResumed))
+
+	// Checked again, at its new version, it resumes.
+	resumed, err = f.repo.ResumeTriggerPausedBy(ctx, "t-edit", core.TriggerPausedOrgMove, now.UpdatedAt)
+	require.NoError(t, err)
+	assert.True(t, resumed)
+}
+
+// An org's ledger is every move in or out of it, newest first; a person's is
+// the moves they made.
+func TestListProjectOrgMoves(t *testing.T) {
+	f := newMoveFixture(t)
+	ctx := context.Background()
+	f.project("p-l1", strp(moveSrc))
+	f.project("p-l2", strp(moveSrc))
+	first := f.prepared("p-l1")
+	second := f.prepared("p-l2")
+	byOrg, err := f.repo.ListProjectOrgMoves(ctx, core.ProjectOrgMoveFilters{OrgID: moveDst})
+	require.NoError(t, err)
+	require.Len(t, byOrg, 2)
+	assert.ElementsMatch(t, []string{first.ID, second.ID}, []string{byOrg[0].ID, byOrg[1].ID})
+	mine, err := f.repo.ListProjectOrgMoves(ctx, core.ProjectOrgMoveFilters{UserID: moveOwner, Limit: 1})
+	require.NoError(t, err)
+	assert.Len(t, mine, 1)
+	none, err := f.repo.ListProjectOrgMoves(ctx, core.ProjectOrgMoveFilters{OrgID: "org-elsewhere"})
+	require.NoError(t, err)
+	assert.Empty(t, none)
 }

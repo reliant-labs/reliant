@@ -366,3 +366,25 @@ func TestWaitForMachine_RegisteredServerSidePreemptable(t *testing.T) {
 	tool := f.WaitForMachine()
 	assert.Equal(t, ToolWaitForMachine, tool.Name())
 }
+
+// A connected machine that cannot start processes is not "connected again,
+// retry": the answer says it is degraded, that retrying and waiting will not
+// help, and why — the loop of 2026-10-30 was 44 "connected again" answers
+// while every retry failed (reliant#1919). It returns at once, and its
+// metadata keeps State "connected" for readers that predate Degraded.
+func TestWaitForMachine_ConnectedButDegradedSaysWhy(t *testing.T) {
+	obs := &scriptedObserver{steps: steps(MachineStatus{Connected: true, Degraded: true, HealthReason: "This machine cannot start new processes: its process table is full."})}
+	resp, err := fastWaitTool(obs).Execute(waitForMachineCtx(withUser(context.Background())), WaitForMachineParams{})
+	require.NoError(t, err)
+	assert.False(t, resp.IsError)
+	assert.Equal(t, 1, obs.callCount())
+	assert.Contains(t, resp.Content, "degraded")
+	assert.Contains(t, resp.Content, "waiting for the machine will not fix it")
+	assert.Contains(t, resp.Content, "its process table is full")
+	assert.NotContains(t, resp.Content, "Retry the call that failed")
+	md := waitMetadata(t, resp)
+	assert.True(t, md.Connected)
+	assert.Equal(t, "connected", md.State)
+	assert.True(t, md.Degraded)
+	assert.Contains(t, md.HealthReason, "process table is full")
+}

@@ -167,11 +167,15 @@ func (s *Service) StreamChatUpdates(
 	// The open's decision is re-asked while the stream lives: a chat of an
 	// org is its owner's only while they are a live member of it, and a
 	// removal must end a stream opened before it, not just refuse the next
-	// open. The chat's owner and org do not change under an open stream, so
-	// the held row is re-decided, not re-read; membership answers are cached
-	// (orgs.CacheTTL), so a tick costs no round trip most of the time. A
-	// removal ends the stream within orgs.CacheTTL plus this interval, and a
-	// failed check ends it too (authz fails closed).
+	// open. The row is re-read on every tick, owner and viewer alike: its
+	// org changes when the backfill stamps it and when its project moves to
+	// another org (control-plane docs/design/org-project-move.md §4.3), and
+	// a stream opened through a credential of the old org must not go on
+	// passing a stale check. That is one primary-key read per open stream
+	// per interval; membership answers are cached (orgs.CacheTTL), so the
+	// decision costs no round trip most of the time. A removal ends the
+	// stream within orgs.CacheTTL plus this interval, a move within this
+	// interval, and a failed check ends it too (authz fails closed).
 	reauthorizeTicker := time.NewTicker(s.reauthorizeInterval)
 	defer reauthorizeTicker.Stop()
 
@@ -248,25 +252,23 @@ func (s *Service) StreamChatUpdates(
 			}
 
 		case <-reauthorizeTicker.C:
-			// A chat of no org yet may be stamped with one (the lazy
-			// backfill): re-read it while it has none, so the decision is
-			// made on the org it has now, not the one it opened with. A
-			// viewer's row is re-read every tick: its owner (or an admin)
-			// may make it private, and that must end the stream within one
-			// interval rather than at the next reconnect.
-			if viewer || chat.OrgID == nil || *chat.OrgID == "" {
-				refreshed, err := s.deps.Repo.GetChatRow(ctx, chatID)
-				switch {
-				case svcerr.IsNotFound(err):
-					return svcerr.NotFound("chat")
-				case err != nil:
-					// Fails closed: the client reopens, and the open decides.
-					logging.WarnContext(ctx, LOG_PREFIX_STREAM_CHAT+" Could not re-read an unassigned chat's org; ending its stream",
-						"userID", userID, "chatID", shortID(chatID), "error", err)
-					return svcerr.Unavailable("could not re-check access to the chat")
-				}
-				chat = refreshed
+			// The decision is made on the row as it is now, not the one
+			// the stream opened with: the backfill may have stamped its
+			// org, its project may have moved to another org, and a
+			// viewer's owner (or an admin) may have made it private. Each
+			// must end the stream within one interval rather than at the
+			// next reconnect.
+			refreshed, err := s.deps.Repo.GetChatRow(ctx, chatID)
+			switch {
+			case svcerr.IsNotFound(err):
+				return svcerr.NotFound("chat")
+			case err != nil:
+				// Fails closed: the client reopens, and the open decides.
+				logging.WarnContext(ctx, LOG_PREFIX_STREAM_CHAT+" Could not re-read the chat; ending its stream",
+					"userID", userID, "chatID", shortID(chatID), "error", err)
+				return svcerr.Unavailable("could not re-check access to the chat")
 			}
+			chat = refreshed
 			if !stillReadable(ctx, userID, chat) {
 				logging.InfoContext(ctx, LOG_PREFIX_STREAM_CHAT+" Caller may no longer read the chat; ending its stream",
 					"userID", userID, "chatID", shortID(chatID))
