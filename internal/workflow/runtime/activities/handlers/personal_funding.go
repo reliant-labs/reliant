@@ -4,7 +4,6 @@ package handlers
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -130,8 +129,11 @@ func (r *AccountRouting) fundingPlanFor(ctx context.Context, spec llmCallSpec, a
 	// setting. It is read here, on the server: the copy the run carries in
 	// __provider_policy is one a workflow, a preset or a spawn can also write.
 	if chatOrder, err := r.Funding.ChatFundingOrder(ctx, spec.ChatID); err != nil {
-		logging.WarnContext(ctx, "Could not read the chat's funding order; asking as the default", "chatID", spec.ChatID, "error", err)
-		plan.order = orgfunding.OrderOrgFirst
+		// The chat may restrict spending (org_only): unreadable, it is taken
+		// as restricting, so the call waits rather than spending (fail closed).
+		logging.WarnContext(ctx, "Could not read the chat's funding order; using only the org's accounts", "chatID", spec.ChatID, "error", err)
+		plan.order = orgfunding.OrderOrgOnly
+		plan.limit = orgfunding.OnOrgLimitWait
 	} else if o := orgfunding.ParseOrder(chatOrder); o != "" {
 		plan.order = o
 	}
@@ -247,22 +249,6 @@ func fundingHold(providerDriver, why string) error {
 		Err:   &ratelimit.UsageLimitError{Provider: "your organization's AI accounts (" + why + ")", StatusCode: 429},
 		Facts: types.UsageLimitFacts{Provider: providerDriver},
 	}
-}
-
-// explicitPersonalPick reports that the call names its provider (a
-// "<model>@<driver>" pick, the chat's provider switch, the run's providers)
-// and that provider has no org-funded account: the person chose to pay, and
-// the composer labelled the choice (§4.4, §10.1).
-func explicitPersonalPick(spec llmCallSpec, avail models.AvailableDrivers, providerDriver string) bool {
-	if !strings.Contains(spec.Selector.ID, "@") && spec.ChatProvider == "" && len(spec.RunProviders) == 0 && len(spec.Selector.Providers) == 0 {
-		return false
-	}
-	for _, a := range avail.Accounts[models.DriverID(providerDriver)] {
-		if models.OrgFunded(a.Funding) {
-			return false
-		}
-	}
-	return true
 }
 
 // replacedOrgFunding reports whether the call replaces an org-funded account
@@ -413,7 +399,12 @@ func (r *AccountRouting) decideCallFunding(ctx context.Context, spec llmCallSpec
 		// being replaced, so their own accounts serve as before.
 		return "", nil
 	}
-	if plan.order == orgfunding.OrderPersonalFirst || explicitPersonalPick(spec, avail, providerDriver) {
+	// Only a person's own decision is consent: their order (the per-org
+	// setting, or the chat's order, both person-only). A provider named by a
+	// "<model>@<driver>" selector, the run's providers or the chat's provider
+	// switch is not: a workflow, a preset or a spawned agent can name one,
+	// and the server records no proof that a person did. Such a call asks.
+	if plan.order == orgfunding.OrderPersonalFirst {
 		return "", nil
 	}
 	q := core.PersonalFunding{

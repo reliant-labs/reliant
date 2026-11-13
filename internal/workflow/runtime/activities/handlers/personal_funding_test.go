@@ -42,6 +42,8 @@ type fundingFake struct {
 	chatOrder map[string]string
 	// recordErr fails RecordThreadFunding.
 	recordErr error
+	// chatOrderErr fails ChatFundingOrder.
+	chatOrderErr error
 }
 
 func newFundingFake() *fundingFake {
@@ -134,6 +136,9 @@ func (f *fundingFake) RecordThreadFunding(_ context.Context, threadID, orgID, fu
 func (f *fundingFake) ChatFundingOrder(_ context.Context, chatID string) (string, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if f.chatOrderErr != nil {
+		return "", f.chatOrderErr
+	}
 	return f.chatOrder[chatID], nil
 }
 
@@ -319,14 +324,6 @@ func TestPersonalFunding_NoQuestion(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, "my-codex", res.Account.Config.AccountID)
 		assert.Empty(t, res.FundingNotice)
-		assert.Nil(t, env.store.row("chat-1"))
-	})
-	t.Run("an explicit pick of the person's provider is the consent", func(t *testing.T) {
-		withAvailableDrivers(t, tiered(acmeKey("acme-key"), myCodex("my-codex")))
-		env := newFundingEnv(t, "", "")
-		res, err := env.resolve(t, "root", "gpt-5.6-sol@codex")
-		require.NoError(t, err)
-		assert.Equal(t, "my-codex", res.Account.Config.AccountID)
 		assert.Nil(t, env.store.row("chat-1"))
 	})
 	t.Run("personal_first", func(t *testing.T) {
@@ -576,7 +573,7 @@ func TestPersonalFunding_ReplacedOnTheSameProvider(t *testing.T) {
 }
 
 // Provenance is per thread (review round 2, B2): thread A ran on the org's
-// key, thread B on the person's own through an explicit pick; then the org's
+// key, thread B on the person's own (an answered question); then the org's
 // last key is deleted. A must ask, whatever B did last.
 func TestPersonalFunding_ProvenanceIsPerThread(t *testing.T) {
 	withAvailableDrivers(t, tiered(acmeKey("acme-key"), personal(claudeAccount("my-claude", "me@me.com", 0))))
@@ -584,9 +581,15 @@ func TestPersonalFunding_ProvenanceIsPerThread(t *testing.T) {
 	res, err := env.resolve(t, "thread-a", routeModel+"@anthropic")
 	require.NoError(t, err)
 	require.Equal(t, "acme-key", res.Account.Config.AccountID)
+	// Thread B names the person's provider; the chat asks, the person says
+	// yes, and B runs on their own account. The episode then ends.
+	_, err = env.resolve(t, "thread-b", routeModel+"@claude")
+	isWait(t, err)
+	env.store.answer("chat-1", core.PersonalFundingUsePersonal, nil)
 	res, err = env.resolve(t, "thread-b", routeModel+"@claude")
-	require.NoError(t, err, "an explicit pick of the person's provider is their consent")
+	require.NoError(t, err)
 	require.Equal(t, "my-claude", res.Account.Config.AccountID)
+	delete(env.store.rows, "chat-1")
 	assert.Equal(t, [3]string{models.FundingOrgKey, fundOrg, "acme-key"}, env.store.threadFunding["thread-a"], "recorded when the call went ahead")
 	assert.Equal(t, models.FundingPersonal, env.store.threadFunding["thread-b"][0])
 
@@ -763,4 +766,43 @@ func TestPersonalFunding_ProvenanceWriteFailsClosed(t *testing.T) {
 	res, err = env2.resolve(t, "thread-b", routeModel+"@claude")
 	require.NoError(t, err)
 	assert.Equal(t, "my-claude", res.Account.Config.AccountID)
+}
+
+// A provider a workflow, a preset, a run or a spawned agent names is not the
+// person's consent (review round 4, B2): a "<model>@<driver>" selector, the
+// run's providers and the selector's providers all ask before the person's own
+// account serves, while the org has an account. Only the person's own order
+// (or answer) goes on without a question.
+func TestPersonalFunding_NamedProviderIsNotConsent(t *testing.T) {
+	for name, mutate := range map[string]func(*llmCallSpec){
+		"a model@driver selector":  func(s *llmCallSpec) { s.Selector.ID = "gpt-5.6-sol@codex" },
+		"the run's providers":      func(s *llmCallSpec) { s.RunProviders = []string{"codex"} },
+		"the selector's providers": func(s *llmCallSpec) { s.Selector.Providers = []string{"codex"} },
+		"a spawned agent's pick": func(s *llmCallSpec) {
+			s.Selector.ID, s.Descendant, s.TurnStart = "gpt-5.6-sol@codex", true, false
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			withAvailableDrivers(t, tiered(acmeKey("acme-key"), myCodex("my-codex")))
+			env := newFundingEnv(t, "", "")
+			_, err := env.resolve(t, "root", "gpt-5.6-sol", mutate)
+			isWait(t, err)
+			assert.NotContains(t, env.built, "my-codex")
+			require.NotNil(t, env.store.row("chat-1"), "it asks")
+		})
+	}
+}
+
+// A chat order that cannot be read is taken as restricting (review round 4,
+// B1): with org_only stored and use_personal remembered, a failing read spends
+// nothing and asks nothing.
+func TestPersonalFunding_UnreadableChatOrderFailsClosed(t *testing.T) {
+	withAvailableDrivers(t, tiered(acmeKey("acme-key"), myCodex("my-codex")))
+	env := newFundingEnv(t, orgfunding.OnOrgLimitUsePersonal, "")
+	env.store.chatOrder["chat-1"] = types.FundingOrgOnly
+	env.store.chatOrderErr = errors.New("db down")
+	_, err := env.resolve(t, "root", "gpt-5.6-sol")
+	isWait(t, err)
+	assert.Empty(t, env.built, "no personal driver is built")
+	assert.Nil(t, env.store.row("chat-1"), "no lease is granted")
 }
