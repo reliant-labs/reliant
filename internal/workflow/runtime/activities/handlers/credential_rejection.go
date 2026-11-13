@@ -40,18 +40,18 @@ func (r *AccountRouting) credentialRejection(ctx context.Context, err error, uc 
 		return nil
 	}
 	reason := "the provider rejected the saved API key: " + err.Error()
-	if merr := r.Credentials.MarkNeedsSignIn(ctx, uc.UserID, cfg.AccountID, reason); merr != nil {
+	if merr := r.Credentials.MarkNeedsSignIn(ctx, uc.Scope.UserID, cfg.AccountID, reason); merr != nil {
 		logging.WarnContext(ctx, "[Failover] Could not take a rejected API key out of rotation",
-			"userID", uc.UserID, "provider", string(uc.Driver), "accountID", cfg.AccountID, "error", merr)
+			"userID", uc.Scope.UserID, "provider", string(uc.Driver), "accountID", cfg.AccountID, "error", merr)
 		return nil
 	}
 	logging.WarnContext(ctx, "[Failover] The provider rejected an account's API key; account needs sign-in",
-		"userID", uc.UserID, "provider", string(uc.Driver), "accountID", cfg.AccountID)
+		"userID", uc.Scope.UserID, "provider", string(uc.Driver), "accountID", cfg.AccountID)
 
 	facts := types.UsageLimitFacts{Provider: string(uc.Driver), AccountID: cfg.AccountID, AccountLabel: accountName(cfg)}
 	// exclude marks the account unusable even though uc.Account.Accounts still lists it.
 	usable, _, aerr := r.Router.Alternatives(ctx, accountrouter.Request{
-		UserID: uc.UserID, ThreadID: uc.ThreadID, Driver: uc.Driver,
+		UserID: uc.Scope.UserID, ThreadID: uc.ThreadID, Driver: uc.Driver,
 		ModelID: uc.ModelID, Accounts: uc.Account.Accounts,
 	}, cfg.AccountID)
 	switch {

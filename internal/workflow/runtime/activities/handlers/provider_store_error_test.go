@@ -16,7 +16,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 )
 
-func withLookup(t *testing.T, fn func(context.Context, string) (models.AvailableDrivers, error)) {
+func withLookup(t *testing.T, fn func(context.Context, drivers.Scope) (models.AvailableDrivers, error)) {
 	t.Helper()
 	orig, origBackoff := lookupAvailableDrivers, providerStoreReadBackoff
 	lookupAvailableDrivers = fn
@@ -37,7 +37,7 @@ func resolveWithStoreDown(t *testing.T) error {
 // not pause the run with a terminal "connect a provider".
 func TestResolveLLMCall_StoreErrorIsRetryableNotNoProvider(t *testing.T) {
 	calls := 0
-	withLookup(t, func(context.Context, string) (models.AvailableDrivers, error) {
+	withLookup(t, func(context.Context, drivers.Scope) (models.AvailableDrivers, error) {
 		calls++
 		return models.AvailableDrivers{}, errors.Join(drivers.ErrDriverLookupFailed, errors.New("connection reset by peer"))
 	})
@@ -62,7 +62,7 @@ func TestResolveLLMCall_StoreErrorIsRetryableNotNoProvider(t *testing.T) {
 func TestResolveLLMCall_StoreBlipIsAbsorbed(t *testing.T) {
 	calls := 0
 	good := driversWith(claudeAccount("a", "alice@acme.com", 0))
-	withLookup(t, func(context.Context, string) (models.AvailableDrivers, error) {
+	withLookup(t, func(context.Context, drivers.Scope) (models.AvailableDrivers, error) {
 		calls++
 		if calls == 1 {
 			return models.AvailableDrivers{}, errors.New("temporary store failure")

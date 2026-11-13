@@ -122,7 +122,7 @@ func (a *DraftAutomationActivity) Execute(ctx context.Context, input DraftAutoma
 	response, err := meter.streamAndAccumulate(a.routing.observe(ctx, spec.UserID, resolved.Account), resolved, prompt, messages, []tools.Tool{draftTool})
 	if err != nil {
 		return DraftAutomationOutput{}, a.routing.providerFailure(ctx, fmt.Errorf("draft automation: %w", err), usageLimitContext{
-			UserID: spec.UserID, Driver: models.DriverID(resolved.ProviderDriver),
+			Scope: spec.scope(), Driver: models.DriverID(resolved.ProviderDriver),
 			ModelID: definitionID(resolved.Definition), Account: resolved.Account,
 		})
 	}

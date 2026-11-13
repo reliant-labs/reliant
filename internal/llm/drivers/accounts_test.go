@@ -30,7 +30,7 @@ func addClaude(t *testing.T, repo *db.Repo, user, name string) core.ProviderAcco
 
 func availableFor(t *testing.T, repo *db.Repo, user string) models.AvailableDrivers {
 	t.Helper()
-	available, err := buildAvailableDrivers(context.Background(), repo, user, noReportClients)
+	available, err := buildAvailableDrivers(context.Background(), repo, PersonalScope(user), noReportClients)
 	require.NoError(t, err)
 	return available
 }
@@ -179,7 +179,7 @@ func TestImageGenerationUsesTheDefaultAccount(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	available := GetAvailableDrivers(ctx, user)
+	available := GetAvailableDrivers(ctx, PersonalScope(user))
 	require.Len(t, available.Accounts["gemini"], 2)
 	assert.Equal(t, "g-first", available.Drivers["gemini"].APIKey)
 

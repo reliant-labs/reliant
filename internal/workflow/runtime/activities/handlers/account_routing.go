@@ -36,10 +36,10 @@ var lookupAvailableDrivers = drivers.LookupAvailableDrivers
 
 // getAvailableDrivers is lookupAvailableDrivers for best-effort callers: a failed
 // read is logged and reads as no providers.
-func getAvailableDrivers(ctx context.Context, userID string) models.AvailableDrivers {
-	avail, err := lookupAvailableDrivers(ctx, userID)
+func getAvailableDrivers(ctx context.Context, scope drivers.Scope) models.AvailableDrivers {
+	avail, err := lookupAvailableDrivers(ctx, scope)
 	if err != nil {
-		logging.ErrorContext(ctx, "Failed to build available drivers from settings", "error", err, "userID", userID)
+		logging.ErrorContext(ctx, "Failed to build available drivers from settings", "error", err, "userID", scope.UserID, "orgID", scope.OrgID)
 		return models.AvailableDrivers{Drivers: make(map[models.DriverID]models.DriverConfig)}
 	}
 	return avail
@@ -227,7 +227,9 @@ func (r *AccountRouting) announceAccountMove(ctx context.Context, post func(text
 
 // usageLimitContext says who was refused, for usageLimitFailure.
 type usageLimitContext struct {
-	UserID   string
+	// Scope is the call's scope (llmCallSpec.scope): whose accounts a
+	// fallback may be chosen from, the same set the call was routed over.
+	Scope    drivers.Scope
 	ThreadID string
 	// Driver is the provider that refused; empty when it cannot be told (the
 	// error then carries no facts and the workflow simply waits).
@@ -278,22 +280,22 @@ func (r *AccountRouting) usageLimitFailure(ctx context.Context, err error, uc us
 	case r.active() && uc.Account != nil && uc.Account.Config.AccountID != "":
 		benched := true
 		if r.Recorder != nil {
-			if _, berr := r.Recorder.Bench(ctx, uc.UserID, uc.Account.Config.AccountID, resetAt, window); berr != nil {
+			if _, berr := r.Recorder.Bench(ctx, uc.Scope.UserID, uc.Account.Config.AccountID, resetAt, window); berr != nil {
 				benched = false
 				logging.WarnContext(ctx, "[Failover] Could not bench the refused account; waiting instead of switching",
-					"userID", uc.UserID, "provider", string(uc.Driver), "accountID", uc.Account.Config.AccountID, "error", berr)
+					"userID", uc.Scope.UserID, "provider", string(uc.Driver), "accountID", uc.Account.Config.AccountID, "error", berr)
 			}
 		} else {
 			benched = false
 		}
 		available, earliest, aerr := r.Router.Alternatives(ctx, accountrouter.Request{
-			UserID: uc.UserID, ThreadID: uc.ThreadID, Driver: uc.Driver,
+			UserID: uc.Scope.UserID, ThreadID: uc.ThreadID, Driver: uc.Driver,
 			ModelID: uc.ModelID, Accounts: uc.Account.Accounts,
 		}, uc.Account.Config.AccountID)
 		switch {
 		case aerr != nil:
 			logging.WarnContext(ctx, "[Failover] Could not ask for another account; waiting",
-				"userID", uc.UserID, "provider", string(uc.Driver), "error", aerr)
+				"userID", uc.Scope.UserID, "provider", string(uc.Driver), "error", aerr)
 		case available && benched:
 			facts.AlternativeAccount = true
 		case !available:
@@ -350,10 +352,10 @@ func (r *AccountRouting) fallbackModel(ctx context.Context, uc usageLimitContext
 		return ""
 	}
 	fd := models.DriverID(driverID)
-	avail, err := lookupAvailableDrivers(ctx, uc.UserID)
+	avail, err := lookupAvailableDrivers(ctx, uc.Scope)
 	if err != nil {
 		logging.WarnContext(ctx, "[Failover] Could not read the user's providers; offering no fallback",
-			"userID", uc.UserID, "error", err)
+			"userID", uc.Scope.UserID, "error", err)
 		return ""
 	}
 	cfg, ok := avail.Drivers[fd]
@@ -365,7 +367,7 @@ func (r *AccountRouting) fallbackModel(ctx context.Context, uc usageLimitContext
 	}
 	if accounts := avail.Accounts[fd]; r.active() && len(accounts) > 0 {
 		usable, _, err := r.Router.Alternatives(ctx, accountrouter.Request{
-			UserID: uc.UserID, Driver: fd, ModelID: modelID, Accounts: accounts,
+			UserID: uc.Scope.UserID, Driver: fd, ModelID: modelID, Accounts: accounts,
 		}, "")
 		if err == nil && !usable {
 			return ""
