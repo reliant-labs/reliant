@@ -33,7 +33,7 @@ import { TriggerOffers } from "../TriggerOffers";
 
 const org: MyOrg = { id: "org-a", name: "Acme", slug: "acme", role: "member", isOwner: false, isDefault: true };
 const members: OrgMember[] = [
-  { userId: "u-ada", email: "ada@acme.test", name: "Ada", avatarUrl: "", role: "admin", joinedAt: null, isFounder: false },
+  { userId: "u-ada", email: "ada@acme.test", name: "Ada", avatarUrl: "", role: "admin", joinedAt: null, isFounder: false, externalId: "" },
 ];
 const OFFER = {
   id: "offer-1",
