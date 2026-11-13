@@ -704,7 +704,7 @@ func (g *Graph) newAPIConnections() (*APIConnections, error) {
 		DB:           g.Database(),
 		// Off until every replica and the rollback target read org
 		// connections (org-sharing.md §9, D13).
-		OrgConnections: g.ApiServerConfig.GetOrgs().GetConnectionsEnabled(),
+		OrgConnections: APIOrgConnections(g.ApiServerConfig),
 	})
 }
 

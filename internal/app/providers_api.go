@@ -1444,3 +1444,11 @@ func gitTokens(cfg *configv1.ControlPlaneConfig) (gitcredentialclient.Service, e
 func TriggerOrgRollout(api *configv1.ApiServerConfig) *configv1.OrgsConfig {
 	return api.GetOrgs()
 }
+
+// APIOrgConnections is whether the API server lets org owners and admins
+// create org-owned connections: ApiServerConfig orgs.connections_enabled, off
+// when unset. One function, so the config-path test proves what
+// newAPIConnections hands the connection service.
+func APIOrgConnections(api *configv1.ApiServerConfig) bool {
+	return api.GetOrgs().GetConnectionsEnabled()
+}
