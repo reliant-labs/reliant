@@ -189,7 +189,7 @@ func (s *Service) liveRunStateUpdate(
 ) (map[string]interface{}, error) {
 	if len(req.Msg.WorkflowParams) == 0 && len(newPresets) == 0 {
 		// Even a plain message holds the run to its org's mode floor.
-		return s.withLiveModeFloor(ctx, userID, chat, workflowName, nil), nil
+		return s.withLiveModeFloor(ctx, userID, chat, workflowName, nil)
 	}
 	stateUpdate, err := s.launcher().BuildStateUpdateForActiveWorkflow(ctx, userID, chat, workflowName, newPresets, req.Msg.WorkflowParams)
 	if err != nil {
@@ -198,7 +198,7 @@ func (s *Service) liveRunStateUpdate(
 	if validationErrors := s.launcher().ValidateStateUpdate(ctx, userID, chat, workflowName, chat.SelectedPresets, stateUpdate); len(validationErrors) > 0 {
 		return nil, inputValidationError(validationErrors)
 	}
-	return s.withLiveModeFloor(ctx, userID, chat, workflowName, stateUpdate), nil
+	return s.withLiveModeFloor(ctx, userID, chat, workflowName, stateUpdate)
 }
 
 // inputValidationError is SendMessage's refusal for inputs that failed

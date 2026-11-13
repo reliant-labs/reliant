@@ -74,15 +74,20 @@ func (s *Service) approvalMode(ctx context.Context, user, project string, row, e
 		projects = append(projects, existing.ProjectID)
 	}
 	mode := automationpolicy.ResolveApprovalMode(settings, projects...)
-	return automationpolicy.WithOrgFloor(ctx, mode, s.activationOrgs(ctx, user, project, row, existing)...), nil
+	orgs, err := s.activationOrgs(ctx, user, project, row, existing)
+	if err != nil {
+		return "", tools.RefuseActivation("the activation's organization could not be resolved, so its approval floor is unknown; try again", err)
+	}
+	return automationpolicy.WithOrgFloor(ctx, mode, orgs...), nil
 }
 
 // activationOrgs are the orgs whose approval floor governs a change: the
 // activation's (row's, existing's when that differs). A new activation has no
-// org yet, which its write decides (triggerOrg); it is decided the same way
-// here. One that cannot be decided is refused by the write, so it floors
-// nothing here.
-func (s *Service) activationOrgs(ctx context.Context, user, project string, row, existing *core.Trigger) []string {
+// org yet, which its write decides (triggerOrg: the project's, else the
+// caller's default); it is decided the same way here, and a lookup that fails
+// is an error, never "no org": a floor must not be skipped because one lookup
+// failed and the write's succeeded.
+func (s *Service) activationOrgs(ctx context.Context, user, project string, row, existing *core.Trigger) ([]string, error) {
 	var orgs []string
 	add := func(org *string) {
 		if org != nil && *org != "" && (len(orgs) == 0 || orgs[0] != *org) {
@@ -94,14 +99,28 @@ func (s *Service) activationOrgs(ctx context.Context, user, project string, row,
 			add(t.OrgID)
 		}
 	}
-	if len(orgs) == 0 && project != "" {
-		if p, err := s.deps.Repo.GetProjectWithUserCheck(ctx, project, user); err == nil {
-			if org, err := s.triggerOrg(ctx, user, "", p); err == nil {
-				add(org)
-			}
-		}
+	if len(orgs) > 0 || project == "" {
+		return orgs, nil
 	}
-	return orgs
+	p, err := s.deps.Repo.GetProjectWithUserCheck(ctx, project, user)
+	if err != nil {
+		return nil, svcerr.Wrap(err)
+	}
+	org, err := s.triggerOrg(ctx, user, "", p)
+	if err != nil {
+		return nil, err
+	}
+	add(org)
+	if len(orgs) == 0 && s.deps.Orgs != nil {
+		// triggerOrg leaves a trigger with no org when the default cannot be
+		// resolved (the write stamps it later); the floor cannot wait.
+		def, err := s.deps.Orgs.DefaultOrg(ctx, user)
+		if err != nil {
+			return nil, svcerr.WrapOr(err, svcerr.Unavailable("the default organization could not be resolved"))
+		}
+		add(&def)
+	}
+	return orgs, nil
 }
 
 // savedCapabilities are the powers a saved activation holds now: its own

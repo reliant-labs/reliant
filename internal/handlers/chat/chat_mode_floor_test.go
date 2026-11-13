@@ -12,6 +12,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/api/enums/v1"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
+
 	controlplanev1 "github.com/reliant-labs/reliant/gen/controlplane/controlplane/v1"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/accesstokenclient"
@@ -142,4 +144,27 @@ func TestSendMessage_LiveAutoRunHeldToTheOrgModeFloor(t *testing.T) {
 	_, err := service.SendMessage(ctx, plainMessage(chatID))
 	require.NoError(t, err)
 	assert.Empty(t, stateUpdateModes(temporal))
+}
+
+// When the floor is enforced and neither the run nor the chat can say which
+// mode it runs in, the send is refused retryably: neither woken unpoliced
+// (it may be auto) nor forced to manual (it may be plan).
+func TestWithLiveModeFloor_UnknownModeRefusesTheSend(t *testing.T) {
+	prev := orgpolicy.EnforcementOf(orgpolicy.PointApprovals)
+	orgpolicy.SetProcessEnforcement(orgpolicy.PointApprovals, orgpolicy.EnforcementEnforce)
+	t.Cleanup(func() { orgpolicy.SetProcessEnforcement(orgpolicy.PointApprovals, prev) })
+
+	repo, cleanup := db.SetupTestDB(t)
+	t.Cleanup(cleanup)
+	ctx, chatID := orgChatFixture(t, repo, "org-floor")
+	chat, err := repo.GetChat(ctx, chatID)
+	require.NoError(t, err)
+	// The run is closed (its inputs cannot be queried), and the chat's
+	// workflow cannot be built (its mode cannot be resolved).
+	temporal := &queryRecorder{closed: true}
+	service := &Service{deps: Deps{Repo: repo, Temporal: temporal}, runs: runs.NewService(repo, temporal, nil)}
+	update, err := service.withLiveModeFloor(ctx, "floor-user", chat, "builtin://no-such-workflow", nil)
+	require.Error(t, err)
+	assert.Nil(t, update)
+	assert.Equal(t, connect.CodeUnavailable, svcerr.ToConnect(err).Code())
 }
