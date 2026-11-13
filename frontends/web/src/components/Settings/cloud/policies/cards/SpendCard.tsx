@@ -61,19 +61,20 @@ function UsdInput({ nanos, onChange, label }: { nanos: bigint; onChange: (nanos:
   return (
     <span className="inline-flex items-center gap-1 text-sm text-foreground">
       $
-      <Input
-        aria-label={label}
-        inputMode="decimal"
-        inputSize="sm"
-        className="w-28"
-        value={text}
-        invalid={invalid}
-        onChange={(e) => {
-          setText(e.target.value);
-          const parsed = parseUsd(e.target.value);
-          if (parsed !== null) onChange(parsed);
-        }}
-      />
+      <span className="w-28">
+        <Input
+          aria-label={label}
+          inputMode="decimal"
+          inputSize="sm"
+          value={text}
+          invalid={invalid}
+          onChange={(e) => {
+            setText(e.target.value);
+            const parsed = parseUsd(e.target.value);
+            if (parsed !== null) onChange(parsed);
+          }}
+        />
+      </span>
     </span>
   );
 }

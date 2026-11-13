@@ -83,7 +83,9 @@ export function McpCard({ value, onChange, editable, changed, violations }: Poli
                       add();
                     }}
                   >
-                    <Input aria-label="MCP server name" inputSize="sm" className="w-56" placeholder="e.g. linear" value={name} invalid={trimmed !== "" && !valid} onChange={(e) => setName(e.target.value)} />
+                    <div className="w-56">
+                      <Input aria-label="MCP server name" inputSize="sm" placeholder="e.g. linear" value={name} invalid={trimmed !== "" && !valid} onChange={(e) => setName(e.target.value)} />
+                    </div>
                     <Button type="submit" variant="outline" size="sm" disabled={!valid}>
                       Allow server
                     </Button>
