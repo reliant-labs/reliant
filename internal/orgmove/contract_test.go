@@ -392,3 +392,35 @@ func TestPrepare_NoControlPlaneServiceAborts(t *testing.T) {
 	require.Error(t, err)
 	assert.False(t, out.Abort)
 }
+
+// The commit carries the target org's live-member count, asked as the
+// project's owner, so the moved triggers are re-stamped from it; a count that
+// cannot be read fails the step (retried), never committing an "any" stamp.
+func TestCommit_CarriesTheTargetOrgsMemberCount(t *testing.T) {
+	m := move()
+	m.State = core.ProjectOrgMoveStatePrepared
+	l := newLedger(m)
+	var got []core.ProjectOrgMoveCommit
+	l.commit = func(c core.ProjectOrgMoveCommit) (*core.ProjectOrgMoveResult, error) {
+		got = append(got, c)
+		return nil, nil
+	}
+	countErr := errors.New("control-plane down")
+	members := &orgmove.MockMembers{LiveMembersFreshFunc: func(_ context.Context, userID, orgID string) (int, bool, error) {
+		assert.Equal(t, "u-1", userID)
+		assert.Equal(t, "globex", orgID)
+		return 0, false, countErr
+	}}
+	svc, err := orgmove.New(orgmove.Deps{Store: l.store(), ControlPlane: controlPlane(&cpCalls{}, nil), Triggers: resumer(nil), Members: members})
+	require.NoError(t, err)
+
+	_, err = svc.Commit(context.Background(), "m-1")
+	require.ErrorIs(t, err, countErr)
+	assert.Empty(t, got, "nothing committed on an unread count")
+
+	members.LiveMembersFreshFunc = func(context.Context, string, string) (int, bool, error) { return 3, true, nil }
+	_, err = svc.Commit(context.Background(), "m-1")
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+	assert.Equal(t, core.ProjectOrgMoveCommit{MoveID: "m-1", TargetLiveMembers: 3, TargetLiveMembersKnown: true}, got[0])
+}

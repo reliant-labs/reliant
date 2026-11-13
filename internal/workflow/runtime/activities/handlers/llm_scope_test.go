@@ -29,7 +29,21 @@ type attendanceStore struct {
 	chats   map[string]*db.Chat
 	parents map[string]string // agent.start_run chat -> parent_chat_id
 	turns   map[string]time.Time
-	err     error // returned by every read when set
+	// stamps is each trigger's unattended funding; a trigger not named reads
+	// as one that predates the stamp (NULL).
+	stamps     map[string]core.UnattendedFunding
+	triggerErr error // returned by GetTrigger when set
+	err        error // returned by every read when set
+}
+
+func (s *attendanceStore) GetTrigger(_ context.Context, id string) (*core.Trigger, error) {
+	if s.err != nil {
+		return nil, s.err
+	}
+	if s.triggerErr != nil {
+		return nil, s.triggerErr
+	}
+	return &core.Trigger{ID: id, UnattendedFunding: s.stamps[id]}, nil
 }
 
 func (s *attendanceStore) GetChat(_ context.Context, id string) (*db.Chat, error) {
@@ -283,6 +297,53 @@ func TestChatAttendance_UndecidedRunNeverSpendsThePersonsOwnAccount(t *testing.T
 			} else {
 				assert.Empty(t, avail.Accounts["anthropic"], "the person's own account is refused")
 				assert.True(t, scope.OrgFundedOnly())
+			}
+		})
+	}
+}
+
+// A resolved unattended run spends what its trigger's stamp allows (§11.3,
+// I4): every source for "any" and for a trigger that predates the stamp, the
+// org's own for "org_only", and the org's own when the trigger cannot be read.
+// An agent-started run follows its lineage root's trigger.
+func TestChatAttendance_UnattendedRunFollowsTheTriggersStamp(t *testing.T) {
+	scheduled := string(core.TriggerEventKindSchedule)
+	started := string(core.TriggerEventKindAgentStartRun)
+	for _, tc := range []struct {
+		name  string
+		chat  *db.Chat
+		store *attendanceStore
+		any   bool
+	}{
+		{"a trigger that predates the stamp (NULL) keeps every source", chatOf("c", scheduled, strPtr("t1")), &attendanceStore{}, true},
+		{"a trigger stamped any keeps every source", chatOf("c", scheduled, strPtr("t1")),
+			&attendanceStore{stamps: map[string]core.UnattendedFunding{"t1": core.UnattendedFundingAny}}, true},
+		{"a trigger stamped org_only spends the org's own only", chatOf("c", scheduled, strPtr("t1")),
+			&attendanceStore{stamps: map[string]core.UnattendedFunding{"t1": core.UnattendedFundingOrgOnly}}, false},
+		{"a trigger that cannot be read spends the org's own only", chatOf("c", scheduled, strPtr("t1")),
+			&attendanceStore{triggerErr: errors.New("db down")}, false},
+		{"an agent-started run follows its root trigger's org_only", chatOf("child", started, nil), &attendanceStore{
+			chats:   map[string]*db.Chat{"root": chatOf("root", scheduled, strPtr("t1"))},
+			parents: map[string]string{"child": "root"},
+			stamps:  map[string]core.UnattendedFunding{"t1": core.UnattendedFundingOrgOnly},
+		}, false},
+		{"an agent-started run follows its root trigger's any", chatOf("child", started, nil), &attendanceStore{
+			chats:   map[string]*db.Chat{"root": chatOf("root", scheduled, strPtr("t1"))},
+			parents: map[string]string{"child": "root"},
+			stamps:  map[string]core.UnattendedFunding{"t1": core.UnattendedFundingAny},
+		}, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			who := chatAttendance(context.Background(), tc.store, tc.chat)
+			assert.False(t, who.attended)
+			assert.Equal(t, tc.any, who.anySource)
+			scope := llmCallSpec{UserID: "u1", OrgID: "o1", Attended: who.attended, UnattendedAnySource: who.anySource}.scope()
+			avail, err := drivers.BuildAvailableDrivers(context.Background(), personalOnlyStore{}, scope)
+			require.NoError(t, err)
+			if tc.any {
+				assert.Len(t, avail.Accounts["anthropic"], 1, "the owner's own account serves, as today")
+			} else {
+				assert.Empty(t, avail.Accounts["anthropic"], "never the owner's own account")
 			}
 		})
 	}
