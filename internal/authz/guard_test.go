@@ -256,6 +256,8 @@ var shareGuard = struct {
 	visibilityWriters: map[string]string{
 		"internal/store/share_event_repo_ext.go": "ApplyShareChange, the one writer, and the shared lists' read predicates",
 		"internal/viewertest/viewertest.go":      "the viewer-matrix fixture seeds a shared row; imported by _test.go files only",
+		// control-plane docs/design/org-project-move.md §1.2, D7.
+		"internal/store/project_org_move_repo_ext.go": "MoveProjectOrg clears every share of a project moving to another org, with a share_events row (moved) each; it never shares",
 	},
 	applyCallers: []string{"internal/db/", "internal/store/", "internal/handlers/sharing/"},
 	viewerReadSites: map[string]string{
