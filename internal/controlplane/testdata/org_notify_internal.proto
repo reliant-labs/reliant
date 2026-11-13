@@ -1,0 +1,99 @@
+// VENDORED from reliant-labs/control-plane at 3eeb9637c83600876ae9ce60a95b8933c426af22 (main, #2701):
+// proto/services/org_notify_internal/v1/org_notify_internal.proto. Do not edit; re-vendor from control-plane main.
+// TestNotifyOrgKeyRejected_SpeaksTheVendoredContract holds the client to it.
+syntax = "proto3";
+
+// OrgNotifyInternalService emails an organization's owners and admins about
+// something only they can fix (docs/design/org-provider-accounts.md §4.7).
+//
+// reliant decides THAT something happened; control-plane decides WHO hears of
+// it and WHAT they read. The caller names a notice of a fixed kind with typed
+// fields, never free text, a subject or a body: every email is rendered here
+// from a template this service owns, with every field HTML-escaped. The
+// recipients are the org's live owners and admins, read here from
+// org_memberships at send time, never a list the caller supplies.
+//
+// One email per recipient per (org, notice kind, subject, incident): the first
+// call for an incident sends, and every repeat (a retry, another worker that
+// met the same rejection, a later call for the same incident) sends nothing
+// and answers deduplicated. A new incident of the same subject (the key
+// rejected again after a rotation) is a new email.
+//
+// Every RPC here requires an internal-service JWT (sub=internal-service,
+// role=admin, signed with INTERNAL_SERVICE_SECRET) and refuses every other
+// caller, a human session and any `rlat_` access token included.
+//
+// It is WITHHELD from the public contract (proto/public-api.txt): reliant
+// speaks it as plain Connect HTTP+JSON.
+package controlplane.v1;
+
+import "forge/v1/forge.proto";
+
+option go_package = "github.com/reliant-labs/control-plane/gen/services/org_notify_internal/v1;org_notify_internalv1";
+
+service OrgNotifyInternalService {
+  option (forge.v1.service) = {
+    name: "OrgNotifyInternalService"
+    version: "1.0.0"
+    description: "email an organization's owners and admins a fixed-template notice about something only they can fix"
+  };
+
+  // NotifyOrgAdmins emails the notice to every live owner and admin of
+  // org_id, once per incident.
+  //
+  // Errors:
+  //   - INVALID_ARGUMENT: org_id or incident_key is empty, no notice is set,
+  //     or a required field of the notice is empty.
+  //   - NOT_FOUND: the org does not exist or was deleted.
+  //   - UNIMPLEMENTED: this deployment has no database (nothing to send from).
+  //   - UNAVAILABLE: the mail provider refused, or another call is sending
+  //     this incident right now; the incident is not recorded as delivered,
+  //     so the caller retries. A retry emails only the recipients not yet
+  //     reached. A call that dies mid-send holds the incident for a few
+  //     minutes, after which a retry takes it over.
+  rpc NotifyOrgAdmins(NotifyOrgAdminsRequest) returns (NotifyOrgAdminsResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+      activity: {none: "a notification to the org's admins about an event reliant already records; the email itself is the record"}
+    };
+  }
+}
+
+message NotifyOrgAdminsRequest {
+  // The organization whose owners and admins are told: control-plane's
+  // organizations.id.
+  string org_id = 1;
+  // Identifies one incident of the notice's subject, chosen by the caller
+  // (for a rejected key, when it was rejected). A repeat with the same key is
+  // deduplicated; a new key is a new incident.
+  string incident_key = 2;
+  // The notice. Exactly one kind is set.
+  oneof notice {
+    OrgProviderKeyRejected org_provider_key_rejected = 3;
+  }
+}
+
+// OrgProviderKeyRejected: an AI provider rejected one of the org's own API
+// keys. Members' chats already route around it; an owner or admin has to
+// rotate or replace it. Deduplicated per account.
+message OrgProviderKeyRejected {
+  // reliant's provider_accounts id of the org's key: the subject the notice
+  // is deduplicated by.
+  string account_id = 1;
+  // The provider's display name, e.g. "Anthropic".
+  string provider = 2;
+  // The key's label in the org's settings. Optional.
+  string label = 3;
+  // The key's last characters as the settings page shows them. Optional.
+  string key_hint = 4;
+  // Why the provider refused it, as reliant recorded. Optional.
+  string reason = 5;
+}
+
+message NotifyOrgAdminsResponse {
+  // How many owners and admins were emailed by this call: 0 when deduplicated.
+  int32 recipients = 1;
+  // True when an earlier call already notified this incident.
+  bool deduplicated = 2;
+}

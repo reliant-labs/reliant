@@ -5,8 +5,11 @@ import (
 	"context"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/controlplane"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/llm/accountrouter"
+	"github.com/reliant-labs/reliant/internal/llm/models"
+	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/handlers"
 )
 
@@ -73,7 +76,11 @@ func (s accountRouterStore) RecentAssignmentCounts(ctx context.Context, accountI
 // activities share. It is inactive until a per-account driver builder is wired
 // (see handlers.AccountRouting.DriverFor): accounts are never assigned that
 // cannot then be used.
-func accountRouting(repo AccountRoutingStore, recorder handlers.AccountLimitRecorder) *handlers.AccountRouting {
+func accountRouting(repo AccountRoutingStore, recorder handlers.AccountLimitRecorder, notices ...orgKeyNoticeQueue) *handlers.AccountRouting {
+	marker := credentialMarker{repo: repo}
+	if len(notices) > 0 {
+		marker.notices = notices[0]
+	}
 	store := accountRouterStore{repo: repo}
 	return &handlers.AccountRouting{
 		Router:                accountrouter.NewInstrumented(accountrouter.Deps{Store: store}),
@@ -82,18 +89,60 @@ func accountRouting(repo AccountRoutingStore, recorder handlers.AccountLimitReco
 		Settings:              repo,
 		DriverFor:             accountDriverFor,
 		Recorder:              recorder,
-		Credentials:           credentialMarker{repo: repo},
+		Credentials:           marker,
 		Funding:               repo,
 	}
 }
 
+// OrgAdminNotifier emails an org's owners and admins that a provider rejected
+// one of the org's own API keys. controlplane.Service is one.
+type OrgAdminNotifier interface {
+	NotifyOrgKeyRejected(ctx context.Context, n controlplane.OrgKeyRejectedNotice) (deduplicated bool, err error)
+}
+
+// orgKeyNoticeQueue is where a rejected org key's notice is started: the
+// Temporal client and the task queue its workflow runs on.
+type orgKeyNoticeQueue struct {
+	starter   noticeStarter
+	taskQueue string
+}
+
 // credentialMarker retires an account whose API key the provider rejected, the
 // way the token refresh coordinator retires one whose refresh token it did.
-type credentialMarker struct{ repo AccountCredentialStore }
+// For an org's own key it also has the org's owners and admins emailed, who
+// alone can rotate it (org-provider-accounts §4.7; the inbox item is listed
+// from the mark itself).
+type credentialMarker struct {
+	repo AccountCredentialStore
+	// notices is unset without Temporal: the inbox item is the only notice.
+	notices orgKeyNoticeQueue
+}
 
 // MarkNeedsSignIn marks the account on its owner's row: a person's own, or the
 // org's for an org key.
 func (m credentialMarker) MarkNeedsSignIn(ctx context.Context, owner core.AccountOwner, accountID, reason string) error {
-	_, err := m.repo.PatchOwnedProviderAccount(ctx, owner, accountID, core.AccountPatch{NeedsReauth: &reason})
-	return err
+	acct, err := m.repo.PatchOwnedProviderAccount(ctx, owner, accountID, core.AccountPatch{NeedsReauth: &reason})
+	if err != nil {
+		return err
+	}
+	if owner.IsOrg() && m.notices.starter != nil && acct.NeedsReauthAt != nil {
+		m.notifyOrgAdmins(context.WithoutCancel(ctx), owner.ID, acct, reason)
+	}
+	return nil
+}
+
+// notifyOrgAdmins starts the notice of the rejected key (OrgKeyRejectedNoticeWorkflow).
+// The incident is when the key was first marked: a mark keeps its time until
+// the key is rotated, so every worker that meets the same rejection, and every
+// retry, names the same incident and starts the same workflow. A start that
+// fails is logged; the mark stands and the inbox lists it whatever happens here.
+func (m credentialMarker) notifyOrgAdmins(ctx context.Context, orgID string, acct core.ProviderAccount, reason string) {
+	n := controlplane.OrgKeyRejectedNotice{
+		OrgID: orgID, IncidentKey: acct.NeedsReauthAt.UTC().Format(time.RFC3339Nano), AccountID: acct.ID,
+		Provider: models.ProviderDisplayName(acct.Provider), Label: acct.Label, KeyHint: acct.KeyHint, Reason: reason,
+	}
+	if err := startOrgKeyNotice(ctx, m.notices.starter, m.notices.taskQueue, n); err != nil {
+		logging.ErrorContext(ctx, "Could not start emailing the org's admins about a rejected key; the inbox still lists it",
+			"orgID", orgID, "accountID", acct.ID, "error", err)
+	}
 }
