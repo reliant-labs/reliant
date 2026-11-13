@@ -41,6 +41,7 @@ import { toast } from "sonner";
 import {
   InboxItemKind,
   type InboxAutomationDefinitionBroken,
+  type InboxAutomationFailing,
   type InboxItem as InboxItemData,
   type InboxStorage as InboxStorageData,
 } from "@/gen/reliant/v1/inbox_pb";
@@ -505,7 +506,8 @@ export function subjectName(item: InboxItemData): string {
   }
   if (item.payload.case === "worktreeMarked") return item.payload.value.name || "Worktree";
   if (item.payload.case === "orgProviderKeyRejected") return item.payload.value.label || "Organization AI key";
-  return item.chatTitle || item.triggerName || "Untitled run";
+  const incidentKey = item.payload.case === "automationFailing" ? item.payload.value.incidentKey : "";
+  return item.chatTitle || item.triggerName || incidentKey || "Untitled run";
 }
 
 const subjectClass =
@@ -607,6 +609,23 @@ function LaunchFailedAction({ triggerId }: { triggerId: string }) {
   );
 }
 
+/** Attention describes the job's incident; health remains trigger diagnostics. */
+export function automationFailureDetail(failure: InboxAutomationFailing): string {
+  const labels: Record<string, string> = {
+    unsuccessful: "Job unsuccessful",
+    execution_error: "Execution failed",
+    recovery_expired: "Recovery timed out",
+  };
+  const label = Object.hasOwn(labels, failure.failureClass) ? labels[failure.failureClass] : undefined;
+  if (label) return [label, failure.detail].filter(Boolean).join(" · ");
+  // Older servers and unknown future classes retain the existing diagnostic copy.
+  const health = failure.health;
+  const failures = health?.consecutiveFailures ?? 0;
+  return [failures > 1 ? `${failures} in a row` : "", health?.lastFailureDetail ?? ""]
+    .filter(Boolean)
+    .join(" · ");
+}
+
 /** The one-line detail after the name, and its full text for the tooltip. */
 function rowDetail(item: InboxItemData): { node: ReactNode; title: string } | null {
   const { payload } = item;
@@ -639,11 +658,7 @@ function rowDetail(item: InboxItemData): { node: ReactNode; title: string } | nu
       return { node: text, title: text };
     }
     case "automationFailing": {
-      const health = payload.value.health;
-      const failures = health?.consecutiveFailures ?? 0;
-      const text = [failures > 1 ? `${failures} in a row` : "", health?.lastFailureDetail ?? ""]
-        .filter(Boolean)
-        .join(" · ");
+      const text = automationFailureDetail(payload.value);
       return text ? { node: text, title: text } : null;
     }
     case "recovery": {
@@ -829,6 +844,15 @@ function InlineAction({ item, expanded, onToggle }: InlineActionProps) {
     case "waitingForMachine":
       return <WakeMachineAction daemonId={payload.value.daemonId} daemonName={payload.value.daemonName} />;
     case "automationFailing":
+      // An incident survives trigger edits, deletion and pausing. Its action is
+      // the owning run, not a trigger toggle that cannot resolve the episode.
+      if (payload.value.incidentKey) {
+        return payload.value.lastRunChatId ? (
+          <RunLink chatId={payload.value.lastRunChatId} className={actionButtonClass}>
+            Open run
+          </RunLink>
+        ) : null;
+      }
       return (
         <FailingAutomationAction
           triggerId={item.triggerId}

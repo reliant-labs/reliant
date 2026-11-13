@@ -431,6 +431,7 @@ type WorkflowCheckpointStore interface {
 // the transition to the next workflow. It forwards the store to
 // threads.Service, runevents.EmitTerminal and TransitionChatOnCompletion.
 type WorkflowStatusStore interface {
+	ApplyAttentionUpdate(ctx context.Context, update core.AttentionUpdate) (core.AttentionResult, error)
 	ListRunNodeExecutions(ctx context.Context, workflowID string, limit int) ([]*db.StepExecution, error)
 	MarkDeclaredFailureNode(ctx context.Context, workflowID, nodeID string) (bool, error)
 	SetLaunchEventRunFailureDetail(ctx context.Context, chatID, detail string) error

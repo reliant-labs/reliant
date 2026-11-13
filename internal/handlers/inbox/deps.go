@@ -47,6 +47,11 @@ type Repository interface {
 	// inbox lists to their orgs' owners and admins.
 	HasRejectedOrgKeys(ctx context.Context) (bool, error)
 	ListRejectedOrgKeysIn(ctx context.Context, orgIDs []string) ([]core.ProviderAccount, error)
+	// Incidents and safe-to-suppress managed-chat membership are scoped by
+	// repository ownership, never YAML scope or a request project filter.
+	// An unfinished observer without an open incident is not suppressible.
+	ListAttentionIncidents(ctx context.Context, userID string) ([]*core.AttentionIncident, error)
+	AttentionManagedChats(ctx context.Context, userID string, chatIDs []string) (map[string]bool, error)
 	ListDismissedInboxItemIDs(ctx context.Context, userID string, itemIDs []string) (map[string]bool, error)
 	DismissInboxItems(ctx context.Context, userID string, itemIDs []string, at time.Time) error
 	RestoreInboxItems(ctx context.Context, userID string, itemIDs []string) error
@@ -56,6 +61,7 @@ type Repository interface {
 	// health and never shows an event, so it does not read their bodies.
 	RecentTriggerOutcomes(ctx context.Context, userID string, triggerIDs []string, perTrigger int) (map[string][]*core.TriggerEventWithRun, error)
 	FiringsSinceLastSuccess(ctx context.Context, userID string, triggerIDs []string, perTrigger int) (map[string][]*core.TriggerEventWithRun, error)
+	FiringsSinceLastUnmanagedSuccess(ctx context.Context, userID string, triggerIDs []string, perTrigger int) (map[string][]*core.TriggerEventWithRun, error)
 	ListTriggerRegistrations(ctx context.Context, userID string, triggerIDs []string) (map[string]*core.TriggerRegistration, error)
 
 	GetDaemon(ctx context.Context, id string) (*db.Daemon, error)

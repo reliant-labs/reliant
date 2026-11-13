@@ -460,111 +460,6 @@ func isInboxItemID(itemID string) bool {
 	return false
 }
 
-// failingAutomations returns one item per enabled trigger whose current
-// failure streak needs its owner: a run it launched failed, or its health is
-// FAILING (ComputeHealth, as Trigger.health reads it). One item per streak,
-// keyed by the streak's first failure, so a later successful run, which ends
-// the streak, resolves it. A streak of launch failures alone is the
-// launch-failed item's until it turns FAILING. Its three reads are independent
-// and run together, each holding one of lim's tokens.
-func (s *Service) failingAutomations(ctx context.Context, lim readLimiter, userID string, stored []*core.Trigger) ([]*reliantv1.InboxItem, error) {
-	ids := make([]string, 0, len(stored))
-	for _, t := range stored {
-		if t.Enabled {
-			ids = append(ids, t.ID)
-		}
-	}
-	if len(ids) == 0 {
-		return nil, nil
-	}
-	var (
-		recent, episodes map[string][]*core.TriggerEventWithRun
-		regs             map[string]*core.TriggerRegistration
-	)
-	g, gctx := errgroup.WithContext(ctx)
-	g.Go(func() error {
-		return lim.do(gctx, func() (err error) {
-			recent, err = s.deps.Repo.RecentTriggerOutcomes(gctx, userID, ids, triggers.HealthWindow)
-			return err
-		})
-	})
-	// The episode is read separately from the health window: a streak longer
-	// than the window must still be one item with an honest count.
-	g.Go(func() error {
-		return lim.do(gctx, func() (err error) {
-			episodes, err = s.deps.Repo.FiringsSinceLastSuccess(gctx, userID, ids, triggers.EpisodeFirings)
-			return err
-		})
-	})
-	// A polled source that cannot authenticate never fires, so it has no
-	// failed firing to show; its source state is what says it is failing.
-	g.Go(func() error {
-		return lim.do(gctx, func() (err error) {
-			regs, err = s.deps.Repo.ListTriggerRegistrations(gctx, userID, ids)
-			return err
-		})
-	})
-	if err := g.Wait(); err != nil {
-		return nil, err
-	}
-	now := time.Now()
-
-	var out []*reliantv1.InboxItem
-	for _, t := range stored {
-		if !t.Enabled {
-			continue
-		}
-		firings := recent[t.ID]
-		if reg := regs[t.ID]; reg != nil && reg.Status == core.TriggerRegistrationNeedsReauth {
-			// Not receiving events at all until the owner reconnects. The
-			// episode is the registration's: it starts when the source
-			// entered needs_reauth, so a dismissal holds until the next one.
-			health := triggers.WithSource(triggers.ComputeHealth(firings), reg, now)
-			out = append(out, &reliantv1.InboxItem{
-				Kind:         reliantv1.InboxItemKind_INBOX_ITEM_KIND_AUTOMATION_FAILING,
-				ItemId:       inboxFailingPrefix + "source:" + t.ID + ":" + strconv.FormatInt(reg.StatusSince.UnixMilli(), 10),
-				TriggerId:    t.ID,
-				TriggerName:  t.Name,
-				ProjectId:    t.ProjectID,
-				ProjectName:  t.ProjectName,
-				WorkflowName: t.Workflow,
-				WaitingSince: reg.StatusSince.UTC().Format(time.RFC3339Nano),
-				Payload:      &reliantv1.InboxItem_AutomationFailing{AutomationFailing: &reliantv1.InboxAutomationFailing{Health: health}},
-			})
-			continue
-		}
-		health := triggers.ComputeHealth(firings)
-		streak := triggers.FailureStreak(episodes[t.ID])
-		if streak.First == nil {
-			continue
-		}
-		if health.Status != reliantv1.TriggerHealthStatus_TRIGGER_HEALTH_STATUS_FAILING && streak.RunFailures == 0 {
-			continue
-		}
-		health.ConsecutiveFailures = streak.Count
-		payload := &reliantv1.InboxAutomationFailing{Health: health}
-		for _, f := range firings {
-			if f.Run != nil {
-				chatID := f.Run.ChatID
-				payload.LastRunChatId = &chatID
-				break
-			}
-		}
-		out = append(out, &reliantv1.InboxItem{
-			Kind:         reliantv1.InboxItemKind_INBOX_ITEM_KIND_AUTOMATION_FAILING,
-			ItemId:       inboxFailingPrefix + streak.First.Event.ID,
-			TriggerId:    t.ID,
-			TriggerName:  t.Name,
-			ProjectId:    t.ProjectID,
-			ProjectName:  t.ProjectName,
-			WorkflowName: t.Workflow,
-			WaitingSince: streak.First.Event.OccurredAt.UTC().Format(time.RFC3339Nano),
-			Payload:      &reliantv1.InboxItem_AutomationFailing{AutomationFailing: payload},
-		})
-	}
-	return out, nil
-}
-
 // declarationAutomations returns the items read from each enabled workflow
 // automation's declaration, as it resolves NOW (the same rules Trigger.health
 // reads):
@@ -744,6 +639,10 @@ func dropSupersededByBroken(items []*reliantv1.InboxItem) []*reliantv1.InboxItem
 		return items
 	}
 	return slices.DeleteFunc(items, func(it *reliantv1.InboxItem) bool {
+		// A broken declaration does not resolve an earlier job's incident.
+		if it.GetAutomationFailing().GetIncidentKey() != "" {
+			return false
+		}
 		if it.TriggerId == "" || !broken[it.TriggerId] || strings.HasPrefix(it.ItemId, inboxFailingPrefix+brokenItemInfix) {
 			return false
 		}

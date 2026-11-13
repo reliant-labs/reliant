@@ -56,6 +56,14 @@ func newInflightRepo(hold time.Duration) *inflightRepo {
 		r.enter(ctx, hold)
 		return nil, nil
 	}
+	m.ListAttentionIncidentsFunc = func(ctx context.Context, _ string) ([]*core.AttentionIncident, error) {
+		r.enter(ctx, hold)
+		return nil, nil
+	}
+	m.AttentionManagedChatsFunc = func(ctx context.Context, _ string, _ []string) (map[string]bool, error) {
+		r.enter(ctx, hold)
+		return nil, nil
+	}
 	m.ListWorktreeRecoveriesFunc = func(ctx context.Context, _, _ string) ([]*core.WorktreeRecovery, error) {
 		r.enter(ctx, hold)
 		return nil, nil
@@ -70,6 +78,7 @@ func newInflightRepo(hold time.Duration) *inflightRepo {
 	}
 	m.RecentTriggerOutcomesFunc = firings
 	m.FiringsSinceLastSuccessFunc = firings
+	m.FiringsSinceLastUnmanagedSuccessFunc = firings
 	m.ListTriggerRegistrationsFunc = func(ctx context.Context, _ string, _ []string) (map[string]*core.TriggerRegistration, error) {
 		r.enter(ctx, hold)
 		return nil, nil
@@ -167,7 +176,7 @@ func TestListInbox_ARequiredReadFailingFailsTheRequest(t *testing.T) {
 			m.ListInboxPendingFunc = func(context.Context, string) ([]*core.InboxPending, error) { return nil, errors.New("boom") }
 		}},
 		{"automation health", func(m *MockRepository) {
-			m.FiringsSinceLastSuccessFunc = func(context.Context, string, []string, int) (map[string][]*core.TriggerEventWithRun, error) {
+			m.FiringsSinceLastUnmanagedSuccessFunc = func(context.Context, string, []string, int) (map[string][]*core.TriggerEventWithRun, error) {
 				return nil, errors.New("boom")
 			}
 		}},
@@ -200,7 +209,7 @@ func TestListInbox_AnAdvisoryReadFailingStillAnswers(t *testing.T) {
 // A user shaped like prod's heaviest (2026-10-23): six enabled automations,
 // one of them 250 firings into a failure episode, every firing carrying a
 // ~7 KB webhook body. ListInbox reads the episode to count it and never shows
-// a body, so it reads none (RecentTriggerOutcomes, FiringsSinceLastSuccess):
+// a body, so it reads none (RecentTriggerOutcomes, FiringsSinceLastUnmanagedSuccess):
 // in prod the bodies were 1.8 MB of JSON per call, decoded into maps, and the
 // RPC took 3-4 s. The timing is logged, not asserted (shared CI machines).
 func TestListInbox_HeavyAutomationUser(t *testing.T) {

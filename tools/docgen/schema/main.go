@@ -58,6 +58,7 @@ var toolHints = map[string]string{
 	"hidden": "A building block other workflows ref: true keeps it out of every picker and default listing while it " +
 		"stays resolvable by ref. With automation_only too, it is an automation's internal step and is listed nowhere. " +
 		"Unset means the workflow is listed.",
+	"attention": "Explicit human-attention incident correlation for root unattended launch runs, independent of lifecycle and outcome. Absent preserves legacy behavior. See WorkflowAttention below.",
 	"concurrency": "Bounds trigger-launched runs: {max_running: N} (later firings wait, FIFO), {per_member: K} " +
 		"(K per machine of the trigger's pool), or both, optionally waiting: latest (only the newest waiting firing " +
 		"per key survives; older ones are recorded skipped, \"superseded\", never failed) and key (a template over " +
@@ -131,6 +132,11 @@ func extractTypesFromProto() []TypeInfo {
 				"a run waiting on a provider holds no slot until it resumes. Example, one release at a time with "+
 				"only the newest waiting merge per repository: `concurrency: {max_running: 1, waiting: latest, key: "+
 				"'{{ trigger.payload.attributes.repository }}'}`.", 4),
+		extractTypeFromMessage("WorkflowAttention",
+			(&reliantv1.WorkflowAttention{}).ProtoReflect().Descriptor(),
+			"Correlates incidents within one owner and project, never across them. Failures remain failed and emit failure events. "+
+				"Only explicit on_success: resolved closes an incident; a key-only observer's success does not. "+
+				"Example: `attention: {key: 'repo:{{ inputs.repo }}:pr:{{ inputs.pr }}', on_start: recovering, recovery_timeout: 30m, on_success: resolved}`.", 5),
 	}
 }
 
@@ -154,14 +160,24 @@ func extractTypeFromMessage(name string, md protoreflect.MessageDescriptor, desc
 		fieldType := simplifyProtoType(fd)
 		fieldDesc := getFieldComment(fd)
 
-		// Check for tool hints
+		// Hints are message-specific: attention.key/on_failure deliberately
+		// have different semantics from concurrency.key/Workflow.on_failure.
 		toolHint := toolHints[fieldName]
+		if name == "WorkflowAttention" {
+			toolHint = map[string]string{
+				"key":              "Required literal or template over finalized inputs only. Evaluated once before graph execution; must produce a nonempty string of at most 512 bytes. Invalid dynamic keys fail visibly with legacy attention as a fail-safe.",
+				"on_start":         "Absent, recovering, or action_required. Recovering requires recovery_timeout. Only an actually started recovery run suppresses attention.",
+				"recovery_timeout": "Go duration in [1s, 24h], allowed only with on_start: recovering. Fixed from run start; retries never extend it. Expiry escalates through the durable inbox read, without a push notification.",
+				"on_success":       "Absent, resolved, or action_required. No implicit resolution on success. A recovery finishing without explicit successful resolution escalates.",
+				"on_failure":       "Absent (defaults to action_required), or action_required. Crashes, cancellation, and unsuccessful outcomes never resolve an incident.",
+			}[fieldName]
+		}
 
 		info.Fields = append(info.Fields, FieldInfo{
 			Name:        fieldName,
 			Type:        fieldType,
 			JSONName:    fieldName,
-			Required:    fieldName == "name" || fieldName == "from",
+			Required:    fieldName == "name" || fieldName == "from" || (name == "WorkflowAttention" && fieldName == "key"),
 			Description: fieldDesc,
 			ToolHint:    toolHint,
 		})

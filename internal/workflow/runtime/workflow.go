@@ -75,6 +75,10 @@ type WorkflowInput struct {
 	// omitempty keeps every run that does not probe byte-identical to a start
 	// recorded before this field existed.
 	GreenfieldProbe bool `json:"GreenfieldProbe,omitempty"`
+	// AttentionHandoff is internal checkpoint-CAN state, never a user input.
+	// It preserves the original actor/lease instead of renewing recovery on
+	// every history compaction. Absent for ordinary starts and human replies.
+	AttentionHandoff *AttentionHandoff `json:"attention_handoff,omitempty"`
 }
 
 // ResumeInput carries the position checkpoint of the interrupted predecessor
@@ -1059,6 +1063,10 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 	// no error and completes normally — that is the whole reason the verdict
 	// needs its own channel instead of being read off the lifecycle status.
 	runOutcome := ""
+	// The pointer is inherited by disconnected terminal cleanup contexts. It is
+	// armed only after a valid opt-in launch policy is resolved below.
+	attention := &runAttention{}
+	ctx = workflow.WithValue(ctx, attentionContextKey{}, attention)
 	// handlerDone stops the input-update handler (STEP 5.55) when the run
 	// exits; nil until that handler starts.
 	var handlerDone workflow.Channel
@@ -1227,6 +1235,28 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 	// Inject spawn_depth from ExecutionContext for depth-based spawn limiting
 	if input.ExecContext != nil && input.ExecContext.SpawnDepth > 0 {
 		input.Inputs["spawn_depth"] = input.ExecContext.SpawnDepth
+	}
+
+	// Attention correlation is frozen from finalized inputs, never re-evaluated
+	// at completion (a person may update inputs while the run is in flight).
+	if policy := wfWithPlaceholders.GetAttention(); policy != nil && parentWorkflowID == "" && IsLaunchRun(input.Inputs) && IsUnattended(input.Inputs) &&
+		workflow.GetVersion(ctx, attentionChangeID, workflow.DefaultVersion, 1) != workflow.DefaultVersion {
+		key, keyErr := attentionKeyForRun(policy, input.Inputs, input.AttentionHandoff)
+		if keyErr != nil {
+			notifyWorkflowError(ctx, input.ChatID, workflowID, input.WorkflowName, thread, "attention_input_error", keyErr.Error())
+			return nil, keyErr
+		}
+		attention.policy, attention.key = policy, key
+		attention.runID, attention.startedAt = info.WorkflowExecution.RunID, info.WorkflowStartTime
+		if handoff := input.AttentionHandoff; handoff != nil {
+			// Continue-as-new is still this recovery attempt, not a new owner.
+			// Its stored policy/key were validated by the preceding execution.
+			if handoff.RunID == "" || handoff.StartedAt.IsZero() || handoff.Policy == nil {
+				return nil, fmt.Errorf("invalid attention continuation identity")
+			}
+			attention.policy, attention.key = handoff.Policy, handoff.Key
+			attention.runID, attention.startedAt = handoff.RunID, handoff.StartedAt
+		}
 	}
 
 	// STEP 5.55: Set up signal handler and query handler NOW (after ApplyDefaults).
@@ -1455,7 +1485,10 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 			LoopIteration:   loopIter,
 		}
 	}
-	notifyWorkflowStatus(ctx, input.ChatID, workflowID, input.WorkflowName, "started", parentWorkflowID, thread, statusOpts)
+	if statusErr := notifyWorkflowStatus(ctx, input.ChatID, workflowID, input.WorkflowName, "started", parentWorkflowID, thread, statusOpts); statusErr != nil && attention.policy != nil {
+		// Do not let a repair run suppress attention without durable ownership.
+		return nil, fmt.Errorf("record attention owner: %w", statusErr)
+	}
 
 	// STEP 6.6: Preflight daemon check, for every run recorded since the check
 	// moved after "started" (see STEP 6.07).
@@ -5486,7 +5519,7 @@ func workflowStatusActivityOptions(status string) workflow.ActivityOptions {
 // and tracks workflow hierarchy in the database.
 // This is a fire-and-forget notification - errors are logged but don't fail the workflow
 // opts can include agent info for UI swim lanes and fork metadata for context inheritance
-func notifyWorkflowStatus(ctx workflow.Context, chatID, workflowID, workflowName, status, parentWorkflowID, thread string, opts *workflowStatusOpts) {
+func notifyWorkflowStatus(ctx workflow.Context, chatID, workflowID, workflowName, status, parentWorkflowID, thread string, opts *workflowStatusOpts) error {
 	logger := workflow.GetLogger(ctx)
 
 	// If the workflow context is cancelled (e.g., during cleanup after cancellation),
@@ -5553,6 +5586,9 @@ func notifyWorkflowStatus(ctx workflow.Context, chatID, workflowID, workflowName
 		}
 	}
 
+	if update := attentionForStatus(ctx, chatID, status, opts); update != nil {
+		input["attention"] = update
+	}
 	var result map[string]interface{}
 	// Use baseCtx (which may be disconnected) for the Get() call as well
 	err := workflow.ExecuteActivity(activityCtx, "WorkflowStatus", input).Get(baseCtx, &result)
@@ -5576,6 +5612,7 @@ func notifyWorkflowStatus(ctx workflow.Context, chatID, workflowID, workflowName
 			"status", status,
 			"workflowID", workflowID)
 	}
+	return err
 }
 
 // notifyWorkflowCheckpoint persists the workflow's position checkpoint: the
@@ -5913,8 +5950,15 @@ func handleWorkflowCompletion(ctx workflow.Context, workflowID, chatID, workflow
 	if runOutcome == model.OutcomeFailure {
 		outcomeNode = runOutcomeNode
 	}
-	notifyWorkflowStatus(cleanupCtx, chatID, workflowID, workflowName, "completed", parentWorkflowID, thread,
-		&workflowStatusOpts{Outcome: runOutcome, OutcomeNode: outcomeNode, LaunchRun: launchRun})
+	if err := notifyWorkflowStatus(cleanupCtx, chatID, workflowID, workflowName, "completed", parentWorkflowID, thread,
+		&workflowStatusOpts{Outcome: runOutcome, OutcomeNode: outcomeNode, LaunchRun: launchRun}); err != nil && attentionHandoff(ctx) != nil {
+		// Exhausting durable terminal bookkeeping is a real execution error,
+		// not a different verdict on the job. In particular, do not let the
+		// reconciler convert an unwritten semantic failure into a successful
+		// completed execution. Its existing failed-Temporal repair is the final
+		// backstop if the status/receipt transaction never committed.
+		return fmt.Errorf("persist workflow attention terminal status: %w", err)
+	}
 
 	// Last, so a wake that landed during the bookkeeping above counts too.
 	// Child runs are never signalled — every wake addresses the chat's root

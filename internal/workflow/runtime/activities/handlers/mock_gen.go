@@ -5105,7 +5105,7 @@ func (m *MockWorkflowCheckpointStore) UpsertWorkflowCheckpoint(ctx context.Conte
 var _ WorkflowCheckpointStore = (*MockWorkflowCheckpointStore)(nil)
 
 // forge:section MockWorkflowStatusStore
-// forge:hash=a26c0d5522052c43bbbcc9caa76971894aba0c3eab24e6f62ad02fa4c458a1b4
+// forge:hash=df3e026cf3a696acf8718651a3755182e8ff431b773c74473d4cf82603384c27
 
 // MockWorkflowStatusStore is a test mock for the WorkflowStatusStore interface.
 //
@@ -5115,6 +5115,7 @@ var _ WorkflowCheckpointStore = (*MockWorkflowCheckpointStore)(nil)
 // "MockWorkflowStatusStore.<Method>Func not set" error.
 type MockWorkflowStatusStore struct {
 	contractkit.Recorder
+	ApplyAttentionUpdateFunc                                 func(context.Context, core.AttentionUpdate) (core.AttentionResult, error)
 	ListRunNodeExecutionsFunc                                func(context.Context, string, int) ([]*db.StepExecution, error)
 	MarkDeclaredFailureNodeFunc                              func(context.Context, string, string) (bool, error)
 	SetLaunchEventRunFailureDetailFunc                       func(context.Context, string, string) error
@@ -5197,6 +5198,15 @@ type MockWorkflowStatusStore struct {
 	GetPinnedProjectCatalogFunc                              func(context.Context, string) (*db.PinnedCatalog, bool, error)
 	PinProjectCatalogFunc                                    func(context.Context, db.CatalogPinScope) (string, error)
 	SaveMessageToThreadFunc                                  func(context.Context, string, string, int32, string, *string, []string, *int32) (*db.Message, error)
+}
+
+// ApplyAttentionUpdate records the call and delegates to ApplyAttentionUpdateFunc when set.
+func (m *MockWorkflowStatusStore) ApplyAttentionUpdate(ctx context.Context, update core.AttentionUpdate) (core.AttentionResult, error) {
+	m.Recorder.Record("ApplyAttentionUpdate", ctx, update)
+	if m.ApplyAttentionUpdateFunc != nil {
+		return m.ApplyAttentionUpdateFunc(ctx, update)
+	}
+	return *new(core.AttentionResult), contractkit.MockNotSet("MockWorkflowStatusStore", "ApplyAttentionUpdate")
 }
 
 // ListRunNodeExecutions records the call and delegates to ListRunNodeExecutionsFunc when set.
