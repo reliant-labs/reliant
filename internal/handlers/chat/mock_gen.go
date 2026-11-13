@@ -70,7 +70,7 @@ func (m *MockOrgResolver) ListScope(ctx context.Context, userID string, requeste
 var _ OrgResolver = (*MockOrgResolver)(nil)
 
 // forge:section MockRepository
-// forge:hash=b85774f0478f8e51cf5dd4b4533d11151de8c290a0569c6c2b6067c56b014489
+// forge:hash=10cf4e0f92ee9fc268bf0b719825553d3694125a3864a128cdba758a2a35ae8f
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -103,6 +103,7 @@ type MockRepository struct {
 	ThreadAwaitsReplyFunc                                    func(context.Context, string) (bool, error)
 	IsLatestTurnInThreadFunc                                 func(context.Context, string, string) (bool, error)
 	CountMessagesInThreadFunc                                func(context.Context, string) (int, error)
+	ClaimUserActivationFunc                                  func(context.Context, string, string, string) (bool, error)
 	CountMessagesInChatOutsideThreadFunc                     func(context.Context, string, string) (int, error)
 	ListTranscriptSiblingMessagesInRangeFunc                 func(context.Context, string, string, int64, *int64, int) ([]*db.Message, error)
 	GetWorkflowByThreadFunc                                  func(context.Context, string, string) (*db.Workflow, error)
@@ -443,6 +444,15 @@ func (m *MockRepository) CountMessagesInThread(ctx context.Context, threadID str
 		return m.CountMessagesInThreadFunc(ctx, threadID)
 	}
 	return 0, contractkit.MockNotSet("MockRepository", "CountMessagesInThread")
+}
+
+// ClaimUserActivation records the call and delegates to ClaimUserActivationFunc when set.
+func (m *MockRepository) ClaimUserActivation(ctx context.Context, userID string, chatID string, messageID string) (bool, error) {
+	m.Recorder.Record("ClaimUserActivation", ctx, userID, chatID, messageID)
+	if m.ClaimUserActivationFunc != nil {
+		return m.ClaimUserActivationFunc(ctx, userID, chatID, messageID)
+	}
+	return false, contractkit.MockNotSet("MockRepository", "ClaimUserActivation")
 }
 
 // CountMessagesInChatOutsideThread records the call and delegates to CountMessagesInChatOutsideThreadFunc when set.

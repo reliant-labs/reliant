@@ -622,6 +622,18 @@ func (a *CallLLMActivity) persistInterruptedTurn(
 const resumeContinueText = "Your previous turn was cut off before it finished, and the run has now resumed. " +
 	"Continue where you left off."
 
+// historyStartsTurn reports whether a call over history begins a turn: the
+// newest message past any trailing system framing is a person's or an agent's
+// (new input), not a tool result inside a turn. A turn start is the only point
+// a thread moves up to a better account tier (org-provider-accounts §4.5).
+func historyStartsTurn(history []message.Message) bool {
+	tail := len(history) - 1
+	for tail >= 0 && history[tail].Role == message.System {
+		tail--
+	}
+	return tail >= 0 && (history[tail].Role == message.User || history[tail].Role == message.Agent)
+}
+
 // endsWithCutOffAssistantTurn reports whether history, past any trailing
 // system framing, ends with an assistant message that requested no tools:
 // on a resumed loop's first turn, the turn that was cut off (reasoning only,
@@ -1317,6 +1329,8 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 		Attended:            chatAttended(chat),
 		UnattendedAnySource: chatUnattendedAnySource(chat),
 		SessionID:           chat.ID,
+		ChatID:              chat.ID,
+		TurnStart:           historyStartsTurn(history),
 		Selector:            modelSelector,
 		RunProviders:        rtx.ProviderPreference,
 		ChatProvider:        rtx.ChatProvider,
@@ -2147,6 +2161,7 @@ streamLoop:
 		failedCall := usageLimitContext{
 			Scope: chatScope(chat), ThreadID: thread, Driver: models.DriverID(resolved.ProviderDriver),
 			ModelID: definitionID(resolved.Definition), Account: resolved.Account, Policy: rtx.Failover,
+			ChatID: chat.ID, Plan: resolved.plan,
 		}
 		return nil, a.routing.providerFailure(ctx, streamErr, failedCall)
 	}

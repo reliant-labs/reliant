@@ -11,6 +11,7 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/svcerr"
+	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -159,6 +160,20 @@ func TestProjectMove(t *testing.T) {
 		_, err := runMove(&fakeMoveClient{previewErr: refusal}, "", true, false, "web")
 		require.ErrorContains(t, err, "Settings → Projects → Danger zone")
 	})
+}
+
+// The command is web-only now: hidden from help and the CLI reference, and
+// deprecated with a pointer to the app, but still there for whatever calls it.
+func TestProjectMoveIsHiddenAndDeprecated(t *testing.T) {
+	var move *cobra.Command
+	for _, c := range newProjectCmd().Commands() {
+		if c.Name() == "move" {
+			move = c
+		}
+	}
+	require.NotNil(t, move, "kept within v1")
+	assert.True(t, move.Hidden)
+	assert.Contains(t, move.Deprecated, "Settings → Projects → Danger zone")
 }
 
 // An agent's shell, and a machine's credential, are refused before the

@@ -179,9 +179,10 @@ func seedMessagesFromInput(messages []*reliantv1.InputMessage) []launch.SeedMess
 
 // trackStartedChatMessage records the user message a chat start carries as a
 // message_sent: StartChat is the only way a chat's first message reaches the
-// server, and the web no longer reports it. The seed carries no stored message
-// id, so the client's named id (or, failing that, the chat's) identifies it.
-func (s *Service) trackStartedChatMessage(ctx context.Context, userID string, chat *db.Chat, clientMessageID string, msg *reliantv1.StartChatRequest) {
+// server, and the web no longer reports it. savedMessageID is the stored id
+// the launcher gave the seed; a start that saved none (a replay) falls back to
+// the client's named id, then the chat's, which no activation claim matches.
+func (s *Service) trackStartedChatMessage(ctx context.Context, userID string, chat *db.Chat, savedMessageID, clientMessageID string, msg *reliantv1.StartChatRequest) {
 	if chat == nil {
 		return
 	}
@@ -195,7 +196,10 @@ func (s *Service) trackStartedChatMessage(ctx context.Context, userID string, ch
 	if content == "" {
 		return
 	}
-	messageID := clientMessageID
+	messageID := savedMessageID
+	if messageID == "" {
+		messageID = clientMessageID
+	}
 	if messageID == "" {
 		messageID = chat.ID
 	}
@@ -245,21 +249,36 @@ func (s *Service) trackMessageSent(ctx context.Context, userID string, chat *db.
 	analyticsClient := analytics.ForUser(ctx, userID)
 	analyticsClient.TrackMessageSent(metrics)
 
-	// Check if this is the user's first-ever message across all chats
-	if isFirstInChat {
-		// List all chats for this user to see if they have any other chats with messages
-		chats, err := s.deps.Repo.SearchChats(ctx, db.ChatSearchFilters{
-			UserID: userID,
-			Limit:  2, // We only need to know if there's more than 1
+	// The message is already stored. It is the user's first ever exactly when
+	// it qualifies (typed by them, on a main thread, in a chat a person
+	// started), no message of theirs precedes it, and no activation is
+	// recorded yet; the claim checks all three and records it in one
+	// statement, so a replayed send or another replica never emits it twice.
+	// A failed claim reports nothing rather than a wrong first.
+	firstForUser, err := s.deps.Repo.ClaimUserActivation(ctx, userID, chat.ID, messageID)
+	if err != nil {
+		firstForUser = false
+		logging.WarnContext(ctx, "[Analytics] Could not claim the user's activation; user_first_message not emitted",
+			"userID", userID, "error", err)
+	}
+	if firstForUser {
+		analyticsClient.TrackUserFirstMessage(analytics.UserFirstMessageMetrics{
+			MessageID:    messageID,
+			ChatID:       chat.ID,
+			ProjectID:    chat.ProjectID,
+			WorkflowType: workflowType,
 		})
-		if err == nil && len(chats) <= 1 {
-			analyticsClient.TrackFirstMessageSent(analytics.FirstMessageSentMetrics{
-				ChatID:       chat.ID,
-				ProjectID:    chat.ProjectID,
-				WorkflowName: workflowName,
-				WorkflowType: workflowType,
-			})
-		}
+	}
+
+	// first_message_sent is per chat.
+	if isFirstInChat {
+		analyticsClient.TrackFirstMessageSent(analytics.FirstMessageSentMetrics{
+			ChatID:       chat.ID,
+			ProjectID:    chat.ProjectID,
+			WorkflowName: workflowName,
+			WorkflowType: workflowType,
+			FirstForUser: firstForUser,
+		})
 	}
 }
 

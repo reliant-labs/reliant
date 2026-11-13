@@ -209,6 +209,10 @@ type Result struct {
 	WorkflowID string
 	RunID      string
 	EventID    string
+	// UserMessageID is the stored id of the user message this call saved
+	// (the client's id when it named one); empty when it saved none, as a
+	// replay or a retry of an earlier start does.
+	UserMessageID string
 }
 
 // ErrAlreadyLaunched reports that the (Kind, DedupeKey) — or the NewChatID —

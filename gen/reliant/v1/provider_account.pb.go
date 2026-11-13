@@ -193,6 +193,166 @@ func (UsageSource) EnumDescriptor() ([]byte, []int) {
 	return file_reliant_v1_provider_account_proto_rawDescGZIP(), []int{2}
 }
 
+type PersonalFundingQuestion_Reason int32
+
+const (
+	PersonalFundingQuestion_REASON_UNSPECIFIED PersonalFundingQuestion_Reason = 0
+	// The org's accounts are rate-limited until org_reset_at.
+	PersonalFundingQuestion_REASON_LIMITED PersonalFundingQuestion_Reason = 1
+	// No org account is usable and none will be at a known time: a key
+	// revoked, rejected or paused, a grant withdrawn, the org's credit spent.
+	PersonalFundingQuestion_REASON_UNUSABLE PersonalFundingQuestion_Reason = 2
+	// None of the org's accounts serves the chat's model.
+	PersonalFundingQuestion_REASON_UNSERVED PersonalFundingQuestion_Reason = 3
+)
+
+// Enum value maps for PersonalFundingQuestion_Reason.
+var (
+	PersonalFundingQuestion_Reason_name = map[int32]string{
+		0: "REASON_UNSPECIFIED",
+		1: "REASON_LIMITED",
+		2: "REASON_UNUSABLE",
+		3: "REASON_UNSERVED",
+	}
+	PersonalFundingQuestion_Reason_value = map[string]int32{
+		"REASON_UNSPECIFIED": 0,
+		"REASON_LIMITED":     1,
+		"REASON_UNUSABLE":    2,
+		"REASON_UNSERVED":    3,
+	}
+)
+
+func (x PersonalFundingQuestion_Reason) Enum() *PersonalFundingQuestion_Reason {
+	p := new(PersonalFundingQuestion_Reason)
+	*p = x
+	return p
+}
+
+func (x PersonalFundingQuestion_Reason) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (PersonalFundingQuestion_Reason) Descriptor() protoreflect.EnumDescriptor {
+	return file_reliant_v1_provider_account_proto_enumTypes[3].Descriptor()
+}
+
+func (PersonalFundingQuestion_Reason) Type() protoreflect.EnumType {
+	return &file_reliant_v1_provider_account_proto_enumTypes[3]
+}
+
+func (x PersonalFundingQuestion_Reason) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use PersonalFundingQuestion_Reason.Descriptor instead.
+func (PersonalFundingQuestion_Reason) EnumDescriptor() ([]byte, []int) {
+	return file_reliant_v1_provider_account_proto_rawDescGZIP(), []int{16, 0}
+}
+
+type PersonalFundingQuestion_State int32
+
+const (
+	PersonalFundingQuestion_STATE_UNSPECIFIED PersonalFundingQuestion_State = 0
+	// Asked, not answered: the chat waits.
+	PersonalFundingQuestion_STATE_ASKED PersonalFundingQuestion_State = 1
+	// Continue on the person's own account while the answer lasts.
+	PersonalFundingQuestion_STATE_USE_PERSONAL PersonalFundingQuestion_State = 2
+	// Keep waiting for the org's accounts.
+	PersonalFundingQuestion_STATE_KEEP_WAITING PersonalFundingQuestion_State = 3
+)
+
+// Enum value maps for PersonalFundingQuestion_State.
+var (
+	PersonalFundingQuestion_State_name = map[int32]string{
+		0: "STATE_UNSPECIFIED",
+		1: "STATE_ASKED",
+		2: "STATE_USE_PERSONAL",
+		3: "STATE_KEEP_WAITING",
+	}
+	PersonalFundingQuestion_State_value = map[string]int32{
+		"STATE_UNSPECIFIED":  0,
+		"STATE_ASKED":        1,
+		"STATE_USE_PERSONAL": 2,
+		"STATE_KEEP_WAITING": 3,
+	}
+)
+
+func (x PersonalFundingQuestion_State) Enum() *PersonalFundingQuestion_State {
+	p := new(PersonalFundingQuestion_State)
+	*p = x
+	return p
+}
+
+func (x PersonalFundingQuestion_State) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (PersonalFundingQuestion_State) Descriptor() protoreflect.EnumDescriptor {
+	return file_reliant_v1_provider_account_proto_enumTypes[4].Descriptor()
+}
+
+func (PersonalFundingQuestion_State) Type() protoreflect.EnumType {
+	return &file_reliant_v1_provider_account_proto_enumTypes[4]
+}
+
+func (x PersonalFundingQuestion_State) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use PersonalFundingQuestion_State.Descriptor instead.
+func (PersonalFundingQuestion_State) EnumDescriptor() ([]byte, []int) {
+	return file_reliant_v1_provider_account_proto_rawDescGZIP(), []int{16, 1}
+}
+
+type ResolvePersonalFundingChoiceRequest_Choice int32
+
+const (
+	ResolvePersonalFundingChoiceRequest_CHOICE_UNSPECIFIED  ResolvePersonalFundingChoiceRequest_Choice = 0
+	ResolvePersonalFundingChoiceRequest_CHOICE_USE_PERSONAL ResolvePersonalFundingChoiceRequest_Choice = 1
+	ResolvePersonalFundingChoiceRequest_CHOICE_KEEP_WAITING ResolvePersonalFundingChoiceRequest_Choice = 2
+)
+
+// Enum value maps for ResolvePersonalFundingChoiceRequest_Choice.
+var (
+	ResolvePersonalFundingChoiceRequest_Choice_name = map[int32]string{
+		0: "CHOICE_UNSPECIFIED",
+		1: "CHOICE_USE_PERSONAL",
+		2: "CHOICE_KEEP_WAITING",
+	}
+	ResolvePersonalFundingChoiceRequest_Choice_value = map[string]int32{
+		"CHOICE_UNSPECIFIED":  0,
+		"CHOICE_USE_PERSONAL": 1,
+		"CHOICE_KEEP_WAITING": 2,
+	}
+)
+
+func (x ResolvePersonalFundingChoiceRequest_Choice) Enum() *ResolvePersonalFundingChoiceRequest_Choice {
+	p := new(ResolvePersonalFundingChoiceRequest_Choice)
+	*p = x
+	return p
+}
+
+func (x ResolvePersonalFundingChoiceRequest_Choice) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (ResolvePersonalFundingChoiceRequest_Choice) Descriptor() protoreflect.EnumDescriptor {
+	return file_reliant_v1_provider_account_proto_enumTypes[5].Descriptor()
+}
+
+func (ResolvePersonalFundingChoiceRequest_Choice) Type() protoreflect.EnumType {
+	return &file_reliant_v1_provider_account_proto_enumTypes[5]
+}
+
+func (x ResolvePersonalFundingChoiceRequest_Choice) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use ResolvePersonalFundingChoiceRequest_Choice.Descriptor instead.
+func (ResolvePersonalFundingChoiceRequest_Choice) EnumDescriptor() ([]byte, []int) {
+	return file_reliant_v1_provider_account_proto_rawDescGZIP(), []int{19, 0}
+}
+
 type UsageWindow struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// "5h", "7d", "7d_opus", "primary", …
@@ -1149,6 +1309,316 @@ func (x *GetChatProviderAccountResponse) GetAccount() *ProviderAccount {
 	return nil
 }
 
+// PersonalFundingQuestion is a chat's question before it would move from its
+// org's accounts to the person's own (org-provider-accounts §10).
+type PersonalFundingQuestion struct {
+	state  protoimpl.MessageState         `protogen:"open.v1"`
+	ChatId string                         `protobuf:"bytes,1,opt,name=chat_id,json=chatId,proto3" json:"chat_id,omitempty"`
+	OrgId  string                         `protobuf:"bytes,2,opt,name=org_id,json=orgId,proto3" json:"org_id,omitempty"`
+	Reason PersonalFundingQuestion_Reason `protobuf:"varint,3,opt,name=reason,proto3,enum=reliant.v1.PersonalFundingQuestion_Reason" json:"reason,omitempty"`
+	State  PersonalFundingQuestion_State  `protobuf:"varint,4,opt,name=state,proto3,enum=reliant.v1.PersonalFundingQuestion_State" json:"state,omitempty"`
+	// model is the model the chat's turn resolved to ("<model>" registry id).
+	Model string `protobuf:"bytes,5,opt,name=model,proto3" json:"model,omitempty"`
+	// personal_provider and personal_account_label name the person's own
+	// account that would serve.
+	PersonalProvider     string `protobuf:"bytes,6,opt,name=personal_provider,json=personalProvider,proto3" json:"personal_provider,omitempty"`
+	PersonalAccountLabel string `protobuf:"bytes,7,opt,name=personal_account_label,json=personalAccountLabel,proto3" json:"personal_account_label,omitempty"`
+	// org_reset_at is when the org's accounts reset (REASON_LIMITED), RFC 3339.
+	OrgResetAt *string `protobuf:"bytes,8,opt,name=org_reset_at,json=orgResetAt,proto3,oneof" json:"org_reset_at,omitempty"`
+	// asked_at is when the chat asked, RFC 3339.
+	AskedAt       string `protobuf:"bytes,9,opt,name=asked_at,json=askedAt,proto3" json:"asked_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PersonalFundingQuestion) Reset() {
+	*x = PersonalFundingQuestion{}
+	mi := &file_reliant_v1_provider_account_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PersonalFundingQuestion) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PersonalFundingQuestion) ProtoMessage() {}
+
+func (x *PersonalFundingQuestion) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_provider_account_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PersonalFundingQuestion.ProtoReflect.Descriptor instead.
+func (*PersonalFundingQuestion) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_provider_account_proto_rawDescGZIP(), []int{16}
+}
+
+func (x *PersonalFundingQuestion) GetChatId() string {
+	if x != nil {
+		return x.ChatId
+	}
+	return ""
+}
+
+func (x *PersonalFundingQuestion) GetOrgId() string {
+	if x != nil {
+		return x.OrgId
+	}
+	return ""
+}
+
+func (x *PersonalFundingQuestion) GetReason() PersonalFundingQuestion_Reason {
+	if x != nil {
+		return x.Reason
+	}
+	return PersonalFundingQuestion_REASON_UNSPECIFIED
+}
+
+func (x *PersonalFundingQuestion) GetState() PersonalFundingQuestion_State {
+	if x != nil {
+		return x.State
+	}
+	return PersonalFundingQuestion_STATE_UNSPECIFIED
+}
+
+func (x *PersonalFundingQuestion) GetModel() string {
+	if x != nil {
+		return x.Model
+	}
+	return ""
+}
+
+func (x *PersonalFundingQuestion) GetPersonalProvider() string {
+	if x != nil {
+		return x.PersonalProvider
+	}
+	return ""
+}
+
+func (x *PersonalFundingQuestion) GetPersonalAccountLabel() string {
+	if x != nil {
+		return x.PersonalAccountLabel
+	}
+	return ""
+}
+
+func (x *PersonalFundingQuestion) GetOrgResetAt() string {
+	if x != nil && x.OrgResetAt != nil {
+		return *x.OrgResetAt
+	}
+	return ""
+}
+
+func (x *PersonalFundingQuestion) GetAskedAt() string {
+	if x != nil {
+		return x.AskedAt
+	}
+	return ""
+}
+
+type GetPersonalFundingQuestionRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ChatId        string                 `protobuf:"bytes,1,opt,name=chat_id,json=chatId,proto3" json:"chat_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetPersonalFundingQuestionRequest) Reset() {
+	*x = GetPersonalFundingQuestionRequest{}
+	mi := &file_reliant_v1_provider_account_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetPersonalFundingQuestionRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetPersonalFundingQuestionRequest) ProtoMessage() {}
+
+func (x *GetPersonalFundingQuestionRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_provider_account_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetPersonalFundingQuestionRequest.ProtoReflect.Descriptor instead.
+func (*GetPersonalFundingQuestionRequest) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_provider_account_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *GetPersonalFundingQuestionRequest) GetChatId() string {
+	if x != nil {
+		return x.ChatId
+	}
+	return ""
+}
+
+type GetPersonalFundingQuestionResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Unset when the chat has no question.
+	Question      *PersonalFundingQuestion `protobuf:"bytes,1,opt,name=question,proto3,oneof" json:"question,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetPersonalFundingQuestionResponse) Reset() {
+	*x = GetPersonalFundingQuestionResponse{}
+	mi := &file_reliant_v1_provider_account_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetPersonalFundingQuestionResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetPersonalFundingQuestionResponse) ProtoMessage() {}
+
+func (x *GetPersonalFundingQuestionResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_provider_account_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetPersonalFundingQuestionResponse.ProtoReflect.Descriptor instead.
+func (*GetPersonalFundingQuestionResponse) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_provider_account_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *GetPersonalFundingQuestionResponse) GetQuestion() *PersonalFundingQuestion {
+	if x != nil {
+		return x.Question
+	}
+	return nil
+}
+
+type ResolvePersonalFundingChoiceRequest struct {
+	state  protoimpl.MessageState                     `protogen:"open.v1"`
+	ChatId string                                     `protobuf:"bytes,1,opt,name=chat_id,json=chatId,proto3" json:"chat_id,omitempty"`
+	Choice ResolvePersonalFundingChoiceRequest_Choice `protobuf:"varint,2,opt,name=choice,proto3,enum=reliant.v1.ResolvePersonalFundingChoiceRequest_Choice" json:"choice,omitempty"`
+	// remember also sets the person's preference for the chat's org:
+	// use_personal with CHOICE_USE_PERSONAL, wait with CHOICE_KEEP_WAITING.
+	Remember      bool `protobuf:"varint,3,opt,name=remember,proto3" json:"remember,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ResolvePersonalFundingChoiceRequest) Reset() {
+	*x = ResolvePersonalFundingChoiceRequest{}
+	mi := &file_reliant_v1_provider_account_proto_msgTypes[19]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ResolvePersonalFundingChoiceRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ResolvePersonalFundingChoiceRequest) ProtoMessage() {}
+
+func (x *ResolvePersonalFundingChoiceRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_provider_account_proto_msgTypes[19]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ResolvePersonalFundingChoiceRequest.ProtoReflect.Descriptor instead.
+func (*ResolvePersonalFundingChoiceRequest) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_provider_account_proto_rawDescGZIP(), []int{19}
+}
+
+func (x *ResolvePersonalFundingChoiceRequest) GetChatId() string {
+	if x != nil {
+		return x.ChatId
+	}
+	return ""
+}
+
+func (x *ResolvePersonalFundingChoiceRequest) GetChoice() ResolvePersonalFundingChoiceRequest_Choice {
+	if x != nil {
+		return x.Choice
+	}
+	return ResolvePersonalFundingChoiceRequest_CHOICE_UNSPECIFIED
+}
+
+func (x *ResolvePersonalFundingChoiceRequest) GetRemember() bool {
+	if x != nil {
+		return x.Remember
+	}
+	return false
+}
+
+type ResolvePersonalFundingChoiceResponse struct {
+	state         protoimpl.MessageState   `protogen:"open.v1"`
+	Question      *PersonalFundingQuestion `protobuf:"bytes,1,opt,name=question,proto3" json:"question,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ResolvePersonalFundingChoiceResponse) Reset() {
+	*x = ResolvePersonalFundingChoiceResponse{}
+	mi := &file_reliant_v1_provider_account_proto_msgTypes[20]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ResolvePersonalFundingChoiceResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ResolvePersonalFundingChoiceResponse) ProtoMessage() {}
+
+func (x *ResolvePersonalFundingChoiceResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_provider_account_proto_msgTypes[20]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ResolvePersonalFundingChoiceResponse.ProtoReflect.Descriptor instead.
+func (*ResolvePersonalFundingChoiceResponse) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_provider_account_proto_rawDescGZIP(), []int{20}
+}
+
+func (x *ResolvePersonalFundingChoiceResponse) GetQuestion() *PersonalFundingQuestion {
+	if x != nil {
+		return x.Question
+	}
+	return nil
+}
+
 var File_reliant_v1_provider_account_proto protoreflect.FileDescriptor
 
 const file_reliant_v1_provider_account_proto_rawDesc = "" +
@@ -1241,7 +1711,44 @@ const file_reliant_v1_provider_account_proto_rawDesc = "" +
 	"\x1eGetChatProviderAccountResponse\x12:\n" +
 	"\aaccount\x18\x01 \x01(\v2\x1b.reliant.v1.ProviderAccountH\x00R\aaccount\x88\x01\x01B\n" +
 	"\n" +
-	"\b_account*\xdb\x01\n" +
+	"\b_account\"\xdb\x04\n" +
+	"\x17PersonalFundingQuestion\x12\x17\n" +
+	"\achat_id\x18\x01 \x01(\tR\x06chatId\x12\x15\n" +
+	"\x06org_id\x18\x02 \x01(\tR\x05orgId\x12B\n" +
+	"\x06reason\x18\x03 \x01(\x0e2*.reliant.v1.PersonalFundingQuestion.ReasonR\x06reason\x12?\n" +
+	"\x05state\x18\x04 \x01(\x0e2).reliant.v1.PersonalFundingQuestion.StateR\x05state\x12\x14\n" +
+	"\x05model\x18\x05 \x01(\tR\x05model\x12+\n" +
+	"\x11personal_provider\x18\x06 \x01(\tR\x10personalProvider\x124\n" +
+	"\x16personal_account_label\x18\a \x01(\tR\x14personalAccountLabel\x12%\n" +
+	"\forg_reset_at\x18\b \x01(\tH\x00R\n" +
+	"orgResetAt\x88\x01\x01\x12\x19\n" +
+	"\basked_at\x18\t \x01(\tR\aaskedAt\"^\n" +
+	"\x06Reason\x12\x16\n" +
+	"\x12REASON_UNSPECIFIED\x10\x00\x12\x12\n" +
+	"\x0eREASON_LIMITED\x10\x01\x12\x13\n" +
+	"\x0fREASON_UNUSABLE\x10\x02\x12\x13\n" +
+	"\x0fREASON_UNSERVED\x10\x03\"_\n" +
+	"\x05State\x12\x15\n" +
+	"\x11STATE_UNSPECIFIED\x10\x00\x12\x0f\n" +
+	"\vSTATE_ASKED\x10\x01\x12\x16\n" +
+	"\x12STATE_USE_PERSONAL\x10\x02\x12\x16\n" +
+	"\x12STATE_KEEP_WAITING\x10\x03B\x0f\n" +
+	"\r_org_reset_at\"<\n" +
+	"!GetPersonalFundingQuestionRequest\x12\x17\n" +
+	"\achat_id\x18\x01 \x01(\tR\x06chatId\"w\n" +
+	"\"GetPersonalFundingQuestionResponse\x12D\n" +
+	"\bquestion\x18\x01 \x01(\v2#.reliant.v1.PersonalFundingQuestionH\x00R\bquestion\x88\x01\x01B\v\n" +
+	"\t_question\"\xfe\x01\n" +
+	"#ResolvePersonalFundingChoiceRequest\x12\x17\n" +
+	"\achat_id\x18\x01 \x01(\tR\x06chatId\x12N\n" +
+	"\x06choice\x18\x02 \x01(\x0e26.reliant.v1.ResolvePersonalFundingChoiceRequest.ChoiceR\x06choice\x12\x1a\n" +
+	"\bremember\x18\x03 \x01(\bR\bremember\"R\n" +
+	"\x06Choice\x12\x16\n" +
+	"\x12CHOICE_UNSPECIFIED\x10\x00\x12\x17\n" +
+	"\x13CHOICE_USE_PERSONAL\x10\x01\x12\x17\n" +
+	"\x13CHOICE_KEEP_WAITING\x10\x02\"g\n" +
+	"$ResolvePersonalFundingChoiceResponse\x12?\n" +
+	"\bquestion\x18\x01 \x01(\v2#.reliant.v1.PersonalFundingQuestionR\bquestion*\xdb\x01\n" +
 	"\x15ProviderAccountStatus\x12'\n" +
 	"#PROVIDER_ACCOUNT_STATUS_UNSPECIFIED\x10\x00\x12%\n" +
 	"!PROVIDER_ACCOUNT_STATUS_AVAILABLE\x10\x01\x12#\n" +
@@ -1258,7 +1765,7 @@ const file_reliant_v1_provider_account_proto_rawDesc = "" +
 	"\x18USAGE_SOURCE_UNSPECIFIED\x10\x00\x12\x18\n" +
 	"\x14USAGE_SOURCE_HEADERS\x10\x01\x12\x1a\n" +
 	"\x16USAGE_SOURCE_USAGE_API\x10\x02\x12\x1c\n" +
-	"\x18USAGE_SOURCE_LIMIT_ERROR\x10\x032\xdb\t\n" +
+	"\x18USAGE_SOURCE_LIMIT_ERROR\x10\x032\xe4\f\n" +
 	"\x16ProviderAccountService\x12k\n" +
 	"\x14ListProviderAccounts\x12'.reliant.v1.ListProviderAccountsRequest\x1a(.reliant.v1.ListProviderAccountsResponse\"\x00\x12\xbc\x01\n" +
 	"\x15UpdateProviderAccount\x12(.reliant.v1.UpdateProviderAccountRequest\x1a).reliant.v1.UpdateProviderAccountResponse\"N\xa2\xbb\x18J:H\n" +
@@ -1274,7 +1781,9 @@ const file_reliant_v1_provider_account_proto_rawDesc = "" +
 	"\x03add\x12?\n" +
 	"\x10provider_account\x12\x13response.account.id\x1a\x16response.account.label*\bprovider\x12\xdb\x01\n" +
 	"\x1bRefreshProviderAccountUsage\x12..reliant.v1.RefreshProviderAccountUsageRequest\x1a/.reliant.v1.RefreshProviderAccountUsageResponse\"[\xa2\xbb\x18W:U:Sre-reads usage from the provider (throttled); changes only the cached usage windows\x12q\n" +
-	"\x16GetChatProviderAccount\x12).reliant.v1.GetChatProviderAccountRequest\x1a*.reliant.v1.GetChatProviderAccountResponse\"\x00B:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
+	"\x16GetChatProviderAccount\x12).reliant.v1.GetChatProviderAccountRequest\x1a*.reliant.v1.GetChatProviderAccountResponse\"\x00\x12\xaa\x01\n" +
+	"\x1aGetPersonalFundingQuestion\x12-.reliant.v1.GetPersonalFundingQuestionRequest\x1a..reliant.v1.GetPersonalFundingQuestionResponse\"-\xa2\xbb\x18):':%reads the chat's own pending question\x12\xd9\x01\n" +
+	"\x1cResolvePersonalFundingChoice\x12/.reliant.v1.ResolvePersonalFundingChoiceRequest\x1a0.reliant.v1.ResolvePersonalFundingChoiceResponse\"V\xa2\xbb\x18R:P:Nanswers the chat's own question; the chat's transcript notice records the moveB:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
 
 var (
 	file_reliant_v1_provider_account_proto_rawDescOnce sync.Once
@@ -1288,59 +1797,76 @@ func file_reliant_v1_provider_account_proto_rawDescGZIP() []byte {
 	return file_reliant_v1_provider_account_proto_rawDescData
 }
 
-var file_reliant_v1_provider_account_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
-var file_reliant_v1_provider_account_proto_msgTypes = make([]protoimpl.MessageInfo, 16)
+var file_reliant_v1_provider_account_proto_enumTypes = make([]protoimpl.EnumInfo, 6)
+var file_reliant_v1_provider_account_proto_msgTypes = make([]protoimpl.MessageInfo, 21)
 var file_reliant_v1_provider_account_proto_goTypes = []any{
-	(ProviderAccountStatus)(0),                  // 0: reliant.v1.ProviderAccountStatus
-	(ProviderAuthKind)(0),                       // 1: reliant.v1.ProviderAuthKind
-	(UsageSource)(0),                            // 2: reliant.v1.UsageSource
-	(*UsageWindow)(nil),                         // 3: reliant.v1.UsageWindow
-	(*ProviderAccount)(nil),                     // 4: reliant.v1.ProviderAccount
-	(*ListProviderAccountsRequest)(nil),         // 5: reliant.v1.ListProviderAccountsRequest
-	(*ListProviderAccountsResponse)(nil),        // 6: reliant.v1.ListProviderAccountsResponse
-	(*UpdateProviderAccountRequest)(nil),        // 7: reliant.v1.UpdateProviderAccountRequest
-	(*UpdateProviderAccountResponse)(nil),       // 8: reliant.v1.UpdateProviderAccountResponse
-	(*ReorderProviderAccountsRequest)(nil),      // 9: reliant.v1.ReorderProviderAccountsRequest
-	(*ReorderProviderAccountsResponse)(nil),     // 10: reliant.v1.ReorderProviderAccountsResponse
-	(*DeleteProviderAccountRequest)(nil),        // 11: reliant.v1.DeleteProviderAccountRequest
-	(*DeleteProviderAccountResponse)(nil),       // 12: reliant.v1.DeleteProviderAccountResponse
-	(*AddProviderAPIKeyRequest)(nil),            // 13: reliant.v1.AddProviderAPIKeyRequest
-	(*AddProviderAPIKeyResponse)(nil),           // 14: reliant.v1.AddProviderAPIKeyResponse
-	(*RefreshProviderAccountUsageRequest)(nil),  // 15: reliant.v1.RefreshProviderAccountUsageRequest
-	(*RefreshProviderAccountUsageResponse)(nil), // 16: reliant.v1.RefreshProviderAccountUsageResponse
-	(*GetChatProviderAccountRequest)(nil),       // 17: reliant.v1.GetChatProviderAccountRequest
-	(*GetChatProviderAccountResponse)(nil),      // 18: reliant.v1.GetChatProviderAccountResponse
+	(ProviderAccountStatus)(0),                      // 0: reliant.v1.ProviderAccountStatus
+	(ProviderAuthKind)(0),                           // 1: reliant.v1.ProviderAuthKind
+	(UsageSource)(0),                                // 2: reliant.v1.UsageSource
+	(PersonalFundingQuestion_Reason)(0),             // 3: reliant.v1.PersonalFundingQuestion.Reason
+	(PersonalFundingQuestion_State)(0),              // 4: reliant.v1.PersonalFundingQuestion.State
+	(ResolvePersonalFundingChoiceRequest_Choice)(0), // 5: reliant.v1.ResolvePersonalFundingChoiceRequest.Choice
+	(*UsageWindow)(nil),                             // 6: reliant.v1.UsageWindow
+	(*ProviderAccount)(nil),                         // 7: reliant.v1.ProviderAccount
+	(*ListProviderAccountsRequest)(nil),             // 8: reliant.v1.ListProviderAccountsRequest
+	(*ListProviderAccountsResponse)(nil),            // 9: reliant.v1.ListProviderAccountsResponse
+	(*UpdateProviderAccountRequest)(nil),            // 10: reliant.v1.UpdateProviderAccountRequest
+	(*UpdateProviderAccountResponse)(nil),           // 11: reliant.v1.UpdateProviderAccountResponse
+	(*ReorderProviderAccountsRequest)(nil),          // 12: reliant.v1.ReorderProviderAccountsRequest
+	(*ReorderProviderAccountsResponse)(nil),         // 13: reliant.v1.ReorderProviderAccountsResponse
+	(*DeleteProviderAccountRequest)(nil),            // 14: reliant.v1.DeleteProviderAccountRequest
+	(*DeleteProviderAccountResponse)(nil),           // 15: reliant.v1.DeleteProviderAccountResponse
+	(*AddProviderAPIKeyRequest)(nil),                // 16: reliant.v1.AddProviderAPIKeyRequest
+	(*AddProviderAPIKeyResponse)(nil),               // 17: reliant.v1.AddProviderAPIKeyResponse
+	(*RefreshProviderAccountUsageRequest)(nil),      // 18: reliant.v1.RefreshProviderAccountUsageRequest
+	(*RefreshProviderAccountUsageResponse)(nil),     // 19: reliant.v1.RefreshProviderAccountUsageResponse
+	(*GetChatProviderAccountRequest)(nil),           // 20: reliant.v1.GetChatProviderAccountRequest
+	(*GetChatProviderAccountResponse)(nil),          // 21: reliant.v1.GetChatProviderAccountResponse
+	(*PersonalFundingQuestion)(nil),                 // 22: reliant.v1.PersonalFundingQuestion
+	(*GetPersonalFundingQuestionRequest)(nil),       // 23: reliant.v1.GetPersonalFundingQuestionRequest
+	(*GetPersonalFundingQuestionResponse)(nil),      // 24: reliant.v1.GetPersonalFundingQuestionResponse
+	(*ResolvePersonalFundingChoiceRequest)(nil),     // 25: reliant.v1.ResolvePersonalFundingChoiceRequest
+	(*ResolvePersonalFundingChoiceResponse)(nil),    // 26: reliant.v1.ResolvePersonalFundingChoiceResponse
 }
 var file_reliant_v1_provider_account_proto_depIdxs = []int32{
 	1,  // 0: reliant.v1.ProviderAccount.auth_kind:type_name -> reliant.v1.ProviderAuthKind
 	0,  // 1: reliant.v1.ProviderAccount.status:type_name -> reliant.v1.ProviderAccountStatus
-	3,  // 2: reliant.v1.ProviderAccount.windows:type_name -> reliant.v1.UsageWindow
+	6,  // 2: reliant.v1.ProviderAccount.windows:type_name -> reliant.v1.UsageWindow
 	2,  // 3: reliant.v1.ProviderAccount.usage_source:type_name -> reliant.v1.UsageSource
-	4,  // 4: reliant.v1.ListProviderAccountsResponse.accounts:type_name -> reliant.v1.ProviderAccount
-	4,  // 5: reliant.v1.UpdateProviderAccountResponse.account:type_name -> reliant.v1.ProviderAccount
-	4,  // 6: reliant.v1.ReorderProviderAccountsResponse.accounts:type_name -> reliant.v1.ProviderAccount
-	4,  // 7: reliant.v1.AddProviderAPIKeyResponse.account:type_name -> reliant.v1.ProviderAccount
-	4,  // 8: reliant.v1.RefreshProviderAccountUsageResponse.account:type_name -> reliant.v1.ProviderAccount
-	4,  // 9: reliant.v1.GetChatProviderAccountResponse.account:type_name -> reliant.v1.ProviderAccount
-	5,  // 10: reliant.v1.ProviderAccountService.ListProviderAccounts:input_type -> reliant.v1.ListProviderAccountsRequest
-	7,  // 11: reliant.v1.ProviderAccountService.UpdateProviderAccount:input_type -> reliant.v1.UpdateProviderAccountRequest
-	9,  // 12: reliant.v1.ProviderAccountService.ReorderProviderAccounts:input_type -> reliant.v1.ReorderProviderAccountsRequest
-	11, // 13: reliant.v1.ProviderAccountService.DeleteProviderAccount:input_type -> reliant.v1.DeleteProviderAccountRequest
-	13, // 14: reliant.v1.ProviderAccountService.AddProviderAPIKey:input_type -> reliant.v1.AddProviderAPIKeyRequest
-	15, // 15: reliant.v1.ProviderAccountService.RefreshProviderAccountUsage:input_type -> reliant.v1.RefreshProviderAccountUsageRequest
-	17, // 16: reliant.v1.ProviderAccountService.GetChatProviderAccount:input_type -> reliant.v1.GetChatProviderAccountRequest
-	6,  // 17: reliant.v1.ProviderAccountService.ListProviderAccounts:output_type -> reliant.v1.ListProviderAccountsResponse
-	8,  // 18: reliant.v1.ProviderAccountService.UpdateProviderAccount:output_type -> reliant.v1.UpdateProviderAccountResponse
-	10, // 19: reliant.v1.ProviderAccountService.ReorderProviderAccounts:output_type -> reliant.v1.ReorderProviderAccountsResponse
-	12, // 20: reliant.v1.ProviderAccountService.DeleteProviderAccount:output_type -> reliant.v1.DeleteProviderAccountResponse
-	14, // 21: reliant.v1.ProviderAccountService.AddProviderAPIKey:output_type -> reliant.v1.AddProviderAPIKeyResponse
-	16, // 22: reliant.v1.ProviderAccountService.RefreshProviderAccountUsage:output_type -> reliant.v1.RefreshProviderAccountUsageResponse
-	18, // 23: reliant.v1.ProviderAccountService.GetChatProviderAccount:output_type -> reliant.v1.GetChatProviderAccountResponse
-	17, // [17:24] is the sub-list for method output_type
-	10, // [10:17] is the sub-list for method input_type
-	10, // [10:10] is the sub-list for extension type_name
-	10, // [10:10] is the sub-list for extension extendee
-	0,  // [0:10] is the sub-list for field type_name
+	7,  // 4: reliant.v1.ListProviderAccountsResponse.accounts:type_name -> reliant.v1.ProviderAccount
+	7,  // 5: reliant.v1.UpdateProviderAccountResponse.account:type_name -> reliant.v1.ProviderAccount
+	7,  // 6: reliant.v1.ReorderProviderAccountsResponse.accounts:type_name -> reliant.v1.ProviderAccount
+	7,  // 7: reliant.v1.AddProviderAPIKeyResponse.account:type_name -> reliant.v1.ProviderAccount
+	7,  // 8: reliant.v1.RefreshProviderAccountUsageResponse.account:type_name -> reliant.v1.ProviderAccount
+	7,  // 9: reliant.v1.GetChatProviderAccountResponse.account:type_name -> reliant.v1.ProviderAccount
+	3,  // 10: reliant.v1.PersonalFundingQuestion.reason:type_name -> reliant.v1.PersonalFundingQuestion.Reason
+	4,  // 11: reliant.v1.PersonalFundingQuestion.state:type_name -> reliant.v1.PersonalFundingQuestion.State
+	22, // 12: reliant.v1.GetPersonalFundingQuestionResponse.question:type_name -> reliant.v1.PersonalFundingQuestion
+	5,  // 13: reliant.v1.ResolvePersonalFundingChoiceRequest.choice:type_name -> reliant.v1.ResolvePersonalFundingChoiceRequest.Choice
+	22, // 14: reliant.v1.ResolvePersonalFundingChoiceResponse.question:type_name -> reliant.v1.PersonalFundingQuestion
+	8,  // 15: reliant.v1.ProviderAccountService.ListProviderAccounts:input_type -> reliant.v1.ListProviderAccountsRequest
+	10, // 16: reliant.v1.ProviderAccountService.UpdateProviderAccount:input_type -> reliant.v1.UpdateProviderAccountRequest
+	12, // 17: reliant.v1.ProviderAccountService.ReorderProviderAccounts:input_type -> reliant.v1.ReorderProviderAccountsRequest
+	14, // 18: reliant.v1.ProviderAccountService.DeleteProviderAccount:input_type -> reliant.v1.DeleteProviderAccountRequest
+	16, // 19: reliant.v1.ProviderAccountService.AddProviderAPIKey:input_type -> reliant.v1.AddProviderAPIKeyRequest
+	18, // 20: reliant.v1.ProviderAccountService.RefreshProviderAccountUsage:input_type -> reliant.v1.RefreshProviderAccountUsageRequest
+	20, // 21: reliant.v1.ProviderAccountService.GetChatProviderAccount:input_type -> reliant.v1.GetChatProviderAccountRequest
+	23, // 22: reliant.v1.ProviderAccountService.GetPersonalFundingQuestion:input_type -> reliant.v1.GetPersonalFundingQuestionRequest
+	25, // 23: reliant.v1.ProviderAccountService.ResolvePersonalFundingChoice:input_type -> reliant.v1.ResolvePersonalFundingChoiceRequest
+	9,  // 24: reliant.v1.ProviderAccountService.ListProviderAccounts:output_type -> reliant.v1.ListProviderAccountsResponse
+	11, // 25: reliant.v1.ProviderAccountService.UpdateProviderAccount:output_type -> reliant.v1.UpdateProviderAccountResponse
+	13, // 26: reliant.v1.ProviderAccountService.ReorderProviderAccounts:output_type -> reliant.v1.ReorderProviderAccountsResponse
+	15, // 27: reliant.v1.ProviderAccountService.DeleteProviderAccount:output_type -> reliant.v1.DeleteProviderAccountResponse
+	17, // 28: reliant.v1.ProviderAccountService.AddProviderAPIKey:output_type -> reliant.v1.AddProviderAPIKeyResponse
+	19, // 29: reliant.v1.ProviderAccountService.RefreshProviderAccountUsage:output_type -> reliant.v1.RefreshProviderAccountUsageResponse
+	21, // 30: reliant.v1.ProviderAccountService.GetChatProviderAccount:output_type -> reliant.v1.GetChatProviderAccountResponse
+	24, // 31: reliant.v1.ProviderAccountService.GetPersonalFundingQuestion:output_type -> reliant.v1.GetPersonalFundingQuestionResponse
+	26, // 32: reliant.v1.ProviderAccountService.ResolvePersonalFundingChoice:output_type -> reliant.v1.ResolvePersonalFundingChoiceResponse
+	24, // [24:33] is the sub-list for method output_type
+	15, // [15:24] is the sub-list for method input_type
+	15, // [15:15] is the sub-list for extension type_name
+	15, // [15:15] is the sub-list for extension extendee
+	0,  // [0:15] is the sub-list for field type_name
 }
 
 func init() { file_reliant_v1_provider_account_proto_init() }
@@ -1353,13 +1879,15 @@ func file_reliant_v1_provider_account_proto_init() {
 	file_reliant_v1_provider_account_proto_msgTypes[4].OneofWrappers = []any{}
 	file_reliant_v1_provider_account_proto_msgTypes[10].OneofWrappers = []any{}
 	file_reliant_v1_provider_account_proto_msgTypes[15].OneofWrappers = []any{}
+	file_reliant_v1_provider_account_proto_msgTypes[16].OneofWrappers = []any{}
+	file_reliant_v1_provider_account_proto_msgTypes[18].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_reliant_v1_provider_account_proto_rawDesc), len(file_reliant_v1_provider_account_proto_rawDesc)),
-			NumEnums:      3,
-			NumMessages:   16,
+			NumEnums:      6,
+			NumMessages:   21,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

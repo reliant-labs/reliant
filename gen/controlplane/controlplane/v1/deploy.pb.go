@@ -312,6 +312,9 @@ const (
 	// The compute subscription lapsed past grace (BillingLapsed). Fix: settle
 	// the invoice.
 	DeploySuspendReason_DEPLOY_SUSPEND_REASON_BILLING_LAPSED DeploySuspendReason = 3
+	// An unclaimed claimable deploy reached its expiry and the platform
+	// suspended it (ClaimableExpired). Fix: claim it before it is purged.
+	DeploySuspendReason_DEPLOY_SUSPEND_REASON_CLAIMABLE_EXPIRED DeploySuspendReason = 4
 )
 
 // Enum value maps for DeploySuspendReason.
@@ -321,12 +324,14 @@ var (
 		1: "DEPLOY_SUSPEND_REASON_OWNER",
 		2: "DEPLOY_SUSPEND_REASON_NO_COMPUTE_PLAN",
 		3: "DEPLOY_SUSPEND_REASON_BILLING_LAPSED",
+		4: "DEPLOY_SUSPEND_REASON_CLAIMABLE_EXPIRED",
 	}
 	DeploySuspendReason_value = map[string]int32{
-		"DEPLOY_SUSPEND_REASON_UNSPECIFIED":     0,
-		"DEPLOY_SUSPEND_REASON_OWNER":           1,
-		"DEPLOY_SUSPEND_REASON_NO_COMPUTE_PLAN": 2,
-		"DEPLOY_SUSPEND_REASON_BILLING_LAPSED":  3,
+		"DEPLOY_SUSPEND_REASON_UNSPECIFIED":       0,
+		"DEPLOY_SUSPEND_REASON_OWNER":             1,
+		"DEPLOY_SUSPEND_REASON_NO_COMPUTE_PLAN":   2,
+		"DEPLOY_SUSPEND_REASON_BILLING_LAPSED":    3,
+		"DEPLOY_SUSPEND_REASON_CLAIMABLE_EXPIRED": 4,
 	}
 )
 
@@ -8684,12 +8689,13 @@ const file_controlplane_v1_deploy_proto_rawDesc = "" +
 	"\x1bDEPLOY_OBSERVED_STATE_READY\x10\x03\x12\"\n" +
 	"\x1eDEPLOY_OBSERVED_STATE_DEGRADED\x10\x04\x12#\n" +
 	"\x1fDEPLOY_OBSERVED_STATE_SUSPENDED\x10\x05\x12!\n" +
-	"\x1dDEPLOY_OBSERVED_STATE_DELETED\x10\x06*\xb2\x01\n" +
+	"\x1dDEPLOY_OBSERVED_STATE_DELETED\x10\x06*\xdf\x01\n" +
 	"\x13DeploySuspendReason\x12%\n" +
 	"!DEPLOY_SUSPEND_REASON_UNSPECIFIED\x10\x00\x12\x1f\n" +
 	"\x1bDEPLOY_SUSPEND_REASON_OWNER\x10\x01\x12)\n" +
 	"%DEPLOY_SUSPEND_REASON_NO_COMPUTE_PLAN\x10\x02\x12(\n" +
-	"$DEPLOY_SUSPEND_REASON_BILLING_LAPSED\x10\x03*\xc2\x01\n" +
+	"$DEPLOY_SUSPEND_REASON_BILLING_LAPSED\x10\x03\x12+\n" +
+	"'DEPLOY_SUSPEND_REASON_CLAIMABLE_EXPIRED\x10\x04*\xc2\x01\n" +
 	"\rDeployVerdict\x12\x1e\n" +
 	"\x1aDEPLOY_VERDICT_UNSPECIFIED\x10\x00\x12\x1a\n" +
 	"\x16DEPLOY_VERDICT_UNKNOWN\x10\x01\x12\x1d\n" +

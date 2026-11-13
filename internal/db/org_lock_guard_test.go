@@ -49,6 +49,9 @@ var orgWritingDecls = map[string]string{
 	"moveProjectOrgChatsSQL":       "restamps the moved project's chats (MoveProjectOrg, orgSensitiveStoreWrites)",
 	"moveProjectOrgRunsSQL":        "restamps the moved chats' runs (MoveProjectOrg, orgSensitiveStoreWrites)",
 	"moveProjectOrgTriggerSQL":     "restamps a moved trigger (MoveProjectOrg, orgSensitiveStoreWrites)",
+	// Provenance, not placement: the org of the run a thread's call was paid in. Nothing is
+	// scoped by it; a project move leaves it naming the old org, which only makes it not count.
+	"PutThreadFunding": "records the org a thread's call was paid in (thread_funding); no org lock: it scopes nothing",
 }
 
 var writesOrgID = regexp.MustCompile(`(?i)\bSET\s+org_id\b|\borg_id\s*=\s*COALESCE\(`)

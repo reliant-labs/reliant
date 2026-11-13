@@ -50,6 +50,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/machinewake"
 	"github.com/reliant-labs/reliant/internal/netguard"
 	"github.com/reliant-labs/reliant/internal/orgmove"
+	"github.com/reliant-labs/reliant/internal/orgpolicy"
 	"github.com/reliant-labs/reliant/internal/orgs"
 	"github.com/reliant-labs/reliant/internal/queueddelivery"
 	"github.com/reliant-labs/reliant/internal/readguard"
@@ -257,6 +258,8 @@ type APIListenerDeps struct {
 	Logger *slog.Logger
 	// Membership decides org resources (authz); the org resolver.
 	Membership *orgs.Resolver
+	// Policies is the org policy resolver every request carries (orgpolicy).
+	Policies *orgpolicy.Resolver
 }
 
 // NewAPIListener is the address browsers, the CLI and `rlat_` tokens call
@@ -275,6 +278,7 @@ func NewAPIListener(d APIListenerDeps) (*grpcserver.APIListener, error) {
 		CORSAllowedOrigins: d.API.GetCorsAllowedOrigins(),
 		Chain:              d.Chain,
 		Membership:         d.Membership,
+		Policies:           d.Policies,
 		Routes: serverkit.RoutesFunc(func(mux *http.ServeMux, opts ...connect.HandlerOption) []string {
 			services := d.Routes.Register(mux, opts...)
 			d.HTTP.Register(mux)

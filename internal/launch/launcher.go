@@ -496,8 +496,11 @@ func (l *Launcher) launchNew(ctx context.Context, ev Event, spec Spec, seed seed
 	// the transaction below), so the start's deadline is measured from no
 	// later than the stamp capacity recovery ages.
 	var attemptAt time.Time
+	// userMessageID is the stored id of the seed's user message.
+	var userMessageID string
 	if err := l.repo.RunTx(ctx, launchTx, func(txCtx context.Context) error {
 		attemptAt = time.Now()
+		userMessageID = ""
 		// The owner's org lock first, before the guard's or any other row
 		// lock: the chat's org was decided from its project's, which no
 		// backfill may stamp between that decision and this insert.
@@ -558,9 +561,11 @@ func (l *Launcher) launchNew(ctx context.Context, ev Event, spec Spec, seed seed
 			return fmt.Errorf("failed to create workflow and thread: %w", err)
 		}
 
-		if err := l.saveSeedMessages(txCtx, chatID, workflowID, seed.systemMessages, seed, spec.Attachments, spec.ClientMessageID); err != nil {
+		savedID, err := l.saveSeedMessages(txCtx, chatID, workflowID, seed.systemMessages, seed, spec.Attachments, spec.ClientMessageID)
+		if err != nil {
 			return err
 		}
+		userMessageID = savedID
 
 		if chatCreatedJSON != nil {
 			if err := l.repo.CreateUserUpdate(txCtx, &db.UserUpdate{
@@ -596,7 +601,7 @@ func (l *Launcher) launchNew(ctx context.Context, ev Event, spec Spec, seed seed
 		return nil, &InternalError{Reason: "failed to create chat", Err: err}
 	}
 
-	return l.start(ctx, startParams{
+	result, err := l.start(ctx, startParams{
 		chat:          chat,
 		workflowName:  workflowName,
 		spec:          spec,
@@ -607,6 +612,10 @@ func (l *Launcher) launchNew(ctx context.Context, ev Event, spec Spec, seed seed
 		generateTitle: spec.GenerateTitle,
 		attemptAt:     attemptAt,
 	})
+	if result != nil {
+		result.UserMessageID = userMessageID
+	}
+	return result, err
 }
 
 // launchPending starts an existing PENDING chat: a branched chat's first send,
@@ -751,7 +760,11 @@ func (l *Launcher) launchPending(ctx context.Context, ev Event, spec Spec, seed 
 		}
 	}
 
+	// userMessageID is the stored id of the seed's user message; it stays
+	// empty when a concurrent identical start already wrote it.
+	var userMessageID string
 	if err := l.repo.RunTx(ctx, orm.Serializable, func(txCtx context.Context) error {
+		userMessageID = ""
 		cur, err := l.repo.GetChat(txCtx, chat.ID)
 		if err != nil {
 			return fmt.Errorf("failed to reload chat: %w", err)
@@ -821,7 +834,9 @@ func (l *Launcher) launchPending(ctx context.Context, ev Event, spec Spec, seed 
 		// append to it. Whether the run probes for greenfield is the
 		// caller's Spec.GreenfieldProbe, which a branch's first send leaves
 		// off: a branch is not a first turn of new work.
-		return l.saveSeedMessages(txCtx, cur.ID, workflowID, seed.systemMessages, seed, spec.Attachments, spec.ClientMessageID)
+		savedID, err := l.saveSeedMessages(txCtx, cur.ID, workflowID, seed.systemMessages, seed, spec.Attachments, spec.ClientMessageID)
+		userMessageID = savedID
+		return err
 	}); err != nil {
 		if errors.Is(err, ErrNotPending) {
 			// The chat started between the check above and the transaction.
@@ -842,7 +857,11 @@ func (l *Launcher) launchPending(ctx context.Context, ev Event, spec Spec, seed 
 	if err != nil {
 		return nil, &InternalError{Reason: "failed to reload the recorded start", Err: err}
 	}
-	return l.startRecorded(ctx, recorded, spec, seed)
+	result, err := l.startRecorded(ctx, recorded, spec, seed)
+	if result != nil {
+		result.UserMessageID = userMessageID
+	}
+	return result, err
 }
 
 // effectiveStart is what a start of chat with spec would run as: the workflow
@@ -1214,6 +1233,8 @@ func (l *Launcher) buildInputs(
 
 // saveSeedMessages writes the seed messages to the root thread. System
 // messages go first, then the user message, so the model reads them in order.
+// It returns the stored id of the user message it saved, or "" when the seed
+// carries none.
 func (l *Launcher) saveSeedMessages(
 	ctx context.Context,
 	chatID, threadID string,
@@ -1221,18 +1242,19 @@ func (l *Launcher) saveSeedMessages(
 	seed seedContent,
 	attachments []string,
 	userMessageID string,
-) error {
+) (string, error) {
 	for _, sysMsg := range systemMessages {
 		if _, err := l.repo.SaveMessageToThread(ctx, chatID, threadID, int32(reliantv1.MessageRole_MESSAGE_ROLE_SYSTEM), sysMsg.Content, &threadID, nil, displayStyleProtoToInt32Ptr(sysMsg.DisplayStyle)); err != nil {
-			return fmt.Errorf("failed to save system message: %w", err)
+			return "", fmt.Errorf("failed to save system message: %w", err)
 		}
 	}
 	if seed.hasUserContent || len(attachments) > 0 {
 		if userMessageID == "" {
-			if _, err := l.repo.SaveMessageToThread(ctx, chatID, threadID, int32(reliantv1.MessageRole_MESSAGE_ROLE_USER), seed.userContent, &threadID, attachments, nil); err != nil {
-				return fmt.Errorf("failed to save first message: %w", err)
+			saved, err := l.repo.SaveMessageToThread(ctx, chatID, threadID, int32(reliantv1.MessageRole_MESSAGE_ROLE_USER), seed.userContent, &threadID, attachments, nil)
+			if err != nil {
+				return "", fmt.Errorf("failed to save first message: %w", err)
 			}
-			return nil
+			return saved.ID, nil
 		}
 		// The client's id is the row's id, and rows share one id space: this
 		// chat is new (or pending, with no message under this id yet), so a
@@ -1240,13 +1262,14 @@ func (l *Launcher) saveSeedMessages(
 		// cannot be the key of this one.
 		_, created, err := l.repo.SaveMessageToThreadOnce(ctx, chatID, threadID, int32(reliantv1.MessageRole_MESSAGE_ROLE_USER), seed.userContent, &threadID, attachments, nil, userMessageID)
 		if err != nil {
-			return fmt.Errorf("failed to save first message: %w", err)
+			return "", fmt.Errorf("failed to save first message: %w", err)
 		}
 		if !created {
-			return ErrClientMessageReused
+			return "", ErrClientMessageReused
 		}
+		return userMessageID, nil
 	}
-	return nil
+	return "", nil
 }
 
 type startParams struct {

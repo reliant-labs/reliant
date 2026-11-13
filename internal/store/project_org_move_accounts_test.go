@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/orm"
@@ -218,4 +219,72 @@ func TestMoveProjectOrgCallsTheTriggerFundingSeam(t *testing.T) {
 	_, err = f.env.Repo.MoveProjectOrg(ctx, core.ProjectOrgMoveCommit{MoveID: move.ID})
 	require.NoError(t, err)
 	assert.Len(t, calls, 2)
+}
+
+// A moved chat's personal-funding question or lease, and its threads' funding
+// provenance, were about the source org's accounts: the move clears them in its
+// transaction, so in the target org the chat asks afresh (review of #2694,
+// round 3, B2). A chat that did not move keeps both.
+func TestMoveProjectOrgClearsPersonalFunding(t *testing.T) {
+	f := newCredFixture(t)
+	ctx := context.Background()
+	f.mvProject("p-move")
+	f.mvChat("c-move", "p-move")
+	f.mvProject("p-stay")
+	f.mvChat("c-stay", "p-stay")
+	until := credT0.Add(time.Hour)
+	for _, chat := range []string{"c-move", "c-stay"} {
+		require.NoError(t, store.PutChatPersonalFunding(ctx, f.env.ORM, core.PersonalFunding{
+			ChatID: chat, UserID: mvOwner, OrgID: mvSrc, State: core.PersonalFundingUsePersonal,
+			Reason: core.PersonalFundingLimited, LeaseUntil: &until, AskedAt: credT0, UpdatedAt: credT0,
+		}))
+		require.NoError(t, store.PutThreadFunding(ctx, f.env.ORM, chat, mvSrc, "org_key", "k-src", credT0))
+	}
+
+	move := f.mvPrepared("p-move")
+	_, err := f.env.Repo.MoveProjectOrg(ctx, core.ProjectOrgMoveCommit{MoveID: move.ID})
+	require.NoError(t, err)
+
+	assert.Equal(t, 0, f.count(`SELECT count(*) FROM chat_personal_funding WHERE chat_id = 'c-move'`), "the lease does not follow the chat")
+	assert.Equal(t, 0, f.count(`SELECT count(*) FROM thread_funding WHERE thread_id = 'c-move'`))
+	assert.Equal(t, 1, f.count(`SELECT count(*) FROM chat_personal_funding WHERE chat_id = 'c-stay'`))
+	assert.Equal(t, 1, f.count(`SELECT count(*) FROM thread_funding WHERE thread_id = 'c-stay'`))
+}
+
+// thread_funding records who pays for a thread's calls: a write on the same
+// account is a no-op, a change replaces it, and the row outlives the account's
+// deletion (no foreign key to provider_accounts), going only with its thread.
+func TestThreadFundingPersistsAcrossAccountDeletion(t *testing.T) {
+	f := newCredFixture(t)
+	ctx := context.Background()
+	f.mvProject("p-1")
+	f.mvChat("c-1", "p-1")
+	f.orgKey("k-src", mvSrc)
+
+	require.NoError(t, store.PutThreadFunding(ctx, f.env.ORM, "c-1", mvSrc, "org_key", "k-src", credT0))
+	require.NoError(t, store.PutThreadFunding(ctx, f.env.ORM, "c-1", mvSrc, "org_key", "k-src", credT0.Add(time.Hour)))
+	funding, org, acct, found, err := store.GetThreadFunding(ctx, f.env.ORM, "c-1")
+	require.NoError(t, err)
+	require.True(t, found)
+	assert.Equal(t, []string{"org_key", mvSrc, "k-src"}, []string{funding, org, acct})
+	assert.Equal(t, 1, f.count(`SELECT count(*) FROM thread_funding WHERE thread_id = 'c-1' AND updated_at = $1`, credT0),
+		"the same account again writes nothing")
+
+	f.exec(`DELETE FROM provider_accounts WHERE id = 'k-src'`)
+	funding, _, acct, found, err = store.GetThreadFunding(ctx, f.env.ORM, "c-1")
+	require.NoError(t, err)
+	require.True(t, found, "provenance outlives the account")
+	assert.Equal(t, "org_key", funding)
+	assert.Equal(t, "k-src", acct)
+
+	require.NoError(t, store.PutThreadFunding(ctx, f.env.ORM, "c-1", mvSrc, "personal", "mine", credT0.Add(2*time.Hour)))
+	funding, _, acct, _, err = store.GetThreadFunding(ctx, f.env.ORM, "c-1")
+	require.NoError(t, err)
+	assert.Equal(t, []string{"personal", "mine"}, []string{funding, acct}, "a new account replaces it")
+
+	_, _, _, found, err = store.GetThreadFunding(ctx, f.env.ORM, "no-such-thread")
+	require.NoError(t, err)
+	assert.False(t, found)
+	require.NoError(t, f.env.Repo.DeleteChat(ctx, "c-1"))
+	assert.Equal(t, 0, f.count(`SELECT count(*) FROM thread_funding`), "it goes with its thread")
 }

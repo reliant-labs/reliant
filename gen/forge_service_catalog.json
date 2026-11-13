@@ -49,6 +49,7 @@
         "ModelEndpoint",
         "NATSConn",
         "OrgCredentialSweep",
+        "OrgPolicyResolver",
         "OrgProviderAccount",
         "OrgResolver",
         "PackageCommands",
@@ -417,6 +418,7 @@
         "JetStream",
         "ManagedReconciler",
         "NATSConn",
+        "OrgPolicyResolver",
         "OrgResolver",
         "Pprof",
         "StateDerivation",
@@ -461,6 +463,7 @@
         "IntegrationSettings",
         "LedgerRetention",
         "NATSConn",
+        "OrgPolicyResolver",
         "OrgResolver",
         "PauseService",
         "PayloadStore",
@@ -27021,6 +27024,16 @@
           "auth_required": true
         },
         {
+          "id": "reliant.v1.ProviderAccountService/GetPersonalFundingQuestion",
+          "name": "GetPersonalFundingQuestion",
+          "input": "reliant.v1.GetPersonalFundingQuestionRequest",
+          "output": "reliant.v1.GetPersonalFundingQuestionResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "UNKNOWN",
+          "auth_required": true
+        },
+        {
           "id": "reliant.v1.ProviderAccountService/ListProviderAccounts",
           "name": "ListProviderAccounts",
           "input": "reliant.v1.ListProviderAccountsRequest",
@@ -27045,6 +27058,16 @@
           "name": "ReorderProviderAccounts",
           "input": "reliant.v1.ReorderProviderAccountsRequest",
           "output": "reliant.v1.ReorderProviderAccountsResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "UNKNOWN",
+          "auth_required": true
+        },
+        {
+          "id": "reliant.v1.ProviderAccountService/ResolvePersonalFundingChoice",
+          "name": "ResolvePersonalFundingChoice",
+          "input": "reliant.v1.ResolvePersonalFundingChoiceRequest",
+          "output": "reliant.v1.ResolvePersonalFundingChoiceResponse",
           "client_streaming": false,
           "server_streaming": false,
           "idempotency": "UNKNOWN",
@@ -27204,6 +27227,45 @@
             "Activity": {
               "Mutating": false
             }
+          },
+          {
+            "Name": "GetPersonalFundingQuestion",
+            "InputType": "GetPersonalFundingQuestionRequest",
+            "OutputType": "GetPersonalFundingQuestionResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "Custom": true,
+            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "InputTypeFQ": "reliant.v1.GetPersonalFundingQuestionRequest",
+            "OutputTypeFQ": "reliant.v1.GetPersonalFundingQuestionResponse",
+            "InputProtoFile": "reliant/v1/provider_account.proto",
+            "OutputProtoFile": "reliant/v1/provider_account.proto",
+            "Activity": {
+              "Mutating": false,
+              "Declared": true,
+              "None": "reads the chat's own pending question"
+            }
+          },
+          {
+            "Name": "ResolvePersonalFundingChoice",
+            "InputType": "ResolvePersonalFundingChoiceRequest",
+            "OutputType": "ResolvePersonalFundingChoiceResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "InputTypeFQ": "reliant.v1.ResolvePersonalFundingChoiceRequest",
+            "OutputTypeFQ": "reliant.v1.ResolvePersonalFundingChoiceResponse",
+            "InputProtoFile": "reliant/v1/provider_account.proto",
+            "OutputProtoFile": "reliant/v1/provider_account.proto",
+            "Activity": {
+              "Mutating": true,
+              "Declared": true,
+              "None": "answers the chat's own question; the chat's transcript notice records the move"
+            }
           }
         ],
         "ProtoFile": "reliant/v1/provider_account.proto",
@@ -27262,6 +27324,21 @@
               "MessageType": "reliant.v1.ProviderAccount"
             }
           ],
+          "GetPersonalFundingQuestionRequest": [
+            {
+              "Name": "chat_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            }
+          ],
+          "GetPersonalFundingQuestionResponse": [
+            {
+              "Name": "question",
+              "ProtoType": "message",
+              "IsOptional": true,
+              "MessageType": "reliant.v1.PersonalFundingQuestion"
+            }
+          ],
           "ListProviderAccountsRequest": null,
           "ListProviderAccountsResponse": [
             {
@@ -27309,6 +27386,31 @@
               "ProtoType": "[]message",
               "IsOptional": false,
               "MessageType": "reliant.v1.ProviderAccount"
+            }
+          ],
+          "ResolvePersonalFundingChoiceRequest": [
+            {
+              "Name": "chat_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "choice",
+              "ProtoType": "enum",
+              "IsOptional": false
+            },
+            {
+              "Name": "remember",
+              "ProtoType": "bool",
+              "IsOptional": false
+            }
+          ],
+          "ResolvePersonalFundingChoiceResponse": [
+            {
+              "Name": "question",
+              "ProtoType": "message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.PersonalFundingQuestion"
             }
           ],
           "UpdateProviderAccountRequest": [
@@ -27386,6 +27488,20 @@
               "optional": true
             }
           ],
+          "reliant.v1.GetPersonalFundingQuestionRequest": [
+            {
+              "name": "chat_id",
+              "kind": "string"
+            }
+          ],
+          "reliant.v1.GetPersonalFundingQuestionResponse": [
+            {
+              "name": "question",
+              "kind": "message",
+              "type_name": "reliant.v1.PersonalFundingQuestion",
+              "optional": true
+            }
+          ],
           "reliant.v1.ListProviderAccountsRequest": [],
           "reliant.v1.ListProviderAccountsResponse": [
             {
@@ -27393,6 +27509,47 @@
               "kind": "message",
               "type_name": "reliant.v1.ProviderAccount",
               "repeated": true
+            }
+          ],
+          "reliant.v1.PersonalFundingQuestion": [
+            {
+              "name": "chat_id",
+              "kind": "string"
+            },
+            {
+              "name": "org_id",
+              "kind": "string"
+            },
+            {
+              "name": "reason",
+              "kind": "enum",
+              "type_name": "reliant.v1.PersonalFundingQuestion.Reason"
+            },
+            {
+              "name": "state",
+              "kind": "enum",
+              "type_name": "reliant.v1.PersonalFundingQuestion.State"
+            },
+            {
+              "name": "model",
+              "kind": "string"
+            },
+            {
+              "name": "personal_provider",
+              "kind": "string"
+            },
+            {
+              "name": "personal_account_label",
+              "kind": "string"
+            },
+            {
+              "name": "org_reset_at",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "asked_at",
+              "kind": "string"
             }
           ],
           "reliant.v1.ProviderAccount": [
@@ -27532,6 +27689,28 @@
               "repeated": true
             }
           ],
+          "reliant.v1.ResolvePersonalFundingChoiceRequest": [
+            {
+              "name": "chat_id",
+              "kind": "string"
+            },
+            {
+              "name": "choice",
+              "kind": "enum",
+              "type_name": "reliant.v1.ResolvePersonalFundingChoiceRequest.Choice"
+            },
+            {
+              "name": "remember",
+              "kind": "bool"
+            }
+          ],
+          "reliant.v1.ResolvePersonalFundingChoiceResponse": [
+            {
+              "name": "question",
+              "kind": "message",
+              "type_name": "reliant.v1.PersonalFundingQuestion"
+            }
+          ],
           "reliant.v1.UpdateProviderAccountRequest": [
             {
               "name": "account_id",
@@ -27587,18 +27766,35 @@
           "reliant.v1.DeleteProviderAccountResponse": "reliant/v1/provider_account.proto",
           "reliant.v1.GetChatProviderAccountRequest": "reliant/v1/provider_account.proto",
           "reliant.v1.GetChatProviderAccountResponse": "reliant/v1/provider_account.proto",
+          "reliant.v1.GetPersonalFundingQuestionRequest": "reliant/v1/provider_account.proto",
+          "reliant.v1.GetPersonalFundingQuestionResponse": "reliant/v1/provider_account.proto",
           "reliant.v1.ListProviderAccountsRequest": "reliant/v1/provider_account.proto",
           "reliant.v1.ListProviderAccountsResponse": "reliant/v1/provider_account.proto",
+          "reliant.v1.PersonalFundingQuestion": "reliant/v1/provider_account.proto",
           "reliant.v1.ProviderAccount": "reliant/v1/provider_account.proto",
           "reliant.v1.RefreshProviderAccountUsageRequest": "reliant/v1/provider_account.proto",
           "reliant.v1.RefreshProviderAccountUsageResponse": "reliant/v1/provider_account.proto",
           "reliant.v1.ReorderProviderAccountsRequest": "reliant/v1/provider_account.proto",
           "reliant.v1.ReorderProviderAccountsResponse": "reliant/v1/provider_account.proto",
+          "reliant.v1.ResolvePersonalFundingChoiceRequest": "reliant/v1/provider_account.proto",
+          "reliant.v1.ResolvePersonalFundingChoiceResponse": "reliant/v1/provider_account.proto",
           "reliant.v1.UpdateProviderAccountRequest": "reliant/v1/provider_account.proto",
           "reliant.v1.UpdateProviderAccountResponse": "reliant/v1/provider_account.proto",
           "reliant.v1.UsageWindow": "reliant/v1/provider_account.proto"
         },
         "Enums": {
+          "reliant.v1.PersonalFundingQuestion.Reason": [
+            "REASON_UNSPECIFIED",
+            "REASON_LIMITED",
+            "REASON_UNUSABLE",
+            "REASON_UNSERVED"
+          ],
+          "reliant.v1.PersonalFundingQuestion.State": [
+            "STATE_UNSPECIFIED",
+            "STATE_ASKED",
+            "STATE_USE_PERSONAL",
+            "STATE_KEEP_WAITING"
+          ],
           "reliant.v1.ProviderAccountStatus": [
             "PROVIDER_ACCOUNT_STATUS_UNSPECIFIED",
             "PROVIDER_ACCOUNT_STATUS_AVAILABLE",
@@ -27613,6 +27809,11 @@
             "PROVIDER_AUTH_KIND_DEVICE",
             "PROVIDER_AUTH_KIND_MANAGED"
           ],
+          "reliant.v1.ResolvePersonalFundingChoiceRequest.Choice": [
+            "CHOICE_UNSPECIFIED",
+            "CHOICE_USE_PERSONAL",
+            "CHOICE_KEEP_WAITING"
+          ],
           "reliant.v1.UsageSource": [
             "USAGE_SOURCE_UNSPECIFIED",
             "USAGE_SOURCE_HEADERS",
@@ -27621,6 +27822,18 @@
           ]
         },
         "EnumNumbers": {
+          "reliant.v1.PersonalFundingQuestion.Reason": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "reliant.v1.PersonalFundingQuestion.State": [
+            0,
+            1,
+            2,
+            3
+          ],
           "reliant.v1.ProviderAccountStatus": [
             0,
             1,
@@ -27635,6 +27848,11 @@
             3,
             4
           ],
+          "reliant.v1.ResolvePersonalFundingChoiceRequest.Choice": [
+            0,
+            1,
+            2
+          ],
           "reliant.v1.UsageSource": [
             0,
             1,
@@ -27643,6 +27861,14 @@
           ]
         },
         "EnumGoRefs": {
+          "reliant.v1.PersonalFundingQuestion.Reason": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "PersonalFundingQuestion_Reason"
+          },
+          "reliant.v1.PersonalFundingQuestion.State": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "PersonalFundingQuestion_State"
+          },
           "reliant.v1.ProviderAccountStatus": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
             "GoName": "ProviderAccountStatus"
@@ -27650,6 +27876,10 @@
           "reliant.v1.ProviderAuthKind": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
             "GoName": "ProviderAuthKind"
+          },
+          "reliant.v1.ResolvePersonalFundingChoiceRequest.Choice": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "ResolvePersonalFundingChoiceRequest_Choice"
           },
           "reliant.v1.UsageSource": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
@@ -51369,6 +51599,18 @@
       "implementation_candidates": []
     },
     {
+      "id": "OrgPolicyResolver",
+      "name": "OrgPolicyResolver",
+      "kind": "provider",
+      "type": "*github.com/reliant-labs/reliant/internal/orgpolicy.Resolver",
+      "source": {
+        "path": "internal/app/providers.go",
+        "symbol": "NewOrgPolicyResolver"
+      },
+      "methods": [],
+      "implementation_candidates": []
+    },
+    {
       "id": "OrgProviderAccount",
       "name": "OrgProviderAccount",
       "kind": "component",
@@ -52930,6 +53172,19 @@
     },
     {
       "consumer": "OrgCredentialSweep",
+      "field": "Authority",
+      "interface": "github.com/reliant-labs/reliant/internal/tokenauthority.Authority",
+      "methods": [],
+      "candidates": [
+        "TokenAuthority"
+      ],
+      "providers": [
+        "TokenAuthority"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "OrgPolicyResolver",
       "field": "Authority",
       "interface": "github.com/reliant-labs/reliant/internal/tokenauthority.Authority",
       "methods": [],

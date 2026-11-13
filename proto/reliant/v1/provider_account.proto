@@ -87,6 +87,33 @@ service ProviderAccountService {
   // GetChatProviderAccount returns the account the chat's root thread is
   // currently using for its provider; unset when none is assigned yet.
   rpc GetChatProviderAccount(GetChatProviderAccountRequest) returns (GetChatProviderAccountResponse) {}
+
+  // GetPersonalFundingQuestion returns the chat's open question "continue on
+  // your own account?" (control-plane docs/design/org-provider-accounts.md
+  // §10), if any. Before a chat in an org moves from the org's accounts to
+  // the person's own, it parks and asks once, for every thread of the chat.
+  // The chat's owner only.
+  // forge:custom
+  rpc GetPersonalFundingQuestion(GetPersonalFundingQuestionRequest) returns (GetPersonalFundingQuestionResponse) {
+    option (forge.v1.method) = {
+      activity: {none: "reads the chat's own pending question"}
+    };
+  }
+
+  // ResolvePersonalFundingChoice answers the chat's question. USE_PERSONAL
+  // lets every waiting thread of the chat, sub-agents included, continue on
+  // the person's own account for as long as the answer lasts: until the
+  // org's accounts reset (LIMITED), until a turn start finds them usable
+  // again (UNUSABLE), or while the chat keeps its model (UNSERVED).
+  // KEEP_WAITING keeps waiting. remember also sets the person's preference
+  // for the org (provider.org_funding: use_personal or wait). Person-only, and
+  // the chat's owner only: nothing else can spend the person's own account in
+  // place of the org's.
+  rpc ResolvePersonalFundingChoice(ResolvePersonalFundingChoiceRequest) returns (ResolvePersonalFundingChoiceResponse) {
+    option (forge.v1.method) = {
+      activity: {none: "answers the chat's own question; the chat's transcript notice records the move"}
+    };
+  }
 }
 
 // ProviderAccountStatus is derived, never stored. Precedence:
@@ -221,4 +248,68 @@ message GetChatProviderAccountRequest {
 }
 message GetChatProviderAccountResponse {
   optional ProviderAccount account = 1;
+}
+
+// PersonalFundingQuestion is a chat's question before it would move from its
+// org's accounts to the person's own (org-provider-accounts §10).
+message PersonalFundingQuestion {
+  enum Reason {
+    REASON_UNSPECIFIED = 0;
+    // The org's accounts are rate-limited until org_reset_at.
+    REASON_LIMITED = 1;
+    // No org account is usable and none will be at a known time: a key
+    // revoked, rejected or paused, a grant withdrawn, the org's credit spent.
+    REASON_UNUSABLE = 2;
+    // None of the org's accounts serves the chat's model.
+    REASON_UNSERVED = 3;
+  }
+  enum State {
+    STATE_UNSPECIFIED = 0;
+    // Asked, not answered: the chat waits.
+    STATE_ASKED = 1;
+    // Continue on the person's own account while the answer lasts.
+    STATE_USE_PERSONAL = 2;
+    // Keep waiting for the org's accounts.
+    STATE_KEEP_WAITING = 3;
+  }
+  string chat_id = 1;
+  string org_id = 2;
+  Reason reason = 3;
+  State state = 4;
+  // model is the model the chat's turn resolved to ("<model>" registry id).
+  string model = 5;
+  // personal_provider and personal_account_label name the person's own
+  // account that would serve.
+  string personal_provider = 6;
+  string personal_account_label = 7;
+  // org_reset_at is when the org's accounts reset (REASON_LIMITED), RFC 3339.
+  optional string org_reset_at = 8;
+  // asked_at is when the chat asked, RFC 3339.
+  string asked_at = 9;
+}
+
+message GetPersonalFundingQuestionRequest {
+  string chat_id = 1;
+}
+
+message GetPersonalFundingQuestionResponse {
+  // Unset when the chat has no question.
+  optional PersonalFundingQuestion question = 1;
+}
+
+message ResolvePersonalFundingChoiceRequest {
+  enum Choice {
+    CHOICE_UNSPECIFIED = 0;
+    CHOICE_USE_PERSONAL = 1;
+    CHOICE_KEEP_WAITING = 2;
+  }
+  string chat_id = 1;
+  Choice choice = 2;
+  // remember also sets the person's preference for the chat's org:
+  // use_personal with CHOICE_USE_PERSONAL, wait with CHOICE_KEEP_WAITING.
+  bool remember = 3;
+}
+
+message ResolvePersonalFundingChoiceResponse {
+  PersonalFundingQuestion question = 1;
 }

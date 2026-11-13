@@ -56,6 +56,12 @@ const (
 	// ProviderAccountServiceGetChatProviderAccountProcedure is the fully-qualified name of the
 	// ProviderAccountService's GetChatProviderAccount RPC.
 	ProviderAccountServiceGetChatProviderAccountProcedure = "/reliant.v1.ProviderAccountService/GetChatProviderAccount"
+	// ProviderAccountServiceGetPersonalFundingQuestionProcedure is the fully-qualified name of the
+	// ProviderAccountService's GetPersonalFundingQuestion RPC.
+	ProviderAccountServiceGetPersonalFundingQuestionProcedure = "/reliant.v1.ProviderAccountService/GetPersonalFundingQuestion"
+	// ProviderAccountServiceResolvePersonalFundingChoiceProcedure is the fully-qualified name of the
+	// ProviderAccountService's ResolvePersonalFundingChoice RPC.
+	ProviderAccountServiceResolvePersonalFundingChoiceProcedure = "/reliant.v1.ProviderAccountService/ResolvePersonalFundingChoice"
 )
 
 // ProviderAccountServiceClient is a client for the reliant.v1.ProviderAccountService service.
@@ -85,6 +91,23 @@ type ProviderAccountServiceClient interface {
 	// GetChatProviderAccount returns the account the chat's root thread is
 	// currently using for its provider; unset when none is assigned yet.
 	GetChatProviderAccount(context.Context, *connect.Request[v1.GetChatProviderAccountRequest]) (*connect.Response[v1.GetChatProviderAccountResponse], error)
+	// GetPersonalFundingQuestion returns the chat's open question "continue on
+	// your own account?" (control-plane docs/design/org-provider-accounts.md
+	// §10), if any. Before a chat in an org moves from the org's accounts to
+	// the person's own, it parks and asks once, for every thread of the chat.
+	// The chat's owner only.
+	// forge:custom
+	GetPersonalFundingQuestion(context.Context, *connect.Request[v1.GetPersonalFundingQuestionRequest]) (*connect.Response[v1.GetPersonalFundingQuestionResponse], error)
+	// ResolvePersonalFundingChoice answers the chat's question. USE_PERSONAL
+	// lets every waiting thread of the chat, sub-agents included, continue on
+	// the person's own account for as long as the answer lasts: until the
+	// org's accounts reset (LIMITED), until a turn start finds them usable
+	// again (UNUSABLE), or while the chat keeps its model (UNSERVED).
+	// KEEP_WAITING keeps waiting. remember also sets the person's preference
+	// for the org (provider.org_funding: use_personal or wait). Person-only, and
+	// the chat's owner only: nothing else can spend the person's own account in
+	// place of the org's.
+	ResolvePersonalFundingChoice(context.Context, *connect.Request[v1.ResolvePersonalFundingChoiceRequest]) (*connect.Response[v1.ResolvePersonalFundingChoiceResponse], error)
 }
 
 // NewProviderAccountServiceClient constructs a client for the reliant.v1.ProviderAccountService
@@ -140,18 +163,32 @@ func NewProviderAccountServiceClient(httpClient connect.HTTPClient, baseURL stri
 			connect.WithSchema(providerAccountServiceMethods.ByName("GetChatProviderAccount")),
 			connect.WithClientOptions(opts...),
 		),
+		getPersonalFundingQuestion: connect.NewClient[v1.GetPersonalFundingQuestionRequest, v1.GetPersonalFundingQuestionResponse](
+			httpClient,
+			baseURL+ProviderAccountServiceGetPersonalFundingQuestionProcedure,
+			connect.WithSchema(providerAccountServiceMethods.ByName("GetPersonalFundingQuestion")),
+			connect.WithClientOptions(opts...),
+		),
+		resolvePersonalFundingChoice: connect.NewClient[v1.ResolvePersonalFundingChoiceRequest, v1.ResolvePersonalFundingChoiceResponse](
+			httpClient,
+			baseURL+ProviderAccountServiceResolvePersonalFundingChoiceProcedure,
+			connect.WithSchema(providerAccountServiceMethods.ByName("ResolvePersonalFundingChoice")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // providerAccountServiceClient implements ProviderAccountServiceClient.
 type providerAccountServiceClient struct {
-	listProviderAccounts        *connect.Client[v1.ListProviderAccountsRequest, v1.ListProviderAccountsResponse]
-	updateProviderAccount       *connect.Client[v1.UpdateProviderAccountRequest, v1.UpdateProviderAccountResponse]
-	reorderProviderAccounts     *connect.Client[v1.ReorderProviderAccountsRequest, v1.ReorderProviderAccountsResponse]
-	deleteProviderAccount       *connect.Client[v1.DeleteProviderAccountRequest, v1.DeleteProviderAccountResponse]
-	addProviderAPIKey           *connect.Client[v1.AddProviderAPIKeyRequest, v1.AddProviderAPIKeyResponse]
-	refreshProviderAccountUsage *connect.Client[v1.RefreshProviderAccountUsageRequest, v1.RefreshProviderAccountUsageResponse]
-	getChatProviderAccount      *connect.Client[v1.GetChatProviderAccountRequest, v1.GetChatProviderAccountResponse]
+	listProviderAccounts         *connect.Client[v1.ListProviderAccountsRequest, v1.ListProviderAccountsResponse]
+	updateProviderAccount        *connect.Client[v1.UpdateProviderAccountRequest, v1.UpdateProviderAccountResponse]
+	reorderProviderAccounts      *connect.Client[v1.ReorderProviderAccountsRequest, v1.ReorderProviderAccountsResponse]
+	deleteProviderAccount        *connect.Client[v1.DeleteProviderAccountRequest, v1.DeleteProviderAccountResponse]
+	addProviderAPIKey            *connect.Client[v1.AddProviderAPIKeyRequest, v1.AddProviderAPIKeyResponse]
+	refreshProviderAccountUsage  *connect.Client[v1.RefreshProviderAccountUsageRequest, v1.RefreshProviderAccountUsageResponse]
+	getChatProviderAccount       *connect.Client[v1.GetChatProviderAccountRequest, v1.GetChatProviderAccountResponse]
+	getPersonalFundingQuestion   *connect.Client[v1.GetPersonalFundingQuestionRequest, v1.GetPersonalFundingQuestionResponse]
+	resolvePersonalFundingChoice *connect.Client[v1.ResolvePersonalFundingChoiceRequest, v1.ResolvePersonalFundingChoiceResponse]
 }
 
 // ListProviderAccounts calls reliant.v1.ProviderAccountService.ListProviderAccounts.
@@ -189,6 +226,17 @@ func (c *providerAccountServiceClient) GetChatProviderAccount(ctx context.Contex
 	return c.getChatProviderAccount.CallUnary(ctx, req)
 }
 
+// GetPersonalFundingQuestion calls reliant.v1.ProviderAccountService.GetPersonalFundingQuestion.
+func (c *providerAccountServiceClient) GetPersonalFundingQuestion(ctx context.Context, req *connect.Request[v1.GetPersonalFundingQuestionRequest]) (*connect.Response[v1.GetPersonalFundingQuestionResponse], error) {
+	return c.getPersonalFundingQuestion.CallUnary(ctx, req)
+}
+
+// ResolvePersonalFundingChoice calls
+// reliant.v1.ProviderAccountService.ResolvePersonalFundingChoice.
+func (c *providerAccountServiceClient) ResolvePersonalFundingChoice(ctx context.Context, req *connect.Request[v1.ResolvePersonalFundingChoiceRequest]) (*connect.Response[v1.ResolvePersonalFundingChoiceResponse], error) {
+	return c.resolvePersonalFundingChoice.CallUnary(ctx, req)
+}
+
 // ProviderAccountServiceHandler is an implementation of the reliant.v1.ProviderAccountService
 // service.
 type ProviderAccountServiceHandler interface {
@@ -217,6 +265,23 @@ type ProviderAccountServiceHandler interface {
 	// GetChatProviderAccount returns the account the chat's root thread is
 	// currently using for its provider; unset when none is assigned yet.
 	GetChatProviderAccount(context.Context, *connect.Request[v1.GetChatProviderAccountRequest]) (*connect.Response[v1.GetChatProviderAccountResponse], error)
+	// GetPersonalFundingQuestion returns the chat's open question "continue on
+	// your own account?" (control-plane docs/design/org-provider-accounts.md
+	// §10), if any. Before a chat in an org moves from the org's accounts to
+	// the person's own, it parks and asks once, for every thread of the chat.
+	// The chat's owner only.
+	// forge:custom
+	GetPersonalFundingQuestion(context.Context, *connect.Request[v1.GetPersonalFundingQuestionRequest]) (*connect.Response[v1.GetPersonalFundingQuestionResponse], error)
+	// ResolvePersonalFundingChoice answers the chat's question. USE_PERSONAL
+	// lets every waiting thread of the chat, sub-agents included, continue on
+	// the person's own account for as long as the answer lasts: until the
+	// org's accounts reset (LIMITED), until a turn start finds them usable
+	// again (UNUSABLE), or while the chat keeps its model (UNSERVED).
+	// KEEP_WAITING keeps waiting. remember also sets the person's preference
+	// for the org (provider.org_funding: use_personal or wait). Person-only, and
+	// the chat's owner only: nothing else can spend the person's own account in
+	// place of the org's.
+	ResolvePersonalFundingChoice(context.Context, *connect.Request[v1.ResolvePersonalFundingChoiceRequest]) (*connect.Response[v1.ResolvePersonalFundingChoiceResponse], error)
 }
 
 // NewProviderAccountServiceHandler builds an HTTP handler from the service implementation. It
@@ -268,6 +333,18 @@ func NewProviderAccountServiceHandler(svc ProviderAccountServiceHandler, opts ..
 		connect.WithSchema(providerAccountServiceMethods.ByName("GetChatProviderAccount")),
 		connect.WithHandlerOptions(opts...),
 	)
+	providerAccountServiceGetPersonalFundingQuestionHandler := connect.NewUnaryHandler(
+		ProviderAccountServiceGetPersonalFundingQuestionProcedure,
+		svc.GetPersonalFundingQuestion,
+		connect.WithSchema(providerAccountServiceMethods.ByName("GetPersonalFundingQuestion")),
+		connect.WithHandlerOptions(opts...),
+	)
+	providerAccountServiceResolvePersonalFundingChoiceHandler := connect.NewUnaryHandler(
+		ProviderAccountServiceResolvePersonalFundingChoiceProcedure,
+		svc.ResolvePersonalFundingChoice,
+		connect.WithSchema(providerAccountServiceMethods.ByName("ResolvePersonalFundingChoice")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/reliant.v1.ProviderAccountService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case ProviderAccountServiceListProviderAccountsProcedure:
@@ -284,6 +361,10 @@ func NewProviderAccountServiceHandler(svc ProviderAccountServiceHandler, opts ..
 			providerAccountServiceRefreshProviderAccountUsageHandler.ServeHTTP(w, r)
 		case ProviderAccountServiceGetChatProviderAccountProcedure:
 			providerAccountServiceGetChatProviderAccountHandler.ServeHTTP(w, r)
+		case ProviderAccountServiceGetPersonalFundingQuestionProcedure:
+			providerAccountServiceGetPersonalFundingQuestionHandler.ServeHTTP(w, r)
+		case ProviderAccountServiceResolvePersonalFundingChoiceProcedure:
+			providerAccountServiceResolvePersonalFundingChoiceHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -319,4 +400,12 @@ func (UnimplementedProviderAccountServiceHandler) RefreshProviderAccountUsage(co
 
 func (UnimplementedProviderAccountServiceHandler) GetChatProviderAccount(context.Context, *connect.Request[v1.GetChatProviderAccountRequest]) (*connect.Response[v1.GetChatProviderAccountResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ProviderAccountService.GetChatProviderAccount is not implemented"))
+}
+
+func (UnimplementedProviderAccountServiceHandler) GetPersonalFundingQuestion(context.Context, *connect.Request[v1.GetPersonalFundingQuestionRequest]) (*connect.Response[v1.GetPersonalFundingQuestionResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ProviderAccountService.GetPersonalFundingQuestion is not implemented"))
+}
+
+func (UnimplementedProviderAccountServiceHandler) ResolvePersonalFundingChoice(context.Context, *connect.Request[v1.ResolvePersonalFundingChoiceRequest]) (*connect.Response[v1.ResolvePersonalFundingChoiceResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ProviderAccountService.ResolvePersonalFundingChoice is not implemented"))
 }

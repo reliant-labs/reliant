@@ -31,6 +31,10 @@ import (
 // identity provider the server refuses it and this command says where to make
 // the move instead. It refuses up front where it can tell already: in an agent's
 // shell, and with --daemon-session (a machine's credential).
+//
+// DEPRECATED and hidden: moving a project is web-only (owner, 2026-11-13). The
+// command stays so nothing that calls it breaks within v1; it is not in
+// `--help` or the CLI reference, and cobra prints the deprecation on every run.
 
 var errAgentCannotMoveProjects = errors.New("an agent cannot move a project to another organization from its shell: ask the user to move it in Settings → Projects → Danger zone")
 
@@ -59,6 +63,12 @@ func newProjectMoveCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "move <project> --to-org <org-id>",
 		Short: "Move a project to another organization",
+		// Moving a project is web-only (owner, 2026-11-13): the server takes
+		// a move only from a person signed in to the app, which the CLI login
+		// is not. Kept working, hidden and deprecated, because the command is
+		// public CLI surface (semver 1); removal waits for a major.
+		Hidden:     true,
+		Deprecated: "moving a project is done in the Reliant app: Settings → Projects → Danger zone",
 		Long: `Moves a project, with its chats, runs and automations, to another organization
 you belong to. <project> is the project's id, name or path.
 

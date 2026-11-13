@@ -179,6 +179,9 @@ func selectionJSON(sel *chatselection.Selection) map[string]interface{} {
 	if sel.Policy.FallbackModel != "" {
 		policy["fallback_model"] = sel.Policy.FallbackModel
 	}
+	if sel.Policy.Funding != chatselection.FundingInherit {
+		policy["funding"] = string(sel.Policy.Funding)
+	}
 	return map[string]interface{}{
 		"workflow_name":   sel.WorkflowName,
 		"params":          sel.Params,
@@ -237,6 +240,14 @@ func policyToProto(p chatselection.ProviderPolicy) *reliantv1.ProviderPolicy {
 		model := p.FallbackModel
 		out.FallbackModel = &model
 	}
+	switch p.Funding {
+	case chatselection.FundingOrgFirst:
+		out.Funding = reliantv1.ProviderPolicy_FUNDING_ORG_FIRST
+	case chatselection.FundingPersonalFirst:
+		out.Funding = reliantv1.ProviderPolicy_FUNDING_PERSONAL_FIRST
+	case chatselection.FundingOrgOnly:
+		out.Funding = reliantv1.ProviderPolicy_FUNDING_ORG_ONLY
+	}
 	return out
 }
 
@@ -250,6 +261,14 @@ func policyFromProto(p *reliantv1.ProviderPolicy) chatselection.ProviderPolicy {
 		out.OnLimit = chatselection.OnLimitWait
 	case reliantv1.ProviderPolicy_ON_LIMIT_FALLBACK:
 		out.OnLimit = chatselection.OnLimitFallback
+	}
+	switch p.GetFunding() {
+	case reliantv1.ProviderPolicy_FUNDING_ORG_FIRST:
+		out.Funding = chatselection.FundingOrgFirst
+	case reliantv1.ProviderPolicy_FUNDING_PERSONAL_FIRST:
+		out.Funding = chatselection.FundingPersonalFirst
+	case reliantv1.ProviderPolicy_FUNDING_ORG_ONLY:
+		out.Funding = chatselection.FundingOrgOnly
 	}
 	return out
 }
