@@ -3,6 +3,7 @@ package project
 import (
 	"context"
 	"errors"
+	"time"
 
 	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/svcerr"
@@ -10,7 +11,9 @@ import (
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/authz"
+	"github.com/reliant-labs/reliant/internal/controlplane"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/logging"
 )
 
 // Reasons (x-forge-error-reason) a project move, or its preview, is refused
@@ -36,10 +39,13 @@ const (
 // be allowed to make the move itself (authz.ProjectOrgMove), so the preview
 // never tells anyone about a project they could not move.
 //
-// The effects are reliant's half. What control-plane holds (secret access to
-// revoke, hosted projects, the target's funding, which machines are in the
-// target) is left unset with control_plane_effects_known false until the
-// move's control-plane read exists.
+// The effects are reliant's half plus what control-plane holds (secret access
+// to revoke, the hosted project staying behind, the target's funding, which
+// machines are in the target), read through ProjectOrgMoveInternalService's
+// PreviewProjectOrgMove with control_plane_effects_known true. Without that
+// read (self-hosted, no internal-service identity, a control plane that
+// predates it, or an outage) those fields stay unset and known is false: the
+// preview shows them as unknown rather than failing.
 func (s *Service) PreviewProjectOrgMove(
 	ctx context.Context,
 	req *connect.Request[pb.PreviewProjectOrgMoveRequest],
@@ -62,13 +68,78 @@ func (s *Service) PreviewProjectOrgMove(
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to read what the move would change"))
 	}
+	out := projectMoveEffectsProto(effects)
+	if err := s.addControlPlaneEffects(ctx, userID, projectID, from, to, effects, out); err != nil {
+		return nil, err
+	}
 	return connect.NewResponse(&pb.PreviewProjectOrgMoveResponse{
 		FromOrgId: from,
 		ToOrgId:   to,
 		Blockers:  projectMoveBlockersProto(blockers),
-		Effects:   projectMoveEffectsProto(effects),
+		Effects:   out,
 	}), nil
 }
+
+// moveFactsTimeout bounds control-plane's preview read: past it the preview
+// answers with those facts unknown rather than keep the dialog waiting.
+var moveFactsTimeout = 5 * time.Second
+
+// addControlPlaneEffects fills what control-plane holds into out, or leaves it
+// unknown. A fresh refusal of the person's authority (no longer an admin of
+// the source, or no longer a member of the target) is the preview's refusal
+// too: reliant's own check read a cached membership.
+func (s *Service) addControlPlaneEffects(ctx context.Context, userID, projectID, from, to string, e *core.ProjectOrgMoveEffects, out *pb.ProjectOrgMoveEffects) error {
+	if s.deps.MoveFacts == nil {
+		return nil
+	}
+	daemonIDs := make([]string, 0, len(e.Machines))
+	for _, m := range e.Machines {
+		daemonIDs = append(daemonIDs, m.DaemonID)
+	}
+	if len(daemonIDs) > maxMoveFactsDaemons {
+		daemonIDs = daemonIDs[:maxMoveFactsDaemons]
+	}
+	readCtx, cancel := context.WithTimeout(ctx, moveFactsTimeout)
+	defer cancel()
+	facts, err := s.deps.MoveFacts.PreviewProjectOrgMove(readCtx, controlplane.ProjectOrgMovePreviewQuery{
+		ProjectID: projectID, FromOrgID: from, ToOrgID: to, ActorUserID: userID,
+		ForgeProjectName: e.ForgeProjectName, DaemonIDs: daemonIDs,
+	})
+	var refused *controlplane.ProjectOrgMoveError
+	switch {
+	case err == nil:
+	case errors.As(err, &refused) && refused.Reason == controlplane.ReasonMoveSourceAdminRequired:
+		return projectMoveRefusal(ctx, authz.ErrNotOrgAdmin)
+	case errors.As(err, &refused) && refused.Reason == controlplane.ReasonMoveTargetMembershipMissing:
+		return projectMoveRefusal(ctx, authz.ErrNotTargetMember)
+	case errors.As(err, &refused) && refused.Code == "permission_denied":
+		// Any other explicit denial of the person (actor_not_live: no live
+		// account; or a reason this release does not know) is a refusal,
+		// never an unknown fact: a preview is only for who could move.
+		return projectMoveRefusal(ctx, authz.ErrNotOrgMember)
+	case errors.Is(err, controlplane.ErrProjectOrgMoveUnsupported):
+		return nil
+	default:
+		logging.WarnContext(ctx, "could not read control-plane's half of a project move preview; showing it as unknown",
+			"project_id", projectID, "to_org_id", to, "error", err)
+		return nil
+	}
+	n := int32(facts.SecretAccessToRevoke)
+	out.ControlPlaneEffectsKnown = true
+	out.SecretAccessToRevoke = &n
+	out.HostedProjectsStaying = facts.HostedProjectsStaying
+	out.TargetFunded = facts.TargetFunded
+	for _, m := range out.Machines {
+		if in, ok := facts.InTargetOrg[m.DaemonId]; ok {
+			m.InTargetOrg = &in
+		}
+	}
+	return nil
+}
+
+// maxMoveFactsDaemons is control-plane's bound on the machines one preview
+// asks about.
+const maxMoveFactsDaemons = 200
 
 // projectMoveRefusal is the answer to a move authz refused.
 func projectMoveRefusal(ctx context.Context, err error) error {

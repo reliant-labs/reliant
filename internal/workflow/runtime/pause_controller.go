@@ -150,6 +150,16 @@ func (pc *PauseController) endsRunInsteadOfPausing(stepID string, err error) err
 		if appErr.Type() == stepConfigFailedErrType {
 			return appErr
 		}
+		// An org policy refused an unattended run: nobody is present to
+		// switch model, and a self-resume ladder would only meet the same
+		// verdict on every rung while holding the automation's slot. The run
+		// ends with the reason; its trigger pauses once
+		// (WorkflowStatusActivity). An attended run pauses as usual.
+		if appErr.Type() == types.OrgPolicyRefusedUnattendedErrType {
+			return temporal.NewNonRetryableApplicationError(
+				fmt.Sprintf("step %s failed: %s", stepID, appErr.Message()),
+				types.OrgPolicyRefusedUnattendedErrType, nil)
+		}
 		e = appErr
 	}
 	return nil

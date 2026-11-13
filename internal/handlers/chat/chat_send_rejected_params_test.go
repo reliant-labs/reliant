@@ -14,6 +14,7 @@ import (
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/reliant-labs/forge/pkg/testkit"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	llmdrivers "github.com/reliant-labs/reliant/internal/llm/drivers"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/registry"
@@ -89,6 +90,10 @@ func TestSendMessage_RejectedParamsPersistNothing(t *testing.T) {
 
 			ctx, fx := setupAbsorbFixture(t, repo, "test-user", tc.dbStatus)
 			connectOnlyAnthropic(t, ctx, repo, "test-user")
+			// A trigger's chat, and its owner signed in as a person: an
+			// accepted send would record their turn (TestSendMessage_PersonTurn).
+			launchByTrigger(t, ctx, repo, fx.chatID)
+			ctx = auth.WithCredential(ctx, auth.CredentialSession)
 			temporal := &rejectedSendTemporalClient{
 				wakeTestTemporalClient: wakeTestTemporalClient{
 					absorbTestTemporalClient: absorbTestTemporalClient{exists: !tc.gone, status: tc.temporalStatus},
@@ -122,6 +127,9 @@ func TestSendMessage_RejectedParamsPersistNothing(t *testing.T) {
 			wf, err := repo.GetWorkflow(ctx, fx.rootThreadID)
 			require.NoError(t, err)
 			assert.Equal(t, tc.dbStatus, wf.Status, "a refused send must not move the run's status")
+			turn, err := repo.ChatPersonTurnAt(ctx, fx.chatID)
+			require.NoError(t, err)
+			assert.Nil(t, turn, "a refused send must not make the trigger's chat attended")
 		})
 	}
 }

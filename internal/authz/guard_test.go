@@ -28,6 +28,7 @@ var rawComparisonAllowed = map[string]string{
 	"internal/workflow/runtime/activities/handlers/personal_funding.go:fundingPlanFor": "binds a stored funding answer to the (user, org) of the run it was given for; no caller",
 	"internal/handlers/chat/chat_selection.go:recordPersonPick":                        "consent, not access: only the owner's own pick may spend their own account; the write was already authorized",
 	"internal/launch/launcher.go:recordStartSelection":                                 "consent, not access: only the owner's own start picks the model that may spend their own account; the launch was already authorized",
+	"internal/handlers/chat/chat_send.go:recordPersonTurn":                             "attendance, not access: only the owner's own turn makes their launched chat spend as an attended run; the send was already authorized",
 	"internal/db/trigger_takeover.go:AdoptTrigger":                                     "compare-and-swap: the locked row still has the owner the adoption decided on, no caller",
 	"internal/db/trigger_takeover.go:CreateTriggerOffer":                               "compare-and-swap: the locked row still has the owner the offer was made for, no caller",
 	"internal/handlers/automation_takeover/takeover.go:offerState":                     "matches a trigger to the owner its offer was made for (adopted or not since), no caller",

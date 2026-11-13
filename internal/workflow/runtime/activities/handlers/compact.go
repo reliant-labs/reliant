@@ -407,11 +407,12 @@ func (a *CompactActivity) generateCompactionSummaryOnProvider(ctx context.Contex
 
 	// Use a small temperature for consistent summaries.
 	temperature := 0.3
+	who := chatAttendance(ctx, a.repo, chat)
 	spec := llmCallSpec{
 		UserID:              chat.UserID,
 		OrgID:               chatOrgID(chat),
-		Attended:            chatAttended(chat),
-		UnattendedAnySource: chatUnattendedAnySource(chat),
+		Attended:            who.attended,
+		UnattendedAnySource: who.anySource,
 		SessionID:           chat.ID, // Use chat ID as thread ID for Anthropic
 		ChatID:              chat.ID,
 		Temperature:         &temperature,
@@ -656,11 +657,12 @@ func (a *GenerateTitleActivity) generateTitleForChat(ctx context.Context, chat *
 	// Low temperature keeps titles consistent and focused.
 	temperature := 0.3
 	maxTokens := int64(256)
+	who := chatAttendance(ctx, a.repo, chat)
 	spec := llmCallSpec{
 		UserID:              userID,
 		OrgID:               chatOrgID(chat),
-		Attended:            chatAttended(chat),
-		UnattendedAnySource: chatUnattendedAnySource(chat),
+		Attended:            who.attended,
+		UnattendedAnySource: who.anySource,
 		Temperature:         &temperature,
 		// Room for a tool_use block wrapping the title, not just a bare
 		// string: a tighter cap truncates the arguments JSON mid-object and

@@ -152,6 +152,14 @@ func (g *Graph) newOrgResolver() (*orgs.Resolver, error) {
 	})
 }
 
+func (g *Graph) newOrgPolicyWatcher() (*OrgPolicyWatcher, error) {
+	return NewOrgPolicyWatcher(OrgPolicyWatcherDeps{
+		Policies: g.OrgPolicyResolver(),
+		DB:       g.Database(),
+		Temporal: g.TemporalClient(),
+	})
+}
+
 func (g *Graph) newOrgPolicyResolver() (*orgpolicy.Resolver, error) {
 	return NewOrgPolicyResolver(OrgPolicyResolverDeps{
 		Authority: g.TokenAuthority(),
@@ -1243,6 +1251,8 @@ func (g *Graph) newProject() (*project.Service, error) {
 		// in the rollback target (orgs.project_moves_enabled).
 		OrgRollout: ProjectOrgRollout(g.ApiServerConfig),
 		Moves:      projectOrgMoveStarter{c: g.TemporalClient().Client},
+		// The preview's control-plane facts; nil shows them as unknown.
+		MoveFacts: ProjectOrgMoveFacts(g.ServerProcessConfig.GetControlPlane()),
 	})
 }
 

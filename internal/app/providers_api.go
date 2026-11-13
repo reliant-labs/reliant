@@ -1461,6 +1461,23 @@ func ProjectOrgRollout(api *configv1.ApiServerConfig) *configv1.OrgsConfig {
 	return api.GetOrgs()
 }
 
+// ProjectOrgMoveFacts is control-plane's half of the project-move preview
+// (ProjectOrgMoveInternalService.PreviewProjectOrgMove), signed as the
+// internal service. nil — the preview shows those facts as unknown — when
+// the control plane is not hosted or this process has no internal-service
+// secret.
+func ProjectOrgMoveFacts(cfg *configv1.ControlPlaneConfig) project.MoveFacts {
+	cp := ControlPlaneEndpoint(cfg)
+	if !cp.Hosted() || cp.InternalServiceSecret == "" {
+		return nil
+	}
+	secret := cp.InternalServiceSecret
+	return controlplane.NewInstrumented(controlplane.Deps{
+		ControlPlane: cfg,
+		Sign:         func() (string, error) { return auth.SignInternalServiceToken(secret) },
+	})
+}
+
 // projectOrgMoveStarter starts a project move's saga on the shared task
 // queue, keyed by the move id: a second start of a running or finished move
 // is not an error, so a retried request never starts a second saga.

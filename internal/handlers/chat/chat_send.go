@@ -75,12 +75,15 @@ func (s *Service) notifyHistoryLimitRestart(ctx context.Context, chatID, workflo
 }
 
 // saveIncomingMessages atomically persists the system and user messages a send
-// contributes to a thread. It deliberately does not inspect or drain the agent
+// contributes to a thread, and, in the same transaction, the person's turn in
+// a launched chat (recordPersonTurn): a send that is not saved makes nothing
+// attended. It deliberately does not inspect or drain the agent
 // mailbox: call_llm is the sole mailbox deliverer, immediately before reading
 // thread history, regardless of whether this send starts or resumes the run.
 func (s *Service) saveIncomingMessages(
 	ctx context.Context,
 	req *connect.Request[reliantv1.SendMessageRequest],
+	chat *db.Chat,
 	thread, workflowID string,
 	systemMessages []*reliantv1.InputMessage,
 	userContent string,
@@ -95,6 +98,11 @@ func (s *Service) saveIncomingMessages(
 	var savedMessageID string
 	err := s.deps.Repo.RunTx(ctx, orm.Serializable, func(txCtx context.Context) error {
 		savedMessageID = ""
+		if sender, ok := auth.GetUserIDFromContext(ctx); ok && hasMessage {
+			if err := s.recordPersonTurn(txCtx, sender, chat); err != nil {
+				return err
+			}
+		}
 		if clientID != "" && hasMessage {
 			existingID, err := s.savedSendID(txCtx, req.Msg.ChatId, clientID)
 			if err != nil {
@@ -455,7 +463,7 @@ func (s *Service) SendMessage(
 				var savedMessageID string
 				err = s.deps.Repo.RunTx(ctx, orm.Serializable, func(txCtx context.Context) error {
 					var saveErr error
-					savedMessageID, saveErr = s.saveIncomingMessages(txCtx, req, targetThread, workflowID, systemMessages, userContent, hasUserContent)
+					savedMessageID, saveErr = s.saveIncomingMessages(txCtx, req, chat, targetThread, workflowID, systemMessages, userContent, hasUserContent)
 					return saveErr
 				})
 				if err != nil {
@@ -594,7 +602,17 @@ func (s *Service) SendMessage(
 					// Queued once: an attempt of this send that already queued
 					// the message left its row, and this one finishes around it
 					// (the wake below is what the first may not have reached).
-					queued, _, err := s.enqueueHumanMessage(ctx, queuedMsg, clientID != "")
+					// Queued in one transaction with the person's turn in a
+					// launched chat (recordPersonTurn), before the run is woken.
+					var queued *db.AgentMessage
+					err := s.deps.Repo.RunTx(ctx, orm.Serializable, func(txCtx context.Context) error {
+						if err := s.recordPersonTurn(txCtx, userID, chat); err != nil {
+							return err
+						}
+						var err error
+						queued, _, err = s.enqueueHumanMessage(txCtx, queuedMsg, clientID != "")
+						return err
+					})
 					if err != nil {
 						return nil, svcerr.WrapOr(err, svcerr.Internal("failed to save message"))
 					}
@@ -815,7 +833,7 @@ func (s *Service) SendMessage(
 					// them, mailbox first: the interrupted run never reached
 					// another drain boundary, so whatever was queued for this
 					// thread still belongs ahead of the new message.
-					presavedID, saveErr := s.saveIncomingMessages(ctx, req, targetThread, workflowID, systemMessages, userContent, hasUserContent)
+					presavedID, saveErr := s.saveIncomingMessages(ctx, req, chat, targetThread, workflowID, systemMessages, userContent, hasUserContent)
 					if saveErr != nil {
 						return nil, svcerr.WrapOr(saveErr, svcerr.Internal("failed to save messages"))
 					}
@@ -992,7 +1010,7 @@ func (s *Service) SendMessage(
 		// A resume continues a conversation, so it never is one.
 		greenfieldProbe = resumeInput == nil && s.launcher().WantsGreenfieldProbe(ctx, chat)
 
-		saved, err := s.saveIncomingMessages(ctx, req, targetThread, workflowID, systemMessages, userContent, hasUserContent)
+		saved, err := s.saveIncomingMessages(ctx, req, chat, targetThread, workflowID, systemMessages, userContent, hasUserContent)
 		if err != nil {
 			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to save messages"))
 		}
@@ -1053,4 +1071,31 @@ func (s *Service) SendMessage(
 		// row is still queued, and this run's first turn drains it.
 		Queued: lateRunThread != "",
 	}), nil
+}
+
+// recordPersonTurn marks a chat a stored trigger or an agent launched as
+// attended from this send on (org-provider-accounts §11.1, I2): the person who
+// sent it is there to be asked, so its calls follow the chat rules rather than
+// an unattended run's org-funded-only sources. A chat a person started needs
+// no mark.
+//
+// Only the chat's owner, signed in as a person, takes a turn: a credential an
+// agent or a script can hold (the CLI login, an agent's access token) never
+// makes a run attended, since attended calls may spend on the owner's own
+// accounts. It runs in the transaction that saves or queues the message, so
+// a send that is refused or rolled back records nothing, and a failed write
+// fails the send (retryable) rather than accepting it unattended.
+func (s *Service) recordPersonTurn(ctx context.Context, userID string, chat *db.Chat) error {
+	kind := core.TriggerEventKind(chat.LaunchKind)
+	launched := (chat.TriggerID != nil && kind.Unattended()) || kind == core.TriggerEventKindAgentStartRun
+	if !launched {
+		return nil
+	}
+	if userID != chat.UserID || auth.RequirePerson(ctx, "take a turn in the chat") != nil {
+		return nil
+	}
+	if err := s.deps.Repo.RecordChatPersonTurn(ctx, chat.ID, userID); err != nil {
+		return fmt.Errorf("record the person's turn in the chat: %w", err)
+	}
+	return nil
 }

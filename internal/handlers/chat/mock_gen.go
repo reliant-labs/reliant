@@ -70,7 +70,7 @@ func (m *MockOrgResolver) ListScope(ctx context.Context, userID string, requeste
 var _ OrgResolver = (*MockOrgResolver)(nil)
 
 // forge:section MockRepository
-// forge:hash=72636403f803e243d9911678c5293968b08cc935ff9f944ed2e6ef0a865589be
+// forge:hash=16e491e2e6bdad4c63e2f3e282549172e70a8ae06cff18f980ece91f120d4e40
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -92,6 +92,7 @@ type MockRepository struct {
 	UpdateChatUnreadFunc                                     func(context.Context, string, bool, string) error
 	SetChatAdoptedFunc                                       func(context.Context, string, string, bool) (bool, error)
 	RecordChatPersonPickFunc                                 func(context.Context, string, string, string, string, string) error
+	RecordChatPersonTurnFunc                                 func(context.Context, string, string) error
 	SetChatDaemonBlockedFunc                                 func(context.Context, string, bool) error
 	SetChatPausedForMachineFunc                              func(context.Context, string, bool) (bool, error)
 	SetChatQueuedForMachineFunc                              func(context.Context, string, bool) (bool, error)
@@ -346,6 +347,15 @@ func (m *MockRepository) RecordChatPersonPick(ctx context.Context, chatID string
 		return m.RecordChatPersonPickFunc(ctx, chatID, userID, orgID, modelKey, chatProvider)
 	}
 	return contractkit.MockNotSet("MockRepository", "RecordChatPersonPick")
+}
+
+// RecordChatPersonTurn records the call and delegates to RecordChatPersonTurnFunc when set.
+func (m *MockRepository) RecordChatPersonTurn(ctx context.Context, chatID string, userID string) error {
+	m.Recorder.Record("RecordChatPersonTurn", ctx, chatID, userID)
+	if m.RecordChatPersonTurnFunc != nil {
+		return m.RecordChatPersonTurnFunc(ctx, chatID, userID)
+	}
+	return contractkit.MockNotSet("MockRepository", "RecordChatPersonTurn")
 }
 
 // SetChatDaemonBlocked records the call and delegates to SetChatDaemonBlockedFunc when set.

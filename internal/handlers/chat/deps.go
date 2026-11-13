@@ -53,6 +53,8 @@ type Repository interface {
 	SetChatAdopted(ctx context.Context, chatID, userID string, adopted bool) (bool, error)
 	// RecordChatPersonPick records the chat's root model and provider switch as its owner's pick.
 	RecordChatPersonPick(ctx context.Context, chatID, userID, orgID, modelKey, chatProvider string) error
+	// RecordChatPersonTurn marks a launched chat attended from a person's send on.
+	RecordChatPersonTurn(ctx context.Context, chatID, userID string) error
 	SetChatDaemonBlocked(ctx context.Context, chatID string, blocked bool) error
 	SetChatPausedForMachine(ctx context.Context, chatID string, paused bool) (bool, error)
 	SetChatQueuedForMachine(ctx context.Context, chatID string, queued bool) (bool, error)

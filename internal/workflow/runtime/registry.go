@@ -30,6 +30,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/errclass"
 	"github.com/reliant-labs/reliant/internal/llm/drivererrors"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/orgpolicy"
 	rtemporal "github.com/reliant-labs/reliant/internal/temporal"
 	"github.com/reliant-labs/reliant/internal/workflow/lifecycle"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
@@ -95,7 +96,8 @@ func markTextOnlyUserError(err error) error {
 		return svcerr.WithClass(err, svcerr.ClassUser)
 	}
 	if kind, _, ok := chatmarkers.Extract(err.Error()); ok &&
-		(kind == chatmarkers.KindProviderUsageLimit || kind == chatmarkers.KindReliantManagedQuotaExhausted) {
+		(kind == chatmarkers.KindProviderUsageLimit || kind == chatmarkers.KindReliantManagedQuotaExhausted ||
+			kind == chatmarkers.KindOrgPolicyRefused) {
 		return svcerr.WithClass(err, svcerr.ClassUser)
 	}
 	return err
@@ -171,6 +173,24 @@ func classifyError(err error) error {
 			})
 		}
 		return temporal.NewNonRetryableApplicationError(err.Error(), "ProviderUsageLimit", err)
+	}
+
+	// An org policy's verdict (control-plane docs/design/org-policies.md
+	// §5.1): never retried. A run a person is behind pauses on it, resumable
+	// by another model or a policy change; an unattended run ends with it
+	// (activitytypes.OrgPolicyRefusedUnattendedErrType, endsRunInsteadOfPausing),
+	// and its trigger pauses once. Decided before the text rules below, which
+	// would read the gateway's 403 as a bad credential.
+	if refusal, ok := orgpolicy.RefusalOf(err); ok {
+		errType := activitytypes.OrgPolicyRefusedErrType
+		if refusal.Unattended {
+			errType = activitytypes.OrgPolicyRefusedUnattendedErrType
+		}
+		return temporal.NewApplicationErrorWithOptions(err.Error(), errType, temporal.ApplicationErrorOptions{
+			NonRetryable: true,
+			// A policy the org's admins set, never a server fault.
+			Category: temporal.ApplicationErrorCategoryBenign,
+		})
 	}
 
 	// Auto-classify based on error content
@@ -546,7 +566,8 @@ func isTerminal(err error) bool {
 	}
 
 	if kind, _, ok := chatmarkers.Extract(err.Error()); ok {
-		return kind == chatmarkers.KindProviderUsageLimit || kind == chatmarkers.KindReliantManagedQuotaExhausted
+		return kind == chatmarkers.KindProviderUsageLimit || kind == chatmarkers.KindReliantManagedQuotaExhausted ||
+			kind == chatmarkers.KindOrgPolicyRefused
 	}
 	return drivererrors.IsProviderCreditExhaustion(err)
 }

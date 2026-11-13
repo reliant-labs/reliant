@@ -1576,3 +1576,14 @@ func (r *Repo) EmitNodeExecutionEvent(ctx context.Context, eventType string, sta
 
 	return r.CreateChatUpdate(ctx, state.ChatID, UpdateTypeNodeExecution, entityID, string(eventJSON))
 }
+
+// RecordChatPersonTurn records that a person sent a message into chatID: from this turn on,
+// its calls are attended (org-provider-accounts §11.1, I2).
+func (r *Repo) RecordChatPersonTurn(ctx context.Context, chatID, userID string) error {
+	return store.RecordChatPersonTurn(ctx, r.ORM(), chatID, userID, time.Now())
+}
+
+// ChatPersonTurnAt returns when a person last sent a message into chatID, nil when nobody has.
+func (r *Repo) ChatPersonTurnAt(ctx context.Context, chatID string) (*time.Time, error) {
+	return store.ChatPersonTurnAt(ctx, r.ORM(), chatID)
+}
