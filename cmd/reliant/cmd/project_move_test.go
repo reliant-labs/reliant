@@ -122,6 +122,32 @@ func TestProjectMove(t *testing.T) {
 		assert.Contains(t, out, "automations are being turned back on")
 	})
 
+	t.Run("a move that aborts while followed is a failure", func(t *testing.T) {
+		movePollInterval = time.Millisecond
+		t.Cleanup(func() { movePollInterval = 1500 * time.Millisecond })
+		f := &fakeMoveClient{
+			preview: idlePreview(),
+			answer:  reliantv1.ProjectOrgMoveState_PROJECT_ORG_MOVE_STATE_PREPARING,
+			reads:   []reliantv1.ProjectOrgMoveState{reliantv1.ProjectOrgMoveState_PROJECT_ORG_MOVE_STATE_ABORTING, reliantv1.ProjectOrgMoveState_PROJECT_ORG_MOVE_STATE_ABORTED},
+		}
+		out, err := runMove(f, "", false, true, "web")
+		require.ErrorContains(t, err, "not moved", "followed through ABORTING to ABORTED")
+		assert.NotContains(t, out, "under way")
+	})
+
+	t.Run("a move still aborting when the wait runs out is a failure", func(t *testing.T) {
+		movePollInterval, moveSettleTimeout = time.Millisecond, 20*time.Millisecond
+		t.Cleanup(func() { movePollInterval, moveSettleTimeout = 1500*time.Millisecond, 2*time.Minute })
+		f := &fakeMoveClient{
+			preview: idlePreview(),
+			answer:  reliantv1.ProjectOrgMoveState_PROJECT_ORG_MOVE_STATE_ABORTING,
+			reads:   []reliantv1.ProjectOrgMoveState{reliantv1.ProjectOrgMoveState_PROJECT_ORG_MOVE_STATE_ABORTING},
+		}
+		out, err := runMove(f, "", false, true, "web")
+		require.ErrorContains(t, err, "not being moved")
+		assert.NotContains(t, out, "under way")
+	})
+
 	t.Run("an ambiguous name asks for the id", func(t *testing.T) {
 		_, err := runMove(&fakeMoveClient{preview: idlePreview()}, "", true, false, "api")
 		require.ErrorContains(t, err, "2 projects are named")

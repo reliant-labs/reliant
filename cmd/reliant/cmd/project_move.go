@@ -150,6 +150,13 @@ func (m projectMove) run(ctx context.Context, ref, toOrg string) error {
 		return err
 	}
 	switch move.GetState() {
+	case reliantv1.ProjectOrgMoveState_PROJECT_ORG_MOVE_STATE_ABORTING:
+		// Still compensating when the wait ran out: it ends aborted, never
+		// moved, so it is a failure now.
+		if d := move.GetDetail(); d != "" {
+			return fmt.Errorf("the project is not being moved: %s (move %s is restoring what it changed)", d, move.GetId())
+		}
+		return fmt.Errorf("the project is not being moved (move %s is restoring what it changed)", move.GetId())
 	case reliantv1.ProjectOrgMoveState_PROJECT_ORG_MOVE_STATE_ABORTED:
 		if d := move.GetDetail(); d != "" {
 			return fmt.Errorf("the project was not moved: %s", d)
@@ -194,6 +201,7 @@ func (m projectMove) findProject(ctx context.Context, ref string) (*reliantv1.Pr
 }
 
 // follow reads an unsettled move again until it settles or the wait runs out.
+// ABORTING is not settled: it is followed to ABORTED.
 func (m projectMove) follow(ctx context.Context, move *reliantv1.ProjectOrgMove) (*reliantv1.ProjectOrgMove, error) {
 	if move == nil {
 		return nil, errors.New("the server did not say what happened to the move")
