@@ -74,22 +74,22 @@ func TestChatAttendance(t *testing.T) {
 		name  string
 		chat  *db.Chat
 		store *attendanceStore
-		want  bool
+		want  attendanceVerdict
 	}{
-		{"a person's chat is attended", chatOf("c", string(core.TriggerEventKindChatStart), nil), nil, true},
-		{"Run now of a workflow is attended", chatOf("c", string(core.TriggerEventKindManualRun), nil), nil, true},
-		{"a chat that predates launch events is attended", chatOf("c", "", nil), nil, true},
-		{"an unattended kind with no stored trigger is attended", chatOf("c", scheduled, nil), nil, true},
-		{"a scheduled trigger's run is unattended", chatOf("c", scheduled, strPtr("t1")), &attendanceStore{}, false},
+		{"a person's chat is attended", chatOf("c", string(core.TriggerEventKindChatStart), nil), nil, verdictAttended},
+		{"Run now of a workflow is attended", chatOf("c", string(core.TriggerEventKindManualRun), nil), nil, verdictAttended},
+		{"a chat that predates launch events is attended", chatOf("c", "", nil), nil, verdictAttended},
+		{"an unattended kind with no stored trigger is attended", chatOf("c", scheduled, nil), nil, verdictAttended},
+		{"a scheduled trigger's run is unattended", chatOf("c", scheduled, strPtr("t1")), &attendanceStore{}, verdictUnattended},
 		{"a webhook trigger's run is unattended",
-			chatOf("c", string(core.TriggerEventKindWebhook), strPtr("t1")), &attendanceStore{}, false},
+			chatOf("c", string(core.TriggerEventKindWebhook), strPtr("t1")), &attendanceStore{}, verdictUnattended},
 		{"I2: a trigger's chat a person took a turn in is attended",
-			chatOf("c", scheduled, strPtr("t1")), &attendanceStore{turns: map[string]time.Time{"c": time.Now()}}, true},
+			chatOf("c", scheduled, strPtr("t1")), &attendanceStore{turns: map[string]time.Time{"c": time.Now()}}, verdictAttended},
 		{"I1: a run a person's chat started is attended",
 			chatOf("child", started, nil), &attendanceStore{
 				chats:   map[string]*db.Chat{"root": chatOf("root", string(core.TriggerEventKindChatStart), nil)},
 				parents: map[string]string{"child": "root"},
-			}, true},
+			}, verdictAttended},
 		{"I1: a run a trigger's run started is unattended, at any depth",
 			chatOf("grandchild", started, nil), &attendanceStore{
 				chats: map[string]*db.Chat{
@@ -97,34 +97,36 @@ func TestChatAttendance(t *testing.T) {
 					"root":  chatOf("root", scheduled, strPtr("t1")),
 				},
 				parents: map[string]string{"grandchild": "child", "child": "root"},
-			}, false},
+			}, verdictUnattended},
 		{"I1+I2: a sub-agent of a trigger's chat a person took a turn in is attended",
 			chatOf("child", started, nil), &attendanceStore{
 				chats:   map[string]*db.Chat{"root": chatOf("root", scheduled, strPtr("t1"))},
 				parents: map[string]string{"child": "root"},
 				turns:   map[string]time.Time{"root": time.Now()},
-			}, true},
+			}, verdictAttended},
 		{"an agent-started run with no launch event fails closed",
-			chatOf("child", started, nil), &attendanceStore{}, false},
+			chatOf("child", started, nil), &attendanceStore{}, verdictUnknown},
 		{"an agent-started run whose parent is gone fails closed",
-			chatOf("child", started, nil), &attendanceStore{parents: map[string]string{"child": "gone"}}, false},
+			chatOf("child", started, nil), &attendanceStore{parents: map[string]string{"child": "gone"}}, verdictUnknown},
 		{"a lineage cycle fails closed",
 			chatOf("a", started, nil), &attendanceStore{
 				chats:   map[string]*db.Chat{"a": chatOf("a", started, nil), "b": chatOf("b", started, nil)},
 				parents: map[string]string{"a": "b", "b": "a"},
-			}, false},
+			}, verdictUnknown},
 		{"a failed read fails closed",
-			chatOf("c", scheduled, strPtr("t1")), &attendanceStore{err: errors.New("db down")}, false},
-		{"no store fails closed", chatOf("c", scheduled, strPtr("t1")), nil, false},
+			chatOf("c", scheduled, strPtr("t1")), &attendanceStore{err: errors.New("db down")}, verdictUnknown},
+		{"no store fails closed", chatOf("c", scheduled, strPtr("t1")), nil, verdictUnknown},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			var store AttendanceStore
 			if tc.store != nil {
 				store = tc.store
 			}
+			assert.Equal(t, tc.want, chatAttended(context.Background(), store, tc.chat))
 			who := chatAttendance(context.Background(), store, tc.chat)
-			assert.Equal(t, tc.want, who.attended)
-			assert.Equal(t, !tc.want, who.anySource, "until P11's stamp, an unattended run keeps every source")
+			assert.Equal(t, tc.want == verdictAttended, who.attended)
+			assert.Equal(t, tc.want == verdictUnattended, who.anySource,
+				"a resolved automation keeps every source until P11's stamp (I4); an undecided run gets the org's only")
 		})
 	}
 	t.Run("no chat is the person's own", func(t *testing.T) {
@@ -231,4 +233,57 @@ func TestFallbackModel_ReadsTheCallsScope(t *testing.T) {
 		Scope: want, Driver: "claude", Policy: types.FailoverPolicy{FallbackModel: "gpt-5.5@codex"},
 	})
 	assert.Equal(t, []drivers.Scope{want}, lookups.all())
+}
+
+// personalOnlyStore is an AvailabilityStore holding one of the person's own
+// API keys and nothing of any org's.
+type personalOnlyStore struct{}
+
+func (personalOnlyStore) ListProviderAccountsWithSecrets(context.Context, string) ([]core.AccountWithSecrets, error) {
+	return []core.AccountWithSecrets{{
+		ProviderAccount: core.ProviderAccount{ID: "mine", UserID: "u1", OwnerKind: core.AccountOwnerUser, Provider: "anthropic", AuthKind: core.AuthKindAPIKey},
+		Secrets:         core.AccountSecrets{Secret: "sk-mine"},
+	}}, nil
+}
+func (personalOnlyStore) ListAccountLimits(context.Context, string) (map[string]core.LimitState, error) {
+	return nil, nil
+}
+func (personalOnlyStore) ListOwnedProviderAccountsWithSecrets(context.Context, core.AccountOwner) ([]core.AccountWithSecrets, error) {
+	return nil, nil
+}
+func (personalOnlyStore) ListOwnedAccountLimits(context.Context, core.AccountOwner) (map[string]core.LimitState, error) {
+	return nil, nil
+}
+func (personalOnlyStore) ListMemberAccountGrants(context.Context, string, string) (map[string]time.Time, error) {
+	return nil, nil
+}
+
+// What each verdict lets a call spend, through the loader every scope goes
+// through: an undecided run never reaches the person's own account; a
+// resolved automation (no stamp yet, I4) and an attended run do.
+func TestChatAttendance_UndecidedRunNeverSpendsThePersonsOwnAccount(t *testing.T) {
+	trigger := chatOf("c", string(core.TriggerEventKindSchedule), strPtr("t1"))
+	for _, tc := range []struct {
+		name     string
+		store    AttendanceStore
+		personal bool
+	}{
+		{"undecided: the turn read failed", &attendanceStore{err: errors.New("db down")}, false},
+		{"undecided: no store", nil, false},
+		{"resolved automation, before P11's stamp", &attendanceStore{}, true},
+		{"attended: the person took a turn", &attendanceStore{turns: map[string]time.Time{"c": time.Now()}}, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			who := chatAttendance(context.Background(), tc.store, trigger)
+			scope := llmCallSpec{UserID: "u1", OrgID: "o1", Attended: who.attended, UnattendedAnySource: who.anySource}.scope()
+			avail, err := drivers.BuildAvailableDrivers(context.Background(), personalOnlyStore{}, scope)
+			require.NoError(t, err)
+			if tc.personal {
+				assert.Len(t, avail.Accounts["anthropic"], 1, "the person's own account serves")
+			} else {
+				assert.Empty(t, avail.Accounts["anthropic"], "the person's own account is refused")
+				assert.True(t, scope.OrgFundedOnly())
+			}
+		})
+	}
 }
