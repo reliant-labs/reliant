@@ -117,6 +117,58 @@ export function overallSpeed(now: number = demoNow()) {
   return { typicalMs: s.p50Ms, slowMs: s.p95Ms, slowYesterdayMs: y.p95Ms, requests: s.requests, errorRate: s.errorRate };
 }
 
+/** The shop's production telemetry, as the console's own pages read it (Observability/ObservabilityPanel). */
+export const SHOP_PROD_SCOPE = { orgId: DEMO_ORG, projectId: "shop", envIds: [PROD], filters: [] };
+
+/**
+ * One step of a request (a span), in words: "SELECT customers" → "Look up the
+ * customer". The raw name always shows beside it; this only says what it is.
+ */
+export function plainStep(span: { name: string; service: string; kind: string }, isRoot: boolean): string {
+  const name = span.name;
+  if (isRoot && PLAIN_ROUTES[name]) return PLAIN_ROUTES[name];
+  if (name.startsWith("HTTP ") || (span.kind === "client" && span.service === "shop-web")) return "The customer's browser waits for an answer";
+  if (name.startsWith("POST https://") && name.includes("charges")) return "Ask the payment provider to take the money";
+  const known: Record<string, string> = {
+    "SELECT customers": "Look up the customer",
+    "INSERT orders": "Save the order",
+    "SELECT orders": "Read the customer's orders",
+    "SELECT products": "Look up the product",
+    "SELECT stock": "Check what's in stock",
+    "UPDATE stock": "Set the stock aside",
+    "payments.Charge": "Charge the card",
+    "nats publish orders.created": "Hand the order to the background worker",
+    "orders.created process": "The background worker picks up the order",
+    "orders.CreateOrder": "Run the order code",
+    "inventory.Reserve": "Run the stock code",
+    "inventory.v1.InventoryService/Reserve": "Reserve the items in stock",
+  };
+  return known[name] ?? PLAIN_ROUTES[name] ?? name;
+}
+
+/** A shop page, as a person would name it: "/checkout" → "the checkout page". */
+export function plainPath(path: string): string {
+  if (!path || path === "/") return "the home page";
+  if (path.startsWith("/products/")) return `a product page (${path.slice("/products/".length).replace(/-/g, " ")})`;
+  const known: Record<string, string> = { "/checkout": "the checkout page", "/cart": "their cart", "/orders": "“Your orders”", "/account": "their account", "/search": "search" };
+  return known[path] ?? path;
+}
+
+/** "2:17" for a duration in ms. */
+export function clock(ms: number): string {
+  const total = Math.max(0, Math.round(ms / 1000));
+  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, "0")}`;
+}
+
+// ── Alerts ──────────────────────────────────────────────────────────────────
+
+/** What each of the shop's alert rules watches, in a sentence, and who it tells. */
+export const PLAIN_ALERTS: Record<string, { watches: string; tells: string }> = {
+  OrdersErrorRateHigh: { watches: "More than 1 in 20 orders fail for 5 minutes in a row", tells: "Wakes the on-call person (Slack)" },
+  ListOrdersSlow: { watches: "The “Your orders” page takes over half a second for 1 in 20 visits, for 10 minutes", tells: "Opens a ticket on GitHub" },
+  WorkerBacklog: { watches: "More than 500 orders are waiting for the background worker, for 10 minutes", tells: "Opens a ticket on GitHub" },
+};
+
 // ── Releases ────────────────────────────────────────────────────────────────
 
 /** "feat(orders): retry the payment charge once on a timeout" → "Retry the payment charge once on a timeout". */

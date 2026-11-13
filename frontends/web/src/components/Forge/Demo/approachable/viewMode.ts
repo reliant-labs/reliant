@@ -4,10 +4,11 @@
  * The public demo's two views of the same console:
  *
  *   simple    (the default) five nav rows in everyday words — Home, What's
- *             happening, Releases, People, Agents — over the same pages, with
- *             the jargon renamed (Traces → "Slow requests", Errors → "Things
- *             that broke", Product analytics → "People"), and no page card
- *             opening by itself.
+ *             happening, Releases, People, Agents — over the same pages, each
+ *             plain name with the console's term beside it ("Slow requests
+ *             (traces)", "Recordings (sessions)"). Traces and recordings stay
+ *             first-class: a slow request's timeline shows inline, and a
+ *             recording plays when opened. No page card opens by itself.
  *   advanced  the full console nav, exactly as the product has it.
  *
  * Remembered for this browser (localStorage), read through

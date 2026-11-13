@@ -3,29 +3,31 @@
 /**
  * The simple view's versions of the console's busiest pages, for readers who
  * are not engineers. Each one leads with ONE plain sentence, shows the few
- * things that matter as big cards that look clickable, keeps IDs and raw
- * names behind "Details", and ends with the way into the detailed page.
+ * things that matter as big cards that look clickable, and keeps IDs and raw
+ * names visible as a quieter second line under each card (TechLine), then
+ * ends with the way into the detailed page.
  *
  *   What's happening   (Overview)          SimpleHappening
  *   Things that broke  (Errors)            SimpleBroke
- *   Slow requests      (Traces)            SimpleSlow
  *   Releases           (Releases)          SimpleReleases
  *   People             (Product analytics) SimplePeople
  *   Checkout           (one dashboard)     SimpleCheckout
+ *   One service        (its dashboard)     ServiceLead, above the real charts
  *
- * Their figures come from simpleData.ts, which reads the shop's one story.
+ * Slow requests, Recordings and Alerts are in SimpleTelemetry.tsx. Their
+ * figures come from simpleData.ts, which reads the shop's one story.
  */
 
 import { useMemo } from "react";
-import { ArrowRight, CheckCircle2, CircleAlert, Rocket, Timer, Users } from "lucide-react";
+import { ArrowRight, BellRing, CheckCircle2, CircleAlert, MonitorPlay, Rocket, Timer, Users } from "lucide-react";
 
 import Link from "@/components/forge-ui/link";
 import { cn } from "@/lib/utils";
 
-import { DEMO_INCIDENT, demoNow, HOUR, RUNNING } from "../demoData/shopStory";
+import { DEMO_INCIDENT, demoNow, demoStats, HOUR, RUNNING } from "../demoData/shopStory";
 import { demoSectionHref, DEMO_SECTION_RELEASES } from "../demoPath";
 import { PageAgentStrip } from "./AgentCards";
-import { DEMO_LINKS } from "./demoLinks";
+import { DEMO_LINKS, issueHref } from "./demoLinks";
 import {
   checkoutByHour,
   ENV_SHORT,
@@ -34,28 +36,35 @@ import {
   peopleThisWeek,
   plainIssue,
   plainSubject,
+  PROD,
   releaseRows,
   routeSpeeds,
   runningNow,
   useShopIssues,
 } from "./simpleData";
-import { ago, CardLink, count, Details, Panel, Section, seconds, ShortList, ShowDetailedView, SimplePage, StatusDot } from "./ui";
-
-const issueHref = (id: string) => `${DEMO_LINKS.errors}?issue=${encodeURIComponent(id)}`;
+import { useRecordings } from "./SimpleTelemetry";
+import { ago, CardLink, Code, count, Panel, Section, seconds, ShortList, ShowDetailedView, SimplePage, StatusDot, TechLine, Term, capital } from "./ui";
 
 // ── What's happening ────────────────────────────────────────────────────────
+
+/** Three tiles to a row: the "Open ›" cue sits under the text, not beside it. */
+const TILE = "sm:flex-col sm:items-start sm:justify-between sm:gap-3";
 
 export function SimpleHappening() {
   const { open } = useShopIssues();
   const speed = useMemo(() => overallSpeed(), []);
   const checkout = useMemo(() => routeSpeeds().find((r) => r.op === "checkout.v1.CheckoutService/Checkout")!, []);
   const people = useMemo(() => peopleThisWeek(), []);
+  const recordings = useRecordings();
+  const visits = recordings.data ?? [];
+  const hitError = visits.filter((s) => s.errors > 0).length;
   const prod = RUNNING["env-prod"];
   const broken = open?.filter((i) => i.envName === "prod").length ?? 1;
   return (
     <SimplePage
       testId="simple-happening"
       title="What's happening"
+      term="overview"
       tone={broken ? "bad" : "good"}
       summary={
         broken ? (
@@ -67,45 +76,76 @@ export function SimpleHappening() {
         )
       }
     >
-      <div className="grid gap-4 sm:grid-cols-2">
-        <CardLink href={issueHref(DEMO_INCIDENT.issueId)} testId="happening-broke">
-          <StatusLine icon={<CircleAlert className="h-5 w-5 text-danger-ink" aria-hidden="true" />} label="Things that broke" />
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <CardLink href={DEMO_LINKS.errors} testId="happening-broke" className={TILE}>
+          <StatusLine icon={<CircleAlert className="h-5 w-5 text-danger-ink" aria-hidden="true" />} label="Things that broke" term="errors" />
           <p className="mt-2 text-lg font-semibold text-ink">1 problem, and it's new</p>
           <p className="mt-1 text-base text-ink-muted">Some checkouts fail. Maya is on it.</p>
         </CardLink>
-        <CardLink href={DEMO_LINKS.traces} testId="happening-slow">
-          <StatusLine icon={<Timer className="h-5 w-5 text-warning-ink" aria-hidden="true" />} label="Speed" />
+        <CardLink href={DEMO_LINKS.traces} testId="happening-slow" className={TILE}>
+          <StatusLine icon={<Timer className="h-5 w-5 text-warning-ink" aria-hidden="true" />} label="Slow requests" term="traces" />
           <p className="mt-2 text-lg font-semibold text-ink">Most pages answer in {seconds(speed.typicalMs)}</p>
-          <p className="mt-1 text-base text-ink-muted">Checkout is the exception: 1 in 20 takes {seconds(checkout.slowMs)} today.</p>
+          <p className="mt-1 text-base text-ink-muted">Checkout is the exception: 1 in 20 takes {seconds(checkout.slowMs)}. See one, step by step.</p>
         </CardLink>
-        <CardLink href={DEMO_LINKS.badRelease} testId="happening-release">
+        <CardLink href={DEMO_LINKS.sessions} testId="happening-recordings" className={TILE}>
+          <StatusLine icon={<MonitorPlay className="h-5 w-5 text-ink-muted" aria-hidden="true" />} label="Recordings" term="sessions" />
+          <p className="mt-2 text-lg font-semibold text-ink">{recordings.data ? `${count(visits.length)} visits recorded today` : "Today's visits"}</p>
+          <p className="mt-1 text-base text-ink-muted">{hitError ? `${hitError} hit the broken checkout. Watch what they saw.` : "Watch what visitors saw."}</p>
+        </CardLink>
+        <CardLink href={DEMO_LINKS.alerts} testId="happening-alerts" className={TILE}>
+          <StatusLine icon={<BellRing className="h-5 w-5 text-danger-ink" aria-hidden="true" />} label="Alerts" />
+          <p className="mt-2 text-lg font-semibold text-ink">1 alert is going off</p>
+          <p className="mt-1 text-base text-ink-muted">Orders are failing. The on-call person was told.</p>
+        </CardLink>
+        <CardLink href={DEMO_LINKS.badRelease} testId="happening-release" className={TILE}>
           <StatusLine icon={<Rocket className="h-5 w-5 text-ink-muted" aria-hidden="true" />} label="Latest release" />
           <p className="mt-2 text-lg font-semibold text-ink">
             {prod.version} went out {ago(prod.age)}
           </p>
           <p className="mt-1 text-base text-ink-muted">Its automatic check failed. The fix is already in development.</p>
         </CardLink>
-        <CardLink href={DEMO_LINKS.people} testId="happening-people">
-          <StatusLine icon={<Users className="h-5 w-5 text-ink-muted" aria-hidden="true" />} label="People" />
+        <CardLink href={DEMO_LINKS.people} testId="happening-people" className={TILE}>
+          <StatusLine icon={<Users className="h-5 w-5 text-ink-muted" aria-hidden="true" />} label="People" term="analytics" />
           <p className="mt-2 text-lg font-semibold text-ink">{count(people.active)} people this week</p>
           <p className="mt-1 text-base text-ink-muted">{count(people.fresh)} of them are new.</p>
         </CardLink>
       </div>
 
-      <Section title="The parts of the shop" about="Each one is running, and here is how it is doing.">
+      <Section title="The parts of the shop" about="Each one is running, and here is how it is doing over the last hour.">
         <Panel className="divide-y divide-border p-0">
           {[
-            { name: "Orders and checkout", tone: "bad" as const, note: "Some checkouts fail since v1.8.3" },
-            { name: "Order processing (in the background)", tone: "good" as const, note: "Normal" },
-            { name: "Stock and inventory", tone: "good" as const, note: "Normal" },
-            { name: "The storefront website", tone: "good" as const, note: "Normal" },
-          ].map((part) => (
-            <div key={part.name} className="flex min-h-14 items-center gap-3 px-5 py-3">
-              <StatusDot tone={part.tone} />
-              <span className="flex-1 text-base text-ink">{part.name}</span>
-              <span className={cn("text-base", part.tone === "bad" ? "text-danger-ink" : "text-ink-muted")}>{part.note}</span>
-            </div>
-          ))}
+            { name: "Orders and checkout", service: "api", tone: "bad" as const, note: "Some checkouts fail since v1.8.3", href: DEMO_LINKS.serviceDashboard },
+            { name: "Order processing (in the background)", service: "worker", tone: "good" as const, note: "Normal" },
+            { name: "Stock and inventory", service: "inventory", tone: "good" as const, note: "Normal" },
+            { name: "The storefront website", service: "shop-web", tone: "good" as const, note: "Normal" },
+          ].map((part) => {
+            const stats = part.service === "shop-web" ? null : demoStats({ startMs: demoNow() - HOUR, endMs: demoNow(), envIds: [PROD], service: part.service });
+            const body = (
+              <>
+                <StatusDot tone={part.tone} className="mt-2" />
+                <span className="min-w-0 flex-1">
+                  <span className="flex flex-wrap items-baseline justify-between gap-x-4">
+                    <span className="text-base text-ink">{part.name}</span>
+                    <span className={cn("text-base", part.tone === "bad" ? "text-danger-ink" : "text-ink-muted")}>{part.note}</span>
+                  </span>
+                  <TechLine
+                    className="mt-0.5"
+                    items={[<Code key="s">{part.service}</Code>, stats && `${count(stats.requests)} requests/h`, stats && `p95 ${Math.round(stats.p95Ms)}ms`, stats && `${(stats.errorRate * 100).toFixed(1)}% errors`]}
+                  />
+                </span>
+              </>
+            );
+            return part.href ? (
+              <Link key={part.name} href={part.href} className="flex min-h-14 items-start gap-3 px-5 py-3 hover:bg-ink/[0.03] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring" data-testid="happening-part-link">
+                {body}
+                <ArrowRight className="mt-1 h-4 w-4 shrink-0 text-primary-ink" aria-hidden="true" />
+              </Link>
+            ) : (
+              <div key={part.name} className="flex min-h-14 items-start gap-3 px-5 py-3">
+                {body}
+              </div>
+            );
+          })}
         </Panel>
       </Section>
 
@@ -115,11 +155,12 @@ export function SimpleHappening() {
   );
 }
 
-function StatusLine({ icon, label }: { icon: React.ReactNode; label: string }) {
+function StatusLine({ icon, label, term }: { icon: React.ReactNode; label: string; term?: string }) {
   return (
     <span className="flex items-center gap-2 text-base font-medium text-ink-muted">
       {icon}
       {label}
+      {term && <Term className="text-sm">{term}</Term>}
     </span>
   );
 }
@@ -135,6 +176,7 @@ export function SimpleBroke() {
     <SimplePage
       testId="simple-broke"
       title="Things that broke"
+      term="errors"
       tone={customers.length ? "bad" : "good"}
       summary={
         !open ? (
@@ -157,31 +199,18 @@ export function SimpleBroke() {
           render={(issue) => {
             const plain = plainIssue(issue);
             return (
-              <div key={issue.id} className="space-y-1">
-                <CardLink href={issueHref(issue.id)} testId={`simple-issue-${issue.id}`}>
-                  <span className="flex flex-wrap items-center gap-2">
-                    {issue.status === "new" && <span className="rounded-full border border-danger-border bg-danger-surface px-2 py-0.5 text-sm font-medium text-danger-ink">New</span>}
-                    <span className="text-lg font-semibold text-ink">{plain.title}</span>
-                  </span>
-                  {plain.why && <span className="mt-1 block text-base text-ink-muted">{plain.why}</span>}
-                  <span className="mt-2 block text-base text-ink">
-                    Hit {count(issue.affected)} orders · started {ago(now - issue.firstSeenMs)}, right after release {issue.firstVersion}
-                    {issue.assignee ? ` · ${issue.assignee.name} is on it` : ""}
-                  </span>
-                </CardLink>
-                <Details>
-                  <dl className="grid grid-cols-[max-content_1fr] gap-x-4 gap-y-1">
-                    <dt>Error</dt>
-                    <dd className="font-mono [overflow-wrap:anywhere]">{issue.title}</dd>
-                    <dt>Where</dt>
-                    <dd className="font-mono [overflow-wrap:anywhere]">{issue.culprit}</dd>
-                    <dt>Service</dt>
-                    <dd>{issue.service}</dd>
-                    <dt>ID</dt>
-                    <dd className="font-mono">{issue.id}</dd>
-                  </dl>
-                </Details>
-              </div>
+              <CardLink key={issue.id} href={issueHref(issue.id)} testId={`simple-issue-${issue.id}`}>
+                <span className="flex flex-wrap items-center gap-2">
+                  {issue.status === "new" && <span className="rounded-full border border-danger-border bg-danger-surface px-2 py-0.5 text-sm font-medium text-danger-ink">New</span>}
+                  <span className="text-lg font-semibold text-ink">{plain.title}</span>
+                </span>
+                {plain.why && <span className="mt-1 block text-base text-ink-muted">{plain.why}</span>}
+                <span className="mt-2 block text-base text-ink">
+                  Hit {count(issue.affected)} orders · started {ago(now - issue.firstSeenMs)}, right after release {issue.firstVersion}
+                  {issue.assignee ? ` · ${capital(issue.assignee.name)} is on it` : ""}
+                </span>
+                <TechLine items={[<Code key="t">{issue.title}</Code>, <Code key="c">{issue.culprit}</Code>, issue.service, `${count(issue.events)} events`]} />
+              </CardLink>
             );
           }}
         />
@@ -210,72 +239,6 @@ export function SimpleBroke() {
         </Section>
       )}
       <ShowDetailedView what="error list" />
-    </SimplePage>
-  );
-}
-
-// ── Slow requests ───────────────────────────────────────────────────────────
-
-export function SimpleSlow() {
-  const routes = useMemo(() => routeSpeeds().filter((r) => r.requests > 0), []);
-  const overall = useMemo(() => overallSpeed(), []);
-  const slowest = routes[0];
-  const max = Math.max(...routes.map((r) => r.slowMs), 1);
-  return (
-    <SimplePage
-      testId="simple-slow"
-      title="Slow requests"
-      tone={slowest && slowest.slowMs > 1000 ? "warn" : "good"}
-      summary={
-        slowest && slowest.slowMs > 1000 ? (
-          <>
-            Most things in the shop answer in {seconds(overall.typicalMs)}. <strong className="font-semibold">{slowest.name} is the slow one:</strong> 1 in 20 takes {seconds(slowest.slowMs)} today, up from {seconds(slowest.slowYesterdayMs)} yesterday.
-          </>
-        ) : (
-          <>All good: everything answers in {seconds(overall.typicalMs)}, the same as yesterday.</>
-        )
-      }
-    >
-      <Section title="Slowest first" about="How long customers wait, over the last hour. The bar is the slowest 1 in 20 visits.">
-        <ShortList
-          items={routes}
-          noun="kinds of request"
-          render={(route) => (
-            <div key={route.op} className="space-y-1">
-              <CardLink href={DEMO_LINKS.traces} cue="See examples" testId={`simple-route-${route.op}`}>
-                <span className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-                  <span className="text-lg font-semibold text-ink">{route.name}</span>
-                  <span className="text-base text-ink">
-                    usually {seconds(route.typicalMs)} · slowest {seconds(route.slowMs)}
-                  </span>
-                </span>
-                <span className="mt-3 block h-3 w-full overflow-hidden rounded-full bg-surface-sunken" aria-hidden="true">
-                  <span className={cn("block h-full rounded-full", route.slowMs > 1000 ? "bg-warning" : "bg-primary/60")} style={{ width: `${Math.max(3, (route.slowMs / max) * 100)}%` }} />
-                </span>
-                {route.slowMs > route.slowYesterdayMs * 1.5 && (
-                  <span className="mt-2 block text-base text-warning-ink">Slower than yesterday ({seconds(route.slowYesterdayMs)})</span>
-                )}
-              </CardLink>
-              <Details>
-                <dl className="grid grid-cols-[max-content_1fr] gap-x-4 gap-y-1">
-                  <dt>Operation</dt>
-                  <dd className="font-mono [overflow-wrap:anywhere]">{route.op}</dd>
-                  <dt>Service</dt>
-                  <dd>{route.service}</dd>
-                  <dt>Requests (1h)</dt>
-                  <dd>{count(route.requests)}</dd>
-                  <dt>p50 / p95</dt>
-                  <dd>
-                    {Math.round(route.typicalMs)}ms / {Math.round(route.slowMs)}ms
-                  </dd>
-                </dl>
-              </Details>
-            </div>
-          )}
-        />
-      </Section>
-      <PageAgentStrip id="slow-pages" lead="We spent months guessing at slow pages. Handing an agent one slow request found the cause in an afternoon." />
-      <ShowDetailedView what="request timelines" />
     </SimplePage>
   );
 }
@@ -336,27 +299,27 @@ export function SimpleReleases() {
           limit={4}
           noun="releases"
           render={({ release, runningIn }) => (
-            <div key={release.version} className="space-y-1">
-              <CardLink href={`${DEMO_LINKS.releases}/${release.version}`} testId={`simple-release-${release.version}`}>
-                <span className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-                  <span className="text-lg font-semibold text-ink">{release.version}</span>
-                  <span className="text-base text-ink">{plainSubject(release.subject)}</span>
-                </span>
-                <span className="mt-1 block text-base text-ink-muted">
-                  by {release.author} · {ago(release.age)}
-                  {runningIn.length ? ` · running in ${runningIn.map((env) => ENV_SHORT[env]).join(" and ")}` : " · replaced by a newer release"}
-                </span>
-              </CardLink>
-              <Details label="What changed">
-                <ul className="space-y-1">
-                  {release.commits.map((commit) => (
-                    <li key={commit.sha}>
-                      {plainSubject(commit.subject)} <span className="text-ink-subtle">({commit.author}, {commit.sha.slice(0, 7)})</span>
-                    </li>
-                  ))}
-                </ul>
-              </Details>
-            </div>
+            <CardLink key={release.version} href={`${DEMO_LINKS.releases}/${release.version}`} testId={`simple-release-${release.version}`}>
+              <span className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                <span className="text-lg font-semibold text-ink">{release.version}</span>
+                <span className="text-base text-ink">{plainSubject(release.subject)}</span>
+              </span>
+              <span className="mt-1 block text-base text-ink-muted">
+                by {release.author} · {ago(release.age)}
+                {runningIn.length ? ` · running in ${runningIn.map((env) => ENV_SHORT[env]).join(" and ")}` : " · replaced by a newer release"}
+              </span>
+              <TechLine
+                items={[
+                  `${release.commits.length} change${release.commits.length === 1 ? "" : "s"}:`,
+                  ...release.commits.slice(0, 3).map((commit) => (
+                    <span key={commit.sha}>
+                      <Code>{commit.sha.slice(0, 7)}</Code> {commit.subject}
+                    </span>
+                  )),
+                  release.commits.length > 3 && `and ${release.commits.length - 3} more`,
+                ]}
+              />
+            </CardLink>
           )}
         />
       </Section>
@@ -377,6 +340,7 @@ export function SimplePeople() {
     <SimplePage
       testId="simple-people"
       title="People"
+      term="product analytics"
       summary={
         <>
           {count(week.active)} people used the shop this week, {change >= 0 ? `${change}% more` : `${-change}% fewer`} than last week. {count(week.fresh)} of them were new, and most new people found it through {top[0]?.channel.toLowerCase() ?? "search"}.
@@ -444,6 +408,7 @@ export function SimpleCheckout() {
     <SimplePage
       testId="simple-checkout"
       title="Checkout"
+      term="dashboard"
       tone="bad"
       summary={
         <>
@@ -483,5 +448,52 @@ export function SimpleCheckout() {
       <PageAgentStrip id="watch-alerts" lead="An agent can watch this chart for you, and start investigating the moment it dips." />
       <ShowDetailedView what="dashboard" />
     </SimplePage>
+  );
+}
+
+// ── One service's dashboard ─────────────────────────────────────────────────
+
+/** The orders service's rpcs: what its dashboard (service-orders) counts. */
+const ORDERS_OPS = ["orders.v1.OrdersService/CreateOrder", "orders.v1.OrdersService/GetOrder", "orders.v1.OrdersService/ListOrders", "orders.v1.OrdersService/CancelOrder"];
+
+/** The orders service's dashboard in the simple view: what its charts say, in a sentence, above them. */
+export function ServiceLead() {
+  const now = demoNow();
+  const { requests, errors, errorsYesterday, create } = useMemo(() => {
+    const hour = ORDERS_OPS.map((op) => demoStats({ startMs: now - HOUR, endMs: now, envIds: [PROD], op }));
+    const yesterday = ORDERS_OPS.map((op) => demoStats({ startMs: now - 25 * HOUR, endMs: now - 24 * HOUR, envIds: [PROD], op }));
+    return {
+      requests: hour.reduce((a, s) => a + s.requests, 0),
+      errors: hour.reduce((a, s) => a + s.errors, 0),
+      errorsYesterday: yesterday.reduce((a, s) => a + s.errors, 0),
+      create: hour[0],
+    };
+  }, [now]);
+  return (
+    <section className="mx-auto w-full max-w-5xl space-y-4 pb-2" data-testid="simple-service-lead" aria-labelledby="service-lead-title">
+      <h1 id="service-lead-title" className="text-3xl font-semibold tracking-tight text-ink">
+        Orders
+        <Term className="ml-2 text-2xl">the orders service's dashboard</Term>
+      </h1>
+      <p className="flex max-w-3xl items-start gap-3 text-lg leading-relaxed text-ink">
+        <StatusDot tone={errors > 0 ? "bad" : "good"} className="mt-2.5" />
+        <span>
+          In the last hour the orders service answered {count(requests)} requests.{" "}
+          <strong className="font-semibold">
+            {count(errors)} failed, all of them customers placing an order
+          </strong>{" "}
+          ({errorsYesterday ? `${count(errorsYesterday)} this time yesterday` : "none this time yesterday"}), and 1 in 20 orders took {seconds(create.p95Ms)}. The charts below show it hour by hour: the red band starts when {RUNNING["env-prod"].version} went out.
+        </span>
+      </p>
+      <TechLine items={[<Code key="s">orders.v1.OrdersService</Code>, "service api", `CreateOrder p50 ${Math.round(create.p50Ms)}ms · p95 ${Math.round(create.p95Ms)}ms`, `error rate ${requests ? ((errors / requests) * 100).toFixed(1) : "0"}%`]} />
+      <div className="flex flex-wrap gap-3">
+        <CardLink href={issueHref(DEMO_INCIDENT.issueId)} className="py-3" cue="Why">
+          <span className="text-base font-medium text-ink">The failures are the broken checkout</span>
+        </CardLink>
+        <CardLink href={DEMO_LINKS.traces} className="py-3" cue="See one">
+          <span className="text-base font-medium text-ink">The slow requests, step by step</span>
+        </CardLink>
+      </div>
+    </section>
   );
 }

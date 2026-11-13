@@ -287,6 +287,45 @@ function release(r: (typeof DEMO_RELEASES)[number], index: number) {
   };
 }
 
+/** The alert rules every environment's shape declares (the simple view's Alerts page reads them too). */
+export const DEMO_ALERT_RULES = [
+  {
+    alert: "OrdersErrorRateHigh",
+    expr: 'rate(rpc_server_errors{service="api",rpc_method="CreateOrder"}[5m]) / rate(rpc_server_requests{service="api",rpc_method="CreateOrder"}[5m]) > 0.05',
+    for: "5m",
+    labels: { severity: "page" },
+    annotations: { summary: "More than 5% of CreateOrder requests are failing" },
+    source: "user",
+    default_id: "",
+  },
+  {
+    alert: "ListOrdersSlow",
+    expr: 'histogram_quantile(0.95, rpc_server_duration{service="api",rpc_method="ListOrders"}) > 0.5',
+    for: "10m",
+    labels: { severity: "ticket" },
+    annotations: { summary: "ListOrders p95 over 500 ms" },
+    source: "default",
+    default_id: "rpc-latency",
+  },
+  {
+    alert: "WorkerBacklog",
+    expr: 'nats_consumer_pending{consumer="fulfilment"} > 500',
+    for: "10m",
+    labels: { severity: "ticket" },
+    annotations: {
+      summary: "The worker is falling behind on order events",
+    },
+    source: "user",
+    default_id: "",
+  },
+] as const;
+
+/** Where each severity is sent. */
+export const DEMO_ALERT_ROUTES = [
+  { match: { severity: "page" }, receiver: "oncall" },
+  { match: { severity: "ticket" }, receiver: "github-issues" },
+] as const;
+
 /** The declared shape of one environment (forge's release.Shape, snake_case). */
 function shape(envId: EnvId): JsonObject {
   return {
@@ -303,41 +342,8 @@ function shape(envId: EnvId): JsonObject {
     })),
     domains: DEMO_DOMAINS.filter((d) => d.env === envId).map((d) => d.hostname as string),
     clusters: [],
-    alerts: [
-      {
-        alert: "OrdersErrorRateHigh",
-        expr: 'rate(rpc_server_errors{service="api",rpc_method="CreateOrder"}[5m]) / rate(rpc_server_requests{service="api",rpc_method="CreateOrder"}[5m]) > 0.05',
-        for: "5m",
-        labels: { severity: "page" },
-        annotations: { summary: "More than 5% of CreateOrder requests are failing" },
-        source: "user",
-        default_id: "",
-      },
-      {
-        alert: "ListOrdersSlow",
-        expr: 'histogram_quantile(0.95, rpc_server_duration{service="api",rpc_method="ListOrders"}) > 0.5',
-        for: "10m",
-        labels: { severity: "ticket" },
-        annotations: { summary: "ListOrders p95 over 500 ms" },
-        source: "default",
-        default_id: "rpc-latency",
-      },
-      {
-        alert: "WorkerBacklog",
-        expr: 'nats_consumer_pending{consumer="fulfilment"} > 500',
-        for: "10m",
-        labels: { severity: "ticket" },
-        annotations: {
-          summary: "The worker is falling behind on order events",
-        },
-        source: "user",
-        default_id: "",
-      },
-    ],
-    alert_routes: [
-      { match: { severity: "page" }, receiver: "oncall" },
-      { match: { severity: "ticket" }, receiver: "github-issues" },
-    ],
+    alerts: DEMO_ALERT_RULES.map((rule) => ({ ...rule, labels: { ...rule.labels }, annotations: { ...rule.annotations } })),
+    alert_routes: DEMO_ALERT_ROUTES.map((route) => ({ match: { ...route.match }, receiver: route.receiver })),
     observability_policy: { enabled: true, disabled: [] },
   };
 }

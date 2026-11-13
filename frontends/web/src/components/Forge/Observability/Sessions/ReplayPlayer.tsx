@@ -129,6 +129,8 @@ export interface ReplayPlayerProps {
   live: boolean;
   /** Open at this moment (epoch ms), e.g. just before an error. */
   startAtMs?: number;
+  /** Start playing as soon as the recording can be played (the public demo's simple view). Default: paused. */
+  autoPlay?: boolean;
   /** A seek asked for from outside (the timeline). A new nonce seeks again. */
   seek?: { atMs: number; nonce: number };
   /** Timeline entries, drawn as marks on the scrubber. */
@@ -282,7 +284,12 @@ export function ReplayPlayer(props: ReplayPlayerProps) {
             pendingSeekRef.current = null;
             setPendingSeek(null);
           }
-          replayer.pause(at);
+          if (initial.autoPlay) {
+            replayer.play(at);
+            setPlaying(true);
+          } else {
+            replayer.pause(at);
+          }
           setOffset(at);
           setReady(true);
         },

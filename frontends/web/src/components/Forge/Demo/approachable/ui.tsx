@@ -2,8 +2,10 @@
 
 /**
  * The plain-language pages' few building blocks, so every simple page reads
- * the same way: a title and ONE summary sentence first, then a short list of
- * big, obviously clickable cards, with the detail behind a disclosure.
+ * the same way: a title (with the technical term beside it, muted) and ONE
+ * summary sentence first, then a short list of big, obviously clickable
+ * cards. The detail an engineer would want — raw names, IDs, p95s — is never
+ * hidden: it sits under each card as a quieter second line (TechLine).
  *
  * Every clickable thing looks clickable: a card has a border that lights on
  * hover, a focus ring, and an "Open" with a chevron; a button is a button.
@@ -11,7 +13,7 @@
  */
 
 import { useState, type ReactNode } from "react";
-import { ChevronDown, ChevronRight, SlidersHorizontal } from "lucide-react";
+import { ChevronRight, SlidersHorizontal } from "lucide-react";
 
 import Link from "@/components/forge-ui/link";
 import { cn } from "@/lib/utils";
@@ -31,12 +33,20 @@ export function StatusDot({ tone, className }: { tone: Tone; className?: string 
   return <span className={cn("inline-block h-2.5 w-2.5 shrink-0 rounded-full", DOT[tone], className)} aria-hidden="true" />;
 }
 
-/** A page of the simple view: title, one summary sentence, then the body. */
-export function SimplePage({ title, summary, tone, children, testId }: { title: string; summary: ReactNode; tone?: Tone; children: ReactNode; testId: string }) {
+/** The console's word for a plain name, muted beside it: "Slow requests (traces)". */
+export function Term({ children, className }: { children: ReactNode; className?: string }) {
+  return <span className={cn("font-normal text-ink-subtle", className)}>({children})</span>;
+}
+
+/** A page of the simple view: title (and its technical term), one summary sentence, then the body. */
+export function SimplePage({ title, term, summary, tone, children, testId }: { title: string; term?: string; summary: ReactNode; tone?: Tone; children: ReactNode; testId: string }) {
   return (
     <div className="mx-auto w-full max-w-5xl space-y-8 pb-16 pt-2" data-testid={testId} data-simple-page="">
       <header className="space-y-3">
-        <h1 className="text-3xl font-semibold tracking-tight text-ink">{title}</h1>
+        <h1 className="text-3xl font-semibold tracking-tight text-ink">
+          {title}
+          {term && <Term className="ml-2 text-2xl">{term}</Term>}
+        </h1>
         <p className="flex max-w-3xl items-start gap-3 text-lg leading-relaxed text-ink">
           {tone && <StatusDot tone={tone} className="mt-2.5" />}
           <span>{summary}</span>
@@ -85,32 +95,40 @@ export function CardLink({ href, children, cue, className, testId }: { href: str
 }
 
 /** A card that does not link: a plain container in the same shape. */
-export function Panel({ children, className }: { children: ReactNode; className?: string }) {
-  return <div className={cn("rounded-2xl border border-border bg-surface p-5", className)}>{children}</div>;
-}
-
-/** The detail nobody needs at first glance: IDs, raw names, secondary figures. */
-export function Details({ label = "Details", children }: { label?: string; children: ReactNode }) {
-  const [open, setOpen] = useState(false);
+export function Panel({ children, className, ...rest }: { children: ReactNode; className?: string; "data-testid"?: string }) {
   return (
-    <div className="pt-1">
-      <button
-        type="button"
-        aria-expanded={open}
-        onClick={(event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          setOpen((was) => !was);
-        }}
-        className="inline-flex min-h-[44px] items-center gap-1.5 rounded-lg px-1 text-sm font-medium text-ink-muted hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-      >
-        <ChevronDown className={cn("h-4 w-4 transition-transform", open && "rotate-180")} aria-hidden="true" />
-        {open ? `Hide ${label.toLowerCase()}` : label}
-      </button>
-      {open && <div className="mt-1 rounded-xl border border-border bg-surface-sunken p-3 text-sm text-ink-muted">{children}</div>}
+    <div className={cn("rounded-2xl border border-border bg-surface p-5", className)} {...rest}>
+      {children}
     </div>
   );
 }
+
+/**
+ * The technical detail, shown inline as a quieter second line rather than
+ * behind a disclosure: raw names in mono, figures as the console says them.
+ * Falsy items are skipped, so a caller can list what it has.
+ */
+export function TechLine({ items, className }: { items: (ReactNode | false | null | undefined)[]; className?: string }) {
+  const shown = items.filter((item) => item !== false && item !== null && item !== undefined && item !== "");
+  if (!shown.length) return null;
+  return (
+    <span className={cn("mt-2 block text-sm leading-relaxed text-ink-subtle [overflow-wrap:anywhere]", className)} data-testid="tech-line">
+      {shown.map((item, index) => (
+        <span key={index}>
+          {index > 0 && (
+            <span aria-hidden="true" className="px-1.5">
+              ·
+            </span>
+          )}
+          {item}
+        </span>
+      ))}
+    </span>
+  );
+}
+
+/** A raw name inside a TechLine. */
+export const Code = ({ children }: { children: ReactNode }) => <code className="font-mono text-[0.8125rem] text-ink-muted">{children}</code>;
 
 /** The first `limit` items, and "Show all N" for the rest. */
 export function ShortList<T>({ items, limit = 5, render, noun }: { items: readonly T[]; limit?: number; render: (item: T) => ReactNode; noun: string }) {
@@ -168,3 +186,6 @@ export function seconds(ms: number): string {
 }
 
 export const count = (n: number) => Math.round(n).toLocaleString("en-US");
+
+/** "maya" → "Maya": a person's handle at the start of a sentence. */
+export const capital = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);

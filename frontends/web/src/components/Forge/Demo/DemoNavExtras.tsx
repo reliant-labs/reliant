@@ -3,9 +3,11 @@
 /**
  * The public demo's additions to the console nav (Console/consoleNavExtras):
  *
- *  - in the simple view (the default; approachable/viewMode.ts), the five
- *    plain-language rows, renamed crumbs and titles, and the simple pages in
- *    place of the busiest console pages (approachable/simpleNav.tsx);
+ *  - in the simple view (the default; approachable/viewMode.ts), the
+ *    plain-language rows (each with the console's term beside it), renamed
+ *    crumbs and titles, the simple pages in place of the list pages, and a
+ *    plain lead over one trace, one problem or one service's dashboard
+ *    (approachable/simpleNav.tsx);
  *  - in the advanced view, "How it was built", the recorded forge run
  *    (`/forge/demo?section=built`), as the first row, and the page's own
  *    breadcrumb when it is open;
@@ -20,7 +22,7 @@ import { useRouterState } from "@tanstack/react-router";
 import { Hammer } from "lucide-react";
 
 import { ConsoleNavExtrasProvider, type ConsoleNavExtras } from "../Console/consoleNavExtras";
-import { simpleCrumbs, simpleNav, simplePage, simpleTitle, ViewModeSwitch, withAgentStrip } from "./approachable/simpleNav";
+import { simpleCrumbs, simpleLead, simpleNav, simplePage, simpleTitle, ViewModeSwitch, withAgentStrip } from "./approachable/simpleNav";
 import { useDemoViewMode } from "./approachable/viewMode";
 import { DemoDrawerActions } from "./DemoScreenActions";
 import { DEMO_SECTION_BUILT, FORGE_DEMO_PATH, type DemoSection } from "./demoPath";
@@ -50,9 +52,9 @@ export function DemoNavExtras({ builtActive = false, section, children }: { buil
       hideScope: true,
       nav: (page, alertsFiring) => simpleNav(page, current, alertsFiring),
       crumbs: (page) => simpleCrumbs(page, current),
-      title: simpleTitle,
+      title: (page) => simpleTitle(page, search),
       // A section page (Home, Agents…) is DemoConsole's own body: never replaced.
-      page: (page, children) => (current ? null : (simplePage(page, search) ?? withAgentStrip(page, children))),
+      page: (page, children) => (current ? null : (simplePage(page, search) ?? simpleLead(page, search, children) ?? withAgentStrip(page, children))),
     };
   }, [mode, current, search]);
   return <ConsoleNavExtrasProvider value={value}>{children}</ConsoleNavExtrasProvider>;

@@ -2,9 +2,9 @@
 
 /**
  * The public demo's home, for buyers who are not engineers: one short hero in
- * everyday words, then four small before/after stories, each with one visual
- * from the sample shop and one way to see it for real, then "Put an agent
- * on it".
+ * everyday words, then four short before/after stories (a sentence each),
+ * each with one visual from the sample shop and one way to see it for real —
+ * a trace, a recording, a release's check — then "Put an agent on it".
  *
  * The first story is our own (we spent months on slow chat loading; a trace
  * handed to an agent found it in an afternoon). The others are told as "teams
@@ -28,25 +28,26 @@ import { count } from "./ui";
 
 export function DemoHome() {
   return (
-    <div className="mx-auto w-full max-w-5xl space-y-20 pb-20 pt-4 sm:space-y-28 sm:pt-10" data-testid="demo-home">
+    <div className="mx-auto w-full max-w-5xl space-y-16 pb-20 pt-4 sm:space-y-20 sm:pt-10" data-testid="demo-home">
       <Hero />
-      <div className="space-y-20 sm:space-y-28">
+      <div className="space-y-16 sm:space-y-20">
         <Story
           id="slow"
           eyebrow="Slow pages"
-          title="Three months of guessing. One afternoon with the agent."
-          before="We spent three months trying to make our chat pages load faster. New caches, bigger servers, rewritten screens. Nothing moved much."
-          after="The day we handed the agent a trace, a step-by-step timeline of one slow page load, it pointed at a single database query and fixed it the same afternoon."
-          see={{ href: DEMO_LINKS.traces, label: "See slow requests in the sample shop" }}
+          title="Three months of guessing. One afternoon with a trace."
+          before="We spent three months trying to make our chat pages load faster. Nothing moved much."
+          after="Then we handed the agent a trace, a step-by-step timeline of one slow load. It found the slow query and fixed it that afternoon."
+          see={{ href: DEMO_LINKS.traces, label: "See a slow request, step by step" }}
           visual={<SlowVisual />}
         />
         <Story
           id="checkout"
           eyebrow="Things that break"
           title="Checkout broke at 2am. The fix was waiting by breakfast."
-          before="Usually an alert wakes someone up, who spends an hour half-asleep working out what changed."
-          after="Here the alert wakes an agent instead. It reads the failed orders, sees that the newest release retries slow payments past checkout's time limit, and opens a fix. In the morning, you review one change."
-          see={{ href: DEMO_LINKS.incidentIssue, label: "See the broken checkout" }}
+          before="Usually an alert wakes someone up to dig through what changed."
+          after="Here it wakes an agent. It finds the release that broke payments and opens a fix; you review one change in the morning."
+          see={{ href: DEMO_LINKS.sessions, label: "Watch a customer hit it" }}
+          more={{ href: DEMO_LINKS.incidentIssue, label: "See the broken checkout" }}
           visual={<CheckoutVisual />}
           flip
         />
@@ -54,8 +55,8 @@ export function DemoHome() {
           id="release"
           eyebrow="Releases"
           title="“Did yesterday's release break anything?” You'll know in minutes."
-          before="Someone ships on a Friday, then everyone watches charts and hopes. Or nobody ships on Fridays at all."
-          after={`Every release is compared, automatically, with the hour before it went out. When v1.8.3 reached the shop's customers, the check flagged it within minutes: failed checkouts went from ${INCIDENT_CHECK.errorsBefore} to ${INCIDENT_CHECK.errorsAfter}.`}
+          before="Someone ships, then everyone watches charts and hopes."
+          after={`Every release is checked against the hour before it. v1.8.3 failed its check within minutes: failed checkouts went from ${INCIDENT_CHECK.errorsBefore} to ${INCIDENT_CHECK.errorsAfter}.`}
           see={{ href: DEMO_LINKS.badRelease, label: "See that release's check" }}
           more={{ href: demoSectionHref(DEMO_SECTION_RELEASES), label: "How releases work, and why it's safer" }}
           visual={<ReleaseVisual />}
@@ -65,7 +66,7 @@ export function DemoHome() {
           eyebrow="People"
           title="“Who actually uses this?”"
           before="Most teams bolt on a separate analytics tool, then argue about whose numbers are right."
-          after="Forge counts people from the same app it runs: who is new, who came back, and where they found you. No extra tool, and the numbers match the rest of the app."
+          after="Forge counts people from the same app it runs, so the numbers match everything else."
           see={{ href: DEMO_LINKS.people, label: "See who uses the sample shop" }}
           visual={<PeopleVisual />}
           flip
