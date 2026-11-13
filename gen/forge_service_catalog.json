@@ -8719,6 +8719,11 @@
               "name": "fallback_model",
               "kind": "string",
               "optional": true
+            },
+            {
+              "name": "funding",
+              "kind": "enum",
+              "type_name": "reliant.v1.ProviderPolicy.Funding"
             }
           ],
           "reliant.v1.QueuedAgentMessage": [
@@ -9688,6 +9693,12 @@
             "PLAN_STATUS_COMPLETED",
             "PLAN_STATUS_CANCELLED"
           ],
+          "reliant.v1.ProviderPolicy.Funding": [
+            "FUNDING_UNSPECIFIED",
+            "FUNDING_ORG_FIRST",
+            "FUNDING_PERSONAL_FIRST",
+            "FUNDING_ORG_ONLY"
+          ],
           "reliant.v1.ProviderPolicy.OnLimit": [
             "ON_LIMIT_UNSPECIFIED",
             "ON_LIMIT_WAIT",
@@ -9816,6 +9827,12 @@
             3,
             4
           ],
+          "reliant.v1.ProviderPolicy.Funding": [
+            0,
+            1,
+            2,
+            3
+          ],
           "reliant.v1.ProviderPolicy.OnLimit": [
             0,
             1,
@@ -9910,6 +9927,10 @@
           "reliant.v1.PlanStatus": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
             "GoName": "PlanStatus"
+          },
+          "reliant.v1.ProviderPolicy.Funding": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "ProviderPolicy_Funding"
           },
           "reliant.v1.ProviderPolicy.OnLimit": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
@@ -17865,7 +17886,8 @@
             "INBOX_ITEM_KIND_AUTOMATION_RUN_PAUSED",
             "INBOX_ITEM_KIND_AUTOMATION_DEFINITION_BROKEN",
             "INBOX_ITEM_KIND_WORKTREE_RECLAIM",
-            "INBOX_ITEM_KIND_WORKTREE_MARKED"
+            "INBOX_ITEM_KIND_WORKTREE_MARKED",
+            "INBOX_ITEM_KIND_PERSONAL_FUNDING"
           ],
           "reliant.v1.TriggerHealthStatus": [
             "TRIGGER_HEALTH_STATUS_UNSPECIFIED",
@@ -17906,7 +17928,8 @@
             10,
             11,
             12,
-            13
+            13,
+            14
           ],
           "reliant.v1.TriggerHealthStatus": [
             0,
@@ -32803,6 +32826,11 @@
               "name": "fallback_model",
               "kind": "string",
               "optional": true
+            },
+            {
+              "name": "funding",
+              "kind": "enum",
+              "type_name": "reliant.v1.ProviderPolicy.Funding"
             }
           ],
           "reliant.v1.SetChatVisibilityRequest": [
@@ -32932,6 +32960,12 @@
             "CHAT_STATE_IDLE",
             "CHAT_STATE_ARCHIVED"
           ],
+          "reliant.v1.ProviderPolicy.Funding": [
+            "FUNDING_UNSPECIFIED",
+            "FUNDING_ORG_FIRST",
+            "FUNDING_PERSONAL_FIRST",
+            "FUNDING_ORG_ONLY"
+          ],
           "reliant.v1.ProviderPolicy.OnLimit": [
             "ON_LIMIT_UNSPECIFIED",
             "ON_LIMIT_WAIT",
@@ -32990,6 +33024,12 @@
             2,
             3
           ],
+          "reliant.v1.ProviderPolicy.Funding": [
+            0,
+            1,
+            2,
+            3
+          ],
           "reliant.v1.ProviderPolicy.OnLimit": [
             0,
             1,
@@ -33035,6 +33075,10 @@
           "reliant.v1.ChatState": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
             "GoName": "ChatState"
+          },
+          "reliant.v1.ProviderPolicy.Funding": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "ProviderPolicy_Funding"
           },
           "reliant.v1.ProviderPolicy.OnLimit": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",

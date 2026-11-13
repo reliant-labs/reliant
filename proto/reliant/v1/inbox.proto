@@ -182,6 +182,13 @@ enum InboxItemKind {
   // KeepMarkedWorktree cancels it, ReclaimMarkedWorktreeNow skips the wait.
   // Informational: nothing has to be done to keep a worktree that is used.
   INBOX_ITEM_KIND_WORKTREE_MARKED = 13;
+  // A chat in an org asks before it moves from the org's AI accounts to the
+  // person's own (control-plane docs/design/org-provider-accounts.md §10):
+  // the org's accounts are rate-limited, unusable, or serve none of the
+  // chat's model, and the person's own account could. The chat waits until
+  // the person answers (ProviderAccountService.ResolvePersonalFundingChoice).
+  // One item per chat per question. Blocks a live run.
+  INBOX_ITEM_KIND_PERSONAL_FUNDING = 14;
 }
 
 message ListInboxRequest {
@@ -237,7 +244,9 @@ message InboxItem {
   // current failure episode, so repeated failures stay one item and a new
   // episode is a new item. A needs-setup item embeds the automation and the
   // set of inputs it is missing, so dismissing it holds until a workflow edit
-  // makes it miss something new.
+  // makes it miss something new. A personal-funding item ("personal_funding:")
+  // embeds the chat id and when the chat asked, so a later question is a new
+  // item.
   string item_id = 2;
 
   // The chat the item belongs to. Empty for automation failure kinds that have
