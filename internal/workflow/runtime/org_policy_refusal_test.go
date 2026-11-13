@@ -79,6 +79,9 @@ func (s *CapacityWakeSuite) TestOrgPolicyRefusal_PausesThenAModelSwitchResumes()
 		allowed.restore() // the person picked an allowed model
 		env.SignalWorkflow(CapacityWakeSignalName, nil)
 	}, 10*time.Minute)
+	// The same wake again (the org's policy watcher retrying a delivery it
+	// could not confirm): idempotent, it resumes nothing twice.
+	env.RegisterDelayedCallback(func() { env.SignalWorkflow(CapacityWakeSignalName, nil) }, 10*time.Minute+time.Second)
 
 	env.ExecuteWorkflow(DynamicWorkflow, input)
 
@@ -87,6 +90,7 @@ func (s *CapacityWakeSuite) TestOrgPolicyRefusal_PausesThenAModelSwitchResumes()
 	at, ok := e.callAt("parent", 2)
 	s.Require().True(ok, "the turn went on after the model switch")
 	s.GreaterOrEqual(at.Sub(startOf(e)), 10*time.Minute, "the turn waited, paused, for the switch")
+	s.Equal(2, e.turns(input.ExecContext.Thread), "a second wake re-ran nothing: one refused turn, one resumed turn")
 }
 
 // An unattended run ends with the reason on a policy refusal instead of

@@ -18,7 +18,10 @@ import (
 // reliant nothing, so the Watcher asks: every org a refusal was met in is
 // watched, its policy re-resolved every WatchInterval, and the first answer
 // with a different version wakes the org's blocked chats (a capacity wake,
-// the one adding an account sends). A wake retries each blocked thread once;
+// the one adding an account sends). A wake is owed until it reaches every
+// chat: a delivery an outage interrupted is retried, with backoff, for the
+// runs it missed. A capacity wake is idempotent, so a chat woken twice only
+// retries its blocked thread once more. A wake retries each blocked thread once;
 // a policy that still refuses pauses it again at the cost of one refused
 // request. An org is watched for at most WatchFor after its last refusal.
 //
@@ -32,11 +35,19 @@ const WatchInterval = CacheTTL
 // WatchFor is how long after its last refusal an org stays watched.
 const WatchFor = 24 * time.Hour
 
-// Waker wakes an org's chats that may have a thread blocked. It reports how
-// many it reached.
+// Waker wakes an org's chats that may have a thread blocked.
 type Waker interface {
-	WakeOrgChats(ctx context.Context, orgID, why string) int
+	// WakeOrgChats wakes every blocked chat of orgID. It returns the runs it
+	// could not signal, and an error when it could not list them at all.
+	WakeOrgChats(ctx context.Context, orgID, why string) (failed []string, err error)
+	// WakeRuns wakes the named runs again and returns those it still could
+	// not signal.
+	WakeRuns(ctx context.Context, workflowIDs []string, why string) (failed []string)
 }
+
+// wakeBackoff bounds the wait between attempts to deliver one org's wake
+// after a failed one: WatchInterval, doubling, at most wakeBackoffMax.
+const wakeBackoffMax = 10 * time.Minute
 
 // Watcher wakes an org's paused chats when its policy changes. A nil
 // *Watcher watches nothing.
@@ -54,6 +65,15 @@ type watched struct {
 	// could not be read, so the first answer read counts as a change.
 	version int64
 	until   time.Time
+
+	// changed is set once the version moved: from then on the org's wake is
+	// owed until it is delivered in full. pending are the runs a partial
+	// delivery could not signal (nil: the whole org is still owed); retryAt
+	// and attempts pace the next delivery.
+	changed  bool
+	pending  []string
+	retryAt  time.Time
+	attempts int
 }
 
 // NewWatcher watches through r and wakes through wake; nil when either is
@@ -86,35 +106,88 @@ func (w *Watcher) Watch(ctx context.Context, orgID string) {
 	w.orgs[orgID] = &watched{version: version, until: until}
 }
 
-// Check re-resolves every watched org once, wakes the chats of each whose
-// policy version changed, and forgets those and the expired ones.
+// Check re-resolves every watched org once and owes a wake to each whose
+// policy version changed, then delivers what is owed. An org is forgotten
+// only once its wake reached every chat, or when it expires; a delivery a
+// database or Temporal outage interrupted is retried with backoff, and only
+// for the runs it missed.
 func (w *Watcher) Check(ctx context.Context) {
 	if w == nil {
 		return
 	}
 	w.mu.Lock()
 	now := w.now()
-	due := make(map[string]int64, len(w.orgs))
+	due := make([]string, 0, len(w.orgs))
 	for org, wt := range w.orgs {
 		if !now.Before(wt.until) {
 			delete(w.orgs, org)
 			continue
 		}
-		due[org] = wt.version
+		due = append(due, org)
 	}
 	w.mu.Unlock()
-	for org, version := range due {
+	for _, org := range due {
+		w.checkOrg(ctx, org)
+	}
+}
+
+func (w *Watcher) checkOrg(ctx context.Context, org string) {
+	w.mu.Lock()
+	wt, ok := w.orgs[org]
+	if !ok {
+		w.mu.Unlock()
+		return
+	}
+	changed, version, retryAt := wt.changed, wt.version, wt.retryAt
+	pending := append([]string(nil), wt.pending...)
+	w.mu.Unlock()
+
+	const why = "the organization's policy changed"
+	if !changed {
 		p, err := w.r.Resolve(ctx, org)
 		if err != nil || p.Stale || p.Version == version {
-			continue
+			return
 		}
-		w.mu.Lock()
-		delete(w.orgs, org)
-		w.mu.Unlock()
-		n := w.wake.WakeOrgChats(ctx, org, "the organization's policy changed")
-		logging.InfoContext(ctx, "orgpolicy: the policy of an org with refused work changed; woke its blocked chats",
-			"org_id", org, "from_version", version, "to_version", p.Version, "woken", n)
+		logging.InfoContext(ctx, "orgpolicy: the policy of an org with refused work changed; waking its blocked chats",
+			"org_id", org, "from_version", version, "to_version", p.Version)
+	} else if w.now().Before(retryAt) {
+		return
 	}
+
+	var failed []string
+	var err error
+	if changed && len(pending) > 0 {
+		failed = w.wake.WakeRuns(ctx, pending, why)
+	} else {
+		failed, err = w.wake.WakeOrgChats(ctx, org, why)
+	}
+
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	cur, ok := w.orgs[org]
+	if !ok {
+		return
+	}
+	if err == nil && len(failed) == 0 {
+		delete(w.orgs, org)
+		return
+	}
+	cur.changed = true
+	if err == nil {
+		cur.pending = failed
+	} // a listing failure leaves pending as it was: nil owes the whole org
+	cur.attempts++
+	backoff := WatchInterval << min(cur.attempts-1, 5)
+	if backoff > wakeBackoffMax {
+		backoff = wakeBackoffMax
+	}
+	cur.retryAt = w.now().Add(backoff)
+	// A wake still owed keeps the org watched past its refusal's window.
+	if until := cur.retryAt.Add(WatchInterval); cur.until.Before(until) {
+		cur.until = until
+	}
+	logging.WarnContext(ctx, "orgpolicy: could not wake every blocked chat of an org whose policy changed; trying again",
+		"org_id", org, "unreached", len(failed), "error", err, "retry_in", backoff)
 }
 
 // Run calls Check every WatchInterval until ctx ends.

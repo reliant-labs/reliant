@@ -39,11 +39,15 @@ func TestWakeOrg_FansOutToTheOrgsBlockedChats(t *testing.T) {
 	_ = inOrg("frank-wake-org", "org-acme", db.Completed()) // ended
 
 	temporal := &usageLimitTemporalClient{}
-	woken := capacitywake.WakeOrg(context.Background(), repo, temporal, "org-acme", "the organization's policy changed")
-	assert.Equal(t, 2, woken)
+	failed, err := capacitywake.WakeOrg(context.Background(), repo, temporal, "org-acme", "the organization's policy changed")
+	require.NoError(t, err)
+	assert.Empty(t, failed)
 	assert.ElementsMatch(t, []string{
 		alicePaused + ":" + v2.CapacityWakeSignalName,
 		bobPaused + ":" + v2.CapacityWakeSignalName,
 	}, temporal.signals)
-	assert.Equal(t, 0, capacitywake.WakeOrg(context.Background(), repo, temporal, "", "x"), "no org wakes nothing")
+	failed, err = capacitywake.WakeOrg(context.Background(), repo, temporal, "", "x")
+	assert.NoError(t, err)
+	assert.Empty(t, failed, "no org wakes nothing")
+	assert.Len(t, temporal.signals, 2, "no org wakes nothing")
 }

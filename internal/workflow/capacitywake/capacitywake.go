@@ -16,6 +16,7 @@ package capacitywake
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/reliant-labs/reliant/internal/logging"
 )
@@ -88,27 +89,39 @@ type OrgTargetLister interface {
 }
 
 // WakeOrg sends a capacity wake to every chat of orgID whose run may have a
-// thread blocked, and reports how many it reached: what an org policy change
-// does for the chats a policy refusal paused (internal/orgpolicy.Watcher).
-func WakeOrg(ctx context.Context, targets OrgTargetLister, signals Signaler, orgID, why string) int {
+// thread blocked: what an org policy change does for the chats a policy
+// refusal paused (internal/orgpolicy.Watcher). It returns the root workflow
+// ids it could not signal, and an error when it could not list the chats at
+// all; the caller wakes those again later (WakeRuns). A capacity wake is
+// idempotent: one sent to a run with nothing blocked is a no-op, and one sent
+// twice retries a blocked thread once more.
+func WakeOrg(ctx context.Context, targets OrgTargetLister, signals Signaler, orgID, why string) (failed []string, err error) {
 	if targets == nil || signals == nil || orgID == "" {
-		return 0
+		return nil, nil
 	}
 	ids, err := targets.ListOrgCapacityWakeTargets(ctx, orgID)
 	if err != nil {
 		logging.WarnContext(ctx, "Could not list the org's chats to wake", "orgID", orgID, "why", why, "error", err)
-		return 0
+		return nil, fmt.Errorf("list the org's chats to wake: %w", err)
 	}
-	woken := 0
-	for _, workflowID := range ids {
-		if err := signals.SignalWorkflow(ctx, workflowID, "", SignalName, Signal{}); err != nil {
-			logging.InfoContext(ctx, "Could not wake an org chat's run", "workflowID", workflowID, "why", why, "error", err)
-			continue
-		}
-		woken++
-	}
+	failed = WakeRuns(ctx, signals, ids, why)
 	if len(ids) > 0 {
-		logging.InfoContext(ctx, "Woke the org's blocked chats", "orgID", orgID, "why", why, "woken", woken, "candidates", len(ids))
+		logging.InfoContext(ctx, "Woke the org's blocked chats", "orgID", orgID, "why", why, "woken", len(ids)-len(failed), "candidates", len(ids))
 	}
-	return woken
+	return failed, nil
+}
+
+// WakeRuns sends a capacity wake to each root workflow id and returns those
+// it could not signal.
+func WakeRuns(ctx context.Context, signals Signaler, workflowIDs []string, why string) (failed []string) {
+	if signals == nil {
+		return workflowIDs
+	}
+	for _, workflowID := range workflowIDs {
+		if err := signals.SignalWorkflow(ctx, workflowID, "", SignalName, Signal{}); err != nil {
+			logging.InfoContext(ctx, "Could not wake a chat's run", "workflowID", workflowID, "why", why, "error", err)
+			failed = append(failed, workflowID)
+		}
+	}
+	return failed
 }

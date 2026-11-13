@@ -50,6 +50,10 @@ type orgChatWaker struct {
 	temporal *TemporalClient
 }
 
-func (o orgChatWaker) WakeOrgChats(ctx context.Context, orgID, why string) int {
+func (o orgChatWaker) WakeOrgChats(ctx context.Context, orgID, why string) ([]string, error) {
 	return capacitywake.WakeOrg(ctx, o.repo, o.temporal.Client, orgID, why)
+}
+
+func (o orgChatWaker) WakeRuns(ctx context.Context, workflowIDs []string, why string) []string {
+	return capacitywake.WakeRuns(ctx, o.temporal.Client, workflowIDs, why)
 }
