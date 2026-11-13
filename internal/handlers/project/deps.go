@@ -126,3 +126,10 @@ type CloneDispatcher interface {
 type MoveStarter interface {
 	StartProjectOrgMove(ctx context.Context, moveID string) error
 }
+
+// MoveFacts reads control-plane's half of a move preview (secret access,
+// hosted projects, the target's funding, the machines' orgs).
+// controlplane.Service is one.
+type MoveFacts interface {
+	PreviewProjectOrgMove(ctx context.Context, q controlplane.ProjectOrgMovePreviewQuery) (*controlplane.ProjectOrgMovePreview, error)
+}

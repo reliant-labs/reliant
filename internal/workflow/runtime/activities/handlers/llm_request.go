@@ -9,6 +9,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -147,13 +148,6 @@ func (s llmCallSpec) scope() drivers.Scope {
 	return drivers.Scope{UserID: s.UserID, OrgID: s.OrgID, Attended: s.Attended, UnattendedAnySource: s.UnattendedAnySource}
 }
 
-// chatScope is the scope of a call made for chat, as a spec built from the
-// chat row (chatOrgID, chatAttended) scopes it.
-func chatScope(chat *db.Chat) drivers.Scope {
-	return llmCallSpec{UserID: chat.UserID, OrgID: chatOrgID(chat), Attended: chatAttended(chat),
-		UnattendedAnySource: chatUnattendedAnySource(chat)}.scope()
-}
-
 // chatOrgID is the org a call made for chat is scoped to: the chat row's
 // org_id, "" when the chat has none (or there is no chat).
 func chatOrgID(chat *db.Chat) string {
@@ -163,27 +157,116 @@ func chatOrgID(chat *db.Chat) string {
 	return *chat.OrgID
 }
 
-// chatAttended reports whether a person is behind a call made for chat,
-// decided from the chat's launch event: a run a stored trigger launched
-// (core.TriggerEventKind.Unattended) has nobody behind it; every other run,
-// and a call with no chat, has. The per-turn rule (a person's message into an
-// automation's chat) and the agent.start_run lineage walk refine this one
-// function when unattended runs are restricted (org-provider-accounts §11.1).
-func chatAttended(chat *db.Chat) bool {
-	if chat == nil || chat.TriggerID == nil {
-		return true
-	}
-	return !core.TriggerEventKind(chat.LaunchKind).Unattended()
+// AttendanceStore is what deciding who is behind a chat's call reads
+// (chatAttendance): the chat rows of an agent.start_run lineage, its launch
+// events, and whether a person has taken a turn in a chat.
+type AttendanceStore interface {
+	GetChat(ctx context.Context, id string) (*db.Chat, error)
+	GetTriggerEventByChat(ctx context.Context, kind core.TriggerEventKind, chatID string) (*core.TriggerEvent, error)
+	// ChatPersonTurnAt is when a person last sent a message into the chat,
+	// nil when nobody has.
+	ChatPersonTurnAt(ctx context.Context, chatID string) (*time.Time, error)
 }
 
-// chatUnattendedAnySource reports whether an unattended run of chat may draw
-// on every source, as its owner's own run would (org-provider-accounts §11.3,
-// I4): true for an automation stamped "any" and for one that predates the
-// stamp, whose NULL reads as "any". No automation carries a stamp yet (P11
-// adds triggers.unattended_funding), so every unattended run keeps today's
-// sources. An attended run is never asked: false.
-func chatUnattendedAnySource(chat *db.Chat) bool {
-	return !chatAttended(chat)
+// attendance is who is behind a call made for a chat (org-provider-accounts
+// §11.1): attended runs follow the chat rules (§10), unattended ones draw on
+// org-funded sources only, unless anySource (§11.3).
+type attendance struct {
+	attended  bool
+	anySource bool
+}
+
+// attendanceVerdict is what deciding attendance concluded: a person is
+// behind the run, it was resolved as an automation's, or it could not be
+// decided at all.
+type attendanceVerdict int
+
+const (
+	verdictAttended attendanceVerdict = iota
+	// verdictUnattended: resolved, a stored trigger launched the run (or the
+	// root of its agent lineage).
+	verdictUnattended
+	// verdictUnknown: a read failed, there was no store, an agent-started
+	// run had no launch event or parent, or the lineage was broken or too
+	// deep to walk.
+	verdictUnknown
+)
+
+// maxAttendanceLineage bounds the agent.start_run walk; the fork-bomb guard
+// (tools.MaxAgentStartRunDepth) keeps real lineages far shorter.
+const maxAttendanceLineage = 8
+
+// chatAttendance decides, on the server and per call, whether a person is
+// behind a call made for chat (§11.1):
+//
+//   - I2, per turn: a chat a person has sent a message into (adopting an
+//     automation's chat) is attended from then on, with its sub-agents; each
+//     trigger fire is a chat of its own, so no later trigger turn shares it.
+//   - a run a stored trigger launched (core.TriggerEventKind.Unattended) is
+//     unattended, a hand fire of the trigger included;
+//   - I1: a run an agent started (agent.start_run) is what its lineage root
+//     is: the parent_chat_id walk the fork-bomb guard does;
+//   - every other run (chat.start, manual.run, cli.run, builder.test, a chat
+//     that predates launch events), and a call with no chat, is attended.
+//
+// A resolved unattended run may draw on every source (anySource), as every
+// automation predates the unattended-funding stamp (I4: NULL reads as "any",
+// today's behaviour; P11 reads the stamp). A run whose attendance could not
+// be decided is unattended with anySource false: org-funded sources only,
+// never the person's own (fail closed).
+func chatAttendance(ctx context.Context, store AttendanceStore, chat *db.Chat) attendance {
+	switch chatAttended(ctx, store, chat) {
+	case verdictAttended:
+		return attendance{attended: true}
+	case verdictUnattended:
+		return attendance{anySource: true}
+	default:
+		return attendance{}
+	}
+}
+
+func chatAttended(ctx context.Context, store AttendanceStore, chat *db.Chat) attendanceVerdict {
+	for range maxAttendanceLineage {
+		if chat == nil {
+			return verdictAttended
+		}
+		launched := core.TriggerEventKind(chat.LaunchKind)
+		triggered := chat.TriggerID != nil && launched.Unattended()
+		if !triggered && launched != core.TriggerEventKindAgentStartRun {
+			return verdictAttended
+		}
+		if store == nil {
+			return verdictUnknown
+		}
+		at, err := store.ChatPersonTurnAt(ctx, chat.ID)
+		if err != nil {
+			logging.WarnContext(ctx, "Could not read whether a person took a turn in the chat; using only the org's sources", "chatID", chat.ID, "error", err)
+			return verdictUnknown
+		}
+		if at != nil {
+			return verdictAttended
+		}
+		if triggered {
+			return verdictUnattended
+		}
+		// agent.start_run: the lineage root decides.
+		event, err := store.GetTriggerEventByChat(ctx, core.TriggerEventKindAgentStartRun, chat.ID)
+		if err != nil {
+			logging.WarnContext(ctx, "Could not read an agent-started run's launch; using only the org's sources", "chatID", chat.ID, "error", err)
+			return verdictUnknown
+		}
+		parent, _ := event.Payload["parent_chat_id"].(string)
+		if parent == "" {
+			logging.WarnContext(ctx, "An agent-started run names no parent; using only the org's sources", "chatID", chat.ID)
+			return verdictUnknown
+		}
+		if chat, err = store.GetChat(ctx, parent); err != nil {
+			logging.WarnContext(ctx, "Could not read an agent-started run's parent chat; using only the org's sources", "chatID", parent, "error", err)
+			return verdictUnknown
+		}
+	}
+	logging.WarnContext(ctx, "An agent-started run's lineage is too deep to walk; using only the org's sources")
+	return verdictUnknown
 }
 
 // LocalModelSpec is what resolving a local model needs beyond the selector.

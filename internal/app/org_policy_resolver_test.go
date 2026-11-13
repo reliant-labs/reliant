@@ -42,3 +42,14 @@ func TestNewOrgPolicyResolver(t *testing.T) {
 
 // selfHostedAuthority is a token store with no control plane behind it.
 type selfHostedAuthority struct{ tokenauthority.Authority }
+
+// With no policies (self-hosted) the worker has no watcher, and a refusal
+// registers with none.
+func TestNewOrgPolicyWatcher_NoPolicies(t *testing.T) {
+	t.Cleanup(func() { orgpolicy.SetProcessWatcher(nil) })
+	w, err := NewOrgPolicyWatcher(OrgPolicyWatcherDeps{})
+	if err != nil || w != nil {
+		t.Fatalf("no policies: %v, %v; want no watcher", w, err)
+	}
+	orgpolicy.WatchRefused(context.Background(), "org-a") // a no-op, not a panic
+}

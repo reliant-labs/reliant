@@ -51,6 +51,8 @@ type Repository interface {
 	UpdateChatState(ctx context.Context, chatID string, state db.ChatState, reason string) error
 	UpdateChatUnread(ctx context.Context, chatID string, unread bool, reason string) error
 	SetChatAdopted(ctx context.Context, chatID, userID string, adopted bool) (bool, error)
+	// RecordChatPersonTurn marks a launched chat attended from a person's send on.
+	RecordChatPersonTurn(ctx context.Context, chatID, userID string) error
 	SetChatDaemonBlocked(ctx context.Context, chatID string, blocked bool) error
 	SetChatPausedForMachine(ctx context.Context, chatID string, paused bool) (bool, error)
 	SetChatQueuedForMachine(ctx context.Context, chatID string, queued bool) (bool, error)

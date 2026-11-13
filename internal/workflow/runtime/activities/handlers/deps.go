@@ -129,6 +129,8 @@ type ApprovalResolveStore interface {
 // to the local-model directory, threads.Service, the tool bindings, the mailbox
 // drain, history loading and the tool-call status writer.
 type CallLLMStore interface {
+	// AttendanceStore decides who is behind the chat's calls (chatAttendance).
+	AttendanceStore
 	LLMUsageRecorder
 	ResolveThreadAmbientMemoryExclusion(ctx context.Context, chatID, threadID string, requested bool) (bool, error)
 	GetChat(ctx context.Context, id string) (*db.Chat, error)
@@ -180,6 +182,8 @@ type CleanupStore interface {
 // CompactStore is what CompactActivity reads and writes; the summary goes
 // through threads.Service and the history through LoadMessagesForLLM.
 type CompactStore interface {
+	// AttendanceStore decides who is behind the chat's calls (chatAttendance).
+	AttendanceStore
 	LLMUsageRecorder
 	GetChat(ctx context.Context, id string) (*db.Chat, error)
 	GetThread(ctx context.Context, id string) (*db.Thread, error)
@@ -301,6 +305,8 @@ type ExecuteToolsStore interface {
 
 // GenerateTitleStore is what GenerateTitleActivity reads and writes.
 type GenerateTitleStore interface {
+	// AttendanceStore decides who is behind the chat's calls (chatAttendance).
+	AttendanceStore
 	LLMUsageRecorder
 	RunTx(ctx context.Context, policy orm.TxPolicy, f func(ctx context.Context) error) error
 	GetChat(ctx context.Context, id string) (*db.Chat, error)

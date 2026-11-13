@@ -11,6 +11,8 @@ import (
 	"github.com/openai/openai-go/v3"
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/genai"
+
+	"github.com/reliant-labs/reliant/internal/orgpolicy"
 )
 
 func anthropicStatus(code int) error {
@@ -40,7 +42,10 @@ func TestCredentialRejected(t *testing.T) {
 		"openrouter 4010 digits": {errors.New("API request failed with status 4010: x"), false},
 		"quota is not a verdict": {fmt.Errorf("403 insufficient_quota: %w", openaiStatus(403)), false},
 		"plain network error":    {errors.New("dial tcp: connection refused"), false},
-		"nil":                    {nil, false},
+		// An org policy's verdict is never the key's, even beside a 403.
+		"org policy refusal": {fmt.Errorf("%w: %w", &orgpolicy.Refusal{Reason: orgpolicy.ReasonProviderNotAllowed}, openaiStatus(403)), false},
+		"org policy marker":  {fmt.Errorf("%s: %w", (&orgpolicy.Refusal{Reason: orgpolicy.ReasonModelNotAllowed}).Error(), anthropicStatus(403)), false},
+		"nil":                {nil, false},
 	} {
 		t.Run(name, func(t *testing.T) {
 			assert.Equal(t, tc.want, CredentialRejected(tc.err))

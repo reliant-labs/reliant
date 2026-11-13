@@ -167,6 +167,13 @@ type Service interface {
 	PrepareProjectOrgMove(ctx context.Context, s ProjectOrgMoveStep, actorUserID string) (revoked int, err error)
 	AbortProjectOrgMove(ctx context.Context, s ProjectOrgMoveStep) error
 	RecordProjectOrgMove(ctx context.Context, s ProjectOrgMoveStep, projectName string, counts map[string]int64) error
+	// PreviewProjectOrgMove reads what control-plane holds that a move would
+	// touch, for the move preview: the source org's secret access, the
+	// hosted project the project deploys as, whether the target can pay and
+	// which machines are in it. It checks the actor as Prepare does and
+	// writes nothing. Errors as the steps above; a control plane that
+	// predates it is ErrProjectOrgMoveUnsupported.
+	PreviewProjectOrgMove(ctx context.Context, q ProjectOrgMovePreviewQuery) (*ProjectOrgMovePreview, error)
 }
 
 // Deps configures the adapter.

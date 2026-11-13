@@ -9,6 +9,7 @@ import (
 	"go.temporal.io/sdk/workflow"
 
 	"github.com/reliant-labs/reliant/internal/llm/drivererrors"
+	"github.com/reliant-labs/reliant/internal/orgpolicy"
 )
 
 // A chat-wide capacity wake (CapacityWakeSignalName) is how a chat whose
@@ -75,6 +76,12 @@ func capacityErrorText(err error) bool {
 		return true
 	}
 	if drivererrors.IsProviderCreditExhaustion(err) {
+		return true
+	}
+	// An org policy refusal: switching the chat's model, the user's Resume,
+	// and the org's policy changing (orgpolicy.Watcher) are each a capacity
+	// wake, and each is how a turn the policy paused goes on.
+	if orgpolicy.IsRefusal(err) {
 		return true
 	}
 	msg := err.Error()

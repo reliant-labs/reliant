@@ -34,6 +34,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/models/message"
+	"github.com/reliant-labs/reliant/internal/orgpolicy"
 )
 
 type ReliantClient struct {
@@ -769,6 +770,11 @@ func (c *ReliantClient) shouldRetry(attempts int, err error) (bool, llm.RetryWai
 		if reason == "reliant_managed_quota_exhausted" {
 			return false, llm.RetryWait{}, wrapReliantManagedQuotaError(apierr)
 		}
+		// An org policy's verdict: typed, so it pauses the turn with its
+		// reason instead of reading as a dead credential (orgpolicy.Refusal).
+		if reason == "org_policy_refused" {
+			return false, llm.RetryWait{}, &orgpolicy.Refusal{Reason: orgPolicyRefusalReason(apierr), Detail: strings.TrimSpace(apierr.Message)}
+		}
 		return false, llm.RetryWait{}, err
 	}
 
@@ -796,6 +802,13 @@ func shouldRetryReliantAPIError(apierr *openai.Error) (bool, string) {
 		apierr.Code,
 		apierr.RawJSON(),
 	}, " "))
+
+	// An org policy refusing the call (control-plane docs/design/org-policies.md
+	// §5.1): a 403 that names its policy reason. Recognised before the
+	// auth-text rule below, which would read "forbidden" as a bad key.
+	if orgPolicyRefusalReason(apierr) != "" {
+		return false, "org_policy_refused"
+	}
 
 	if containsAny(errText,
 		"reauthentication is needed",
@@ -909,7 +922,26 @@ func (c *ReliantClient) logReliantAPIError(attempts int, apierr *openai.Error, r
 // Reliant credit is spent (the chat shows the upgrade prompt). Those log at
 // WARN; at ERROR an empty wallet raised a production error issue per user.
 func reliantAPIErrorIsExpected(retry bool, reason string) bool {
-	return retry || reason == "reliant_managed_quota_exhausted"
+	return retry || reason == "reliant_managed_quota_exhausted" || reason == "org_policy_refused"
+}
+
+// orgPolicyRefusalReason is the org policy reason a gateway refusal names, or
+// "". The gateway sends it as x-forge-error-reason on a 403 (never a 429,
+// which is the wallet's), with the same string as the OpenAI-shaped body's
+// error.code; the header is read first, the body when a proxy dropped it.
+func orgPolicyRefusalReason(apierr *openai.Error) string {
+	if apierr == nil || apierr.StatusCode != http.StatusForbidden {
+		return ""
+	}
+	if apierr.Response != nil {
+		if r := strings.TrimSpace(apierr.Response.Header.Get(svcerr.ReasonHeader)); orgpolicy.IsRefusalReason(r) {
+			return r
+		}
+	}
+	if r := strings.TrimSpace(apierr.Code); orgpolicy.IsRefusalReason(r) {
+		return r
+	}
+	return ""
 }
 
 func summarizeReliantAPIError(apierr *openai.Error) string {

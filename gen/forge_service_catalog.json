@@ -464,6 +464,7 @@
         "LedgerRetention",
         "NATSConn",
         "OrgPolicyResolver",
+        "OrgPolicyWatcher",
         "OrgResolver",
         "PauseService",
         "PayloadStore",
@@ -2412,6 +2413,11 @@
             {
               "name": "paused_reason",
               "kind": "string"
+            },
+            {
+              "name": "unattended_funding",
+              "kind": "enum",
+              "type_name": "reliant.v1.UnattendedFunding"
             }
           ],
           "reliant.v1.TriggerChange": [
@@ -2915,6 +2921,11 @@
             "TRIGGER_OVERLAP_POLICY_SKIP",
             "TRIGGER_OVERLAP_POLICY_ALLOW"
           ],
+          "reliant.v1.UnattendedFunding": [
+            "UNATTENDED_FUNDING_UNSPECIFIED",
+            "UNATTENDED_FUNDING_ANY",
+            "UNATTENDED_FUNDING_ORG_ONLY"
+          ],
           "reliant.v1.WorkflowState": [
             "WORKFLOW_STATE_UNSPECIFIED",
             "WORKFLOW_STATE_PENDING",
@@ -2979,6 +2990,11 @@
             1,
             2
           ],
+          "reliant.v1.UnattendedFunding": [
+            0,
+            1,
+            2
+          ],
           "reliant.v1.WorkflowState": [
             0,
             1,
@@ -3017,6 +3033,10 @@
           "reliant.v1.TriggerOverlapPolicy": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
             "GoName": "TriggerOverlapPolicy"
+          },
+          "reliant.v1.UnattendedFunding": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "UnattendedFunding"
           },
           "reliant.v1.WorkflowState": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
@@ -41708,6 +41728,11 @@
               "Name": "triggers",
               "ProtoType": "[]string",
               "IsOptional": false
+            },
+            {
+              "Name": "unattended_funding",
+              "ProtoType": "enum",
+              "IsOptional": false
             }
           ],
           "EnableWorkflowResponse": [
@@ -42154,6 +42179,11 @@
               "name": "triggers",
               "kind": "string",
               "repeated": true
+            },
+            {
+              "name": "unattended_funding",
+              "kind": "enum",
+              "type_name": "reliant.v1.UnattendedFunding"
             }
           ],
           "reliant.v1.EnableWorkflowResponse": [
@@ -42658,6 +42688,11 @@
             {
               "name": "paused_reason",
               "kind": "string"
+            },
+            {
+              "name": "unattended_funding",
+              "kind": "enum",
+              "type_name": "reliant.v1.UnattendedFunding"
             }
           ],
           "reliant.v1.TriggerChange": [
@@ -42815,6 +42850,11 @@
               "name": "acting_identity",
               "kind": "enum",
               "type_name": "reliant.v1.ActingIdentity"
+            },
+            {
+              "name": "unattended_funding",
+              "kind": "enum",
+              "type_name": "reliant.v1.UnattendedFunding"
             }
           ],
           "reliant.v1.TriggerDefinitionSource": [
@@ -43297,6 +43337,11 @@
             "TRIGGER_OVERLAP_POLICY_SKIP",
             "TRIGGER_OVERLAP_POLICY_ALLOW"
           ],
+          "reliant.v1.UnattendedFunding": [
+            "UNATTENDED_FUNDING_UNSPECIFIED",
+            "UNATTENDED_FUNDING_ANY",
+            "UNATTENDED_FUNDING_ORG_ONLY"
+          ],
           "reliant.v1.WorkflowState": [
             "WORKFLOW_STATE_UNSPECIFIED",
             "WORKFLOW_STATE_PENDING",
@@ -43371,6 +43416,11 @@
             1,
             2
           ],
+          "reliant.v1.UnattendedFunding": [
+            0,
+            1,
+            2
+          ],
           "reliant.v1.WorkflowState": [
             0,
             1,
@@ -43419,6 +43469,10 @@
           "reliant.v1.TriggerOverlapPolicy": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
             "GoName": "TriggerOverlapPolicy"
+          },
+          "reliant.v1.UnattendedFunding": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "UnattendedFunding"
           },
           "reliant.v1.WorkflowState": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
@@ -51611,6 +51665,18 @@
       "implementation_candidates": []
     },
     {
+      "id": "OrgPolicyWatcher",
+      "name": "OrgPolicyWatcher",
+      "kind": "provider",
+      "type": "*github.com/reliant-labs/reliant/internal/app.OrgPolicyWatcher",
+      "source": {
+        "path": "internal/app/org_policy_watcher.go",
+        "symbol": "NewOrgPolicyWatcher"
+      },
+      "methods": [],
+      "implementation_candidates": []
+    },
+    {
       "id": "OrgProviderAccount",
       "name": "OrgProviderAccount",
       "kind": "component",
@@ -53299,6 +53365,15 @@
     },
     {
       "consumer": "Project",
+      "field": "MoveFacts",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/project.MoveFacts",
+      "methods": [],
+      "candidates": [],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "Project",
       "field": "Moves",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/project.MoveStarter",
       "methods": [],
@@ -54392,6 +54467,14 @@
     {
       "code": "binding_unresolved",
       "component": "Project.ControlPlane",
+      "source": {
+        "path": "internal/handlers/project/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "Project.MoveFacts",
       "source": {
         "path": "internal/handlers/project/service.go",
         "symbol": "New"
