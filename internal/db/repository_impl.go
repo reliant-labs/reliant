@@ -770,16 +770,14 @@ func (r *Repo) CountMessagesInThread(ctx context.Context, threadID string) (int,
 	return r.countMessages(ctx, orm.WhereEq(store.MessageFieldThreadID, threadID))
 }
 
-// CountUserMessagesCapped counts the user-role messages in userID's chats, up
-// to limit.
-func (r *Repo) CountUserMessagesCapped(ctx context.Context, userID string, limit int) (int, error) {
-	if userID == "" {
-		return 0, fmt.Errorf("user ID cannot be empty")
+// ClaimUserActivation records messageID as userID's activation when it is
+// their first typed message ever and no activation is recorded, reporting
+// whether this call recorded it (store.ClaimUserActivation).
+func (r *Repo) ClaimUserActivation(ctx context.Context, userID, chatID, messageID string) (bool, error) {
+	if userID == "" || chatID == "" || messageID == "" {
+		return false, fmt.Errorf("user, chat and message IDs are required")
 	}
-	if limit <= 0 {
-		return 0, fmt.Errorf("limit must be positive")
-	}
-	return store.CountUserMessagesCapped(ctx, r.ORM(), userID, limit)
+	return store.ClaimUserActivation(ctx, r.ORM(), userID, chatID, messageID)
 }
 
 // GetMessagesByContextWindow loads messages from a specific context window.

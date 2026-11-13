@@ -80,14 +80,20 @@ func TestTrackMessageSentSeparatesPerChatFromFirstForUser(t *testing.T) {
 	out := installAnalytics(t)
 	ctx := context.Background()
 
-	// Messages in the user's whole history, as the repository would count them
-	// after the message under test was stored.
-	typed := 1
+	// The store claims the activation for the first qualifying message only,
+	// and records which message it was asked about.
+	var asked []string
+	claimed := false
 	repo := &MockRepository{
 		CountMessagesInThreadFunc: func(context.Context, string) (int, error) { return 1, nil },
-		CountUserMessagesCappedFunc: func(_ context.Context, userID string, limit int) (int, error) {
+		ClaimUserActivationFunc: func(_ context.Context, userID, chatID, messageID string) (bool, error) {
 			assert.Equal(t, "user-1", userID)
-			return min(typed, limit), nil
+			asked = append(asked, chatID+"/"+messageID)
+			if claimed {
+				return false, nil
+			}
+			claimed = true
+			return true, nil
 		},
 	}
 	svc := &Service{deps: Deps{Repo: repo}}
@@ -97,7 +103,6 @@ func TestTrackMessageSentSeparatesPerChatFromFirstForUser(t *testing.T) {
 	// The user's first message ever, in chat A.
 	svc.trackMessageSent(ctx, "user-1", chatA, "msg-1", "thread-a", "hello", 0)
 	// A second chat's first message: per-chat event only, not first for user.
-	typed = 2
 	svc.trackMessageSent(ctx, "user-1", chatB, "msg-2", "thread-b", "hello again", 0)
 
 	recs := out.records(t)
@@ -116,6 +121,34 @@ func TestTrackMessageSentSeparatesPerChatFromFirstForUser(t *testing.T) {
 	assert.Equal(t, map[any]any{"chat-a": true, "chat-b": false}, byChat)
 
 	assert.Len(t, eventsNamed(recs, "product.message_sent"), 2)
+	// The claim is asked about the very message being tracked, so the store can
+	// check that message qualifies (a node-thread or automation-chat message
+	// never does: TestClaimUserActivation).
+	assert.Equal(t, []string{"chat-a/msg-1", "chat-b/msg-2"}, asked)
+}
+
+// A replayed send (a named StartChat retry, a redelivered activity) tracks the
+// same message again: the claim, already recorded, refuses it, so
+// user_first_message is not emitted twice however late the replay comes.
+func TestUserFirstMessageIsNotEmittedAgainOnReplay(t *testing.T) {
+	out := installAnalytics(t)
+	claimed := map[string]bool{}
+	repo := &MockRepository{
+		CountMessagesInThreadFunc: func(context.Context, string) (int, error) { return 1, nil },
+		ClaimUserActivationFunc: func(_ context.Context, userID, _, _ string) (bool, error) {
+			if claimed[userID] {
+				return false, nil
+			}
+			claimed[userID] = true
+			return true, nil
+		},
+	}
+	svc := &Service{deps: Deps{Repo: repo}}
+	chat := &db.Chat{ID: "chat-a", ProjectID: "proj-1"}
+	for range 3 {
+		svc.trackMessageSent(context.Background(), "user-1", chat, "msg-1", "thread-a", "hello", 0)
+	}
+	assert.Len(t, eventsNamed(out.records(t), "product.user_first_message"), 1)
 }
 
 // Only the opaque ids and the workflow type go on user_first_message: a custom
@@ -124,8 +157,8 @@ func TestUserFirstMessageCarriesOpaqueIDsOnly(t *testing.T) {
 	out := installAnalytics(t)
 	name := "my secret workflow"
 	repo := &MockRepository{
-		CountMessagesInThreadFunc:   func(context.Context, string) (int, error) { return 1, nil },
-		CountUserMessagesCappedFunc: func(context.Context, string, int) (int, error) { return 1, nil },
+		CountMessagesInThreadFunc: func(context.Context, string) (int, error) { return 1, nil },
+		ClaimUserActivationFunc:   func(context.Context, string, string, string) (bool, error) { return true, nil },
 	}
 	svc := &Service{deps: Deps{Repo: repo}}
 	svc.trackMessageSent(context.Background(), "user-1", &db.Chat{ID: "chat-a", ProjectID: "proj-1", WorkflowName: &name},
@@ -141,13 +174,13 @@ func TestUserFirstMessageCarriesOpaqueIDsOnly(t *testing.T) {
 	assert.NotContains(t, string(raw), "private prompt")
 }
 
-// A failed count is not a first: no user_first_message, and first_for_user is
+// A failed claim is not a first: no user_first_message, and first_for_user is
 // false, rather than a guess that would inflate activation.
-func TestUserFirstMessageNotEmittedWhenCountFails(t *testing.T) {
+func TestUserFirstMessageNotEmittedWhenTheClaimFails(t *testing.T) {
 	out := installAnalytics(t)
 	repo := &MockRepository{
-		CountMessagesInThreadFunc:   func(context.Context, string) (int, error) { return 1, nil },
-		CountUserMessagesCappedFunc: func(context.Context, string, int) (int, error) { return 0, errors.New("db down") },
+		CountMessagesInThreadFunc: func(context.Context, string) (int, error) { return 1, nil },
+		ClaimUserActivationFunc:   func(context.Context, string, string, string) (bool, error) { return false, errors.New("db down") },
 	}
 	svc := &Service{deps: Deps{Repo: repo}}
 	svc.trackMessageSent(context.Background(), "user-1", &db.Chat{ID: "chat-a"}, "msg-1", "thread-a", "hi", 0)

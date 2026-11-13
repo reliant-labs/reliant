@@ -76,14 +76,17 @@ workflow name or any message text). `first_message_sent` carries
 `first_for_user=true` on the one chat whose first message is that one, so either
 `countIf(first_for_user = 'true')` or `user_first_message` answers "activated".
 
-Both are decided server-side when the message is stored: the user's first iff
-the count of user-role messages on a chat's main thread, across the chats a
-person started (automation and agent chats, whose seeded prompts the user did not
-type, are excluded), is 1 (`store.CountUserMessagesCapped`, capped at 2 rows). If
-that count fails, neither the event nor `first_for_user=true` is emitted. Two
-first chats started in the same instant can each see the other's message and
-emit neither: a rare undercount, never a double count. Messages sent before this
-shipped are not backfilled: an older user's next message is not a first.
+Both are decided server-side when the message is stored, by one claim
+(`store.ClaimUserActivation`): the message qualifies when it is user-role, on a
+chat's main thread, in a chat a person started (automation and agent chats,
+whose seeded prompts the user did not type, are excluded), and no qualifying
+message of the user's precedes it; the same statement then inserts the user's
+`user_activations` row, keyed by user. Only the call that inserts it emits, so a
+replayed send, a retry on another replica or a later message never emits again,
+and deleting the user's history does not reset it (the row references no
+message). If the claim fails, neither the event nor `first_for_user=true` is
+emitted. Messages sent before this shipped are not backfilled: an older user's
+next message has one of theirs before it, so it is not a first.
 `llm_call_completed` is the worker's: `CallLLMActivity` emits one per model call
 (success or failure) from the one place that has the provider, the usage and the
 latency. Its fields are counts and metadata only, never prompt or reply text:

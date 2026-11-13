@@ -245,14 +245,16 @@ func (s *Service) trackMessageSent(ctx context.Context, userID string, chat *db.
 	analyticsClient := analytics.ForUser(ctx, userID)
 	analyticsClient.TrackMessageSent(metrics)
 
-	// The message is already stored, so it is the user's first ever exactly
-	// when it is the only user message in all of their chats. A failed count
-	// reports nothing rather than a wrong first.
-	firstForUser := false
-	if n, err := s.deps.Repo.CountUserMessagesCapped(ctx, userID, 2); err == nil {
-		firstForUser = n == 1
-	} else {
-		logging.WarnContext(ctx, "[Analytics] Could not count the user's messages; user_first_message not emitted",
+	// The message is already stored. It is the user's first ever exactly when
+	// it qualifies (typed by them, on a main thread, in a chat a person
+	// started), no message of theirs precedes it, and no activation is
+	// recorded yet; the claim checks all three and records it in one
+	// statement, so a replayed send or another replica never emits it twice.
+	// A failed claim reports nothing rather than a wrong first.
+	firstForUser, err := s.deps.Repo.ClaimUserActivation(ctx, userID, chat.ID, messageID)
+	if err != nil {
+		firstForUser = false
+		logging.WarnContext(ctx, "[Analytics] Could not claim the user's activation; user_first_message not emitted",
 			"userID", userID, "error", err)
 	}
 	if firstForUser {
