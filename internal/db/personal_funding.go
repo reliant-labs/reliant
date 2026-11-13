@@ -144,45 +144,45 @@ func (r *Repo) ChatFundingOrder(ctx context.Context, chatID string) (string, err
 	return string(sel.Policy.Funding), nil
 }
 
-// RecordChatPersonPick records the chat's root model and provider switch, as
-// its selection holds them now, as the pick of userID, a person, in orgID
-// (chat_person_picks). Only the chat handler calls it, for a write made by the
-// chat's owner signed in as a person.
-func (r *Repo) RecordChatPersonPick(ctx context.Context, chatID, userID, orgID, modelKey, chatProvider string) error {
-	return store.PutChatPersonPick(ctx, r.ORM(), chatID, userID, orgID, modelKey, chatProvider, time.Now())
+// PersonPick is who picks a chat's root model and provider switch through a
+// selection write: the chat's owner, signed in as a person, in the chat's org.
+type PersonPick struct{ UserID, OrgID string }
+
+type personPickKey struct{}
+
+// WithPersonPick marks ctx's selection writes as pick's own choice:
+// MutateChatSelection records the stored root model and provider switch as
+// their pick (chat_person_picks), bound to the version that write leaves, in
+// the same locked transaction. Only the chat handler and the launcher set it,
+// for a write made by the chat's owner as a person whose root model no
+// substitution moved.
+func WithPersonPick(ctx context.Context, pick PersonPick) context.Context {
+	return context.WithValue(ctx, personPickKey{}, pick)
 }
 
-// ClearChatPersonPick removes chatID's person pick: a later write of its root
-// model or provider switch superseded it.
-func (r *Repo) ClearChatPersonPick(ctx context.Context, chatID string) error {
-	return store.DeleteChatPersonPickByChat(ctx, r.ORM(), chatID)
+// PersonPickFrom is the pick WithPersonPick marked ctx with.
+func PersonPickFrom(ctx context.Context) (PersonPick, bool) {
+	pick, ok := ctx.Value(personPickKey{}).(PersonPick)
+	return pick, ok && pick.UserID != "" && pick.OrgID != ""
 }
 
 // ChatPersonPickDriver is the provider a person picked for chatID's root in
 // orgID, the one named provider that is consent to spend their own account
-// there (org-provider-accounts §4.4, §10). It is "" when nobody did, when
-// the pick was made in another org, or when the chat's selection no longer
-// holds the picked model and provider switch (a workflow, a preset or an
-// agent changed them since).
+// there (org-provider-accounts §4.4, §10). It is "" when nobody did, when the
+// pick was made in another org, or when the chat's selection has been written
+// since (its version moved past the pick's).
 func (r *Repo) ChatPersonPickDriver(ctx context.Context, chatID, orgID string) (string, error) {
 	if chatID == "" || orgID == "" {
 		return "", nil
 	}
-	pick, err := store.GetChatPersonPick(ctx, r.ORM(), chatID)
-	if err != nil || pick == nil || pick.OrgID != orgID {
+	pick, err := store.CurrentChatPersonPick(ctx, r.ORM(), chatID, orgID)
+	if err != nil || pick == nil {
 		return "", err
-	}
-	sel, err := r.GetChatSelection(ctx, chatID)
-	if err != nil || sel == nil {
-		return "", err
-	}
-	key, driver := RootModelPick(sel.Params)
-	if key != pick.ModelID || sel.ChatProvider != pick.ChatProvider {
-		return "", nil
 	}
 	if pick.ChatProvider != "" {
 		return pick.ChatProvider, nil
 	}
+	_, driver := RootModelPick(map[string]any{"model": pick.ModelID})
 	return driver, nil
 }
 

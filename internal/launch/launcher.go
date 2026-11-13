@@ -1584,21 +1584,16 @@ func (l *Launcher) recordStartSelection(ctx context.Context, userID string, chat
 	if len(patch) == 0 {
 		return nil
 	}
-	sel, err := chatselection.NewInstrumented(l.repo).Merge(ctx, chat.ID, userID, workflowName, patch, 0)
-	if err != nil {
-		return fmt.Errorf("failed to record the chat's selection: %w", err)
-	}
 	// The root model of a start the chat's owner made as a person is their
-	// pick (chat_person_picks); a trigger's, an agent's or the CLI login's
-	// start records none. In the launch transaction, so its error is the
-	// launch's.
-	if _, picked := patch["model"]; !picked || sel == nil || chat.OrgID == nil || *chat.OrgID == "" ||
-		userID != chat.UserID || auth.RequirePerson(ctx, "pick the chat's model") != nil {
-		return nil
+	// pick (chat_person_picks), recorded by the selection write itself, in
+	// the launch transaction; a trigger's, an agent's or the CLI login's
+	// start records none.
+	if _, picked := patch["model"]; picked && chat.OrgID != nil && *chat.OrgID != "" &&
+		userID == chat.UserID && auth.RequirePerson(ctx, "pick the chat's model") == nil {
+		ctx = db.WithPersonPick(ctx, db.PersonPick{UserID: userID, OrgID: *chat.OrgID})
 	}
-	key, _ := db.RootModelPick(sel.Params)
-	if err := l.repo.RecordChatPersonPick(ctx, chat.ID, userID, *chat.OrgID, key, sel.ChatProvider); err != nil {
-		return fmt.Errorf("failed to record the person's pick for the chat: %w", err)
+	if _, err := chatselection.NewInstrumented(l.repo).Merge(ctx, chat.ID, userID, workflowName, patch, 0); err != nil {
+		return fmt.Errorf("failed to record the chat's selection: %w", err)
 	}
 	return nil
 }

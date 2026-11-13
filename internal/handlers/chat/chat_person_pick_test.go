@@ -10,49 +10,38 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/authz"
-	"github.com/reliant-labs/reliant/internal/chatselection"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/ptr"
 )
 
-// Only the chat's owner, signed in as a person, picks the root's provider
-// (chat_person_picks), and only with a model the server did not substitute;
-// every other write of the root model removes the pick it supersedes.
-func TestRecordPersonPick(t *testing.T) {
+// Only the chat's owner, signed in as a person, picks the root's provider,
+// and only with a model the server did not substitute: only then is the
+// selection write marked to record their pick (db.WithPersonPick).
+func TestPersonPickContext(t *testing.T) {
 	person := auth.WithCredential(context.Background(), auth.CredentialSession)
 	cli := auth.WithCredential(context.Background(), auth.CredentialAccessToken)
 	inOrg := &db.Chat{ID: "c1", UserID: "alice", OrgID: ptr.Of("org-acme")}
 	noOrg := &db.Chat{ID: "c1", UserID: "alice"}
-	sel := &chatselection.Selection{Params: map[string]any{"model": map[string]any{"id": "gpt-5.6-sol@codex"}}, ChatProvider: "codex"}
-
 	for _, tc := range []struct {
 		name   string
 		ctx    context.Context
 		sender string
 		chat   *db.Chat
 		chosen bool
-		want   []string
+		want   bool
 	}{
-		{"the owner, as a person", person, "alice", inOrg, true, []string{"c1/alice/org-acme/gpt-5.6-sol@codex/codex"}},
-		{"a substituted root model", person, "alice", inOrg, false, []string{"cleared c1"}},
-		{"the CLI login or an agent's token", cli, "alice", inOrg, true, []string{"cleared c1"}},
-		{"a teammate", person, "bob", inOrg, true, []string{"cleared c1"}},
-		{"a chat with no org", person, "alice", noOrg, true, []string{"cleared c1"}},
+		{"the owner, as a person", person, "alice", inOrg, true, true},
+		{"a substituted root model", person, "alice", inOrg, false, false},
+		{"the CLI login or an agent's token", cli, "alice", inOrg, true, false},
+		{"a teammate", person, "bob", inOrg, true, false},
+		{"a chat with no org", person, "alice", noOrg, true, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			var got []string
-			repo := &MockRepository{
-				RecordChatPersonPickFunc: func(_ context.Context, chatID, userID, orgID, model, provider string) error {
-					got = append(got, chatID+"/"+userID+"/"+orgID+"/"+model+"/"+provider)
-					return nil
-				},
-				ClearChatPersonPickFunc: func(_ context.Context, chatID string) error {
-					got = append(got, "cleared "+chatID)
-					return nil
-				},
+			pick, ok := db.PersonPickFrom(personPickContext(tc.ctx, tc.sender, tc.chat, tc.chosen))
+			assert.Equal(t, tc.want, ok)
+			if tc.want {
+				assert.Equal(t, db.PersonPick{UserID: "alice", OrgID: "org-acme"}, pick)
 			}
-			(&Service{deps: Deps{Repo: repo}}).recordPersonPick(tc.ctx, tc.sender, tc.chat, sel, tc.chosen)
-			assert.Equal(t, tc.want, got)
 		})
 	}
 }
@@ -75,14 +64,19 @@ func TestSendMessage_SubstitutedRootModelIsNoPick(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, driver, "a substituted provider is never the person's pick")
 
-	// An earlier pick the selection now matches again is superseded by the
-	// next substituted send, not revived by it.
-	require.NoError(t, repo.RecordChatPersonPick(ctx, fx.chatID, "test-user", "org-acme", moved, ""))
+	// The person then picks the model that runs; a later send whose pin the
+	// server substitutes onto another model supersedes that pick: the write
+	// advances the selection's version, so the pick is void by construction.
+	_, err = service.SendMessage(ctx, sendContinue(fx.chatID, paramsOf(t, map[string]any{"model": map[string]any{"id": sonnetOnClaude}})))
+	require.NoError(t, err)
+	driver, err = repo.ChatPersonPickDriver(ctx, fx.chatID, "org-acme")
+	require.NoError(t, err)
+	require.NotEmpty(t, driver, "the person's own pick")
 	_, err = service.SendMessage(ctx, sendContinue(fx.chatID, pin))
 	require.NoError(t, err)
 	driver, err = repo.ChatPersonPickDriver(ctx, fx.chatID, "org-acme")
 	require.NoError(t, err)
-	assert.Empty(t, driver, "the substituted send removed the superseded pick")
+	assert.Empty(t, driver, "the substituted send superseded the pick")
 }
 
 // The person's own unsubstituted pick of the root model, in an org, is

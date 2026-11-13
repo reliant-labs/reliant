@@ -8,14 +8,17 @@
 -- docs/design/org-provider-accounts.md §4.4, §10). It is the one named
 -- provider that counts as consent to spend the person's own account in the
 -- chat: for the root thread's calls, in this chat, in org_id, and only while
--- the chat's selection still holds model_id and chat_provider (a later write
--- by a workflow, a preset or an agent that changes them voids it without
--- touching this row). A workflow's selector, a run's or a spawn's providers
--- and a sub-agent's model are never recorded here.
+-- the chat's selection is still at selection_version, the revision the pick
+-- was written with, in the same locked transaction as that write. Every later
+-- write of the selection advances its version, so it voids the pick by
+-- construction (a workflow's, a preset's, an agent's, a substitution's);
+-- nothing ever has to clear the row. A workflow's selector, a run's or a
+-- spawn's providers and a sub-agent's model are never recorded here.
 --
 --   model_id       the root model selector the person picked ("<model>@<driver>",
 --                  or "" when the write named none)
 --   chat_provider  the provider an explicit switch bound the chat to, "" when none
+--   selection_version  chat_selections.version this pick is valid at
 --
 -- One row per chat, replaced by each person pick (ON CONFLICT). It goes with
 -- the chat (ON DELETE CASCADE) and with the person's account (account purge);
@@ -33,6 +36,7 @@ CREATE TABLE chat_person_picks (
     org_id        text NOT NULL,
     model_id      text NOT NULL DEFAULT '',
     chat_provider text NOT NULL DEFAULT '',
+    selection_version bigint NOT NULL,
     at            timestamptz NOT NULL DEFAULT now(),
     CONSTRAINT chat_person_picks_ids_nonempty CHECK (user_id <> '' AND org_id <> '')
 );

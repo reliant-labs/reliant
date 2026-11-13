@@ -645,7 +645,7 @@ func (m *MockTransactor) RunTx(p0 context.Context, policy orm.TxPolicy, f func(c
 var _ Transactor = (*MockTransactor)(nil)
 
 // forge:section MockChatSelections
-// forge:hash=9666eeca024f432e25608fdcf709a5caee192c99e328853229f29b7b824f9770
+// forge:hash=c9e9cffeec8a162c06bb0fe9808c849c4c05cf3f05196068879171808c36c426
 
 // MockChatSelections is a test mock for the ChatSelections interface.
 //
@@ -655,10 +655,9 @@ var _ Transactor = (*MockTransactor)(nil)
 // "MockChatSelections.<Method>Func not set" error.
 type MockChatSelections struct {
 	contractkit.Recorder
-	GetChatSelectionFunc     func(context.Context, string) (*chatselection.Selection, error)
-	MutateChatSelectionFunc  func(context.Context, string, func(current *chatselection.Selection) (*chatselection.Selection, error)) (*chatselection.Selection, error)
-	CopyChatSelectionFunc    func(context.Context, string, string, string) error
-	RecordChatPersonPickFunc func(context.Context, string, string, string, string, string) error
+	GetChatSelectionFunc    func(context.Context, string) (*chatselection.Selection, error)
+	MutateChatSelectionFunc func(context.Context, string, func(current *chatselection.Selection) (*chatselection.Selection, error)) (*chatselection.Selection, error)
+	CopyChatSelectionFunc   func(context.Context, string, string, string) error
 }
 
 // GetChatSelection records the call and delegates to GetChatSelectionFunc when set.
@@ -688,20 +687,11 @@ func (m *MockChatSelections) CopyChatSelection(ctx context.Context, fromChatID s
 	return contractkit.MockNotSet("MockChatSelections", "CopyChatSelection")
 }
 
-// RecordChatPersonPick records the call and delegates to RecordChatPersonPickFunc when set.
-func (m *MockChatSelections) RecordChatPersonPick(ctx context.Context, chatID string, userID string, orgID string, modelKey string, chatProvider string) error {
-	m.Recorder.Record("RecordChatPersonPick", ctx, chatID, userID, orgID, modelKey, chatProvider)
-	if m.RecordChatPersonPickFunc != nil {
-		return m.RecordChatPersonPickFunc(ctx, chatID, userID, orgID, modelKey, chatProvider)
-	}
-	return contractkit.MockNotSet("MockChatSelections", "RecordChatPersonPick")
-}
-
 // Compile-time check.
 var _ ChatSelections = (*MockChatSelections)(nil)
 
 // forge:section MockStore
-// forge:hash=68af710b8d77a98be8638c780d1b0336f9aa128b769b8d338d865467b8a27b73
+// forge:hash=1a1b3cfadc2f411de498118b6a0a91d4b71caeecc7d84945024052b3c444abb1
 
 // MockStore is a test mock for the Store interface.
 //
@@ -723,7 +713,6 @@ type MockStore struct {
 	GetChatSelectionFunc               func(context.Context, string) (*chatselection.Selection, error)
 	MutateChatSelectionFunc            func(context.Context, string, func(current *chatselection.Selection) (*chatselection.Selection, error)) (*chatselection.Selection, error)
 	CopyChatSelectionFunc              func(context.Context, string, string, string) error
-	RecordChatPersonPickFunc           func(context.Context, string, string, string, string, string) error
 	CreateTriggerEventFunc             func(context.Context, *core.TriggerEvent) (bool, error)
 	GetTriggerEventByDedupeFunc        func(context.Context, core.TriggerEventKind, string) (*core.TriggerEvent, error)
 	UpdateTriggerEventOutcomeFunc      func(context.Context, string, core.TriggerEventOutcome, string, *string) error
@@ -859,15 +848,6 @@ func (m *MockStore) CopyChatSelection(ctx context.Context, fromChatID string, to
 		return m.CopyChatSelectionFunc(ctx, fromChatID, toChatID, userID)
 	}
 	return contractkit.MockNotSet("MockStore", "CopyChatSelection")
-}
-
-// RecordChatPersonPick records the call and delegates to RecordChatPersonPickFunc when set.
-func (m *MockStore) RecordChatPersonPick(ctx context.Context, chatID string, userID string, orgID string, modelKey string, chatProvider string) error {
-	m.Recorder.Record("RecordChatPersonPick", ctx, chatID, userID, orgID, modelKey, chatProvider)
-	if m.RecordChatPersonPickFunc != nil {
-		return m.RecordChatPersonPickFunc(ctx, chatID, userID, orgID, modelKey, chatProvider)
-	}
-	return contractkit.MockNotSet("MockStore", "RecordChatPersonPick")
 }
 
 // CreateTriggerEvent records the call and delegates to CreateTriggerEventFunc when set.

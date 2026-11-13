@@ -51,10 +51,6 @@ type Repository interface {
 	UpdateChatState(ctx context.Context, chatID string, state db.ChatState, reason string) error
 	UpdateChatUnread(ctx context.Context, chatID string, unread bool, reason string) error
 	SetChatAdopted(ctx context.Context, chatID, userID string, adopted bool) (bool, error)
-	// RecordChatPersonPick records the chat's root model and provider switch as its owner's pick.
-	RecordChatPersonPick(ctx context.Context, chatID, userID, orgID, modelKey, chatProvider string) error
-	// ClearChatPersonPick removes a pick a later write superseded.
-	ClearChatPersonPick(ctx context.Context, chatID string) error
 	// RecordChatPersonTurn marks a launched chat attended from a person's send on.
 	RecordChatPersonTurn(ctx context.Context, chatID, userID string) error
 	SetChatDaemonBlocked(ctx context.Context, chatID string, blocked bool) error

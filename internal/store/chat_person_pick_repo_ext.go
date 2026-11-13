@@ -46,26 +46,40 @@ import (
 )
 
 // PutChatPersonPick records that userID, a person, picked modelID (and the
-// provider switch chatProvider) as chatID's root model in orgID at now,
-// replacing the chat's earlier pick.
-func PutChatPersonPick(ctx context.Context, db orm.Context, chatID, userID, orgID, modelID, chatProvider string, now time.Time) error {
-	_, err := db.Bun().NewRaw(`INSERT INTO chat_person_picks (chat_id, user_id, org_id, model_id, chat_provider, at)
-		VALUES (?0, ?1, ?2, ?3, ?4, ?5)
+// provider switch chatProvider) as chatID's root model in orgID at now, valid
+// while the chat's selection is at selectionVersion; it replaces the chat's
+// earlier pick. Called inside the selection write's transaction.
+func PutChatPersonPick(ctx context.Context, db orm.Context, chatID, userID, orgID, modelID, chatProvider string, selectionVersion int64, now time.Time) error {
+	_, err := db.Bun().NewRaw(`INSERT INTO chat_person_picks (chat_id, user_id, org_id, model_id, chat_provider, selection_version, at)
+		VALUES (?0, ?1, ?2, ?3, ?4, ?5, ?6)
 		ON CONFLICT (chat_id) DO UPDATE SET user_id = EXCLUDED.user_id, org_id = EXCLUDED.org_id,
-		    model_id = EXCLUDED.model_id, chat_provider = EXCLUDED.chat_provider, at = EXCLUDED.at`,
-		chatID, userID, orgID, modelID, chatProvider, now.UTC()).Exec(ctx)
+		    model_id = EXCLUDED.model_id, chat_provider = EXCLUDED.chat_provider,
+		    selection_version = EXCLUDED.selection_version, at = EXCLUDED.at`,
+		chatID, userID, orgID, modelID, chatProvider, selectionVersion, now.UTC()).Exec(ctx)
 	if err != nil {
 		return fmt.Errorf("record the person's pick for the chat: %w", err)
 	}
 	return nil
 }
 
-// DeleteChatPersonPickByChat removes chatID's person pick, if it has one.
-func DeleteChatPersonPickByChat(ctx context.Context, db orm.Context, chatID string) error {
-	if _, err := db.Bun().NewRaw(`DELETE FROM chat_person_picks WHERE chat_id = ?`, chatID).Exec(ctx); err != nil {
-		return fmt.Errorf("clear the person's pick for the chat: %w", err)
+// CurrentChatPersonPick returns chatID's person pick in orgID only while the
+// chat's selection is still at the version the pick was written with; nil
+// otherwise. One statement, so the pick and the selection's version are read
+// from one snapshot: a write that commits between two reads cannot make a
+// superseded pick look current.
+func CurrentChatPersonPick(ctx context.Context, db orm.Context, chatID, orgID string) (*ChatPersonPick, error) {
+	var rows []ChatPersonPick
+	err := db.Bun().NewRaw(`SELECT p.chat_id, p.user_id, p.org_id, p.model_id, p.chat_provider, p.selection_version, p.at
+		FROM chat_person_picks p
+		JOIN chat_selections s ON s.chat_id = p.chat_id AND s.version = p.selection_version
+		WHERE p.chat_id = ?0 AND p.org_id = ?1`, chatID, orgID).Scan(ctx, &rows)
+	if err != nil {
+		return nil, fmt.Errorf("read the person's pick for the chat: %w", err)
 	}
-	return nil
+	if len(rows) == 0 {
+		return nil, nil
+	}
+	return &rows[0], nil
 }
 
 // GetChatPersonPick returns chatID's person pick, nil when it has none.

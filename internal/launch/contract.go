@@ -495,10 +495,6 @@ type Transactor interface {
 // presets and a send's params, and where a start records its first choice.
 type ChatSelections interface {
 	chatselection.Store
-	// RecordChatPersonPick records a chat's root model as its owner's pick
-	// (chat_person_picks): consent to spend their own account in the chat's
-	// org for that provider (org-provider-accounts §4.4, §10).
-	RecordChatPersonPick(ctx context.Context, chatID, userID, orgID, modelKey, chatProvider string) error
 }
 
 // Store is everything a Launcher needs from the database. *db.Repo satisfies it.
