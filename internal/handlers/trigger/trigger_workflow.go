@@ -160,7 +160,7 @@ func (s *Service) EnableWorkflow(
 				err = svcerr.AlreadyExists(fmt.Sprintf("you already have an automation named %q in this project; pick another name", def.Name))
 			} else {
 				var row *core.Trigger
-				if row, err = s.triggerFromDefinition(ctx, userID, def, nil); err == nil {
+				if row, err = s.activationRow(ctx, userID, def, nil); err == nil {
 					row.Enabled = true
 					if err = s.refreshTriggerAccess(ctx, row); err == nil {
 						warnings, err = s.checkReachability(ctx, userID, wf, wt, msg, row)
@@ -240,15 +240,16 @@ func (s *Service) existingActivationStep(
 		return nil, err
 	}
 	// A connection the request does not name stays the one this activation
-	// listens through, rather than falling back to the default.
-	if def.ConnectionId == nil && existing.ConnectionID != nil {
-		id := *existing.ConnectionID
-		def.ConnectionId = &id
+	// listens through, rather than falling back to the default: its saved
+	// connection or its org GitHub App installation, which has no
+	// ConnectionID and would otherwise be dropped (widening the trigger).
+	if def.ConnectionId == nil {
+		def.ConnectionId = effectiveConnectionID(existing)
 	}
 	if def.Name != existing.Name && taken[def.Name] {
 		return nil, svcerr.AlreadyExists(fmt.Sprintf("you already have an automation named %q in this project; pick another name", def.Name))
 	}
-	row, err := s.triggerFromDefinition(ctx, userID, def, existing)
+	row, err := s.activationRow(ctx, userID, def, existing)
 	if err != nil {
 		return nil, err
 	}
@@ -283,7 +284,7 @@ func sameActivationSettings(a, b *core.Trigger) bool {
 		a.MachinePoolID == b.MachinePoolID &&
 		a.NotifyOnComplete == b.NotifyOnComplete &&
 		a.ActingIdentity.OrOwner() == b.ActingIdentity.OrOwner() &&
-		ptrValue(a.ConnectionID) == ptrValue(b.ConnectionID) &&
+		ptrValue(effectiveConnectionID(a)) == ptrValue(effectiveConnectionID(b)) &&
 		sameJSON(a.Presets, b.Presets) &&
 		sameJSON(a.Params, b.Params)
 }
