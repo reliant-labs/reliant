@@ -99,6 +99,15 @@ func (s *Service) AdoptAs(ctx context.Context, t *core.Trigger, adopterID string
 	adopted.OrgID = t.OrgID
 	adopted.Enabled = false
 	adopted.PausedReason = ""
+	// An org GitHub App installation the adopter names is validated and
+	// recorded exactly as on create, now that the org is set: the rollout
+	// gate, the installation linked to this org and live, the adopter a
+	// member. The old owner's binding is not carried (the config was rebuilt
+	// from the source), so without one the trigger listens on the adopter's
+	// own access, as a new trigger of theirs would.
+	if err := s.bindOrgGitHubApp(ctx, adopterID, def, adopted); err != nil {
+		return nil, err
+	}
 	if err := s.deps.Repo.AdoptTrigger(ctx, adopted, t.UserID, offerID,
 		db.OrgRead{Table: "projects", ID: project.ID, Org: project.OrgID}); err != nil {
 		return nil, triggerDBError("adopt trigger", err)

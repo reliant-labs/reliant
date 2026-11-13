@@ -14,6 +14,7 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
+	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/authz"
@@ -435,4 +436,84 @@ func TestRenderDefinition_WithholdsValues(t *testing.T) {
 	assert.Nil(t, rendered.ConnectionId, "the departed owner's connection is withheld")
 	assert.NotContains(t, rendered.String(), "hunter2")
 	assert.Equal(t, old.Name, rendered.GetName(), "the definition is shown")
+}
+
+// A GitHub trigger adopted onto an org's GitHub App installation is bound
+// exactly as a create binds it: a linked, live installation of the trigger's
+// org is recorded in its config (so routing gives it only that
+// installation's events); an unlinked one is refused, and so is any while
+// the deployment's rollout gate is off. A refusal writes nothing. The old
+// owner's binding is never carried.
+func TestAdoptAs_BindsAnOrgGitHubInstallationAsCreateDoes(t *testing.T) {
+	t.Parallel()
+	ghSource := func(d *reliantv1.TriggerDefinition) {
+		d.Name = "on issue"
+		d.Source = &reliantv1.TriggerDefinition_Integration{Integration: &reliantv1.IntegrationSource{
+			Integration: "github", Events: []string{"issues.opened"},
+		}}
+		// This deployment has no control plane, so no GitHub App bot.
+		d.ActingIdentity = reliantv1.ActingIdentity_ACTING_IDENTITY_OWNER
+	}
+	setup := func(t *testing.T, gate *configv1.OrgsConfig) (*adoptEnv, *core.Trigger) {
+		t.Helper()
+		e := setupAdoption(t)
+		e.configure(t, func(d *Deps) {
+			d.Catalog = fakeCatalog{"test": true, "github": true}
+			d.Access = map[string]IntegrationAccess{"github": &fakeAccess{}}
+			d.OrgRollout = gateOn
+			d.OrgGitHubApps = linkedApps()
+		})
+		// The creator bound it to acme's installation 4242.
+		conn := "controlplane:github-app:4242"
+		old, _ := e.made(t, e.definition(func(d *reliantv1.TriggerDefinition) {
+			ghSource(d)
+			d.ConnectionId = &conn
+		}))
+		require.Equal(t, "4242", installationOf(t, old))
+		e.configure(t, func(d *Deps) { d.OrgRollout = gate })
+		return e, old
+	}
+	rebind := func(e *adoptEnv, id *string) *reliantv1.TriggerRebinding {
+		rb := e.rebinding(nil)
+		if id != nil {
+			rb.ConnectionId = id
+		}
+		return rb
+	}
+
+	t.Run("a linked installation is recorded", func(t *testing.T) {
+		t.Parallel()
+		e, old := setup(t, gateOn)
+		linked := "controlplane:github-app:4242"
+		resp, err := e.svc.AdoptAs(e.bobCtx, old, e.bobID, rebind(e, &linked), "")
+		require.NoError(t, err)
+		adopted := e.row(t, old.ID)
+		assert.Equal(t, e.bobID, adopted.UserID)
+		assert.Equal(t, "4242", installationOf(t, adopted), "the adopter's chosen installation is the binding")
+		assert.Equal(t, linked, resp.GetTrigger().GetConnectionId())
+	})
+	t.Run("an unlinked installation is refused", func(t *testing.T) {
+		t.Parallel()
+		e, old := setup(t, gateOn)
+		for _, id := range []string{"controlplane:github-app:9999", "controlplane:github-app:7"} { // not acme's; suspended
+			_, err := e.svc.AdoptAs(e.bobCtx, old, e.bobID, rebind(e, &id), "")
+			assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err), "%s: %v", id, err)
+		}
+		assert.Equal(t, e.userID, e.row(t, old.ID).UserID, "a refused adoption changes nothing")
+	})
+	t.Run("the rollout gate off refuses any installation", func(t *testing.T) {
+		t.Parallel()
+		e, old := setup(t, nil)
+		linked := "controlplane:github-app:4242"
+		_, err := e.svc.AdoptAs(e.bobCtx, old, e.bobID, rebind(e, &linked), "")
+		assert.Equal(t, ReasonOrgInstallationTriggersDisabled, svcerr.ToConnect(err).Meta().Get(svcerr.ReasonHeader), "error: %v", err)
+		assert.Equal(t, e.userID, e.row(t, old.ID).UserID)
+	})
+	t.Run("without one the old binding is not carried", func(t *testing.T) {
+		t.Parallel()
+		e, old := setup(t, gateOn)
+		_, err := e.svc.AdoptAs(e.bobCtx, old, e.bobID, rebind(e, nil), "")
+		require.NoError(t, err)
+		assert.Empty(t, installationOf(t, e.row(t, old.ID)), "the departed owner's choice of installation is theirs, not carried")
+	})
 }
