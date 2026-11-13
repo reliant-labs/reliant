@@ -28,6 +28,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/gitcredentialclient"
 	grpcserver "github.com/reliant-labs/reliant/internal/grpc"
 	"github.com/reliant-labs/reliant/internal/handlers/chat"
+	"github.com/reliant-labs/reliant/internal/handlers/org_provider_account"
 	"github.com/reliant-labs/reliant/internal/handlers/project"
 	"github.com/reliant-labs/reliant/internal/handlers/trigger"
 	"github.com/reliant-labs/reliant/internal/integrations/catalog"
@@ -1451,4 +1452,23 @@ func TriggerOrgRollout(api *configv1.ApiServerConfig) *configv1.OrgsConfig {
 // newAPIConnections hands the connection service.
 func APIOrgConnections(api *configv1.ApiServerConfig) bool {
 	return api.GetOrgs().GetConnectionsEnabled()
+}
+
+// APIOrgProviderAccounts is whether the API server lets org owners and admins
+// add org-owned AI provider accounts and bind provider workspaces:
+// ApiServerConfig orgs.provider_accounts_enabled, off when unset. One
+// function, so the config-path test proves what newOrgProviderAccount hands
+// the service.
+func APIOrgProviderAccounts(api *configv1.ApiServerConfig) bool {
+	return api.GetOrgs().GetProviderAccountsEnabled()
+}
+
+// NewOrgProviderAccount builds the API server's OrgProviderAccountService
+// from d, with its rollout gates (Deps.OrgRollout) read from api: ApiServerConfig
+// orgs, whose provider_accounts_enabled is APIOrgProviderAccounts.
+// newOrgProviderAccount and the config-path test both build it here, so the
+// test proves the wiring production runs.
+func NewOrgProviderAccount(api *configv1.ApiServerConfig, d org_provider_account.Deps) (*org_provider_account.Service, error) {
+	d.OrgRollout = api.GetOrgs()
+	return org_provider_account.New(d)
 }

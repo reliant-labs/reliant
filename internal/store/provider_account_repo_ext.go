@@ -529,6 +529,77 @@ func LatestServingProviderAccount(ctx context.Context, db orm.Context, threadID 
 	return id, err
 }
 
+// ---- org accounts and seats (org-provider-accounts.md §3.3–§3.4, §6) ----
+
+// SetOrgProviderAccountAccess sets who in orgID may use one of its accounts, stamps updated_at
+// with now and returns the account, or core.ErrProviderAccountNotFound when orgID has no account
+// with that id.
+func SetOrgProviderAccountAccess(ctx context.Context, db orm.Context, orgID, accountID, access string, now time.Time) (core.ProviderAccount, error) {
+	var row ProviderAccount
+	err := db.Bun().NewUpdate().Model(&row).
+		Set("org_access = ?", access).Set("updated_at = ?", now.UTC()).
+		Where("id = ?", accountID).Where("owner_kind = ?", core.AccountOwnerOrg).Where("org_id = ?", orgID).
+		Returning(providerAccountMetaColumns).Scan(ctx)
+	if errors.Is(err, sql.ErrNoRows) {
+		return core.ProviderAccount{}, core.ErrProviderAccountNotFound
+	}
+	if err != nil {
+		return core.ProviderAccount{}, err
+	}
+	return providerAccountToCore(&row), nil
+}
+
+// ListAttributedProviderAccounts returns the persons' accounts orgID pays for (seats, and the
+// managed key minted in it), metadata only, by (user, provider, priority).
+func ListAttributedProviderAccounts(ctx context.Context, db orm.Context, orgID string) ([]core.ProviderAccount, error) {
+	if orgID == "" {
+		return nil, nil
+	}
+	var rows []*ProviderAccount
+	if err := db.Bun().NewSelect().Model(&rows).ExcludeColumn(providerAccountSealedColumns...).
+		Where("attributed_org_id = ?", orgID).Where("owner_kind = ?", core.AccountOwnerUser).
+		Order("user_id", "provider", "priority").Scan(ctx); err != nil {
+		return nil, err
+	}
+	out := make([]core.ProviderAccount, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, providerAccountToCore(r))
+	}
+	return out, nil
+}
+
+// ClearProviderAccountAttribution makes one account orgID pays for a personal one again, when its
+// attribution source is one of sources, and reports whether it did.
+func ClearProviderAccountAttribution(ctx context.Context, db orm.Context, orgID, accountID string, sources []string, now time.Time) (bool, error) {
+	if orgID == "" || len(sources) == 0 {
+		return false, nil
+	}
+	res, err := db.Bun().NewUpdate().Model((*ProviderAccount)(nil)).
+		Set("attributed_org_id = NULL").Set("attribution_source = NULL").Set("updated_at = ?", now.UTC()).
+		Where("id = ?", accountID).Where("attributed_org_id = ?", orgID).
+		Where("attribution_source IN (?)", bun.List(sources)).Exec(ctx)
+	if err != nil {
+		return false, err
+	}
+	n, err := res.RowsAffected()
+	return n > 0, err
+}
+
+// ClearWorkspaceAttributions makes every sign-in a binding of orgID matched (attribution source
+// 'workspace', in workspace externalOrgID of provider) a personal account again, and returns how
+// many it changed. Which column holds a sign-in's workspace is core.ProviderWorkspaceID's rule.
+func ClearWorkspaceAttributions(ctx context.Context, db orm.Context, orgID, provider, externalOrgID string, now time.Time) (int64, error) {
+	res, err := db.Bun().NewRaw(`UPDATE provider_accounts SET
+			attributed_org_id = NULL, attribution_source = NULL, updated_at = ?3
+		WHERE attributed_org_id = ?0 AND attribution_source = ?4 AND provider = ?1 AND auth_kind = ?5
+		  AND (CASE provider WHEN 'claude' THEN organization_id WHEN 'codex' THEN external_account_id END) = ?2`,
+		orgID, provider, externalOrgID, now.UTC(), core.AttributionWorkspace, string(core.AuthKindOAuth)).Exec(ctx)
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
+}
+
 // ProviderAccountExtra carries fields on ProviderAccount that are NOT columns — computed
 // values, transient state, anything derived rather than stored. ProviderAccount is
 // embedded on ProviderAccountExtra (see provider_account_orm.go), so a field added here is a field on

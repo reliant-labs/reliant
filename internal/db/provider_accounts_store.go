@@ -537,14 +537,22 @@ func (s *accountStore) PatchOwnedProviderAccount(ctx context.Context, owner core
 }
 
 func (s *accountStore) ReorderProviderAccounts(ctx context.Context, userID, provider string, orderedIDs []string) error {
-	if !core.UserAccountOwner(userID).Valid() {
-		return core.ErrInvalidAccountOrder // no person: an owner key never reaches an org's order this way
+	return s.ReorderOwnedProviderAccounts(ctx, core.UserAccountOwner(userID), provider, orderedIDs)
+}
+
+// ReorderOwnedProviderAccounts sets the priorities of the owner's accounts of provider to
+// 0..n-1 in orderedIDs order. An invalid owner (a person's id shaped like an owner key) has no
+// order: core.ErrInvalidAccountOrder.
+func (s *accountStore) ReorderOwnedProviderAccounts(ctx context.Context, owner core.AccountOwner, provider string, orderedIDs []string) error {
+	if !owner.Valid() {
+		return core.ErrInvalidAccountOrder // no owner: an owner key never reaches an org's order as a person's
 	}
+	key := owner.Key()
 	return s.inTx(ctx, func(ctx context.Context) error {
-		if err := store.LockUserProviderAccounts(ctx, s.db, userID, provider); err != nil {
+		if err := store.LockUserProviderAccounts(ctx, s.db, key, provider); err != nil {
 			return err
 		}
-		ids, err := store.LockProviderAccountIDs(ctx, s.db, userID, provider)
+		ids, err := store.LockProviderAccountIDs(ctx, s.db, key, provider)
 		if err != nil {
 			return err
 		}
@@ -573,25 +581,33 @@ func (s *accountStore) ReorderProviderAccounts(ctx context.Context, userID, prov
 }
 
 func (s *accountStore) DeleteProviderAccount(ctx context.Context, userID, accountID string) error {
-	if !core.UserAccountOwner(userID).Valid() {
+	return s.DeleteOwnedProviderAccount(ctx, core.UserAccountOwner(userID), accountID)
+}
+
+// DeleteOwnedProviderAccount deletes one of the owner's accounts and re-densifies its provider's
+// priorities. Its ciphertext goes with the row; limit state, thread assignments and an org
+// account's grants cascade.
+func (s *accountStore) DeleteOwnedProviderAccount(ctx context.Context, owner core.AccountOwner, accountID string) error {
+	if !owner.Valid() {
 		return core.ErrProviderAccountNotFound // a person's delete never reaches an org's account
 	}
-	provider, err := store.UserProviderAccountProvider(ctx, s.db, userID, accountID)
+	key := owner.Key()
+	provider, err := store.UserProviderAccountProvider(ctx, s.db, key, accountID)
 	if err != nil {
 		return err
 	}
 	return s.inTx(ctx, func(ctx context.Context) error {
-		if err := store.LockUserProviderAccounts(ctx, s.db, userID, provider); err != nil {
+		if err := store.LockUserProviderAccounts(ctx, s.db, key, provider); err != nil {
 			return err
 		}
-		deleted, err := store.DeleteUserProviderAccount(ctx, s.db, userID, accountID)
+		deleted, err := store.DeleteUserProviderAccount(ctx, s.db, key, accountID)
 		if err != nil {
 			return err
 		}
 		if !deleted {
 			return core.ErrProviderAccountNotFound
 		}
-		return store.DensifyProviderAccounts(ctx, s.db, userID, provider)
+		return store.DensifyProviderAccounts(ctx, s.db, key, provider)
 	})
 }
 

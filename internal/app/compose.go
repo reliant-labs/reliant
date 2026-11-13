@@ -49,6 +49,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/handlers/mcp"
 	"github.com/reliant-labs/reliant/internal/handlers/message"
 	"github.com/reliant-labs/reliant/internal/handlers/model_endpoint"
+	"github.com/reliant-labs/reliant/internal/handlers/org_provider_account"
 	"github.com/reliant-labs/reliant/internal/handlers/package_commands"
 	"github.com/reliant-labs/reliant/internal/handlers/plan"
 	"github.com/reliant-labs/reliant/internal/handlers/preset"
@@ -923,6 +924,7 @@ func (g *Graph) newUserRoutes() (*UserRoutes, error) {
 		WorktreeReclaim:    g.WorktreeReclaim(),
 		Sharing:            g.Sharing(),
 		AutomationTakeover: g.AutomationTakeover(),
+		OrgProviderAccount: g.OrgProviderAccount(),
 	})
 }
 
@@ -1416,5 +1418,19 @@ func (g *Graph) newAutomationTakeover() (*automation_takeover.Service, error) {
 		Repo:     g.Database(),
 		Triggers: g.Trigger(),
 		Now:      nil, // optional — no provider
+	})
+}
+
+// newOrgProviderAccount constructs the org-provider-account handler
+// (internal/handlers/org_provider_account). Adding an org account or binding a
+// workspace is gated by ApiServerConfig orgs.provider_accounts_enabled
+// (NewOrgProviderAccount); nothing else it does is.
+func (g *Graph) newOrgProviderAccount() (*org_provider_account.Service, error) {
+	return NewOrgProviderAccount(g.ApiServerConfig, org_provider_account.Deps{
+		Logger:      g.Log,
+		Config:      g.Cfg,
+		Store:       g.Database(),
+		ValidateKey: keyvalidate.Validate,
+		OrgRollout:  g.ApiServerConfig.GetOrgs(), // NewOrgProviderAccount sets the same, from the config it is given
 	})
 }

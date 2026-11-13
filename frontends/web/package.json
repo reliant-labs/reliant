@@ -23,6 +23,7 @@
       "MCPService",
       "MessageService",
       "ModelEndpointService",
+      "OrgProviderAccountService",
       "PackageCommandsService",
       "PlanService",
       "PresetService",

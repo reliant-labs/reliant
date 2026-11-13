@@ -28,6 +28,7 @@ import (
 	"net/http"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
+	"github.com/reliant-labs/reliant/internal/orgs"
 	"github.com/reliant-labs/reliant/internal/vault"
 )
 
@@ -65,7 +66,7 @@ const (
 // ReasonHumanOnly is the error reason of an org connection's administration
 // refused to a credential that is not a person's (the members rpcs' reason in
 // control-plane, orgs-and-members.md §2.3).
-const ReasonHumanOnly = "human_only"
+const ReasonHumanOnly = orgs.ReasonHumanOnly
 
 // ReasonOrgConnectionsDisabled is the error reason of creating or
 // reconnecting an org-owned connection on a deployment that has not enabled

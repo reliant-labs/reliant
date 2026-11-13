@@ -48,6 +48,7 @@
         "Message",
         "ModelEndpoint",
         "NATSConn",
+        "OrgProviderAccount",
         "OrgResolver",
         "PackageCommands",
         "PauseService",
@@ -218,6 +219,13 @@
         {
           "component": "ModelEndpoint",
           "service": "reliant.v1.ModelEndpointService",
+          "route_set": "UserRoutes",
+          "audience": "user",
+          "resolution": "declared_route_set"
+        },
+        {
+          "component": "OrgProviderAccount",
+          "service": "reliant.v1.OrgProviderAccountService",
           "route_set": "UserRoutes",
           "audience": "user",
           "resolution": "declared_route_set"
@@ -20106,6 +20114,1183 @@
           "reliant.v1.ModelEndpointRoute": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
             "GoName": "ModelEndpointRoute"
+          }
+        }
+      }
+    },
+    {
+      "name": "reliant.v1.OrgProviderAccountService",
+      "proto_file": "reliant/v1/org_provider_account.proto",
+      "methods": [
+        {
+          "id": "reliant.v1.OrgProviderAccountService/AddOrgProviderAPIKey",
+          "name": "AddOrgProviderAPIKey",
+          "input": "reliant.v1.AddOrgProviderAPIKeyRequest",
+          "output": "reliant.v1.AddOrgProviderAPIKeyResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "UNKNOWN",
+          "auth_required": true
+        },
+        {
+          "id": "reliant.v1.OrgProviderAccountService/BindOrgProviderWorkspace",
+          "name": "BindOrgProviderWorkspace",
+          "input": "reliant.v1.BindOrgProviderWorkspaceRequest",
+          "output": "reliant.v1.BindOrgProviderWorkspaceResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "UNKNOWN",
+          "auth_required": true
+        },
+        {
+          "id": "reliant.v1.OrgProviderAccountService/DeleteOrgProviderAccount",
+          "name": "DeleteOrgProviderAccount",
+          "input": "reliant.v1.DeleteOrgProviderAccountRequest",
+          "output": "reliant.v1.DeleteOrgProviderAccountResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "UNKNOWN",
+          "auth_required": true
+        },
+        {
+          "id": "reliant.v1.OrgProviderAccountService/ListOrgProviderAccounts",
+          "name": "ListOrgProviderAccounts",
+          "input": "reliant.v1.ListOrgProviderAccountsRequest",
+          "output": "reliant.v1.ListOrgProviderAccountsResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "UNKNOWN",
+          "auth_required": true
+        },
+        {
+          "id": "reliant.v1.OrgProviderAccountService/ListOrgProviderWorkspaces",
+          "name": "ListOrgProviderWorkspaces",
+          "input": "reliant.v1.ListOrgProviderWorkspacesRequest",
+          "output": "reliant.v1.ListOrgProviderWorkspacesResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "UNKNOWN",
+          "auth_required": true
+        },
+        {
+          "id": "reliant.v1.OrgProviderAccountService/ReleaseOrgProviderSeat",
+          "name": "ReleaseOrgProviderSeat",
+          "input": "reliant.v1.ReleaseOrgProviderSeatRequest",
+          "output": "reliant.v1.ReleaseOrgProviderSeatResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "UNKNOWN",
+          "auth_required": true
+        },
+        {
+          "id": "reliant.v1.OrgProviderAccountService/ReorderOrgProviderAccounts",
+          "name": "ReorderOrgProviderAccounts",
+          "input": "reliant.v1.ReorderOrgProviderAccountsRequest",
+          "output": "reliant.v1.ReorderOrgProviderAccountsResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "UNKNOWN",
+          "auth_required": true
+        },
+        {
+          "id": "reliant.v1.OrgProviderAccountService/RotateOrgProviderAPIKey",
+          "name": "RotateOrgProviderAPIKey",
+          "input": "reliant.v1.RotateOrgProviderAPIKeyRequest",
+          "output": "reliant.v1.RotateOrgProviderAPIKeyResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "UNKNOWN",
+          "auth_required": true
+        },
+        {
+          "id": "reliant.v1.OrgProviderAccountService/SetOrgProviderAccountGrants",
+          "name": "SetOrgProviderAccountGrants",
+          "input": "reliant.v1.SetOrgProviderAccountGrantsRequest",
+          "output": "reliant.v1.SetOrgProviderAccountGrantsResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "UNKNOWN",
+          "auth_required": true
+        },
+        {
+          "id": "reliant.v1.OrgProviderAccountService/UnbindOrgProviderWorkspace",
+          "name": "UnbindOrgProviderWorkspace",
+          "input": "reliant.v1.UnbindOrgProviderWorkspaceRequest",
+          "output": "reliant.v1.UnbindOrgProviderWorkspaceResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "UNKNOWN",
+          "auth_required": true
+        },
+        {
+          "id": "reliant.v1.OrgProviderAccountService/UpdateOrgProviderAccount",
+          "name": "UpdateOrgProviderAccount",
+          "input": "reliant.v1.UpdateOrgProviderAccountRequest",
+          "output": "reliant.v1.UpdateOrgProviderAccountResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "UNKNOWN",
+          "auth_required": true
+        }
+      ],
+      "descriptor": {
+        "Name": "OrgProviderAccountService",
+        "Package": "reliant.v1",
+        "GoPackage": "github.com/reliant-labs/reliant/gen/reliant/v1",
+        "PkgName": "reliantv1",
+        "Methods": [
+          {
+            "Name": "ListOrgProviderAccounts",
+            "InputType": "ListOrgProviderAccountsRequest",
+            "OutputType": "ListOrgProviderAccountsResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "Custom": true,
+            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "InputTypeFQ": "reliant.v1.ListOrgProviderAccountsRequest",
+            "OutputTypeFQ": "reliant.v1.ListOrgProviderAccountsResponse",
+            "InputProtoFile": "reliant/v1/org_provider_account.proto",
+            "OutputProtoFile": "reliant/v1/org_provider_account.proto",
+            "Activity": {
+              "Mutating": false
+            }
+          },
+          {
+            "Name": "AddOrgProviderAPIKey",
+            "InputType": "AddOrgProviderAPIKeyRequest",
+            "OutputType": "AddOrgProviderAPIKeyResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "InputTypeFQ": "reliant.v1.AddOrgProviderAPIKeyRequest",
+            "OutputTypeFQ": "reliant.v1.AddOrgProviderAPIKeyResponse",
+            "InputProtoFile": "reliant/v1/org_provider_account.proto",
+            "OutputProtoFile": "reliant/v1/org_provider_account.proto",
+            "Activity": {
+              "Mutating": true,
+              "Declared": true,
+              "Verb": "add",
+              "TargetKind": "provider_account",
+              "Writer": "INTERCEPTOR"
+            }
+          },
+          {
+            "Name": "RotateOrgProviderAPIKey",
+            "InputType": "RotateOrgProviderAPIKeyRequest",
+            "OutputType": "RotateOrgProviderAPIKeyResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "InputTypeFQ": "reliant.v1.RotateOrgProviderAPIKeyRequest",
+            "OutputTypeFQ": "reliant.v1.RotateOrgProviderAPIKeyResponse",
+            "InputProtoFile": "reliant/v1/org_provider_account.proto",
+            "OutputProtoFile": "reliant/v1/org_provider_account.proto",
+            "Activity": {
+              "Mutating": true,
+              "Declared": true,
+              "Verb": "rotate",
+              "TargetKind": "provider_account",
+              "Writer": "INTERCEPTOR"
+            }
+          },
+          {
+            "Name": "UpdateOrgProviderAccount",
+            "InputType": "UpdateOrgProviderAccountRequest",
+            "OutputType": "UpdateOrgProviderAccountResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "Custom": true,
+            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "InputTypeFQ": "reliant.v1.UpdateOrgProviderAccountRequest",
+            "OutputTypeFQ": "reliant.v1.UpdateOrgProviderAccountResponse",
+            "InputProtoFile": "reliant/v1/org_provider_account.proto",
+            "OutputProtoFile": "reliant/v1/org_provider_account.proto",
+            "Activity": {
+              "Mutating": true,
+              "Declared": true,
+              "Verb": "update",
+              "TargetKind": "provider_account",
+              "Writer": "INTERCEPTOR"
+            }
+          },
+          {
+            "Name": "ReorderOrgProviderAccounts",
+            "InputType": "ReorderOrgProviderAccountsRequest",
+            "OutputType": "ReorderOrgProviderAccountsResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "InputTypeFQ": "reliant.v1.ReorderOrgProviderAccountsRequest",
+            "OutputTypeFQ": "reliant.v1.ReorderOrgProviderAccountsResponse",
+            "InputProtoFile": "reliant/v1/org_provider_account.proto",
+            "OutputProtoFile": "reliant/v1/org_provider_account.proto",
+            "Activity": {
+              "Mutating": true,
+              "Declared": true,
+              "Verb": "reorder",
+              "TargetKind": "provider_account_order",
+              "Writer": "INTERCEPTOR"
+            }
+          },
+          {
+            "Name": "SetOrgProviderAccountGrants",
+            "InputType": "SetOrgProviderAccountGrantsRequest",
+            "OutputType": "SetOrgProviderAccountGrantsResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "InputTypeFQ": "reliant.v1.SetOrgProviderAccountGrantsRequest",
+            "OutputTypeFQ": "reliant.v1.SetOrgProviderAccountGrantsResponse",
+            "InputProtoFile": "reliant/v1/org_provider_account.proto",
+            "OutputProtoFile": "reliant/v1/org_provider_account.proto",
+            "Activity": {
+              "Mutating": true,
+              "Declared": true,
+              "Verb": "set_grants",
+              "TargetKind": "provider_account",
+              "Writer": "INTERCEPTOR"
+            }
+          },
+          {
+            "Name": "DeleteOrgProviderAccount",
+            "InputType": "DeleteOrgProviderAccountRequest",
+            "OutputType": "DeleteOrgProviderAccountResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "Custom": true,
+            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "InputTypeFQ": "reliant.v1.DeleteOrgProviderAccountRequest",
+            "OutputTypeFQ": "reliant.v1.DeleteOrgProviderAccountResponse",
+            "InputProtoFile": "reliant/v1/org_provider_account.proto",
+            "OutputProtoFile": "reliant/v1/org_provider_account.proto",
+            "Activity": {
+              "Mutating": true,
+              "Declared": true,
+              "Verb": "delete",
+              "TargetKind": "provider_account",
+              "Writer": "INTERCEPTOR"
+            }
+          },
+          {
+            "Name": "ListOrgProviderWorkspaces",
+            "InputType": "ListOrgProviderWorkspacesRequest",
+            "OutputType": "ListOrgProviderWorkspacesResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "Custom": true,
+            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "InputTypeFQ": "reliant.v1.ListOrgProviderWorkspacesRequest",
+            "OutputTypeFQ": "reliant.v1.ListOrgProviderWorkspacesResponse",
+            "InputProtoFile": "reliant/v1/org_provider_account.proto",
+            "OutputProtoFile": "reliant/v1/org_provider_account.proto",
+            "Activity": {
+              "Mutating": false
+            }
+          },
+          {
+            "Name": "BindOrgProviderWorkspace",
+            "InputType": "BindOrgProviderWorkspaceRequest",
+            "OutputType": "BindOrgProviderWorkspaceResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "InputTypeFQ": "reliant.v1.BindOrgProviderWorkspaceRequest",
+            "OutputTypeFQ": "reliant.v1.BindOrgProviderWorkspaceResponse",
+            "InputProtoFile": "reliant/v1/org_provider_account.proto",
+            "OutputProtoFile": "reliant/v1/org_provider_account.proto",
+            "Activity": {
+              "Mutating": true,
+              "Declared": true,
+              "Verb": "bind",
+              "TargetKind": "provider_workspace",
+              "Writer": "INTERCEPTOR"
+            }
+          },
+          {
+            "Name": "UnbindOrgProviderWorkspace",
+            "InputType": "UnbindOrgProviderWorkspaceRequest",
+            "OutputType": "UnbindOrgProviderWorkspaceResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "InputTypeFQ": "reliant.v1.UnbindOrgProviderWorkspaceRequest",
+            "OutputTypeFQ": "reliant.v1.UnbindOrgProviderWorkspaceResponse",
+            "InputProtoFile": "reliant/v1/org_provider_account.proto",
+            "OutputProtoFile": "reliant/v1/org_provider_account.proto",
+            "Activity": {
+              "Mutating": true,
+              "Declared": true,
+              "Verb": "unbind",
+              "TargetKind": "provider_workspace",
+              "Writer": "INTERCEPTOR"
+            }
+          },
+          {
+            "Name": "ReleaseOrgProviderSeat",
+            "InputType": "ReleaseOrgProviderSeatRequest",
+            "OutputType": "ReleaseOrgProviderSeatResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "InputTypeFQ": "reliant.v1.ReleaseOrgProviderSeatRequest",
+            "OutputTypeFQ": "reliant.v1.ReleaseOrgProviderSeatResponse",
+            "InputProtoFile": "reliant/v1/org_provider_account.proto",
+            "OutputProtoFile": "reliant/v1/org_provider_account.proto",
+            "Activity": {
+              "Mutating": true,
+              "Declared": true,
+              "Verb": "release",
+              "TargetKind": "provider_account",
+              "Writer": "INTERCEPTOR"
+            }
+          }
+        ],
+        "ProtoFile": "reliant/v1/org_provider_account.proto",
+        "ModulePath": "github.com/reliant-labs/reliant",
+        "Messages": {
+          "AddOrgProviderAPIKeyRequest": [
+            {
+              "Name": "org_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "provider",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "api_key",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "label",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "access",
+              "ProtoType": "enum",
+              "IsOptional": false
+            }
+          ],
+          "AddOrgProviderAPIKeyResponse": [
+            {
+              "Name": "account",
+              "ProtoType": "message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.OrgProviderAccount"
+            },
+            {
+              "Name": "created",
+              "ProtoType": "bool",
+              "IsOptional": false
+            }
+          ],
+          "BindOrgProviderWorkspaceRequest": [
+            {
+              "Name": "org_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "account_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            }
+          ],
+          "BindOrgProviderWorkspaceResponse": [
+            {
+              "Name": "workspace",
+              "ProtoType": "message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.OrgProviderWorkspace"
+            },
+            {
+              "Name": "created",
+              "ProtoType": "bool",
+              "IsOptional": false
+            }
+          ],
+          "DeleteOrgProviderAccountRequest": [
+            {
+              "Name": "org_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "account_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            }
+          ],
+          "DeleteOrgProviderAccountResponse": null,
+          "ListOrgProviderAccountsRequest": [
+            {
+              "Name": "org_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            }
+          ],
+          "ListOrgProviderAccountsResponse": [
+            {
+              "Name": "accounts",
+              "ProtoType": "[]message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.OrgProviderAccount"
+            },
+            {
+              "Name": "caller_is_admin",
+              "ProtoType": "bool",
+              "IsOptional": false
+            },
+            {
+              "Name": "adding_enabled",
+              "ProtoType": "bool",
+              "IsOptional": false
+            }
+          ],
+          "ListOrgProviderWorkspacesRequest": [
+            {
+              "Name": "org_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            }
+          ],
+          "ListOrgProviderWorkspacesResponse": [
+            {
+              "Name": "workspaces",
+              "ProtoType": "[]message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.OrgProviderWorkspace"
+            },
+            {
+              "Name": "seats",
+              "ProtoType": "[]message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.OrgProviderSeat"
+            }
+          ],
+          "ReleaseOrgProviderSeatRequest": [
+            {
+              "Name": "org_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "account_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            }
+          ],
+          "ReleaseOrgProviderSeatResponse": null,
+          "ReorderOrgProviderAccountsRequest": [
+            {
+              "Name": "org_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "provider",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "account_ids",
+              "ProtoType": "[]string",
+              "IsOptional": false
+            }
+          ],
+          "ReorderOrgProviderAccountsResponse": [
+            {
+              "Name": "accounts",
+              "ProtoType": "[]message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.OrgProviderAccount"
+            }
+          ],
+          "RotateOrgProviderAPIKeyRequest": [
+            {
+              "Name": "org_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "account_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "api_key",
+              "ProtoType": "string",
+              "IsOptional": false
+            }
+          ],
+          "RotateOrgProviderAPIKeyResponse": [
+            {
+              "Name": "account",
+              "ProtoType": "message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.OrgProviderAccount"
+            }
+          ],
+          "SetOrgProviderAccountGrantsRequest": [
+            {
+              "Name": "org_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "account_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "user_ids",
+              "ProtoType": "[]string",
+              "IsOptional": false
+            }
+          ],
+          "SetOrgProviderAccountGrantsResponse": [
+            {
+              "Name": "account",
+              "ProtoType": "message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.OrgProviderAccount"
+            }
+          ],
+          "UnbindOrgProviderWorkspaceRequest": [
+            {
+              "Name": "org_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "provider",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "external_org_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            }
+          ],
+          "UnbindOrgProviderWorkspaceResponse": null,
+          "UpdateOrgProviderAccountRequest": [
+            {
+              "Name": "org_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "account_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "label",
+              "ProtoType": "string",
+              "IsOptional": true
+            },
+            {
+              "Name": "paused",
+              "ProtoType": "bool",
+              "IsOptional": true
+            },
+            {
+              "Name": "access",
+              "ProtoType": "enum",
+              "IsOptional": true
+            }
+          ],
+          "UpdateOrgProviderAccountResponse": [
+            {
+              "Name": "account",
+              "ProtoType": "message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.OrgProviderAccount"
+            }
+          ]
+        },
+        "Audience": "user",
+        "Schemas": {
+          "reliant.v1.AddOrgProviderAPIKeyRequest": [
+            {
+              "name": "org_id",
+              "kind": "string"
+            },
+            {
+              "name": "provider",
+              "kind": "string"
+            },
+            {
+              "name": "api_key",
+              "kind": "string"
+            },
+            {
+              "name": "label",
+              "kind": "string"
+            },
+            {
+              "name": "access",
+              "kind": "enum",
+              "type_name": "reliant.v1.OrgProviderAccountAccess"
+            }
+          ],
+          "reliant.v1.AddOrgProviderAPIKeyResponse": [
+            {
+              "name": "account",
+              "kind": "message",
+              "type_name": "reliant.v1.OrgProviderAccount"
+            },
+            {
+              "name": "created",
+              "kind": "bool"
+            }
+          ],
+          "reliant.v1.BindOrgProviderWorkspaceRequest": [
+            {
+              "name": "org_id",
+              "kind": "string"
+            },
+            {
+              "name": "account_id",
+              "kind": "string"
+            }
+          ],
+          "reliant.v1.BindOrgProviderWorkspaceResponse": [
+            {
+              "name": "workspace",
+              "kind": "message",
+              "type_name": "reliant.v1.OrgProviderWorkspace"
+            },
+            {
+              "name": "created",
+              "kind": "bool"
+            }
+          ],
+          "reliant.v1.DeleteOrgProviderAccountRequest": [
+            {
+              "name": "org_id",
+              "kind": "string"
+            },
+            {
+              "name": "account_id",
+              "kind": "string"
+            }
+          ],
+          "reliant.v1.DeleteOrgProviderAccountResponse": [],
+          "reliant.v1.ListOrgProviderAccountsRequest": [
+            {
+              "name": "org_id",
+              "kind": "string"
+            }
+          ],
+          "reliant.v1.ListOrgProviderAccountsResponse": [
+            {
+              "name": "accounts",
+              "kind": "message",
+              "type_name": "reliant.v1.OrgProviderAccount",
+              "repeated": true
+            },
+            {
+              "name": "caller_is_admin",
+              "kind": "bool"
+            },
+            {
+              "name": "adding_enabled",
+              "kind": "bool"
+            }
+          ],
+          "reliant.v1.ListOrgProviderWorkspacesRequest": [
+            {
+              "name": "org_id",
+              "kind": "string"
+            }
+          ],
+          "reliant.v1.ListOrgProviderWorkspacesResponse": [
+            {
+              "name": "workspaces",
+              "kind": "message",
+              "type_name": "reliant.v1.OrgProviderWorkspace",
+              "repeated": true
+            },
+            {
+              "name": "seats",
+              "kind": "message",
+              "type_name": "reliant.v1.OrgProviderSeat",
+              "repeated": true
+            }
+          ],
+          "reliant.v1.OrgProviderAccount": [
+            {
+              "name": "account",
+              "kind": "message",
+              "type_name": "reliant.v1.ProviderAccount"
+            },
+            {
+              "name": "access",
+              "kind": "enum",
+              "type_name": "reliant.v1.OrgProviderAccountAccess"
+            },
+            {
+              "name": "created_by_user_id",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "grants",
+              "kind": "message",
+              "type_name": "reliant.v1.OrgProviderAccountGrant",
+              "repeated": true
+            }
+          ],
+          "reliant.v1.OrgProviderAccountGrant": [
+            {
+              "name": "user_id",
+              "kind": "string"
+            },
+            {
+              "name": "granted_by_user_id",
+              "kind": "string"
+            },
+            {
+              "name": "granted_at",
+              "kind": "string"
+            }
+          ],
+          "reliant.v1.OrgProviderSeat": [
+            {
+              "name": "account_id",
+              "kind": "string"
+            },
+            {
+              "name": "user_id",
+              "kind": "string"
+            },
+            {
+              "name": "provider",
+              "kind": "string"
+            },
+            {
+              "name": "email",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "plan",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "attribution_source",
+              "kind": "string"
+            },
+            {
+              "name": "external_org_id",
+              "kind": "string",
+              "optional": true
+            }
+          ],
+          "reliant.v1.OrgProviderWorkspace": [
+            {
+              "name": "provider",
+              "kind": "string"
+            },
+            {
+              "name": "external_org_id",
+              "kind": "string"
+            },
+            {
+              "name": "display_name",
+              "kind": "string"
+            },
+            {
+              "name": "bound_by_user_id",
+              "kind": "string"
+            },
+            {
+              "name": "bound_at",
+              "kind": "string"
+            }
+          ],
+          "reliant.v1.ProviderAccount": [
+            {
+              "name": "id",
+              "kind": "string"
+            },
+            {
+              "name": "provider",
+              "kind": "string"
+            },
+            {
+              "name": "provider_display_name",
+              "kind": "string"
+            },
+            {
+              "name": "auth_kind",
+              "kind": "enum",
+              "type_name": "reliant.v1.ProviderAuthKind"
+            },
+            {
+              "name": "label",
+              "kind": "string"
+            },
+            {
+              "name": "email",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "organization_name",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "plan",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "plan_display",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "masked_key",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "priority",
+              "kind": "int32"
+            },
+            {
+              "name": "status",
+              "kind": "enum",
+              "type_name": "reliant.v1.ProviderAccountStatus"
+            },
+            {
+              "name": "limited_until",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "limited_window",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "needs_sign_in_reason",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "windows",
+              "kind": "message",
+              "type_name": "reliant.v1.UsageWindow",
+              "repeated": true
+            },
+            {
+              "name": "usage_observed_at",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "usage_source",
+              "kind": "enum",
+              "type_name": "reliant.v1.UsageSource"
+            },
+            {
+              "name": "usage_error",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "created_at",
+              "kind": "string"
+            },
+            {
+              "name": "using_credits",
+              "kind": "bool"
+            }
+          ],
+          "reliant.v1.ReleaseOrgProviderSeatRequest": [
+            {
+              "name": "org_id",
+              "kind": "string"
+            },
+            {
+              "name": "account_id",
+              "kind": "string"
+            }
+          ],
+          "reliant.v1.ReleaseOrgProviderSeatResponse": [],
+          "reliant.v1.ReorderOrgProviderAccountsRequest": [
+            {
+              "name": "org_id",
+              "kind": "string"
+            },
+            {
+              "name": "provider",
+              "kind": "string"
+            },
+            {
+              "name": "account_ids",
+              "kind": "string",
+              "repeated": true
+            }
+          ],
+          "reliant.v1.ReorderOrgProviderAccountsResponse": [
+            {
+              "name": "accounts",
+              "kind": "message",
+              "type_name": "reliant.v1.OrgProviderAccount",
+              "repeated": true
+            }
+          ],
+          "reliant.v1.RotateOrgProviderAPIKeyRequest": [
+            {
+              "name": "org_id",
+              "kind": "string"
+            },
+            {
+              "name": "account_id",
+              "kind": "string"
+            },
+            {
+              "name": "api_key",
+              "kind": "string"
+            }
+          ],
+          "reliant.v1.RotateOrgProviderAPIKeyResponse": [
+            {
+              "name": "account",
+              "kind": "message",
+              "type_name": "reliant.v1.OrgProviderAccount"
+            }
+          ],
+          "reliant.v1.SetOrgProviderAccountGrantsRequest": [
+            {
+              "name": "org_id",
+              "kind": "string"
+            },
+            {
+              "name": "account_id",
+              "kind": "string"
+            },
+            {
+              "name": "user_ids",
+              "kind": "string",
+              "repeated": true
+            }
+          ],
+          "reliant.v1.SetOrgProviderAccountGrantsResponse": [
+            {
+              "name": "account",
+              "kind": "message",
+              "type_name": "reliant.v1.OrgProviderAccount"
+            }
+          ],
+          "reliant.v1.UnbindOrgProviderWorkspaceRequest": [
+            {
+              "name": "org_id",
+              "kind": "string"
+            },
+            {
+              "name": "provider",
+              "kind": "string"
+            },
+            {
+              "name": "external_org_id",
+              "kind": "string"
+            }
+          ],
+          "reliant.v1.UnbindOrgProviderWorkspaceResponse": [],
+          "reliant.v1.UpdateOrgProviderAccountRequest": [
+            {
+              "name": "org_id",
+              "kind": "string"
+            },
+            {
+              "name": "account_id",
+              "kind": "string"
+            },
+            {
+              "name": "label",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "paused",
+              "kind": "bool",
+              "optional": true
+            },
+            {
+              "name": "access",
+              "kind": "enum",
+              "type_name": "reliant.v1.OrgProviderAccountAccess",
+              "optional": true
+            }
+          ],
+          "reliant.v1.UpdateOrgProviderAccountResponse": [
+            {
+              "name": "account",
+              "kind": "message",
+              "type_name": "reliant.v1.OrgProviderAccount"
+            }
+          ],
+          "reliant.v1.UsageWindow": [
+            {
+              "name": "name",
+              "kind": "string"
+            },
+            {
+              "name": "label",
+              "kind": "string"
+            },
+            {
+              "name": "used_fraction",
+              "kind": "double",
+              "optional": true
+            },
+            {
+              "name": "resets_at",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "length_seconds",
+              "kind": "int64"
+            }
+          ]
+        },
+        "SchemaFiles": {
+          "reliant.v1.AddOrgProviderAPIKeyRequest": "reliant/v1/org_provider_account.proto",
+          "reliant.v1.AddOrgProviderAPIKeyResponse": "reliant/v1/org_provider_account.proto",
+          "reliant.v1.BindOrgProviderWorkspaceRequest": "reliant/v1/org_provider_account.proto",
+          "reliant.v1.BindOrgProviderWorkspaceResponse": "reliant/v1/org_provider_account.proto",
+          "reliant.v1.DeleteOrgProviderAccountRequest": "reliant/v1/org_provider_account.proto",
+          "reliant.v1.DeleteOrgProviderAccountResponse": "reliant/v1/org_provider_account.proto",
+          "reliant.v1.ListOrgProviderAccountsRequest": "reliant/v1/org_provider_account.proto",
+          "reliant.v1.ListOrgProviderAccountsResponse": "reliant/v1/org_provider_account.proto",
+          "reliant.v1.ListOrgProviderWorkspacesRequest": "reliant/v1/org_provider_account.proto",
+          "reliant.v1.ListOrgProviderWorkspacesResponse": "reliant/v1/org_provider_account.proto",
+          "reliant.v1.OrgProviderAccount": "reliant/v1/org_provider_account.proto",
+          "reliant.v1.OrgProviderAccountGrant": "reliant/v1/org_provider_account.proto",
+          "reliant.v1.OrgProviderSeat": "reliant/v1/org_provider_account.proto",
+          "reliant.v1.OrgProviderWorkspace": "reliant/v1/org_provider_account.proto",
+          "reliant.v1.ProviderAccount": "reliant/v1/provider_account.proto",
+          "reliant.v1.ReleaseOrgProviderSeatRequest": "reliant/v1/org_provider_account.proto",
+          "reliant.v1.ReleaseOrgProviderSeatResponse": "reliant/v1/org_provider_account.proto",
+          "reliant.v1.ReorderOrgProviderAccountsRequest": "reliant/v1/org_provider_account.proto",
+          "reliant.v1.ReorderOrgProviderAccountsResponse": "reliant/v1/org_provider_account.proto",
+          "reliant.v1.RotateOrgProviderAPIKeyRequest": "reliant/v1/org_provider_account.proto",
+          "reliant.v1.RotateOrgProviderAPIKeyResponse": "reliant/v1/org_provider_account.proto",
+          "reliant.v1.SetOrgProviderAccountGrantsRequest": "reliant/v1/org_provider_account.proto",
+          "reliant.v1.SetOrgProviderAccountGrantsResponse": "reliant/v1/org_provider_account.proto",
+          "reliant.v1.UnbindOrgProviderWorkspaceRequest": "reliant/v1/org_provider_account.proto",
+          "reliant.v1.UnbindOrgProviderWorkspaceResponse": "reliant/v1/org_provider_account.proto",
+          "reliant.v1.UpdateOrgProviderAccountRequest": "reliant/v1/org_provider_account.proto",
+          "reliant.v1.UpdateOrgProviderAccountResponse": "reliant/v1/org_provider_account.proto",
+          "reliant.v1.UsageWindow": "reliant/v1/provider_account.proto"
+        },
+        "Enums": {
+          "reliant.v1.OrgProviderAccountAccess": [
+            "ORG_PROVIDER_ACCOUNT_ACCESS_UNSPECIFIED",
+            "ORG_PROVIDER_ACCOUNT_ACCESS_MEMBERS",
+            "ORG_PROVIDER_ACCOUNT_ACCESS_ADMINS",
+            "ORG_PROVIDER_ACCOUNT_ACCESS_SELECTED"
+          ],
+          "reliant.v1.ProviderAccountStatus": [
+            "PROVIDER_ACCOUNT_STATUS_UNSPECIFIED",
+            "PROVIDER_ACCOUNT_STATUS_AVAILABLE",
+            "PROVIDER_ACCOUNT_STATUS_LIMITED",
+            "PROVIDER_ACCOUNT_STATUS_PAUSED",
+            "PROVIDER_ACCOUNT_STATUS_NEEDS_SIGN_IN"
+          ],
+          "reliant.v1.ProviderAuthKind": [
+            "PROVIDER_AUTH_KIND_UNSPECIFIED",
+            "PROVIDER_AUTH_KIND_OAUTH",
+            "PROVIDER_AUTH_KIND_API_KEY",
+            "PROVIDER_AUTH_KIND_DEVICE",
+            "PROVIDER_AUTH_KIND_MANAGED"
+          ],
+          "reliant.v1.UsageSource": [
+            "USAGE_SOURCE_UNSPECIFIED",
+            "USAGE_SOURCE_HEADERS",
+            "USAGE_SOURCE_USAGE_API",
+            "USAGE_SOURCE_LIMIT_ERROR"
+          ]
+        },
+        "EnumNumbers": {
+          "reliant.v1.OrgProviderAccountAccess": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "reliant.v1.ProviderAccountStatus": [
+            0,
+            1,
+            2,
+            3,
+            4
+          ],
+          "reliant.v1.ProviderAuthKind": [
+            0,
+            1,
+            2,
+            3,
+            4
+          ],
+          "reliant.v1.UsageSource": [
+            0,
+            1,
+            2,
+            3
+          ]
+        },
+        "EnumGoRefs": {
+          "reliant.v1.OrgProviderAccountAccess": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "OrgProviderAccountAccess"
+          },
+          "reliant.v1.ProviderAccountStatus": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "ProviderAccountStatus"
+          },
+          "reliant.v1.ProviderAuthKind": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "ProviderAuthKind"
+          },
+          "reliant.v1.UsageSource": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "UsageSource"
           }
         }
       }
@@ -49484,6 +50669,18 @@
       "implementation_candidates": []
     },
     {
+      "id": "OrgProviderAccount",
+      "name": "OrgProviderAccount",
+      "kind": "component",
+      "type": "*github.com/reliant-labs/reliant/internal/handlers/org_provider_account.Service",
+      "source": {
+        "path": "internal/handlers/org_provider_account/service.go",
+        "symbol": "New"
+      },
+      "methods": [],
+      "implementation_candidates": []
+    },
+    {
       "id": "OrgResolver",
       "name": "OrgResolver",
       "kind": "provider",
@@ -50984,6 +52181,19 @@
       "candidates": [],
       "providers": [],
       "resolution": "unresolved"
+    },
+    {
+      "consumer": "OrgProviderAccount",
+      "field": "Store",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/org_provider_account.Store",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
     },
     {
       "consumer": "OrgResolver",
