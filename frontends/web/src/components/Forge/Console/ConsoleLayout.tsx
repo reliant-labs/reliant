@@ -19,7 +19,9 @@
  *    when the reader picks one.
  *
  * 3. THE CHROME: ConsoleShell — the nav, the top bar with the breadcrumb and
- *    scope, the rail (its collapsed state remembered per user).
+ *    scope, the rail (its collapsed state remembered per user) — in the led
+ *    console (ledConsole.tsx): the grouped nav, and pages that lead with one
+ *    sentence and the item worth opening first.
  *
  * Escape and the way out belong to the parent `_forge` layout (ForgeLayout),
  * which also hosts the redirects from the retired URLs.
@@ -31,7 +33,8 @@ import { Outlet, useLocation, useNavigate, useParams, useSearch } from "@tanstac
 import SkeletonLoader from "@/components/forge-ui/skeleton_loader";
 import { useForgeRoster } from "@/hooks/forge-queries";
 import { useDashboard, useDashboardIndex } from "@/hooks/dashboard-queries";
-import { displayTitle, hubOf, hubTabLabel } from "../Observability/Dashboards/dashboardHubs";
+import { displayTitle, hubOf, hubsOf, hubTabLabel } from "../Observability/Dashboards/dashboardHubs";
+import { DOCS } from "../GettingStarted";
 import { useAlerts, useObservabilityOrg } from "@/hooks/observability-queries";
 import { useTitleBarChrome } from "@/hooks/useTitleBarChrome";
 import { getParentRouteNavigateOptions } from "@/lib/routeParent";
@@ -44,6 +47,7 @@ import { ObsQuotaBanner } from "../Observability/ObsStates";
 import { ConsoleProjectSwitcher, ProjectMonogram } from "./ConsoleProjectSwitcher";
 import { OrgSwitcher } from "@/components/Orgs/OrgSwitcher";
 import { ConsoleShell, type ConsoleNavEnv } from "./ConsoleShell";
+import { LedConsoleProvider, type LedConsoleHost } from "./ledConsole";
 import { ForgeConsoleContext, type ForgeConsole } from "./consoleContext";
 import { useConsoleReliantProject, useConsoleUser } from "./consoleHost";
 import { useOptionalViews } from "./useOptionalViews";
@@ -198,7 +202,18 @@ export function ConsoleLayout() {
     [forgeProject, projectId, page, env, setEnv, roster, href]
   );
 
+  // The led console is the console's default (ledConsole.tsx): Product analytics leads to the project's hub, when it has one.
+  const ledHost = useMemo<LedConsoleHost>(() => {
+    const hub = hubsOf(dashboards.data?.dashboards ?? [], forgeProject).find((candidate) => candidate.id === "product");
+    const first = hub?.tabs[0];
+    return {
+      productAnalytics: hub && first && first.ref.kind !== "template" ? { open: { kind: "dashboard", dashKind: first.ref.kind, key: first.ref.key }, keys: hub.tabs.map((tab) => tab.ref.key) } : undefined,
+      releasesExplainer: { href: DOCS.deploys, label: "How releases work" },
+    };
+  }, [dashboards.data, forgeProject]);
+
   return (
+    <LedConsoleProvider host={ledHost}>
     <ConsoleShell
       project={forgeProject}
       orgSwitcher={<OrgSwitcher />}
@@ -251,6 +266,7 @@ export function ConsoleLayout() {
         </div>
       )}
     </ConsoleShell>
+    </LedConsoleProvider>
   );
 }
 
