@@ -1069,7 +1069,8 @@ func (s *Service) SendMessage(
 // narrower scope.
 func (s *Service) recordPersonTurn(ctx context.Context, userID string, chat *db.Chat) {
 	kind := core.TriggerEventKind(chat.LaunchKind)
-	if !(chat.TriggerID != nil && kind.Unattended()) && kind != core.TriggerEventKindAgentStartRun {
+	launched := (chat.TriggerID != nil && kind.Unattended()) || kind == core.TriggerEventKindAgentStartRun
+	if !launched {
 		return
 	}
 	if userID != chat.UserID || auth.RequirePerson(ctx, "take a turn in the chat") != nil {
