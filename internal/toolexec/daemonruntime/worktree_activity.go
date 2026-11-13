@@ -13,10 +13,14 @@ import (
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/llm/tools/shell"
+	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/internal/worktreereclaim"
 )
 
-var errRecoveryAdmission = errors.New("workspace recovery finalization in progress; retry this operation")
+// errRecoveryAdmission is the refusal of work while a worktree's recovery
+// finalizes. Its text is the wire contract the server classifies it by, so it
+// is toolexec's sentinel itself.
+var errRecoveryAdmission = toolexec.ErrRecoveryFinalizing
 
 // This gate is daemon-process scoped (commands and stream input share it).
 // Every admission names its scope (admissionScope). An unknown scope conflicts

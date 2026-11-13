@@ -33,11 +33,13 @@ import { demoEntryHref } from './components/Forge/Demo/demoEntry'
 import { DemoTourToast } from './components/Forge/Demo/DemoTourToast'
 import { DemoTips } from './components/Forge/Demo/tips'
 import { createForgeDemoRedirectRoute, createForgeDemoRoute } from './components/Forge/Demo/demoRoute'
-import { consolePath } from './components/Forge/Console/paths'
+import { consolePath, isObsNavView, withSearch, type ConsolePage } from './components/Forge/Console/paths'
+import { FORGE_DEMO_PATH } from './components/Forge/Demo/demoPath'
 import { FIXTURE_PROJECT } from './components/Forge/Observability/__fixtures__/fixtureApi'
 import { createForgeConsoleRoutes } from './forgeConsoleRoutes'
 import { forgeConsolePages } from './forgeConsolePages'
 import { DemoConsoleProviders } from './demoBundle/DemoConsoleProviders'
+import { retainTourParam } from './components/Onboarding/tourParam'
 import { JourneyTour } from './components/Onboarding/JourneyTour'
 import { PageVisitTracker } from './components/PageVisitTracker'
 import { ObsReadOnlyProvider } from './components/Forge/Observability/obsReadOnly'
@@ -84,6 +86,18 @@ export function otherProjectPath(pathname: string): string | null {
   return `${consolePath(FIXTURE_PROJECT, { kind: 'overview' })}${match[2] ?? ''}`
 }
 
+/**
+ * A tour link to the demo panel (`/forge/demo?view=traces&tour=…`, how every
+ * tour link read before the tour moved onto the console) as the console page
+ * it names, or null for any other demo URL. The tour walks the console here.
+ */
+export function consoleTourHref(pathname: string, search: Record<string, unknown>): string | null {
+  if (pathname !== FORGE_DEMO_PATH || !search.tour || search.section || search.browser) return null
+  const { view, ...rest } = search
+  const page: ConsolePage = typeof view === 'string' && isObsNavView(view) ? { kind: 'obs-view', view } : { kind: 'overview' }
+  return withSearch(consolePath(FIXTURE_PROJECT, page), rest)
+}
+
 /** Retired console paths a shared link may still carry; they land on the Overview. */
 const LEGACY_SHOP_SECTIONS = new Set(['env', 'topology', 'status'])
 
@@ -113,6 +127,13 @@ function DemoNotFound() {
 export function buildDemoShellTree() {
   const rootRoute = createRootRoute({
     component: DemoRootShell,
+    // Keep `?tour=` across navigations that don't name it (retainTourParam): the tour walks the console's own links.
+    // The root has no search schema, so its middleware type is `{}`-shaped.
+    search: { middlewares: [retainTourParam as never] },
+    beforeLoad: ({ location }) => {
+      const tourHref = consoleTourHref(location.pathname, location.search as Record<string, unknown>)
+      if (tourHref) throw redirect({ href: tourHref, replace: true })
+    },
     // A console URL with no page (`/forge/p/shop/nope`) says so; anything else lands on the demo.
     notFoundComponent: DemoNotFound,
     errorComponent: RouteErrorFallback,

@@ -50,12 +50,15 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 )
 
-// User connections — the credential vault's metadata rows (P5b lane L5). The
+// Connections — the credential vault's metadata rows (P5b lane L5). The
 // ciphertext lives in connection_secrets (connection_secret_repo_ext.go), so
 // no query here can return it; the audit trail is connection_events
-// (connection_event_repo_ext.go). Every read and write that takes a userID
-// enforces ownership in SQL. connections.deleted_at is bun's soft-delete
-// column, so every model query below already excludes deleted rows.
+// (connection_event_repo_ext.go). Every read and write that takes an owner
+// (a core.ConnectionOwner, or a userID meaning that user's personal ones)
+// enforces ownership in SQL, owner_kind included: an org's connection is never
+// read or changed as a person's, even by the admin whose user_id it carries
+// for attribution. connections.deleted_at is bun's soft-delete column, so
+// every model query below already excludes deleted rows.
 //
 // The writes run in connectionTx: one READ COMMITTED transaction (joining
 // one ctx already carries) that is never retried. Their consistency comes
@@ -71,20 +74,28 @@ func connectionTx(ctx context.Context, db orm.Context, fn func(ctx context.Conte
 }
 
 // InsertUserConnection inserts c, its secrets and its created event in one
-// transaction. The user's first connection for an integration becomes its
-// default; concurrent first-creates for the same (user, integration) are
-// serialized so the partial unique index is never what decides.
+// transaction. The owner's (c.Owner(): the user, or the org of an org
+// connection) first connection for an integration becomes its default;
+// concurrent first-creates for the same (owner, integration) are serialized
+// so the partial unique index is never what decides.
 func InsertUserConnection(ctx context.Context, db orm.Context, c *core.Connection, secrets []core.ConnectionSecret, ev core.ConnectionEvent) error {
+	owner := c.Owner()
 	return connectionTx(ctx, db, func(ctx context.Context) error {
-		if _, err := db.Bun().NewRaw(`SELECT pg_advisory_xact_lock(hashtextextended(?0, 0))`,
-			fmt.Sprintf("connections:%d:%s:%s", len(c.UserID), c.UserID, c.IntegrationID)).Exec(ctx); err != nil {
+		// A personal key keeps the spelling it always had, so a replica of
+		// the previous release serializes with this one on the same lock.
+		lockKey := fmt.Sprintf("connections:%d:%s:%s", len(c.UserID), c.UserID, c.IntegrationID)
+		if owner.Kind == core.ConnectionOwnerOrg {
+			lockKey = fmt.Sprintf("connections:org:%d:%s:%s", len(owner.ID), owner.ID, c.IntegrationID)
+		}
+		if _, err := db.Bun().NewRaw(`SELECT pg_advisory_xact_lock(hashtextextended(?0, 0))`, lockKey).Exec(ctx); err != nil {
 			return err
 		}
-		defaults, err := CountConnection(ctx, db,
-			orm.WhereEq(ConnectionFieldUserID, c.UserID),
-			orm.WhereEq(ConnectionFieldIntegrationID, c.IntegrationID),
-			orm.WhereEq(ConnectionFieldOwnerKind, core.ConnectionOwnerUser),
-			orm.WhereEq(ConnectionFieldIsDefault, true))
+		pred, args := ownerPredicate(owner)
+		defaults, err := db.Bun().NewSelect().Model((*Connection)(nil)).
+			Where(pred, args...).
+			Where("? = ?", bun.Ident(ConnectionFieldIntegrationID), c.IntegrationID).
+			Where("?", bun.Ident(ConnectionFieldIsDefault)).
+			Count(ctx)
 		if err != nil {
 			return err
 		}
@@ -94,7 +105,7 @@ func InsertUserConnection(ctx context.Context, db orm.Context, c *core.Connectio
 			return err
 		}
 		if err := CreateConnection(ctx, db, row); err != nil {
-			if orm.ConstraintName(err) == ConnectionConstraintName {
+			if isConnectionNameTaken(err) {
 				return core.ErrConnectionNameTaken
 			}
 			return err
@@ -112,8 +123,15 @@ func InsertUserConnection(ctx context.Context, db orm.Context, c *core.Connectio
 }
 
 // ReauthorizeConnection rewrites the identity and secrets of the user's live
-// connection, returns it to active, and returns the row as stored.
+// personal connection, returns it to active, and returns the row as stored.
 func ReauthorizeConnection(ctx context.Context, db orm.Context, userID, id string, upd core.ConnectionUpdate, secrets []core.ConnectionSecret, ev core.ConnectionEvent) (*core.Connection, error) {
+	return ReauthorizeOwnedConnection(ctx, db, core.UserConnectionOwner(userID), id, upd, secrets, ev)
+}
+
+// ReauthorizeOwnedConnection is ReauthorizeConnection for owner's live
+// connection.
+func ReauthorizeOwnedConnection(ctx context.Context, db orm.Context, owner core.ConnectionOwner, id string, upd core.ConnectionUpdate, secrets []core.ConnectionSecret, ev core.ConnectionEvent) (*core.Connection, error) {
+	pred, args := ownerPredicate(owner)
 	var out *core.Connection
 	err := connectionTx(ctx, db, func(ctx context.Context) error {
 		scopes := upd.Scopes
@@ -131,7 +149,7 @@ func ReauthorizeConnection(ctx context.Context, db orm.Context, userID, id strin
 			Set("? = NULL", bun.Ident(ConnectionFieldStatusReason)).
 			Set("? = now()", bun.Ident(ConnectionFieldUpdatedAt)).
 			Where("? = ?", bun.Ident(ConnectionFieldID), id).
-			Where("? = ?", bun.Ident(ConnectionFieldUserID), userID).
+			Where(pred, args...).
 			Exec(ctx)
 		if err := requireConnectionRow(res, err); err != nil {
 			return err
@@ -146,24 +164,36 @@ func ReauthorizeConnection(ctx context.Context, db orm.Context, userID, id strin
 		if err := AppendConnectionEvent(ctx, db, ev); err != nil {
 			return err
 		}
-		out, err = selectConnection(ctx, db, false, whereConnection(ConnectionFieldID, id), whereConnection(ConnectionFieldUserID, userID))
+		out, err = selectConnection(ctx, db, false, whereConnection(ConnectionFieldID, id), whereOwned(owner))
 		return err
 	})
 	return out, err
 }
 
-// GetUserConnection returns the user's live connection, or
-// core.ErrConnectionNotFound (missing, deleted, or someone else's).
+// GetUserConnection returns the user's live personal connection, or
+// core.ErrConnectionNotFound (missing, deleted, someone else's, or an org's).
 func GetUserConnection(ctx context.Context, db orm.Context, userID, id string) (*core.Connection, error) {
-	return selectConnection(ctx, db, false, whereConnection(ConnectionFieldID, id), whereUserOwned(userID))
+	return GetOwnedConnection(ctx, db, core.UserConnectionOwner(userID), id)
 }
 
-// ListUserConnections returns the user's live connections, of one
+// GetOwnedConnection returns owner's live connection, or
+// core.ErrConnectionNotFound (missing, deleted, or not owner's).
+func GetOwnedConnection(ctx context.Context, db orm.Context, owner core.ConnectionOwner, id string) (*core.Connection, error) {
+	return selectConnection(ctx, db, false, whereConnection(ConnectionFieldID, id), whereOwned(owner))
+}
+
+// ListUserConnections returns the user's live personal connections, of one
 // integration when integrationID is set, ordered by integration then age.
 func ListUserConnections(ctx context.Context, db orm.Context, userID, integrationID string) ([]*core.Connection, error) {
+	return ListOwnedConnections(ctx, db, core.UserConnectionOwner(userID), integrationID)
+}
+
+// ListOwnedConnections returns owner's live connections, of one integration
+// when integrationID is set, ordered by integration then age.
+func ListOwnedConnections(ctx context.Context, db orm.Context, owner core.ConnectionOwner, integrationID string) ([]*core.Connection, error) {
 	var rows []*Connection
 	q := db.Bun().NewSelect().Model(&rows)
-	whereUserOwned(userID)(q)
+	whereOwned(owner)(q)
 	if integrationID != "" {
 		whereConnection(ConnectionFieldIntegrationID, integrationID)(q)
 	}
@@ -189,25 +219,37 @@ func DefaultUserConnection(ctx context.Context, db orm.Context, userID, integrat
 		whereConnection(ConnectionFieldIntegrationID, integrationID), whereConnection(ConnectionFieldIsDefault, true))
 }
 
-// FindConnectionByExternalAccount returns the user's oldest live connection
-// to that provider account, or core.ErrConnectionNotFound.
+// FindConnectionByExternalAccount returns the user's oldest live personal
+// connection to that provider account, or core.ErrConnectionNotFound.
 func FindConnectionByExternalAccount(ctx context.Context, db orm.Context, userID, integrationID, externalAccountID string) (*core.Connection, error) {
-	return selectConnection(ctx, db, false, whereUserOwned(userID),
+	return FindOwnedConnectionByExternalAccount(ctx, db, core.UserConnectionOwner(userID), integrationID, externalAccountID)
+}
+
+// FindOwnedConnectionByExternalAccount returns owner's oldest live
+// connection to that provider account, or core.ErrConnectionNotFound.
+func FindOwnedConnectionByExternalAccount(ctx context.Context, db orm.Context, owner core.ConnectionOwner, integrationID, externalAccountID string) (*core.Connection, error) {
+	return selectConnection(ctx, db, false, whereOwned(owner),
 		whereConnection(ConnectionFieldIntegrationID, integrationID),
 		whereConnection(ConnectionFieldExternalAccountID, externalAccountID),
 		func(q *bun.SelectQuery) { q.OrderExpr("?", bun.Ident(ConnectionFieldCreatedAt)) })
 }
 
-// RenameConnection renames the user's live connection and records ev.
+// RenameConnection renames the user's live personal connection and records ev.
 func RenameConnection(ctx context.Context, db orm.Context, userID, id, name string, ev core.ConnectionEvent) error {
+	return RenameOwnedConnection(ctx, db, core.UserConnectionOwner(userID), id, name, ev)
+}
+
+// RenameOwnedConnection renames owner's live connection and records ev.
+func RenameOwnedConnection(ctx context.Context, db orm.Context, owner core.ConnectionOwner, id, name string, ev core.ConnectionEvent) error {
+	pred, args := ownerPredicate(owner)
 	return connectionTx(ctx, db, func(ctx context.Context) error {
 		res, err := db.Bun().NewUpdate().Model((*Connection)(nil)).
 			Set("? = ?", bun.Ident(ConnectionFieldName), name).
 			Set("? = now()", bun.Ident(ConnectionFieldUpdatedAt)).
 			Where("? = ?", bun.Ident(ConnectionFieldID), id).
-			Where("? = ?", bun.Ident(ConnectionFieldUserID), userID).
+			Where(pred, args...).
 			Exec(ctx)
-		if orm.ConstraintName(err) == ConnectionConstraintName {
+		if isConnectionNameTaken(err) {
 			return core.ErrConnectionNameTaken
 		}
 		if err := requireConnectionRow(res, err); err != nil {
@@ -218,11 +260,18 @@ func RenameConnection(ctx context.Context, db orm.Context, userID, id, name stri
 	})
 }
 
-// SetDefaultConnection makes the user's live connection its integration's
-// default and records ev.
+// SetDefaultConnection makes the user's live personal connection its
+// integration's default and records ev.
 func SetDefaultConnection(ctx context.Context, db orm.Context, userID, id string, ev core.ConnectionEvent) error {
+	return SetDefaultOwnedConnection(ctx, db, core.UserConnectionOwner(userID), id, ev)
+}
+
+// SetDefaultOwnedConnection makes owner's live connection its integration's
+// default among owner's connections and records ev.
+func SetDefaultOwnedConnection(ctx context.Context, db orm.Context, owner core.ConnectionOwner, id string, ev core.ConnectionEvent) error {
+	pred, args := ownerPredicate(owner)
 	return connectionTx(ctx, db, func(ctx context.Context) error {
-		c, err := selectConnection(ctx, db, true, whereConnection(ConnectionFieldID, id), whereUserOwned(userID))
+		c, err := selectConnection(ctx, db, true, whereConnection(ConnectionFieldID, id), whereOwned(owner))
 		if err != nil {
 			return err
 		}
@@ -230,7 +279,7 @@ func SetDefaultConnection(ctx context.Context, db orm.Context, userID, id string
 		if _, err := db.Bun().NewUpdate().Model((*Connection)(nil)).
 			Set("? = false", bun.Ident(ConnectionFieldIsDefault)).
 			Set("? = now()", bun.Ident(ConnectionFieldUpdatedAt)).
-			Where("? = ?", bun.Ident(ConnectionFieldUserID), userID).
+			Where(pred, args...).
 			Where("? = ?", bun.Ident(ConnectionFieldIntegrationID), c.IntegrationID).
 			Where("?", bun.Ident(ConnectionFieldIsDefault)).
 			Where("? <> ?", bun.Ident(ConnectionFieldID), id).
@@ -241,7 +290,7 @@ func SetDefaultConnection(ctx context.Context, db orm.Context, userID, id string
 			Set("? = true", bun.Ident(ConnectionFieldIsDefault)).
 			Set("? = now()", bun.Ident(ConnectionFieldUpdatedAt)).
 			Where("? = ?", bun.Ident(ConnectionFieldID), id).
-			Where("? = ?", bun.Ident(ConnectionFieldUserID), userID).
+			Where(pred, args...).
 			Exec(ctx); err != nil {
 			return err
 		}
@@ -250,9 +299,16 @@ func SetDefaultConnection(ctx context.Context, db orm.Context, userID, id string
 	})
 }
 
-// SoftDeleteConnection deletes the user's live connection: the row is kept,
-// revoked, for the audit trail; its secrets are destroyed.
+// SoftDeleteConnection deletes the user's live personal connection: the row
+// is kept, revoked, for the audit trail; its secrets are destroyed.
 func SoftDeleteConnection(ctx context.Context, db orm.Context, userID, id string, ev core.ConnectionEvent) error {
+	return SoftDeleteOwnedConnection(ctx, db, core.UserConnectionOwner(userID), id, ev)
+}
+
+// SoftDeleteOwnedConnection is SoftDeleteConnection for owner's live
+// connection.
+func SoftDeleteOwnedConnection(ctx context.Context, db orm.Context, owner core.ConnectionOwner, id string, ev core.ConnectionEvent) error {
+	pred, args := ownerPredicate(owner)
 	return connectionTx(ctx, db, func(ctx context.Context) error {
 		res, err := db.Bun().NewUpdate().Model((*Connection)(nil)).
 			Set("? = now()", bun.Ident(ConnectionFieldDeletedAt)).
@@ -261,7 +317,7 @@ func SoftDeleteConnection(ctx context.Context, db orm.Context, userID, id string
 			Set("? = 'deleted'", bun.Ident(ConnectionFieldStatusReason)).
 			Set("? = now()", bun.Ident(ConnectionFieldUpdatedAt)).
 			Where("? = ?", bun.Ident(ConnectionFieldID), id).
-			Where("? = ?", bun.Ident(ConnectionFieldUserID), userID).
+			Where(pred, args...).
 			Exec(ctx)
 		if err := requireConnectionRow(res, err); err != nil {
 			return err
@@ -276,26 +332,39 @@ func SoftDeleteConnection(ctx context.Context, db orm.Context, userID, id string
 	})
 }
 
-// RecordConnectionTestResult stores what a successful probe read; an empty
-// value keeps the stored one.
+// RecordConnectionTestResult stores what a successful probe of the user's
+// personal connection read; an empty value keeps the stored one.
 func RecordConnectionTestResult(ctx context.Context, db orm.Context, userID, id, accountLabel, senderID string) error {
+	return RecordOwnedConnectionTestResult(ctx, db, core.UserConnectionOwner(userID), id, accountLabel, senderID)
+}
+
+// RecordOwnedConnectionTestResult is RecordConnectionTestResult for owner's
+// connection.
+func RecordOwnedConnectionTestResult(ctx context.Context, db orm.Context, owner core.ConnectionOwner, id, accountLabel, senderID string) error {
+	pred, args := ownerPredicate(owner)
 	res, err := db.Bun().NewUpdate().Model((*Connection)(nil)).
 		Set("? = COALESCE(?, ?)", bun.Ident(ConnectionFieldAccountLabel), emptyToNil(accountLabel), bun.Ident(ConnectionFieldAccountLabel)).
 		Set("? = COALESCE(?, ?)", bun.Ident(ConnectionFieldSenderID), emptyToNil(senderID), bun.Ident(ConnectionFieldSenderID)).
 		Set("? = now()", bun.Ident(ConnectionFieldUpdatedAt)).
 		Where("? = ?", bun.Ident(ConnectionFieldID), id).
-		Where("? = ?", bun.Ident(ConnectionFieldUserID), userID).
+		Where(pred, args...).
 		Exec(ctx)
 	return requireConnectionRow(res, err)
 }
 
-// TouchConnectionUsed stamps the connection's last use. It is telemetry:
-// updated_at is left alone.
+// TouchConnectionUsed stamps the user's personal connection's last use. It
+// is telemetry: updated_at is left alone.
 func TouchConnectionUsed(ctx context.Context, db orm.Context, userID, id string) error {
+	return TouchOwnedConnectionUsed(ctx, db, core.UserConnectionOwner(userID), id)
+}
+
+// TouchOwnedConnectionUsed is TouchConnectionUsed for owner's connection.
+func TouchOwnedConnectionUsed(ctx context.Context, db orm.Context, owner core.ConnectionOwner, id string) error {
+	pred, args := ownerPredicate(owner)
 	_, err := db.Bun().NewUpdate().Model((*Connection)(nil)).
 		Set("? = now()", bun.Ident(ConnectionFieldLastUsedAt)).
 		Where("? = ?", bun.Ident(ConnectionFieldID), id).
-		Where("? = ?", bun.Ident(ConnectionFieldUserID), userID).
+		Where(pred, args...).
 		Exec(ctx)
 	return err
 }
@@ -309,10 +378,44 @@ func whereConnection(column string, value any) connectionFilter {
 
 // whereUserOwned is a connection the user owns personally (not an org's).
 func whereUserOwned(userID string) connectionFilter {
-	return func(q *bun.SelectQuery) {
-		q.Where("? = ?", bun.Ident(ConnectionFieldUserID), userID).
-			Where("? = ?", bun.Ident(ConnectionFieldOwnerKind), core.ConnectionOwnerUser)
+	return whereOwned(core.UserConnectionOwner(userID))
+}
+
+// whereOwned is a connection owner owns.
+func whereOwned(owner core.ConnectionOwner) connectionFilter {
+	pred, args := ownerPredicate(owner)
+	return func(q *bun.SelectQuery) { q.Where(pred, args...) }
+}
+
+// ownerPredicate is the SQL that scopes a connections query to owner: a
+// person's own rows (user_id, owner_kind 'user'), or an org's (org_id,
+// owner_kind 'org'). An owner with no id or an unknown kind matches nothing.
+func ownerPredicate(owner core.ConnectionOwner) (string, []any) {
+	if owner.ID == "" {
+		return "FALSE", nil
 	}
+	switch owner.Kind {
+	case core.ConnectionOwnerUser:
+		return "? = ? AND ? = ?", []any{
+			bun.Ident(ConnectionFieldUserID), owner.ID, bun.Ident(ConnectionFieldOwnerKind), core.ConnectionOwnerUser,
+		}
+	case core.ConnectionOwnerOrg:
+		return "? = ? AND ? = ?", []any{
+			bun.Ident(ConnectionFieldOrgID), owner.ID, bun.Ident(ConnectionFieldOwnerKind), core.ConnectionOwnerOrg,
+		}
+	}
+	return "FALSE", nil
+}
+
+// isConnectionNameTaken reports whether err is a write that lost to a live
+// connection of the same name: a person's (connections_user_name) or an
+// org's (connections_org_name).
+func isConnectionNameTaken(err error) bool {
+	switch orm.ConstraintName(err) {
+	case ConnectionConstraintUserName, ConnectionConstraintOrgName:
+		return true
+	}
+	return false
 }
 
 // selectConnection reads the one live connection the filters name (the

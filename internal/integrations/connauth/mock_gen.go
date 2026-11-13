@@ -185,6 +185,62 @@ func (m *MockActingBroker) Credential(ctx context.Context, ownerUserID string) (
 // Compile-time check.
 var _ ActingBroker = (*MockActingBroker)(nil)
 
+// forge:section MockOrgActingBroker
+// forge:hash=970d7b58e2e3a33525c9d6a4369c4a4aa55a714e4211c62ae219651655958e68
+
+// MockOrgActingBroker is a test mock for the OrgActingBroker interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockOrgActingBroker.<Method>Func not set" error.
+type MockOrgActingBroker struct {
+	contractkit.Recorder
+	OwnsConnectionIDFunc    func(string) bool
+	OrgActingCredentialFunc func(context.Context, string, string, httpaction.CredentialRequest) (httpaction.Credential, error)
+	ActingCredentialFunc    func(context.Context, string, httpaction.CredentialRequest) (httpaction.Credential, error)
+	CredentialFunc          func(context.Context, string) (httpaction.Credential, error)
+}
+
+// OwnsConnectionID records the call and delegates to OwnsConnectionIDFunc when set.
+func (m *MockOrgActingBroker) OwnsConnectionID(id string) bool {
+	m.Recorder.Record("OwnsConnectionID", id)
+	if m.OwnsConnectionIDFunc != nil {
+		return m.OwnsConnectionIDFunc(id)
+	}
+	return false
+}
+
+// OrgActingCredential records the call and delegates to OrgActingCredentialFunc when set.
+func (m *MockOrgActingBroker) OrgActingCredential(ctx context.Context, ownerUserID string, orgID string, req httpaction.CredentialRequest) (httpaction.Credential, error) {
+	m.Recorder.Record("OrgActingCredential", ctx, ownerUserID, orgID, req)
+	if m.OrgActingCredentialFunc != nil {
+		return m.OrgActingCredentialFunc(ctx, ownerUserID, orgID, req)
+	}
+	return *new(httpaction.Credential), contractkit.MockNotSet("MockOrgActingBroker", "OrgActingCredential")
+}
+
+// ActingCredential records the call and delegates to ActingCredentialFunc when set.
+func (m *MockOrgActingBroker) ActingCredential(ctx context.Context, ownerUserID string, req httpaction.CredentialRequest) (httpaction.Credential, error) {
+	m.Recorder.Record("ActingCredential", ctx, ownerUserID, req)
+	if m.ActingCredentialFunc != nil {
+		return m.ActingCredentialFunc(ctx, ownerUserID, req)
+	}
+	return *new(httpaction.Credential), contractkit.MockNotSet("MockOrgActingBroker", "ActingCredential")
+}
+
+// Credential records the call and delegates to CredentialFunc when set.
+func (m *MockOrgActingBroker) Credential(ctx context.Context, ownerUserID string) (httpaction.Credential, error) {
+	m.Recorder.Record("Credential", ctx, ownerUserID)
+	if m.CredentialFunc != nil {
+		return m.CredentialFunc(ctx, ownerUserID)
+	}
+	return *new(httpaction.Credential), contractkit.MockNotSet("MockOrgActingBroker", "Credential")
+}
+
+// Compile-time check.
+var _ OrgActingBroker = (*MockOrgActingBroker)(nil)
+
 // forge:section MockDelegatedBroker
 // forge:hash=a7e34351194a5d3a5eb36ce8bce8e7f85e0df5e60e86e9fdbbd5ec1bd635d00b
 

@@ -86,3 +86,16 @@ enum ConfigScope {
   // CONFIG_SCOPE_PROJECT_LOCAL saves to $project/.reliant.local/ - personal config (gitignored)
   CONFIG_SCOPE_PROJECT_LOCAL = 3;
 }
+
+// ResourceVisibility is who besides its owner may read a chat or project
+// (read-only sharing; control-plane docs/design/org-sharing.md). Only the
+// owner shares; an org admin may make a shared one private again. The share
+// rpcs are the app's (SharingService), not the SDK's.
+enum ResourceVisibility {
+  // A server that predates sharing; read it as PRIVATE.
+  RESOURCE_VISIBILITY_UNSPECIFIED = 0;
+  // The owner alone.
+  RESOURCE_VISIBILITY_PRIVATE = 1;
+  // Every live member of the resource's organization, read-only.
+  RESOURCE_VISIBILITY_ORG = 2;
+}

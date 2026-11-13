@@ -1,6 +1,5 @@
 import { expect, test, type Page, type Request, type Route } from '@playwright/test';
 
-import { mockAppsBackend } from './appsMocks';
 
 // The forge journey ("Explore a forge app", Onboarding/journeys/forge.tsx) on
 // the demo console (/forge/demo, fixture data), walked end to end in the
@@ -152,28 +151,6 @@ function expectNoDaemonOrChat(log: { urls: string[]; sockets: string[] }) {
   expect(log.sockets).toEqual([]);
 }
 
-test.describe('the forge journey in Reliant', () => {
-  test('walks the eleven steps on the demo and ends on Finish or the workflows journey', async ({ page }) => {
-    await mockAppsBackend(page);
-    await page.goto('/forge/demo?tour=forge:fg-intro', { waitUntil: 'domcontentloaded' });
-    await expect(page.locator("[data-tour='forge-console']")).toBeVisible(LOADED);
-    // Reliant's own chrome (chats, machines) loads with the page; the demo's walk adds none of it.
-    const log = recordRequests(page);
-
-    await walkToEndCard(page);
-
-    // The end card: Reliant's CLI, and the other journey runs right here.
-    await expect(endCardCommands(page, 'obs status prod')).toContainText('reliant forge obs status prod');
-    await expect(page.getByTestId('tour-secondary')).toHaveText('Try the other journey');
-    expectNoDaemonOrChat(log);
-
-    await page.getByTestId('tour-next').click();
-    // Finish lands on forge's Apps (the bare /forge lands there), tour closed.
-    await expect(page).toHaveURL(/\/(forge|apps)(\?|$)/, LOADED);
-    expect(page.url()).not.toContain('tour=');
-  });
-});
-
 test.describe('the forge journey in the forge shell', () => {
   test('a signed-out visitor from the landing page goes straight to the journey on the public demo', async ({ page }) => {
     await mockForgeShellSignedOut(page);
@@ -257,11 +234,12 @@ test.describe('the demo page-entry tour', () => {
     await expect(page.getByTestId('tour-callout')).toHaveCount(0);
     await expect(page.getByTestId('onboarding-nav-bar')).toHaveCount(0);
   });
-  test('legacy logs link has no prerequisite or cross-site sequence', async ({page}) => {
+  test('legacy logs link opens the console Logs with no prerequisite or cross-site sequence', async ({page}) => {
+    // An old /forge/demo?view=…&tour= link redirects to the console page it names (#2687).
     await openDemo(page, '/forge/demo?shell=demo&view=logs&tour=forge:fg-logs');
     await expect(page.getByTestId('tour-callout')).toContainText('Logs', LOADED);
     await page.getByTestId('tour-next').click();
     await expect(page.getByTestId('tour-callout')).toHaveCount(0);
-    await expect(page).toHaveURL(/view=logs/);
+    await expect(page).toHaveURL(/\/forge\/p\/shop\/observability\/logs\?/);
   });
 });

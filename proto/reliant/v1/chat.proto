@@ -644,6 +644,18 @@ message Chat {
   // bills this org. Unset for a chat created before orgs or where no org
   // could be resolved: such a chat belongs to its creator's default org.
   optional string org_id = 44;
+  // Who besides its owner may read the chat (read-only sharing). Set on
+  // every read by a server that knows sharing; UNSPECIFIED from an older
+  // one, which means private.
+  ResourceVisibility visibility = 45;
+  // True when the caller reads the chat as a VIEWER: a member of its org it
+  // was shared with, not its owner. A viewer's reads are read-only (every
+  // write answers NOT_FOUND), tool results come elided and cannot be
+  // fetched, and the owner's composer choice, workspace and machine are left
+  // out. The client hides the composer and shows whose chat it is.
+  bool viewer_access = 46;
+  // When the chat was shared (RFC 3339); unset while private.
+  optional string shared_at = 47;
 }
 
 // ChatOrigin is who started a chat. It is the chat list's policy key: a USER
@@ -695,6 +707,16 @@ message ProviderPolicy {
   }
   OnLimit on_limit = 1;
   optional string fallback_model = 2; // "<model>@<driver>"
+  // Funding is whose AI accounts a chat in an org uses first (control-plane
+  // docs/design/org-provider-accounts.md §4.4). Sub-agents, loops and
+  // sub-workflows inherit it. A server that predates it ignores it.
+  enum Funding {
+    FUNDING_UNSPECIFIED = 0;    // inherit the person's setting for the org
+    FUNDING_ORG_FIRST = 1;      // the org's accounts first, then the person's own
+    FUNDING_PERSONAL_FIRST = 2; // the person's own accounts first
+    FUNDING_ORG_ONLY = 3;       // never the person's own accounts in this chat
+  }
+  Funding funding = 3;
 }
 
 // ArchivedChat includes worktree information for archived chats

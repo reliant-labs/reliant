@@ -28,17 +28,14 @@
 import { logger } from "@/lib/logger";
 import { trackEvent } from "@/lib/analytics";
 import { TOUR_PICKER } from "@/components/Onboarding/tourParam";
-import { START_APP } from "@/components/Apps/appStart";
+import { startForIntent } from "@/components/Apps/appStart";
 import { stepsViewedCount } from "./analytics";
 import type { OnboardingIntent } from "./types";
 
 /**
- * What finishing onboarding opens: the journey picker ("Explore a forge app" /
- * "Use AI workflows"), preselected from the landing page's `?journey=` when it
- * carried one. Picking starts that journey's tour.
- *
- * `?tour=` is the ONLY thing that starts the tour (see useTourNavigation),
- * so an exit that drops it ends the tour before it renders.
+ * The journey picker's `?tour=` value. Finishing onboarding no longer opens it
+ * (see onboardingExitTarget); it stays exported for the places that still do —
+ * the home view's "quick tour" link and Settings → About.
  */
 export const TOUR_ENTRY_PARAM = TOUR_PICKER;
 
@@ -84,20 +81,28 @@ export interface OnboardingExitTarget {
 }
 
 /**
- * The destination for each reason.
- *
- * The two `completed_*` reasons SET the tour param rather than preserving it:
- * a cloud user's finalize never touched the URL, so there is nothing in `prev`
- * to preserve, and relying on that is what dropped the tour for every cloud
- * user.
- */
-/**
  * What the user said they came to do, for the exits that finish the flow.
- * "build_app" lands on the app-building composer (`?start=app`,
- * components/Apps/startBuilding.ts); anything else on the plain new chat.
+ * It picks the first message the new chat offers (appStart.ts): "build_app" the
+ * app-building composer, "existing_codebase" a deploy of their repository,
+ * anything else a first question about the project.
  */
 export type OnboardingLanding = OnboardingIntent | undefined;
 
+/**
+ * The destination for each reason.
+ *
+ * The two `completed_*` reasons land on a NEW CHAT with a first message ready
+ * in the composer, and NOT on the journey picker. In the first week none of
+ * the 12 external signups sent a chat: the two who finished onboarding were
+ * dropped on a seven-step tour or the forge journey, and neither came back to
+ * the composer. The tour is still reachable (the heading's "quick tour" link,
+ * Settings → About, the setup checklist); it is just no longer the first thing
+ * between a new user and the product.
+ *
+ * `tour: undefined` is explicit: the root route retains `?tour=` across
+ * navigations that do not name it (routes.tsx), and an exit has to say it is
+ * clearing it.
+ */
 export function onboardingExitTarget(
   reason: OnboardingExitReason,
   landing?: OnboardingLanding,
@@ -105,10 +110,7 @@ export function onboardingExitTarget(
   switch (reason) {
     case "completed_local":
     case "completed_cloud_gate_continue":
-      return {
-        to: "/",
-        search: landing === "build_app" ? { tour: TOUR_ENTRY_PARAM, start: START_APP } : { tour: TOUR_ENTRY_PARAM },
-      };
+      return { to: "/", search: { start: startForIntent(landing), tour: undefined } };
     case "already_complete":
     case "returning_user_heal":
       return { to: "/", search: keepTourHandoff };

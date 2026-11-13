@@ -15,6 +15,9 @@ import (
 	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/mountkit"
 	"github.com/reliant-labs/forge/pkg/serverkit"
+	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/sdk/client"
 
 	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -28,6 +31,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/gitcredentialclient"
 	grpcserver "github.com/reliant-labs/reliant/internal/grpc"
 	"github.com/reliant-labs/reliant/internal/handlers/chat"
+	"github.com/reliant-labs/reliant/internal/handlers/org_provider_account"
 	"github.com/reliant-labs/reliant/internal/handlers/project"
 	"github.com/reliant-labs/reliant/internal/handlers/trigger"
 	"github.com/reliant-labs/reliant/internal/integrations/catalog"
@@ -45,6 +49,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/machinepool"
 	"github.com/reliant-labs/reliant/internal/machinewake"
 	"github.com/reliant-labs/reliant/internal/netguard"
+	"github.com/reliant-labs/reliant/internal/orgmove"
 	"github.com/reliant-labs/reliant/internal/orgs"
 	"github.com/reliant-labs/reliant/internal/queueddelivery"
 	"github.com/reliant-labs/reliant/internal/readguard"
@@ -406,6 +411,9 @@ type APIConnectionsDeps struct {
 	Integrations *IntegrationSettings
 	AppOrigins   []string
 	ControlPlane *configv1.ControlPlaneConfig
+	// OrgConnections lets org owners and admins create org-owned connections
+	// (ApiServerConfig orgs.connections_enabled; off by default).
+	OrgConnections bool
 }
 
 // NewAPIConnections builds the connection service, the token source and the
@@ -426,7 +434,8 @@ func NewAPIConnections(d APIConnectionsDeps) (*APIConnections, error) {
 	tokens := connections.NewTokenSource(store, d.Vault, providers, nil)
 	broker := connections.NewBroker(store, d.Vault, providers, nil, d.Integrations.PublicURL).WithAppOrigins(d.AppOrigins)
 	svc := connections.NewService(store, d.Vault, providers, tokens, broker, nil).
-		WithDelegated(delegatedAvailable(ControlPlaneEndpoint(d.ControlPlane).Hosted()))
+		WithDelegated(delegatedAvailable(ControlPlaneEndpoint(d.ControlPlane).Hosted())).
+		WithOrgConnections(d.OrgConnections)
 	for _, in := range svc.ListIntegrations() {
 		for _, m := range in.Methods {
 			if !m.Available {
@@ -1432,4 +1441,63 @@ func gitTokens(cfg *configv1.ControlPlaneConfig) (gitcredentialclient.Service, e
 		ControlPlane: cfg,
 		Sign:         func() (string, error) { return auth.SignInternalServiceToken(secret) },
 	}), nil
+}
+
+// TriggerOrgRollout is the org rollout gates the API server's trigger handler
+// runs with: ApiServerConfig orgs, nil (every gate off) when unset. One
+// function, so the config-path test proves what newTrigger hands the handler.
+func TriggerOrgRollout(api *configv1.ApiServerConfig) *configv1.OrgsConfig {
+	return api.GetOrgs()
+}
+
+// ProjectOrgRollout is the org rollout gates the project handler decides a
+// move with (project.MovesAllowed): ApiServerConfig orgs, off when unset. One
+// function, so the config-path test proves what newProject hands it.
+func ProjectOrgRollout(api *configv1.ApiServerConfig) *configv1.OrgsConfig {
+	return api.GetOrgs()
+}
+
+// projectOrgMoveStarter starts a project move's saga on the shared task
+// queue, keyed by the move id: a second start of a running or finished move
+// is not an error, so a retried request never starts a second saga.
+type projectOrgMoveStarter struct{ c client.Client }
+
+func (s projectOrgMoveStarter) StartProjectOrgMove(ctx context.Context, moveID string) error {
+	_, err := s.c.ExecuteWorkflow(ctx, client.StartWorkflowOptions{
+		ID:                    orgmove.WorkflowID(moveID),
+		TaskQueue:             v2workflow.SharedTaskQueue,
+		WorkflowIDReusePolicy: enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE,
+	}, orgmove.WorkflowName, moveID)
+	var started *serviceerror.WorkflowExecutionAlreadyStarted
+	if errors.As(err, &started) {
+		return nil
+	}
+	return err
+}
+
+// APIOrgConnections is whether the API server lets org owners and admins
+// create org-owned connections: ApiServerConfig orgs.connections_enabled, off
+// when unset. One function, so the config-path test proves what
+// newAPIConnections hands the connection service.
+func APIOrgConnections(api *configv1.ApiServerConfig) bool {
+	return api.GetOrgs().GetConnectionsEnabled()
+}
+
+// APIOrgProviderAccounts is whether the API server lets org owners and admins
+// add org-owned AI provider accounts and bind provider workspaces:
+// ApiServerConfig orgs.provider_accounts_enabled, off when unset. One
+// function, so the config-path test proves what newOrgProviderAccount hands
+// the service.
+func APIOrgProviderAccounts(api *configv1.ApiServerConfig) bool {
+	return api.GetOrgs().GetProviderAccountsEnabled()
+}
+
+// NewOrgProviderAccount builds the API server's OrgProviderAccountService
+// from d, with its rollout gates (Deps.OrgRollout) read from api: ApiServerConfig
+// orgs, whose provider_accounts_enabled is APIOrgProviderAccounts.
+// newOrgProviderAccount and the config-path test both build it here, so the
+// test proves the wiring production runs.
+func NewOrgProviderAccount(api *configv1.ApiServerConfig, d org_provider_account.Deps) (*org_provider_account.Service, error) {
+	d.OrgRollout = api.GetOrgs()
+	return org_provider_account.New(d)
 }

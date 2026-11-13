@@ -66,6 +66,7 @@ import {
 import { ResumeDaemonPill } from "./ResumeDaemonPill";
 import { OomKillBanner } from "./OomKillBanner";
 import { DiskPressureBanner } from "./DiskPressureBanner";
+import { MachineHealthBanner } from "./MachineHealthBanner";
 import { toast } from "sonner";
 import { cn } from "../../lib/utils";
 import Tooltip from "../forge-ui/tooltip";
@@ -723,7 +724,8 @@ export function NewChatView({
                     className="flex items-center gap-2 px-5 py-2.5 text-sm font-medium text-foreground bg-muted/40 border border-border/70 rounded-lg hover:border-border hover:bg-muted/60 transition-colors"
                   >
                     <FolderPlus className="w-4 h-4 shrink-0" />
-                    <span className="leading-none">New workspace</span>
+                    {/* Keep the selectors' text-sm line height, even on a wrapped row. */}
+                    <span>New workspace</span>
                   </button>
                 </Tooltip>
                 </>
@@ -766,6 +768,7 @@ export function NewChatView({
 
       {/* OOM banner — machine ran out of memory recently (cloud daemons) */}
       <OomKillBanner />
+      <MachineHealthBanner />
       <DiskPressureBanner />
 
       {/* Message Input - Collapsible when not focused */}

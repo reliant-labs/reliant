@@ -31,7 +31,7 @@ type usageStore interface {
 	ClaimUsageFetch(ctx context.Context, accountID string, now time.Time, floor time.Duration) (bool, error)
 	ScheduleUsagePoll(ctx context.Context, accountID string, next time.Time, failures int, errText string) error
 	UpsertAccountLimitSnapshot(ctx context.Context, s core.LimitState) error
-	BenchAccount(ctx context.Context, userID, accountID string, until time.Time, window string, probe bool) error
+	BenchAccount(ctx context.Context, owner core.AccountOwner, accountID string, until time.Time, window string, probe bool) error
 }
 
 // FetchUsage reads the usage windows of one subscription credential from its
@@ -249,7 +249,7 @@ func (f *Fetcher) recordSuccess(ctx context.Context, res Result, cur *core.Limit
 // disconnect and reconnect it.
 func (f *Fetcher) reconcileBench(ctx context.Context, acct core.ProviderAccount, cur *core.LimitState, st core.LimitState, now time.Time) time.Time {
 	if ex := exhausted(st.Windows, st.RepresentativeWindow, st.Status, now); ex.Exhausted {
-		eff, err := bench(ctx, f.Store, now, acct.UserID, acct.ID, ex.Until, ex.Window)
+		eff, err := bench(ctx, f.Store, now, acct.Owner(), acct.ID, ex.Until, ex.Window)
 		if err != nil {
 			logging.WarnContext(ctx, "benching account from its usage reading failed", "account_id", acct.ID, "error", err)
 			return time.Time{}
@@ -263,7 +263,7 @@ func (f *Fetcher) reconcileBench(ctx context.Context, acct core.ProviderAccount,
 				"account_id", acct.ID, "provider", acct.Provider, "window", cur.LimitedWindow, "was_limited_until", *cur.LimitedUntil)
 			return time.Time{}
 		}
-		if err := f.Store.BenchAccount(ctx, acct.UserID, acct.ID, *cur.LimitedUntil, cur.LimitedWindow, false); err != nil {
+		if err := f.Store.BenchAccount(ctx, acct.Owner(), acct.ID, *cur.LimitedUntil, cur.LimitedWindow, false); err != nil {
 			logging.WarnContext(ctx, "restoring account bench after usage reading failed", "account_id", acct.ID, "error", err)
 			return time.Time{}
 		}

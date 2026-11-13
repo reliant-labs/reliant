@@ -49,11 +49,11 @@ var ErrDriverLookupFailed = errors.New("could not read provider settings")
 
 // LookupAvailableDrivers is GetAvailableDrivers for callers that must tell a
 // failed read (error wrapping ErrDriverLookupFailed) from an empty result.
-func LookupAvailableDrivers(ctx context.Context, userID string) (models.AvailableDrivers, error) {
+func LookupAvailableDrivers(ctx context.Context, scope Scope) (models.AvailableDrivers, error) {
 	if globalAPIKeyProvider == nil {
 		return models.AvailableDrivers{}, fmt.Errorf("%w: API key provider not initialized", ErrDriverLookupFailed)
 	}
-	availableDrivers, err := BuildAvailableDrivers(ctx, globalAPIKeyProvider.repo, userID)
+	availableDrivers, err := BuildAvailableDrivers(ctx, globalAPIKeyProvider.repo, scope)
 	if err != nil {
 		return models.AvailableDrivers{}, fmt.Errorf("%w: %w", ErrDriverLookupFailed, err)
 	}
@@ -62,8 +62,9 @@ func LookupAvailableDrivers(ctx context.Context, userID string) (models.Availabl
 
 // GetAvailableDrivers returns the available drivers with their API keys
 // Returns an error if no API keys are configured - users must configure keys via settings
-func GetAvailableDrivers(ctx context.Context, userID string) models.AvailableDrivers {
-	logging.DebugContext(ctx, "GetAvailableDrivers called", "userID", userID, "providerInitialized", globalAPIKeyProvider != nil)
+func GetAvailableDrivers(ctx context.Context, scope Scope) models.AvailableDrivers {
+	userID := scope.UserID
+	logging.DebugContext(ctx, "GetAvailableDrivers called", "userID", userID, "orgID", scope.OrgID, "providerInitialized", globalAPIKeyProvider != nil)
 
 	// Check if provider is initialized
 	if globalAPIKeyProvider == nil {
@@ -72,7 +73,7 @@ func GetAvailableDrivers(ctx context.Context, userID string) models.AvailableDri
 	}
 
 	// Build from settings (no caching for now - will add later)
-	availableDrivers, err := BuildAvailableDrivers(ctx, globalAPIKeyProvider.repo, userID)
+	availableDrivers, err := BuildAvailableDrivers(ctx, globalAPIKeyProvider.repo, scope)
 	if err != nil {
 		logging.ErrorContext(ctx, "Failed to build available drivers from settings", "error", err, "userID", userID)
 		return models.AvailableDrivers{Drivers: make(map[models.DriverID]models.DriverConfig)}

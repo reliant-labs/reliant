@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 )
 
 // The wire contract of ResolveOrgMembership as control-plane serves it
@@ -37,6 +38,39 @@ func TestResolveOrgMembership_NamedAndDefault(t *testing.T) {
 	got, err = c.ResolveOrgMembership(context.Background(), "user-1", "")
 	if err != nil || got != (OrgMembership{OrgID: "org-home", Member: true}) {
 		t.Fatalf("default org (no orgId sent): %+v, %v", got, err)
+	}
+}
+
+// member_since and org_live_members (control-plane#2662) come with a member's
+// answer; an older control plane omits them, which reads as zero / unknown,
+// and a negative answer never carries them even if sent.
+func TestResolveOrgMembership_MemberSinceAndLiveMembers(t *testing.T) {
+	srv := fakeCP(t, func(_ string, body map[string]any) (int, string) {
+		switch body["orgId"] {
+		case "org-acme":
+			return 200, `{"orgId":"org-acme","member":true,"role":"member","memberSince":"2026-11-10T08:00:00Z","orgLiveMembers":3}`
+		case "org-old":
+			return 200, `{"orgId":"org-old","member":true,"role":"admin"}`
+		default:
+			return 200, `{"orgId":"org-gone","memberSince":"2026-11-10T08:00:00Z","orgLiveMembers":3}`
+		}
+	})
+	defer srv.Close()
+	c := New(Deps{BaseURL: srv.URL, Sign: sign})
+
+	got, err := c.ResolveOrgMembership(context.Background(), "user-1", "org-acme")
+	want := OrgMembership{OrgID: "org-acme", Member: true, Role: "member",
+		MemberSince: time.Date(2026, 11, 10, 8, 0, 0, 0, time.UTC), OrgLiveMembers: 3, OrgLiveMembersKnown: true}
+	if err != nil || got != want {
+		t.Fatalf("new control plane: %+v, %v; want %+v", got, err, want)
+	}
+	got, err = c.ResolveOrgMembership(context.Background(), "user-1", "org-old")
+	if err != nil || got != (OrgMembership{OrgID: "org-old", Member: true, Role: "admin"}) {
+		t.Fatalf("old control plane: %+v, %v", got, err)
+	}
+	got, err = c.ResolveOrgMembership(context.Background(), "user-1", "org-gone")
+	if err != nil || got != (OrgMembership{OrgID: "org-gone"}) {
+		t.Fatalf("a negative carries no epoch or count: %+v, %v", got, err)
 	}
 }
 
@@ -102,5 +136,36 @@ func TestResolveOrgMembership_OlderControlPlaneIsUnsupported(t *testing.T) {
 				t.Fatalf("err=%v, want ErrUnsupported", err)
 			}
 		})
+	}
+}
+
+// role (control-plane org-sharing S0) rides on a member's answer. A control
+// plane that predates it omits it, which decodes as "" (unknown), and a role
+// on a negative answer is never carried.
+func TestResolveOrgMembership_Role(t *testing.T) {
+	srv := fakeCP(t, func(_ string, body map[string]any) (int, string) {
+		switch body["orgId"] {
+		case "org-admin":
+			return 200, `{"orgId":"org-admin","member":true,"role":"admin"}`
+		case "org-old":
+			return 200, `{"orgId":"org-old","member":true}`
+		case "org-odd":
+			return 200, `{"orgId":"org-odd","role":"owner"}`
+		default:
+			return 200, `{"orgId":"org-home","member":true,"role":"owner"}`
+		}
+	})
+	defer srv.Close()
+	c := New(Deps{BaseURL: srv.URL, Sign: sign})
+	for org, want := range map[string]OrgMembership{
+		"org-admin": {OrgID: "org-admin", Member: true, Role: "admin"},
+		"org-old":   {OrgID: "org-old", Member: true},
+		"org-odd":   {OrgID: "org-odd"},
+		"":          {OrgID: "org-home", Member: true, Role: "owner"},
+	} {
+		got, err := c.ResolveOrgMembership(context.Background(), "user-1", org)
+		if err != nil || got != want {
+			t.Errorf("org %q: %+v, %v; want %+v", org, got, err, want)
+		}
 	}
 }

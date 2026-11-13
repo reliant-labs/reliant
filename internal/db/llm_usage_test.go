@@ -128,13 +128,21 @@ func TestLLMUsageTablesHoldNoContent(t *testing.T) {
 			"provider": "text", "model": "text", "auth_mode": "text", "purpose": "text", "outcome": "text", "error_class": "text",
 			"input_tokens": "bigint", "output_tokens": "bigint", "cache_read_tokens": "bigint",
 			"cache_write_tokens": "bigint", "latency_ms": "bigint", "attempt": "integer",
-			"created_at": "timestamp with time zone",
+			"created_at": "timestamp with time zone", "funding": "text", "account_id": "text",
 		},
 		"llm_call_usage_daily": {
 			"user_id": "text", "org_id": "text", "provider": "text", "model": "text", "auth_mode": "text", "purpose": "text",
 			"day": "date", "calls": "bigint", "error_calls": "bigint", "input_tokens": "bigint",
 			"output_tokens": "bigint", "cache_read_tokens": "bigint", "cache_write_tokens": "bigint",
 			"latency_ms_total": "bigint", "updated_at": "timestamp with time zone",
+		},
+		// The org-funded rollup an org admin reads (org-provider-accounts.md §3.7): ids,
+		// closed-set labels and counts.
+		"llm_org_usage_daily": {
+			"day": "date", "org_id": "text", "account_id": "text", "user_id": "text", "provider": "text",
+			"model": "text", "funding": "text", "purpose": "text", "calls": "bigint", "error_calls": "bigint",
+			"input_tokens": "bigint", "output_tokens": "bigint", "cache_read_tokens": "bigint",
+			"cache_write_tokens": "bigint", "latency_ms_total": "bigint", "updated_at": "timestamp with time zone",
 		},
 		"llm_usage_purged_users": {"user_id": "text", "purged_at": "timestamp with time zone"},
 	}
@@ -158,6 +166,18 @@ func TestLLMUsageTablesHoldNoContent(t *testing.T) {
 	_, err := raw.Exec(`INSERT INTO llm_call_usage (id, user_id, chat_id, provider, model, auth_mode, purpose, outcome, error_class, attempt)
 		VALUES ('x', 'u', 'c', 'p', 'm', 'byok', 'chat', 'error', 'invalid api key sk-ant-secret', 1)`)
 	assert.Error(t, err, "free text in error_class must be refused by the schema")
+
+	// funding is a closed set too, on the ledger and the org rollup; the rollup holds
+	// org-funded calls only, never a personal one.
+	_, err = raw.Exec(`INSERT INTO llm_call_usage (id, user_id, chat_id, provider, model, auth_mode, purpose, outcome, attempt, funding)
+		VALUES ('y', 'u', 'c', 'p', 'm', 'byok', 'chat', 'success', 1, 'acme prod key')`)
+	assert.Error(t, err, "free text in funding must be refused by the schema")
+	_, err = raw.Exec(`INSERT INTO llm_org_usage_daily (day, org_id, account_id, user_id, provider, model, funding, purpose)
+		VALUES (current_date, 'o', 'a', 'u', 'p', 'm', 'personal', 'chat')`)
+	assert.Error(t, err, "the org rollup must refuse a personal-account row")
+	_, err = raw.Exec(`INSERT INTO llm_org_usage_daily (day, org_id, account_id, user_id, provider, model, funding, purpose)
+		VALUES (current_date, 'o', 'a', 'u', 'p', 'm', 'org_key', 'chat')`)
+	assert.NoError(t, err)
 }
 
 func TestLLMUsageDaily_RollupSumsPerUserModelProviderAuthModeAndDay(t *testing.T) {

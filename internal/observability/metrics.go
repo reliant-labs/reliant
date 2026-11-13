@@ -90,6 +90,20 @@ var (
 		},
 		[]string{"outcome"},
 	)
+	// DaemonRecoveryAdmissionRefusedTotal counts work a daemon refused while
+	// it finalized a worktree's recovery (toolexec.ErrRecoveryFinalizing), by
+	// kind: command (a daemon command) or tool_call. Callers retry, so the
+	// refusal is logged below ERROR; a rate that does not fall back to zero
+	// is a finalization that is stuck.
+	DaemonRecoveryAdmissionRefusedTotal = newCounterVec(
+		prometheus.CounterOpts{
+			Namespace: "reliant",
+			Subsystem: "daemon",
+			Name:      "recovery_admission_refused_total",
+			Help:      "Daemon work refused while a worktree recovery was finalizing, by kind (command, tool_call).",
+		},
+		[]string{"kind"},
+	)
 )
 
 // ─── Terminal output ────────────────────────────────────────────────────────
@@ -550,6 +564,7 @@ func initMetrics() {
 		DaemonReconnectLatencySeconds,
 		DaemonConnectWorkDeferredTotal,
 		DaemonCommandsHeldTotal,
+		DaemonRecoveryAdmissionRefusedTotal,
 		// Terminal output
 		TerminalOutputOverflowTotal,
 		// DB

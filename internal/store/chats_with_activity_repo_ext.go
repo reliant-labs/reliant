@@ -295,6 +295,8 @@ func chatFromView(row *ChatsWithActivity) *core.Chat {
 		UsageLimitResumesAt:  row.UsageLimitResumesAt,
 		UsageLimitProvider:   chatViewString(row.UsageLimitProvider),
 		UsageLimitProbing:    row.UsageLimitProbing != nil && *row.UsageLimitProbing,
+		Visibility:           visibilityOf(row.Visibility),
+		SharedAt:             row.SharedAt,
 	}
 	if row.WorkingThreads != nil {
 		chat.WorkingThreads = int(*row.WorkingThreads)

@@ -231,6 +231,16 @@ describe('machine detail — lifecycle actions', () => {
     expect(screen.getByText(/runs on your own hardware/i)).toBeInTheDocument()
   })
 
+  it('opens a self-hosted machine without requesting a cloud provisioning record', async () => {
+    showMachine(selfHostedDaemon())
+    mocks.getDaemon.mockRejectedValue(new Error('cloud machine not found'))
+    renderDetail()
+
+    expect(await screen.findByRole('heading', { name: /seans-macbook/i })).toBeVisible()
+    expect(screen.getByText(/runs on your own hardware/i)).toBeVisible()
+    expect(mocks.getDaemon).not.toHaveBeenCalled()
+  })
+
   it('confirms first, then restarts by suspending and resuming in order', async () => {
     const user = userEvent.setup()
     // The machine starts RUNNING (the only state that offers Restart) and

@@ -1,6 +1,7 @@
 ---
-title: "Why this helps an agent"
-description: "How forge's telemetry, exit codes, recon commands, shipped skills and per-worktree environments let an AI agent see what a person would look at, and how Reliant workflows can act on a failed release check"
+title: "Forge MCP server: deploy from Claude Code, Cursor, Codex"
+sidebarTitle: "Why this helps an agent"
+description: "Run forge as an MCP server (forge mcp) so Claude Code, Cursor or Codex can deploy your app, lint, generate and read telemetry, with skills, exit codes and per-worktree environments"
 ---
 
 Most of what makes an agent good at fixing software is not the model. It is whether the agent can see the same things you would look at: the error the user hit, the trace behind it, whether the last deploy made things worse. A codebase with no logs on disk, no trace IDs and no machine-readable verdicts forces the agent to guess, and an agent that guesses writes plausible fixes for the wrong problem.
@@ -112,7 +113,7 @@ Skills come from the binary and are never written into your project, which is a 
 
 ## It speaks MCP
 
-If your agent works through the Model Context Protocol rather than a shell, `forge mcp` runs the same surface as a stdio MCP server. The read-only tools are `capabilities`, `annotations`, `libraries`, `audit`, `shapes`, `skill_list`, `skill_search` and `skill_load`; `lint` and `generate` mutate. Each tool runs the same command in process, takes an optional project directory, and reports a version skew instead of handing a project off to a different forge. Its instructions tell the model what forge is and to load the `forge` skill first.
+If your agent works through the Model Context Protocol rather than a shell, `forge mcp` runs the same surface as a stdio MCP server. The read-only tools are `capabilities`, `annotations`, `libraries`, `audit`, `shapes`, `skill_list`, `skill_search` and `skill_load`; `lint` and `generate` mutate, and `deploy_claimable` puts a Vite or Next.js app live with no account ([how](/forge/deploy-without-an-account)). Each tool runs the same command in process, takes an optional project directory, and reports a version skew instead of handing a project off to a different forge. Its instructions tell the model what forge is and to load the `forge` skill first.
 
 ```bash
 claude mcp add forge -- forge mcp

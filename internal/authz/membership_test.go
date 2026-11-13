@@ -167,3 +167,38 @@ func TestProcessMembershipIsTheBackgroundsFallback(t *testing.T) {
 		t.Fatal("a context's own membership must win over the process's")
 	}
 }
+
+// Using an org-owned thing (an org connection) needs a positive answer that
+// the caller is a live member: no answer is a refusal, since there is no
+// owner to fall back to, and an outage or an unwired path is not an answer.
+func TestOrgMemberDenial(t *testing.T) {
+	member := WithMembership(context.Background(), members{})
+	for name, tc := range map[string]struct {
+		ctx          context.Context
+		user, org    string
+		want         error
+		wantRefusedT string
+	}{
+		"a live member":                 {ctx: member, user: "alice", org: "acme"},
+		"a non-member":                  {ctx: member, user: "bob", org: "acme", want: ErrNotOrgMember},
+		"another org":                   {ctx: member, user: "alice", org: "globex", want: ErrNotOrgMember},
+		"no caller":                     {ctx: member, user: "", org: "acme", want: ErrDenied},
+		"no org":                        {ctx: member, user: "alice", org: "", want: ErrDenied},
+		"no answer (no orgs here)":      {ctx: WithMembership(context.Background(), NoOrgs{}), user: "alice", org: "acme", want: ErrNotOrgMember},
+		"an outage":                     {ctx: WithMembership(context.Background(), members{err: errors.New("down")}), user: "alice", org: "acme", want: ErrMembershipUnavailable},
+		"a path with no membership":     {ctx: context.Background(), user: "alice", org: "acme", want: ErrMembershipUnavailable},
+		"a credential bound to the org": {ctx: WithCredentialOrg(member, "acme"), user: "alice", org: "acme"},
+		"a credential bound elsewhere":  {ctx: WithCredentialOrg(member, "globex"), user: "alice", org: "acme", want: ErrDenied, wantRefusedT: "acme"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if err := OrgMemberDenial(tc.ctx, tc.user, tc.org); !errors.Is(err, tc.want) || (tc.want == nil && err != nil) {
+				t.Fatalf("OrgMemberDenial = %v, want %v", err, tc.want)
+			}
+			if tc.wantRefusedT != "" {
+				if _, refused, ok := CredentialRefusal(tc.ctx); !ok || refused != tc.wantRefusedT {
+					t.Fatalf("CredentialRefusal = %q, %v; want %q recorded", refused, ok, tc.wantRefusedT)
+				}
+			}
+		})
+	}
+}

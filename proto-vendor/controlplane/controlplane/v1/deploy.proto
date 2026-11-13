@@ -429,6 +429,11 @@ message DeployEnvironment {
   // and host cluster on the platform fleet) because at least one of its
   // parts is hosted. Its other parts may run anywhere.
   bool hosted_slot = 27;
+  // The environment's ACTIVE rollback floors, oldest first: a release that
+  // fails any of them cannot be promoted here. Set by a server that
+  // advertises GetCapabilities.rollback_floors; empty from one that predates
+  // them, which a client tells apart by the capability, never by emptiness.
+  repeated DeployRollbackFloor rollback_floors = 28;
 }
 
 // DeployEnvironmentLifetime is the environment-wide half of the retired
@@ -1113,6 +1118,95 @@ message DeployRelease {
 // (sets[].source / commit / files), which is what forge sends and reads.
 message DeployMigrationManifest {
   repeated DeployMigrationSet sets = 1;
+  // The rollback-floor declarations the release carries (forge
+  // release.FloorDeclaration), sorted by (source, id): each migration that
+  // declares `-- forge:breaks-rollback` (kind "schema") and each checked-in
+  // deploy/rollback-floors/<id>.yaml (kinds "api", "feature", "data"). A
+  // promote of the release raises a declared rollback floor for the ones no
+  // active floor requires yet. Evidence, like commit: it takes no part in
+  // whether two manifests are the same.
+  repeated DeployFloorDeclaration declarations = 2;
+  // Whether the cut read declarations at all. False on a manifest a forge
+  // that predates them recorded: there, no declarations means "unknown".
+  bool declarations_recorded = 3;
+}
+
+// DeployFloorDeclaration is forge's release.FloorDeclaration: one thing a
+// release says no older release can survive. (source, id) is its identity
+// across releases.
+message DeployFloorDeclaration {
+  // "<canonical repo>/<dir>": the migrations directory (schema) or the
+  // repository's deploy/rollback-floors directory (every other kind).
+  string source = 1;
+  // The migration file name (schema), or the declaration file's id.
+  string id = 2;
+  // schema | api | feature | data. A string, not an enum, because forge
+  // sends its own lower-case spelling as JSON.
+  string kind = 3;
+  // Why, as the author wrote it. May be empty for a schema declaration only.
+  string reason = 4;
+}
+
+// DeployDeclarationRef names one declaration: what a lift vouches for.
+message DeployDeclarationRef {
+  string source = 1;
+  string id = 2;
+}
+
+// DeployRollbackFloor is one rollback floor on one environment (forge
+// release.Floor): from the moment it is set, a release that does not satisfy
+// it can never become the environment's binding, and Promote refuses one with
+// reason `below_rollback_floor`.
+//
+//   - kind "order": the target must not be cut before `version` (cut order:
+//     the release's created_at, then its version).
+//   - kind "declared": the target must carry every declaration in `requires`.
+//     Raised automatically by a promote of a release carrying declarations no
+//     active floor requires.
+//
+// The escape is a lift — SetRollbackFloor / LiftRollbackFloor, an audited act
+// with a reason — never a flag on Promote.
+message DeployRollbackFloor {
+  string id = 1;
+  string environment_id = 2;
+  // order | declared.
+  string kind = 3;
+  // manual | roll_forward_only | declared.
+  string source = 4;
+  // The release the floor names: an order floor's bound, a declared floor's
+  // raising release.
+  string release_id = 5;
+  string version = 6;
+  google.protobuf.Timestamp release_cut_at = 7;
+  // The release's source commit, when recorded: a client with git also
+  // refuses a target whose commit is an ancestor of it.
+  string commit = 8;
+  // Declared floors: every declaration a target must carry.
+  repeated DeployFloorDeclaration requires = 9;
+  string reason = 10;
+  // The principal that set it: a person, or a machine credential (and the
+  // automation name it stated).
+  string set_by_user_id = 11;
+  string set_by_token_id = 12;
+  string set_by_actor = 13;
+  google.protobuf.Timestamp set_at = 14;
+  // The promotion that raised it, when one did.
+  string promotion_id = 15;
+  // Set once lifted; a lifted floor constrains nothing.
+  DeployRollbackFloorLift lift = 16;
+}
+
+// DeployRollbackFloorLift records that a floor no longer applies, and why.
+message DeployRollbackFloorLift {
+  string reason = 1;
+  string lifted_by_user_id = 2;
+  string lifted_by_token_id = 3;
+  string lifted_by_actor = 4;
+  google.protobuf.Timestamp lifted_at = 5;
+  // `floor lower`: the floor set in the same transaction.
+  string replaced_by_floor_id = 6;
+  // Every declaration the lifter vouched for (a declared floor's requires).
+  repeated DeployDeclarationRef acknowledged = 7;
 }
 
 // DeployMigrationSet is one migrations directory as a release carried it.
@@ -1123,6 +1217,10 @@ message DeployMigrationSet {
   string commit = 2;
   // Forward migration file names ("20261024035148_x.up.sql"), version order.
   repeated string files = 3;
+  // The versions of forge's own history a squashed baseline in this
+  // directory adopted (`-- forge:adopts forge ...`), as canonical decimal
+  // strings: a release carrying the baseline still carries them.
+  repeated string adopts = 4;
 }
 
 // DeployGate is one check's result, recorded against a promotion.
@@ -1408,7 +1506,8 @@ message DeployRunStage {
 // round trip.
 message DeployPromoteRefusal {
   // promotion_conflict | rollout_in_flight | environment_pinned |
-  // plan_stale | plan_unacknowledged.
+  // plan_stale | plan_unacknowledged | below_rollback_floor (and the
+  // health_gate_* reasons).
   //
   // `plan_stale`: the plan the caller approved no longer describes what would
   // happen. The server recomputed it under the environment's row lock and got
@@ -1446,6 +1545,11 @@ message DeployPromoteRefusal {
   // plan_stale this is the plan they should have approved; for
   // plan_unacknowledged its findings name exactly which codes are missing.
   DeployPlan current_plan = 8;
+
+  // For `below_rollback_floor`: the environment's active rollback floors the
+  // target fails, one sentence each in `detail`. Lower or lift the floor
+  // (an audited act with a reason), or roll forward; waiting fixes nothing.
+  repeated DeployRollbackFloor floors = 9;
 }
 
 // DeployPromotion is one entry in the append-only ledger: this environment ran

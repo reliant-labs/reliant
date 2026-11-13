@@ -52,7 +52,11 @@ var traceHeaders = []string{"traceparent", "tracestate", "baggage"}
 // (TransportBackend "control-plane" in api/transport.ts), whose CORS allow-list
 // is forge's default, not corsAllowedHeaders. This server never receives them,
 // so allowing them here would widen the policy for nothing.
-var controlPlaneOnlyRequestHeaders = []string{"Forge-Via"}
+//
+// X-Reliant-Attribution (api/signupAttribution.ts) carries first-touch signup
+// attribution to the control plane, which creates the account; transport.ts
+// installs its interceptor on control-plane transports only.
+var controlPlaneOnlyRequestHeaders = []string{"Forge-Via", "X-Reliant-Attribution"}
 
 var (
 	// req.header.set("x-foo", …) / header.append(NAME, …) — the Connect

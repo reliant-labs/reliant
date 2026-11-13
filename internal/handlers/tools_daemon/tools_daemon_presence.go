@@ -78,6 +78,10 @@ func (s *Service) publishDaemonHeartbeat(_ context.Context, userID, daemonID str
 			ports = []uint32{}
 		}
 		payload["detected_ports"] = ports
+		// Whether the machine can do work ("ok" or "degraded"), so the app
+		// re-reads the daemon list when it changes rather than up to a
+		// poll later. The reason itself is read from the list.
+		payload["health_state"] = string(machineHealthFromHeartbeat(hb.Health).State)
 	}
 	data, _ := json.Marshal(payload)
 	s.deps.UserUpdateHub.Publish(context.Background(), streaming.UpdateEvent[db.UserUpdate]{
@@ -91,6 +95,43 @@ func (s *Service) publishDaemonHeartbeat(_ context.Context, userID, daemonID str
 			CreatedAt:  ts,
 		},
 	})
+}
+
+// recordMachineHealth stores a heartbeat's machine health on the attachment
+// lease, where the registry and wait_for_machine read it. A heartbeat with no
+// health (a daemon that predates the report, or one that has not probed yet)
+// is a healthy machine. It writes only when the state, code or reason
+// changed, stamping Since with this gateway's clock when the state changed
+// and carrying it forward otherwise — across a re-created lease too.
+func (s *Service) recordMachineHealth(ctx context.Context, conn *daemonConnection, h *reliantv1.MachineHealth, now time.Time) {
+	next := machineHealthFromHeartbeat(h)
+	prev := conn.lastHealth
+	if conn.healthWritten && next.State == prev.State && next.Code == prev.Code && next.Reason == prev.Reason {
+		return
+	}
+	next.Since = now
+	if next.State == prev.State && !prev.Since.IsZero() {
+		next.Since = prev.Since
+	}
+	if err := s.deps.Repo.UpdateDaemonAttachmentHealth(ctx, conn.daemonID, next); err != nil {
+		logging.WarnContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" Failed to record machine health", "error", err, "daemonID", conn.daemonID)
+		return
+	}
+	if next.State != prev.State {
+		logging.InfoContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" Machine health changed",
+			"daemonID", conn.daemonID, "from", string(prev.State), "to", string(next.State), "code", next.Code)
+	}
+	conn.lastHealth, conn.healthWritten = next, true
+}
+
+// machineHealthFromHeartbeat is the stored form of a heartbeat's health:
+// degraded only when the daemon says so, healthy otherwise (unset, OK, or a
+// state this gateway does not know).
+func machineHealthFromHeartbeat(h *reliantv1.MachineHealth) db.MachineHealth {
+	if h.GetState() != reliantv1.MachineHealthState_MACHINE_HEALTH_STATE_DEGRADED {
+		return db.MachineHealth{State: db.MachineHealthOK}
+	}
+	return db.MachineHealth{State: db.MachineHealthDegraded, Code: h.GetCode(), Reason: h.GetReason()}
 }
 
 // diskReportRefresh is how old a stored disk report may get while nothing

@@ -10974,8 +10974,18 @@ type ReleasePromotionRef struct {
 	PromotedAt     *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=promoted_at,json=promotedAt,proto3" json:"promoted_at,omitempty"`
 	// The release it replaced, empty for the first.
 	PreviousReleaseVersion string `protobuf:"bytes,5,opt,name=previous_release_version,json=previousReleaseVersion,proto3" json:"previous_release_version,omitempty"`
-	unknownFields          protoimpl.UnknownFields
-	sizeCache              protoimpl.SizeCache
+	// True when the deploy ledger holds no promotion of release_version and the
+	// marker is INFERRED: promoted_at is the first time the environment's
+	// telemetry showed service.version = release_version (an app whose deploys
+	// nothing records). id and git_commit are empty then, and
+	// previous_release_version is the version first seen before it.
+	Inferred bool `protobuf:"varint,6,opt,name=inferred,proto3" json:"inferred,omitempty"`
+	// Where promoted_at came from: "promotion" (the deploy ledger) or
+	// "telemetry_first_seen" (inferred). Always set by a server that knows the
+	// field; an older server leaves it empty, which means "promotion".
+	MarkerSource  string `protobuf:"bytes,7,opt,name=marker_source,json=markerSource,proto3" json:"marker_source,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ReleasePromotionRef) Reset() {
@@ -11039,6 +11049,20 @@ func (x *ReleasePromotionRef) GetPromotedAt() *timestamppb.Timestamp {
 func (x *ReleasePromotionRef) GetPreviousReleaseVersion() string {
 	if x != nil {
 		return x.PreviousReleaseVersion
+	}
+	return ""
+}
+
+func (x *ReleasePromotionRef) GetInferred() bool {
+	if x != nil {
+		return x.Inferred
+	}
+	return false
+}
+
+func (x *ReleasePromotionRef) GetMarkerSource() string {
+	if x != nil {
+		return x.MarkerSource
 	}
 	return ""
 }
@@ -12640,7 +12664,7 @@ const file_services_observability_v1_observability_proto_rawDesc = "" +
 	"thresholds\x18\f \x03(\v2#.controlplane.v1.EffectiveThresholdR\n" +
 	"thresholds\x12#\n" +
 	"\rnot_evaluated\x18\r \x03(\tR\fnotEvaluated\x12E\n" +
-	"\x0einstance_scope\x18\x0e \x01(\v2\x1e.controlplane.v1.InstanceScopeR\rinstanceScope\"\xe4\x01\n" +
+	"\x0einstance_scope\x18\x0e \x01(\v2\x1e.controlplane.v1.InstanceScopeR\rinstanceScope\"\xa5\x02\n" +
 	"\x13ReleasePromotionRef\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12'\n" +
 	"\x0frelease_version\x18\x02 \x01(\tR\x0ereleaseVersion\x12\x1d\n" +
@@ -12648,7 +12672,9 @@ const file_services_observability_v1_observability_proto_rawDesc = "" +
 	"git_commit\x18\x03 \x01(\tR\tgitCommit\x12;\n" +
 	"\vpromoted_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"promotedAt\x128\n" +
-	"\x18previous_release_version\x18\x05 \x01(\tR\x16previousReleaseVersion\"\xcb\x01\n" +
+	"\x18previous_release_version\x18\x05 \x01(\tR\x16previousReleaseVersion\x12\x1a\n" +
+	"\binferred\x18\x06 \x01(\bR\binferred\x12#\n" +
+	"\rmarker_source\x18\a \x01(\tR\fmarkerSource\"\xcb\x01\n" +
 	"\x12ServiceHealthDelta\x12\x18\n" +
 	"\aservice\x18\x01 \x01(\tR\aservice\x12;\n" +
 	"\x06before\x18\x02 \x01(\v2#.controlplane.v1.ServiceWindowStatsR\x06before\x129\n" +

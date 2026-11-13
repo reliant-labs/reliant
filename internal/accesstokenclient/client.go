@@ -354,6 +354,22 @@ type OrgMembership struct {
 	OrgID string
 	// Member reports whether the user is a live member of OrgID.
 	Member bool
+	// Role is the member's role in OrgID: "owner", "admin" or "member". ""
+	// when Member is false, and "" from a control plane that predates the
+	// field: a caller reads "" as "unknown" and refuses
+	// anything only an admin may do.
+	Role string
+	// MemberSince is when the member's CURRENT membership of OrgID began (a
+	// rejoin's time, not the first join's). Zero when Member is false and
+	// from a control plane that predates the field (control-plane#2662): a
+	// caller then counts no grant made in the org (fail closed;
+	// docs/design/org-provider-accounts.md §3.3 there).
+	MemberSince time.Time
+	// OrgLiveMembers is how many live members OrgID has, valid only when
+	// OrgLiveMembersKnown (a member's answer from a control plane that has
+	// the field). It only ever chooses a default, never grants anything.
+	OrgLiveMembers      int32
+	OrgLiveMembersKnown bool
 }
 
 // ErrUnsupported reports a control plane that predates the rpc asked for. A
@@ -364,8 +380,11 @@ var ErrUnsupported = errors.New("accesstokenclient: the control plane does not s
 // orgID, or, with orgID "", which org is their default.
 func (c *Client) ResolveOrgMembership(ctx context.Context, userID, orgID string) (OrgMembership, error) {
 	var out struct {
-		OrgID  string `json:"orgId"`
-		Member bool   `json:"member"`
+		OrgID          string     `json:"orgId"`
+		Member         bool       `json:"member"`
+		Role           string     `json:"role"`
+		MemberSince    *time.Time `json:"memberSince"`
+		OrgLiveMembers *int32     `json:"orgLiveMembers"`
 	}
 	body := map[string]any{"userId": userID}
 	if orgID != "" {
@@ -377,7 +396,19 @@ func (c *Client) ResolveOrgMembership(ctx context.Context, userID, orgID string)
 		}
 		return OrgMembership{}, err
 	}
-	return OrgMembership{OrgID: out.OrgID, Member: out.Member}, nil
+	m := OrgMembership{OrgID: out.OrgID, Member: out.Member}
+	if out.Member {
+		// A role, a membership epoch and a member count are only ever a
+		// member's: never carry one on a negative.
+		m.Role = out.Role
+		if out.MemberSince != nil {
+			m.MemberSince = out.MemberSince.UTC()
+		}
+		if out.OrgLiveMembers != nil {
+			m.OrgLiveMembers, m.OrgLiveMembersKnown = *out.OrgLiveMembers, true
+		}
+	}
+	return m, nil
 }
 
 // isUnsupported is a control plane without the method: Connect's
@@ -386,6 +417,55 @@ func (c *Client) ResolveOrgMembership(ctx context.Context, userID, orgID string)
 func isUnsupported(err error) bool {
 	var rpc *RPCError
 	return errors.As(err, &rpc) && (rpc.Code == "unimplemented" || rpc.Code == http.StatusText(http.StatusNotFound))
+}
+
+// GoneOrg is an org control-plane reports gone: soft-deleted, or its owner's
+// account deleted with no live member left. At is when it went.
+type GoneOrg struct {
+	OrgID string
+	At    time.Time
+}
+
+// MaxResolveGoneOrgs is the most org ids one ResolveGoneOrgs call may name
+// (control-plane refuses a longer list).
+const MaxResolveGoneOrgs = 500
+
+// ResolveGoneOrgs asks control-plane which of orgIDs are gone. An org it
+// does not report is live, or unknown to it: a caller deletes nothing for
+// one. A control plane that predates the rpc answers ErrUnsupported.
+func (c *Client) ResolveGoneOrgs(ctx context.Context, orgIDs []string) ([]GoneOrg, error) {
+	if len(orgIDs) == 0 {
+		return nil, nil
+	}
+	if len(orgIDs) > MaxResolveGoneOrgs {
+		return nil, fmt.Errorf("accesstokenclient: ResolveGoneOrgs: %d org ids, at most %d", len(orgIDs), MaxResolveGoneOrgs)
+	}
+	var out struct {
+		Gone []struct {
+			OrgID  string    `json:"orgId"`
+			GoneAt time.Time `json:"goneAt"`
+		} `json:"gone"`
+	}
+	if err := c.call(ctx, "ResolveGoneOrgs", map[string]any{"orgIds": orgIDs}, &out); err != nil {
+		if isUnsupported(err) {
+			return nil, fmt.Errorf("%w: ResolveGoneOrgs: %w", ErrUnsupported, err)
+		}
+		return nil, err
+	}
+	asked := make(map[string]bool, len(orgIDs))
+	for _, id := range orgIDs {
+		asked[id] = true
+	}
+	gone := make([]GoneOrg, 0, len(out.Gone))
+	for _, g := range out.Gone {
+		// Only an answer about an org asked for, with a time, counts: the
+		// caller destroys what an answer names.
+		if !asked[g.OrgID] || g.GoneAt.IsZero() {
+			continue
+		}
+		gone = append(gone, GoneOrg{OrgID: g.OrgID, At: g.GoneAt.UTC()})
+	}
+	return gone, nil
 }
 
 // IsNotFound reports whether err is control-plane's not_found.

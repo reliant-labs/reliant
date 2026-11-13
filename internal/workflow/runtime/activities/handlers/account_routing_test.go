@@ -14,8 +14,10 @@ import (
 	"go.temporal.io/sdk/temporal"
 
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/llm"
 	"github.com/reliant-labs/reliant/internal/llm/accountrouter"
+	"github.com/reliant-labs/reliant/internal/llm/drivers"
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/llm/ratelimit"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
@@ -58,7 +60,7 @@ func driversWith(accts ...models.AccountConfig) models.AvailableDrivers {
 func withAvailableDrivers(t *testing.T, avail models.AvailableDrivers) {
 	t.Helper()
 	orig := lookupAvailableDrivers
-	lookupAvailableDrivers = func(context.Context, string) (models.AvailableDrivers, error) { return avail, nil }
+	lookupAvailableDrivers = func(context.Context, drivers.Scope) (models.AvailableDrivers, error) { return avail, nil }
 	t.Cleanup(func() { lookupAvailableDrivers = orig })
 }
 
@@ -103,6 +105,10 @@ func (f *routerFake) ListAccountLimits(context.Context, string) (map[string]acco
 	return out, nil
 }
 
+func (f *routerFake) ListOrgAccountLimits(context.Context, string) (map[string]accountrouter.LimitState, error) {
+	return nil, nil
+}
+
 func (f *routerFake) RecentAssignmentCounts(context.Context, []string, time.Time) (map[string]int, error) {
 	return nil, nil
 }
@@ -118,18 +124,23 @@ type recorderFake struct {
 	benched   []string
 	failBench bool
 	observed  []string
+	// observedOwners and benchOwners are the owners each call named, in order.
+	observedOwners []core.AccountOwner
+	benchOwners    []core.AccountOwner
 }
 
-func (r *recorderFake) For(_, accountID string) ratelimit.Observer {
+func (r *recorderFake) For(owner core.AccountOwner, accountID string) ratelimit.Observer {
 	r.observed = append(r.observed, accountID)
+	r.observedOwners = append(r.observedOwners, owner)
 	return nopObserver{}
 }
 
-func (r *recorderFake) Bench(_ context.Context, _, accountID string, until time.Time, window string) (time.Time, error) {
+func (r *recorderFake) Bench(_ context.Context, owner core.AccountOwner, accountID string, until time.Time, window string) (time.Time, error) {
 	if r.failBench {
 		return until, errors.New("store down")
 	}
 	r.benched = append(r.benched, accountID)
+	r.benchOwners = append(r.benchOwners, owner)
 	r.store.bench(accountID, until, window)
 	return until, nil
 }
@@ -233,7 +244,7 @@ func TestRouting_ALimitedAccountMovesTheThreadWithOneNotice(t *testing.T) {
 	reset := time.Now().Add(2 * time.Hour).UTC().Truncate(time.Second)
 	refusal := &ratelimit.UsageLimitError{Provider: "Claude subscription", StatusCode: 429, ResetAt: reset, Window: "five_hour"}
 	got := env.routing.usageLimitFailure(context.Background(), refusal, usageLimitContext{
-		UserID: "u1", ThreadID: "thread-1", Driver: "claude", ModelID: routeModel, Account: first.Account,
+		Scope: drivers.PersonalScope("u1"), ThreadID: "thread-1", Driver: "claude", ModelID: routeModel, Account: first.Account,
 	})
 	var failure *types.UsageLimitFailure
 	require.ErrorAs(t, got, &failure)
@@ -308,7 +319,7 @@ func TestRouting_FallbackOnlyWhenTheChatOptedIn(t *testing.T) {
 
 	t.Run("default: no fallback", func(t *testing.T) {
 		got := env.routing.usageLimitFailure(context.Background(), refusal, usageLimitContext{
-			UserID: "u1", ThreadID: "t", Driver: "claude", ModelID: routeModel, Account: first.Account})
+			Scope: drivers.PersonalScope("u1"), ThreadID: "t", Driver: "claude", ModelID: routeModel, Account: first.Account})
 		var f *types.UsageLimitFailure
 		require.ErrorAs(t, got, &f)
 		assert.Empty(t, f.Facts.FallbackModel)
@@ -317,7 +328,7 @@ func TestRouting_FallbackOnlyWhenTheChatOptedIn(t *testing.T) {
 
 	t.Run("opt-in: servable fallback is reported", func(t *testing.T) {
 		got := env.routing.usageLimitFailure(context.Background(), refusal, usageLimitContext{
-			UserID: "u1", ThreadID: "t", Driver: "claude", ModelID: routeModel, Account: first.Account,
+			Scope: drivers.PersonalScope("u1"), ThreadID: "t", Driver: "claude", ModelID: routeModel, Account: first.Account,
 			Policy: types.FailoverPolicy{FallbackModel: routeFallback}})
 		var f *types.UsageLimitFailure
 		require.ErrorAs(t, got, &f)
@@ -326,7 +337,7 @@ func TestRouting_FallbackOnlyWhenTheChatOptedIn(t *testing.T) {
 
 	t.Run("a fallback on the same provider is ignored", func(t *testing.T) {
 		got := env.routing.usageLimitFailure(context.Background(), refusal, usageLimitContext{
-			UserID: "u1", ThreadID: "t", Driver: "claude", ModelID: routeModel, Account: first.Account,
+			Scope: drivers.PersonalScope("u1"), ThreadID: "t", Driver: "claude", ModelID: routeModel, Account: first.Account,
 			Policy: types.FailoverPolicy{FallbackModel: "claude-5.5-opus@claude"}})
 		var f *types.UsageLimitFailure
 		require.ErrorAs(t, got, &f)
@@ -336,7 +347,7 @@ func TestRouting_FallbackOnlyWhenTheChatOptedIn(t *testing.T) {
 	t.Run("a fallback on a provider that is not connected is not offered", func(t *testing.T) {
 		withAvailableDrivers(t, driversWith(claudeAccount("a", "alice@acme.com", 0)))
 		got := env.routing.usageLimitFailure(context.Background(), refusal, usageLimitContext{
-			UserID: "u1", ThreadID: "t", Driver: "claude", ModelID: routeModel, Account: first.Account,
+			Scope: drivers.PersonalScope("u1"), ThreadID: "t", Driver: "claude", ModelID: routeModel, Account: first.Account,
 			Policy: types.FailoverPolicy{FallbackModel: routeFallback}})
 		var f *types.UsageLimitFailure
 		require.ErrorAs(t, got, &f)
@@ -347,7 +358,7 @@ func TestRouting_FallbackOnlyWhenTheChatOptedIn(t *testing.T) {
 		withAvailableDrivers(t, driversWith(claudeAccount("a", "alice@acme.com", 0), codex))
 		env.store.bench("cx", time.Now().Add(time.Hour), "five_hour")
 		got := env.routing.usageLimitFailure(context.Background(), refusal, usageLimitContext{
-			UserID: "u1", ThreadID: "t", Driver: "claude", ModelID: routeModel, Account: first.Account,
+			Scope: drivers.PersonalScope("u1"), ThreadID: "t", Driver: "claude", ModelID: routeModel, Account: first.Account,
 			Policy: types.FailoverPolicy{FallbackModel: routeFallback}})
 		var f *types.UsageLimitFailure
 		require.ErrorAs(t, got, &f)
@@ -381,7 +392,7 @@ func TestRouting_FailuresDegradeToTheDefaultBehaviour(t *testing.T) {
 		require.NoError(t, err)
 		got := env.routing.usageLimitFailure(context.Background(),
 			&ratelimit.UsageLimitError{Provider: "Claude", ResetAt: time.Now().Add(time.Hour)},
-			usageLimitContext{UserID: "u1", ThreadID: "t", Driver: "claude", ModelID: routeModel, Account: first.Account})
+			usageLimitContext{Scope: drivers.PersonalScope("u1"), ThreadID: "t", Driver: "claude", ModelID: routeModel, Account: first.Account})
 		var f *types.UsageLimitFailure
 		require.ErrorAs(t, got, &f)
 		assert.False(t, f.Facts.AlternativeAccount, "an unbenched account would be handed straight back")

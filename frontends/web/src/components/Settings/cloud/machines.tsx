@@ -110,6 +110,7 @@ import { MachineDiskCard } from "./MachineDiskCard";
 import { RenameMachineButton, RenameMachineField } from "./RenameMachine";
 import { machineBuildLabel } from "@/lib/machineBuild";
 import { machineCrashSummary } from "@/lib/machineMemory";
+import { degradedReason } from "@/lib/machineHealth";
 import { DiskGrowNotice, GrowDiskModal, type GrowStage } from "./GrowDiskModal";
 import { diskGrowStatus, isStorageDenied } from "./diskGrow";
 import { DaemonDiskState } from "@/gen/controlplane/controlplane/v1/shared_pb";
@@ -714,12 +715,20 @@ function ManagedMachinesTable({
         const status = daemonStatus(d);
         const presentation = presentMachineStatus(status, d.lastStatusMessage, waking.get(d.daemonId));
         const failureReason = presentation.label ? null : daemonFailureReason(d);
+        // Connected but unable to start processes (lib/machineHealth): the
+        // status alone would say it is fine while every command fails.
+        const degraded = presentation.label ? null : degradedReason(d);
         return (
           <>
             <StatusDot
-              variant={presentedDotVariant(status, presentation)}
-              label={presentation.label ?? statusBadge[status].label}
+              variant={degraded ? "error" : presentedDotVariant(status, presentation)}
+              label={degraded ? "Degraded" : (presentation.label ?? statusBadge[status].label)}
             />
+            {degraded && (
+              <p className="mt-1 max-w-xs text-xs text-destructive-ink" data-testid="machine-degraded-reason">
+                {degraded}
+              </p>
+            )}
             {presentation.progress && <p className="mt-1 max-w-xs text-xs text-muted-foreground">{presentation.progress}</p>}
             {failureReason && (
               // Destructive red for a machine that BROKE; muted for one that
@@ -854,11 +863,15 @@ function MachineName({ daemon, appCount }: { daemon: Daemon; appCount: number })
   const machineOrgs = useMachineOrgs();
   const org = machineOrgs.multiOrg ? machineOrgs.orgOf(daemon.daemonId) : undefined;
   return (
-    <span className="block">
-      <span className="font-medium text-foreground">{daemonDisplayName(daemon)}</span>
-      {daemon.isDefault && <Badge label="Default" variant="neutral" size="sm" className="ml-2 align-middle" />}
-      {org && <Badge label={org.name} variant="neutral" size="sm" className="ml-2 align-middle" />}
-      <AppAccessIndicator count={appCount} />
+    // DataTable rows have a minimum height, not vertical padding. Reserve room
+    // around both lines so a badge plus build cannot press against the border.
+    <span className="block py-2">
+      <span className="flex items-center">
+        <span className="font-medium text-foreground">{daemonDisplayName(daemon)}</span>
+        {daemon.isDefault && <Badge label="Default" variant="neutral" size="sm" className="ml-2" />}
+        {org && <Badge label={org.name} variant="neutral" size="sm" className="ml-2" />}
+        <AppAccessIndicator count={appCount} />
+      </span>
       {build && <span className="mt-0.5 block text-xs text-muted-foreground">{build}</span>}
     </span>
   );
@@ -1368,6 +1381,10 @@ function EnvironmentDetail({
     refetchInterval: restartStage ? 2_000 : 15_000,
   }));
   const daemon = listQ.data?.find((d) => d.daemonId === daemonId);
+  // A self-hosted registry entry need not have a cloud provisioning record.
+  // Wait for its type before fetching that record; missing cloud metadata must
+  // never prevent opening a personal machine's settings.
+  const needsCloudSpec = cloud && !!daemon && !isExternalDaemon(daemon);
 
   const daemonQ = useQuery({
     queryKey: QK.daemon(daemonId),
@@ -1378,7 +1395,7 @@ function EnvironmentDetail({
     // to look alive. 5s while the disk grows, which takes about a minute.
     refetchInterval: (query) =>
       restartStage ? 2_000 : query.state.data?.daemon?.disk?.state === DaemonDiskState.EXPANDING ? 5_000 : 15_000,
-    enabled: cloud,
+    enabled: needsCloudSpec,
   });
   const spec = daemonQ.data?.daemon;
   const workspaceBaseDomain = daemonQ.data?.workspaceBaseDomain ?? "";
@@ -1590,8 +1607,8 @@ function EnvironmentDetail({
   const growNotice = disk ? diskGrowStatus(disk, daemon ? daemon.status !== DaemonStatus.SUSPENDED : false) : null;
   // The registry list is what proves the machine exists; the control-plane
   // spec is an extra half that only a cloud build has.
-  const loading = listQ.isLoading || (cloud && daemonQ.isLoading);
-  const loadError = cloud ? daemonQ.error : listQ.error;
+  const loading = listQ.isLoading || (needsCloudSpec && daemonQ.isLoading);
+  const loadError = listQ.error ?? (needsCloudSpec ? daemonQ.error : null);
   // A managed pod's projects live under the clone root; a personal machine
   // has no safe default, so the user names one (or picks a reported project).
   const suggestedRoots = Array.from(
@@ -1733,6 +1750,8 @@ function EnvironmentDetail({
             ) : (
               <ErrorNote message={daemonFailureReason(daemon) ?? undefined} />
             ))}
+          {/* Connected, but it cannot start processes: every command fails. */}
+          {degradedReason(daemon) && <ErrorNote message={degradedReason(daemon) ?? undefined} />}
           {lifecyclePlan(daemon, null).recoveryHint && (
             <p className="mb-4 text-sm text-muted-foreground" data-testid="machine-recovery-hint">
               {lifecyclePlan(daemon, null).recoveryHint}
@@ -1794,6 +1813,18 @@ function EnvironmentDetail({
               <CardContent>
                 <dl>
                   <InfoRow label="Connection" value={<Badge label={connected ? "Connected" : "Disconnected"} variant={connected ? "success" : "neutral"} />} />
+                  {connected && (
+                    <InfoRow
+                      label="Health"
+                      value={
+                        degradedReason(daemon) ? (
+                          <Badge label="Can't start processes" variant="error" />
+                        ) : (
+                          <Badge label="Healthy" variant="success" />
+                        )
+                      }
+                    />
+                  )}
                   {/*
                     The label tracks the state. "Connected at <timestamp>"
                     beside a DISCONNECTED machine describes a connection that

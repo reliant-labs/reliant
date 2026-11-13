@@ -13,6 +13,7 @@ package vault
 
 import (
 	"context"
+	"time"
 
 	"github.com/reliant-labs/forge/pkg/orm"
 )
@@ -45,4 +46,7 @@ type Deps struct {
 	DB orm.Context
 	// Keys wraps and unwraps DEKs under the KEK (NewEnvKeyWrapper).
 	Keys KeyWrapper
+	// Now is the clock a cached key's age is measured by
+	// (KeyRecheckInterval); nil is time.Now.
+	Now func() time.Time
 }

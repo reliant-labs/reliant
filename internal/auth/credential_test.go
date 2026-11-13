@@ -8,6 +8,9 @@ import (
 	"connectrpc.com/connect"
 	fat "github.com/reliant-labs/forge/pkg/accesstoken"
 	"github.com/reliant-labs/forge/pkg/svcerr"
+
+	"github.com/reliant-labs/reliant/internal/authz"
+	"github.com/reliant-labs/reliant/internal/db/core"
 )
 
 // The validator that verified a bearer classifies it, and only a session from
@@ -113,4 +116,35 @@ func TestMachineBound(t *testing.T) {
 			t.Errorf("%s: MachineBound = %v, want %v", name, got, tc.want)
 		}
 	}
+}
+
+// WithCredential tells authz whether a person holds the credential, by the
+// same class RequirePerson admits: only a person may read what another org
+// member shared (org-sharing S2). Measured through a shared chat a live member
+// may read only as a person.
+func TestWithCredentialInstallsThePersonKind(t *testing.T) {
+	acme := "acme"
+	shared := &core.Chat{UserID: "owner", OrgID: &acme, Visibility: core.VisibilityOrg}
+	base := authz.WithMembership(context.Background(), everyoneInAcme{})
+	for c, person := range map[Credential]bool{
+		CredentialSession:     true,
+		CredentialSharedKey:   true,
+		CredentialAccessToken: false,
+		CredentialOAuthClient: false,
+		CredentialUnknown:     false,
+	} {
+		ctx := WithCredential(base, c)
+		if got := authz.CanReadChat(authz.WithViewerReads(ctx), "viewer", shared); got != person {
+			t.Errorf("%v: a shared read = %v, want %v", c, got, person)
+		}
+		if (RequirePerson(ctx, "x") == nil) != person {
+			t.Errorf("%v: RequirePerson disagrees with the installed kind", c)
+		}
+	}
+}
+
+type everyoneInAcme struct{}
+
+func (everyoneInAcme) IsMember(_ context.Context, _, orgID string) (bool, bool, error) {
+	return orgID == "acme", true, nil
 }

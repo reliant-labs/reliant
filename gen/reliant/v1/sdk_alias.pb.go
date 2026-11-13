@@ -247,6 +247,8 @@ type (
 	LocalModelInfo                           = sdk.LocalModelInfo
 	LocalModelInventory                      = sdk.LocalModelInventory
 	LocalModelRefresh                        = sdk.LocalModelRefresh
+	MachineHealth                            = sdk.MachineHealth
+	MachineHealthState                       = sdk.MachineHealthState
 	MarkUnreadChatRequest                    = sdk.MarkUnreadChatRequest
 	MarkUnreadChatResponse                   = sdk.MarkUnreadChatResponse
 	Message                                  = sdk.Message
@@ -297,6 +299,7 @@ type (
 	ResolveTriggerSendersRequest             = sdk.ResolveTriggerSendersRequest
 	ResolveTriggerSendersResponse            = sdk.ResolveTriggerSendersResponse
 	ResolvedTriggerSender                    = sdk.ResolvedTriggerSender
+	ResourceVisibility                       = sdk.ResourceVisibility
 	RestoreInboxItemRequest                  = sdk.RestoreInboxItemRequest
 	RestoreInboxItemResponse                 = sdk.RestoreInboxItemResponse
 	RestoreWorktreeRecoveryRequest           = sdk.RestoreWorktreeRecoveryRequest
@@ -547,6 +550,9 @@ const (
 	InboxItemKind_INBOX_ITEM_KIND_WAITING_FOR_MACHINE                          = sdk.InboxItemKind_INBOX_ITEM_KIND_WAITING_FOR_MACHINE
 	InboxItemKind_INBOX_ITEM_KIND_WORKTREE_MARKED                              = sdk.InboxItemKind_INBOX_ITEM_KIND_WORKTREE_MARKED
 	InboxItemKind_INBOX_ITEM_KIND_WORKTREE_RECLAIM                             = sdk.InboxItemKind_INBOX_ITEM_KIND_WORKTREE_RECLAIM
+	MachineHealthState_MACHINE_HEALTH_STATE_DEGRADED                           = sdk.MachineHealthState_MACHINE_HEALTH_STATE_DEGRADED
+	MachineHealthState_MACHINE_HEALTH_STATE_OK                                 = sdk.MachineHealthState_MACHINE_HEALTH_STATE_OK
+	MachineHealthState_MACHINE_HEALTH_STATE_UNSPECIFIED                        = sdk.MachineHealthState_MACHINE_HEALTH_STATE_UNSPECIFIED
 	MessageRole_MESSAGE_ROLE_ASSISTANT                                         = sdk.MessageRole_MESSAGE_ROLE_ASSISTANT
 	MessageRole_MESSAGE_ROLE_SYSTEM                                            = sdk.MessageRole_MESSAGE_ROLE_SYSTEM
 	MessageRole_MESSAGE_ROLE_TOOL                                              = sdk.MessageRole_MESSAGE_ROLE_TOOL
@@ -569,6 +575,9 @@ const (
 	RecoveryType_RECOVERY_TYPE_RESUMED                                         = sdk.RecoveryType_RECOVERY_TYPE_RESUMED
 	RecoveryType_RECOVERY_TYPE_UNSPECIFIED                                     = sdk.RecoveryType_RECOVERY_TYPE_UNSPECIFIED
 	RecoveryType_RECOVERY_TYPE_WORKFLOW_LOST                                   = sdk.RecoveryType_RECOVERY_TYPE_WORKFLOW_LOST
+	ResourceVisibility_RESOURCE_VISIBILITY_ORG                                 = sdk.ResourceVisibility_RESOURCE_VISIBILITY_ORG
+	ResourceVisibility_RESOURCE_VISIBILITY_PRIVATE                             = sdk.ResourceVisibility_RESOURCE_VISIBILITY_PRIVATE
+	ResourceVisibility_RESOURCE_VISIBILITY_UNSPECIFIED                         = sdk.ResourceVisibility_RESOURCE_VISIBILITY_UNSPECIFIED
 	RunDisplayState_RUN_DISPLAY_STATE_CANCELLED                                = sdk.RunDisplayState_RUN_DISPLAY_STATE_CANCELLED
 	RunDisplayState_RUN_DISPLAY_STATE_COMPLETED                                = sdk.RunDisplayState_RUN_DISPLAY_STATE_COMPLETED
 	RunDisplayState_RUN_DISPLAY_STATE_FAILED                                   = sdk.RunDisplayState_RUN_DISPLAY_STATE_FAILED
@@ -706,6 +715,8 @@ var (
 	File_reliant_v1_worktree_proto       = sdk.File_reliant_v1_worktree_proto
 	InboxItemKind_name                   = sdk.InboxItemKind_name
 	InboxItemKind_value                  = sdk.InboxItemKind_value
+	MachineHealthState_name              = sdk.MachineHealthState_name
+	MachineHealthState_value             = sdk.MachineHealthState_value
 	MessageRole_name                     = sdk.MessageRole_name
 	MessageRole_value                    = sdk.MessageRole_value
 	OutputStreamType_name                = sdk.OutputStreamType_name
@@ -718,6 +729,8 @@ var (
 	QuestionStatus_value                 = sdk.QuestionStatus_value
 	RecoveryType_name                    = sdk.RecoveryType_name
 	RecoveryType_value                   = sdk.RecoveryType_value
+	ResourceVisibility_name              = sdk.ResourceVisibility_name
+	ResourceVisibility_value             = sdk.ResourceVisibility_value
 	RunDisplayState_name                 = sdk.RunDisplayState_name
 	RunDisplayState_value                = sdk.RunDisplayState_value
 	StreamingState_name                  = sdk.StreamingState_name

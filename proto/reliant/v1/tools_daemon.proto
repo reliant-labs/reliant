@@ -332,6 +332,10 @@ message DaemonHeartbeat {
   uint64 oom_kills = 8;
   // When the daemon saw the newest of those kills (unix ms); 0 when none.
   int64 last_oom_kill_at_ms = 9;
+  // Whether the machine can start processes, from the daemon's fork
+  // watchdog (internal/forkwatch). Unset for a daemon that predates it, or
+  // that has not probed yet, which the gateway reads as healthy.
+  MachineHealth health = 10;
 }
 
 // DiskReport is a machine's view of the filesystems that matter to the work
@@ -460,6 +464,41 @@ message ProcessTree {
   bool tracked = 4;
   // The chat's title, filled in by the server for display.
   string chat_title = 5;
+}
+
+// MachineHealth is whether a connected machine can do work. It is separate
+// from DaemonStatus, which says whether the machine is connected at all: a
+// machine whose process table is full stays attached and answers, but every
+// command it is asked to start fails (reliant#1919). Keeping it out of the
+// status enum means a client that switches on DaemonStatus sees exactly what
+// it saw before; a client that knows this message can say why work fails.
+//
+// Clients treat an unset message, and MACHINE_HEALTH_STATE_UNSPECIFIED, as
+// healthy: that is what a daemon that predates the report sends.
+message MachineHealth {
+  MachineHealthState state = 1;
+  // Machine-readable cause while degraded ("process_table_full"); empty when
+  // ok. New causes may be added, so clients fall back to reason for one they
+  // do not know.
+  string code = 2;
+  // Why the machine is degraded, in words for a person or an agent; empty
+  // when ok.
+  string reason = 3;
+  // When the machine entered its current state (unix ms). Daemons leave it 0;
+  // the gateway stamps it when the state changes and carries it forward
+  // otherwise, so readers never compare against a skewed clock.
+  int64 since_ms = 4;
+}
+
+// MachineHealthState is MachineHealth's verdict.
+enum MachineHealthState {
+  // Not reported: a daemon that predates the report, or one that has not
+  // probed yet. Read as healthy.
+  MACHINE_HEALTH_STATE_UNSPECIFIED = 0;
+  // The machine can start processes.
+  MACHINE_HEALTH_STATE_OK = 1;
+  // The machine is connected but cannot do work; code and reason say why.
+  MACHINE_HEALTH_STATE_DEGRADED = 2;
 }
 
 // DiskGuardState is what the daemon's disk guard (internal/diskguard) is doing

@@ -83,17 +83,32 @@ func readConnectionSecrets(ctx context.Context, db orm.Context, connectionID str
 	return connectionSecretsToCore(rows), nil
 }
 
-// GetConnectionSecrets returns the sealed fields of the user's live
+// GetConnectionSecrets returns the sealed fields of the user's live personal
+// connection, or core.ErrConnectionNotFound.
+func GetConnectionSecrets(ctx context.Context, db orm.Context, userID, id string) (map[string]core.ConnectionSecret, error) {
+	return GetOwnedConnectionSecrets(ctx, db, core.UserConnectionOwner(userID), id)
+}
+
+// GetOwnedConnectionSecrets returns the sealed fields of owner's live
 // connection, or core.ErrConnectionNotFound. Ownership is checked in the same
 // statement that reads the ciphertext, so a caller that forgot to Get first
-// still cannot read another user's.
-func GetConnectionSecrets(ctx context.Context, db orm.Context, userID, id string) (map[string]core.ConnectionSecret, error) {
+// still cannot read another owner's.
+func GetOwnedConnectionSecrets(ctx context.Context, db orm.Context, owner core.ConnectionOwner, id string) (map[string]core.ConnectionSecret, error) {
 	var rows []*ConnectionSecret
-	if err := db.Bun().NewSelect().Model(&rows).
+	q := db.Bun().NewSelect().Model(&rows).
 		Join("JOIN connections AS c ON c.id = ?", bun.Ident("connection_secrets.connection_id")).
-		Where("? = ?", bun.Ident("connection_secrets.connection_id"), id).
-		Where("c.user_id = ?", userID).
-		Where("c.owner_kind = ?", core.ConnectionOwnerUser).
+		Where("? = ?", bun.Ident("connection_secrets.connection_id"), id)
+	switch {
+	case owner.ID == "":
+		q = q.Where("FALSE")
+	case owner.Kind == core.ConnectionOwnerUser:
+		q = q.Where("c.user_id = ?", owner.ID).Where("c.owner_kind = ?", core.ConnectionOwnerUser)
+	case owner.Kind == core.ConnectionOwnerOrg:
+		q = q.Where("c.org_id = ?", owner.ID).Where("c.owner_kind = ?", core.ConnectionOwnerOrg)
+	default:
+		q = q.Where("FALSE")
+	}
+	if err := q.
 		Where("c.deleted_at IS NULL").
 		OrderExpr("?", bun.Ident("connection_secrets.field")).
 		Scan(ctx); err != nil {
@@ -105,18 +120,26 @@ func GetConnectionSecrets(ctx context.Context, db orm.Context, userID, id string
 	return connectionSecretsToCore(rows), nil
 }
 
-// WithConnectionSecretsLock runs fn with the user's live connection row and
+// WithConnectionSecretsLock is WithOwnedConnectionSecretsLock for the user's
+// live personal connection.
+func WithConnectionSecretsLock(ctx context.Context, db orm.Context, userID, id string,
+	fn func(txCtx context.Context, conn *core.Connection, secrets map[string]core.ConnectionSecret) error,
+) error {
+	return WithOwnedConnectionSecretsLock(ctx, db, core.UserConnectionOwner(userID), id, fn)
+}
+
+// WithOwnedConnectionSecretsLock runs fn with owner's live connection row and
 // its secret rows locked (SELECT … FOR UPDATE) inside one transaction,
 // serializing token refreshes across worker processes. The connection row is
 // locked too: a connection with no secret rows still needs a lock target. fn
 // receives the ctx carrying that transaction; the writes it makes through
 // ReplaceConnectionSecrets, MarkConnectionStatus and AppendConnectionEvent
 // join it only when given that ctx.
-func WithConnectionSecretsLock(ctx context.Context, db orm.Context, userID, id string,
+func WithOwnedConnectionSecretsLock(ctx context.Context, db orm.Context, owner core.ConnectionOwner, id string,
 	fn func(txCtx context.Context, conn *core.Connection, secrets map[string]core.ConnectionSecret) error,
 ) error {
 	return connectionTx(ctx, db, func(txCtx context.Context) error {
-		conn, err := selectConnection(txCtx, db, true, whereConnection(ConnectionFieldID, id), whereUserOwned(userID))
+		conn, err := selectConnection(txCtx, db, true, whereConnection(ConnectionFieldID, id), whereOwned(owner))
 		if err != nil {
 			return err
 		}

@@ -113,7 +113,15 @@ func (r *Resolver) resolve(ctx context.Context, userID, orgID string) (accesstok
 	if err != nil {
 		return accesstokenclient.OrgMembership{}, err
 	}
+	r.remember(k, m)
+	return m, nil
+}
+
+// remember caches m as the answer for k for one TTL.
+func (r *Resolver) remember(k key, m accesstokenclient.OrgMembership) {
+	now := r.now()
 	r.mu.Lock()
+	defer r.mu.Unlock()
 	// Expired entries are dropped as they are met, so the map holds at most
 	// the (user, org) pairs asked about within one TTL.
 	for k2, a := range r.answers {
@@ -122,8 +130,6 @@ func (r *Resolver) resolve(ctx context.Context, userID, orgID string) (accesstok
 		}
 	}
 	r.answers[k] = answer{m: m, expires: now.Add(r.ttl)}
-	r.mu.Unlock()
-	return m, nil
 }
 
 // IsMember reports whether userID is a live member of orgID. ok is false when
@@ -142,6 +148,94 @@ func (r *Resolver) IsMember(ctx context.Context, userID, orgID string) (member, 
 		return false, true, err
 	}
 	return m.Member && m.OrgID == orgID, true, nil
+}
+
+// Membership is control-plane's whole answer about userID in orgID (member,
+// role, when the current membership began, the org's live member count),
+// cached like IsMember. ok is false when the deployment has no orgs; err is an
+// outage. A caller deciding access from it fails closed on both: a negative,
+// an unknown and an error all grant nothing.
+func (r *Resolver) Membership(ctx context.Context, userID, orgID string) (m accesstokenclient.OrgMembership, ok bool, err error) {
+	if r == nil || userID == "" || orgID == "" {
+		return accesstokenclient.OrgMembership{}, false, nil
+	}
+	m, err = r.resolve(ctx, userID, orgID)
+	if errors.Is(err, errUnsupported) {
+		return accesstokenclient.OrgMembership{}, false, nil
+	}
+	if err != nil {
+		return accesstokenclient.OrgMembership{}, true, err
+	}
+	if m.OrgID != orgID {
+		// An answer about another org says nothing about this one.
+		return accesstokenclient.OrgMembership{OrgID: orgID}, true, nil
+	}
+	return m, true, nil
+}
+
+// The roles control-plane answers (its org_memberships.role). Authority to
+// administer an org is RoleOwner or RoleAdmin (docs/design/org-sharing.md
+// §3.4 in control-plane).
+const (
+	RoleOwner  = "owner"
+	RoleAdmin  = "admin"
+	RoleMember = "member"
+)
+
+// Role is userID's role in orgID, cached like membership (CacheTTL): for
+// display and other questions a stale answer cannot widen. A decision that
+// grants admin authority asks RoleFresh instead.
+//
+// role is RoleOwner, RoleAdmin or RoleMember for a live member, "" otherwise.
+// ok reports whether control-plane gave a definite answer: true for a member
+// with a role and for a non-member (role ""); false when the role is unknown
+// (a deployment with no orgs, a control plane without the rpc, or one that
+// predates the role field and answers a member with none). err is an outage.
+// Every caller refuses an admin action unless role is RoleOwner or RoleAdmin,
+// so an unknown role and an error both fail closed.
+func (r *Resolver) Role(ctx context.Context, userID, orgID string) (role string, ok bool, err error) {
+	if r == nil || userID == "" || orgID == "" {
+		return "", false, nil
+	}
+	m, err := r.resolve(ctx, userID, orgID)
+	return roleOf(m, orgID, err)
+}
+
+// RoleFresh is Role asked of control-plane now, bypassing the cache, so a
+// just-demoted admin cannot act on a cached role. The fresh answer replaces
+// the cached one (membership included). It is what every admin-only write
+// asks (creating an org connection, clearing a share, adopting an
+// automation).
+func (r *Resolver) RoleFresh(ctx context.Context, userID, orgID string) (role string, ok bool, err error) {
+	if r == nil || userID == "" || orgID == "" {
+		return "", false, nil
+	}
+	m, err := r.src.ResolveOrgMembership(ctx, userID, orgID)
+	if err == nil {
+		r.remember(key{userID, orgID}, m)
+	}
+	return roleOf(m, orgID, err)
+}
+
+// roleOf reads Role's answer from one membership answer about orgID.
+func roleOf(m accesstokenclient.OrgMembership, orgID string, err error) (string, bool, error) {
+	if errors.Is(err, errUnsupported) {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, err
+	}
+	if !m.Member || m.OrgID != orgID {
+		return "", true, nil
+	}
+	switch m.Role {
+	case RoleOwner, RoleAdmin, RoleMember:
+		return m.Role, true, nil
+	default:
+		// A member with no role (an older control plane) or one this
+		// build does not know: unknown, never guessed upward.
+		return "", false, nil
+	}
 }
 
 // DefaultOrg is the org userID acts in when a request names none: "" when

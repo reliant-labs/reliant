@@ -28,6 +28,11 @@ type WorkflowDraft struct {
 	UpdatedAt   time.Time           `json:"updated_at"`
 	IsHidden    bool                `json:"is_hidden"`
 	Version     int64               `json:"version"` // OCC version number
+	// Visibility is who besides UserID may read the saved workflow;
+	// SharedAt when it was shared (nil while private). Read by
+	// internal/authz only.
+	Visibility Visibility `json:"visibility,omitempty"`
+	SharedAt   *time.Time `json:"shared_at,omitempty"`
 }
 
 // WorkflowDraftStatus is a stored workflow's lifecycle state.

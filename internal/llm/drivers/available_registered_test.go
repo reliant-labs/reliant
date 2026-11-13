@@ -25,7 +25,7 @@ func TestBuildAvailableDrivers_SkipsProvidersWithoutRegisteredDriver(t *testing.
 		db.SeedProviderAccount(t, repo, userID, id, key)
 	}
 
-	avail, err := BuildAvailableDrivers(ctx, repo, userID)
+	avail, err := BuildAvailableDrivers(ctx, repo, PersonalScope(userID))
 	require.NoError(t, err)
 
 	assert.NotContains(t, avail.Drivers, models.DriverID("xai"))

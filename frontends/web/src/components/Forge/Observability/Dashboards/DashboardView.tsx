@@ -4,16 +4,26 @@
  * ONE DASHBOARD: its panels over the console's
  * scope, with the controls the mockup draws.
  *
- *   header       title, star, source tag; one meta line (where it came from,
- *                version and editor, panels, the environments it is about);
- *                actions — release: History, Save as copy; built-in: Save
+ *   header       title (the hub's, when the dashboard is one of a hub's
+ *                tabs; the project prefix dropped), star, and a small
+ *                "generated · v1.8.3" — why it is read-only, where it runs and
+ *                its panels are that word's tooltip, not a banner. A
+ *                workspace dashboard adds one line: version, editor, scope.
+ *                Actions — release: History, Save as copy; built-in: Save
  *                as copy (the platform defines it, so it has no history); workspace:
  *                History, Promote to code, Edit layout, Add panel, More
  *                (save a copy, archive).
- *   variables    env (the console's own scope: changing it here changes it
- *                everywhere), service, time; Compare (previous period or
- *                previous release); auto-refresh; Share (a link carrying all
- *                of it); full screen for a wall display.
+ *   hub          a hub's tabs (Users · Product · Acquisition), or its picker
+ *                when there are too many (sixteen services): each tab is its
+ *                own dashboard and URL, opened with the page's time,
+ *                comparison and refresh (dashboardHubs.ts).
+ *   toolbar      ONE row: process, time, Compare (previous period or
+ *                previous release), the dashboard's own filters in the
+ *                console's words (ViewerControls.tsx), then View options
+ *                (breakdown, markers, bands, sections, panels), auto-refresh,
+ *                Share (a link carrying all of it), full screen. The
+ *                environment is the console's own scope (the top bar); only
+ *                full screen, which hides the top bar, offers it here.
  *   grid         four columns; each panel is its forge width in quarters.
  *                Line panels carry release markers (when the dashboard
  *                declares the `releases` annotation) and alert-firing bands;
@@ -38,14 +48,15 @@
 import { useCallback, useEffect, useMemo, useState, type ComponentProps, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { ConnectError, Code } from "@connectrpc/connect";
-import { ArrowLeft, ArrowRight, ChevronDown, ChevronRight, GripVertical, History, LayoutDashboard, LayoutGrid, Maximize2, MoreHorizontal, Plus, RefreshCw, Share2, Trash2, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, ChevronDown, ChevronRight, GripVertical, History, LayoutDashboard, LayoutGrid, Lock, Maximize2, MoreHorizontal, Plus, RefreshCw, Share2, Trash2, X } from "lucide-react";
 
 import Card from "@/components/forge-ui/card";
 import ConfirmationDialog from "@/components/forge-ui/confirmation_dialog";
 import EmptyState from "@/components/forge-ui/empty_state";
 import Link from "@/components/forge-ui/link";
-import Mono from "@/components/forge-ui/mono";
+import Tabs from "@/components/forge-ui/tabs";
 import Tag from "@/components/forge-ui/tag";
+import Tooltip from "@/components/forge-ui/tooltip";
 import {
   dashboardKeys,
   useDashboard,
@@ -69,7 +80,8 @@ import type { ObsEnvironment } from "../obsPlace";
 import { ObsAsOf, ObsError } from "../ObsStates";
 import { useReleaseMarkers } from "../releaseMarkers";
 import { DashboardHeader } from "./DashboardHeader";
-import { ViewerControls } from "./ViewerControls";
+import { ViewerFilters, ViewOptions } from "./ViewerControls";
+import { displayTitle, isTabOf, type DashboardHub, type HubTab } from "./dashboardHubs";
 import { OrganizationCostsView } from "./OrganizationCostsView";
 import { OrganizationUsageView } from "./OrganizationUsageView";
 import { OrganizationBillingView } from "./OrganizationBillingView";
@@ -90,6 +102,7 @@ import {
   rangeMs,
   refreshMs,
   REFRESH_INTERVALS,
+  SOURCE_LABELS,
   isStandardBuiltinRef,
   spanOf,
   type CompareMode,
@@ -110,7 +123,7 @@ import { OrgEnvPicker } from "./OrgEnvPicker";
 import { orgDashboardHrefs, orgExploreHref, orgQueryScope, orgScopeLabel, orgSelection } from "./orgScope";
 import { PanelDrawer, type DrawerMode } from "./PanelDrawer";
 import { PanelErrorBoundary } from "./PanelErrorBoundary";
-import { BUTTON_PRIMARY, BUTTON_SECONDARY, BUTTON_SMALL, ICON_BUTTON, INK_LINK, Menu, PointMenu, Segmented, SourceTag, StarButton, VariableSelect, type MenuEntry } from "./parts";
+import { BUTTON_PRIMARY, BUTTON_SECONDARY, BUTTON_SMALL, ICON_BUTTON, INK_LINK, Menu, PointMenu, Segmented, StarButton, VariableSelect, type MenuEntry } from "./parts";
 import { useObsReadOnly } from "../obsReadOnly";
 import { DataPanelBody, type PanelDataContext } from "./DataPanel";
 import { isDeliveryKind, type DeliveryPanelContext } from "./DeliveryPanels";
@@ -145,6 +158,12 @@ export interface DashboardViewProps {
   onEnvChange: (env: string) => void;
   hrefs: DashboardHrefs;
   navigateTo: (href: string) => void;
+  /**
+   * The hub this dashboard is a tab of (dashboardHubs.ts): the page is titled
+   * by the hub, and its tabs (or picker) open the hub's other dashboards with
+   * the same time, comparison and refresh.
+   */
+  hub?: DashboardHub | null;
 }
 
 const NO_MARKERS: readonly ChartMarker[] = [];
@@ -157,7 +176,7 @@ const PLATFORM_NO_RELEASE: CompareTarget = {
 
 const NO_ORG_ENVS: readonly ObsEnvironment[] = [];
 
-export function DashboardView({ project, dashRef, env: consoleEnv, environments: projectEnvironments, orgEnvironments = NO_ORG_ENVS, orgEnvironmentsLoading = false, orgEnvironmentsError = null, onRetryOrgEnvironments, search, onSearch, onEnvChange, hrefs: consoleHrefs, navigateTo }: DashboardViewProps) {
+export function DashboardView({ project, dashRef, env: consoleEnv, environments: projectEnvironments, orgEnvironments = NO_ORG_ENVS, orgEnvironmentsLoading = false, orgEnvironmentsError = null, onRetryOrgEnvironments, search, onSearch, onEnvChange, hrefs: consoleHrefs, navigateTo, hub = null }: DashboardViewProps) {
   const org = useObservabilityOrg();
   const orgId = org.orgId;
   const api = useObservabilityApi();
@@ -473,8 +492,14 @@ export function DashboardView({ project, dashRef, env: consoleEnv, environments:
       onSearch={onSearch}
       tv={tv}
       orgPicker={orgScoped ? <OrgEnvPicker environments={orgEnvironments} selection={orgPick} onChange={(names) => onSearch({ orgEnvs: names.length ? names : undefined })} /> : undefined}
+      filters={<ViewerFilters dashboard={spec} scope={scope} range={range} search={search} onSearch={onSearch} oneEnv={!orgScoped && !platform && env !== ENV_ALL} />}
+      viewOptions={layout ? undefined : <ViewOptions dashboard={spec} search={search} onSearch={onSearch} />}
     />
   );
+  // A hub's tabs carry what the reader set for the page, not this dashboard's own variables.
+  const hubHref = (ref: DashboardRef) => hrefs.dashboard(ref, { range: search.range, compare: search.compare, refresh: search.refresh });
+  const activeTab = hub?.tabs.find((tab) => isTabOf(tab, dashRef));
+  const title = hub && hub.tabs.length > 1 ? hub.title : displayTitle(summary.title, project);
 
   if (tv) {
     return (
@@ -507,7 +532,7 @@ export function DashboardView({ project, dashRef, env: consoleEnv, environments:
     <div className="space-y-4" data-testid="dashboard-view" data-kind={dashRef.kind}>
       <DashboardHeader
         testId="dashboard-header"
-        title={summary.title}
+        title={title}
         titleAccessory={
           <>
             <StarButton
@@ -519,21 +544,21 @@ export function DashboardView({ project, dashRef, env: consoleEnv, environments:
               }}
               testId="dashboard-star"
             />
-            <SourceTag source={summary.source} standard={isStandardBuiltinRef(dashRef)} />
+            <SourceMeta summary={summary} standard={isStandardBuiltinRef(dashRef)} panels={spec.panels.length} environments={environments} hrefs={hrefs} />
             {viewingOld && <Tag tone="warning">v{search.version}</Tag>}
           </>
         }
-        meta={<DashboardMeta summary={summary} panels={spec.panels.length} environments={environments} hrefs={hrefs} marks={marks} hasBands={bands.length > 0} />}
+        meta={summary.workspace ? <WorkspaceMeta summary={summary} environments={environments} /> : undefined}
         actions={
           <>
             {dashRef.kind !== "builtin" && <HistoryMenu orgId={orgId} dashRef={dashRef} summary={summary} hrefs={hrefs} search={search} />}
             {summary.readOnly ? (
               <button
                 type="button"
-                className={BUTTON_PRIMARY}
+                className={BUTTON_SECONDARY}
                 onClick={() => setDialog("copy")}
                 disabled={!docCanWrite}
-                title={docCanWrite ? undefined : readOnlyReason ?? "Only organization admins can create dashboards."}
+                title={docCanWrite ? readOnlyNote(summary) : readOnlyReason ?? "Only organization admins can create dashboards."}
                 data-testid="dashboard-save-copy"
               >
                 Save as copy
@@ -594,26 +619,7 @@ export function DashboardView({ project, dashRef, env: consoleEnv, environments:
         }
       />
 
-      {summary.readOnly && (
-        <p className="flex items-center gap-2 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-ink-muted" data-testid="dashboard-readonly-note">
-          {summary.source === "repo" ? (
-            <>
-              Declared in your repo
-              {summary.release?.filePath && (
-                <>
-                  {" "}
-                  at <Mono value={summary.release.filePath} copy={false} />
-                </>
-              )}
-              : edit it there, or save a copy to change it here.
-            </>
-          ) : summary.source === "builtin" ? (
-            <>Built in for every project, over this project&apos;s data: save a copy to change it.</>
-          ) : (
-            <>Generated by forge from your services on every release: save a copy to change it.</>
-          )}
-        </p>
-      )}
+      {hub && hub.tabs.length > 1 && <HubTabs hub={hub} active={activeTab} href={hubHref} navigateTo={navigateTo} />}
 
       {viewingOld && (
         <div className="flex flex-wrap items-center gap-3 rounded-lg border border-border bg-surface px-3 py-2 text-sm" role="status" data-testid="dashboard-old-version">
@@ -655,7 +661,6 @@ export function DashboardView({ project, dashRef, env: consoleEnv, environments:
       )}
 
       {variables}
-      {!layout && <ViewerControls dashboard={spec} scope={scope} range={range} search={search} onSearch={onSearch} />}
 
       {layout && (
         <div className="flex flex-wrap items-center gap-3 rounded-lg border border-border bg-surface px-3 py-2 text-sm" role="status" data-testid="dashboard-layout-bar">
@@ -804,38 +809,73 @@ export function DashboardView({ project, dashRef, env: consoleEnv, environments:
 
 // ── Header pieces ───────────────────────────────────────────────────────────
 
-function DashboardMeta({
+/** Why a read-only dashboard cannot be changed here, and how to change it. */
+function readOnlyNote(summary: DashboardSummary): string {
+  if (summary.source === "repo") return `Declared in your repo${summary.release?.filePath ? ` at ${summary.release.filePath}` : ""}: edit it there, or save a copy to change it here.`;
+  if (summary.source === "builtin") return "Built in for every project, over this project's data: save a copy to change it.";
+  return "Generated by forge from your services on every release: save a copy to change it.";
+}
+
+/**
+ * Where the dashboard came from, said small beside its title: "generated ·
+ * v1.8.3" (the release a link). Why it is read-only, where it runs and how
+ * many panels it has are the tooltip (the word's accessible description),
+ * not a banner over the page.
+ */
+function SourceMeta({
   summary,
+  standard,
   panels,
   environments,
   hrefs,
-  marks,
-  hasBands,
 }: {
   summary: DashboardSummary;
+  standard: boolean;
   panels: number;
   environments: readonly ObsEnvironment[];
   hrefs: DashboardHrefs;
-  marks: boolean;
-  hasBands: boolean;
 }) {
   const nameOf = (id: string) => environments.find((candidate) => candidate.id === id)?.name ?? id;
+  const version = summary.release?.releaseVersion;
+  const where = summary.release?.envIds.length ? `Running in ${summary.release.envIds.map(nameOf).join(", ")}. ` : "";
+  const about = (
+    <>
+      {summary.readOnly && <span data-testid="dashboard-readonly-note">{readOnlyNote(summary)} </span>}
+      {where}
+      {panels === 1 ? "1 panel" : `${panels} panels`}.
+    </>
+  );
+  return (
+    <span className="inline-flex items-center gap-1.5 text-sm text-ink-muted" data-testid="dashboard-source">
+      <Tooltip content={about} tooltipClassName="max-w-xs">
+        <span className="inline-flex items-center gap-1">
+          {summary.readOnly && <Lock className="h-3 w-3" aria-hidden="true" />}
+          {summary.source === "builtin" && standard ? "built-in" : SOURCE_LABELS[summary.source]}
+        </span>
+      </Tooltip>
+      {summary.release && (
+        <>
+          <span aria-hidden="true">·</span>
+          <span>
+            <span className="sr-only">Shipped in </span>
+            {version ? (
+              <Link href={hrefs.release(version)} className={INK_LINK}>
+                {version}
+              </Link>
+            ) : (
+              "a release"
+            )}
+          </span>
+        </>
+      )}
+    </span>
+  );
+}
+
+/** A workspace dashboard's line: its version, who last edited it, and the environments it is for. */
+function WorkspaceMeta({ summary, environments }: { summary: DashboardSummary; environments: readonly ObsEnvironment[] }) {
+  const nameOf = (id: string) => environments.find((candidate) => candidate.id === id)?.name ?? id;
   const parts: ReactNode[] = [];
-  if (summary.release) {
-    parts.push(
-      <span key="shipped">
-        Shipped in{" "}
-        {summary.release.releaseVersion ? (
-          <Link href={hrefs.release(summary.release.releaseVersion)} className={INK_LINK}>
-            {summary.release.releaseVersion}
-          </Link>
-        ) : (
-          "a release"
-        )}
-      </span>
-    );
-    if (summary.release.envIds.length) parts.push(<span key="where">running in {summary.release.envIds.map(nameOf).join(", ")}</span>);
-  }
   if (summary.workspace) {
     const editor = summary.workspace.updatedBy ?? summary.workspace.createdBy;
     parts.push(
@@ -851,15 +891,39 @@ function DashboardMeta({
       </Tag>
     );
   }
-  parts.push(<span key="panels">{panels === 1 ? "1 panel" : `${panels} panels`}</span>);
-  if (marks || hasBands) {
-    parts.push(
-      <span key="legend">
-        {[marks ? "dashed lines are releases" : "", hasBands ? "red bands are alerts firing" : ""].filter(Boolean).join("; ").replace(/^./, (c) => c.toUpperCase())}
-      </span>
+  return <>{parts}</>;
+}
+
+/**
+ * A hub's tabs: each opens the hub's next dashboard, at its own URL, with the
+ * page's time, comparison and refresh. Too many for a row (a project with
+ * sixteen services) and it is a picker instead.
+ */
+function HubTabs({ hub, active, href, navigateTo }: { hub: DashboardHub; active: HubTab | undefined; href: (ref: DashboardRef) => string; navigateTo: (href: string) => void }) {
+  const idOf = (tab: HubTab) => `${tab.ref.kind}/${tab.ref.key}`;
+  const open = (id: string) => {
+    const tab = hub.tabs.find((candidate) => idOf(candidate) === id);
+    if (tab) navigateTo(href(tab.ref));
+  };
+  if (hub.picker) {
+    return (
+      <div className="flex flex-wrap items-center gap-2 border-b border-border pb-3" data-testid="dashboard-hub-picker">
+        <VariableSelect
+          id="dashboard-hub-tab"
+          label={hub.id === "services" ? "Service" : "Dashboard"}
+          value={active ? idOf(active) : ""}
+          options={hub.tabs.map((tab) => ({ value: idOf(tab), label: tab.label }))}
+          onChange={open}
+        />
+        <span className="text-xs text-ink-muted">{hub.tabs.length} dashboards</span>
+      </div>
     );
   }
-  return <>{parts}</>;
+  return (
+    <div className="-mt-1 overflow-x-auto" data-testid="dashboard-hub-tabs">
+      <Tabs ariaLabel={hub.title} tabs={hub.tabs.map((tab) => ({ id: idOf(tab), label: tab.label }))} activeTab={active ? idOf(active) : ""} onChange={open} />
+    </div>
+  );
 }
 
 function HistoryMenu({
@@ -918,6 +982,9 @@ function HistoryMenu({
 
 // ── Variables bar ───────────────────────────────────────────────────────────
 
+/** The toolbar's buttons stand beside its selects: the same 32px height. */
+const TOOLBAR_BUTTON = cn(BUTTON_SMALL, "h-8 text-sm");
+
 function VariablesBar({
   scope,
   env,
@@ -935,7 +1002,13 @@ function VariablesBar({
   onSearch,
   tv,
   orgPicker,
+  filters,
+  viewOptions,
 }: {
+  /** The dashboard's own filters (ViewerFilters), after the time and comparison. */
+  filters?: ReactNode;
+  /** The View options popover, beside refresh and share. Absent while the layout is edited. */
+  viewOptions?: ReactNode;
   scope: ObsScope | null;
   env: string;
   environments: readonly ObsEnvironment[];
@@ -976,14 +1049,17 @@ function VariablesBar({
   };
 
   return (
-    <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-surface p-2" data-testid="dashboard-variables">
+    // One row: what the panels read (environment, service, time, comparison,
+    // the dashboard's filters), then how the page behaves (view options,
+    // refresh, share, full screen). It wraps on a narrow screen.
+    <div className="flex flex-wrap items-center gap-2" data-testid="dashboard-variables">
       {/* The console's top bar is the one environment selector. Full screen
           hides the top bar, so only there does the dashboard offer its own. */}
       {orgPicker}
       {tv && !orgPicker && (
         <VariableSelect
           id="dashboard-var-env"
-          label="env"
+          label="Environment"
           value={env}
           options={[...environments.map((candidate) => ({ value: candidate.name, label: candidate.name })), { value: ENV_ALL, label: "All" }]}
           onChange={onEnvChange}
@@ -991,14 +1067,15 @@ function VariablesBar({
       )}
       {hasProcessFilter && <VariableSelect
         id="dashboard-var-service"
-        label="process"
+        // The deployed process (service.name): "Service" is the hub's picker of dashboards.
+        label="Process"
         value={service ?? ""}
-        options={[{ value: "", label: "all" }, ...names.map((name) => ({ value: name, label: name }))]}
+        options={[{ value: "", label: "All" }, ...names.map((name) => ({ value: name, label: name }))]}
         onChange={(value) => onSearch({ service: value || undefined })}
       />}
       <VariableSelect
         id="dashboard-var-range"
-        label="time"
+        label="Time"
         value={range}
         options={RANGE_PRESETS.map((preset) => ({ value: preset, label: RANGE_LABELS[preset] }))}
         onChange={(value) => onSearch({ range: value === defaultRange ? undefined : (value as RangePreset) })}
@@ -1021,7 +1098,9 @@ function VariablesBar({
           dashed: the {formatSpan(rangeMs(range))} before {target.promotion.version || "the release"} reached {target.promotion.envName}
         </span>
       )}
+      {filters}
       <span className="flex-1" />
+      {viewOptions}
       <Menu
         label="Auto-refresh"
         trigger={
@@ -1030,7 +1109,7 @@ function VariablesBar({
             {refresh === "off" ? "Off" : refresh}
           </>
         }
-        triggerClassName={BUTTON_SMALL}
+        triggerClassName={TOOLBAR_BUTTON}
         heading="Auto-refresh"
         entries={REFRESH_INTERVALS.map((interval) => ({
           label: interval === "off" ? "Off" : `Every ${interval}`,
@@ -1041,13 +1120,13 @@ function VariablesBar({
       />
       {!tv && (
         <>
-          <button type="button" className={BUTTON_SMALL} onClick={share} title="Copy a link with the env, service, time, compare and refresh" data-testid="dashboard-share">
+          <button type="button" className={TOOLBAR_BUTTON} onClick={share} title="Copy a link with the env, service, time, compare and refresh" data-testid="dashboard-share">
             <Share2 className="h-3 w-3" aria-hidden="true" />
             {copied ? "Link copied" : "Share"}
           </button>
           <button
             type="button"
-            className={BUTTON_SMALL}
+            className={TOOLBAR_BUTTON}
             onClick={() => onSearch({ tv: true })}
             aria-label="Full screen"
             title="Full screen, for a wall display"

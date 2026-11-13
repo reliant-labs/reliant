@@ -743,6 +743,13 @@ blocking: true — the exception: stop and wait for the answer. Use it only when
 
 Before asking, call list_pending_questions if you may have asked already: do not ask a question that is still pending. Before finishing, withdraw questions your default made moot.
 
+Make each question stand on its own. Include enough context for users, as sometimes they may only see the question in isolation in their feed. Someone who has not read this chat must be able to answer it:
+- Say what the decision is about: name the issue, PR, file or system, not just an id ("PR #123, retrying on daemon reconnect", not "#123").
+- Say why you are asking now: what you found, or what is blocked on the answer.
+- In each option's description, say what choosing it means in practice and its main trade-off; do not restate the label.
+- Say what you will do by default if nobody answers.
+- Avoid internal shorthand, ids with no description, and references to "above", "earlier" or other messages the user may not see.
+
 Usage notes:
 - The user will always have an option to provide freetext input in addition to any predefined options.
 - If you recommend a specific option, list it first and add "(Recommended)" to the label.
@@ -761,7 +768,7 @@ Usage notes:
 						"properties": map[string]interface{}{
 							"question": map[string]interface{}{
 								"type":        "string",
-								"description": "The question to ask. Should be clear and specific.",
+								"description": "The question to ask, clear, specific and able to stand on its own: the user may see it alone in their inbox or feed, without this chat. Name what it is about (the issue, PR or system, not a bare id), why you are asking now, and the default you will proceed with. No internal shorthand, and no references to \"above\" or earlier messages.",
 							},
 							"options": map[string]interface{}{
 								"type":        "array",
@@ -777,7 +784,7 @@ Usage notes:
 										},
 										"description": map[string]interface{}{
 											"type":        "string",
-											"description": "Explanation of what this option means.",
+											"description": "What choosing this option means in practice: its consequence and main trade-off. Do not restate the label.",
 										},
 										"preview": map[string]interface{}{
 											"type":        "string",

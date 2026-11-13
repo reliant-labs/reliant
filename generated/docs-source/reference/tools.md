@@ -2218,6 +2218,13 @@ blocking: true — the exception: stop and wait for the answer. Use it only when
 
 Before asking, call list_pending_questions if you may have asked already: do not ask a question that is still pending. Before finishing, withdraw questions your default made moot.
 
+Make each question stand on its own. Include enough context for users, as sometimes they may only see the question in isolation in their feed. Someone who has not read this chat must be able to answer it:
+- Say what the decision is about: name the issue, PR, file or system, not just an id ("PR #123, retrying on daemon reconnect", not "#123").
+- Say why you are asking now: what you found, or what is blocked on the answer.
+- In each option's description, say what choosing it means in practice and its main trade-off; do not restate the label.
+- Say what you will do by default if nobody answers.
+- Avoid internal shorthand, ids with no description, and references to "above", "earlier" or other messages the user may not see.
+
 Usage notes:
 - The user will always have an option to provide freetext input in addition to any predefined options.
 - If you recommend a specific option, list it first and add "(Recommended)" to the label.
@@ -3072,8 +3079,10 @@ If it reports that the machine was removed, or that it failed to start and staye
 RETURNS EARLY WHEN A MESSAGE ARRIVES:
 If a message arrives for you while you wait — from the user, your parent, or a sub-agent — the wait ends early so you can read it. Nothing is lost; call wait_for_machine again if you still need the machine.
 
+If it reports that the machine is connected but degraded (it cannot start processes), retrying will fail the same way and waiting will not help: free the machine (shell_list, shell_kill) or tell the user.
+
 RETURNS:
-- connected: true once the machine is attached — retry the call that failed
+- connected: true once the machine is attached — retry the call that failed, unless it also says degraded
 - otherwise its last known state (disconnected, starting, suspended, failed, removed) with what to do about it
 
 ---

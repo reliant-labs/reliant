@@ -22,8 +22,11 @@ import (
 type fakeSource struct {
 	members  map[string]map[string]bool
 	defaults map[string]string
-	err      error
-	calls    int
+	// roles[user][org] is a member's role; a member with none answers no
+	// role, as a control plane that predates the field does.
+	roles map[string]map[string]string
+	err   error
+	calls int
 }
 
 func (f *fakeSource) ResolveOrgMembership(_ context.Context, userID, orgID string) (accesstokenclient.OrgMembership, error) {
@@ -35,7 +38,11 @@ func (f *fakeSource) ResolveOrgMembership(_ context.Context, userID, orgID strin
 		def := f.defaults[userID]
 		return accesstokenclient.OrgMembership{OrgID: def, Member: def != ""}, nil
 	}
-	return accesstokenclient.OrgMembership{OrgID: orgID, Member: f.members[userID][orgID]}, nil
+	m := accesstokenclient.OrgMembership{OrgID: orgID, Member: f.members[userID][orgID]}
+	if m.Member {
+		m.Role = f.roles[userID][orgID]
+	}
+	return m, nil
 }
 
 func newFake() *fakeSource {
@@ -371,5 +378,36 @@ func TestInProject(t *testing.T) {
 				t.Fatalf("got %v, %v; want %q", got, err, tc.want)
 			}
 		})
+	}
+}
+
+// Membership is the whole answer for one org, cached like IsMember; a nil
+// resolver has no orgs, and an outage is an error, never a negative.
+func TestMembership(t *testing.T) {
+	src := newFake()
+	src.roles = map[string]map[string]string{"alice": {"acme": RoleAdmin}}
+	r, _ := newResolver(src)
+	ctx := context.Background()
+
+	m, ok, err := r.Membership(ctx, "alice", "acme")
+	if err != nil || !ok || !m.Member || m.Role != RoleAdmin || m.OrgID != "acme" {
+		t.Fatalf("member: %+v ok=%v err=%v", m, ok, err)
+	}
+	calls := src.calls
+	if _, _, _ = r.Membership(ctx, "alice", "acme"); src.calls != calls {
+		t.Fatalf("a second ask within the TTL went to control-plane")
+	}
+	if m, ok, err = r.Membership(ctx, "alice", "globex"); err != nil || !ok || m.Member {
+		t.Fatalf("non-member: %+v ok=%v err=%v", m, ok, err)
+	}
+	var none *Resolver
+	if _, ok, err = none.Membership(ctx, "alice", "acme"); ok || err != nil {
+		t.Fatalf("no orgs: ok=%v err=%v", ok, err)
+	}
+	down := newFake()
+	down.err = errors.New("control plane down")
+	rd, _ := newResolver(down)
+	if _, _, err = rd.Membership(ctx, "alice", "acme"); err == nil {
+		t.Fatal("an outage must be an error")
 	}
 }

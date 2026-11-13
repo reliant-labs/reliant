@@ -62,12 +62,30 @@ var userScopedReads = map[string]string{
 	"ListProjects":                         readCallersFilter,
 	"ListRuns":                             readCallersFilter,
 	"ListTriggers":                         readCallersFilter,
-	"ListUnlaunchedTriggerEvents":          readCallersFilter,
-	"ListWorktreeRecoveries":               readCallersFilter,
-	"SearchChats":                          readCallersFilter,
-	"GetUserUpdatesSince":                  readCallersFilter,
-	"GetProjectByPathAndUser":              readCallersFilter,
-	"GetProjectByRemoteURLAndUser":         readCallersFilter,
+	// The takeover decides each offer: its offeree and offerer must be live
+	// members of its org, or an admin of it asked (internal/orgtakeover).
+	"ListPendingTriggerOffers": readCallersFilter,
+	// The account loader counts a grant only for a live member of the org,
+	// and only when it postdates their current membership (internal/llm/
+	// drivers, org-provider-accounts §3.3).
+	"ListMemberAccountGrants": readCallersFilter,
+	// A project's moves span two orgs: ProjectService decides each with
+	// canReadMove (its owner or actor through authz.CanReadOwn on either org,
+	// or authz.RequireOrgAdmin of either), the list and a retried request alike.
+	"ListProjectOrgMoves":          readCallersFilter,
+	"FindProjectOrgMoveByRequest":  readCallersFilter,
+	"ListUnlaunchedTriggerEvents":  readCallersFilter,
+	"ListWorktreeRecoveries":       readCallersFilter,
+	"SearchChats":                  readCallersFilter,
+	"GetUserUpdatesSince":          readCallersFilter,
+	"GetProjectByPathAndUser":      readCallersFilter,
+	"GetProjectByRemoteURLAndUser": readCallersFilter,
+
+	// The shared lists read OTHER users' rows of one org; SharingService
+	// passes each through authz.SharedChatsFor / SharedProjectsFor,
+	// which is where a viewer is decided.
+	"ListSharedChats":    readCallersFilter,
+	"ListSharedProjects": readCallersFilter,
 
 	"FiringsSinceLastSuccess":   readParentAuthorized,
 	"GetPresetBySlugAndProject": readParentAuthorized,

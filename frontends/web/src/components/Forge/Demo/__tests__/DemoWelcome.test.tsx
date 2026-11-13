@@ -2,52 +2,51 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { createMemoryHistory, createRootRoute, createRoute, createRouter, Outlet, RouterProvider } from "@tanstack/react-router";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { ObservabilityApiProvider } from "@/services/controlPlane/observability/ObservabilityApiContext";
 import { DemoTips } from "../tips/DemoTips";
-import { DemoWelcome } from "../DemoWelcome";
+import { DemoHome } from "../sections/DemoHome";
+import { createDemoApi } from "../demoData/demoApi";
 import { demoEntryHref } from "../demoEntry";
 import { DEMO_TIP_KEYS, demoTipKey } from "../tips/tipKeys";
 import { resetDemoSessionForTests } from "../demoSession";
 
 function mount(path = "/forge/p/shop/observability/logs?range=6h", entry = false) {
   const root = createRootRoute({ component: () => <><Outlet /><DemoTips /></> });
-  const route = createRoute({ getParentRoute: () => root, path: "$", validateSearch: (s: Record<string, unknown>) => s, component: () => <main>{entry && <DemoWelcome />}<button>Page action</button></main> });
+  const route = createRoute({ getParentRoute: () => root, path: "$", validateSearch: (s: Record<string, unknown>) => s, component: () => <main>{entry && <DemoHome />}<button>Page action</button></main> });
   const router = createRouter({ routeTree: root.addChildren([route]), history: createMemoryHistory({ initialEntries: [path] }) });
-  render(<RouterProvider router={router} />);
+  // The Home's trace story reads the sample app (its slowest request's timeline).
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  render(<QueryClientProvider client={client}><ObservabilityApiProvider api={createDemoApi()}><RouterProvider router={router} /></ObservabilityApiProvider></QueryClientProvider>);
   return router;
 }
 beforeEach(() => resetDemoSessionForTests());
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
-it("leads bare entry with the visual build story while preserving explicit legacy URLs", () => {
-  expect(demoEntryHref("")).toBe("/forge/demo?section=built");
-  expect(demoEntryHref("?rid=visitor&utm_source=site")).toBe("/forge/demo?rid=visitor&utm_source=site&section=built");
+it("leads bare entry with the Home while preserving explicit legacy URLs", () => {
+  expect(demoEntryHref("")).toBe("/forge/demo?section=home");
+  expect(demoEntryHref("?rid=visitor&utm_source=site")).toBe("/forge/demo?rid=visitor&utm_source=site&section=home");
   expect(demoEntryHref("?tour=forge:fg-intro")).toBe("/forge/p/shop?tour=forge:fg-intro");
   expect(demoEntryHref("?view=logs")).toBe("/forge/p/shop?view=logs");
 });
-it("is one hero, an H1 and a one-line subhead, then a choice that blocks nothing", async () => {
-  const router = mount("/forge/demo?section=built", true);
-  const welcome = await screen.findByTestId("demo-welcome");
-  expect(within(welcome).getAllByRole("heading")).toHaveLength(1);
-  expect(within(welcome).getByRole("heading", {level:1})).toHaveTextContent("Forge builds your app. Then helps you keep it running.");
-  expect(welcome.querySelectorAll("p")).toHaveLength(1);
-  // "You own the code" is said here, once; the disclaimer is the action row's, not the hero's.
-  expect(welcome).toHaveTextContent("You own the code");
-  expect(welcome).not.toHaveTextContent(/read-only|sample data|1\. Build/i);
+it("is one hero with an H1, then a choice that blocks nothing", async () => {
+  const router = mount("/forge/demo?section=home", true);
+  const home = await screen.findByTestId("demo-home");
+  expect(within(home).getByRole("heading", { level: 1 })).toHaveTextContent("Ship your app safely, see what breaks, and let an agent fix it.");
   expect(screen.queryByRole("dialog")).toBeNull();
   expect(screen.queryByTestId("tour-callout")).toBeNull();
-  fireEvent.click(within(welcome).getByRole("button", {name:"Explore the running app"}));
+  fireEvent.click(within(home).getByTestId("home-primary"));
   await waitFor(() => expect(router.state.location.pathname).toBe("/forge/p/shop"));
   expect(router.state.location.search).not.toHaveProperty("tour");
 });
-it("starts the existing journey at its intro, and Take the tour stays available", async () => {
-  const router = mount("/forge/demo?section=built", true);
-  fireEvent.click(within(await screen.findByTestId("demo-welcome")).getByRole("button", {name:"Take the tour"}));
-  await waitFor(() => expect(router.state.location.search).toMatchObject({tour:"forge:fg-intro",view:"overview"}));
-  expect(router.state.location.pathname).toBe("/forge/demo");
-  expect(screen.queryByTestId("tour-callout")).toBeNull();
-  await act(async () => { await router.navigate({href:"/forge/p/shop/releases"}); });
-  fireEvent.click(within(screen.getByTestId("demo-screen-actions")).getByRole("button", {name:"Take the tour"}));
-  await waitFor(() => expect(router.state.location.search).toMatchObject({tour:"forge:fg-intro"}));
+it("starts the journey at its intro on the sample app's console, and Take the tour stays available", async () => {
+  const router = mount("/forge/demo?section=home", true);
+  fireEvent.click(within(await screen.findByTestId("demo-home")).getByRole("button", { name: "Take the tour" }));
+  await waitFor(() => expect(router.state.location.search).toMatchObject({ tour: "forge:fg-intro" }));
+  expect(router.state.location.pathname).toBe("/forge/p/shop");
+  await act(async () => { await router.navigate({ href: "/forge/p/shop/releases" }); });
+  fireEvent.click(within(screen.getByTestId("demo-screen-actions")).getByRole("button", { name: "Take the tour" }));
+  await waitFor(() => expect(router.state.location.search).toMatchObject({ tour: "forge:fg-intro" }));
 });
 it("deep links never show a blocking welcome, even with session storage blocked", async () => {
   vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {throw new Error("blocked");});

@@ -694,6 +694,39 @@ func (r *NATSDaemonRouter) MachineState(ctx context.Context, userID string, sele
 	}, nil
 }
 
+// attachmentReader is the lease read MachineHealth needs. The registry's
+// repository satisfies it; a DaemonRecords that does not leaves health
+// unknown, which reads as healthy.
+type attachmentReader interface {
+	ListFreshDaemonAttachmentsForUser(ctx context.Context, userID string, staleThreshold time.Duration) ([]*db.DaemonAttachment, error)
+}
+
+// MachineHealth reports the health the attached daemon a request for this
+// selector would route to last reported (the gateway stores it on the
+// attachment lease). The zero value — not reported — when no daemon is
+// attached or the registry cannot say; callers read that as healthy. Like
+// MachineState it reads this process's database only.
+func (r *NATSDaemonRouter) MachineHealth(ctx context.Context, userID string, selector *DaemonSelector) (db.MachineHealth, error) {
+	reader, ok := r.db.(attachmentReader)
+	if !ok {
+		return db.MachineHealth{}, nil
+	}
+	state, err := r.MachineState(ctx, userID, selector)
+	if err != nil || state.DaemonID == "" {
+		return db.MachineHealth{}, err
+	}
+	atts, err := reader.ListFreshDaemonAttachmentsForUser(ctx, userID, daemonStaleThreshold)
+	if err != nil {
+		return db.MachineHealth{}, err
+	}
+	for _, att := range atts {
+		if att.DaemonID == state.DaemonID {
+			return att.Health, nil
+		}
+	}
+	return db.MachineHealth{}, nil
+}
+
 // DaemonWaker wakes a suspended daemon. It is held only by the callers that
 // are allowed to: run preflight, the attended send/start path, and a signed-in
 // user's own file and worktree requests (machinewake). Tool-time code
@@ -1331,6 +1364,9 @@ func (r *NATSDaemonRouter) sendDaemonCommandData(ctx context.Context, userID, da
 			// said nothing.
 			return nil, fmt.Errorf("daemon command %q failed: %s", commandType, resp.ErrorMessage)
 		}
+		if isRecoveryRefusalText(resp.ErrorMessage) {
+			noteRecoveryRefusal(recoveryRefusedCommand)
+		}
 		return nil, DaemonReportedFailure(commandType, resp.ErrorMessage)
 	}
 	return resp.Payload, nil
@@ -1344,8 +1380,28 @@ var errDaemonReportedFailure = errors.New("daemon reported failure")
 // daemonReportedFailure is a command's failure in the daemon's own words.
 type daemonReportedFailure string
 
-func (e daemonReportedFailure) Error() string        { return string(e) }
-func (e daemonReportedFailure) Is(target error) bool { return target == errDaemonReportedFailure }
+func (e daemonReportedFailure) Error() string { return string(e) }
+
+// Is matches errDaemonReportedFailure, and ErrRecoveryFinalizing when the
+// daemon's words are that refusal: only its text crosses the wire.
+func (e daemonReportedFailure) Is(target error) bool {
+	switch target {
+	case errDaemonReportedFailure:
+		return true
+	case ErrRecoveryFinalizing:
+		return isRecoveryRefusalText(string(e))
+	}
+	return false
+}
+
+// RetryableRefusal reports whether the daemon refused the command on purpose,
+// for a moment, and the caller retries: ErrRecoveryFinalizing. errclass reads
+// it anywhere on an error's chain, behind a handler's own WithCause too, so
+// the RPC edge and the process logger write the refusal at the user-error
+// level whatever code the handler wrapped it in.
+func (e daemonReportedFailure) RetryableRefusal() bool {
+	return isRecoveryRefusalText(string(e))
+}
 
 // ErrorClass implements svcerr.Classed. A path the daemon reports missing on
 // its own disk — a project folder the user moved, a worktree removed, a
@@ -1362,8 +1418,14 @@ func (e daemonReportedFailure) Is(target error) bool { return target == errDaemo
 // what a tool or the file viewer asked for, as designed. Logged as a server
 // fault it was an ERROR "machinewake.AfterFailure" issue (prod issue
 // 1e396220, 2026-11-09) for a refusal that worked.
+//
+// So is the daemon refusing work while it finalizes a worktree's recovery
+// (ErrRecoveryFinalizing): admission control working, retried by every
+// caller. At ERROR it was ~170 "rpc failed" and "daemoncmd.Dispatch" lines in
+// prod for exec.bg_list and forge.topology polls (reliant#2429); it is counted
+// in DaemonRecoveryAdmissionRefusedTotal instead.
 func (e daemonReportedFailure) ErrorClass() svcerr.Class {
-	if IsMissingPathText(string(e)) || isCredentialRefusalText(string(e)) {
+	if IsMissingPathText(string(e)) || isCredentialRefusalText(string(e)) || isRecoveryRefusalText(string(e)) {
 		return svcerr.ClassUser
 	}
 	return svcerr.ClassNone
@@ -1503,6 +1565,9 @@ func (r *NATSDaemonRouter) sendToolRequestSync(ctx context.Context, userID strin
 			err = notDispatched(err, target)
 		}
 		return nil, err
+	}
+	if resp.ErrorCode == ErrorCodeRecoveryFinalizing {
+		noteRecoveryRefusal(recoveryRefusedToolCall)
 	}
 	if waited > 0 && resp.ErrorMessage != "" {
 		resp.ErrorMessage = withWaitNote(errors.New(resp.ErrorMessage), waited).Error()

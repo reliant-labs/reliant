@@ -98,6 +98,9 @@ func (s *Service) CreateTrigger(
 	if trigger.OrgID, err = s.triggerOrg(ctx, userID, req.Msg.GetOrgId(), project); err != nil {
 		return nil, err
 	}
+	if err := s.bindOrgGitHubApp(ctx, userID, def, trigger); err != nil {
+		return nil, err
+	}
 	trigger.ID = uuid.NewString()
 	// nil enabled means true: a create that omits the field wants a working
 	// trigger, not a disabled one.
@@ -291,6 +294,9 @@ func (s *Service) UpdateTrigger(
 		}
 	}
 	if updated.OrgID, err = s.updatedTriggerOrg(ctx, existing.UserID, existing, source, target); err != nil {
+		return nil, err
+	}
+	if err := s.bindOrgGitHubApp(ctx, existing.UserID, def, updated); err != nil {
 		return nil, err
 	}
 	// The write re-reads, under the owner's org lock, every org this
@@ -1123,7 +1129,7 @@ func (s *Service) renderFirings(ctx context.Context, t *core.Trigger, firings []
 		}
 	}
 
-	proto, err := triggers.ToProto(t, nextFireAt, firings, reg)
+	proto, err := renderTrigger(t, nextFireAt, firings, reg)
 	if err != nil {
 		// Params that will not round-trip through structpb. Report the trigger
 		// without them rather than failing the whole call.
