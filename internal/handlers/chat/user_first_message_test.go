@@ -8,10 +8,12 @@ import (
 	"log/slog"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/analytics"
 	"github.com/reliant-labs/reliant/internal/db"
 )
@@ -190,4 +192,54 @@ func TestUserFirstMessageNotEmittedWhenTheClaimFails(t *testing.T) {
 	perChat := eventsNamed(recs, "product.first_message_sent")
 	require.Len(t, perChat, 1)
 	assert.Equal(t, false, perChat[0]["product.first_for_user"])
+}
+
+// eventsForChat narrows events to one chat: earlier tests' detached tracking
+// may still write into the shared log.
+func eventsForChat(recs []map[string]any, name, chatID string) []map[string]any {
+	var out []map[string]any
+	for _, r := range eventsNamed(recs, name) {
+		if r["product.chat_id"] == chatID {
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
+// An ordinary StartChat names no client_message_id. Its seed is stored under
+// an id the server picks, and the activation claim must be asked about that
+// stored message: claiming under the chat's id matched no row, so a user who
+// only ever started unnamed chats never activated.
+func TestStartChatWithoutClientMessageIDClaimsActivationOnce(t *testing.T) {
+	out := installAnalytics(t)
+	e := newStartDaemonEnv(t)
+
+	first, err := e.start(t, nil)
+	require.NoError(t, err)
+	firstChat := first.Msg.GetChat().GetId()
+	seedID := e.firstMessageID(t, firstChat)
+	require.NotEqual(t, firstChat, seedID, "the seed's stored id is not the chat's")
+
+	// Tracking runs detached; first_message_sent is its last event.
+	require.Eventually(t, func() bool {
+		return len(eventsForChat(out.records(t), "product.first_message_sent", firstChat)) == 1
+	}, 10*time.Second, 10*time.Millisecond)
+	perUser := eventsForChat(out.records(t), "product.user_first_message", firstChat)
+	require.Len(t, perUser, 1, "the user's first unnamed start is their activation")
+	assert.Equal(t, seedID, perUser[0]["product.message_id"])
+	sent := eventsForChat(out.records(t), "product.message_sent", firstChat)
+	require.Len(t, sent, 1)
+	assert.Equal(t, seedID, sent[0]["product.message_id"])
+
+	// A second unnamed start is that chat's first message, not the user's.
+	second, err := e.start(t, func(r *reliantv1.StartChatRequest) { r.Messages[0].Content = "again" })
+	require.NoError(t, err)
+	secondChat := second.Msg.GetChat().GetId()
+	require.Eventually(t, func() bool {
+		return len(eventsForChat(out.records(t), "product.first_message_sent", secondChat)) == 1
+	}, 10*time.Second, 10*time.Millisecond)
+	recs := out.records(t)
+	assert.Empty(t, eventsForChat(recs, "product.user_first_message", secondChat))
+	assert.Len(t, eventsForChat(recs, "product.user_first_message", firstChat), 1)
+	assert.Equal(t, false, eventsForChat(recs, "product.first_message_sent", secondChat)[0]["product.first_for_user"])
 }

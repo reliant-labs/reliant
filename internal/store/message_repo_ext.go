@@ -340,7 +340,9 @@ func CountMessagesInChatOutsideThread(ctx context.Context, db orm.Context, chatI
 
 // ClaimUserActivation records messageID as userID's activation (their first
 // typed message ever) and reports whether this call did. The message must be
-// the user's own: user-role, on a chat's main thread, in a chat a person
+// the user's own: user-role, on a chat's main thread (the root workflow's
+// thread, chats.workflow_id: a launched chat's root thread is recorded with
+// origin node, not main, so origin cannot say which it is), in a chat a person
 // started (the prompts automations and agents seed, and the ones workflow
 // nodes write on their own threads, are not), with no such message of theirs
 // before it. One statement checks that and inserts the user's
@@ -349,24 +351,22 @@ func CountMessagesInChatOutsideThread(ctx context.Context, db orm.Context, chatI
 // row and claim nothing, and since the row references no message, deleting
 // the user's history cannot reset it.
 func ClaimUserActivation(ctx context.Context, db orm.Context, userID, chatID, messageID string) (bool, error) {
-	main, role := string(core.ThreadOriginMain), int32(reliantv1.MessageRole_MESSAGE_ROLE_USER)
+	role := int32(reliantv1.MessageRole_MESSAGE_ROLE_USER)
 	auto, agent := int32(core.ChatOriginAutomation), int32(core.ChatOriginAgent)
 	var claimed []string
 	err := db.Bun().NewRaw(`INSERT INTO user_activations (user_id, message_id, chat_id)
 SELECT c.user_id, m.id, m.chat_id
 FROM messages m
-JOIN chats c ON c.id = m.chat_id
-JOIN threads t ON t.id = m.thread_id AND t.origin = ?0
-WHERE m.id = ?1 AND m.chat_id = ?2 AND c.user_id = ?3 AND m.role = ?4
-  AND (c.origin IS NULL OR c.origin NOT IN (?5, ?6))
+JOIN chats c ON c.id = m.chat_id AND m.thread_id = c.workflow_id
+WHERE m.id = ?0 AND m.chat_id = ?1 AND c.user_id = ?2 AND m.role = ?3
+  AND (c.origin IS NULL OR c.origin NOT IN (?4, ?5))
   AND NOT EXISTS (
     SELECT 1 FROM messages m2
-    JOIN chats c2 ON c2.id = m2.chat_id
-    JOIN threads t2 ON t2.id = m2.thread_id AND t2.origin = ?0
-    WHERE c2.user_id = ?3 AND m2.role = ?4 AND m2.id <> m.id AND m2.created_at < m.created_at
-      AND (c2.origin IS NULL OR c2.origin NOT IN (?5, ?6)))
+    JOIN chats c2 ON c2.id = m2.chat_id AND m2.thread_id = c2.workflow_id
+    WHERE c2.user_id = ?2 AND m2.role = ?3 AND m2.id <> m.id AND m2.created_at < m.created_at
+      AND (c2.origin IS NULL OR c2.origin NOT IN (?4, ?5)))
 ON CONFLICT (user_id) DO NOTHING
-RETURNING user_id`, main, messageID, chatID, userID, role, auto, agent).Scan(ctx, &claimed)
+RETURNING user_id`, messageID, chatID, userID, role, auto, agent).Scan(ctx, &claimed)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return false, fmt.Errorf("failed to claim the user's activation: %w", err)
 	}

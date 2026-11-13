@@ -32,6 +32,10 @@ func TestClaimUserActivation(t *testing.T) {
 		}); err != nil {
 			t.Fatalf("chat %s: %v", id, err)
 		}
+		// The chat's main thread is its root workflow's, as a launch records it.
+		if _, err := env.SQL.ExecContext(ctx, `UPDATE chats SET workflow_id = $1 WHERE id = $1`, id); err != nil {
+			t.Fatalf("chat %s root workflow: %v", id, err)
+		}
 		f := &msgFixture{env: env, chat: id, main: id, node: id + "-node"}
 		for _, th := range []struct {
 			id     string

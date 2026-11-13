@@ -179,9 +179,10 @@ func seedMessagesFromInput(messages []*reliantv1.InputMessage) []launch.SeedMess
 
 // trackStartedChatMessage records the user message a chat start carries as a
 // message_sent: StartChat is the only way a chat's first message reaches the
-// server, and the web no longer reports it. The seed carries no stored message
-// id, so the client's named id (or, failing that, the chat's) identifies it.
-func (s *Service) trackStartedChatMessage(ctx context.Context, userID string, chat *db.Chat, clientMessageID string, msg *reliantv1.StartChatRequest) {
+// server, and the web no longer reports it. savedMessageID is the stored id
+// the launcher gave the seed; a start that saved none (a replay) falls back to
+// the client's named id, then the chat's, which no activation claim matches.
+func (s *Service) trackStartedChatMessage(ctx context.Context, userID string, chat *db.Chat, savedMessageID, clientMessageID string, msg *reliantv1.StartChatRequest) {
 	if chat == nil {
 		return
 	}
@@ -195,7 +196,10 @@ func (s *Service) trackStartedChatMessage(ctx context.Context, userID string, ch
 	if content == "" {
 		return
 	}
-	messageID := clientMessageID
+	messageID := savedMessageID
+	if messageID == "" {
+		messageID = clientMessageID
+	}
 	if messageID == "" {
 		messageID = chat.ID
 	}
