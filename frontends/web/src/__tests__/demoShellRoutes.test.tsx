@@ -85,11 +85,11 @@ describe("the demo shell's boot", () => {
 });
 
 describe("the demo shell's routes", () => {
-  it("leads bare entry with the build story, without starting a tour", async () => {
+  it("leads bare entry with the Home, without starting a tour", async () => {
     const router = renderDemoShell("/?rid=abcdefgh1234&utm_source=landing");
     await screen.findByTestId("demo-console");
     expect(router.state.location.pathname).toBe("/forge/demo");
-    expect(searchOf(router)).toMatchObject({section:"built", rid:"abcdefgh1234", utm_source:"landing"});
+    expect(searchOf(router)).toMatchObject({section:"home", rid:"abcdefgh1234", utm_source:"landing"});
     expect(searchOf(router).tour).toBeUndefined();
     expect(screen.queryByTestId("tour-callout")).toBeNull();
   });
@@ -144,11 +144,11 @@ describe("the demo shell's routes", () => {
     expect(router.state.location.pathname).toBe("/forge/demo");
   });
 
-  it("preserves a legacy logs tour URL without sending it to auth or a prerequisite", async () => {
+  it("opens a legacy logs tour URL on the console's Logs, without sending it to auth or a prerequisite", async () => {
     const router = renderDemoShell("/forge/demo?shell=demo&view=logs&tour=forge:fg-logs");
-    await screen.findByTestId("demo-console");
-    expect(router.state.location.pathname).toBe("/forge/demo");
-    expect(searchOf(router)).toMatchObject({ shell: "demo", view: "logs", tour: "forge:fg-logs" });
+    await screen.findByTestId("console-observabilityView");
+    expect(router.state.location.pathname).toBe("/forge/p/shop/observability/logs");
+    expect(searchOf(router)).toMatchObject({ shell: "demo", tour: "forge:fg-logs" });
     expect(screen.queryByTestId("demo-tip")).toBeNull();
   });
 
@@ -180,9 +180,10 @@ describe("every demo page entry starts its own concise tour", () => {
     expect(screen.getByTestId("demo-page-info")).toBeInTheDocument();
   });
 
-  it("hides the toast over a deep link to a step, and leaves the link alone", async () => {
+  it("hides the toast over a deep link to a step, and opens the step's console page", async () => {
     const router = renderDemoShell("/forge/demo?view=traces&tour=forge:fg-trace");
-    await screen.findByTestId("demo-console");
+    await screen.findByTestId("console-observabilityView");
+    expect(router.state.location.pathname).toBe("/forge/p/shop/observability/traces");
     expect(screen.queryByTestId("demo-tour-toast")).toBeNull();
     expect(searchOf(router).tour).toBe("forge:fg-trace");
   });

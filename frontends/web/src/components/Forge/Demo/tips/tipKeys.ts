@@ -13,7 +13,7 @@
  */
 
 import { consolePageOf } from "../../Console/paths";
-import { DEMO_SECTION_BUILT, FORGE_DEMO_PATH } from "../demoPath";
+import { FORGE_DEMO_PATH } from "../demoPath";
 
 export const DEMO_TIP_KEYS = [
   "overview",
@@ -64,7 +64,8 @@ function obsTip(view: string | undefined, search: Record<string, unknown>): Demo
 
 export function demoTipKey(pathname: string, search: Record<string, unknown>): DemoTipKey | null {
   if (pathname === FORGE_DEMO_PATH || pathname.startsWith(`${FORGE_DEMO_PATH}/`)) {
-    if (search.section === DEMO_SECTION_BUILT) return null;
+    // Every section (the build story, and the plain-language pages) explains itself.
+    if (search.section) return null;
     return obsTip(typeof search.view === "string" ? search.view : undefined, search);
   }
   const page = consolePageOf(pathname)?.page;
@@ -119,7 +120,7 @@ export function demoDetailOf(search: Record<string, unknown>): string {
  */
 export function isDemoSectionPage(pathname: string, search: Record<string, unknown>): boolean {
   if (demoDetailOf(search)) return false;
-  if (pathname === FORGE_DEMO_PATH || pathname.startsWith(`${FORGE_DEMO_PATH}/`)) return search.section !== DEMO_SECTION_BUILT;
+  if (pathname === FORGE_DEMO_PATH || pathname.startsWith(`${FORGE_DEMO_PATH}/`)) return !search.section;
   const page = consolePageOf(pathname)?.page;
   if (!page) return false;
   return !["workload", "release", "environment", "dashboard"].includes(page.kind);
