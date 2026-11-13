@@ -18,9 +18,12 @@ import { DaemonStatus } from "@/gen/reliant/v1/daemon_registry_pb";
 import { BooleanInputConfigSchema, InputBaseSchema, InputSchema } from "@/gen/reliant/v1/workflow_v2_pb";
 import type { Trigger } from "@/gen/reliant/v1/trigger_pb";
 
+const ADA_PROJECT = { id: "proj-ada", name: "Ada's app", org_id: "org-a" };
+const mocks = vi.hoisted(() => ({ projects: [] as { id: string; name: string; org_id: string }[] }));
+
 vi.mock("@/hooks/project-queries", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/hooks/project-queries")>()),
-  useProjects: () => ({ projects: [{ id: "proj-ada", name: "Ada's app", org_id: "org-a" }], isLoading: false, error: null, refetch: () => undefined }),
+  useProjects: () => ({ projects: mocks.projects, isLoading: false, error: null, refetch: () => undefined }),
   useProjectDaemonInstalls: () => ({ data: [], isLoading: false }),
 }));
 vi.mock("@/hooks/useDaemonStatus", () => ({
@@ -52,6 +55,7 @@ function typedWorkflow() {
 }
 
 const getWorkflow = vi.fn();
+const getDefaultPresetsBatch = vi.fn();
 const adopt = vi.fn((_req: unknown) => ({ trigger: { id: "t-1", name: "Triage" }, notices: [] }));
 
 const trigger = { id: "t-1", name: "Triage", workflow: "triage", source: { case: "schedule", value: {} } } as unknown as Trigger;
@@ -59,13 +63,16 @@ const trigger = { id: "t-1", name: "Triage", workflow: "triage", source: { case:
 beforeEach(() => {
   adopt.mockClear();
   getWorkflow.mockReset();
+  mocks.projects = [ADA_PROJECT];
+  getDefaultPresetsBatch.mockReset();
+  getDefaultPresetsBatch.mockResolvedValue({ presetsByWorkflow: {} });
   setTransport(
     mockTransport({
       "AutomationTakeoverService.AdoptTrigger": adopt,
       ...serviceHandlers("WorkflowService", { getWorkflow, listWorkflows: async () => WORKFLOW_LIST }),
       ...serviceHandlers("PresetService", {
         listPresetsForWorkflow: async () => presetsResponse(),
-        getDefaultPresetsBatch: async () => ({ presetsByWorkflow: {} }),
+        getDefaultPresetsBatch,
       }),
       ...serviceHandlers("WorktreeService", { listWorktrees: async (r: { projectId: string }) => worktreesResponse(r.projectId) }),
     }),
@@ -104,6 +111,40 @@ describe("AdoptAutomationDialog typed inputs", () => {
     expect(params.dry_run.kind.case).toBe("boolValue");
     expect(params.review.kind.case).toBe("structValue");
     expect(asJson(params)).toEqual(expect.objectContaining({ label: "bugs", depth: 5, dry_run: true, review: { strictness: "high" } }));
+  });
+
+  it("starts the inputs again when the adopter switches project: nothing chosen against the first is sent to the second", async () => {
+    mocks.projects = [ADA_PROJECT, { id: "proj-bob", name: "Bob's app", org_id: "org-a" }];
+    getWorkflow.mockImplementation(async () => typedWorkflow());
+    // Ada's app defaults triage to its "careful" preset; Bob's app has none.
+    getDefaultPresetsBatch.mockImplementation(async (r: { projectId: string }) =>
+      r.projectId === "proj-ada" ? { presetsByWorkflow: { triage: { presets: { "": "careful" } } } } : { presetsByWorkflow: {} },
+    );
+    renderWithQuery(<AdoptAutomationDialog orgId="org-a" target={{ kind: "adopt", trigger, paramNames: ["label"] }} onClose={vi.fn()} />);
+
+    const label = await screen.findByLabelText("Label");
+    await waitFor(() => expect(getDefaultPresetsBatch).toHaveBeenCalledWith(expect.objectContaining({ projectId: "proj-ada" })));
+    fireEvent.change(label, { target: { value: "from-ada" } });
+    fireEvent.change(screen.getByLabelText("Depth"), { target: { value: "7" } });
+
+    await userEvent.selectOptions(screen.getByTestId("adopt-project"), "proj-bob");
+    await waitFor(() => expect(getWorkflow).toHaveBeenCalledWith(expect.objectContaining({ projectId: "proj-bob", name: "triage" })));
+    await waitFor(() => expect(screen.getByLabelText("Label")).toHaveValue(""));
+    // Bob's required Label is unset again: Adopt waits for it.
+    await waitFor(() => expect(screen.getByTestId("adopt-submit")).toBeDisabled());
+
+    fireEvent.change(screen.getByLabelText("Label"), { target: { value: "from-bob" } });
+    await waitFor(() => expect(screen.getByTestId("adopt-submit")).toBeEnabled());
+    await userEvent.click(screen.getByTestId("adopt-submit"));
+    await waitFor(() => expect(adopt).toHaveBeenCalledTimes(1));
+
+    const rebinding = (adopt.mock.calls[0][0] as { rebinding: { projectId: string; params: Record<string, Value>; presets: Record<string, string> } }).rebinding;
+    expect(rebinding.projectId).toBe("proj-bob");
+    expect(rebinding.presets).toEqual({});
+    const params = asJson(rebinding.params);
+    expect(params.label).toBe("from-bob");
+    expect(params).not.toHaveProperty("depth");
+    expect(JSON.stringify(params)).not.toContain("from-ada");
   });
 
   it("falls back to typing each input when the workflow does not resolve in the adopter's project", async () => {

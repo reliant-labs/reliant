@@ -182,6 +182,13 @@ function AdoptForm({ orgId, target, onClose, onDone }: { orgId: string; target: 
             onChange={(e) => {
               setProjectId(e.target.value);
               setMachine("");
+              // The workflow, its inputs and its presets are the project's: a
+              // value or preset chosen against the last project is not one
+              // this project offers, so the inputs start again (and the
+              // typed form remounts on the project, applying its defaults).
+              setRunValue(EMPTY_RUN_VALUE);
+              setRunStatus(null);
+              setParams({});
             }}
             data-testid="adopt-project"
           >
@@ -223,6 +230,7 @@ function AdoptForm({ orgId, target, onClose, onDone }: { orgId: string; target: 
             Its previous owner&apos;s values are not carried: they may have been their tokens or addresses. Set your own.
           </p>
           <RunWorkflowForm
+            key={projectId}
             projectId={projectId}
             workflowRef={workflowRef}
             value={runValue}
