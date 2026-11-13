@@ -15,7 +15,7 @@ jqexpr=""; prev=""
 for a in "$@"; do [ "$prev" = --jq ] && jqexpr="$a"; prev="$a"; done
 case "$*" in
   *"/reviews"*) printf '%s\n' "$REVIEWS" ;;
-  "api repos/acme/app/pulls/7"*) printf '%s\n' "$PR" | jq -r "$jqexpr" ;;
+  "api repos/acme/app/pulls/7"*) [ -z "${PR_READ_FAILS:-}" ] || { echo "HTTP 502" >&2; exit 1; }; printf '%s\n' "$PR" | jq -r "$jqexpr" ;;
   *) echo "unexpected gh: $*" >&2; exit 90 ;;
 esac
 GH
@@ -65,3 +65,6 @@ grep -q 'is held (hold)' "$fx/out" || fail "the hold refusal does not say why: $
 LABELS='[{"name":"review:passed"},{"name":"needs:human"}]' check 1 "a passed head labelled needs:human fails" '{"full_name":"acme/app"}' "$pass"
 LABELS='[{"name":"review:passed"},{"name":"merge:queue"}]' check 0 "a passed head with only pipeline labels passes" '{"full_name":"acme/app"}' "$pass"
 LABELS='[{"name":"hold-on"},{"name":"hold:pin"}]' check 0 "a label that only starts with hold is not hold" '{"full_name":"acme/app"}' "$pass"
+# The labels are read live: a read that fails (GitHub answered 502) passes nothing.
+PR_READ_FAILS=1 check 1 "a pull request that cannot be read is not passed" '{"full_name":"acme/app"}' "$pass"
+grep -q 'cannot read the pull request' "$fx/out" || fail "the read failure does not say why: $(cat "$fx/out")"

@@ -60,8 +60,14 @@ esac
 
 bad=0
 for n in $prs; do
-  read -r head hrepo held < <(gh api "repos/$repo/pulls/$n" --jq '[.head.sha, (.head.repo.full_name // "-"),
-    ([.labels[]?.name | select(. == "hold" or . == "needs:human")] | join(",") | if . == "" then "-" else . end)] | join(" ")')
+  # Read live, and a read that fails passes nothing: the labels are what holds it.
+  if ! info=$(gh api "repos/$repo/pulls/$n" --jq '[.head.sha, (.head.repo.full_name // "-"),
+    ([.labels[]?.name | select(. == "hold" or . == "needs:human")] | join(",") | if . == "" then "-" else . end)] | join(" ")') \
+    || [ -z "$info" ]; then
+    echo "::error::#$n: cannot read the pull request (its head, repository and labels), so it is not passed"
+    bad=1; continue
+  fi
+  read -r head hrepo held <<<"$info"
   if [ "$hrepo" != "$repo" ]; then
     echo "::error::#$n: its head is not a branch of $repo (head repository: $hrepo); a fork's pull request never merges here: push its commits to a branch of $repo and open a pull request from there"
     bad=1; continue
