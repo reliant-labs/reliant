@@ -1,9 +1,9 @@
 -- forge:backward-compatible — validates the widened share_events action CHECK on existing rows; every one satisfied the narrower CHECK it replaced, and nothing is written.
 
 -- Migration: share_events_action_moved_validate
--- Created: 2026-11-12T23:49:41Z
+-- Created: 2026-11-13T04:13:13Z
 --
--- 20261112234909_share_events_action_moved added share_events_action_check NOT
+-- 20261113041307_share_events_action_moved added share_events_action_check NOT
 -- VALID. Validate it here, in its own transaction: VALIDATE CONSTRAINT holds
 -- SHARE UPDATE EXCLUSIVE, which does not block reads or writes while it scans.
 --
