@@ -95,4 +95,42 @@ describe("the project's dashboard hubs", () => {
     expect(cards.map((card) => (card.kind === "hub" ? card.hub.title : card.title))).toEqual(["Overview", "Product analytics", "Services", "Releases", "Workloads", "LLM usage"]);
     expect(own.map((d) => d.title)).toEqual(["Checkout funnel", "Payment provider"]);
   });
+
+  it("leave an organization view out of the project's hubs, whatever its key", () => {
+    const org = (key: string, title: string, over: Partial<DashboardSummary> = {}) =>
+      summary(key, { source: "builtin", title, category: "billing", ref: { kind: "builtin", projectId: "", key }, ...over });
+    const dashboards = [
+      ...CONTROL_PLANE,
+      org("product", "Organization product"),
+      org("frontend", "Organization frontend"),
+      org("usage", "Organization usage", { viewKind: "organization-usage" }),
+      org("org-service-red", "Organization service health", { category: "", group: "services" }),
+    ];
+    const hubs = hubsOf(dashboards, "control-plane");
+    const tabs = hubs.flatMap((h) => h.tabs.map((tab) => tab.summary.title));
+    expect(tabs).not.toEqual(expect.arrayContaining([expect.stringMatching(/^Organization/)]));
+    expect(hubs[0]!.tabs.map((tab) => tab.label)).toEqual(["Users", "Product", "Acquisition"]);
+    expect(hubOf(dashboards, { kind: "builtin", key: "frontend" }, "control-plane")).toBeNull();
+  });
+
+  it("show organization views as their own cards right after Workloads, before a custom one", () => {
+    const dashboards = [
+      summary("org-costs", { source: "builtin", title: "Costs", category: "billing", viewKind: "organization-costs", ref: { kind: "builtin", projectId: "", key: "org-costs" } }),
+      summary("product", { source: "builtin", title: "Organization product", category: "billing", ref: { kind: "builtin", projectId: "", key: "product" } }),
+      summary("notes", { group: "custom", title: "control-plane: notes" }),
+      ...CONTROL_PLANE,
+    ];
+    const { cards } = landingOf(dashboards, "control-plane");
+    expect(cards.map((card) => (card.kind === "hub" ? card.hub.title : card.title))).toEqual([
+      "Overview",
+      "Product analytics",
+      "Services",
+      "Releases",
+      "Workloads",
+      "Costs",
+      "Organization product",
+      "LLM usage",
+      "Notes",
+    ]);
+  });
 });
