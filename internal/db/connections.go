@@ -65,6 +65,43 @@ func (s ConnectionStore) FindByExternalAccount(ctx context.Context, userID, inte
 	return store.FindConnectionByExternalAccount(ctx, s.db, userID, integrationID, externalAccountID)
 }
 
+// FindOwnedByExternalAccount returns owner's oldest live connection to that
+// provider account.
+func (s ConnectionStore) FindOwnedByExternalAccount(ctx context.Context, owner core.ConnectionOwner, integrationID, externalAccountID string) (*core.Connection, error) {
+	return store.FindOwnedConnectionByExternalAccount(ctx, s.db, owner, integrationID, externalAccountID)
+}
+
+// ReauthorizeOwnedConnection is ReauthorizeConnection for owner's connection.
+func (s ConnectionStore) ReauthorizeOwnedConnection(ctx context.Context, owner core.ConnectionOwner, id string, upd core.ConnectionUpdate, secrets []core.ConnectionSecret, ev core.ConnectionEvent) (*core.Connection, error) {
+	return store.ReauthorizeOwnedConnection(ctx, s.db, owner, id, upd, secrets, ev)
+}
+
+// RenameOwnedConnection renames owner's connection.
+func (s ConnectionStore) RenameOwnedConnection(ctx context.Context, owner core.ConnectionOwner, id, name string, ev core.ConnectionEvent) error {
+	return store.RenameOwnedConnection(ctx, s.db, owner, id, name, ev)
+}
+
+// SetDefaultOwnedConnection makes owner's connection its integration's default.
+func (s ConnectionStore) SetDefaultOwnedConnection(ctx context.Context, owner core.ConnectionOwner, id string, ev core.ConnectionEvent) error {
+	return store.SetDefaultOwnedConnection(ctx, s.db, owner, id, ev)
+}
+
+// SoftDeleteOwnedConnection soft-deletes owner's connection and destroys its
+// ciphertext.
+func (s ConnectionStore) SoftDeleteOwnedConnection(ctx context.Context, owner core.ConnectionOwner, id string, ev core.ConnectionEvent) error {
+	return store.SoftDeleteOwnedConnection(ctx, s.db, owner, id, ev)
+}
+
+// RecordOwnedTestResult stores what a successful probe of owner's connection read.
+func (s ConnectionStore) RecordOwnedTestResult(ctx context.Context, owner core.ConnectionOwner, id, accountLabel, senderID string) error {
+	return store.RecordOwnedConnectionTestResult(ctx, s.db, owner, id, accountLabel, senderID)
+}
+
+// ListAllConnectionEvents pages every user's events of one connection.
+func (s ConnectionStore) ListAllConnectionEvents(ctx context.Context, id string, limit int, beforeID int64) ([]core.ConnectionEvent, error) {
+	return store.ListAllConnectionEvents(ctx, s.db, id, limit, beforeID)
+}
+
 func (s ConnectionStore) RenameConnection(ctx context.Context, userID, id, name string, ev core.ConnectionEvent) error {
 	return store.RenameConnection(ctx, s.db, userID, id, name, ev)
 }

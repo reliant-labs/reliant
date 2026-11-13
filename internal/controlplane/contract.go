@@ -145,6 +145,22 @@ type Service interface {
 	// receiver the control plane holds, across every organization, for the
 	// reconcile sweep.
 	ListAutopilotReceivers(ctx context.Context) ([]string, error)
+
+	// PrepareProjectOrgMove, AbortProjectOrgMove and RecordProjectOrgMove
+	// are control-plane's steps of moving a project to another org
+	// (ProjectOrgMoveInternalService; docs/design/org-project-move.md §3.1 in
+	// control-plane), signed with this process's internal-service identity
+	// (Deps.Sign). Prepare re-checks actorUserID's authority (admin or owner
+	// of the source, member of the target) and revokes the source org's
+	// secret access for the project, answering how many entries it revoked;
+	// Abort restores exactly those; Record writes the move to both orgs'
+	// activity streams. Each is idempotent by the move id. Errors:
+	// ErrProjectOrgMoveUnsupported when the control plane has no such service
+	// or this adapter cannot sign; otherwise a *ProjectOrgMoveError carrying
+	// control-plane's code and reason.
+	PrepareProjectOrgMove(ctx context.Context, s ProjectOrgMoveStep, actorUserID string) (revoked int, err error)
+	AbortProjectOrgMove(ctx context.Context, s ProjectOrgMoveStep) error
+	RecordProjectOrgMove(ctx context.Context, s ProjectOrgMoveStep, projectName string, counts map[string]int64) error
 }
 
 // Deps configures the adapter.

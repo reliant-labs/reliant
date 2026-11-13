@@ -163,8 +163,10 @@ func GetDriverForModel(model models.Model, driverID models.Family, opts ...llm.D
 	return &baseDriver{client: driverClient, model: options.Model}, nil
 }
 
-// GetDriver allows injecting a custom driver function for testing
-var GetDriver func(ctx context.Context, userID string, preferences models.Preferences, opts ...llm.DriverOption) (llm.Driver, error) = defaultGetDriver
+// GetDriver resolves a driver for preferences from the accounts scope may draw
+// on (the default account of the chosen provider). A variable so tests can
+// inject a driver.
+var GetDriver func(ctx context.Context, scope Scope, preferences models.Preferences, opts ...llm.DriverOption) (llm.Driver, error) = defaultGetDriver
 
 // ReplayMode holds the current replay configuration
 var ReplayMode struct {
@@ -196,8 +198,11 @@ func tokenRefresherForAccount(ctx context.Context, driverID models.DriverID, use
 	return buildAccountRefresher(ctx, driverID, userID, accountID, refresh)
 }
 
-// defaultGetDriver tries to get a driver using the provided model preferences
-func defaultGetDriver(ctx context.Context, userID string, preferences models.Preferences, opts ...llm.DriverOption) (llm.Driver, error) {
+// defaultGetDriver tries to get a driver using the provided model preferences,
+// over the same scoped candidates the account router sees, so the default
+// account can never come from a different set than a routed one.
+func defaultGetDriver(ctx context.Context, scope Scope, preferences models.Preferences, opts ...llm.DriverOption) (llm.Driver, error) {
+	userID := scope.UserID
 	// Check if we're in replay mode
 	if ReplayMode.Enabled && ReplayMode.Driver != nil {
 		return ReplayMode.Driver, nil
@@ -225,7 +230,7 @@ func defaultGetDriver(ctx context.Context, userID string, preferences models.Pre
 		model := def.ToModel()
 
 		// Get available drivers
-		availableDrivers := GetAvailableDrivers(ctx, userID)
+		availableDrivers := GetAvailableDrivers(ctx, scope)
 
 		var driverConfig models.DriverConfig
 		var found bool
@@ -261,6 +266,13 @@ func defaultGetDriver(ctx context.Context, userID string, preferences models.Pre
 		if !found {
 			lastErr = fmt.Errorf("model %q: no configured driver can serve it (explicitDriver=%q) — is the provider connected and is this binary current?", modelID, explicitDriverID)
 			continue // Try next model in preferences
+		}
+		// The re-check at the driver build (org-provider-accounts §8.1 point 3):
+		// a default account of another org is passed over for the next of the
+		// driver's accounts this scope may use.
+		if driverConfig, found = scopedDefaultAccount(ctx, scope, availableDrivers, driverConfig); !found {
+			lastErr = fmt.Errorf("model %q@%s: no account of the provider may serve this run", modelID, driverConfig.DriverID)
+			continue
 		}
 
 		// The model as the selected provider serves it: a provider may cap the
@@ -346,4 +358,18 @@ func GetDriverForAccount(ctx context.Context, userID string, driverConfig models
 	}
 	driverOpts = append(driverOpts, opts...)
 	return GetDriverForModel(model, models.Family(driverConfig.DriverID), driverOpts...)
+}
+
+// scopedDefaultAccount is cfg when CheckAccountScope admits it, else the first of its driver's
+// accounts that it does. ok is false when none does.
+func scopedDefaultAccount(ctx context.Context, scope Scope, avail models.AvailableDrivers, cfg models.DriverConfig) (models.DriverConfig, bool) {
+	if CheckAccountScope(ctx, scope, cfg) == nil {
+		return cfg, true
+	}
+	for _, acct := range avail.Accounts[cfg.DriverID] {
+		if acct.AccountID != cfg.AccountID && CheckAccountScope(ctx, scope, acct.DriverConfig) == nil {
+			return acct.DriverConfig, true
+		}
+	}
+	return cfg, false
 }

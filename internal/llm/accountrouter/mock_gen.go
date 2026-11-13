@@ -51,7 +51,7 @@ func (m *MockService) Alternatives(ctx context.Context, req Request, exclude str
 var _ Service = (*MockService)(nil)
 
 // forge:section MockStore
-// forge:hash=cba2873a2eb45585c1bd92caa7d266795734dfe8ae6894c865cf49bb77dc7c82
+// forge:hash=aaa48c8b2f5bb289fb2f8b45a042834728ae85770d3a3c625c2bce0e79e912e7
 
 // MockStore is a test mock for the Store interface.
 //
@@ -64,6 +64,7 @@ type MockStore struct {
 	GetThreadAssignmentFunc    func(context.Context, string, string) (*Assignment, error)
 	SetThreadAssignmentFunc    func(context.Context, Assignment, string) (bool, error)
 	ListAccountLimitsFunc      func(context.Context, string) (map[string]LimitState, error)
+	ListOrgAccountLimitsFunc   func(context.Context, string) (map[string]LimitState, error)
 	RecentAssignmentCountsFunc func(context.Context, []string, time.Time) (map[string]int, error)
 }
 
@@ -92,6 +93,15 @@ func (m *MockStore) ListAccountLimits(ctx context.Context, userID string) (map[s
 		return m.ListAccountLimitsFunc(ctx, userID)
 	}
 	return nil, contractkit.MockNotSet("MockStore", "ListAccountLimits")
+}
+
+// ListOrgAccountLimits records the call and delegates to ListOrgAccountLimitsFunc when set.
+func (m *MockStore) ListOrgAccountLimits(ctx context.Context, orgID string) (map[string]LimitState, error) {
+	m.Recorder.Record("ListOrgAccountLimits", ctx, orgID)
+	if m.ListOrgAccountLimitsFunc != nil {
+		return m.ListOrgAccountLimitsFunc(ctx, orgID)
+	}
+	return nil, contractkit.MockNotSet("MockStore", "ListOrgAccountLimits")
 }
 
 // RecentAssignmentCounts records the call and delegates to RecentAssignmentCountsFunc when set.

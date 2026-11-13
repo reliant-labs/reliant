@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 
+	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 )
 
@@ -44,8 +45,16 @@ type machineStateReader interface {
 	MachineState(ctx context.Context, userID string, selector *DaemonSelector) (MachineState, error)
 }
 
+// machineHealthReader is the registry view of an attached machine's health.
+// NATSDaemonRouter satisfies it; a router that does not leaves a connected
+// machine's health unknown, which reads as healthy.
+type machineHealthReader interface {
+	MachineHealth(ctx context.Context, userID string, selector *DaemonSelector) (db.MachineHealth, error)
+}
+
 // MachineStatus reports whether the run's machine is attached, and if not,
-// why. It reads connectivity and the registry only and never wakes anything.
+// why; and, for an attached one, whether its daemon reports it degraded. It
+// reads connectivity and the registry only and never wakes anything.
 // A registry lookup that fails is not fatal: the machine reads as not
 // connected with no reason, so a waiter keeps waiting.
 func (m *RunMachine) MachineStatus(ctx context.Context, userID string) (tools.MachineStatus, error) {
@@ -58,7 +67,15 @@ func (m *RunMachine) MachineStatus(ctx context.Context, userID string) (tools.Ma
 		return tools.MachineStatus{}, err
 	}
 	if online {
-		return tools.MachineStatus{Connected: true}, nil
+		status := tools.MachineStatus{Connected: true}
+		// A failed health read is not fatal: the machine is connected, and
+		// reads as healthy, as it did before health was reported.
+		if reader, ok := m.router.(machineHealthReader); ok {
+			if h, err := reader.MachineHealth(ctx, userID, selector); err == nil && h.State == db.MachineHealthDegraded {
+				status.Degraded, status.HealthReason = true, h.Reason
+			}
+		}
+		return status, nil
 	}
 	reader, ok := m.router.(machineStateReader)
 	if !ok {

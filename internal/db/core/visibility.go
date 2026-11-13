@@ -108,3 +108,23 @@ type SharedProjectFilters struct {
 	Limit        int
 	Offset       int
 }
+
+// OrgUpdate is one row of an org's feed (org_updates): a coarse event about
+// a chat or project shared with the org. The database writes them
+// (org_feed_* triggers); nothing in Go does.
+type OrgUpdate struct {
+	OrgID          string
+	SequenceNumber int64
+	// UpdateType is a reliantv1.OrgUpdateType.
+	UpdateType  int32
+	Kind        ShareKind
+	ResourceID  string
+	OwnerUserID string
+	ProjectID   *string
+	// Title is the chat's title or the project's name; nil on a marker.
+	Title *string
+	// Data is the coarse state the event carried: a chat activity
+	// announcement's own payload (chat id, activity, working threads).
+	Data      string
+	CreatedAt time.Time
+}

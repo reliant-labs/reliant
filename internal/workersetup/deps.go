@@ -26,13 +26,14 @@ type AccountAssignmentStore interface {
 	GetThreadAssignment(ctx context.Context, threadID, provider string) (*core.Assignment, error)
 	SetThreadAssignment(ctx context.Context, a core.Assignment, expectedAccountID string) (applied bool, err error)
 	ListAccountLimits(ctx context.Context, userID string) (map[string]core.LimitState, error)
+	ListOwnedAccountLimits(ctx context.Context, owner core.AccountOwner) (map[string]core.LimitState, error)
 	RecentAssignmentCounts(ctx context.Context, accountIDs []string, since time.Time) (map[string]int, error)
 }
 
 // AccountCredentialStore is what credentialMarker writes: the needs-sign-in
 // mark on an account whose key the provider rejected.
 type AccountCredentialStore interface {
-	PatchProviderAccount(ctx context.Context, userID, accountID string, p core.AccountPatch) (core.ProviderAccount, error)
+	PatchOwnedProviderAccount(ctx context.Context, owner core.AccountOwner, accountID string, p core.AccountPatch) (core.ProviderAccount, error)
 }
 
 // AccountRoutingStore is what accountRouting wires: the router's store, the

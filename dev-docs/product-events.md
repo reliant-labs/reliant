@@ -255,6 +255,18 @@ from `frontends/web/src/components/Claim/useClaimFlow.ts`, and never the token:
 `existing-account`. The control plane sends its own `signup` event with
 `source=claimable_deploy` at completion; the web does not duplicate it.
 
+## Forge first run (empty `/apps` on forge.reliantlabs.io)
+
+`components/ForgeShell/ForgeFirstRun.tsx`. Ids only, never a command line:
+
+| event | when | props |
+| --- | --- | --- |
+| `forge_first_run_copied` | a copy button worked | `id` (`login`, `adopt`, `deploy`, `claimable_adopt`, `claimable_deploy`, `claude_mcp`) |
+| `forge_first_run_opened` | a link was clicked | `id` (`cursor_mcp`, `vscode_mcp`, `docs`) |
+
+The public demo's `demo_cta_clicked` has `cta` `deploy` (Deploy yours free, to
+reliantlabs.io/products/forge#start), `signup` or `install`.
+
 ## LLM usage ledger (not a product event)
 
 `llm_call_usage` is a service record, not telemetry: the analytics toggle does

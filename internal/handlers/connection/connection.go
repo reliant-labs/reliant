@@ -9,6 +9,7 @@ import (
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/connectionrpc"
 	"github.com/reliant-labs/reliant/internal/connections"
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -61,6 +62,20 @@ func connectionToProto(c *core.Connection) *reliantv1.Connection {
 		CreatedAt: c.CreatedAt.UTC().Format(time.RFC3339), UpdatedAt: c.UpdatedAt.UTC().Format(time.RFC3339),
 		Params: c.Params, SenderId: derefStr(c.SenderID),
 	}
+}
+
+// orgAdminCaller is the caller of an rpc that administers an org's
+// connection: a person signed in to the app, never a credential an agent can
+// hold (connections.HumanOnly, reason human_only).
+func orgAdminCaller(ctx context.Context) (string, error) {
+	userID, err := connectionrpc.Caller(ctx)
+	if err != nil {
+		return "", err
+	}
+	if auth.RequirePerson(ctx, "manage an organization's connections") != nil {
+		return "", svcerr.Wrap(connections.HumanOnly())
+	}
+	return userID, nil
 }
 
 func (s *Service) ListIntegrations(ctx context.Context, _ *connect.Request[reliantv1.ListIntegrationsRequest]) (*connect.Response[reliantv1.ListIntegrationsResponse], error) {
@@ -122,7 +137,12 @@ func (s *Service) GetConnection(ctx context.Context, req *connect.Request[relian
 	if err != nil {
 		return nil, err
 	}
-	c, err := s.deps.Connections.Get(ctx, userID, req.Msg.GetId())
+	var c *core.Connection
+	if org := req.Msg.GetOwnerOrgId(); org != "" {
+		c, err = s.deps.Connections.GetOrg(ctx, userID, org, req.Msg.GetId())
+	} else {
+		c, err = s.deps.Connections.Get(ctx, userID, req.Msg.GetId())
+	}
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("connection service error"))
 	}
@@ -130,7 +150,11 @@ func (s *Service) GetConnection(ctx context.Context, req *connect.Request[relian
 }
 
 func (s *Service) CreateApiKeyConnection(ctx context.Context, req *connect.Request[reliantv1.CreateApiKeyConnectionRequest]) (*connect.Response[reliantv1.CreateApiKeyConnectionResponse], error) {
-	userID, err := connectionrpc.Caller(ctx)
+	caller := connectionrpc.Caller
+	if req.Msg.GetOwnerOrgId() != "" {
+		caller = orgAdminCaller
+	}
+	userID, err := caller(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -143,7 +167,7 @@ func (s *Service) CreateApiKeyConnection(ctx context.Context, req *connect.Reque
 	}
 	c, err := s.deps.Connections.CreateAPIKey(ctx, connections.CreateAPIKeyParams{
 		UserID: userID, IntegrationID: req.Msg.GetIntegrationId(), Name: req.Msg.GetName(),
-		Kind: kind, Fields: req.Msg.GetFields(), Params: req.Msg.GetParams(),
+		Kind: kind, Fields: req.Msg.GetFields(), Params: req.Msg.GetParams(), OrgID: req.Msg.GetOwnerOrgId(),
 	})
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("connection service error"))
@@ -152,7 +176,11 @@ func (s *Service) CreateApiKeyConnection(ctx context.Context, req *connect.Reque
 }
 
 func (s *Service) StartOAuth(ctx context.Context, req *connect.Request[reliantv1.StartOAuthRequest]) (*connect.Response[reliantv1.StartOAuthResponse], error) {
-	userID, err := connectionrpc.Caller(ctx)
+	caller := connectionrpc.Caller
+	if req.Msg.GetOwnerOrgId() != "" {
+		caller = orgAdminCaller
+	}
+	userID, err := caller(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -164,6 +192,7 @@ func (s *Service) StartOAuth(ctx context.Context, req *connect.Request[reliantv1
 		// the provider's redirect is relayed back to.
 		ClientOrigin:     req.Header().Get("Origin"),
 		LoopbackRedirect: req.Msg.GetLoopbackRedirect(),
+		OrgID:            req.Msg.GetOwnerOrgId(),
 	})
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("connection service error"))
@@ -176,7 +205,13 @@ func (s *Service) CompleteOAuth(ctx context.Context, req *connect.Request[relian
 	if err != nil {
 		return nil, err
 	}
-	done, err := s.deps.Connections.CompleteOAuth(ctx, userID, req.Msg.GetState(), req.Msg.GetCode())
+	// Whether the caller is a person only matters to a flow started for an
+	// org, which only a person may finish; a personal flow is finished as
+	// before, by any credential of the user who started it.
+	done, err := s.deps.Connections.CompleteOAuthFlow(ctx, connections.CompleteParams{
+		State: req.Msg.GetState(), Code: req.Msg.GetCode(), UserID: userID,
+		Person: auth.RequirePerson(ctx, "connect an organization's account") == nil,
+	})
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("connection service error"))
 	}
@@ -186,11 +221,25 @@ func (s *Service) CompleteOAuth(ctx context.Context, req *connect.Request[relian
 }
 
 func (s *Service) TestConnection(ctx context.Context, req *connect.Request[reliantv1.TestConnectionRequest]) (*connect.Response[reliantv1.TestConnectionResponse], error) {
+	var r *connections.TestResult
+	if org := req.Msg.GetOwnerOrgId(); org != "" {
+		userID, err := orgAdminCaller(ctx)
+		if err != nil {
+			return nil, err
+		}
+		r, err = s.deps.Connections.TestOrg(ctx, userID, org, req.Msg.GetId())
+		if err != nil {
+			return nil, svcerr.WrapOr(err, svcerr.Internal("connection service error"))
+		}
+		return connect.NewResponse(&reliantv1.TestConnectionResponse{
+			Ok: r.OK, Probed: r.Probed, AccountLabel: r.AccountLabel, ErrorClass: r.ErrorClass,
+		}), nil
+	}
 	userID, err := connectionrpc.Caller(ctx)
 	if err != nil {
 		return nil, err
 	}
-	r, err := s.deps.Connections.Test(ctx, userID, req.Msg.GetId())
+	r, err = s.deps.Connections.Test(ctx, userID, req.Msg.GetId())
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("connection service error"))
 	}
@@ -200,11 +249,21 @@ func (s *Service) TestConnection(ctx context.Context, req *connect.Request[relia
 }
 
 func (s *Service) RenameConnection(ctx context.Context, req *connect.Request[reliantv1.RenameConnectionRequest]) (*connect.Response[reliantv1.RenameConnectionResponse], error) {
-	userID, err := connectionrpc.Caller(ctx)
+	org := req.Msg.GetOwnerOrgId()
+	caller := connectionrpc.Caller
+	if org != "" {
+		caller = orgAdminCaller
+	}
+	userID, err := caller(ctx)
 	if err != nil {
 		return nil, err
 	}
-	c, err := s.deps.Connections.Rename(ctx, userID, req.Msg.GetId(), req.Msg.GetName())
+	var c *core.Connection
+	if org != "" {
+		c, err = s.deps.Connections.RenameOrg(ctx, userID, org, req.Msg.GetId(), req.Msg.GetName())
+	} else {
+		c, err = s.deps.Connections.Rename(ctx, userID, req.Msg.GetId(), req.Msg.GetName())
+	}
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("connection service error"))
 	}
@@ -212,11 +271,21 @@ func (s *Service) RenameConnection(ctx context.Context, req *connect.Request[rel
 }
 
 func (s *Service) SetDefaultConnection(ctx context.Context, req *connect.Request[reliantv1.SetDefaultConnectionRequest]) (*connect.Response[reliantv1.SetDefaultConnectionResponse], error) {
-	userID, err := connectionrpc.Caller(ctx)
+	org := req.Msg.GetOwnerOrgId()
+	caller := connectionrpc.Caller
+	if org != "" {
+		caller = orgAdminCaller
+	}
+	userID, err := caller(ctx)
 	if err != nil {
 		return nil, err
 	}
-	c, err := s.deps.Connections.SetDefault(ctx, userID, req.Msg.GetId())
+	var c *core.Connection
+	if org != "" {
+		c, err = s.deps.Connections.SetDefaultOrg(ctx, userID, org, req.Msg.GetId())
+	} else {
+		c, err = s.deps.Connections.SetDefault(ctx, userID, req.Msg.GetId())
+	}
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("connection service error"))
 	}
@@ -224,22 +293,42 @@ func (s *Service) SetDefaultConnection(ctx context.Context, req *connect.Request
 }
 
 func (s *Service) DeleteConnection(ctx context.Context, req *connect.Request[reliantv1.DeleteConnectionRequest]) (*connect.Response[reliantv1.DeleteConnectionResponse], error) {
-	userID, err := connectionrpc.Caller(ctx)
+	org := req.Msg.GetOwnerOrgId()
+	caller := connectionrpc.Caller
+	if org != "" {
+		caller = orgAdminCaller
+	}
+	userID, err := caller(ctx)
 	if err != nil {
 		return nil, err
 	}
-	if err := s.deps.Connections.Delete(ctx, userID, req.Msg.GetId()); err != nil {
+	if org != "" {
+		err = s.deps.Connections.DeleteOrg(ctx, userID, org, req.Msg.GetId())
+	} else {
+		err = s.deps.Connections.Delete(ctx, userID, req.Msg.GetId())
+	}
+	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("connection service error"))
 	}
 	return connect.NewResponse(&reliantv1.DeleteConnectionResponse{}), nil
 }
 
 func (s *Service) ListConnectionEvents(ctx context.Context, req *connect.Request[reliantv1.ListConnectionEventsRequest]) (*connect.Response[reliantv1.ListConnectionEventsResponse], error) {
-	userID, err := connectionrpc.Caller(ctx)
+	org := req.Msg.GetOwnerOrgId()
+	caller := connectionrpc.Caller
+	if org != "" {
+		caller = orgAdminCaller
+	}
+	userID, err := caller(ctx)
 	if err != nil {
 		return nil, err
 	}
-	evs, err := s.deps.Connections.Events(ctx, userID, req.Msg.GetId(), int(req.Msg.GetLimit()), req.Msg.GetBeforeId())
+	var evs []core.ConnectionEvent
+	if org != "" {
+		evs, err = s.deps.Connections.EventsOrg(ctx, userID, org, req.Msg.GetId(), int(req.Msg.GetLimit()), req.Msg.GetBeforeId())
+	} else {
+		evs, err = s.deps.Connections.Events(ctx, userID, req.Msg.GetId(), int(req.Msg.GetLimit()), req.Msg.GetBeforeId())
+	}
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("connection service error"))
 	}
@@ -247,7 +336,7 @@ func (s *Service) ListConnectionEvents(ctx context.Context, req *connect.Request
 	for _, e := range evs {
 		out = append(out, &reliantv1.ConnectionEvent{
 			Id: e.ID, ConnectionId: e.ConnectionID, Kind: e.Kind, RunId: e.RunID, NodeId: e.NodeID,
-			ToolCallId: e.ToolCallID, Actor: e.Actor, At: e.At.UTC().Format(time.RFC3339),
+			ToolCallId: e.ToolCallID, Actor: e.Actor, At: e.At.UTC().Format(time.RFC3339), UserId: e.UserID,
 		})
 	}
 	return connect.NewResponse(&reliantv1.ListConnectionEventsResponse{Events: out}), nil

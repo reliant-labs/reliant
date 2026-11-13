@@ -5,6 +5,7 @@ package drivers
 
 import (
 	"context"
+	"time"
 
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -17,10 +18,20 @@ type AccountLister interface {
 }
 
 // AvailabilityStore is what BuildAvailableDrivers reads: the user's accounts
-// and their limit state.
+// and their limit state, and in an org's run the org's accounts.
 type AvailabilityStore interface {
 	AccountLister
 	ListAccountLimits(ctx context.Context, userID string) (map[string]core.LimitState, error)
+	OrgAccountStore
+}
+
+// OrgAccountStore is what the loader reads of an org's accounts in a run of
+// that org: the org's own accounts (owner core.OrgAccountOwner), their limit
+// state, and which of them were granted to the member by hand.
+type OrgAccountStore interface {
+	ListOwnedProviderAccountsWithSecrets(ctx context.Context, owner core.AccountOwner) ([]core.AccountWithSecrets, error)
+	ListOwnedAccountLimits(ctx context.Context, owner core.AccountOwner) (map[string]core.LimitState, error)
+	ListMemberAccountGrants(ctx context.Context, orgID, userID string) (map[string]time.Time, error)
 }
 
 // AccountTokenStore is the slice of the account store the refresh

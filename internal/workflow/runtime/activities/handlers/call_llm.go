@@ -1312,25 +1312,28 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 	// When a custom driver resolver is injected (e.g., in tests), it skips
 	// registry resolution and probes the resolver for its model.
 	resolved, err := resolveLLMCall(ctx, a.driverResolver, llmCallSpec{
-		UserID:            chat.UserID,
-		SessionID:         chat.ID,
-		Selector:          modelSelector,
-		RunProviders:      rtx.ProviderPreference,
-		ChatProvider:      rtx.ChatProvider,
-		ClearProviderPins: rtx.ClearProviderPins,
-		Descendant:        rtx.Descendant,
-		PresetModelTags:   rtx.PresetModelTags,
-		ChatModel:         chatModelSelector(rtx.ChatModel),
-		ThreadModelChosen: rtx.ThreadModelChosen,
-		ThreadID:          thread,
-		Routing:           a.routing,
-		Failover:          rtx.Failover,
-		Temperature:       explicitTemperature,
-		ThinkingLevel:     explicitThinkingLevel,
-		MaxTokens:         explicitMaxTokens,
-		WorkingDir:        workingDir,
-		TagPrefsReader:    a.repo,
-		Local:             a.localModelSpec(worktreeDaemonID, chat.NoMachine),
+		UserID:              chat.UserID,
+		OrgID:               chatOrgID(chat),
+		Attended:            chatAttended(chat),
+		UnattendedAnySource: chatUnattendedAnySource(chat),
+		SessionID:           chat.ID,
+		Selector:            modelSelector,
+		RunProviders:        rtx.ProviderPreference,
+		ChatProvider:        rtx.ChatProvider,
+		ClearProviderPins:   rtx.ClearProviderPins,
+		Descendant:          rtx.Descendant,
+		PresetModelTags:     rtx.PresetModelTags,
+		ChatModel:           chatModelSelector(rtx.ChatModel),
+		ThreadModelChosen:   rtx.ThreadModelChosen,
+		ThreadID:            thread,
+		Routing:             a.routing,
+		Failover:            rtx.Failover,
+		Temperature:         explicitTemperature,
+		ThinkingLevel:       explicitThinkingLevel,
+		MaxTokens:           explicitMaxTokens,
+		WorkingDir:          workingDir,
+		TagPrefsReader:      a.repo,
+		Local:               a.localModelSpec(worktreeDaemonID, chat.NoMachine),
 	})
 	if err != nil {
 		return nil, err
@@ -2099,7 +2102,7 @@ streamLoop:
 	if streamInterrupted {
 		usageErr = nil
 	}
-	a.recordLLMCallUsage(ctx, chat, usageProvider(resolved, driver), resolvedModelID, llmLatencyMs, streamState.usage, streamErr, streamInterrupted, streamState.retries)
+	a.recordLLMCallUsage(ctx, chat, usageProvider(resolved, driver), resolvedModelID, resolved, llmLatencyMs, streamState.usage, streamErr, streamInterrupted, streamState.retries)
 	a.logLLMUsage(ctx, chat, driver, llmLatencyMs, streamState.usage, usageErr, shape, shapeDiff)
 	a.trackLLMCallCompleted(ctx, chat, driver, rtx.WorkflowID, rtx.StepID, llmLatencyMs, streamState.usage, usageErr)
 
@@ -2142,7 +2145,7 @@ streamLoop:
 			return nil, stalled
 		}
 		failedCall := usageLimitContext{
-			UserID: chat.UserID, ThreadID: thread, Driver: models.DriverID(resolved.ProviderDriver),
+			Scope: chatScope(chat), ThreadID: thread, Driver: models.DriverID(resolved.ProviderDriver),
 			ModelID: definitionID(resolved.Definition), Account: resolved.Account, Policy: rtx.Failover,
 		}
 		return nil, a.routing.providerFailure(ctx, streamErr, failedCall)

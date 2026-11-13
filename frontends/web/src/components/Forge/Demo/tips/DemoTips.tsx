@@ -11,8 +11,16 @@ import { DemoScreenActions } from "../DemoScreenActions";
 /** The existing demo-shell mount owns automatic entry and visit-local dismissal. */
 export function DemoTips() { return <><DemoScreenActions /><PageEntryTour /></>; }
 
+/** Pages whose own "put an agent on it" card (sections/AgentCards) replaces this disclosure. */
+const AGENT_CARD_PAGES: readonly DemoTipKey[] = ["errors", "alerts", "traces", "releases", "release"];
+
 /** Secondary information is disclosed by click, tap or keyboard, never hover only. */
 export function PageAgentHelp({ tipKey }: { tipKey: DemoTipKey }) {
+  if (AGENT_CARD_PAGES.includes(tipKey)) return null;
+  return <AgentHelpDisclosure tipKey={tipKey} />;
+}
+
+function AgentHelpDisclosure({ tipKey }: { tipKey: DemoTipKey }) {
   const tip = DEMO_TIPS[tipKey];
   const [open, setOpen] = useState(false);
   const trigger = useRef<HTMLButtonElement>(null);

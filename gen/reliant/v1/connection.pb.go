@@ -858,8 +858,13 @@ func (x *ListConnectionsResponse) GetConnections() []*Connection {
 }
 
 type GetConnectionRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Id    string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	// OwnerOrgId, when set, makes this about a connection of that
+	// organization (owner_kind ORG) instead of the caller's own. Any live member of it may read one.
+	// It is never filled in for the caller (it is not org_id, which the web
+	// app fills with the active org): acting on an org's account is explicit.
+	OwnerOrgId    *string `protobuf:"bytes,2,opt,name=owner_org_id,json=ownerOrgId,proto3,oneof" json:"owner_org_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -897,6 +902,13 @@ func (*GetConnectionRequest) Descriptor() ([]byte, []int) {
 func (x *GetConnectionRequest) GetId() string {
 	if x != nil {
 		return x.Id
+	}
+	return ""
+}
+
+func (x *GetConnectionRequest) GetOwnerOrgId() string {
+	if x != nil && x.OwnerOrgId != nil {
+		return *x.OwnerOrgId
 	}
 	return ""
 }
@@ -954,7 +966,13 @@ type CreateApiKeyConnectionRequest struct {
 	// WRITE-ONLY. The only message in this API that carries a secret.
 	Fields map[string]string `protobuf:"bytes,4,rep,name=fields,proto3" json:"fields,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	// Values for the integration's connection_params. Not secret.
-	Params        map[string]string `protobuf:"bytes,5,rep,name=params,proto3" json:"params,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	Params map[string]string `protobuf:"bytes,5,rep,name=params,proto3" json:"params,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	// OwnerOrgId, when set, makes this about a connection of that
+	// organization (owner_kind ORG) instead of the caller's own. Only an owner or admin of it, signed in to the app as a person, may.
+	// The deployment must enable org connections (orgs.connections_enabled).
+	// It is never filled in for the caller (it is not org_id, which the web
+	// app fills with the active org): acting on an org's account is explicit.
+	OwnerOrgId    *string `protobuf:"bytes,6,opt,name=owner_org_id,json=ownerOrgId,proto3,oneof" json:"owner_org_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1024,6 +1042,13 @@ func (x *CreateApiKeyConnectionRequest) GetParams() map[string]string {
 	return nil
 }
 
+func (x *CreateApiKeyConnectionRequest) GetOwnerOrgId() string {
+	if x != nil && x.OwnerOrgId != nil {
+		return *x.OwnerOrgId
+	}
+	return ""
+}
+
 type CreateApiKeyConnectionResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Connection    *Connection            `protobuf:"bytes,1,opt,name=connection,proto3" json:"connection,omitempty"`
@@ -1084,8 +1109,16 @@ type StartOAuthRequest struct {
 	// the callback relays the code because consent runs in the system browser.
 	// Empty for a web app, whose request Origin decides instead.
 	LoopbackRedirect string `protobuf:"bytes,6,opt,name=loopback_redirect,json=loopbackRedirect,proto3" json:"loopback_redirect,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	// OwnerOrgId, when set, makes this about a connection of that
+	// organization (owner_kind ORG) instead of the caller's own. A new connection, or with reconnect_id a
+	// reconnect of one of the org's. Only an owner or admin of it, signed in to the app as a person, may. The same person must
+	// finish the flow, and must still be an owner or admin then. The
+	// deployment must enable org connections (orgs.connections_enabled).
+	// It is never filled in for the caller (it is not org_id, which the web
+	// app fills with the active org): acting on an org's account is explicit.
+	OwnerOrgId    *string `protobuf:"bytes,7,opt,name=owner_org_id,json=ownerOrgId,proto3,oneof" json:"owner_org_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *StartOAuthRequest) Reset() {
@@ -1156,6 +1189,13 @@ func (x *StartOAuthRequest) GetParams() map[string]string {
 func (x *StartOAuthRequest) GetLoopbackRedirect() string {
 	if x != nil {
 		return x.LoopbackRedirect
+	}
+	return ""
+}
+
+func (x *StartOAuthRequest) GetOwnerOrgId() string {
+	if x != nil && x.OwnerOrgId != nil {
+		return *x.OwnerOrgId
 	}
 	return ""
 }
@@ -1309,8 +1349,13 @@ func (x *CompleteOAuthResponse) GetRedirectAfter() string {
 }
 
 type TestConnectionRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Id    string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	// OwnerOrgId, when set, makes this about a connection of that
+	// organization (owner_kind ORG) instead of the caller's own. Only an owner or admin of it, signed in to the app as a person, may.
+	// It is never filled in for the caller (it is not org_id, which the web
+	// app fills with the active org): acting on an org's account is explicit.
+	OwnerOrgId    *string `protobuf:"bytes,2,opt,name=owner_org_id,json=ownerOrgId,proto3,oneof" json:"owner_org_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1348,6 +1393,13 @@ func (*TestConnectionRequest) Descriptor() ([]byte, []int) {
 func (x *TestConnectionRequest) GetId() string {
 	if x != nil {
 		return x.Id
+	}
+	return ""
+}
+
+func (x *TestConnectionRequest) GetOwnerOrgId() string {
+	if x != nil && x.OwnerOrgId != nil {
+		return *x.OwnerOrgId
 	}
 	return ""
 }
@@ -1424,9 +1476,14 @@ func (x *TestConnectionResponse) GetErrorClass() string {
 }
 
 type RenameConnectionRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Id    string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Name  string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	// OwnerOrgId, when set, makes this about a connection of that
+	// organization (owner_kind ORG) instead of the caller's own. Only an owner or admin of it, signed in to the app as a person, may.
+	// It is never filled in for the caller (it is not org_id, which the web
+	// app fills with the active org): acting on an org's account is explicit.
+	OwnerOrgId    *string `protobuf:"bytes,3,opt,name=owner_org_id,json=ownerOrgId,proto3,oneof" json:"owner_org_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1471,6 +1528,13 @@ func (x *RenameConnectionRequest) GetId() string {
 func (x *RenameConnectionRequest) GetName() string {
 	if x != nil {
 		return x.Name
+	}
+	return ""
+}
+
+func (x *RenameConnectionRequest) GetOwnerOrgId() string {
+	if x != nil && x.OwnerOrgId != nil {
+		return *x.OwnerOrgId
 	}
 	return ""
 }
@@ -1520,8 +1584,14 @@ func (x *RenameConnectionResponse) GetConnection() *Connection {
 }
 
 type SetDefaultConnectionRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Id    string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	// OwnerOrgId, when set, makes this about a connection of that
+	// organization (owner_kind ORG) instead of the caller's own. Only an owner or admin of it, signed in to the app as a person, may. The org's default is what a
+	// picker offers first; an unnamed reference never falls back to it.
+	// It is never filled in for the caller (it is not org_id, which the web
+	// app fills with the active org): acting on an org's account is explicit.
+	OwnerOrgId    *string `protobuf:"bytes,2,opt,name=owner_org_id,json=ownerOrgId,proto3,oneof" json:"owner_org_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1559,6 +1629,13 @@ func (*SetDefaultConnectionRequest) Descriptor() ([]byte, []int) {
 func (x *SetDefaultConnectionRequest) GetId() string {
 	if x != nil {
 		return x.Id
+	}
+	return ""
+}
+
+func (x *SetDefaultConnectionRequest) GetOwnerOrgId() string {
+	if x != nil && x.OwnerOrgId != nil {
+		return *x.OwnerOrgId
 	}
 	return ""
 }
@@ -1608,8 +1685,13 @@ func (x *SetDefaultConnectionResponse) GetConnection() *Connection {
 }
 
 type DeleteConnectionRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Id    string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	// OwnerOrgId, when set, makes this about a connection of that
+	// organization (owner_kind ORG) instead of the caller's own. Only an owner or admin of it, signed in to the app as a person, may.
+	// It is never filled in for the caller (it is not org_id, which the web
+	// app fills with the active org): acting on an org's account is explicit.
+	OwnerOrgId    *string `protobuf:"bytes,2,opt,name=owner_org_id,json=ownerOrgId,proto3,oneof" json:"owner_org_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1647,6 +1729,13 @@ func (*DeleteConnectionRequest) Descriptor() ([]byte, []int) {
 func (x *DeleteConnectionRequest) GetId() string {
 	if x != nil {
 		return x.Id
+	}
+	return ""
+}
+
+func (x *DeleteConnectionRequest) GetOwnerOrgId() string {
+	if x != nil && x.OwnerOrgId != nil {
+		return *x.OwnerOrgId
 	}
 	return ""
 }
@@ -1698,8 +1787,12 @@ type ConnectionEvent struct {
 	NodeId     string `protobuf:"bytes,5,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
 	ToolCallId string `protobuf:"bytes,6,opt,name=tool_call_id,json=toolCallId,proto3" json:"tool_call_id,omitempty"`
 	// "user:<id>", "worker", or "trigger:<id>".
-	Actor         string `protobuf:"bytes,7,opt,name=actor,proto3" json:"actor,omitempty"`
-	At            string `protobuf:"bytes,8,opt,name=at,proto3" json:"at,omitempty"`
+	Actor string `protobuf:"bytes,7,opt,name=actor,proto3" json:"actor,omitempty"`
+	At    string `protobuf:"bytes,8,opt,name=at,proto3" json:"at,omitempty"`
+	// The person the event is attributed to: who acted, also on an org's
+	// connection (the member whose run used it), so an org admin can tell who
+	// used the org's account.
+	UserId        string `protobuf:"bytes,9,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1790,12 +1883,25 @@ func (x *ConnectionEvent) GetAt() string {
 	return ""
 }
 
+func (x *ConnectionEvent) GetUserId() string {
+	if x != nil {
+		return x.UserId
+	}
+	return ""
+}
+
 type ListConnectionEventsRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Id    string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
 	Limit int32                  `protobuf:"varint,2,opt,name=limit,proto3" json:"limit,omitempty"`
 	// Return events older than this id; unset (or 0) for the newest page.
-	BeforeId      *int64 `protobuf:"varint,3,opt,name=before_id,json=beforeId,proto3,oneof" json:"before_id,omitempty"`
+	BeforeId *int64 `protobuf:"varint,3,opt,name=before_id,json=beforeId,proto3,oneof" json:"before_id,omitempty"`
+	// OwnerOrgId, when set, makes this about a connection of that
+	// organization (owner_kind ORG) instead of the caller's own. Only an owner or admin of it, signed in to the app as a person, may. They see every member's use
+	// of it (ConnectionEvent.user_id).
+	// It is never filled in for the caller (it is not org_id, which the web
+	// app fills with the active org): acting on an org's account is explicit.
+	OwnerOrgId    *string `protobuf:"bytes,4,opt,name=owner_org_id,json=ownerOrgId,proto3,oneof" json:"owner_org_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1849,6 +1955,13 @@ func (x *ListConnectionEventsRequest) GetBeforeId() int64 {
 		return *x.BeforeId
 	}
 	return 0
+}
+
+func (x *ListConnectionEventsRequest) GetOwnerOrgId() string {
+	if x != nil && x.OwnerOrgId != nil {
+		return *x.OwnerOrgId
+	}
+	return ""
 }
 
 type ListConnectionEventsResponse struct {
@@ -1959,39 +2072,48 @@ const file_reliant_v1_connection_proto_rawDesc = "" +
 	"\x0f_integration_idB\t\n" +
 	"\a_org_id\"S\n" +
 	"\x17ListConnectionsResponse\x128\n" +
-	"\vconnections\x18\x01 \x03(\v2\x16.reliant.v1.ConnectionR\vconnections\"&\n" +
+	"\vconnections\x18\x01 \x03(\v2\x16.reliant.v1.ConnectionR\vconnections\"^\n" +
 	"\x14GetConnectionRequest\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\tR\x02id\"O\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12%\n" +
+	"\fowner_org_id\x18\x02 \x01(\tH\x00R\n" +
+	"ownerOrgId\x88\x01\x01B\x0f\n" +
+	"\r_owner_org_id\"O\n" +
 	"\x15GetConnectionResponse\x126\n" +
 	"\n" +
 	"connection\x18\x01 \x01(\v2\x16.reliant.v1.ConnectionR\n" +
-	"connection\"\xa9\x03\n" +
+	"connection\"\xe1\x03\n" +
 	"\x1dCreateApiKeyConnectionRequest\x12%\n" +
 	"\x0eintegration_id\x18\x01 \x01(\tR\rintegrationId\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x124\n" +
 	"\x04kind\x18\x03 \x01(\x0e2 .reliant.v1.ApiKeyConnectionKindR\x04kind\x12R\n" +
 	"\x06fields\x18\x04 \x03(\v25.reliant.v1.CreateApiKeyConnectionRequest.FieldsEntryB\x03\x80\x01\x01R\x06fields\x12M\n" +
-	"\x06params\x18\x05 \x03(\v25.reliant.v1.CreateApiKeyConnectionRequest.ParamsEntryR\x06params\x1a9\n" +
+	"\x06params\x18\x05 \x03(\v25.reliant.v1.CreateApiKeyConnectionRequest.ParamsEntryR\x06params\x12%\n" +
+	"\fowner_org_id\x18\x06 \x01(\tH\x00R\n" +
+	"ownerOrgId\x88\x01\x01\x1a9\n" +
 	"\vFieldsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\x1a9\n" +
 	"\vParamsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"X\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01B\x0f\n" +
+	"\r_owner_org_id\"X\n" +
 	"\x1eCreateApiKeyConnectionResponse\x126\n" +
 	"\n" +
 	"connection\x18\x01 \x01(\v2\x16.reliant.v1.ConnectionR\n" +
-	"connection\"\xc3\x02\n" +
+	"connection\"\xfb\x02\n" +
 	"\x11StartOAuthRequest\x12%\n" +
 	"\x0eintegration_id\x18\x01 \x01(\tR\rintegrationId\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12!\n" +
 	"\freconnect_id\x18\x03 \x01(\tR\vreconnectId\x12%\n" +
 	"\x0eredirect_after\x18\x04 \x01(\tR\rredirectAfter\x12A\n" +
 	"\x06params\x18\x05 \x03(\v2).reliant.v1.StartOAuthRequest.ParamsEntryR\x06params\x12+\n" +
-	"\x11loopback_redirect\x18\x06 \x01(\tR\x10loopbackRedirect\x1a9\n" +
+	"\x11loopback_redirect\x18\x06 \x01(\tR\x10loopbackRedirect\x12%\n" +
+	"\fowner_org_id\x18\a \x01(\tH\x00R\n" +
+	"ownerOrgId\x88\x01\x01\x1a9\n" +
 	"\vParamsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"9\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01B\x0f\n" +
+	"\r_owner_org_id\"9\n" +
 	"\x12StartOAuthResponse\x12#\n" +
 	"\rauthorize_url\x18\x01 \x01(\tR\fauthorizeUrl\"J\n" +
 	"\x14CompleteOAuthRequest\x12\x19\n" +
@@ -2001,31 +2123,43 @@ const file_reliant_v1_connection_proto_rawDesc = "" +
 	"\n" +
 	"connection\x18\x01 \x01(\v2\x16.reliant.v1.ConnectionR\n" +
 	"connection\x12%\n" +
-	"\x0eredirect_after\x18\x02 \x01(\tR\rredirectAfter\"'\n" +
+	"\x0eredirect_after\x18\x02 \x01(\tR\rredirectAfter\"_\n" +
 	"\x15TestConnectionRequest\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\tR\x02id\"\x86\x01\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12%\n" +
+	"\fowner_org_id\x18\x02 \x01(\tH\x00R\n" +
+	"ownerOrgId\x88\x01\x01B\x0f\n" +
+	"\r_owner_org_id\"\x86\x01\n" +
 	"\x16TestConnectionResponse\x12\x0e\n" +
 	"\x02ok\x18\x01 \x01(\bR\x02ok\x12\x16\n" +
 	"\x06probed\x18\x02 \x01(\bR\x06probed\x12#\n" +
 	"\raccount_label\x18\x03 \x01(\tR\faccountLabel\x12\x1f\n" +
 	"\verror_class\x18\x04 \x01(\tR\n" +
-	"errorClass\"=\n" +
+	"errorClass\"u\n" +
 	"\x17RenameConnectionRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
-	"\x04name\x18\x02 \x01(\tR\x04name\"R\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\x12%\n" +
+	"\fowner_org_id\x18\x03 \x01(\tH\x00R\n" +
+	"ownerOrgId\x88\x01\x01B\x0f\n" +
+	"\r_owner_org_id\"R\n" +
 	"\x18RenameConnectionResponse\x126\n" +
 	"\n" +
 	"connection\x18\x01 \x01(\v2\x16.reliant.v1.ConnectionR\n" +
-	"connection\"-\n" +
+	"connection\"e\n" +
 	"\x1bSetDefaultConnectionRequest\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\tR\x02id\"V\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12%\n" +
+	"\fowner_org_id\x18\x02 \x01(\tH\x00R\n" +
+	"ownerOrgId\x88\x01\x01B\x0f\n" +
+	"\r_owner_org_id\"V\n" +
 	"\x1cSetDefaultConnectionResponse\x126\n" +
 	"\n" +
 	"connection\x18\x01 \x01(\v2\x16.reliant.v1.ConnectionR\n" +
-	"connection\")\n" +
+	"connection\"a\n" +
 	"\x17DeleteConnectionRequest\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\tR\x02id\"\x1a\n" +
-	"\x18DeleteConnectionResponse\"\xd2\x01\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12%\n" +
+	"\fowner_org_id\x18\x02 \x01(\tH\x00R\n" +
+	"ownerOrgId\x88\x01\x01B\x0f\n" +
+	"\r_owner_org_id\"\x1a\n" +
+	"\x18DeleteConnectionResponse\"\xeb\x01\n" +
 	"\x0fConnectionEvent\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\x03R\x02id\x12#\n" +
 	"\rconnection_id\x18\x02 \x01(\tR\fconnectionId\x12\x12\n" +
@@ -2035,13 +2169,17 @@ const file_reliant_v1_connection_proto_rawDesc = "" +
 	"\ftool_call_id\x18\x06 \x01(\tR\n" +
 	"toolCallId\x12\x14\n" +
 	"\x05actor\x18\a \x01(\tR\x05actor\x12\x0e\n" +
-	"\x02at\x18\b \x01(\tR\x02at\"{\n" +
+	"\x02at\x18\b \x01(\tR\x02at\x12\x17\n" +
+	"\auser_id\x18\t \x01(\tR\x06userId\"\xb3\x01\n" +
 	"\x1bListConnectionEventsRequest\x12\x16\n" +
 	"\x02id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\x02id\x12\x14\n" +
 	"\x05limit\x18\x02 \x01(\x05R\x05limit\x12 \n" +
-	"\tbefore_id\x18\x03 \x01(\x03H\x00R\bbeforeId\x88\x01\x01B\f\n" +
+	"\tbefore_id\x18\x03 \x01(\x03H\x00R\bbeforeId\x88\x01\x01\x12%\n" +
+	"\fowner_org_id\x18\x04 \x01(\tH\x01R\n" +
+	"ownerOrgId\x88\x01\x01B\f\n" +
 	"\n" +
-	"_before_id\"S\n" +
+	"_before_idB\x0f\n" +
+	"\r_owner_org_id\"S\n" +
 	"\x1cListConnectionEventsResponse\x123\n" +
 	"\x06events\x18\x01 \x03(\v2\x1b.reliant.v1.ConnectionEventR\x06events*\xe0\x01\n" +
 	"\x12ConnectionAuthKind\x12$\n" +
@@ -2198,6 +2336,13 @@ func file_reliant_v1_connection_proto_init() {
 		return
 	}
 	file_reliant_v1_connection_proto_msgTypes[6].OneofWrappers = []any{}
+	file_reliant_v1_connection_proto_msgTypes[8].OneofWrappers = []any{}
+	file_reliant_v1_connection_proto_msgTypes[10].OneofWrappers = []any{}
+	file_reliant_v1_connection_proto_msgTypes[12].OneofWrappers = []any{}
+	file_reliant_v1_connection_proto_msgTypes[16].OneofWrappers = []any{}
+	file_reliant_v1_connection_proto_msgTypes[18].OneofWrappers = []any{}
+	file_reliant_v1_connection_proto_msgTypes[20].OneofWrappers = []any{}
+	file_reliant_v1_connection_proto_msgTypes[22].OneofWrappers = []any{}
 	file_reliant_v1_connection_proto_msgTypes[25].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{

@@ -178,3 +178,78 @@ func jsonString(s string) string {
 	b, _ := json.Marshal(s)
 	return string(b)
 }
+
+// Every chat update type has a viewer rule, so a type added later reaches a
+// viewer only once someone has decided what of it may.
+func TestEveryChatUpdateTypeIsClassifiedForViewers(t *testing.T) {
+	for v, name := range reliantv1.ChatUpdateType_name {
+		if _, ok := viewerChatUpdates[reliantv1.ChatUpdateType(v)]; !ok {
+			t.Errorf("%s has no viewer rule in viewerChatUpdates: decide whether its payload may reach a viewer", name)
+		}
+	}
+	if got := ViewerChatUpdate(reliantv1.ChatUpdateType(999), `{"stdout":"SECRET"}`); got != `{}` {
+		t.Fatalf("an unclassified type: %q, want {}", got)
+	}
+}
+
+// A redacted type's payload that is not a JSON object is sent as {}: null
+// (which decodes to a nil map) and malformed bodies alike, never as it is
+// and never a panic.
+func TestViewerChatUpdateNonObjectPayloads(t *testing.T) {
+	for _, typ := range []reliantv1.ChatUpdateType{
+		reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_RUN_OUTPUT,
+		reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_EXECUTION_LOG,
+		reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_NODE_EXECUTION,
+		reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_WORKFLOW_EXECUTION,
+		reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_ERROR,
+		reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_QUESTION,
+	} {
+		for _, data := range []string{`null`, `{"stdout": "SECRET`, `["SECRET"]`, `"SECRET"`, ``} {
+			if got := ViewerChatUpdate(typ, data); got != `{}` {
+				t.Errorf("%v %q: %q, want {}", typ, data, got)
+			}
+		}
+	}
+	if got := ViewerChatUpdate(reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_MESSAGE, `null`); got != `null` {
+		t.Errorf("a message update with no blocks is sent as it is: %q", got)
+	}
+}
+
+// An error's raw text is the failure as it happened, which embeds what a
+// command or tool printed: a viewer is told that it failed, where and when.
+func TestViewerChatUpdateError(t *testing.T) {
+	got := ViewerChatUpdate(reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_ERROR,
+		`{"id":"e","activity_type":"run_command","error_message":"exit 1: SECRET=hunter2","error_summary":"SECRET=hunter2","thread":"t","timestamp":"x"}`)
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(got), &payload); err != nil {
+		t.Fatal(err)
+	}
+	if _, has := payload["error_message"]; has {
+		t.Fatalf("error_message reached a viewer: %v", payload)
+	}
+	if _, has := payload["error_summary"]; has {
+		t.Fatalf("error_summary reached a viewer: %v", payload)
+	}
+	if payload["thread"] != "t" || payload["activity_type"] != "run_command" || payload["body_elided"] != true {
+		t.Fatalf("where and when it failed stay: %v", payload)
+	}
+}
+
+// A workflow step's question is a resolved prompt and goes without its
+// metadata; an agent's ask_user is the model's own words and stays whole.
+func TestViewerChatUpdateQuestion(t *testing.T) {
+	step := ViewerChatUpdate(reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_QUESTION,
+		`{"question_id":"q","status":"pending","metadata":"{\"question\":\"Deploy with SECRET=hunter2?\"}"}`)
+	if strings.Contains(step, "SECRET") || !strings.Contains(step, `"question_id":"q"`) {
+		t.Fatalf("a workflow question: %s", step)
+	}
+	asked := `{"question_id":"q","tool_call_id":"c","metadata":"{\"question\":\"Which branch?\"}"}`
+	var got, want map[string]any
+	if err := json.Unmarshal([]byte(ViewerChatUpdate(reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_QUESTION, asked)), &got); err != nil {
+		t.Fatal(err)
+	}
+	_ = json.Unmarshal([]byte(asked), &want)
+	if got["metadata"] != want["metadata"] {
+		t.Fatalf("an ask_user question: %v", got)
+	}
+}

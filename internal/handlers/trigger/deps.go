@@ -12,6 +12,7 @@ package trigger
 
 import (
 	"context"
+	"time"
 
 	"github.com/reliant-labs/forge/pkg/orm"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -49,8 +50,15 @@ type Repository interface {
 	// lock, only while every org the handler's decision read still holds.
 	CreateTriggerInOrg(ctx context.Context, t *core.Trigger, reads ...db.OrgRead) error
 	UpdateTriggerInOrg(ctx context.Context, t *core.Trigger, reads ...db.OrgRead) error
+	// AdoptTrigger re-owns an orphaned trigger in place (AdoptAs), only
+	// while previousOwner still owns it; with offerID it accepts that offer.
+	AdoptTrigger(ctx context.Context, t *core.Trigger, previousOwner, offerID string, reads ...db.OrgRead) error
 	DeleteTrigger(ctx context.Context, id string) error
 	SetTriggerEnabled(ctx context.Context, id string, enabled bool) error
+	// ResumeTriggerPausedBy turns a trigger on only while the system's pause
+	// for reason still stands and the row is the version checked (seen, its
+	// updated_at): a project move's, ResumeAfterOrgMove.
+	ResumeTriggerPausedBy(ctx context.Context, id, reason string, seen time.Time) (bool, error)
 	SetTriggerWebhookSecret(ctx context.Context, id string, sealed []byte) error
 	SetTriggerWebhookTokenHash(ctx context.Context, id string, hash []byte) error
 	GetTriggerWebhookCredentials(ctx context.Context, id string) (*core.TriggerWebhookCredentials, error)

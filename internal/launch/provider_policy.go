@@ -174,7 +174,7 @@ func (l *Launcher) primaryDriver(ctx context.Context, userID string, inputs map[
 	if !ok || selector == nil {
 		return ""
 	}
-	available, err := drivers.LookupAvailableDrivers(ctx, userID)
+	available, err := drivers.LookupAvailableDrivers(ctx, drivers.PersonalScope(userID))
 	if err != nil {
 		return ""
 	}
@@ -211,7 +211,7 @@ func (l *Launcher) ResolvedModelAtDriver(ctx context.Context, userID string, sel
 	if selector == nil {
 		return ""
 	}
-	available, err := drivers.LookupAvailableDrivers(ctx, userID)
+	available, err := drivers.LookupAvailableDrivers(ctx, drivers.PersonalScope(userID))
 	if err != nil {
 		return ""
 	}

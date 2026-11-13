@@ -116,7 +116,7 @@ describe("ComputeStep — waiting for the desktop app's machine", () => {
     fireEvent.click(screen.getByRole("button", { name: /choose a machine myself/i }));
 
     expect(screen.queryByTestId("compute-step-loading")).toBeNull();
-    expect(screen.getByRole("button", { name: /your own computer/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /use your own computer/i })).toBeInTheDocument();
   });
 });
 

@@ -54,3 +54,18 @@ function ToolBodyErrorComponent({ onRetry }: { onRetry: () => void }) {
 }
 
 export const ToolBodyError = memo(ToolBodyErrorComponent);
+
+/**
+ * A viewer of a shared chat reads each call's input but never its result
+ * (control-plane docs/design/org-sharing.md §4): say so where the result
+ * would be, rather than leave a blank that reads as "it printed nothing".
+ */
+function ToolResultWithheldComponent() {
+  return (
+    <div className="px-2 py-1.5 text-2xs text-muted-foreground" data-testid="tool-result-withheld">
+      The result stays on the owner's machine.
+    </div>
+  );
+}
+
+export const ToolResultWithheld = memo(ToolResultWithheldComponent);

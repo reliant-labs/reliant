@@ -271,7 +271,7 @@ describe("integration helpers", () => {
   });
 
   it("groups by integration, default first", () => {
-    const groups = groupConnections(connections.map((c) => ({ ...c, authKind: "oauth2", senderId: "", status: "active", statusReason: "", lastUsedAt: "", createdAt: "" })));
+    const groups = groupConnections(connections.map((c) => ({ ...c, authKind: "oauth2", senderId: "", status: "active", statusReason: "", lastUsedAt: "", createdAt: "", ownerKind: "user" })));
     expect(groups.map((g) => [g.integrationId, g.connections.map((c) => c.id)])).toEqual([
       ["github", ["c-gh", "c-gh2"]],
       ["slack", ["c-slack"]],
