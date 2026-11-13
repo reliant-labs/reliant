@@ -287,3 +287,17 @@ func optional(s string) *string {
 	}
 	return &s
 }
+
+// wakeOrgChats tells orgID's blocked chats that an org account may serve them
+// now (Deps.ChatWaker). Best effort: the account change stands whatever
+// happens here, and a chat it could not reach goes on at its own retry.
+func (s *Service) wakeOrgChats(ctx context.Context, orgID, why string) {
+	if s.deps.ChatWaker == nil {
+		return
+	}
+	failed, err := s.deps.ChatWaker.WakeOrgChats(context.WithoutCancel(ctx), orgID, why)
+	if err != nil || len(failed) > 0 {
+		s.deps.Logger.WarnContext(ctx, "could not wake every org chat after an org account change",
+			"org_id", orgID, "why", why, "unreached", len(failed), "error", err)
+	}
+}
