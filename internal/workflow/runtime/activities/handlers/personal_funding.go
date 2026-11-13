@@ -53,6 +53,10 @@ type PersonalFundingStore interface {
 	ProviderAccountOrgs(ctx context.Context, accountID string) (ownerOrg, attributedOrg string, found bool, err error)
 	ListThreadAssignments(ctx context.Context, threadID string) ([]core.Assignment, error)
 	LatestServingAccount(ctx context.Context, threadID string) (string, error)
+	// LatestChatCallFunding is who paid for the chat's newest successful call
+	// (llm_call_usage.funding) and the chat's org then: the provenance a
+	// replaced or deleted account no longer carries.
+	LatestChatCallFunding(ctx context.Context, userID, chatID string) (funding, orgID string, found bool, err error)
 }
 
 // fundingNow is the clock of the funding decisions; a variable for tests.
@@ -62,11 +66,15 @@ var fundingNow = time.Now
 // the person's choice for the org, the chat's question, and whether the org
 // gave the person anything at all.
 type fundingPlan struct {
-	// active is false for a call that names no org, or a chat with no
-	// question store: nothing here applies, the call routes as before.
+	// active is false for a call that names no org or no chat: nothing here
+	// applies, the call routes as before.
 	active bool
-	order  orgfunding.Order
-	limit  orgfunding.OnOrgLimit
+	// unchecked is a call of a chat in an org whose consent cannot be read
+	// or recorded (a worker built without the question store): it never
+	// spends the person's own account, it waits.
+	unchecked bool
+	order     orgfunding.Order
+	limit     orgfunding.OnOrgLimit
 	// question is the chat's row, nil when it has none.
 	question *core.PersonalFunding
 	// orgGave reports that the scope holds at least one org-funded account
@@ -84,7 +92,7 @@ func orgFundedFirstTier(a models.AccountConfig) bool {
 
 // fundingPlanFor reads the plan of spec's call over avail.
 func (r *AccountRouting) fundingPlanFor(ctx context.Context, spec llmCallSpec, avail models.AvailableDrivers) fundingPlan {
-	if r == nil || r.Funding == nil || spec.OrgID == "" || spec.ChatID == "" {
+	if r == nil || spec.OrgID == "" || spec.ChatID == "" {
 		return fundingPlan{}
 	}
 	plan := fundingPlan{active: true}
@@ -111,6 +119,11 @@ func (r *AccountRouting) fundingPlanFor(ctx context.Context, spec llmCallSpec, a
 		// owner's stamp is the consent (org-provider-accounts §11.3).
 		plan.limit = orgfunding.OnOrgLimitUsePersonal
 	}
+	if r.Funding == nil {
+		// Consent can be neither read nor recorded: fail closed.
+		plan.unchecked = true
+		return plan
+	}
 	q, err := r.Funding.GetChatPersonalFunding(ctx, spec.ChatID)
 	if err != nil {
 		logging.WarnContext(ctx, "Could not read the chat's funding question; deciding without it", "chatID", spec.ChatID, "error", err)
@@ -120,8 +133,10 @@ func (r *AccountRouting) fundingPlanFor(ctx context.Context, spec llmCallSpec, a
 	// accounts while it lasts; an unusable one only until a turn start finds
 	// the org's accounts usable again (checked after routing). An unserved
 	// answer needs no reorder: no org account serves its model anyway.
+	// org_only honours no lease: the person's own account never serves.
 	recheckAtTurnStart := q != nil && q.Reason == core.PersonalFundingUnusable && spec.TurnStart
-	if q != nil && q.Reason != core.PersonalFundingUnserved && q.LeaseActive(fundingNow(), "") && !recheckAtTurnStart {
+	if plan.order != orgfunding.OrderOrgOnly && q != nil && q.Reason != core.PersonalFundingUnserved &&
+		q.LeaseActive(fundingNow(), "") && !recheckAtTurnStart {
 		plan.leased = true
 	}
 	return plan
@@ -134,6 +149,9 @@ func (r *AccountRouting) fundingPlanFor(ctx context.Context, spec llmCallSpec, a
 func (r *AccountRouting) applyFundingPlan(ctx context.Context, spec llmCallSpec, plan fundingPlan, avail models.AvailableDrivers) models.AvailableDrivers {
 	if !plan.active {
 		return avail
+	}
+	if plan.order == orgfunding.OrderOrgOnly || plan.unchecked {
+		avail = withoutPersonalBesideOrg(avail)
 	}
 	if plan.order == orgfunding.OrderPersonalFirst || plan.leased {
 		avail = drivers.PersonalFirst(avail)
@@ -154,6 +172,41 @@ func (r *AccountRouting) applyFundingPlan(ctx context.Context, spec llmCallSpec,
 		}
 	}
 	return avail
+}
+
+// withoutPersonalBesideOrg drops the person's own accounts from every driver
+// that also has an org-funded one, before any account is chosen: under
+// org_only the router never places a thread on them. A driver with only the
+// person's accounts keeps them, so model resolution still sees the provider and
+// the call waits (checkPersonalFunding) rather than failing to resolve.
+func withoutPersonalBesideOrg(avail models.AvailableDrivers) models.AvailableDrivers {
+	out := avail
+	out.Accounts = make(map[models.DriverID][]models.AccountConfig, len(avail.Accounts))
+	out.Drivers = make(map[models.DriverID]models.DriverConfig, len(avail.Drivers))
+	for d, cfg := range avail.Drivers {
+		out.Drivers[d] = cfg
+	}
+	for d, list := range avail.Accounts {
+		orgServes := false
+		for _, a := range list {
+			orgServes = orgServes || models.OrgFunded(a.Funding)
+		}
+		if !orgServes {
+			out.Accounts[d] = list
+			continue
+		}
+		kept := make([]models.AccountConfig, 0, len(list))
+		for _, a := range list {
+			if a.Funding != models.FundingPersonal {
+				kept = append(kept, a)
+			}
+		}
+		out.Accounts[d] = kept
+		if len(kept) > 0 {
+			out.Drivers[d] = kept[0].DriverConfig
+		}
+	}
+	return out
 }
 
 // fundingHold is the refusal of a call that would move to the person's own
@@ -183,37 +236,48 @@ func explicitPersonalPick(spec llmCallSpec, avail models.AvailableDrivers, provi
 	return true
 }
 
-// threadWasOrgFunded reports whether the thread was on an org-funded account
-// of the run's org that is no longer a candidate (§10.1 case 2): its sticky
-// assignment names an account owned by, or attributed to, the org.
-func (r *AccountRouting) threadWasOrgFunded(ctx context.Context, spec llmCallSpec, avail models.AvailableDrivers) bool {
-	if spec.ThreadID == "" {
-		return false
-	}
-	assignments, err := r.Funding.ListThreadAssignments(ctx, spec.ThreadID)
-	if err != nil {
-		logging.WarnContext(ctx, "Could not read the thread's accounts; treating it as new", "threadID", spec.ThreadID, "error", err)
-		return false
-	}
+// replacedOrgFunding reports whether the call replaces an org-funded account
+// of the run's org that no longer serves (§10.1 case 2). It reads provenance
+// that routing cannot have rewritten: the account this call's assignment left
+// (captured before the router stored the new one), the thread's assignments on
+// other providers, and who paid for the chat's newest call, which outlives the
+// account's deletion.
+func (r *AccountRouting) replacedOrgFunding(ctx context.Context, spec llmCallSpec, avail models.AvailableDrivers, acct *routedAccount) bool {
 	candidate := map[string]bool{}
 	for _, list := range avail.Accounts {
 		for _, a := range list {
 			candidate[a.AccountID] = true
 		}
 	}
-	for _, as := range assignments {
-		if candidate[as.AccountID] {
-			continue
-		}
-		owner, attributed, found, err := r.Funding.ProviderAccountOrgs(ctx, as.AccountID)
-		if err != nil || !found {
-			continue
-		}
-		if owner == spec.OrgID || attributed == spec.OrgID {
+	ofOrg := func(accountID string) bool {
+		owner, attributed, found, err := r.Funding.ProviderAccountOrgs(ctx, accountID)
+		return err == nil && found && (owner == spec.OrgID || attributed == spec.OrgID)
+	}
+	if acct != nil && acct.Change != nil && acct.Change.Previous != nil {
+		prev := acct.Change.Previous
+		if models.OrgFunded(prev.Funding) || ofOrg(prev.AccountID) {
 			return true
 		}
 	}
-	return false
+	if spec.ThreadID != "" {
+		assignments, err := r.Funding.ListThreadAssignments(ctx, spec.ThreadID)
+		if err != nil {
+			logging.WarnContext(ctx, "Could not read the thread's accounts", "threadID", spec.ThreadID, "error", err)
+		}
+		for _, as := range assignments {
+			if !candidate[as.AccountID] && ofOrg(as.AccountID) {
+				return true
+			}
+		}
+	}
+	funding, orgID, found, err := r.Funding.LatestChatCallFunding(ctx, spec.UserID, spec.ChatID)
+	if err != nil {
+		// Unknown provenance: treat it as the org's, so the call asks or
+		// waits rather than spending without a say.
+		logging.WarnContext(ctx, "Could not read who paid for the chat's last call; treating it as the org's", "chatID", spec.ChatID, "error", err)
+		return true
+	}
+	return found && models.OrgFunded(funding) && orgID == spec.OrgID
 }
 
 // checkPersonalFunding is the decision after routing (§10.1 cases 2 and 3):
@@ -244,13 +308,19 @@ func (r *AccountRouting) checkPersonalFunding(ctx context.Context, spec llmCallS
 	if funding != models.FundingPersonal {
 		return "", nil
 	}
+	if plan.unchecked || plan.order == orgfunding.OrderOrgOnly {
+		// org_only never uses the person's own account, whatever was
+		// answered, picked or served before; nor does a call whose consent
+		// cannot be checked. Both wait, without asking.
+		return "", fundingHold(providerDriver, "only your organization's accounts may serve this chat")
+	}
 	now := fundingNow()
 	if plan.question.LeaseActive(now, modelID) {
 		if !plan.question.Announced {
 			// The first call under the person's answer says whose account
 			// serves, once for the chat.
 			if marked, merr := r.Funding.MarkPersonalFundingAnnounced(ctx, spec.ChatID); merr == nil && marked {
-				return personalFundingNotice(*plan.question, plan.question.Reason, false), nil
+				return personalFundingNotice(*plan.question, plan.question.Reason, plan.limit == orgfunding.OnOrgLimitUsePersonal), nil
 			}
 		}
 		return "", nil
@@ -264,28 +334,29 @@ func (r *AccountRouting) checkPersonalFunding(ctx context.Context, spec llmCallS
 	}
 	reason := core.PersonalFundingUnserved
 	switch {
-	case r.threadWasOrgFunded(ctx, spec, avail):
+	case r.replacedOrgFunding(ctx, spec, avail, acct):
 		reason = core.PersonalFundingUnusable
 	case !plan.orgGave:
 		// The org gave the person no account: nothing of the org's is
 		// being replaced, so their own accounts serve as before.
 		return "", nil
 	}
-	consented := plan.order == orgfunding.OrderPersonalFirst || explicitPersonalPick(spec, avail, providerDriver)
-	if consented && plan.order != orgfunding.OrderOrgOnly {
+	if plan.order == orgfunding.OrderPersonalFirst || explicitPersonalPick(spec, avail, providerDriver) {
 		return "", nil
 	}
 	q := core.PersonalFunding{
 		ChatID: spec.ChatID, UserID: spec.UserID, OrgID: spec.OrgID, Reason: reason, Model: modelID,
 		PersonalProvider: providerDriver, PersonalAccountLabel: accountName(acct.Config),
 	}
-	return r.decidePersonalFunding(ctx, plan, q, providerDriver, now)
+	return r.decidePersonalFunding(ctx, plan, q, providerDriver, now, true)
 }
 
 // decidePersonalFunding acts on the person's choice for a call that would use
 // their own account in place of the org's: grant a lease (use_personal), ask
 // (the default) or wait. org_only never uses their account, and never asks.
-func (r *AccountRouting) decidePersonalFunding(ctx context.Context, plan fundingPlan, q core.PersonalFunding, providerDriver string, now time.Time) (string, error) {
+// announce is whether this call serves on the lease it grants and so says so;
+// a grant made for a later retry leaves the notice to the call that serves.
+func (r *AccountRouting) decidePersonalFunding(ctx context.Context, plan fundingPlan, q core.PersonalFunding, providerDriver string, now time.Time, announce bool) (string, error) {
 	why := map[string]string{
 		core.PersonalFundingLimited:  "rate-limited",
 		core.PersonalFundingUnusable: "unavailable",
@@ -297,7 +368,7 @@ func (r *AccountRouting) decidePersonalFunding(ctx context.Context, plan funding
 	}
 	switch limit {
 	case orgfunding.OnOrgLimitUsePersonal:
-		q.Announced = true // this call says so
+		q.Announced = announce
 		if q.Reason == core.PersonalFundingLimited {
 			until := now.Add(time.Hour)
 			if q.OrgResetAt != nil && q.OrgResetAt.After(now) {
@@ -328,7 +399,7 @@ func (r *AccountRouting) decidePersonalFunding(ctx context.Context, plan funding
 // person's account; under ask it records the question; the wait itself is
 // unchanged.
 func (r *AccountRouting) fundingOnLimit(ctx context.Context, uc usageLimitContext, facts *types.UsageLimitFacts) {
-	if r == nil || r.Funding == nil || !uc.Plan.active || facts.AlternativeAccount || !uc.OrgFundedLimited {
+	if r == nil || r.Funding == nil || !uc.Plan.active || uc.Plan.unchecked || facts.AlternativeAccount || !uc.OrgFundedLimited {
 		return
 	}
 	personal := r.personalAlternative(ctx, uc)
@@ -346,10 +417,35 @@ func (r *AccountRouting) fundingOnLimit(ctx context.Context, uc usageLimitContex
 	if !reset.IsZero() {
 		q.OrgResetAt = &reset
 	}
-	if _, err := r.decidePersonalFunding(ctx, uc.Plan, q, string(uc.Driver), fundingNow()); err == nil {
+	if _, err := r.decidePersonalFunding(ctx, uc.Plan, q, string(uc.Driver), fundingNow(), false); err == nil {
 		// Granted: the retry runs on the person's own account, and says so.
 		facts.AlternativeAccount = true
 	}
+}
+
+// checkDefaultAccountFunding is checkPersonalFunding for a call routing chose
+// no account for (the router failed, or the chosen account was refused or its
+// driver could not be built): drivers.GetDriver then serves the provider's
+// default account of the scope, which answers to the same consent. A default
+// whose funding cannot be told waits.
+func (r *AccountRouting) checkDefaultAccountFunding(ctx context.Context, spec llmCallSpec, plan fundingPlan, scope, avail models.AvailableDrivers,
+	providerDriver, modelID string) (string, error) {
+	if !plan.active {
+		return "", nil
+	}
+	d := models.DriverID(providerDriver)
+	def, ok := scope.Drivers[d]
+	if !ok {
+		// GetDriver has no account of this provider either and fails on its
+		// own: nothing is spent.
+		return "", nil
+	}
+	for _, a := range scope.Accounts[d] {
+		if a.AccountID == def.AccountID {
+			return r.checkPersonalFunding(ctx, spec, plan, avail, &routedAccount{Config: a}, providerDriver, modelID)
+		}
+	}
+	return "", fundingHold(providerDriver, "who pays for this call is unknown")
 }
 
 // limitedTierIsOrgFunded reports whether a refusal of driver's accounts for
@@ -432,7 +528,7 @@ func personalFundingNotice(q core.PersonalFunding, reason string, remembered boo
 // provider (the turn-start upgrade across providers, §4.5). A move within one
 // provider is announced by the router's own notice (ReasonOrgAvailable).
 func (r *AccountRouting) movedUpFromPersonal(ctx context.Context, spec llmCallSpec, avail models.AvailableDrivers, acct *routedAccount) bool {
-	if acct.Change == nil || !acct.Change.Changed || acct.Change.Previous != nil || spec.ThreadID == "" {
+	if r.Funding == nil || acct.Change == nil || !acct.Change.Changed || acct.Change.Previous != nil || spec.ThreadID == "" {
 		return false
 	}
 	servingID, err := r.Funding.LatestServingAccount(ctx, spec.ThreadID)

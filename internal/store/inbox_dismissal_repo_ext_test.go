@@ -132,7 +132,7 @@ func TestInboxQueries(t *testing.T) {
 func TestInboxListsPersonalFundingQuestion(t *testing.T) {
 	env := storetest.New(t)
 	ctx := context.Background()
-	at := time.Now().UTC().Truncate(time.Microsecond).Add(-time.Hour)
+	at := time.Date(2026, 11, 13, 6, 0, 0, 123456000, time.UTC)
 	for _, id := range []string{"pf-asked", "pf-answered", "pf-other", "pf-archived"} {
 		if err := store.InsertChat(ctx, env.ORM, convChat(id, at)); err != nil {
 			t.Fatalf("InsertChat(%s): %v", id, err)

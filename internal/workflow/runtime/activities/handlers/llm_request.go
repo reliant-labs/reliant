@@ -312,6 +312,9 @@ func resolveLLMCallOnce(ctx context.Context, resolver drivers.DriverResolver, sp
 	var providerDriver string
 	var localTransport http.RoundTripper
 	var routingDrivers models.AvailableDrivers
+	// scopeDrivers is the scope as drivers.GetDriver reads it (no funding
+	// plan applied): what its default account is.
+	var scopeDrivers models.AvailableDrivers
 	var plan fundingPlan
 	var fundingNotice string
 	effectiveTemperature := spec.Temperature
@@ -377,6 +380,7 @@ func resolveLLMCallOnce(ctx context.Context, resolver drivers.DriverResolver, sp
 		}
 		// Who pays (§4.4, §10): the person's order for the org, a lease they
 		// granted, and the thread kept on its provider mid-turn.
+		scopeDrivers = availableDrivers
 		plan = spec.Routing.fundingPlanFor(ctx, spec, availableDrivers)
 		availableDrivers = spec.Routing.applyFundingPlan(ctx, spec, plan, availableDrivers)
 		routingDrivers = availableDrivers
@@ -576,6 +580,17 @@ func resolveLLMCallOnce(ctx context.Context, resolver drivers.DriverResolver, sp
 				account = nil
 			} else {
 				driver = d
+			}
+		}
+		if driver == nil && resolver == nil && providerDriver != "" && !drivers.ReplayMode.Enabled {
+			// No routed account serves: the provider's default account will,
+			// and it answers to the same consent (§10).
+			notice, ferr := spec.Routing.checkDefaultAccountFunding(ctx, spec, plan, scopeDrivers, routingDrivers, providerDriver, definitionID(definition))
+			if ferr != nil {
+				return nil, ferr
+			}
+			if notice != "" {
+				fundingNotice = notice
 			}
 		}
 		if driver == nil {

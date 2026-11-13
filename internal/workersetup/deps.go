@@ -51,6 +51,7 @@ type AccountRoutingStore interface {
 	ClearPersonalFunding(ctx context.Context, chatID string) (bool, error)
 	MarkPersonalFundingAnnounced(ctx context.Context, chatID string) (bool, error)
 	ProviderAccountOrgs(ctx context.Context, accountID string) (ownerOrg, attributedOrg string, found bool, err error)
+	LatestChatCallFunding(ctx context.Context, userID, chatID string) (funding, orgID string, found bool, err error)
 	ListThreadAssignments(ctx context.Context, threadID string) ([]core.Assignment, error)
 	LatestServingAccount(ctx context.Context, threadID string) (string, error)
 }

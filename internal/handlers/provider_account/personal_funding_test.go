@@ -40,10 +40,12 @@ func TestPersonalFundingQuestion_ReadAndAnswer(t *testing.T) {
 	}))
 	const user = "u-funding"
 	chat, _ := seedChat(t, e.repo, user)
-	reset := time.Now().Add(2 * time.Hour).UTC().Truncate(time.Second)
+	// The org's accounts reset well after the test runs; the lease the answer grants lasts until then.
+	reset := time.Date(2099, 1, 2, 5, 0, 0, 0, time.UTC)
+	asked := time.Date(2026, 11, 13, 6, 0, 0, 0, time.UTC)
 	_, err := e.repo.AskPersonalFunding(as(user), core.PersonalFunding{ChatID: chat, UserID: user, OrgID: "org-acme",
 		Reason: core.PersonalFundingLimited, Model: "claude-5.5-opus", PersonalProvider: "claude",
-		PersonalAccountLabel: "me@example.com", OrgResetAt: &reset}, time.Now())
+		PersonalAccountLabel: "me@example.com", OrgResetAt: &reset}, asked)
 	require.NoError(t, err)
 
 	got, err := e.svc.GetPersonalFundingQuestion(as(user), connect.NewRequest(&pb.GetPersonalFundingQuestionRequest{ChatId: chat}))

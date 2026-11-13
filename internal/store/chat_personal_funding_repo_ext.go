@@ -183,3 +183,24 @@ func ProviderAccountOrgs(ctx context.Context, db orm.Context, accountID string) 
 	}
 	return acctText(row.OrgID), acctText(row.AttributedOrgID), true, nil
 }
+
+// LatestChatCallFunding returns who paid for userID's newest successful chat call in chatID
+// (llm_call_usage.funding) and the chat's org when it was made; found is false when the chat
+// has made none. It is the funding provenance of a thread whose account was since replaced or
+// deleted: a usage row is written once and never rewritten by routing.
+func LatestChatCallFunding(ctx context.Context, db orm.Context, userID, chatID string) (funding, orgID string, found bool, err error) {
+	var rows []struct {
+		Funding string `bun:"funding"`
+		OrgID   string `bun:"org_id"`
+	}
+	// (user_id, created_at) is indexed; the chat's newest calls are among the user's newest.
+	if err := db.Bun().NewRaw(`SELECT funding, org_id FROM llm_call_usage
+		WHERE user_id = ? AND chat_id = ? AND purpose = 'chat' AND outcome = 'success'
+		ORDER BY created_at DESC LIMIT 1`, userID, chatID).Scan(ctx, &rows); err != nil {
+		return "", "", false, fmt.Errorf("read who paid for the chat's last call: %w", err)
+	}
+	if len(rows) == 0 {
+		return "", "", false, nil
+	}
+	return rows[0].Funding, rows[0].OrgID, true, nil
+}

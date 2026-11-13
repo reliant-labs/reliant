@@ -122,3 +122,9 @@ func (r *Repo) ClearPersonalFunding(ctx context.Context, chatID string) (bool, e
 func (r *Repo) ProviderAccountOrgs(ctx context.Context, accountID string) (ownerOrg, attributedOrg string, found bool, err error) {
 	return store.ProviderAccountOrgs(ctx, r.ORM(), accountID)
 }
+
+// LatestChatCallFunding is who paid for userID's newest successful call in chatID, and the
+// chat's org at the time; found is false when there is none.
+func (r *Repo) LatestChatCallFunding(ctx context.Context, userID, chatID string) (funding, orgID string, found bool, err error) {
+	return store.LatestChatCallFunding(ctx, r.ORM(), userID, chatID)
+}

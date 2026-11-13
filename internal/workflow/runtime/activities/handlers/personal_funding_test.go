@@ -3,6 +3,7 @@ package handlers
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"testing"
 	"time"
@@ -11,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/llm/accountrouter"
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/llm/ratelimit"
 	"github.com/reliant-labs/reliant/internal/models/message"
@@ -32,11 +34,15 @@ type fundingFake struct {
 	assignments map[string][]core.Assignment
 	orgs        map[string][2]string // account -> {owner org, attributed org}
 	serving     map[string]string    // thread -> account
+	// lastCall is who paid for the chat's newest call: {funding, org}.
+	lastCall map[string][2]string
+	// lastCallErr fails LatestChatCallFunding.
+	lastCallErr error
 }
 
 func newFundingFake() *fundingFake {
 	return &fundingFake{rows: map[string]*core.PersonalFunding{}, assignments: map[string][]core.Assignment{},
-		orgs: map[string][2]string{}, serving: map[string]string{}}
+		orgs: map[string][2]string{}, serving: map[string]string{}, lastCall: map[string][2]string{}}
 }
 
 func (f *fundingFake) GetChatPersonalFunding(_ context.Context, chatID string) (*core.PersonalFunding, error) {
@@ -99,6 +105,14 @@ func (f *fundingFake) ListThreadAssignments(_ context.Context, threadID string) 
 
 func (f *fundingFake) LatestServingAccount(_ context.Context, threadID string) (string, error) {
 	return f.serving[threadID], nil
+}
+
+func (f *fundingFake) LatestChatCallFunding(_ context.Context, _, chatID string) (string, string, bool, error) {
+	if f.lastCallErr != nil {
+		return "", "", false, f.lastCallErr
+	}
+	c, ok := f.lastCall[chatID]
+	return c[0], c[1], ok, nil
 }
 
 func (f *fundingFake) answer(chatID, state string, until *time.Time) {
@@ -351,7 +365,8 @@ func TestPersonalFunding_UnusableOrgAccount(t *testing.T) {
 // Case 1 (limited): every org key serving the model is limited and the
 // person's own account could serve now.
 func TestPersonalFunding_LimitedOrgTier(t *testing.T) {
-	reset := time.Now().Add(2 * time.Hour).UTC().Truncate(time.Second)
+	// A reset well after the test runs: the router benches the org's key until then.
+	reset := time.Date(2099, 1, 2, 5, 0, 0, 0, time.UTC)
 	for _, tc := range []struct {
 		onLimit orgfunding.OnOrgLimit
 		lease   bool
@@ -371,10 +386,12 @@ func TestPersonalFunding_LimitedOrgTier(t *testing.T) {
 			assert.Equal(t, core.PersonalFundingUsePersonal, q.State)
 			require.NotNil(t, q.LeaseUntil)
 			assert.True(t, q.LeaseUntil.Equal(reset), "the lease lasts until the org's reset")
-			// The retry goes to the person's account.
+			// The retry goes to the person's account, and says so.
 			res, err := env.resolve(t, "root", routeModel)
 			require.NoError(t, err)
 			assert.Equal(t, "my-claude", res.Account.Config.AccountID)
+			assert.Contains(t, res.FundingNotice, "rate-limited")
+			assert.Contains(t, res.FundingNotice, "Settings → Providers", "the person's setting chose it")
 		case tc.asked:
 			require.NotNil(t, q)
 			assert.Equal(t, core.PersonalFundingAsked, q.State)
@@ -423,16 +440,143 @@ func TestPersonalFunding_UnattendedAnyGoesOn(t *testing.T) {
 	assert.Equal(t, core.PersonalFundingUsePersonal, env.store.row("chat-1").State)
 }
 
-// Without a question store (a worker built without one) a call that would
-// replace the org's account with the person's waits: it never spends.
+// Without a question store (a worker built without one) consent can be
+// neither read nor recorded: a call that would use the person's own account
+// waits, and no driver is built for it. An org-funded call goes on.
 func TestPersonalFunding_NoStoreNeverSpends(t *testing.T) {
-	withAvailableDrivers(t, tiered(acmeKey("acme-key"), myCodex("my-codex")))
+	withAvailableDrivers(t, tiered(acmeKey("acme-key"), myCodex("my-codex"), personal(claudeAccount("my-claude", "me@me.com", 0))))
 	env := newFundingEnv(t, orgfunding.OnOrgLimitUsePersonal, "")
 	env.routing.Funding = nil
-	res, err := env.resolve(t, "root", "gpt-5.6-sol")
-	// Without the store the plan is inactive: the call routes as P5a does.
+	_, err := env.resolve(t, "root", "gpt-5.6-sol")
+	isWait(t, err)
+	assert.NotContains(t, env.built, "my-codex")
+	_, err = env.resolve(t, "root", "gpt-5.6-sol@codex")
+	isWait(t, err)
+	assert.Empty(t, env.built, "not even an explicit pick spends without the store")
+
+	res, err := env.resolve(t, "root", routeModel)
+	require.NoError(t, err)
+	assert.Equal(t, "acme-key", res.Account.Config.AccountID, "the org's account still serves")
+}
+
+// org_only honours no lease and no explicit pick, and holds when the org has
+// no account left: the person's own account never serves (B1).
+func TestPersonalFunding_OrgOnlyIsAbsolute(t *testing.T) {
+	orgOnly := func(s *llmCallSpec) { s.Failover.Funding = types.FundingOrgOnly }
+	leased := func(env *fundingEnv) {
+		until := time.Date(2099, 1, 1, 0, 0, 0, 0, time.UTC)
+		env.store.rows["chat-1"] = &core.PersonalFunding{ChatID: "chat-1", UserID: "u1", OrgID: fundOrg,
+			State: core.PersonalFundingUsePersonal, Reason: core.PersonalFundingLimited, Model: routeModel, LeaseUntil: &until, Announced: true}
+	}
+
+	t.Run("a live lease is ignored: the org's account serves", func(t *testing.T) {
+		withAvailableDrivers(t, tiered(acmeKey("acme-key"), personal(claudeAccount("my-claude", "me@me.com", 0))))
+		env := newFundingEnv(t, orgfunding.OnOrgLimitUsePersonal, "")
+		leased(env)
+		res, err := env.resolve(t, "root", routeModel, orgOnly)
+		require.NoError(t, err)
+		assert.Equal(t, "acme-key", res.Account.Config.AccountID)
+		assert.NotContains(t, env.built, "my-claude")
+	})
+	t.Run("a live lease is ignored: with the org's key gone, it waits", func(t *testing.T) {
+		withAvailableDrivers(t, tiered(personal(claudeAccount("my-claude", "me@me.com", 0))))
+		env := newFundingEnv(t, orgfunding.OnOrgLimitUsePersonal, "")
+		leased(env)
+		_, err := env.resolve(t, "root", routeModel, orgOnly)
+		isWait(t, err)
+		assert.Empty(t, env.built)
+	})
+	t.Run("an org that gave nothing: it waits", func(t *testing.T) {
+		withAvailableDrivers(t, tiered(myCodex("my-codex")))
+		env := newFundingEnv(t, "", "")
+		_, err := env.resolve(t, "root", "gpt-5.6-sol", orgOnly)
+		isWait(t, err)
+		assert.Empty(t, env.built)
+		assert.Nil(t, env.store.row("chat-1"), "org_only never asks")
+	})
+	t.Run("the person's own account on the org's provider is never placed", func(t *testing.T) {
+		mine := personal(apiKeyAccount("my-anthropic", "me@me.com", 0))
+		withAvailableDrivers(t, tiered(acmeKey("acme-key"), mine))
+		env := newFundingEnv(t, "", "")
+		env.routing.Store.(*routerFake).bench("acme-key", time.Date(2099, 1, 1, 0, 0, 0, 0, time.UTC), "five_hour")
+		_, err := env.resolve(t, "root", routeModel+"@anthropic", orgOnly)
+		var failure *types.UsageLimitFailure
+		require.ErrorAs(t, err, &failure, "the org's key is limited: a wait")
+		assert.False(t, failure.Facts.AlternativeAccount)
+		assert.Empty(t, env.built)
+	})
+}
+
+// Case 2 when the replaced account was the org's last, on the same provider:
+// by the time the call is checked the router has already stored the person's
+// account as the thread's, and the org has nothing left (B2). The provenance
+// is the account the assignment left, or, once that account is deleted, who
+// paid for the chat's last call.
+func TestPersonalFunding_ReplacedOnTheSameProvider(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		setup   func(env *fundingEnv)
+		unknown bool
+	}{
+		{name: "the org's key, paused or revoked", setup: func(env *fundingEnv) {
+			env.store.orgs["acme-key"] = [2]string{fundOrg, ""}
+		}},
+		{name: "the org's key, deleted", setup: func(env *fundingEnv) {
+			env.store.lastCall["chat-1"] = [2]string{models.FundingOrgKey, fundOrg}
+		}},
+		{name: "the chat's history cannot be read", setup: func(env *fundingEnv) {
+			env.store.lastCallErr = errors.New("db down")
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			withAvailableDrivers(t, tiered(personal(claudeAccount("my-claude", "me@me.com", 0))))
+			env := newFundingEnv(t, "", "")
+			env.routing.Store.(*routerFake).assignments["root|claude"] = "acme-key"
+			// What the real store returns once the router moved the thread.
+			env.store.assignments["root"] = []core.Assignment{{ThreadID: "root", Provider: "claude", AccountID: "my-claude"}}
+			tc.setup(env)
+			_, err := env.resolve(t, "root", routeModel)
+			isWait(t, err)
+			assert.Empty(t, env.built, "no provider call on the person's account")
+			q := env.store.row("chat-1")
+			require.NotNil(t, q)
+			assert.Equal(t, core.PersonalFundingUnusable, q.Reason)
+		})
+	}
+	t.Run("a chat whose last call was the person's own goes on", func(t *testing.T) {
+		withAvailableDrivers(t, tiered(personal(claudeAccount("my-claude", "me@me.com", 0))))
+		env := newFundingEnv(t, "", "")
+		env.store.lastCall["chat-1"] = [2]string{models.FundingPersonal, fundOrg}
+		res, err := env.resolve(t, "root", routeModel)
+		require.NoError(t, err)
+		assert.Equal(t, "my-claude", res.Account.Config.AccountID)
+	})
+}
+
+// A router outage routes no account, so the provider's default account would
+// serve: it answers to the same consent (B5).
+func TestPersonalFunding_RouterOutageChecksTheDefaultAccount(t *testing.T) {
+	failing := &accountrouter.MockService{AssignFunc: func(context.Context, accountrouter.Request) (accountrouter.Result, error) {
+		return accountrouter.Result{}, errors.New("db down")
+	}}
+	withAvailableDrivers(t, tiered(acmeKey("acme-key"), myCodex("my-codex")))
+	env := newFundingEnv(t, "", "")
+	env.routing.Router = failing
+	_, err := env.resolve(t, "root", "gpt-5.6-sol")
+	isWait(t, err)
+	q := env.store.row("chat-1")
+	require.NotNil(t, q, "the default account is the person's own: the chat asks")
+	assert.Equal(t, core.PersonalFundingUnserved, q.Reason)
+
+	// A default that is the org's goes on as before.
+	env = newFundingEnv(t, "", "")
+	env.routing.Router = failing
+	res, err := env.resolve(t, "root", routeModel+"@anthropic")
 	if err == nil {
-		assert.Equal(t, "my-codex", res.Account.Config.AccountID)
+		assert.Nil(t, res.Account, "served by the default account, unrouted")
+	} else {
+		var failure *types.UsageLimitFailure
+		assert.False(t, errors.As(err, &failure), "never a funding wait for the org's own account: %v", err)
 	}
 }
 
