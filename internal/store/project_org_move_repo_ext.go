@@ -716,16 +716,34 @@ func ListProjectTriggersPausedBy(ctx context.Context, db orm.Context, projectID,
 }
 
 // ResumeTriggerPausedBy turns the trigger back on only while it is still
-// paused for reason: a person who paused, resumed or edited it meanwhile
-// decided, and is not overridden. It reports whether it resumed it.
-func ResumeTriggerPausedBy(ctx context.Context, db orm.Context, id, reason string) (bool, error) {
+// paused for reason AND is the row version the caller checked (updated_at =
+// seen): a person who paused, resumed or edited it meanwhile decided, and is
+// not overridden. It reports whether it resumed it.
+func ResumeTriggerPausedBy(ctx context.Context, db orm.Context, id, reason string, seen time.Time) (bool, error) {
 	res, err := db.Bun().NewRaw(`UPDATE triggers SET enabled = true, paused_reason = NULL, updated_at = NOW()
-WHERE id = ? AND NOT enabled AND paused_reason = ?`, id, reason).Exec(ctx)
+WHERE id = ? AND NOT enabled AND paused_reason = ? AND updated_at = ?`, id, reason, seen).Exec(ctx)
 	if err != nil {
 		return false, fmt.Errorf("resume trigger %s: %w", id, err)
 	}
 	n, err := res.RowsAffected()
 	return n == 1, err
+}
+
+// ListProjectTriggersResumedSince lists the project's triggers a move turned
+// back on (a trigger_changes row of core.TriggerChangeOrgMoveResumed) at or
+// after since, by id: what a move resumed, read from the history, so a
+// retried step sees what an earlier attempt did.
+func ListProjectTriggersResumedSince(ctx context.Context, db orm.Context, projectID string, since time.Time) ([]*core.Trigger, error) {
+	var rows []*Trigger
+	if err := db.Bun().NewSelect().Model(&rows).
+		Where("project_id = ?", projectID).
+		Where(`EXISTS (SELECT 1 FROM trigger_changes c WHERE c.trigger_id = triggers.id AND c.operation = ? AND c.created_at >= ?)`,
+			core.TriggerChangeOrgMoveResumed, since).
+		Order("id").
+		Scan(ctx); err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return nil, fmt.Errorf("list the project's resumed triggers: %w", err)
+	}
+	return triggersToCore(rows)
 }
 
 // FindProjectOrgMoveByRequest is the move an actor's request key made, or

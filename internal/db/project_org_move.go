@@ -4,6 +4,7 @@ package db
 
 import (
 	"context"
+	"time"
 
 	"github.com/reliant-labs/forge/pkg/orm"
 
@@ -91,10 +92,20 @@ func (r *Repo) ListProjectTriggersPausedBy(ctx context.Context, projectID, reaso
 	return store.ListProjectTriggersPausedBy(ctx, r.ORM(), projectID, reason)
 }
 
+// ListProjectTriggersResumedSince lists the project's triggers a move turned
+// back on at or after since (store.ListProjectTriggersResumedSince).
+func (r *Repo) ListProjectTriggersResumedSince(ctx context.Context, projectID string, since time.Time) ([]*core.Trigger, error) {
+	return store.ListProjectTriggersResumedSince(ctx, r.ORM(), projectID, since)
+}
+
 // ResumeTriggerPausedBy turns a trigger back on only while it is still
-// paused for reason, recording it in the trigger's change history; it
-// reports whether it did. A person's pause, resume or edit since wins.
-func (r *Repo) ResumeTriggerPausedBy(ctx context.Context, id, reason string) (bool, error) {
+// paused for reason and is the version the caller checked (its updated_at,
+// seen), recording it in the trigger's change history; it reports whether it
+// did. A person's pause or resume since wins (false). A change since that left
+// the pause standing, such as an edit that kept it disabled, is
+// core.ErrTriggerChangedSinceRead: the caller reads it again and checks the
+// definition it would turn on.
+func (r *Repo) ResumeTriggerPausedBy(ctx context.Context, id, reason string, seen time.Time) (bool, error) {
 	var resumed bool
 	err := r.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
 		if err := store.LockTrigger(ctx, r.ORM(), id); err != nil {
@@ -104,7 +115,13 @@ func (r *Repo) ResumeTriggerPausedBy(ctx context.Context, id, reason string) (bo
 		if err != nil {
 			return err
 		}
-		if resumed, err = store.ResumeTriggerPausedBy(ctx, r.ORM(), id, reason); err != nil || !resumed {
+		if before.Enabled || before.PausedReason != reason {
+			return nil
+		}
+		if !before.UpdatedAt.Equal(seen) {
+			return core.ErrTriggerChangedSinceRead
+		}
+		if resumed, err = store.ResumeTriggerPausedBy(ctx, r.ORM(), id, reason, seen); err != nil || !resumed {
 			return err
 		}
 		after, err := store.GetTrigger(ctx, r.ORM(), id)

@@ -3,6 +3,7 @@
 package core
 
 import (
+	"errors"
 	"time"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
@@ -188,6 +189,12 @@ type ProjectOrgMoveFilters struct {
 // TriggerChangeOrgMoveResumed is the trigger_changes operation recording a
 // move turning a trigger it paused back on in the target org.
 const TriggerChangeOrgMoveResumed = "org_move_resumed"
+
+// ErrTriggerChangedSinceRead refuses to resume a trigger a move paused
+// because its row changed after the move checked it (an edit that kept it
+// disabled keeps the move's pause): the move reads it again and checks the
+// definition it would turn on.
+var ErrTriggerChangedSinceRead = errors.New("the trigger changed after it was checked")
 
 // ProjectOrgMoveCommit is the input of the move's transaction.
 type ProjectOrgMoveCommit struct {

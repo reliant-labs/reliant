@@ -683,8 +683,11 @@ func TestResumeTriggerPausedBy(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, paused, 1)
 	assert.Equal(t, "t-moved", paused[0].ID)
+	none, err := f.repo.ListProjectTriggersResumedSince(ctx, "p-res", move.CreatedAt)
+	require.NoError(t, err)
+	assert.Empty(t, none)
 
-	resumed, err := f.repo.ResumeTriggerPausedBy(ctx, "t-moved", core.TriggerPausedOrgMove)
+	resumed, err := f.repo.ResumeTriggerPausedBy(ctx, "t-moved", core.TriggerPausedOrgMove, paused[0].UpdatedAt)
 	require.NoError(t, err)
 	assert.True(t, resumed)
 	tr, err := f.repo.GetTrigger(ctx, "t-moved")
@@ -692,13 +695,57 @@ func TestResumeTriggerPausedBy(t *testing.T) {
 	assert.True(t, tr.Enabled)
 	assert.Empty(t, tr.PausedReason)
 	assert.Equal(t, 1, f.count(`SELECT count(*) FROM trigger_changes WHERE trigger_id = 't-moved' AND operation = $1`, core.TriggerChangeOrgMoveResumed))
+	back, err := f.repo.ListProjectTriggersResumedSince(ctx, "p-res", move.CreatedAt)
+	require.NoError(t, err)
+	require.Len(t, back, 1, "what the move resumed, from the history")
+	assert.Equal(t, "t-moved", back[0].ID)
 
-	resumed, err = f.repo.ResumeTriggerPausedBy(ctx, "t-person", core.TriggerPausedOrgMove)
+	person, err := f.repo.GetTrigger(ctx, "t-person")
+	require.NoError(t, err)
+	resumed, err = f.repo.ResumeTriggerPausedBy(ctx, "t-person", core.TriggerPausedOrgMove, person.UpdatedAt)
 	require.NoError(t, err)
 	assert.False(t, resumed, "a person's pause is theirs")
-	resumed, err = f.repo.ResumeTriggerPausedBy(ctx, "t-moved", core.TriggerPausedOrgMove)
+	resumed, err = f.repo.ResumeTriggerPausedBy(ctx, "t-moved", core.TriggerPausedOrgMove, paused[0].UpdatedAt)
 	require.NoError(t, err)
 	assert.False(t, resumed, "resuming twice resumes once")
+}
+
+// A trigger edited after the move checked it, and kept disabled (so the
+// move's pause stands), is not turned on from the old check: the resume says
+// it changed, and the trigger stays off until it is checked again.
+func TestResumeTriggerPausedBy_AnEditSinceTheCheckWins(t *testing.T) {
+	f := newMoveFixture(t)
+	ctx := context.Background()
+	f.project("p-edit", strp(moveSrc))
+	f.trigger("t-edit", "p-edit", true, nil)
+	move := f.prepared("p-edit")
+	_, err := f.repo.MoveProjectOrg(ctx, core.ProjectOrgMoveCommit{MoveID: move.ID})
+	require.NoError(t, err)
+	paused, err := f.repo.ListProjectTriggersPausedBy(ctx, "p-edit", core.TriggerPausedOrgMove)
+	require.NoError(t, err)
+	require.Len(t, paused, 1)
+	checked := paused[0]
+
+	// The owner edits it, still disabled, between the check and the resume.
+	edited := *checked
+	edited.Name = "edited while the move ran"
+	require.NoError(t, f.repo.UpdateTrigger(ctx, &edited))
+	now, err := f.repo.GetTrigger(ctx, "t-edit")
+	require.NoError(t, err)
+	require.Equal(t, core.TriggerPausedOrgMove, now.PausedReason, "an edit that keeps it disabled keeps the move's pause")
+
+	resumed, err := f.repo.ResumeTriggerPausedBy(ctx, "t-edit", core.TriggerPausedOrgMove, checked.UpdatedAt)
+	require.ErrorIs(t, err, core.ErrTriggerChangedSinceRead)
+	assert.False(t, resumed)
+	now, err = f.repo.GetTrigger(ctx, "t-edit")
+	require.NoError(t, err)
+	assert.False(t, now.Enabled, "the edited definition is not turned on unchecked")
+	assert.Zero(t, f.count(`SELECT count(*) FROM trigger_changes WHERE trigger_id = 't-edit' AND operation = $1`, core.TriggerChangeOrgMoveResumed))
+
+	// Checked again, at its new version, it resumes.
+	resumed, err = f.repo.ResumeTriggerPausedBy(ctx, "t-edit", core.TriggerPausedOrgMove, now.UpdatedAt)
+	require.NoError(t, err)
+	assert.True(t, resumed)
 }
 
 // An org's ledger is every move in or out of it, newest first; a person's is

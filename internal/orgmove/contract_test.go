@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -23,7 +24,20 @@ import (
 type ledger struct {
 	moves  map[string]*core.ProjectOrgMove
 	commit func(core.ProjectOrgMoveCommit) (*core.ProjectOrgMoveResult, error)
-	paused []*core.Trigger
+	// paused are the triggers the move paused and has not turned back on;
+	// resumed, those it has (the triggers' history).
+	paused, resumed []*core.Trigger
+}
+
+// resume moves a paused trigger to resumed, as the store's resume does.
+func (l *ledger) resume(id string) {
+	for i, t := range l.paused {
+		if t.ID == id {
+			l.resumed = append(l.resumed, t)
+			l.paused = append(l.paused[:i:i], l.paused[i+1:]...)
+			return
+		}
+	}
 }
 
 func newLedger(m core.ProjectOrgMove) *ledger {
@@ -73,7 +87,10 @@ func (l *ledger) store() *orgmove.MockStore {
 			return &core.Project{ID: "p-1", Name: "shop"}, nil
 		},
 		ListProjectTriggersPausedByFunc: func(context.Context, string, string) ([]*core.Trigger, error) {
-			return l.paused, nil
+			return append([]*core.Trigger(nil), l.paused...), nil
+		},
+		ListProjectTriggersResumedSinceFunc: func(context.Context, string, time.Time) ([]*core.Trigger, error) {
+			return append([]*core.Trigger(nil), l.resumed...), nil
 		},
 	}
 }
@@ -110,7 +127,54 @@ func resumer(resume map[string]bool) *orgmove.MockTriggers {
 			}
 			return false, "needs setup", nil
 		},
+		SyncAfterOrgMoveFunc: func(context.Context, *core.Trigger) error { return nil },
 	}
+}
+
+// flakyTriggers is the trigger handler over l: ids in ok resume, others stay
+// paused for setup; outages[id] attempts at resuming id fail with an outage
+// first, and syncFails[id] attempts at syncing it fail after it resumed.
+type flakyTriggers struct {
+	l                  *ledger
+	ok                 map[string]bool
+	outages, syncFails map[string]int
+	synced             map[string]int
+}
+
+func (f *flakyTriggers) mock() *orgmove.MockTriggers {
+	f.synced = map[string]int{}
+	return &orgmove.MockTriggers{
+		ResumeAfterOrgMoveFunc: func(_ context.Context, t *core.Trigger) (bool, string, error) {
+			if f.outages[t.ID] > 0 {
+				f.outages[t.ID]--
+				return false, "", errors.New("membership: control-plane unavailable")
+			}
+			if !f.ok[t.ID] {
+				return false, "needs setup", nil
+			}
+			f.l.resume(t.ID)
+			return true, "", nil
+		},
+		SyncAfterOrgMoveFunc: func(_ context.Context, t *core.Trigger) error {
+			if f.syncFails[t.ID] > 0 {
+				f.syncFails[t.ID]--
+				return errors.New("temporal: schedule update failed")
+			}
+			f.synced[t.ID]++
+			return nil
+		},
+	}
+}
+
+// movedLedger is a move that committed, with triggers paused by it.
+func movedLedger(paused ...string) *ledger {
+	m := move()
+	m.State = core.ProjectOrgMoveStateMoved
+	l := newLedger(m)
+	for _, id := range paused {
+		l.paused = append(l.paused, &core.Trigger{ID: id})
+	}
+	return l
 }
 
 // runSaga drives ProjectOrgMoveWorkflow in the Temporal test environment with
@@ -143,7 +207,8 @@ func TestSaga_CommitsRecordsAndResumes(t *testing.T) {
 	l := newLedger(move())
 	l.paused = []*core.Trigger{{ID: "t-ok"}, {ID: "t-setup"}}
 	var calls cpCalls
-	runSaga(t, newService(t, l, controlPlane(&calls, nil), resumer(map[string]bool{"t-ok": true})))
+	f := &flakyTriggers{l: l, ok: map[string]bool{"t-ok": true}}
+	runSaga(t, newService(t, l, controlPlane(&calls, nil), f.mock()))
 
 	m := l.moves["m-1"]
 	assert.Equal(t, core.ProjectOrgMoveStateCompleted, m.State)
@@ -257,6 +322,46 @@ func TestSteps_AreIdempotent(t *testing.T) {
 	require.NoError(t, svc.ResumeTriggers(ctx, "m-1"))
 	assert.Zero(t, calls.record)
 	assert.Equal(t, core.ProjectOrgMoveStateAborted, l.moves["m-1"].State)
+}
+
+// An outage while turning a trigger back on is retried, never taken for the
+// trigger's own state: the move stays moved, the other triggers resume in
+// the same attempt, and the retry converges with the counts of both.
+func TestResumeTriggers_AnOutageIsRetried(t *testing.T) {
+	ctx := context.Background()
+	l := movedLedger("t-a", "t-b", "t-setup")
+	f := &flakyTriggers{l: l, ok: map[string]bool{"t-a": true, "t-b": true}, outages: map[string]int{"t-b": 1}}
+	svc := newService(t, l, controlPlane(&cpCalls{}, nil), f.mock())
+
+	require.Error(t, svc.ResumeTriggers(ctx, "m-1"))
+	assert.Equal(t, core.ProjectOrgMoveStateMoved, l.moves["m-1"].State, "an outage does not complete the move")
+	assert.Equal(t, 1, f.synced["t-a"], "the others resume in the same attempt")
+
+	require.NoError(t, svc.ResumeTriggers(ctx, "m-1"))
+	m := l.moves["m-1"]
+	assert.Equal(t, core.ProjectOrgMoveStateCompleted, m.State)
+	assert.Equal(t, 2, m.Counts.TriggersReenabled, "both, though they resumed in different attempts")
+	assert.Contains(t, m.Detail, "1 triggers stay paused")
+}
+
+// A trigger turned back on whose schedule then failed to converge is synced
+// again on the retry, though it is no longer paused, and counted once.
+func TestResumeTriggers_ASyncFailureAfterEnablingIsRetried(t *testing.T) {
+	ctx := context.Background()
+	l := movedLedger("t-a")
+	f := &flakyTriggers{l: l, ok: map[string]bool{"t-a": true}, syncFails: map[string]int{"t-a": 1}}
+	svc := newService(t, l, controlPlane(&cpCalls{}, nil), f.mock())
+
+	require.Error(t, svc.ResumeTriggers(ctx, "m-1"))
+	assert.Equal(t, core.ProjectOrgMoveStateMoved, l.moves["m-1"].State)
+	assert.Empty(t, l.paused, "the row was enabled before the sync failed")
+
+	require.NoError(t, svc.ResumeTriggers(ctx, "m-1"))
+	m := l.moves["m-1"]
+	assert.Equal(t, core.ProjectOrgMoveStateCompleted, m.State)
+	assert.Equal(t, 1, f.synced["t-a"], "its schedule converged on the retry")
+	assert.Equal(t, 1, m.Counts.TriggersReenabled)
+	assert.Empty(t, m.Detail)
 }
 
 // A control plane without the service is a refusal, not an outage: the move

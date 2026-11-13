@@ -16,6 +16,7 @@ package orgmove
 
 import (
 	"context"
+	"time"
 
 	"github.com/reliant-labs/reliant/internal/controlplane"
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -59,6 +60,10 @@ type Store interface {
 	MoveProjectOrg(ctx context.Context, c core.ProjectOrgMoveCommit) (*core.ProjectOrgMoveResult, error)
 	GetProject(ctx context.Context, id string) (*core.Project, error)
 	ListProjectTriggersPausedBy(ctx context.Context, projectID, reason string) ([]*core.Trigger, error)
+	// ListProjectTriggersResumedSince is what a move turned back on, from
+	// the triggers' change history, so a retried step sees what an earlier
+	// attempt did.
+	ListProjectTriggersResumedSince(ctx context.Context, projectID string, since time.Time) ([]*core.Trigger, error)
 }
 
 // ControlPlane is control-plane's half of the move
@@ -70,7 +75,13 @@ type ControlPlane interface {
 }
 
 // Triggers turns a trigger the move paused back on, as its owner, when it
-// checks out in its new org. The trigger handler (*trigger.Service) is one.
+// checks out in its new org, and converges its schedule. The trigger handler
+// (*trigger.Service) is one.
 type Triggers interface {
+	// ResumeAfterOrgMove reports why a trigger stays paused (its owner's to
+	// fix), or an error to retry.
 	ResumeAfterOrgMove(ctx context.Context, t *core.Trigger) (resumed bool, why string, err error)
+	// SyncAfterOrgMove converges a resumed trigger's schedule from its row;
+	// repeating it is harmless.
+	SyncAfterOrgMove(ctx context.Context, t *core.Trigger) error
 }

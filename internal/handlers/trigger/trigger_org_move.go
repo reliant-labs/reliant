@@ -9,6 +9,9 @@ import (
 	"fmt"
 	"strconv"
 
+	"connectrpc.com/connect"
+	"github.com/reliant-labs/forge/pkg/svcerr"
+
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -24,8 +27,15 @@ import (
 // the move's reason, where the inbox's "needs setup" item shows it.
 //
 // It acts as the trigger's owner, never as whoever runs the move's saga, and
-// turns the trigger on only while the move's pause still stands: a person
-// who resumed, paused or edited it meanwhile decided.
+// turns the trigger on only while the move's pause still stands on the very
+// version it checked: a person who resumed or paused it meanwhile decided,
+// and a change that left the pause standing (an edit that kept it disabled)
+// is an error, so the move reads it again and checks what it would turn on.
+//
+// An error is transient (an outage, or that change): the move retries. A
+// "why" is the trigger's own state, which only its owner can fix. It does not
+// converge the trigger's schedule; SyncAfterOrgMove does, once per move,
+// for every trigger the move turned back on.
 func (s *Service) ResumeAfterOrgMove(ctx context.Context, t *core.Trigger) (resumed bool, why string, err error) {
 	if t == nil || t.Enabled || t.PausedReason != core.TriggerPausedOrgMove {
 		return false, "not paused by the move", nil
@@ -43,7 +53,7 @@ func (s *Service) ResumeAfterOrgMove(ctx context.Context, t *core.Trigger) (resu
 		return false, "", fmt.Errorf("read the trigger's project: %w", err)
 	}
 	if err := s.requireSetupComplete(ctx, t); err != nil {
-		return false, err.Error(), nil
+		return ownerFixes(err, "check the trigger's setup")
 	}
 	if ok, why, err := s.installationLinked(ctx, t); err != nil || !ok {
 		return false, why, err
@@ -51,17 +61,36 @@ func (s *Service) ResumeAfterOrgMove(ctx context.Context, t *core.Trigger) (resu
 	enabling := *t
 	enabling.Enabled = true
 	if err := s.refreshTriggerAccess(ctx, &enabling); err != nil {
-		return false, err.Error(), nil
+		return ownerFixes(err, "check the owner's integration access")
 	}
-	resumed, err = s.deps.Repo.ResumeTriggerPausedBy(ctx, t.ID, core.TriggerPausedOrgMove)
-	if err != nil || !resumed {
-		return false, "its pause changed while the move ran", err
+	resumed, err = s.deps.Repo.ResumeTriggerPausedBy(ctx, t.ID, core.TriggerPausedOrgMove, t.UpdatedAt)
+	if err != nil {
+		return false, "", fmt.Errorf("turn the trigger back on: %w", err)
 	}
-	// A polled or scheduled trigger converges its schedule from the row.
-	if err := s.sync(ctx, t.Kind, t.ID); err != nil {
-		return true, "", fmt.Errorf("resume the trigger's schedule: %w", err)
+	if !resumed {
+		return false, "its owner paused or resumed it while the move ran", nil
 	}
 	return true, "", nil
+}
+
+// ownerFixes sorts a check's refusal: a FailedPrecondition is the trigger's
+// own state (setup unfinished, access not granted), which only its owner can
+// fix, so it is the why; anything else is an outage to retry.
+func ownerFixes(err error, doing string) (bool, string, error) {
+	if svcerr.Code(err) == connect.CodeFailedPrecondition {
+		return false, err.Error(), nil
+	}
+	return false, "", fmt.Errorf("%s: %w", doing, err)
+}
+
+// SyncAfterOrgMove converges a trigger's schedule from its row after a move
+// turned it back on. It reads the row it is given, so it is safe to repeat:
+// a retried move syncs every trigger it resumed again.
+func (s *Service) SyncAfterOrgMove(ctx context.Context, t *core.Trigger) error {
+	if err := s.sync(auth.WithUser(ctx, t.UserID, "", ""), t.Kind, t.ID); err != nil {
+		return fmt.Errorf("resume the trigger's schedule: %w", err)
+	}
+	return nil
 }
 
 // installationLinked reports whether an org GitHub App installation the

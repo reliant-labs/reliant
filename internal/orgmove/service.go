@@ -224,26 +224,44 @@ func (s *service) ResumeTriggers(ctx context.Context, moveID string) error {
 	if err != nil {
 		return err
 	}
-	counts := m.Counts
-	stayed := 0
+	// Every trigger is tried, so one outage does not hold the others paused;
+	// an error keeps the move "moved" and the step is retried, reading the
+	// triggers again. A trigger that stays paused for its owner to fix is not
+	// an error.
+	var retry []error
 	for _, t := range paused {
 		resumed, why, err := s.deps.Triggers.ResumeAfterOrgMove(ctx, t)
 		switch {
 		case err != nil:
-			// Fails closed: it stays paused, where the owner can resume it.
-			stayed++
-			s.deps.Logger.WarnContext(ctx, "could not turn a moved trigger back on; it stays paused",
-				"move_id", moveID, "trigger_id", t.ID, "error", err)
-		case resumed:
-			counts.TriggersReenabled++
-		default:
-			stayed++
+			retry = append(retry, fmt.Errorf("trigger %s: %w", t.ID, err))
+		case !resumed:
 			s.deps.Logger.InfoContext(ctx, "a moved trigger stays paused", "move_id", moveID, "trigger_id", t.ID, "why", why)
 		}
 	}
+	// What this move turned back on, this attempt or an earlier one, from the
+	// triggers' history: each converges its schedule (again, harmlessly, on a
+	// retry), and the count is the history's, not this attempt's.
+	resumed, err := s.deps.Store.ListProjectTriggersResumedSince(ctx, m.ProjectID, m.CreatedAt)
+	if err != nil {
+		return err
+	}
+	for _, t := range resumed {
+		if err := s.deps.Triggers.SyncAfterOrgMove(ctx, t); err != nil {
+			retry = append(retry, fmt.Errorf("trigger %s: %w", t.ID, err))
+		}
+	}
+	if len(retry) > 0 {
+		return fmt.Errorf("turn the moved triggers back on: %w", errors.Join(retry...))
+	}
+	stayed, err := s.deps.Store.ListProjectTriggersPausedBy(ctx, m.ProjectID, core.TriggerPausedOrgMove)
+	if err != nil {
+		return err
+	}
+	counts := m.Counts
+	counts.TriggersReenabled = len(resumed)
 	detail := ""
-	if stayed > 0 {
-		detail = fmt.Sprintf("%d triggers stay paused until they are set up in the target organization", stayed)
+	if len(stayed) > 0 {
+		detail = fmt.Sprintf("%d triggers stay paused until they are set up in the target organization", len(stayed))
 	}
 	if _, err := s.deps.Store.TransitionProjectOrgMove(ctx, moveID,
 		[]core.ProjectOrgMoveState{core.ProjectOrgMoveStateMoved}, core.ProjectOrgMoveStateCompleted, detail, &counts); err != nil &&

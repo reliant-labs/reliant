@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -21,7 +22,7 @@ func movedTrigger(t *testing.T, org, installation string) *core.Trigger {
 	cfg, err := json.Marshal(core.IntegrationConfig{Integration: "github", Events: []string{"issues.opened"}, Installation: installation})
 	require.NoError(t, err)
 	return &core.Trigger{ID: "t-1", UserID: "alice", ProjectID: "p-1", OrgID: &org, Kind: core.TriggerKindIntegration,
-		Config: cfg, PausedReason: core.TriggerPausedOrgMove}
+		Config: cfg, PausedReason: core.TriggerPausedOrgMove, UpdatedAt: time.Date(2026, 11, 13, 9, 0, 0, 123456000, time.UTC)}
 }
 
 // A trigger a move paused is turned back on, as its owner, only when it
@@ -61,9 +62,10 @@ func TestResumeAfterOrgMove(t *testing.T) {
 					require.Equal(t, "alice", userID, "decided as the trigger's owner")
 					return &db.Project{ID: id, UserID: userID}, nil
 				},
-				ResumeTriggerPausedByFunc: func(_ context.Context, id, reason string) (bool, error) {
+				ResumeTriggerPausedByFunc: func(_ context.Context, id, reason string, seen time.Time) (bool, error) {
 					asked = true
 					assert.Equal(t, core.TriggerPausedOrgMove, reason)
+					assert.Equal(t, tc.trigger.UpdatedAt, seen, "the version it checked")
 					return tc.pauseHeld, nil
 				},
 			}
@@ -87,4 +89,14 @@ func TestResumeAfterOrgMove(t *testing.T) {
 	svc := NewTestTrigger(t, WithTriggerDeps(Deps{Repo: repo, OrgGitHubApps: down}))
 	_, _, err := svc.ResumeAfterOrgMove(context.Background(), movedTrigger(t, "acme", "4242"))
 	require.Error(t, err)
+
+	// A trigger edited after the move read it (still disabled, so the pause
+	// stands) is not turned on from the old read: an error, so the move reads
+	// it again and checks the definition it would turn on.
+	repo.ResumeTriggerPausedByFunc = func(context.Context, string, string, time.Time) (bool, error) {
+		return false, core.ErrTriggerChangedSinceRead
+	}
+	svc = NewTestTrigger(t, WithTriggerDeps(Deps{Repo: repo}))
+	_, _, err = svc.ResumeAfterOrgMove(context.Background(), movedTrigger(t, "acme", ""))
+	require.ErrorIs(t, err, core.ErrTriggerChangedSinceRead)
 }
