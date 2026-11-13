@@ -9,6 +9,7 @@ import { useRef, useState, memo, useMemo, useEffect, useCallback } from "react";
 import { useCurrentMachineStore } from "../../store/currentMachineStore";
 import { GripHorizontal, GripVertical } from "lucide-react";
 import { ChatInputWrapper } from "./ChatInputWrapper";
+import { ViewerNotice } from "../Sharing/ViewerNotice";
 import { ChatThinkingIndicator } from "./ChatThinkingIndicator";
 import { ChatMachineNoticeLine } from "./ChatMachineNotice";
 import { QueuedForMachineNote } from "./QueuedForMachineNote";
@@ -480,6 +481,10 @@ export const ChatPresenter = memo(function ChatPresenter({
   // machine surfaces apply, and the composer says what the chat can do.
   const currentChat = chatForQueue?.id === chatId ? chatForQueue : undefined;
   const noMachine = !!currentChat?.noMachine;
+  // A viewer of a chat another member shared: read-only. Nothing between the
+  // transcript and the composer is theirs (queued messages, background work,
+  // approvals, the machine), and the composer is replaced by ViewerNotice.
+  const isViewer = !!currentChat?.viewerAccess;
 
   // The run is parked until a provider's usage limit resets (server-side timer;
   // it retries by itself). The reset time rides on the chat, the activity says
@@ -853,6 +858,10 @@ export const ChatPresenter = memo(function ChatPresenter({
               the status slot: in full on desktop and on a wide phone column,
               one line (three at medium width) plus a sheet on a narrow phone
               column. Approvals are never collapsed. */}
+          {isViewer && currentChat ? (
+            <ViewerNotice chat={currentChat} />
+          ) : (
+          <>
           <ComposerStatusSlot
             upper={
               <>
@@ -985,6 +994,8 @@ export const ChatPresenter = memo(function ChatPresenter({
               Click to focus and type a message
             </div>
           ) : null}
+          </>
+          )}
         </div>
       </div>
       

@@ -226,6 +226,7 @@ const LONG_TIMEOUT_METHODS: Record<string, number> = {
   StreamUserUpdates: 0,
   StreamChatUpdates: 0,
   StreamProcessOutput: 0,
+  StreamOrgUpdates: 0,
 };
 
 /**

@@ -28,6 +28,7 @@ import { MessageAttachments } from "./MessageAttachments";
 import { MessageGeneratedImages } from "./MessageGeneratedImages";
 import { MessageGeneratedVideos, isVideoMimeType } from "./MessageGeneratedVideos";
 import { MessageTimestamp, useMessageBranching } from "./MessageChrome";
+import { viewerSafeMessage } from "../../lib/viewerResults";
 import { MessageActionsSheet, type MessageActionsSheetAction } from "./MessageActionsSheet";
 import { CodeContextPill } from "./CodeContextPill";
 import { FailedSendStatus } from "./FailedSendStatus";
@@ -302,6 +303,7 @@ function ChatMessageComponent({
   const [isExpanded, setIsExpanded] = useState(false);
   const [isOverflowing, setIsOverflowing] = useState(false);
   const {
+    available: branchAvailable,
     openBranchMenu,
     branchInPlace: handleBranchChat,
     branchToExistingWorkspace: handleBranchToExistingWorkspace,
@@ -309,7 +311,7 @@ function ChatMessageComponent({
   } = useMessageBranching(chatId, message.id);
   const surface = useSurface();
   const isMobile = surface === "mobile";
-  const canBranch = useCapability("chatBranching");
+  const canBranch = useCapability("chatBranching") && branchAvailable;
   const [showActionsSheet, setShowActionsSheet] = useState(false);
   const bubbleRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -380,7 +382,12 @@ function ChatMessageComponent({
         // The transcript may hold a call's input as a skeleton, its result as
         // a stub (both elided by a stub read) or a large result as a preview:
         // copy the bodies, read whole in one batch, never what labelled the row.
-        const executions = parsed.toolExecutions;
+        // A viewer of another member's shared chat copies each call's input
+        // and never its result, however the result reached this client.
+        const viewer = isViewer;
+        const executions = viewer
+          ? parsed.toolExecutions.map((execution) => ({ ...execution, result: undefined }))
+          : parsed.toolExecutions;
         const { inputs, results } = await fullBodiesOfExecutions(chatId, executions);
         executions.forEach((execution, index) => {
           const input = inputs[index];
@@ -427,7 +434,9 @@ function ChatMessageComponent({
 
           contentToCopy += `${toolCallText}\n`;
           const resultContent = results[index];
-          if (resultContent) {
+          if (viewer) {
+            contentToCopy += "Result withheld: it stays on the owner's machine\n";
+          } else if (resultContent) {
             contentToCopy += resultContent + "\n";
           } else {
             contentToCopy += "No output available\n";
@@ -461,8 +470,12 @@ function ChatMessageComponent({
   // the approvals list changes reference (all fresh on immutable content
   // change, stable otherwise) — so this stays fast on tab switches / re-renders
   // without a hand-maintained store cache, and never renders stale results.
+  // A viewer of another member's shared chat never sees a tool's result:
+  // every view of the message below (rows, cards, media, copy) reads it
+  // through viewerSafeMessage.
+  const isViewer = !!currentChat?.viewerAccess;
   const parsed = useMemo((): ParsedContent => {
-    const processed = getProcessedMessage(message, toolResultsByCallId, approvals);
+    const processed = viewerSafeMessage(getProcessedMessage(message, toolResultsByCallId, approvals), isViewer);
     return {
       text: processed.text,
       toolExecutions: processed.toolExecutions?.map((exec) => ({
@@ -472,7 +485,7 @@ function ChatMessageComponent({
       })),
       segments: processed.segments,
     };
-  }, [message, approvals, toolResultsByCallId]);
+  }, [message, approvals, toolResultsByCallId, isViewer]);
 
   // The segments this row renders: all of them, or the slice's.
   const visibleSegments = (() => {
@@ -956,6 +969,7 @@ function ChatMessageComponent({
         {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
       </button>
       </Tooltip>
+      {branchAvailable && (
       <Tooltip
         content={
           failedClientMessageId
@@ -986,6 +1000,7 @@ function ChatMessageComponent({
         <GitBranch className="h-3.5 w-3.5" />
       </button>
       </Tooltip>
+      )}
     </>
   );
 
