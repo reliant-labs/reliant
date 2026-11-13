@@ -5,6 +5,7 @@ package connections_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -51,7 +52,11 @@ func (unknownRoles) RoleFresh(context.Context, string, string) (string, bool, er
 
 var acme = orgRoles{"org-1": {"olivia": "owner", "ada": "admin", "dana": "member"}}
 
-func asIn(m authz.Membership) context.Context { return authz.WithMembership(context.Background(), m) }
+// asIn is a request by a person signed in to the app, under membership m: the
+// credential kind the auth edge installs (auth.WithCredential).
+func asIn(m authz.Membership) context.Context {
+	return authz.WithCredentialKind(authz.WithMembership(context.Background(), m), authz.CredentialKindPerson)
+}
 
 func (e *env) createOrgKey(ctx context.Context, userID, orgID, name string) (*core.Connection, error) {
 	return e.svc.CreateAPIKey(ctx, connections.CreateAPIKeyParams{
@@ -246,4 +251,22 @@ func TestOrgCreate_NamesAreEachOwnersOwn(t *testing.T) {
 		Kind: connections.APIKeyKindAPIKey, Fields: map[string]string{"api_key": "mine-2"},
 	})
 	require.ErrorIs(t, err, connections.ErrAlreadyExists)
+}
+
+// Administering an org's connections is a person's act below the handler's
+// human_only check too: authz.RequireOrgAdmin refuses a software credential
+// (an agent's CLI login) or an unclassified one, even an owner's, so the
+// service refuses it on any path, and stores nothing.
+func TestOrgCreate_OnlyAPersonAdministers(t *testing.T) {
+	e := newEnv(t)
+	e.svc.WithOrgConnections(true)
+	for name, ctx := range map[string]context.Context{
+		"software credential":     authz.WithCredentialKind(authz.WithMembership(context.Background(), acme), authz.CredentialKindSoftware),
+		"unclassified credential": authz.WithMembership(context.Background(), acme),
+	} {
+		_, err := e.createOrgKey(ctx, "olivia", "org-1", "agent-"+strings.ReplaceAll(name, " ", "-"))
+		require.Equal(t, connections.CodePermissionDenied, connections.CodeOf(err), "%s: %v", name, err)
+		require.ErrorIs(t, err, authz.ErrPersonRequired, name)
+	}
+	require.Equal(t, 0, e.count(`SELECT count(*) FROM connections WHERE owner_kind='org'`))
 }

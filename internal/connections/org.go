@@ -55,6 +55,8 @@ func requireOrgAdmin(ctx context.Context, userID, orgID string) error {
 		return nil
 	case errors.Is(err, authz.ErrMembershipUnavailable):
 		return &Error{Code: CodeUnavailable, Message: "could not check your role in the organization; try again", Err: err}
+	case errors.Is(err, authz.ErrPersonRequired):
+		return &Error{Code: CodePermissionDenied, Message: "only a person signed in to the app can manage an organization's connections", Err: err}
 	default:
 		return &Error{Code: CodePermissionDenied, Message: "only an owner or admin of the organization can manage its connections", Err: err}
 	}
