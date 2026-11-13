@@ -176,6 +176,19 @@ type ProjectOrgMoveMachine struct {
 	PinnedChats int
 }
 
+// ProjectOrgMoveFilters lists moves: an org's ledger (the moves out of and
+// into OrgID) when OrgID is set, else UserID's own.
+type ProjectOrgMoveFilters struct {
+	OrgID  string
+	UserID string
+	Limit  int
+	Offset int
+}
+
+// TriggerChangeOrgMoveResumed is the trigger_changes operation recording a
+// move turning a trigger it paused back on in the target org.
+const TriggerChangeOrgMoveResumed = "org_move_resumed"
+
 // ProjectOrgMoveCommit is the input of the move's transaction.
 type ProjectOrgMoveCommit struct {
 	// MoveID names the move row, in state prepared; the row decides the
@@ -203,6 +216,12 @@ type ProjectOrgMoveResult struct {
 // paused. Only triggers with this reason are re-enabled by the move, once
 // they check out in the target org; one that cannot stays paused with it.
 const TriggerPausedOrgMove = "org_move"
+
+// TriggerPausedOrgMoveSetup is Trigger.PausedReason of an enabled trigger a
+// project move paused and cannot turn back on by itself: its binding to the
+// source org's connection was cleared, so it waits for someone to bind it in
+// the target org (or to their own connection) and resume it.
+const TriggerPausedOrgMoveSetup = "org_move_setup"
 
 // TriggerChangeOrgMoved is the trigger_changes operation recording a
 // trigger's move to another org, one row per trigger.

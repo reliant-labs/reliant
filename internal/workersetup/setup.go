@@ -24,6 +24,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/machinepool"
 	"github.com/reliant-labs/reliant/internal/observability"
+	"github.com/reliant-labs/reliant/internal/orgmove"
 	"github.com/reliant-labs/reliant/internal/streaming"
 	"github.com/reliant-labs/reliant/internal/telemetry"
 	"github.com/reliant-labs/reliant/internal/threads"
@@ -87,6 +88,12 @@ type Config struct {
 	// or a trigger fire decides org resources against live membership as an
 	// API request does. nil is a deployment with no orgs: owner-only.
 	Membership authz.Membership
+
+	// OrgMoves runs the steps of a project's move to another org
+	// (orgmove.ProjectOrgMoveWorkflow). The workflow is always registered;
+	// its activities only with this set, so a move's saga on a worker
+	// without them retries until one that has them takes it.
+	OrgMoves orgmove.Service
 
 	// TriggerPollers looks up a polled integration's poll function. nil
 	// registers the poll workflow without its activity: a poll that reaches
@@ -333,6 +340,19 @@ func NewWorker(cfg *Config) (*Worker, *v2.ActivityRegistry, error) {
 		)
 	} else {
 		logging.Warn("no trigger launcher configured; this worker will not execute scheduled fires")
+	}
+
+	// Moving a project to another org: the saga is pure orchestration; its
+	// steps need the control plane and the trigger service.
+	w.RegisterWorkflowWithOptions(orgmove.ProjectOrgMoveWorkflow, workflow.RegisterOptions{
+		Name: orgmove.WorkflowName,
+	})
+	if m := cfg.OrgMoves; m != nil {
+		w.RegisterActivityWithOptions(m.Prepare, activity.RegisterOptions{Name: orgmove.PrepareActivityName})
+		w.RegisterActivityWithOptions(m.Commit, activity.RegisterOptions{Name: orgmove.CommitActivityName})
+		w.RegisterActivityWithOptions(m.Abort, activity.RegisterOptions{Name: orgmove.AbortActivityName})
+		w.RegisterActivityWithOptions(m.Record, activity.RegisterOptions{Name: orgmove.RecordActivityName})
+		w.RegisterActivityWithOptions(m.ResumeTriggers, activity.RegisterOptions{Name: orgmove.ResumeTriggersActivityName})
 	}
 
 	// Workflow-event triggers: same split as schedules. The dispatch workflow

@@ -54,6 +54,9 @@ type Repository interface {
 	AdoptTrigger(ctx context.Context, t *core.Trigger, previousOwner, offerID string, reads ...db.OrgRead) error
 	DeleteTrigger(ctx context.Context, id string) error
 	SetTriggerEnabled(ctx context.Context, id string, enabled bool) error
+	// ResumeTriggerPausedBy turns a trigger on only while the system's pause
+	// for reason still stands (a project move's, ResumeAfterOrgMove).
+	ResumeTriggerPausedBy(ctx context.Context, id, reason string) (bool, error)
 	SetTriggerWebhookSecret(ctx context.Context, id string, sealed []byte) error
 	SetTriggerWebhookTokenHash(ctx context.Context, id string, hash []byte) error
 	GetTriggerWebhookCredentials(ctx context.Context, id string) (*core.TriggerWebhookCredentials, error)

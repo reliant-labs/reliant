@@ -39,6 +39,12 @@ type Repository interface {
 	// the running work that refuses it now, and what it would change.
 	ProjectOrgMoveBlockers(ctx context.Context, projectID string) (*core.ProjectOrgMoveBlockers, error)
 	ProjectOrgMoveEffects(ctx context.Context, projectID, toOrgID string) (*core.ProjectOrgMoveEffects, error)
+	// The move ledger: a move is recorded (idempotently by the actor's
+	// request key) before its saga starts, and read back as it runs.
+	InsertProjectOrgMove(ctx context.Context, m *core.ProjectOrgMove) (*core.ProjectOrgMove, bool, error)
+	FindProjectOrgMoveByRequest(ctx context.Context, actorUserID, requestKey string) (*core.ProjectOrgMove, error)
+	GetProjectOrgMove(ctx context.Context, id string) (*core.ProjectOrgMove, error)
+	ListProjectOrgMoves(ctx context.Context, f core.ProjectOrgMoveFilters) ([]*core.ProjectOrgMove, error)
 
 	UpsertProjectDaemon(ctx context.Context, projectID, daemonID, path string, defaultBranch *string) error
 	RecordObservedProjectDaemon(ctx context.Context, projectID, daemonID, path string, defaultBranch *string) (bool, error)
@@ -113,4 +119,10 @@ type MachineConfigSync interface {
 // the caller's daemons. controlplane.Service implements it.
 type CloneDispatcher interface {
 	CloneRepoOntoDaemon(ctx context.Context, jwt string, req controlplane.CloneRepoRequest) (controlplane.CloneRepoResult, error)
+}
+
+// MoveStarter starts a project move's saga, keyed by the move id: starting a
+// move that already started is not an error.
+type MoveStarter interface {
+	StartProjectOrgMove(ctx context.Context, moveID string) error
 }

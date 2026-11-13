@@ -116,6 +116,15 @@ const (
 	// ProjectServicePreviewProjectOrgMoveProcedure is the fully-qualified name of the ProjectService's
 	// PreviewProjectOrgMove RPC.
 	ProjectServicePreviewProjectOrgMoveProcedure = "/reliant.v1.ProjectService/PreviewProjectOrgMove"
+	// ProjectServiceMoveProjectToOrgProcedure is the fully-qualified name of the ProjectService's
+	// MoveProjectToOrg RPC.
+	ProjectServiceMoveProjectToOrgProcedure = "/reliant.v1.ProjectService/MoveProjectToOrg"
+	// ProjectServiceGetProjectOrgMoveProcedure is the fully-qualified name of the ProjectService's
+	// GetProjectOrgMove RPC.
+	ProjectServiceGetProjectOrgMoveProcedure = "/reliant.v1.ProjectService/GetProjectOrgMove"
+	// ProjectServiceListProjectOrgMovesProcedure is the fully-qualified name of the ProjectService's
+	// ListProjectOrgMoves RPC.
+	ProjectServiceListProjectOrgMovesProcedure = "/reliant.v1.ProjectService/ListProjectOrgMoves"
 )
 
 // ProjectServiceClient is a client for the reliant.v1.ProjectService service.
@@ -245,6 +254,25 @@ type ProjectServiceClient interface {
 	// an admin or owner of the project's organization and a live member of
 	// the target; anyone else is refused as the move itself would refuse them.
 	PreviewProjectOrgMove(context.Context, *connect.Request[v1.PreviewProjectOrgMoveRequest]) (*connect.Response[v1.PreviewProjectOrgMoveResponse], error)
+	// MoveProjectToOrg moves the project, with every chat, run and trigger of
+	// it, to another organization (control-plane
+	// docs/design/org-project-move.md). The caller is admitted as for
+	// PreviewProjectOrgMove; the project must be in expected_from_org_id
+	// still, and nothing may be running in it. The move runs as a saga: this
+	// returns once it has committed or stopped, or after about 15 seconds with
+	// the move still under way (GetProjectOrgMove follows it). A repeat of the
+	// same request_key is the same move. Refused while the deployment's
+	// orgs.project_moves_enabled is off.
+	MoveProjectToOrg(context.Context, *connect.Request[v1.MoveProjectToOrgRequest]) (*connect.Response[v1.MoveProjectToOrgResponse], error)
+	// GetProjectOrgMove reads one move: its owner's, or one in or out of an
+	// organization the caller administers.
+	// forge:custom — the move's owner, or an admin of either org, reads it
+	GetProjectOrgMove(context.Context, *connect.Request[v1.GetProjectOrgMoveRequest]) (*connect.Response[v1.GetProjectOrgMoveResponse], error)
+	// ListProjectOrgMoves lists the moves of projects out of and into an
+	// organization, newest first: the move ledger its admins and owners read.
+	// With no org_id, the caller's own moves.
+	// forge:custom — an org's ledger, for its admins and owners; else the caller's own moves
+	ListProjectOrgMoves(context.Context, *connect.Request[v1.ListProjectOrgMovesRequest]) (*connect.Response[v1.ListProjectOrgMovesResponse], error)
 }
 
 // NewProjectServiceClient constructs a client for the reliant.v1.ProjectService service. By
@@ -421,6 +449,26 @@ func NewProjectServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
+		moveProjectToOrg: connect.NewClient[v1.MoveProjectToOrgRequest, v1.MoveProjectToOrgResponse](
+			httpClient,
+			baseURL+ProjectServiceMoveProjectToOrgProcedure,
+			connect.WithSchema(projectServiceMethods.ByName("MoveProjectToOrg")),
+			connect.WithClientOptions(opts...),
+		),
+		getProjectOrgMove: connect.NewClient[v1.GetProjectOrgMoveRequest, v1.GetProjectOrgMoveResponse](
+			httpClient,
+			baseURL+ProjectServiceGetProjectOrgMoveProcedure,
+			connect.WithSchema(projectServiceMethods.ByName("GetProjectOrgMove")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+			connect.WithClientOptions(opts...),
+		),
+		listProjectOrgMoves: connect.NewClient[v1.ListProjectOrgMovesRequest, v1.ListProjectOrgMovesResponse](
+			httpClient,
+			baseURL+ProjectServiceListProjectOrgMovesProcedure,
+			connect.WithSchema(projectServiceMethods.ByName("ListProjectOrgMoves")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -453,6 +501,9 @@ type projectServiceClient struct {
 	detachProjectFromDaemon     *connect.Client[v1.DetachProjectFromDaemonRequest, v1.DetachProjectFromDaemonResponse]
 	recloneProjectOnDaemon      *connect.Client[v1.RecloneProjectOnDaemonRequest, v1.RecloneProjectOnDaemonResponse]
 	previewProjectOrgMove       *connect.Client[v1.PreviewProjectOrgMoveRequest, v1.PreviewProjectOrgMoveResponse]
+	moveProjectToOrg            *connect.Client[v1.MoveProjectToOrgRequest, v1.MoveProjectToOrgResponse]
+	getProjectOrgMove           *connect.Client[v1.GetProjectOrgMoveRequest, v1.GetProjectOrgMoveResponse]
+	listProjectOrgMoves         *connect.Client[v1.ListProjectOrgMovesRequest, v1.ListProjectOrgMovesResponse]
 }
 
 // CreateProject calls reliant.v1.ProjectService.CreateProject.
@@ -590,6 +641,21 @@ func (c *projectServiceClient) PreviewProjectOrgMove(ctx context.Context, req *c
 	return c.previewProjectOrgMove.CallUnary(ctx, req)
 }
 
+// MoveProjectToOrg calls reliant.v1.ProjectService.MoveProjectToOrg.
+func (c *projectServiceClient) MoveProjectToOrg(ctx context.Context, req *connect.Request[v1.MoveProjectToOrgRequest]) (*connect.Response[v1.MoveProjectToOrgResponse], error) {
+	return c.moveProjectToOrg.CallUnary(ctx, req)
+}
+
+// GetProjectOrgMove calls reliant.v1.ProjectService.GetProjectOrgMove.
+func (c *projectServiceClient) GetProjectOrgMove(ctx context.Context, req *connect.Request[v1.GetProjectOrgMoveRequest]) (*connect.Response[v1.GetProjectOrgMoveResponse], error) {
+	return c.getProjectOrgMove.CallUnary(ctx, req)
+}
+
+// ListProjectOrgMoves calls reliant.v1.ProjectService.ListProjectOrgMoves.
+func (c *projectServiceClient) ListProjectOrgMoves(ctx context.Context, req *connect.Request[v1.ListProjectOrgMovesRequest]) (*connect.Response[v1.ListProjectOrgMovesResponse], error) {
+	return c.listProjectOrgMoves.CallUnary(ctx, req)
+}
+
 // ProjectServiceHandler is an implementation of the reliant.v1.ProjectService service.
 type ProjectServiceHandler interface {
 	// CreateProject creates a new project
@@ -717,6 +783,25 @@ type ProjectServiceHandler interface {
 	// an admin or owner of the project's organization and a live member of
 	// the target; anyone else is refused as the move itself would refuse them.
 	PreviewProjectOrgMove(context.Context, *connect.Request[v1.PreviewProjectOrgMoveRequest]) (*connect.Response[v1.PreviewProjectOrgMoveResponse], error)
+	// MoveProjectToOrg moves the project, with every chat, run and trigger of
+	// it, to another organization (control-plane
+	// docs/design/org-project-move.md). The caller is admitted as for
+	// PreviewProjectOrgMove; the project must be in expected_from_org_id
+	// still, and nothing may be running in it. The move runs as a saga: this
+	// returns once it has committed or stopped, or after about 15 seconds with
+	// the move still under way (GetProjectOrgMove follows it). A repeat of the
+	// same request_key is the same move. Refused while the deployment's
+	// orgs.project_moves_enabled is off.
+	MoveProjectToOrg(context.Context, *connect.Request[v1.MoveProjectToOrgRequest]) (*connect.Response[v1.MoveProjectToOrgResponse], error)
+	// GetProjectOrgMove reads one move: its owner's, or one in or out of an
+	// organization the caller administers.
+	// forge:custom — the move's owner, or an admin of either org, reads it
+	GetProjectOrgMove(context.Context, *connect.Request[v1.GetProjectOrgMoveRequest]) (*connect.Response[v1.GetProjectOrgMoveResponse], error)
+	// ListProjectOrgMoves lists the moves of projects out of and into an
+	// organization, newest first: the move ledger its admins and owners read.
+	// With no org_id, the caller's own moves.
+	// forge:custom — an org's ledger, for its admins and owners; else the caller's own moves
+	ListProjectOrgMoves(context.Context, *connect.Request[v1.ListProjectOrgMovesRequest]) (*connect.Response[v1.ListProjectOrgMovesResponse], error)
 }
 
 // NewProjectServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -889,6 +974,26 @@ func NewProjectServiceHandler(svc ProjectServiceHandler, opts ...connect.Handler
 		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
+	projectServiceMoveProjectToOrgHandler := connect.NewUnaryHandler(
+		ProjectServiceMoveProjectToOrgProcedure,
+		svc.MoveProjectToOrg,
+		connect.WithSchema(projectServiceMethods.ByName("MoveProjectToOrg")),
+		connect.WithHandlerOptions(opts...),
+	)
+	projectServiceGetProjectOrgMoveHandler := connect.NewUnaryHandler(
+		ProjectServiceGetProjectOrgMoveProcedure,
+		svc.GetProjectOrgMove,
+		connect.WithSchema(projectServiceMethods.ByName("GetProjectOrgMove")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+		connect.WithHandlerOptions(opts...),
+	)
+	projectServiceListProjectOrgMovesHandler := connect.NewUnaryHandler(
+		ProjectServiceListProjectOrgMovesProcedure,
+		svc.ListProjectOrgMoves,
+		connect.WithSchema(projectServiceMethods.ByName("ListProjectOrgMoves")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/reliant.v1.ProjectService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case ProjectServiceCreateProjectProcedure:
@@ -945,6 +1050,12 @@ func NewProjectServiceHandler(svc ProjectServiceHandler, opts ...connect.Handler
 			projectServiceRecloneProjectOnDaemonHandler.ServeHTTP(w, r)
 		case ProjectServicePreviewProjectOrgMoveProcedure:
 			projectServicePreviewProjectOrgMoveHandler.ServeHTTP(w, r)
+		case ProjectServiceMoveProjectToOrgProcedure:
+			projectServiceMoveProjectToOrgHandler.ServeHTTP(w, r)
+		case ProjectServiceGetProjectOrgMoveProcedure:
+			projectServiceGetProjectOrgMoveHandler.ServeHTTP(w, r)
+		case ProjectServiceListProjectOrgMovesProcedure:
+			projectServiceListProjectOrgMovesHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -1060,4 +1171,16 @@ func (UnimplementedProjectServiceHandler) RecloneProjectOnDaemon(context.Context
 
 func (UnimplementedProjectServiceHandler) PreviewProjectOrgMove(context.Context, *connect.Request[v1.PreviewProjectOrgMoveRequest]) (*connect.Response[v1.PreviewProjectOrgMoveResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ProjectService.PreviewProjectOrgMove is not implemented"))
+}
+
+func (UnimplementedProjectServiceHandler) MoveProjectToOrg(context.Context, *connect.Request[v1.MoveProjectToOrgRequest]) (*connect.Response[v1.MoveProjectToOrgResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ProjectService.MoveProjectToOrg is not implemented"))
+}
+
+func (UnimplementedProjectServiceHandler) GetProjectOrgMove(context.Context, *connect.Request[v1.GetProjectOrgMoveRequest]) (*connect.Response[v1.GetProjectOrgMoveResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ProjectService.GetProjectOrgMove is not implemented"))
+}
+
+func (UnimplementedProjectServiceHandler) ListProjectOrgMoves(context.Context, *connect.Request[v1.ListProjectOrgMovesRequest]) (*connect.Response[v1.ListProjectOrgMovesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ProjectService.ListProjectOrgMoves is not implemented"))
 }

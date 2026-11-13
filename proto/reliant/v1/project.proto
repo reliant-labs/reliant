@@ -308,6 +308,43 @@ service ProjectService {
   rpc PreviewProjectOrgMove(PreviewProjectOrgMoveRequest) returns (PreviewProjectOrgMoveResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
+
+  // MoveProjectToOrg moves the project, with every chat, run and trigger of
+  // it, to another organization (control-plane
+  // docs/design/org-project-move.md). The caller is admitted as for
+  // PreviewProjectOrgMove; the project must be in expected_from_org_id
+  // still, and nothing may be running in it. The move runs as a saga: this
+  // returns once it has committed or stopped, or after about 15 seconds with
+  // the move still under way (GetProjectOrgMove follows it). A repeat of the
+  // same request_key is the same move. Refused while the deployment's
+  // orgs.project_moves_enabled is off.
+  rpc MoveProjectToOrg(MoveProjectToOrgRequest) returns (MoveProjectToOrgResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "move_org"
+        target: {
+          kind: "project"
+          id: "project_id"
+        }
+        detail: ["to_org_id"]
+      }
+    };
+  }
+
+  // GetProjectOrgMove reads one move: its owner's, or one in or out of an
+  // organization the caller administers.
+  // forge:custom — the move's owner, or an admin of either org, reads it
+  rpc GetProjectOrgMove(GetProjectOrgMoveRequest) returns (GetProjectOrgMoveResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+
+  // ListProjectOrgMoves lists the moves of projects out of and into an
+  // organization, newest first: the move ledger its admins and owners read.
+  // With no org_id, the caller's own moves.
+  // forge:custom — an org's ledger, for its admins and owners; else the caller's own moves
+  rpc ListProjectOrgMoves(ListProjectOrgMovesRequest) returns (ListProjectOrgMovesResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 }
 
 // Project represents a project in the system
@@ -943,4 +980,84 @@ message ProjectOrgMoveMachine {
   // control-plane did not say. A machine in another organization keeps
   // billing its compute there.
   optional bool in_target_org = 5;
+}
+
+// ProjectOrgMoveState is where a move is.
+enum ProjectOrgMoveState {
+  PROJECT_ORG_MOVE_STATE_UNSPECIFIED = 0;
+  // Control-plane is revoking the source organization's secret access.
+  PROJECT_ORG_MOVE_STATE_PREPARING = 1;
+  // Ready to commit.
+  PROJECT_ORG_MOVE_STATE_PREPARED = 2;
+  // The project is in the target organization; the last steps (the
+  // activity events, turning triggers back on) are under way.
+  PROJECT_ORG_MOVE_STATE_MOVED = 3;
+  // Done.
+  PROJECT_ORG_MOVE_STATE_COMPLETED = 4;
+  // Stopping before it committed: restoring what was revoked.
+  PROJECT_ORG_MOVE_STATE_ABORTING = 5;
+  // Stopped before it committed; nothing moved. detail says why.
+  PROJECT_ORG_MOVE_STATE_ABORTED = 6;
+}
+
+// ProjectOrgMove is one move of a project to another organization.
+message ProjectOrgMove {
+  string id = 1;
+  string project_id = 2;
+  // The project's owner, who moved it.
+  string owner_user_id = 3;
+  string actor_user_id = 4;
+  string from_org_id = 5;
+  string to_org_id = 6;
+  ProjectOrgMoveState state = 7;
+  // Why it stopped, or what a last step waits on; "" otherwise.
+  string detail = 8;
+  ProjectOrgMoveCounts counts = 9;
+  string created_at = 10;
+  string updated_at = 11;
+}
+
+// ProjectOrgMoveCounts is what a move changed.
+message ProjectOrgMoveCounts {
+  int32 chats = 1;
+  int32 runs = 2;
+  int32 triggers = 3;
+  int32 triggers_paused = 4;
+  int32 triggers_reenabled = 5;
+  int32 shares_cleared = 6;
+  int32 bindings_cleared = 7;
+  int32 secret_entries_revoked = 8;
+}
+
+message MoveProjectToOrgRequest {
+  string project_id = 1 [(buf.validate.field).string.min_len = 1];
+  string to_org_id = 2 [(buf.validate.field).string.min_len = 1];
+  // The organization the caller saw the project in: a move from a stale
+  // dialog, after the project already left it, is refused (org_changed).
+  string expected_from_org_id = 3 [(buf.validate.field).string.min_len = 1];
+  // The client's idempotency key: a repeat is the same move.
+  string request_key = 4 [(buf.validate.field).string = {min_len: 1, max_len: 128}];
+}
+
+message MoveProjectToOrgResponse {
+  ProjectOrgMove move = 1;
+}
+
+message GetProjectOrgMoveRequest {
+  string move_id = 1 [(buf.validate.field).string.min_len = 1];
+}
+
+message GetProjectOrgMoveResponse {
+  ProjectOrgMove move = 1;
+}
+
+message ListProjectOrgMovesRequest {
+  // The organization whose moves in and out to list; unset, the caller's own.
+  optional string org_id = 1;
+  int32 limit = 2;
+  int32 offset = 3;
+}
+
+message ListProjectOrgMovesResponse {
+  repeated ProjectOrgMove moves = 1;
 }

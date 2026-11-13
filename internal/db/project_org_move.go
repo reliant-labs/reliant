@@ -66,13 +66,64 @@ func (r *Repo) MoveProjectOrg(ctx context.Context, c core.ProjectOrgMoveCommit) 
 		}
 		var err error
 		result, err = store.MoveProjectOrg(ctx, r.ORM(), c)
-		return err
+		if err != nil || result.AlreadyMoved {
+			return err
+		}
+		// The owner's clients learn the project moved in the commit's own
+		// transaction: stamped with the target org (user_updates_stamp_org
+		// reads the project as this transaction left it), it reaches them in
+		// the org it is now in. The log's older rows keep their orgs.
+		projectID := result.Move.ProjectID
+		return r.EmitUserRefetch(ctx, result.Move.OwnerUserID, RefetchProjectOrgMoved, RefetchOpts{ProjectID: &projectID})
 	})
 	return result, err
+}
+
+// ListProjectOrgMoves lists moves newest first (store.ListProjectOrgMoves):
+// an org's ledger, or a person's own moves.
+func (r *Repo) ListProjectOrgMoves(ctx context.Context, f core.ProjectOrgMoveFilters) ([]*core.ProjectOrgMove, error) {
+	return store.ListProjectOrgMoves(ctx, r.ORM(), f)
+}
+
+// ListProjectTriggersPausedBy lists the project's triggers the system paused
+// for reason.
+func (r *Repo) ListProjectTriggersPausedBy(ctx context.Context, projectID, reason string) ([]*core.Trigger, error) {
+	return store.ListProjectTriggersPausedBy(ctx, r.ORM(), projectID, reason)
+}
+
+// ResumeTriggerPausedBy turns a trigger back on only while it is still
+// paused for reason, recording it in the trigger's change history; it
+// reports whether it did. A person's pause, resume or edit since wins.
+func (r *Repo) ResumeTriggerPausedBy(ctx context.Context, id, reason string) (bool, error) {
+	var resumed bool
+	err := r.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
+		if err := store.LockTrigger(ctx, r.ORM(), id); err != nil {
+			return err
+		}
+		before, err := store.GetTrigger(ctx, r.ORM(), id)
+		if err != nil {
+			return err
+		}
+		if resumed, err = store.ResumeTriggerPausedBy(ctx, r.ORM(), id, reason); err != nil || !resumed {
+			return err
+		}
+		after, err := store.GetTrigger(ctx, r.ORM(), id)
+		if err != nil {
+			return err
+		}
+		return store.RecordTriggerChange(ctx, r.ORM(), core.TriggerChangeOrgMoveResumed, before, after)
+	})
+	return resumed, err
 }
 
 // ProjectOrgMoveEffects reads what moving the project to toOrgID would do,
 // as reliant can tell it: the preview's effects (store.ProjectOrgMoveEffects).
 func (r *Repo) ProjectOrgMoveEffects(ctx context.Context, projectID, toOrgID string) (*core.ProjectOrgMoveEffects, error) {
 	return store.ProjectOrgMoveEffects(ctx, r.ORM(), projectID, toOrgID)
+}
+
+// FindProjectOrgMoveByRequest is the move an actor's request key made, or
+// core.ErrProjectOrgMoveNotFound.
+func (r *Repo) FindProjectOrgMoveByRequest(ctx context.Context, actorUserID, requestKey string) (*core.ProjectOrgMove, error) {
+	return store.FindProjectOrgMoveByRequest(ctx, r.ORM(), actorUserID, requestKey)
 }
