@@ -51,6 +51,7 @@ const LABELS: Record<StatusSlotItemId, string> = {
   recovery: "Session interrupted",
   "no-machine": "No machine",
   wake: "Waking mac…",
+  "machine-health": "This machine can't start new processes",
   oom: "Machine ran out of memory",
   disk: "Disk almost full",
   resume: "mac is suspended",

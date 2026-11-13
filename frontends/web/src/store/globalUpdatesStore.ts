@@ -702,7 +702,7 @@ function routeUserUpdates(
           noteDaemonHeartbeat(data.daemon_id as string);
           // Proof the daemon is attached right now: a cached list that
           // says otherwise is re-read (throttled).
-          reconcileDaemonHeartbeat(queryClient, data.daemon_id as string);
+          reconcileDaemonHeartbeat(queryClient, data.daemon_id as string, Date.now(), data.health_state);
         }
         // detected_ports is present (possibly empty) on real heartbeats and
         // absent on synthetic connection events — only update when carried,

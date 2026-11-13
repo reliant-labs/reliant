@@ -23,6 +23,13 @@ type MachineStatus struct {
 	Starting bool
 	// StatusMessage is the control plane's latest reason, shown verbatim.
 	StatusMessage string
+	// Degraded: the machine is connected, but its daemon reports that it
+	// cannot do work — today, that its process table is full, so no command
+	// can start (reliant#1919). Waiting does not bring it back; only
+	// processes exiting, or a restart, does.
+	Degraded bool
+	// HealthReason is the daemon's reason while Degraded, shown verbatim.
+	HealthReason string
 }
 
 // MachineObserver reports the state of the machine a run's tools execute on.
