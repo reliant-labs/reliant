@@ -72,6 +72,7 @@
         "Run",
         "Scenario",
         "ScheduleSyncer",
+        "Seatmatch",
         "Settings",
         "Sharing",
         "Streaming",
@@ -12709,6 +12710,11 @@
               "name": "pools",
               "kind": "string",
               "repeated": true
+            },
+            {
+              "name": "health",
+              "kind": "message",
+              "type_name": "reliant.v1.MachineHealth"
             }
           ],
           "reliant.v1.DeleteMachinePoolRequest": [
@@ -12970,6 +12976,25 @@
             {
               "name": "probed_at",
               "kind": "string"
+            }
+          ],
+          "reliant.v1.MachineHealth": [
+            {
+              "name": "state",
+              "kind": "enum",
+              "type_name": "reliant.v1.MachineHealthState"
+            },
+            {
+              "name": "code",
+              "kind": "string"
+            },
+            {
+              "name": "reason",
+              "kind": "string"
+            },
+            {
+              "name": "since_ms",
+              "kind": "int64"
             }
           ],
           "reliant.v1.MachinePool": [
@@ -13354,6 +13379,7 @@
           "reliant.v1.LocalModelEndpoint": "reliant/v1/tools_daemon.proto",
           "reliant.v1.LocalModelInfo": "reliant/v1/tools_daemon.proto",
           "reliant.v1.LocalModelInventory": "reliant/v1/tools_daemon.proto",
+          "reliant.v1.MachineHealth": "reliant/v1/tools_daemon.proto",
           "reliant.v1.MachinePool": "reliant/v1/daemon_registry.proto",
           "reliant.v1.MachinePoolMember": "reliant/v1/daemon_registry.proto",
           "reliant.v1.MachinePoolSpec": "reliant/v1/daemon_registry.proto",
@@ -13401,6 +13427,11 @@
             "DISK_GUARD_STATE_UNSPECIFIED",
             "DISK_GUARD_STATE_RECLAIMING",
             "DISK_GUARD_STATE_REFUSING_HEAVY"
+          ],
+          "reliant.v1.MachineHealthState": [
+            "MACHINE_HEALTH_STATE_UNSPECIFIED",
+            "MACHINE_HEALTH_STATE_OK",
+            "MACHINE_HEALTH_STATE_DEGRADED"
           ]
         },
         "EnumNumbers": {
@@ -13426,6 +13457,11 @@
             0,
             1,
             2
+          ],
+          "reliant.v1.MachineHealthState": [
+            0,
+            1,
+            2
           ]
         },
         "EnumGoRefs": {
@@ -13440,6 +13476,10 @@
           "reliant.v1.DiskGuardState": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
             "GoName": "DiskGuardState"
+          },
+          "reliant.v1.MachineHealthState": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "MachineHealthState"
           }
         }
       }
@@ -17340,6 +17380,38 @@
               "kind": "message",
               "type_name": "reliant.v1.InboxWorktreeMarked",
               "oneof": "payload"
+            },
+            {
+              "name": "org_provider_key_rejected",
+              "kind": "message",
+              "type_name": "reliant.v1.InboxOrgProviderKeyRejected",
+              "oneof": "payload"
+            }
+          ],
+          "reliant.v1.InboxOrgProviderKeyRejected": [
+            {
+              "name": "org_id",
+              "kind": "string"
+            },
+            {
+              "name": "account_id",
+              "kind": "string"
+            },
+            {
+              "name": "provider",
+              "kind": "string"
+            },
+            {
+              "name": "label",
+              "kind": "string"
+            },
+            {
+              "name": "key_hint",
+              "kind": "string"
+            },
+            {
+              "name": "reason",
+              "kind": "string"
             }
           ],
           "reliant.v1.InboxQuestion": [
@@ -17847,6 +17919,7 @@
           "reliant.v1.InboxAutomationNeedsSetup": "reliant/v1/inbox.proto",
           "reliant.v1.InboxAutomationRunPaused": "reliant/v1/inbox.proto",
           "reliant.v1.InboxItem": "reliant/v1/inbox.proto",
+          "reliant.v1.InboxOrgProviderKeyRejected": "reliant/v1/inbox.proto",
           "reliant.v1.InboxQuestion": "reliant/v1/inbox.proto",
           "reliant.v1.InboxRefusedAutomation": "reliant/v1/inbox.proto",
           "reliant.v1.InboxStorage": "reliant/v1/inbox.proto",
@@ -17899,7 +17972,8 @@
             "INBOX_ITEM_KIND_AUTOMATION_DEFINITION_BROKEN",
             "INBOX_ITEM_KIND_WORKTREE_RECLAIM",
             "INBOX_ITEM_KIND_WORKTREE_MARKED",
-            "INBOX_ITEM_KIND_PERSONAL_FUNDING"
+            "INBOX_ITEM_KIND_PERSONAL_FUNDING",
+            "INBOX_ITEM_KIND_ORG_PROVIDER_KEY_REJECTED"
           ],
           "reliant.v1.TriggerHealthStatus": [
             "TRIGGER_HEALTH_STATUS_UNSPECIFIED",
@@ -17941,7 +18015,8 @@
             11,
             12,
             13,
-            14
+            14,
+            15
           ],
           "reliant.v1.TriggerHealthStatus": [
             0,
@@ -51621,6 +51696,43 @@
       "implementation_candidates": []
     },
     {
+      "id": "Seatmatch",
+      "name": "Seatmatch",
+      "kind": "component",
+      "type": "github.com/reliant-labs/reliant/internal/seatmatch.Service",
+      "source": {
+        "path": "internal/seatmatch/service.go",
+        "symbol": "New"
+      },
+      "methods": [],
+      "implementation_candidates": [
+        {
+          "type": "*github.com/reliant-labs/reliant/internal/seatmatch.MockService",
+          "source": {
+            "path": "internal/seatmatch/mock_gen.go",
+            "symbol": "MockService"
+          },
+          "methods": []
+        },
+        {
+          "type": "*github.com/reliant-labs/reliant/internal/seatmatch.forgeMiddlewareService",
+          "source": {
+            "path": "internal/seatmatch/middleware_gen.go",
+            "symbol": "forgeMiddlewareService"
+          },
+          "methods": []
+        },
+        {
+          "type": "*github.com/reliant-labs/reliant/internal/seatmatch.service",
+          "source": {
+            "path": "internal/seatmatch/service.go",
+            "symbol": "service"
+          },
+          "methods": []
+        }
+      ]
+    },
+    {
       "id": "Settings",
       "name": "Settings",
       "kind": "component",
@@ -52850,6 +52962,19 @@
     },
     {
       "consumer": "OrgProviderAccount",
+      "field": "Seats",
+      "interface": "github.com/reliant-labs/reliant/internal/seatmatch.Service",
+      "methods": [],
+      "candidates": [
+        "Seatmatch"
+      ],
+      "providers": [
+        "Seatmatch"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "OrgProviderAccount",
       "field": "Store",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/org_provider_account.Store",
       "methods": [],
@@ -53174,6 +53299,41 @@
       "resolution": "composition_expression"
     },
     {
+      "consumer": "Seatmatch",
+      "field": "Members",
+      "interface": "github.com/reliant-labs/reliant/internal/seatmatch.Members",
+      "methods": [],
+      "candidates": [
+        "OrgResolver"
+      ],
+      "providers": [
+        "OrgResolver"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Seatmatch",
+      "field": "Rollout",
+      "interface": "github.com/reliant-labs/reliant/internal/seatmatch.Rollout",
+      "methods": [],
+      "candidates": [],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "Seatmatch",
+      "field": "Store",
+      "interface": "github.com/reliant-labs/reliant/internal/seatmatch.Store",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
       "consumer": "Settings",
       "field": "ChatWaker",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/settings.ChatWaker",
@@ -53206,6 +53366,19 @@
       ],
       "providers": [
         "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Settings",
+      "field": "Seats",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/settings.SeatMatcher",
+      "methods": [],
+      "candidates": [
+        "Seatmatch"
+      ],
+      "providers": [
+        "Seatmatch"
       ],
       "resolution": "composition_expression"
     },
@@ -53977,6 +54150,14 @@
       "component": "Project.ControlPlane",
       "source": {
         "path": "internal/handlers/project/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "Seatmatch.Rollout",
+      "source": {
+        "path": "internal/seatmatch/service.go",
         "symbol": "New"
       }
     },

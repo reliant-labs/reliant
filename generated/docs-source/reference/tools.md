@@ -3079,8 +3079,10 @@ If it reports that the machine was removed, or that it failed to start and staye
 RETURNS EARLY WHEN A MESSAGE ARRIVES:
 If a message arrives for you while you wait — from the user, your parent, or a sub-agent — the wait ends early so you can read it. Nothing is lost; call wait_for_machine again if you still need the machine.
 
+If it reports that the machine is connected but degraded (it cannot start processes), retrying will fail the same way and waiting will not help: free the machine (shell_list, shell_kill) or tell the user.
+
 RETURNS:
-- connected: true once the machine is attached — retry the call that failed
+- connected: true once the machine is attached — retry the call that failed, unless it also says degraded
 - otherwise its last known state (disconnected, starting, suspended, failed, removed) with what to do about it
 
 ---

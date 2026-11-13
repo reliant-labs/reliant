@@ -102,6 +102,11 @@ export const ERROR_REASONS = [
   "observability_not_configured",
   /** The caller is not a member of the organization asked about. */
   "not_org_member",
+  // ── reliant: moving a project to another org (handlers/project rpc_move_project_to_org.go) ──
+  /** Running work in the project refuses the move; the preview names it. FailedPrecondition. */
+  "project_busy",
+  /** The project left the organization the dialog saw it in. FailedPrecondition. */
+  "org_changed",
   /** The org's hourly observability query quota is spent; the QueryQuotaExhausted detail says when it resets. */
   "obs_query_quota",
   /** A background poll refused early, to keep the last of the quota for a person's own query. */

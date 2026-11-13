@@ -694,6 +694,39 @@ func (r *NATSDaemonRouter) MachineState(ctx context.Context, userID string, sele
 	}, nil
 }
 
+// attachmentReader is the lease read MachineHealth needs. The registry's
+// repository satisfies it; a DaemonRecords that does not leaves health
+// unknown, which reads as healthy.
+type attachmentReader interface {
+	ListFreshDaemonAttachmentsForUser(ctx context.Context, userID string, staleThreshold time.Duration) ([]*db.DaemonAttachment, error)
+}
+
+// MachineHealth reports the health the attached daemon a request for this
+// selector would route to last reported (the gateway stores it on the
+// attachment lease). The zero value — not reported — when no daemon is
+// attached or the registry cannot say; callers read that as healthy. Like
+// MachineState it reads this process's database only.
+func (r *NATSDaemonRouter) MachineHealth(ctx context.Context, userID string, selector *DaemonSelector) (db.MachineHealth, error) {
+	reader, ok := r.db.(attachmentReader)
+	if !ok {
+		return db.MachineHealth{}, nil
+	}
+	state, err := r.MachineState(ctx, userID, selector)
+	if err != nil || state.DaemonID == "" {
+		return db.MachineHealth{}, err
+	}
+	atts, err := reader.ListFreshDaemonAttachmentsForUser(ctx, userID, daemonStaleThreshold)
+	if err != nil {
+		return db.MachineHealth{}, err
+	}
+	for _, att := range atts {
+		if att.DaemonID == state.DaemonID {
+			return att.Health, nil
+		}
+	}
+	return db.MachineHealth{}, nil
+}
+
 // DaemonWaker wakes a suspended daemon. It is held only by the callers that
 // are allowed to: run preflight, the attended send/start path, and a signed-in
 // user's own file and worktree requests (machinewake). Tool-time code

@@ -18,6 +18,7 @@ import (
 	reliantv1connect "github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/llm/models"
+	"github.com/reliant-labs/reliant/internal/seatmatch"
 	"github.com/reliant-labs/reliant/pkg/config"
 )
 
@@ -41,7 +42,9 @@ type Store interface {
 	BindOrgProviderWorkspace(ctx context.Context, w core.OrgProviderWorkspace) (core.OrgProviderWorkspace, bool, error)
 	UnbindOrgProviderWorkspace(ctx context.Context, orgID, provider, externalOrgID string) error
 	ListOrgSeats(ctx context.Context, orgID string) ([]core.ProviderAccount, error)
-	ReleaseOrgSeat(ctx context.Context, orgID, accountID string) error
+	// ReleaseOrgSeat clears one of the org's seats and records the release, so the binding
+	// matcher never makes it the org's seat again.
+	ReleaseOrgSeat(ctx context.Context, orgID, accountID, releasedBy string) error
 }
 
 // Deps holds dependencies for the org_provider_account service. Composition
@@ -63,6 +66,12 @@ type Deps struct {
 	//
 	// forge:optional-dep
 	OrgRollout *configv1.OrgsConfig
+	// Seats is the binding matcher: a bind makes every live member's sign-in already in the
+	// workspace the org's seat. Nil matches nothing at bind; members are then matched as they
+	// sign in.
+	//
+	// forge:optional-dep
+	Seats seatmatch.Service
 }
 
 // validateDeps returns an error if any required Deps field is nil. The

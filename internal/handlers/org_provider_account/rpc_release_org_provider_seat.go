@@ -26,7 +26,7 @@ func (s *Service) ReleaseOrgProviderSeat(
 	if err != nil {
 		return nil, err
 	}
-	if err := s.deps.Store.ReleaseOrgSeat(ctx, orgID, req.Msg.GetAccountId()); err != nil {
+	if err := s.deps.Store.ReleaseOrgSeat(ctx, orgID, req.Msg.GetAccountId(), userID); err != nil {
 		return nil, svcerr.Wrap(err)
 	}
 	s.deps.Logger.InfoContext(ctx, "org provider seat released", "org_id", orgID, "account_id", req.Msg.GetAccountId(), "user_id", userID)
