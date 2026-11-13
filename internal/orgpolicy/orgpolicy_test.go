@@ -309,7 +309,7 @@ func reasonOf(err error) string {
 }
 
 // unsupported is a control plane without the rpc.
-var unsupported = fmt.Errorf("%w: ResolveOrgPolicy: unimplemented", accesstokenclient.ErrUnsupported)
+var errUnsupportedCP = fmt.Errorf("%w: ResolveOrgPolicy: unimplemented", accesstokenclient.ErrUnsupported)
 
 // failsToConfirm drives r on c through Grace of the v4 fetched at fetched,
 // while every later fetch fails to confirm it: each answer within Grace is the
@@ -335,7 +335,7 @@ func failsToConfirm(t *testing.T, r *Resolver, c *clock, fetched time.Time) {
 // stale, until Grace runs out, then the org's work fails closed.
 func TestUnsupportedAfterAKnownPolicyFailsClosed(t *testing.T) {
 	t.Parallel()
-	src := &scripted{replies: []reply{{version: 4, doc: machines}, {err: unsupported}}}
+	src := &scripted{replies: []reply{{version: 4, doc: machines}, {err: errUnsupportedCP}}}
 	r, c := newResolver(src)
 	fetched := c.now()
 	mustResolve(t, r, "org-a")
@@ -418,7 +418,7 @@ func (b byOrg) ResolveOrgPolicy(ctx context.Context, orgID string) (accesstokenc
 func TestEvictionKeepsTheHighWaterMark(t *testing.T) {
 	t.Parallel()
 	for name, later := range map[string]reply{
-		"unsupported":   {err: unsupported},
+		"unsupported":   {err: errUnsupportedCP},
 		"older version": {version: 2},
 		"version zero":  {version: 0},
 	} {
