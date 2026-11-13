@@ -31,6 +31,7 @@ import { SessionTimeline } from "./SessionTimeline";
 import { isLive, LEAVE_SESSIONS, sessionTitle } from "./sessionModel";
 import { SessionNote, SessionsNotConfigured } from "./SessionStates";
 import { ClientSummary } from "../Client";
+import { Foldable } from "../detailDensity";
 
 export interface SessionDetailProps {
   scope: RumScope;
@@ -160,6 +161,7 @@ function SessionBody({
             </span>
           )}
         </div>
+        <Foldable id="session-details" title="Visit details" hint="Visitor, place, browser, build and counts">
         <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-muted">
           {session.userId ? <span className="text-ink">{session.userId}</span> : <span>anonymous user</span>}
           <Place geo={session} testId="session-place" />
@@ -187,6 +189,7 @@ function SessionBody({
             {formatCount(session.interactions)} interaction{session.interactions === 1 ? "" : "s"}
           </span>
         </p>
+        </Foldable>
       </header>
 
       {/* No replay (a session reached by id from a trace or an error): the

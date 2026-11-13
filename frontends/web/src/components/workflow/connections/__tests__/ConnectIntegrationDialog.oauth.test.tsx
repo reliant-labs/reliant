@@ -51,6 +51,7 @@ const protoConnection = {
 const connection = {
   id: 'conn_1', integrationId: 'slack', authKind: 'oauth2', name: 'Acme',
   accountLabel: 'Acme', senderId: '', status: 'active', statusReason: '', isDefault: true, lastUsedAt: '', createdAt: '',
+  ownerKind: 'user', orgId: '',
 }
 
 const renderDialog = (props: { onConnected?: (c: unknown) => void; onClose?: () => void } = {}) => {

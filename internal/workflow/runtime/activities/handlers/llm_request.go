@@ -10,6 +10,8 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/llm"
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/local"
@@ -32,6 +34,14 @@ import (
 type llmCallSpec struct {
 	UserID    string
 	SessionID string
+
+	// OrgID and Attended scope the accounts the call may draw on (see
+	// scope). Both come from the chat row the activity loaded, on the
+	// server, through chatOrgID and chatAttended: never from workflow inputs,
+	// a client or a daemon, which are replayed and inherited and so are not
+	// authority. A call with no chat leaves them unset: the personal scope.
+	OrgID    string
+	Attended bool
 
 	// Selector picks the model via the registry. Ignored when an injected
 	// resolver (tests) supplies its own driver/model, mirroring CallLLM.
@@ -111,6 +121,46 @@ type llmCallSpec struct {
 	// models never come from the registry: they are synthesized per request
 	// from the daemons' published inventories.
 	Local *LocalModelSpec
+}
+
+// scope is the drivers.Scope every account read of this call uses: the
+// registry's candidates, the router's accounts, the default-account fallback
+// and the failover's alternatives, so none of them can pick from a different
+// set. A call with no org (no chat, or a chat that predates orgs) gets the
+// person's own accounts.
+func (s llmCallSpec) scope() drivers.Scope {
+	if s.OrgID == "" {
+		return drivers.PersonalScope(s.UserID)
+	}
+	return drivers.Scope{UserID: s.UserID, OrgID: s.OrgID, Attended: s.Attended}
+}
+
+// chatScope is the scope of a call made for chat, as a spec built from the
+// chat row (chatOrgID, chatAttended) scopes it.
+func chatScope(chat *db.Chat) drivers.Scope {
+	return llmCallSpec{UserID: chat.UserID, OrgID: chatOrgID(chat), Attended: chatAttended(chat)}.scope()
+}
+
+// chatOrgID is the org a call made for chat is scoped to: the chat row's
+// org_id, "" when the chat has none (or there is no chat).
+func chatOrgID(chat *db.Chat) string {
+	if chat == nil || chat.OrgID == nil {
+		return ""
+	}
+	return *chat.OrgID
+}
+
+// chatAttended reports whether a person is behind a call made for chat,
+// decided from the chat's launch event: a run a stored trigger launched
+// (core.TriggerEventKind.Unattended) has nobody behind it; every other run,
+// and a call with no chat, has. The per-turn rule (a person's message into an
+// automation's chat) and the agent.start_run lineage walk refine this one
+// function when unattended runs are restricted (org-provider-accounts §11.1).
+func chatAttended(chat *db.Chat) bool {
+	if chat == nil || chat.TriggerID == nil {
+		return true
+	}
+	return !core.TriggerEventKind(chat.LaunchKind).Unattended()
 }
 
 // LocalModelSpec is what resolving a local model needs beyond the selector.
@@ -283,7 +333,7 @@ func resolveLLMCallOnce(ctx context.Context, resolver drivers.DriverResolver, sp
 		// configured.
 		// A store failure says nothing about what the user has connected, so it
 		// must not read as "connect a provider", which is terminal.
-		availableDrivers, lerr := lookupAvailableDriversWithRetry(ctx, spec.UserID)
+		availableDrivers, lerr := lookupAvailableDriversWithRetry(ctx, spec.scope())
 		if lerr != nil {
 			return nil, lerr
 		}
@@ -431,7 +481,7 @@ func resolveLLMCallOnce(ctx context.Context, resolver drivers.DriverResolver, sp
 			// Every account is limited: refuse here, with no provider call, the
 			// way the provider would have, carrying the facts to decide on.
 			return nil, spec.Routing.usageLimitFailure(ctx, rerr, usageLimitContext{
-				UserID: spec.UserID, ThreadID: spec.ThreadID, Driver: models.DriverID(providerDriver),
+				Scope: spec.scope(), ThreadID: spec.ThreadID, Driver: models.DriverID(providerDriver),
 				ModelID: definitionID(definition), Policy: spec.Failover,
 			})
 		}
@@ -464,12 +514,16 @@ func resolveLLMCallOnce(ctx context.Context, resolver drivers.DriverResolver, sp
 			}
 		}
 		if driver == nil {
-			resolve := drivers.GetDriver
-			if resolver != nil {
-				resolve = resolver
-			}
 			var err error
-			if driver, err = resolve(ctx, spec.UserID, preferences, driverOpts...); err != nil {
+			if resolver != nil {
+				// An injected resolver (tests) reads no accounts.
+				driver, err = resolver(ctx, spec.UserID, preferences, driverOpts...)
+			} else {
+				// The provider's default account, from the same scope the
+				// router saw.
+				driver, err = drivers.GetDriver(ctx, spec.scope(), preferences, driverOpts...)
+			}
+			if err != nil {
 				return nil, fmt.Errorf("failed to get LLM driver: %w", err)
 			}
 		}

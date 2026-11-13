@@ -20,6 +20,7 @@
         "Account",
         "Approval",
         "Attachment",
+        "AutomationTakeover",
         "Background",
         "Catalog",
         "Chat",
@@ -119,6 +120,13 @@
         {
           "component": "Attachment",
           "service": "reliant.v1.AttachmentService",
+          "route_set": "UserRoutes",
+          "audience": "user",
+          "resolution": "declared_route_set"
+        },
+        {
+          "component": "AutomationTakeover",
+          "service": "reliant.v1.AutomationTakeoverService",
           "route_set": "UserRoutes",
           "audience": "user",
           "resolution": "declared_route_set"
@@ -1689,6 +1697,1322 @@
           "reliant.v1.GetAttachmentResponse": "reliant/v1/attachment.proto",
           "reliant.v1.UploadAttachmentRequest": "reliant/v1/attachment.proto",
           "reliant.v1.UploadAttachmentResponse": "reliant/v1/attachment.proto"
+        }
+      }
+    },
+    {
+      "name": "reliant.v1.AutomationTakeoverService",
+      "proto_file": "reliant/v1/automation_takeover.proto",
+      "methods": [
+        {
+          "id": "reliant.v1.AutomationTakeoverService/AcceptTriggerOffer",
+          "name": "AcceptTriggerOffer",
+          "input": "reliant.v1.AcceptTriggerOfferRequest",
+          "output": "reliant.v1.AcceptTriggerOfferResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "UNKNOWN",
+          "auth_required": true
+        },
+        {
+          "id": "reliant.v1.AutomationTakeoverService/AdoptTrigger",
+          "name": "AdoptTrigger",
+          "input": "reliant.v1.AdoptTriggerRequest",
+          "output": "reliant.v1.AdoptTriggerResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "UNKNOWN",
+          "auth_required": true
+        },
+        {
+          "id": "reliant.v1.AutomationTakeoverService/ListOrphanedAutomations",
+          "name": "ListOrphanedAutomations",
+          "input": "reliant.v1.ListOrphanedAutomationsRequest",
+          "output": "reliant.v1.ListOrphanedAutomationsResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "UNKNOWN",
+          "auth_required": true
+        },
+        {
+          "id": "reliant.v1.AutomationTakeoverService/ListTriggerOffers",
+          "name": "ListTriggerOffers",
+          "input": "reliant.v1.ListTriggerOffersRequest",
+          "output": "reliant.v1.ListTriggerOffersResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "UNKNOWN",
+          "auth_required": true
+        },
+        {
+          "id": "reliant.v1.AutomationTakeoverService/RevokeTriggerOffer",
+          "name": "RevokeTriggerOffer",
+          "input": "reliant.v1.RevokeTriggerOfferRequest",
+          "output": "reliant.v1.RevokeTriggerOfferResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "UNKNOWN",
+          "auth_required": true
+        }
+      ],
+      "descriptor": {
+        "Name": "AutomationTakeoverService",
+        "Package": "reliant.v1",
+        "GoPackage": "github.com/reliant-labs/reliant/gen/reliant/v1",
+        "PkgName": "reliantv1",
+        "Methods": [
+          {
+            "Name": "ListOrphanedAutomations",
+            "InputType": "ListOrphanedAutomationsRequest",
+            "OutputType": "ListOrphanedAutomationsResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "Custom": true,
+            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "InputTypeFQ": "reliant.v1.ListOrphanedAutomationsRequest",
+            "OutputTypeFQ": "reliant.v1.ListOrphanedAutomationsResponse",
+            "InputProtoFile": "reliant/v1/automation_takeover.proto",
+            "OutputProtoFile": "reliant/v1/automation_takeover.proto",
+            "Activity": {
+              "Mutating": false
+            }
+          },
+          {
+            "Name": "AdoptTrigger",
+            "InputType": "AdoptTriggerRequest",
+            "OutputType": "AdoptTriggerResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "InputTypeFQ": "reliant.v1.AdoptTriggerRequest",
+            "OutputTypeFQ": "reliant.v1.AdoptTriggerResponse",
+            "InputProtoFile": "reliant/v1/automation_takeover.proto",
+            "OutputProtoFile": "reliant/v1/automation_takeover.proto",
+            "Activity": {
+              "Mutating": true,
+              "Declared": true,
+              "Verb": "adopt",
+              "TargetKind": "trigger",
+              "Writer": "INTERCEPTOR"
+            }
+          },
+          {
+            "Name": "AcceptTriggerOffer",
+            "InputType": "AcceptTriggerOfferRequest",
+            "OutputType": "AcceptTriggerOfferResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "InputTypeFQ": "reliant.v1.AcceptTriggerOfferRequest",
+            "OutputTypeFQ": "reliant.v1.AcceptTriggerOfferResponse",
+            "InputProtoFile": "reliant/v1/automation_takeover.proto",
+            "OutputProtoFile": "reliant/v1/automation_takeover.proto",
+            "Activity": {
+              "Mutating": true,
+              "Declared": true,
+              "Verb": "accept",
+              "TargetKind": "trigger_offer",
+              "Writer": "INTERCEPTOR"
+            }
+          },
+          {
+            "Name": "ListTriggerOffers",
+            "InputType": "ListTriggerOffersRequest",
+            "OutputType": "ListTriggerOffersResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "Custom": true,
+            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "InputTypeFQ": "reliant.v1.ListTriggerOffersRequest",
+            "OutputTypeFQ": "reliant.v1.ListTriggerOffersResponse",
+            "InputProtoFile": "reliant/v1/automation_takeover.proto",
+            "OutputProtoFile": "reliant/v1/automation_takeover.proto",
+            "Activity": {
+              "Mutating": false
+            }
+          },
+          {
+            "Name": "RevokeTriggerOffer",
+            "InputType": "RevokeTriggerOfferRequest",
+            "OutputType": "RevokeTriggerOfferResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "InputTypeFQ": "reliant.v1.RevokeTriggerOfferRequest",
+            "OutputTypeFQ": "reliant.v1.RevokeTriggerOfferResponse",
+            "InputProtoFile": "reliant/v1/automation_takeover.proto",
+            "OutputProtoFile": "reliant/v1/automation_takeover.proto",
+            "Activity": {
+              "Mutating": true,
+              "Declared": true,
+              "Verb": "revoke",
+              "TargetKind": "trigger_offer",
+              "Writer": "INTERCEPTOR"
+            }
+          }
+        ],
+        "ProtoFile": "reliant/v1/automation_takeover.proto",
+        "ModulePath": "github.com/reliant-labs/reliant",
+        "Messages": {
+          "AcceptTriggerOfferRequest": [
+            {
+              "Name": "offer_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "rebinding",
+              "ProtoType": "message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.TriggerRebinding"
+            }
+          ],
+          "AcceptTriggerOfferResponse": [
+            {
+              "Name": "trigger",
+              "ProtoType": "message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.Trigger"
+            },
+            {
+              "Name": "webhook",
+              "ProtoType": "message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.WebhookCredential"
+            },
+            {
+              "Name": "notices",
+              "ProtoType": "[]string",
+              "IsOptional": false
+            }
+          ],
+          "AdoptTriggerRequest": [
+            {
+              "Name": "trigger_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "new_owner_user_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "rebinding",
+              "ProtoType": "message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.TriggerRebinding"
+            }
+          ],
+          "AdoptTriggerResponse": [
+            {
+              "Name": "trigger",
+              "ProtoType": "message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.Trigger"
+            },
+            {
+              "Name": "webhook",
+              "ProtoType": "message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.WebhookCredential"
+            },
+            {
+              "Name": "offer",
+              "ProtoType": "message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.TriggerOffer"
+            },
+            {
+              "Name": "notices",
+              "ProtoType": "[]string",
+              "IsOptional": false
+            }
+          ],
+          "ListOrphanedAutomationsRequest": [
+            {
+              "Name": "org_id",
+              "ProtoType": "string",
+              "IsOptional": true
+            }
+          ],
+          "ListOrphanedAutomationsResponse": [
+            {
+              "Name": "triggers",
+              "ProtoType": "[]message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.OrphanedTrigger"
+            },
+            {
+              "Name": "workflows",
+              "ProtoType": "[]message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.OrphanedWorkflow"
+            }
+          ],
+          "ListTriggerOffersRequest": [
+            {
+              "Name": "org_id",
+              "ProtoType": "string",
+              "IsOptional": true
+            }
+          ],
+          "ListTriggerOffersResponse": [
+            {
+              "Name": "offers",
+              "ProtoType": "[]message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.TriggerOffer"
+            }
+          ],
+          "RevokeTriggerOfferRequest": [
+            {
+              "Name": "offer_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            }
+          ],
+          "RevokeTriggerOfferResponse": [
+            {
+              "Name": "offer",
+              "ProtoType": "message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.TriggerOffer"
+            }
+          ]
+        },
+        "Audience": "user",
+        "Schemas": {
+          "reliant.v1.AcceptTriggerOfferRequest": [
+            {
+              "name": "offer_id",
+              "kind": "string",
+              "validate": {
+                "min_len": 1
+              }
+            },
+            {
+              "name": "rebinding",
+              "kind": "message",
+              "type_name": "reliant.v1.TriggerRebinding"
+            }
+          ],
+          "reliant.v1.AcceptTriggerOfferResponse": [
+            {
+              "name": "trigger",
+              "kind": "message",
+              "type_name": "reliant.v1.Trigger"
+            },
+            {
+              "name": "webhook",
+              "kind": "message",
+              "type_name": "reliant.v1.WebhookCredential"
+            },
+            {
+              "name": "notices",
+              "kind": "string",
+              "repeated": true
+            }
+          ],
+          "reliant.v1.AdoptTriggerRequest": [
+            {
+              "name": "trigger_id",
+              "kind": "string",
+              "validate": {
+                "min_len": 1
+              }
+            },
+            {
+              "name": "new_owner_user_id",
+              "kind": "string"
+            },
+            {
+              "name": "rebinding",
+              "kind": "message",
+              "type_name": "reliant.v1.TriggerRebinding"
+            }
+          ],
+          "reliant.v1.AdoptTriggerResponse": [
+            {
+              "name": "trigger",
+              "kind": "message",
+              "type_name": "reliant.v1.Trigger"
+            },
+            {
+              "name": "webhook",
+              "kind": "message",
+              "type_name": "reliant.v1.WebhookCredential"
+            },
+            {
+              "name": "offer",
+              "kind": "message",
+              "type_name": "reliant.v1.TriggerOffer"
+            },
+            {
+              "name": "notices",
+              "kind": "string",
+              "repeated": true
+            }
+          ],
+          "reliant.v1.IntegrationSource": [
+            {
+              "name": "integration",
+              "kind": "string"
+            },
+            {
+              "name": "events",
+              "kind": "string",
+              "repeated": true
+            },
+            {
+              "name": "match",
+              "kind": "map",
+              "map_key_kind": "string",
+              "map_value_kind": "string"
+            },
+            {
+              "name": "poll_interval",
+              "kind": "string"
+            },
+            {
+              "name": "match_input",
+              "kind": "map",
+              "map_key_kind": "string",
+              "map_value_kind": "string"
+            }
+          ],
+          "reliant.v1.ListOrphanedAutomationsRequest": [
+            {
+              "name": "org_id",
+              "kind": "string",
+              "optional": true
+            }
+          ],
+          "reliant.v1.ListOrphanedAutomationsResponse": [
+            {
+              "name": "triggers",
+              "kind": "message",
+              "type_name": "reliant.v1.OrphanedTrigger",
+              "repeated": true
+            },
+            {
+              "name": "workflows",
+              "kind": "message",
+              "type_name": "reliant.v1.OrphanedWorkflow",
+              "repeated": true
+            }
+          ],
+          "reliant.v1.ListTriggerOffersRequest": [
+            {
+              "name": "org_id",
+              "kind": "string",
+              "optional": true
+            }
+          ],
+          "reliant.v1.ListTriggerOffersResponse": [
+            {
+              "name": "offers",
+              "kind": "message",
+              "type_name": "reliant.v1.TriggerOffer",
+              "repeated": true
+            }
+          ],
+          "reliant.v1.OrphanedTrigger": [
+            {
+              "name": "trigger",
+              "kind": "message",
+              "type_name": "reliant.v1.Trigger"
+            },
+            {
+              "name": "param_names",
+              "kind": "string",
+              "repeated": true
+            },
+            {
+              "name": "creator_user_id",
+              "kind": "string"
+            },
+            {
+              "name": "pending_offer",
+              "kind": "message",
+              "type_name": "reliant.v1.TriggerOffer",
+              "optional": true
+            }
+          ],
+          "reliant.v1.OrphanedWorkflow": [
+            {
+              "name": "id",
+              "kind": "string"
+            },
+            {
+              "name": "name",
+              "kind": "string"
+            },
+            {
+              "name": "slug",
+              "kind": "string"
+            },
+            {
+              "name": "description",
+              "kind": "string"
+            },
+            {
+              "name": "definition",
+              "kind": "string"
+            },
+            {
+              "name": "creator_user_id",
+              "kind": "string"
+            },
+            {
+              "name": "org_id",
+              "kind": "string"
+            },
+            {
+              "name": "updated_at",
+              "kind": "string"
+            },
+            {
+              "name": "status",
+              "kind": "string"
+            }
+          ],
+          "reliant.v1.RevokeTriggerOfferRequest": [
+            {
+              "name": "offer_id",
+              "kind": "string",
+              "validate": {
+                "min_len": 1
+              }
+            }
+          ],
+          "reliant.v1.RevokeTriggerOfferResponse": [
+            {
+              "name": "offer",
+              "kind": "message",
+              "type_name": "reliant.v1.TriggerOffer"
+            }
+          ],
+          "reliant.v1.ScheduleSource": [
+            {
+              "name": "cron",
+              "kind": "string",
+              "repeated": true
+            },
+            {
+              "name": "interval",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "timezone",
+              "kind": "string"
+            },
+            {
+              "name": "overlap",
+              "kind": "enum",
+              "type_name": "reliant.v1.TriggerOverlapPolicy"
+            },
+            {
+              "name": "catchup_window",
+              "kind": "string",
+              "optional": true
+            }
+          ],
+          "reliant.v1.Trigger": [
+            {
+              "name": "id",
+              "kind": "string"
+            },
+            {
+              "name": "name",
+              "kind": "string"
+            },
+            {
+              "name": "project_id",
+              "kind": "string"
+            },
+            {
+              "name": "worktree_id",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "enabled",
+              "kind": "bool"
+            },
+            {
+              "name": "workflow",
+              "kind": "string"
+            },
+            {
+              "name": "presets",
+              "kind": "map",
+              "map_key_kind": "string",
+              "map_value_kind": "string"
+            },
+            {
+              "name": "params",
+              "kind": "map",
+              "map_key_kind": "string",
+              "map_value_kind": "message",
+              "map_value_type_name": "google.protobuf.Value"
+            },
+            {
+              "name": "message",
+              "kind": "string"
+            },
+            {
+              "name": "created_at",
+              "kind": "string"
+            },
+            {
+              "name": "updated_at",
+              "kind": "string"
+            },
+            {
+              "name": "next_fire_at",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "last_event",
+              "kind": "message",
+              "type_name": "reliant.v1.TriggerEvent",
+              "optional": true
+            },
+            {
+              "name": "changes",
+              "kind": "message",
+              "type_name": "reliant.v1.TriggerChange",
+              "repeated": true
+            },
+            {
+              "name": "daemon_id",
+              "kind": "string"
+            },
+            {
+              "name": "no_machine",
+              "kind": "bool"
+            },
+            {
+              "name": "machine_pool_id",
+              "kind": "string"
+            },
+            {
+              "name": "machine_pool_name",
+              "kind": "string"
+            },
+            {
+              "name": "health",
+              "kind": "message",
+              "type_name": "reliant.v1.TriggerHealth"
+            },
+            {
+              "name": "project_name",
+              "kind": "string"
+            },
+            {
+              "name": "daemon_name",
+              "kind": "string"
+            },
+            {
+              "name": "machine_state",
+              "kind": "string"
+            },
+            {
+              "name": "notify_on_complete",
+              "kind": "bool"
+            },
+            {
+              "name": "filter",
+              "kind": "string"
+            },
+            {
+              "name": "schedule",
+              "kind": "message",
+              "type_name": "reliant.v1.ScheduleSource",
+              "oneof": "source"
+            },
+            {
+              "name": "webhook",
+              "kind": "message",
+              "type_name": "reliant.v1.WebhookSource",
+              "oneof": "source"
+            },
+            {
+              "name": "integration",
+              "kind": "message",
+              "type_name": "reliant.v1.IntegrationSource",
+              "oneof": "source"
+            },
+            {
+              "name": "workflow_event",
+              "kind": "message",
+              "type_name": "reliant.v1.WorkflowEventSource",
+              "oneof": "source"
+            },
+            {
+              "name": "connection_id",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "webhook_url",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "workflow_trigger",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "acting_identity",
+              "kind": "enum",
+              "type_name": "reliant.v1.ActingIdentity"
+            },
+            {
+              "name": "webhook_managed",
+              "kind": "bool"
+            },
+            {
+              "name": "definition_source",
+              "kind": "message",
+              "type_name": "reliant.v1.TriggerDefinitionSource"
+            },
+            {
+              "name": "org_id",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "paused_reason",
+              "kind": "string"
+            }
+          ],
+          "reliant.v1.TriggerChange": [
+            {
+              "name": "id",
+              "kind": "string"
+            },
+            {
+              "name": "user_id",
+              "kind": "string"
+            },
+            {
+              "name": "chat_id",
+              "kind": "string"
+            },
+            {
+              "name": "run_id",
+              "kind": "string"
+            },
+            {
+              "name": "tool_call_id",
+              "kind": "string"
+            },
+            {
+              "name": "operation",
+              "kind": "string"
+            },
+            {
+              "name": "before_state",
+              "kind": "string"
+            },
+            {
+              "name": "after_state",
+              "kind": "string"
+            },
+            {
+              "name": "created_at",
+              "kind": "string"
+            },
+            {
+              "name": "approval",
+              "kind": "string"
+            },
+            {
+              "name": "capabilities_added",
+              "kind": "string",
+              "repeated": true
+            },
+            {
+              "name": "capabilities_removed",
+              "kind": "string",
+              "repeated": true
+            }
+          ],
+          "reliant.v1.TriggerDefinitionSource": [
+            {
+              "name": "kind",
+              "kind": "string"
+            },
+            {
+              "name": "path",
+              "kind": "string"
+            },
+            {
+              "name": "daemon_id",
+              "kind": "string"
+            },
+            {
+              "name": "daemon_name",
+              "kind": "string"
+            },
+            {
+              "name": "summary",
+              "kind": "string"
+            },
+            {
+              "name": "warnings",
+              "kind": "string",
+              "repeated": true
+            }
+          ],
+          "reliant.v1.TriggerEvent": [
+            {
+              "name": "id",
+              "kind": "string"
+            },
+            {
+              "name": "trigger_id",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "kind",
+              "kind": "enum",
+              "type_name": "reliant.v1.TriggerEventKind"
+            },
+            {
+              "name": "occurred_at",
+              "kind": "string"
+            },
+            {
+              "name": "outcome",
+              "kind": "enum",
+              "type_name": "reliant.v1.TriggerEventOutcome"
+            },
+            {
+              "name": "outcome_detail",
+              "kind": "string"
+            },
+            {
+              "name": "chat_id",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "payload",
+              "kind": "message",
+              "type_name": "google.protobuf.Struct"
+            },
+            {
+              "name": "run",
+              "kind": "message",
+              "type_name": "reliant.v1.TriggerEventRun",
+              "optional": true
+            },
+            {
+              "name": "sender",
+              "kind": "message",
+              "type_name": "reliant.v1.TriggerSender",
+              "optional": true
+            },
+            {
+              "name": "fire_workflow_id",
+              "kind": "string"
+            },
+            {
+              "name": "definition",
+              "kind": "message",
+              "type_name": "reliant.v1.TriggerEventDefinition",
+              "optional": true
+            }
+          ],
+          "reliant.v1.TriggerEventDefinition": [
+            {
+              "name": "workflow",
+              "kind": "string"
+            },
+            {
+              "name": "source",
+              "kind": "string"
+            },
+            {
+              "name": "path",
+              "kind": "string"
+            },
+            {
+              "name": "daemon_id",
+              "kind": "string"
+            },
+            {
+              "name": "daemon_name",
+              "kind": "string"
+            },
+            {
+              "name": "repo",
+              "kind": "string"
+            },
+            {
+              "name": "branch",
+              "kind": "string"
+            },
+            {
+              "name": "commit",
+              "kind": "string"
+            },
+            {
+              "name": "dirty",
+              "kind": "bool"
+            },
+            {
+              "name": "content_hash",
+              "kind": "string"
+            },
+            {
+              "name": "error",
+              "kind": "string"
+            },
+            {
+              "name": "summary",
+              "kind": "string"
+            },
+            {
+              "name": "catalog_pin",
+              "kind": "string"
+            }
+          ],
+          "reliant.v1.TriggerEventRun": [
+            {
+              "name": "display_state",
+              "kind": "enum",
+              "type_name": "reliant.v1.RunDisplayState"
+            },
+            {
+              "name": "title",
+              "kind": "string"
+            },
+            {
+              "name": "state",
+              "kind": "enum",
+              "type_name": "reliant.v1.WorkflowState"
+            },
+            {
+              "name": "stop_reason",
+              "kind": "enum",
+              "type_name": "reliant.v1.WorkflowStopReason"
+            }
+          ],
+          "reliant.v1.TriggerHealth": [
+            {
+              "name": "status",
+              "kind": "enum",
+              "type_name": "reliant.v1.TriggerHealthStatus"
+            },
+            {
+              "name": "consecutive_failures",
+              "kind": "int32"
+            },
+            {
+              "name": "consecutive_skips",
+              "kind": "int32"
+            },
+            {
+              "name": "last_failure_detail",
+              "kind": "string"
+            },
+            {
+              "name": "setup_issues",
+              "kind": "message",
+              "type_name": "reliant.v1.TriggerSetupIssue",
+              "repeated": true
+            }
+          ],
+          "reliant.v1.TriggerOffer": [
+            {
+              "name": "id",
+              "kind": "string"
+            },
+            {
+              "name": "trigger_id",
+              "kind": "string"
+            },
+            {
+              "name": "org_id",
+              "kind": "string"
+            },
+            {
+              "name": "offered_by_user_id",
+              "kind": "string"
+            },
+            {
+              "name": "offeree_user_id",
+              "kind": "string"
+            },
+            {
+              "name": "status",
+              "kind": "string"
+            },
+            {
+              "name": "status_reason",
+              "kind": "string"
+            },
+            {
+              "name": "created_at",
+              "kind": "string"
+            },
+            {
+              "name": "expires_at",
+              "kind": "string"
+            },
+            {
+              "name": "trigger",
+              "kind": "message",
+              "type_name": "reliant.v1.Trigger",
+              "optional": true
+            },
+            {
+              "name": "param_names",
+              "kind": "string",
+              "repeated": true
+            }
+          ],
+          "reliant.v1.TriggerRebinding": [
+            {
+              "name": "project_id",
+              "kind": "string"
+            },
+            {
+              "name": "worktree_id",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "daemon_id",
+              "kind": "string"
+            },
+            {
+              "name": "no_machine",
+              "kind": "bool"
+            },
+            {
+              "name": "machine_pool_id",
+              "kind": "string"
+            },
+            {
+              "name": "connection_id",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "presets",
+              "kind": "map",
+              "map_key_kind": "string",
+              "map_value_kind": "string"
+            },
+            {
+              "name": "workflow",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "webhook_hmac_secret",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "params",
+              "kind": "map",
+              "map_key_kind": "string",
+              "map_value_kind": "message",
+              "map_value_type_name": "google.protobuf.Value"
+            }
+          ],
+          "reliant.v1.TriggerSender": [
+            {
+              "name": "kind",
+              "kind": "string"
+            },
+            {
+              "name": "id",
+              "kind": "string"
+            },
+            {
+              "name": "display_name",
+              "kind": "string"
+            },
+            {
+              "name": "verified",
+              "kind": "bool"
+            }
+          ],
+          "reliant.v1.TriggerSetupIssue": [
+            {
+              "name": "input",
+              "kind": "string"
+            },
+            {
+              "name": "message",
+              "kind": "string"
+            }
+          ],
+          "reliant.v1.WebhookCredential": [
+            {
+              "name": "token",
+              "kind": "string"
+            },
+            {
+              "name": "url",
+              "kind": "string"
+            }
+          ],
+          "reliant.v1.WebhookHmac": [
+            {
+              "name": "header",
+              "kind": "string"
+            },
+            {
+              "name": "algorithm",
+              "kind": "string"
+            },
+            {
+              "name": "prefix",
+              "kind": "string"
+            },
+            {
+              "name": "encoding",
+              "kind": "string"
+            }
+          ],
+          "reliant.v1.WebhookSource": [
+            {
+              "name": "hmac",
+              "kind": "message",
+              "type_name": "reliant.v1.WebhookHmac"
+            },
+            {
+              "name": "source",
+              "kind": "string"
+            }
+          ],
+          "reliant.v1.WorkflowEventSource": [
+            {
+              "name": "workflows",
+              "kind": "string",
+              "repeated": true
+            },
+            {
+              "name": "outcomes",
+              "kind": "string",
+              "repeated": true
+            }
+          ]
+        },
+        "SchemaFiles": {
+          "reliant.v1.AcceptTriggerOfferRequest": "reliant/v1/automation_takeover.proto",
+          "reliant.v1.AcceptTriggerOfferResponse": "reliant/v1/automation_takeover.proto",
+          "reliant.v1.AdoptTriggerRequest": "reliant/v1/automation_takeover.proto",
+          "reliant.v1.AdoptTriggerResponse": "reliant/v1/automation_takeover.proto",
+          "reliant.v1.IntegrationSource": "reliant/v1/trigger.proto",
+          "reliant.v1.ListOrphanedAutomationsRequest": "reliant/v1/automation_takeover.proto",
+          "reliant.v1.ListOrphanedAutomationsResponse": "reliant/v1/automation_takeover.proto",
+          "reliant.v1.ListTriggerOffersRequest": "reliant/v1/automation_takeover.proto",
+          "reliant.v1.ListTriggerOffersResponse": "reliant/v1/automation_takeover.proto",
+          "reliant.v1.OrphanedTrigger": "reliant/v1/automation_takeover.proto",
+          "reliant.v1.OrphanedWorkflow": "reliant/v1/automation_takeover.proto",
+          "reliant.v1.RevokeTriggerOfferRequest": "reliant/v1/automation_takeover.proto",
+          "reliant.v1.RevokeTriggerOfferResponse": "reliant/v1/automation_takeover.proto",
+          "reliant.v1.ScheduleSource": "reliant/v1/trigger.proto",
+          "reliant.v1.Trigger": "reliant/v1/trigger.proto",
+          "reliant.v1.TriggerChange": "reliant/v1/trigger.proto",
+          "reliant.v1.TriggerDefinitionSource": "reliant/v1/trigger.proto",
+          "reliant.v1.TriggerEvent": "reliant/v1/trigger.proto",
+          "reliant.v1.TriggerEventDefinition": "reliant/v1/trigger.proto",
+          "reliant.v1.TriggerEventRun": "reliant/v1/trigger.proto",
+          "reliant.v1.TriggerHealth": "reliant/v1/trigger.proto",
+          "reliant.v1.TriggerOffer": "reliant/v1/automation_takeover.proto",
+          "reliant.v1.TriggerRebinding": "reliant/v1/automation_takeover.proto",
+          "reliant.v1.TriggerSender": "reliant/v1/trigger.proto",
+          "reliant.v1.TriggerSetupIssue": "reliant/v1/trigger.proto",
+          "reliant.v1.WebhookCredential": "reliant/v1/trigger.proto",
+          "reliant.v1.WebhookHmac": "reliant/v1/trigger.proto",
+          "reliant.v1.WebhookSource": "reliant/v1/trigger.proto",
+          "reliant.v1.WorkflowEventSource": "reliant/v1/trigger.proto"
+        },
+        "Enums": {
+          "reliant.v1.ActingIdentity": [
+            "ACTING_IDENTITY_UNSPECIFIED",
+            "ACTING_IDENTITY_OWNER",
+            "ACTING_IDENTITY_APP"
+          ],
+          "reliant.v1.RunDisplayState": [
+            "RUN_DISPLAY_STATE_UNSPECIFIED",
+            "RUN_DISPLAY_STATE_QUEUED",
+            "RUN_DISPLAY_STATE_RUNNING",
+            "RUN_DISPLAY_STATE_NEEDS_INPUT",
+            "RUN_DISPLAY_STATE_PAUSED",
+            "RUN_DISPLAY_STATE_COMPLETED",
+            "RUN_DISPLAY_STATE_FAILED",
+            "RUN_DISPLAY_STATE_CANCELLED",
+            "RUN_DISPLAY_STATE_WAITING_FOR_MACHINE"
+          ],
+          "reliant.v1.TriggerEventKind": [
+            "TRIGGER_EVENT_KIND_UNSPECIFIED",
+            "TRIGGER_EVENT_KIND_CHAT_START",
+            "TRIGGER_EVENT_KIND_SCHEDULE",
+            "TRIGGER_EVENT_KIND_AGENT_START_RUN",
+            "TRIGGER_EVENT_KIND_BUILDER_TEST",
+            "TRIGGER_EVENT_KIND_WEBHOOK",
+            "TRIGGER_EVENT_KIND_INTEGRATION",
+            "TRIGGER_EVENT_KIND_WORKFLOW_EVENT",
+            "TRIGGER_EVENT_KIND_MANUAL_RUN",
+            "TRIGGER_EVENT_KIND_CLI_RUN"
+          ],
+          "reliant.v1.TriggerEventOutcome": [
+            "TRIGGER_EVENT_OUTCOME_UNSPECIFIED",
+            "TRIGGER_EVENT_OUTCOME_LAUNCHED",
+            "TRIGGER_EVENT_OUTCOME_SKIPPED",
+            "TRIGGER_EVENT_OUTCOME_FAILED",
+            "TRIGGER_EVENT_OUTCOME_PENDING"
+          ],
+          "reliant.v1.TriggerHealthStatus": [
+            "TRIGGER_HEALTH_STATUS_UNSPECIFIED",
+            "TRIGGER_HEALTH_STATUS_HEALTHY",
+            "TRIGGER_HEALTH_STATUS_DEGRADED",
+            "TRIGGER_HEALTH_STATUS_FAILING",
+            "TRIGGER_HEALTH_STATUS_UNKNOWN",
+            "TRIGGER_HEALTH_STATUS_BROKEN",
+            "TRIGGER_HEALTH_STATUS_NEEDS_SETUP"
+          ],
+          "reliant.v1.TriggerOverlapPolicy": [
+            "TRIGGER_OVERLAP_POLICY_UNSPECIFIED",
+            "TRIGGER_OVERLAP_POLICY_SKIP",
+            "TRIGGER_OVERLAP_POLICY_ALLOW"
+          ],
+          "reliant.v1.WorkflowState": [
+            "WORKFLOW_STATE_UNSPECIFIED",
+            "WORKFLOW_STATE_PENDING",
+            "WORKFLOW_STATE_ACTIVE",
+            "WORKFLOW_STATE_STOPPED"
+          ],
+          "reliant.v1.WorkflowStopReason": [
+            "WORKFLOW_STOP_REASON_UNSPECIFIED",
+            "WORKFLOW_STOP_REASON_COMPLETED",
+            "WORKFLOW_STOP_REASON_FAILED",
+            "WORKFLOW_STOP_REASON_PAUSED",
+            "WORKFLOW_STOP_REASON_CANCELLED"
+          ]
+        },
+        "EnumNumbers": {
+          "reliant.v1.ActingIdentity": [
+            0,
+            1,
+            2
+          ],
+          "reliant.v1.RunDisplayState": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8
+          ],
+          "reliant.v1.TriggerEventKind": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9
+          ],
+          "reliant.v1.TriggerEventOutcome": [
+            0,
+            1,
+            2,
+            3,
+            4
+          ],
+          "reliant.v1.TriggerHealthStatus": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6
+          ],
+          "reliant.v1.TriggerOverlapPolicy": [
+            0,
+            1,
+            2
+          ],
+          "reliant.v1.WorkflowState": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "reliant.v1.WorkflowStopReason": [
+            0,
+            1,
+            2,
+            3,
+            4
+          ]
+        },
+        "EnumGoRefs": {
+          "reliant.v1.ActingIdentity": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "ActingIdentity"
+          },
+          "reliant.v1.RunDisplayState": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "RunDisplayState"
+          },
+          "reliant.v1.TriggerEventKind": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "TriggerEventKind"
+          },
+          "reliant.v1.TriggerEventOutcome": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "TriggerEventOutcome"
+          },
+          "reliant.v1.TriggerHealthStatus": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "TriggerHealthStatus"
+          },
+          "reliant.v1.TriggerOverlapPolicy": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "TriggerOverlapPolicy"
+          },
+          "reliant.v1.WorkflowState": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "WorkflowState"
+          },
+          "reliant.v1.WorkflowStopReason": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "WorkflowStopReason"
+          }
         }
       }
     },
@@ -9021,6 +10345,11 @@
               "Name": "params",
               "ProtoType": "message",
               "IsOptional": false
+            },
+            {
+              "Name": "owner_org_id",
+              "ProtoType": "string",
+              "IsOptional": true
             }
           ],
           "CreateApiKeyConnectionResponse": [
@@ -9036,6 +10365,11 @@
               "Name": "id",
               "ProtoType": "string",
               "IsOptional": false
+            },
+            {
+              "Name": "owner_org_id",
+              "ProtoType": "string",
+              "IsOptional": true
             }
           ],
           "DeleteConnectionResponse": null,
@@ -9044,6 +10378,11 @@
               "Name": "id",
               "ProtoType": "string",
               "IsOptional": false
+            },
+            {
+              "Name": "owner_org_id",
+              "ProtoType": "string",
+              "IsOptional": true
             }
           ],
           "GetConnectionResponse": [
@@ -9068,6 +10407,11 @@
             {
               "Name": "before_id",
               "ProtoType": "int64",
+              "IsOptional": true
+            },
+            {
+              "Name": "owner_org_id",
+              "ProtoType": "string",
               "IsOptional": true
             }
           ],
@@ -9118,6 +10462,11 @@
               "Name": "name",
               "ProtoType": "string",
               "IsOptional": false
+            },
+            {
+              "Name": "owner_org_id",
+              "ProtoType": "string",
+              "IsOptional": true
             }
           ],
           "RenameConnectionResponse": [
@@ -9133,6 +10482,11 @@
               "Name": "id",
               "ProtoType": "string",
               "IsOptional": false
+            },
+            {
+              "Name": "owner_org_id",
+              "ProtoType": "string",
+              "IsOptional": true
             }
           ],
           "SetDefaultConnectionResponse": [
@@ -9173,6 +10527,11 @@
               "Name": "loopback_redirect",
               "ProtoType": "string",
               "IsOptional": false
+            },
+            {
+              "Name": "owner_org_id",
+              "ProtoType": "string",
+              "IsOptional": true
             }
           ],
           "StartOAuthResponse": [
@@ -9187,6 +10546,11 @@
               "Name": "id",
               "ProtoType": "string",
               "IsOptional": false
+            },
+            {
+              "Name": "owner_org_id",
+              "ProtoType": "string",
+              "IsOptional": true
             }
           ],
           "TestConnectionResponse": [
@@ -9347,6 +10711,10 @@
             {
               "name": "at",
               "kind": "string"
+            },
+            {
+              "name": "user_id",
+              "kind": "string"
             }
           ],
           "reliant.v1.CreateApiKeyConnectionRequest": [
@@ -9374,6 +10742,11 @@
               "kind": "map",
               "map_key_kind": "string",
               "map_value_kind": "string"
+            },
+            {
+              "name": "owner_org_id",
+              "kind": "string",
+              "optional": true
             }
           ],
           "reliant.v1.CreateApiKeyConnectionResponse": [
@@ -9387,6 +10760,11 @@
             {
               "name": "id",
               "kind": "string"
+            },
+            {
+              "name": "owner_org_id",
+              "kind": "string",
+              "optional": true
             }
           ],
           "reliant.v1.DeleteConnectionResponse": [],
@@ -9394,6 +10772,11 @@
             {
               "name": "id",
               "kind": "string"
+            },
+            {
+              "name": "owner_org_id",
+              "kind": "string",
+              "optional": true
             }
           ],
           "reliant.v1.GetConnectionResponse": [
@@ -9488,6 +10871,11 @@
               "name": "before_id",
               "kind": "int64",
               "optional": true
+            },
+            {
+              "name": "owner_org_id",
+              "kind": "string",
+              "optional": true
             }
           ],
           "reliant.v1.ListConnectionEventsResponse": [
@@ -9535,6 +10923,11 @@
             {
               "name": "name",
               "kind": "string"
+            },
+            {
+              "name": "owner_org_id",
+              "kind": "string",
+              "optional": true
             }
           ],
           "reliant.v1.RenameConnectionResponse": [
@@ -9548,6 +10941,11 @@
             {
               "name": "id",
               "kind": "string"
+            },
+            {
+              "name": "owner_org_id",
+              "kind": "string",
+              "optional": true
             }
           ],
           "reliant.v1.SetDefaultConnectionResponse": [
@@ -9583,6 +10981,11 @@
             {
               "name": "loopback_redirect",
               "kind": "string"
+            },
+            {
+              "name": "owner_org_id",
+              "kind": "string",
+              "optional": true
             }
           ],
           "reliant.v1.StartOAuthResponse": [
@@ -9595,6 +10998,11 @@
             {
               "name": "id",
               "kind": "string"
+            },
+            {
+              "name": "owner_org_id",
+              "kind": "string",
+              "optional": true
             }
           ],
           "reliant.v1.TestConnectionResponse": [
@@ -40248,6 +41656,16 @@
           "auth_required": true
         },
         {
+          "id": "reliant.v1.WorkflowService/ForkOrphanedWorkflow",
+          "name": "ForkOrphanedWorkflow",
+          "input": "reliant.v1.ForkOrphanedWorkflowRequest",
+          "output": "reliant.v1.ForkOrphanedWorkflowResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "UNKNOWN",
+          "auth_required": true
+        },
+        {
           "id": "reliant.v1.WorkflowService/GetWorkflow",
           "name": "GetWorkflow",
           "input": "reliant.v1.GetWorkflowRequest",
@@ -40543,6 +41961,27 @@
               "TargetKind": "workflow",
               "Writer": "INTERCEPTOR"
             }
+          },
+          {
+            "Name": "ForkOrphanedWorkflow",
+            "InputType": "ForkOrphanedWorkflowRequest",
+            "OutputType": "ForkOrphanedWorkflowResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "InputTypeFQ": "reliant.v1.ForkOrphanedWorkflowRequest",
+            "OutputTypeFQ": "reliant.v1.ForkOrphanedWorkflowResponse",
+            "InputProtoFile": "reliant/v1/workflow.proto",
+            "OutputProtoFile": "reliant/v1/workflow.proto",
+            "Activity": {
+              "Mutating": true,
+              "Declared": true,
+              "Verb": "fork_orphan",
+              "TargetKind": "workflow",
+              "Writer": "INTERCEPTOR"
+            }
           }
         ],
         "ProtoFile": "reliant/v1/workflow.proto",
@@ -40724,6 +42163,40 @@
               "ProtoType": "message",
               "IsOptional": false,
               "MessageType": "reliant.v1.Workflow"
+            }
+          ],
+          "ForkOrphanedWorkflowRequest": [
+            {
+              "Name": "workflow_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "project_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "new_name",
+              "ProtoType": "string",
+              "IsOptional": true
+            }
+          ],
+          "ForkOrphanedWorkflowResponse": [
+            {
+              "Name": "id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "slug",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "name",
+              "ProtoType": "string",
+              "IsOptional": false
             }
           ],
           "GetWorkflowRequest": [
@@ -41804,6 +43277,41 @@
               "name": "workflow",
               "kind": "message",
               "type_name": "reliant.v1.Workflow"
+            }
+          ],
+          "reliant.v1.ForkOrphanedWorkflowRequest": [
+            {
+              "name": "workflow_id",
+              "kind": "string",
+              "validate": {
+                "min_len": 1
+              }
+            },
+            {
+              "name": "project_id",
+              "kind": "string",
+              "validate": {
+                "min_len": 1
+              }
+            },
+            {
+              "name": "new_name",
+              "kind": "string",
+              "optional": true
+            }
+          ],
+          "reliant.v1.ForkOrphanedWorkflowResponse": [
+            {
+              "name": "id",
+              "kind": "string"
+            },
+            {
+              "name": "slug",
+              "kind": "string"
+            },
+            {
+              "name": "name",
+              "kind": "string"
             }
           ],
           "reliant.v1.GetWorkflowRequest": [
@@ -44011,6 +45519,8 @@
           "reliant.v1.ExecuteToolsArgs": "reliant/v1/workflow_v2.proto",
           "reliant.v1.ExportWorkflowRequest": "reliant/v1/workflow.proto",
           "reliant.v1.ExportWorkflowResponse": "reliant/v1/workflow.proto",
+          "reliant.v1.ForkOrphanedWorkflowRequest": "reliant/v1/workflow.proto",
+          "reliant.v1.ForkOrphanedWorkflowResponse": "reliant/v1/workflow.proto",
           "reliant.v1.GetWorkflowRequest": "reliant/v1/workflow.proto",
           "reliant.v1.GetWorkflowResponse": "reliant/v1/workflow.proto",
           "reliant.v1.GitPublishArgs": "reliant/v1/workflow_v2.proto",
@@ -47438,6 +48948,18 @@
       "implementation_candidates": []
     },
     {
+      "id": "AutomationTakeover",
+      "name": "AutomationTakeover",
+      "kind": "component",
+      "type": "*github.com/reliant-labs/reliant/internal/handlers/automation_takeover.Service",
+      "source": {
+        "path": "internal/handlers/automation_takeover/service.go",
+        "symbol": "New"
+      },
+      "methods": [],
+      "implementation_candidates": []
+    },
+    {
       "id": "Background",
       "name": "Background",
       "kind": "component",
@@ -48865,6 +50387,33 @@
       ],
       "providers": [
         "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "AutomationTakeover",
+      "field": "Repo",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/automation_takeover.Repository",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "AutomationTakeover",
+      "field": "Triggers",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/automation_takeover.TriggerAdopter",
+      "methods": [],
+      "candidates": [
+        "Trigger",
+        "WorkerTrigger"
+      ],
+      "providers": [
+        "Trigger"
       ],
       "resolution": "composition_expression"
     },

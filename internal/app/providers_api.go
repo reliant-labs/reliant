@@ -406,6 +406,9 @@ type APIConnectionsDeps struct {
 	Integrations *IntegrationSettings
 	AppOrigins   []string
 	ControlPlane *configv1.ControlPlaneConfig
+	// OrgConnections lets org owners and admins create org-owned connections
+	// (ApiServerConfig orgs.connections_enabled; off by default).
+	OrgConnections bool
 }
 
 // NewAPIConnections builds the connection service, the token source and the
@@ -426,7 +429,8 @@ func NewAPIConnections(d APIConnectionsDeps) (*APIConnections, error) {
 	tokens := connections.NewTokenSource(store, d.Vault, providers, nil)
 	broker := connections.NewBroker(store, d.Vault, providers, nil, d.Integrations.PublicURL).WithAppOrigins(d.AppOrigins)
 	svc := connections.NewService(store, d.Vault, providers, tokens, broker, nil).
-		WithDelegated(delegatedAvailable(ControlPlaneEndpoint(d.ControlPlane).Hosted()))
+		WithDelegated(delegatedAvailable(ControlPlaneEndpoint(d.ControlPlane).Hosted())).
+		WithOrgConnections(d.OrgConnections)
 	for _, in := range svc.ListIntegrations() {
 		for _, m := range in.Methods {
 			if !m.Available {
@@ -1439,4 +1443,12 @@ func gitTokens(cfg *configv1.ControlPlaneConfig) (gitcredentialclient.Service, e
 // function, so the config-path test proves what newTrigger hands the handler.
 func TriggerOrgRollout(api *configv1.ApiServerConfig) *configv1.OrgsConfig {
 	return api.GetOrgs()
+}
+
+// APIOrgConnections is whether the API server lets org owners and admins
+// create org-owned connections: ApiServerConfig orgs.connections_enabled, off
+// when unset. One function, so the config-path test proves what
+// newAPIConnections hands the connection service.
+func APIOrgConnections(api *configv1.ApiServerConfig) bool {
+	return api.GetOrgs().GetConnectionsEnabled()
 }

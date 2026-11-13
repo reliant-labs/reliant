@@ -144,7 +144,7 @@ func windowUsed(w core.LimitWindow) (float64, bool) {
 
 // benchStore is the slice of the account store a bench needs.
 type benchStore interface {
-	BenchAccount(ctx context.Context, userID, accountID string, until time.Time, window string, probe bool) error
+	BenchAccount(ctx context.Context, owner core.AccountOwner, accountID string, until time.Time, window string, probe bool) error
 	GetAccountLimits(ctx context.Context, accountID string) (*core.LimitState, error)
 }
 
@@ -153,7 +153,7 @@ type benchStore interface {
 // returns the bench now in force, which can be later than asked when the
 // account was already benched past it. A probe never escalates while the
 // previous bench is still running, so concurrent refusals cost one rung.
-func bench(ctx context.Context, st benchStore, now time.Time, userID, accountID string, until time.Time, window string) (time.Time, error) {
+func bench(ctx context.Context, st benchStore, now time.Time, owner core.AccountOwner, accountID string, until time.Time, window string) (time.Time, error) {
 	cur, err := st.GetAccountLimits(ctx, accountID)
 	if err != nil {
 		return time.Time{}, err
@@ -173,7 +173,7 @@ func bench(ctx context.Context, st benchStore, now time.Time, userID, accountID 
 		}
 		until, probe = now.Add(ProbeDelay(probes)), true
 	}
-	if err := st.BenchAccount(ctx, userID, accountID, until, window, probe); err != nil {
+	if err := st.BenchAccount(ctx, owner, accountID, until, window, probe); err != nil {
 		return time.Time{}, err
 	}
 	if existing.After(until) {

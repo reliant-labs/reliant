@@ -50,7 +50,7 @@ func TestProviderSwitchCompaction_DescendantKeepsRecoveredPresetTags(t *testing.
 	// The preferred model was stamped as the old provider's exact id; the
 	// preset's original tags are the only memory of what the thread asked for.
 	stale := &reliantv1.ModelSelector{Id: "claude-4.5-haiku@anthropic"}
-	selector, _, err := resolveCompactionModelForCall(ctx, "u", stale, compactSpec("codex", true, models.TagFast))
+	selector, _, err := resolveCompactionModelForCall(ctx, stale, compactSpec("codex", true, models.TagFast))
 	require.NoError(t, err)
 	assert.Equal(t, []string{models.TagFast}, selector.Tags, "a descendant's tags are recovered from its preset")
 	assert.Empty(t, selector.ID, "the stale concrete id must not survive on a descendant")
@@ -62,7 +62,7 @@ func TestProviderSwitchCompaction_DescendantKeepsRecoveredPresetTags(t *testing.
 
 	t.Run("tags the descendant already has win over the preset's", func(t *testing.T) {
 		own := &reliantv1.ModelSelector{Tags: []string{models.TagFlagship}}
-		selector, _, err := resolveCompactionModelForCall(ctx, "u", own, compactSpec("codex", true, models.TagFast))
+		selector, _, err := resolveCompactionModelForCall(ctx, own, compactSpec("codex", true, models.TagFast))
 		require.NoError(t, err)
 		assert.Equal(t, []string{models.TagFlagship}, selector.Tags)
 	})
@@ -74,7 +74,7 @@ func TestProviderSwitchCompaction_RootIsARootNotADescendant(t *testing.T) {
 
 	t.Run("a root keeps its exact model and ignores preset tags", func(t *testing.T) {
 		exact := &reliantv1.ModelSelector{Id: "gpt-6.1-sol@codex"}
-		selector, _, err := resolveCompactionModelForCall(ctx, "u", exact, compactSpec("codex", false, models.TagFast))
+		selector, _, err := resolveCompactionModelForCall(ctx, exact, compactSpec("codex", false, models.TagFast))
 		require.NoError(t, err)
 		assert.Equal(t, "gpt-6.1-sol@codex", selector.ID)
 		assert.Empty(t, selector.Tags, "preset tags must not rewrite the root's exact pick")
@@ -82,7 +82,7 @@ func TestProviderSwitchCompaction_RootIsARootNotADescendant(t *testing.T) {
 
 	t.Run("a root whose exact model the bound provider cannot serve holds, never re-tagged", func(t *testing.T) {
 		exact := &reliantv1.ModelSelector{Id: "claude-4.5-haiku@anthropic"}
-		_, _, err := resolveCompactionModelForCall(ctx, "u", exact, compactSpec("codex", false, models.TagFast))
+		_, _, err := resolveCompactionModelForCall(ctx, exact, compactSpec("codex", false, models.TagFast))
 		requireProviderSwitchHold(t, nil, err)
 	})
 }
@@ -92,7 +92,7 @@ func TestProviderSwitchCompaction_NeverResolvesOnAnotherProvider(t *testing.T) {
 
 	t.Run("control: unbound chat still falls back to the tier list", func(t *testing.T) {
 		withAvailableDrivers(t, boundDrivers("", "anthropic"))
-		selector, reason, err := resolveCompactionModelForCall(ctx, "u", &reliantv1.ModelSelector{Id: "not-a-real-model"}, llmCallSpec{})
+		selector, reason, err := resolveCompactionModelForCall(ctx, &reliantv1.ModelSelector{Id: "not-a-real-model"}, llmCallSpec{})
 		require.NoError(t, err)
 		assert.Equal(t, string(compactionModelTier[0]), selector.ID)
 		assert.Contains(t, reason, "tier list")
@@ -101,33 +101,33 @@ func TestProviderSwitchCompaction_NeverResolvesOnAnotherProvider(t *testing.T) {
 	t.Run("preferred tag the bound provider cannot serve holds instead of using another provider", func(t *testing.T) {
 		// codex is connected but serves nothing; anthropic and openai would serve.
 		withAvailableDrivers(t, boundDrivers("codex", "anthropic", "codex", "openai"))
-		_, _, err := resolveCompactionModelForCall(ctx, "u", &reliantv1.ModelSelector{Tags: []string{models.TagFast}}, compactSpec("codex", true))
+		_, _, err := resolveCompactionModelForCall(ctx, &reliantv1.ModelSelector{Tags: []string{models.TagFast}}, compactSpec("codex", true))
 		requireProviderSwitchHold(t, nil, err)
 	})
 
 	t.Run("no preferred model: the tier list cannot reach an unbound provider", func(t *testing.T) {
 		withAvailableDrivers(t, boundDrivers("codex", "anthropic", "codex", "openai"))
-		_, _, err := resolveCompactionModelForCall(ctx, "u", nil, compactSpec("codex", false))
+		_, _, err := resolveCompactionModelForCall(ctx, nil, compactSpec("codex", false))
 		requireProviderSwitchHold(t, nil, err)
 	})
 
 	t.Run("bound provider not connected at all holds", func(t *testing.T) {
 		withAvailableDrivers(t, boundDrivers("", "anthropic", "openai"))
-		_, _, err := resolveCompactionModelForCall(ctx, "u", nil, compactSpec("codex", false))
+		_, _, err := resolveCompactionModelForCall(ctx, nil, compactSpec("codex", false))
 		requireProviderSwitchHold(t, nil, err)
-		_, _, err = resolveCompactionModelForCall(ctx, "u", &reliantv1.ModelSelector{Tags: []string{models.TagFast}}, compactSpec("codex", true))
+		_, _, err = resolveCompactionModelForCall(ctx, &reliantv1.ModelSelector{Tags: []string{models.TagFast}}, compactSpec("codex", true))
 		requireProviderSwitchHold(t, nil, err)
 	})
 
 	t.Run("unresolvable preferred id on a bound root holds rather than dropping to the tier list", func(t *testing.T) {
 		withAvailableDrivers(t, boundDrivers("", "anthropic", "codex", "openai"))
-		_, _, err := resolveCompactionModelForCall(ctx, "u", &reliantv1.ModelSelector{Id: "not-a-real-model"}, compactSpec("codex", false))
+		_, _, err := resolveCompactionModelForCall(ctx, &reliantv1.ModelSelector{Id: "not-a-real-model"}, compactSpec("codex", false))
 		requireProviderSwitchHold(t, nil, err)
 	})
 
 	t.Run("no preferred model on a healthy bound provider resolves there", func(t *testing.T) {
 		withAvailableDrivers(t, boundDrivers("", "anthropic", "codex", "openai"))
-		selector, _, err := resolveCompactionModelForCall(ctx, "u", nil, compactSpec("codex", false))
+		selector, _, err := resolveCompactionModelForCall(ctx, nil, compactSpec("codex", false))
 		require.NoError(t, err)
 		resolved, err := models.MustGetRegistry().Resolve(selector, []string{"codex"})
 		require.NoError(t, err)

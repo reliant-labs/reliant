@@ -46,6 +46,16 @@ func TestPostDeployRecipe_BranchesOnExitCode(t *testing.T) {
 	if !strings.Contains(actions[2], `never "passed"`) {
 		t.Error(`exit 2 must say it is never reported as "passed"`)
 	}
+	// forge's obs check puts low traffic on exit 2 — a closed window, final
+	// for the promotion — and keeps 8 for a --wait timeout. Guidance that
+	// read 8 as "not enough data yet" had agents misread a quiet site's 2
+	// (forge bug report 07d1d05f).
+	if !strings.Contains(actions[2], "low_traffic") || !strings.Contains(actions[2], "do not poll") {
+		t.Errorf("exit 2 must say low traffic lands there and is final: %q", actions[2])
+	}
+	if !strings.Contains(actions[8], "--wait") || strings.Contains(strings.ToLower(actions[8]), "not enough data") {
+		t.Errorf("exit 8 is the --wait timeout, not low traffic: %q", actions[8])
+	}
 	for _, doc := range []string{
 		`{"schema":"forge.obs.check/v1","ok":true,"exit_code":0,"findings":[],"suggested":[]}`,
 		`{"schema":"forge.obs.check/v1","ok":false,"exit_code":1,"findings":[{"code":"new_issue"}],"suggested":["forge obs issue abc"]}`,

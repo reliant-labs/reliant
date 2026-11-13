@@ -23,7 +23,7 @@
  *   /forge-dashboards-preview?page=panel-editor&kind=sql      the panel editor, for every kind (PanelEditorPreview)
  */
 
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, type ComponentProps } from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Code, ConnectError } from "@connectrpc/connect";
@@ -41,6 +41,7 @@ import { compareParam, isDashboardPageKind, rangeParam, refreshParam, type Dashb
 import { DashboardsList, type DashboardsSearch } from "../DashboardsList";
 import { AlertFromPanelDialog } from "../AlertFromPanelDialog";
 import { DashboardView } from "../DashboardView";
+import { useDashboardHub } from "../useDashboardHub";
 import ChartCorrectnessPreview from "../../charts/__preview__/ChartCorrectnessPreview";
 import ChartGalleryPreview from "./ChartGalleryPreview";
 import PanelEditorPreview from "./PanelEditorPreview";
@@ -65,6 +66,7 @@ interface ReadCap {
 const CASES: { id: string; label: string; options: FixtureOptions & { loading?: boolean; readCap?: ReadCap } }[] = [
   { id: "data", label: "the fixture app", options: {} },
   { id: "few", label: "a young app: two dashboards", options: { dashboardsFew: true } },
+  { id: "many", label: "control-plane's shape: 16 services, hosted built-ins (…&dash=release/process-admin-api)", options: { dashboardsManyServices: true } },
   { id: "ungrouped", label: "older control plane: no group field", options: { dashboardsUngrouped: true } },
   { id: "empty", label: "no dashboards yet", options: { dashboardsEmpty: true } },
   { id: "read-only", label: "member, not admin", options: { dashboardsReadOnly: true } },
@@ -290,7 +292,7 @@ export default function DashboardsPreview() {
               navigateTo={navigateTo}
             />
           ) : (
-            <DashboardView
+            <HubbedDashboardView
               key={`${caseId}-${search.dash}`}
               project={FIXTURE_PROJECT}
               dashRef={dashRef}
@@ -334,4 +336,11 @@ export default function DashboardsPreview() {
       )}
     </ConsolePreviewShell>
   );
+}
+
+/** The dashboard as the console opens it: inside its hub's tabs, when it is one's. */
+function HubbedDashboardView(props: Omit<ComponentProps<typeof DashboardView>, "hub">) {
+  const envId = FIXTURE_ENVS.find((candidate) => candidate.name === props.env)?.id;
+  const hub = useDashboardHub(FIXTURE_PROJECT, envId, props.dashRef);
+  return <DashboardView {...props} hub={hub} />;
 }

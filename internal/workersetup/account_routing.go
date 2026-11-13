@@ -77,7 +77,9 @@ func accountRouting(repo AccountRoutingStore, recorder handlers.AccountLimitReco
 // way the token refresh coordinator retires one whose refresh token it did.
 type credentialMarker struct{ repo AccountCredentialStore }
 
-func (m credentialMarker) MarkNeedsSignIn(ctx context.Context, userID, accountID, reason string) error {
-	_, err := m.repo.PatchProviderAccount(ctx, userID, accountID, core.AccountPatch{NeedsReauth: &reason})
+// MarkNeedsSignIn marks the account on its owner's row: a person's own, or the
+// org's for an org key.
+func (m credentialMarker) MarkNeedsSignIn(ctx context.Context, owner core.AccountOwner, accountID, reason string) error {
+	_, err := m.repo.PatchOwnedProviderAccount(ctx, owner, accountID, core.AccountPatch{NeedsReauth: &reason})
 	return err
 }

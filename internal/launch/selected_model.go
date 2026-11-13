@@ -71,7 +71,7 @@ func (l *Launcher) ValidateSelectedModel(ctx context.Context, userID string, val
 		return SelectedModel{Local: true}, nil
 	}
 
-	available, err := drivers.LookupAvailableDrivers(ctx, userID)
+	available, err := drivers.LookupAvailableDrivers(ctx, drivers.PersonalScope(userID))
 	if err != nil {
 		return SelectedModel{}, err
 	}

@@ -71,6 +71,7 @@ export   InboxService/RestoreInboxItem
 
 withhold AccountService           # not part of the first public surface
 withhold AttachmentService        # not part of the first public surface
+withhold AutomationTakeoverService # org-admin takeover of a departed member's automations; person-only
 withhold BackgroundService        # daemon-facing wiring
 withhold CatalogService           # not part of the first public surface
 withhold ConnectionService        # not part of the first public surface

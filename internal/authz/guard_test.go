@@ -24,6 +24,9 @@ var rawComparisonAllowed = map[string]string{
 	"internal/triggers/origin.go:fromWrite":                                           "matches two rows' owners (an integration write and its trigger), no caller",
 	"internal/triggers/workflowevent/dispatch.go:Dispatch":                            "matches a run event to the triggers of the same user, no caller",
 	"internal/db/repository_impl.go:UpsertDaemon":                                     "re-registration consistency: the same user re-registering the same daemon",
+	"internal/db/trigger_takeover.go:AdoptTrigger":                                    "compare-and-swap: the locked row still has the owner the adoption decided on, no caller",
+	"internal/db/trigger_takeover.go:CreateTriggerOffer":                              "compare-and-swap: the locked row still has the owner the offer was made for, no caller",
+	"internal/handlers/automation_takeover/takeover.go:offerState":                    "matches a trigger to the owner its offer was made for (adopted or not since), no caller",
 	"internal/handlers/streaming/org_stream.go:sendOrgUpdates":                        "leaves the caller's own rows out of the org feed they may already read in full; not an access decision",
 	"internal/tokenauthority/localstore.go:MintForUser":                               "self-hosted orgs: the only org a user has is their own id",
 	"internal/tokenauthority/memory.go:MintForUser":                                   "self-hosted orgs: the only org a user has is their own id",
@@ -253,6 +256,8 @@ var shareGuard = struct {
 	visibilityWriters: map[string]string{
 		"internal/store/share_event_repo_ext.go": "ApplyShareChange, the one writer, and the shared lists' read predicates",
 		"internal/viewertest/viewertest.go":      "the viewer-matrix fixture seeds a shared row; imported by _test.go files only",
+		// control-plane docs/design/org-project-move.md §1.2, D7.
+		"internal/store/project_org_move_repo_ext.go": "MoveProjectOrg clears every share of a project moving to another org, with a share_events row (moved) each; it never shares",
 	},
 	applyCallers: []string{"internal/db/", "internal/store/", "internal/handlers/sharing/"},
 	viewerReadSites: map[string]string{

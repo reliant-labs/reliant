@@ -271,7 +271,8 @@ func TestOrgConnectionIndexesHoldTheInvariants(t *testing.T) {
 func TestConnectionUserNameIndexHoldsPersonalNamesAlone(t *testing.T) {
 	env := storetest.New(t)
 	ctx := context.Background()
-	if _, err := env.SQL.ExecContext(ctx, `DROP INDEX public.connections_name`); err != nil {
+	// IF EXISTS: the migration that drops it for real makes this a no-op.
+	if _, err := env.SQL.ExecContext(ctx, `DROP INDEX IF EXISTS public.connections_name`); err != nil {
 		t.Fatalf("dropping connections_name in this test's database: %v", err)
 	}
 	deletedAt := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
