@@ -112,6 +112,11 @@ func (s *Service) addControlPlaneEffects(ctx context.Context, userID, projectID,
 		return projectMoveRefusal(ctx, authz.ErrNotOrgAdmin)
 	case errors.As(err, &refused) && refused.Reason == controlplane.ReasonMoveTargetMembershipMissing:
 		return projectMoveRefusal(ctx, authz.ErrNotTargetMember)
+	case errors.As(err, &refused) && refused.Code == "permission_denied":
+		// Any other explicit denial of the person (actor_not_live: no live
+		// account; or a reason this release does not know) is a refusal,
+		// never an unknown fact: a preview is only for who could move.
+		return projectMoveRefusal(ctx, authz.ErrNotOrgMember)
 	case errors.Is(err, controlplane.ErrProjectOrgMoveUnsupported):
 		return nil
 	default:

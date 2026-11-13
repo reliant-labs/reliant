@@ -118,6 +118,11 @@ func TestPreviewProjectOrgMove_ControlPlaneRefusalIsTheRefusal(t *testing.T) {
 	for reason, want := range map[string]string{
 		controlplane.ReasonMoveSourceAdminRequired:     project.ReasonSourceAdminRequired,
 		controlplane.ReasonMoveTargetMembershipMissing: project.ReasonNotOrgMember,
+		// A deleted or unknown account never gets a preview from a cached
+		// membership.
+		"actor_not_live": project.ReasonNotOrgMember,
+		// Nor does a denial this release does not know by name.
+		"some_future_reason": project.ReasonNotOrgMember,
 	} {
 		t.Run(reason, func(t *testing.T) {
 			_, err := previewWithFacts(t, &project.MockMoveFacts{PreviewProjectOrgMoveFunc: func(context.Context, controlplane.ProjectOrgMovePreviewQuery) (*controlplane.ProjectOrgMovePreview, error) {
