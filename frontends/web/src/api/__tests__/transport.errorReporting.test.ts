@@ -231,6 +231,39 @@ describe("deleting a setting that is already gone", () => {
   });
 });
 
+describe("a 401 on a request sent with no token (signed-out page)", () => {
+  it("is a debug line, not an error log, and still reaches the caller", async () => {
+    const call = await chainFailingWith(() => new ConnectError("unauthenticated", Code.Unauthenticated));
+    const { logger } = await import("@/lib/logger");
+    await expect(call("controlplane.v1.OrganizationService", "ListMyOrganizations")).rejects.toMatchObject({
+      code: Code.Unauthenticated,
+    });
+    expect(logger.error).not.toHaveBeenCalled();
+    expect(reporting.reportError).not.toHaveBeenCalled();
+  });
+
+  it("is still an error log when the request carried a token", async () => {
+    const { buildInterceptors } = await import("../transport");
+    const wire = (async () => {
+      throw new ConnectError("token rejected", Code.Unauthenticated);
+    }) as unknown as Next;
+    const run = buildInterceptors({ withAuth: false }).reduceRight<Next>((next, i) => i(next), wire);
+    const header = new Headers({ Authorization: "Bearer abc" });
+    await expect(
+      run({
+        stream: false,
+        service: { typeName: "controlplane.v1.OrganizationService" },
+        method: { name: "ListMyOrganizations" },
+        header,
+        signal: new AbortController().signal,
+        message: {},
+      } as unknown as Req),
+    ).rejects.toBeInstanceOf(ConnectError);
+    const { logger } = await import("@/lib/logger");
+    expect(logger.error).toHaveBeenCalledWith("[gRPC Client] Request failed:", expect.anything());
+  });
+});
+
 describe("what a caller holds after the transport decided", () => {
   // A caller's console.error of it must not be a second report
   // (lib/handledRpcFailures.ts): reported or not, it was decided once.
