@@ -31,7 +31,9 @@ import (
 // errOrgConnectionsDisabled is the refusal of a create or reconnect while the
 // deployment has not enabled org connections.
 func errOrgConnectionsDisabled() error {
-	return newError(CodeFailedPrecondition, "org connections are not enabled on this deployment")
+	e := newError(CodeFailedPrecondition, "org connections are not enabled on this deployment")
+	e.Reason = ReasonOrgConnectionsDisabled
+	return e
 }
 
 // WithOrgConnections turns on creating and reconnecting org-owned

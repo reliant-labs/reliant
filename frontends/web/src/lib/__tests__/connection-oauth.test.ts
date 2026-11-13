@@ -44,6 +44,7 @@ const protoConnection = {
 const connection = {
   id: 'conn_1', integrationId: 'slack', authKind: 'oauth2', name: 'work',
   accountLabel: 'Acme', senderId: '', status: 'active', statusReason: '', isDefault: true, lastUsedAt: '', createdAt: '',
+  ownerKind: 'user', orgId: '',
 }
 
 const setBridge = (bridge: unknown) => {

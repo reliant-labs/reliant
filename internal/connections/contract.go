@@ -67,6 +67,12 @@ const (
 // control-plane, orgs-and-members.md §2.3).
 const ReasonHumanOnly = "human_only"
 
+// ReasonOrgConnectionsDisabled is the error reason of creating or
+// reconnecting an org-owned connection on a deployment that has not enabled
+// org connections (ApiServerConfig orgs.connections_enabled): the client
+// shows the org's connections read-only and says why it cannot add one.
+const ReasonOrgConnectionsDisabled = "org_connections_disabled"
+
 // HumanOnly is the refusal of an org connection's administration to a
 // credential an agent can hold: a CLI login, an access token, a daemon's.
 func HumanOnly() error {
@@ -80,6 +86,10 @@ type Error struct {
 	Code    ErrorCode
 	Message string
 	Err     error
+	// Reason, when set, is the x-forge-error-reason the caller branches on
+	// (ReasonOrgConnectionsDisabled), so a client never reads Message to
+	// decide. It does not change Code, or what errors.Is matches.
+	Reason string
 }
 
 func (e *Error) Error() string {
@@ -114,7 +124,11 @@ func (e *Error) Unwrap() error {
 	default:
 		return e.Err
 	}
-	return svcerr.WithCause(svcerr.WithMessage(kind, e.Message), e.Err)
+	out := svcerr.WithMessage(kind, e.Message)
+	if e.Reason != "" {
+		out = svcerr.WithReason(out, e.Reason)
+	}
+	return svcerr.WithCause(out, e.Err)
 }
 
 // Is matches by code, so errors.Is(err, connections.ErrNeedsReauth) works

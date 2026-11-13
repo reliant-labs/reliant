@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 
+	"connectrpc.com/connect"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/reliant/internal/authz"
@@ -110,6 +112,10 @@ func TestOrgCreate_RefusedWhileDisabledOrWhenTheRoleCannotBeRead(t *testing.T) {
 	e := newEnv(t)
 	_, err := e.createOrgKey(asIn(acme), "olivia", "org-1", "off")
 	require.Equal(t, connections.CodeFailedPrecondition, connections.CodeOf(err), "off by default: %v", err)
+	// The refusal carries a stable reason, so a client shows the org's
+	// connections read-only and says why without reading the message.
+	require.Equal(t, connections.ReasonOrgConnectionsDisabled, svcerr.ToConnect(err).Meta().Get(svcerr.ReasonHeader), "the reason: %v", err)
+	require.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err), "still FailedPrecondition on the wire")
 
 	e.svc.WithOrgConnections(true)
 	_, err = e.createOrgKey(asIn(unknownRoles{acme}), "olivia", "org-1", "unknown")
