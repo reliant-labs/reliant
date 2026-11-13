@@ -130,6 +130,38 @@ func TestMachinePolicy_CallerCredentialsNeverReachAnOldDaemon(t *testing.T) {
 	}
 }
 
+// bothRules is an org that enforces an MCP allowlist and forced
+// credentials:none.
+type bothRules struct{}
+
+func (bothRules) ResolveOrgPolicy(context.Context, string) (accesstokenclient.OrgPolicy, error) {
+	return accesstokenclient.OrgPolicy{Version: 11, Policy: &controlplanev1.OrgPolicy{
+		Mcp:      &controlplanev1.McpPolicy{Mode: controlplanev1.OrgPolicyMode_ORG_POLICY_MODE_ENFORCE, AllowedServers: []string{"github"}},
+		Machines: &controlplanev1.MachinesPolicy{Mode: controlplanev1.OrgPolicyMode_ORG_POLICY_MODE_ENFORCE, ForceCredentialsNone: true},
+	}}, nil
+}
+
+// An org that enforces both the MCP and the machines rule sends one stamp
+// carrying both, under one org id.
+func TestMachinePolicy_OneStampCarriesMCPAndCredentials(t *testing.T) {
+	setMachines(t, orgpolicy.EnforcementEnforce)
+	prev := orgpolicy.EnforcementOf(orgpolicy.PointMCP)
+	orgpolicy.SetProcessEnforcement(orgpolicy.PointMCP, orgpolicy.EnforcementEnforce)
+	t.Cleanup(func() { orgpolicy.SetProcessEnforcement(orgpolicy.PointMCP, prev) })
+
+	ctx := orgpolicy.WithResolver(context.Background(), orgpolicy.New(bothRules{}))
+	router, res := sendThrough(t, ctx, orgShellRequest("org-a", `{"command":"ls"}`))
+	require.True(t, res.Success, res.Content)
+	require.Len(t, router.sent, 1)
+	stamp := daemonpolicy.OrgStampFrom(router.sent[0].Context)
+	require.NotNil(t, stamp)
+	assert.Equal(t, "org-a", stamp.OrgID)
+	assert.EqualValues(t, 11, stamp.Version)
+	assert.True(t, stamp.CredentialsForced())
+	require.NotNil(t, stamp.MCP)
+	assert.Equal(t, []string{"github"}, stamp.MCP.AllowedServers)
+}
+
 // In audit (the org's section, or the platform switch), with the switch
 // off, and outside any org, the request goes out exactly as it came, with
 // no stamp.
