@@ -386,6 +386,13 @@ func (x *ApiServerConfig) GetOrgs() *OrgsConfig {
 // header.
 type OrgsConfig struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
+	// Lets an org's owners and admins create and reconnect org-owned
+	// connections (control-plane docs/design/org-sharing.md §7, D13). Off by
+	// default: turn it on only once every API server and worker, and the
+	// release a rollback would return to, read org connections; an older
+	// replica routes no event through one. Using, listing, renaming and
+	// deleting an org connection that exists are not gated.
+	ConnectionsEnabled bool `protobuf:"varint,1,opt,name=connections_enabled,json=connectionsEnabled,proto3" json:"connections_enabled,omitempty"`
 	// Lets a GitHub trigger of an org listen through one of the org's linked
 	// GitHub App installations (control-plane docs/design/org-sharing.md §7.1):
 	// only that installation's events reach it. Off by default: a release
@@ -427,6 +434,13 @@ func (x *OrgsConfig) ProtoReflect() protoreflect.Message {
 // Deprecated: Use OrgsConfig.ProtoReflect.Descriptor instead.
 func (*OrgsConfig) Descriptor() ([]byte, []int) {
 	return file_reliant_config_v1_api_server_config_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *OrgsConfig) GetConnectionsEnabled() bool {
+	if x != nil {
+		return x.ConnectionsEnabled
+	}
+	return false
 }
 
 func (x *OrgsConfig) GetGithubInstallationTriggersEnabled() bool {
@@ -506,9 +520,11 @@ const file_reliant_config_v1_api_server_config_proto_rawDesc = "" +
 	"\x04orgs\x18U \x01(\v2\x1d.reliant.config.v1.OrgsConfigR\x04orgs:\x95\x01\xbaHx\x1av\n" +
 	"\x15auth_api_key_required\x12&AUTH_MODE=apikey requires AUTH_API_KEY\x1a5this.auth_mode != 'apikey' || this.auth_api_key != ''\xca\xc1\x18\x16\n" +
 	"\areliant\x12\x06server\x12\x03apiJ\x04\b\x05\x10\x06J\x04\b\n" +
-	"\x10\vJ\x04\b\v\x10\fJ\x04\b\f\x10\rJ\x04\b\r\x10\x0eJ\x04\b\x0e\x10\x0fJ\x04\b\x13\x10\x14J\x04\b\x14\x10\x15J\x04\b(\x10)J\x04\b2\x103J\x04\b3\x104J\x04\b<\x10=J\x04\bF\x10GJ\x04\bZ\x10[R\rcontrol_planeR\bdatabaseR\x04natsR\btemporalR\x03tlsR\x05drainR\bdata_dirR\x10streaming_driverR\fintegrationsR\robservabilityR\x06sentryR\tanalyticsR\x03llmR\apreview\"\xf7\x01\n" +
+	"\x10\vJ\x04\b\v\x10\fJ\x04\b\f\x10\rJ\x04\b\r\x10\x0eJ\x04\b\x0e\x10\x0fJ\x04\b\x13\x10\x14J\x04\b\x14\x10\x15J\x04\b(\x10)J\x04\b2\x103J\x04\b3\x104J\x04\b<\x10=J\x04\bF\x10GJ\x04\bZ\x10[R\rcontrol_planeR\bdatabaseR\x04natsR\btemporalR\x03tlsR\x05drainR\bdata_dirR\x10streaming_driverR\fintegrationsR\robservabilityR\x06sentryR\tanalyticsR\x03llmR\apreview\"\x95\x03\n" +
 	"\n" +
-	"OrgsConfig\x12\xe8\x01\n" +
+	"OrgsConfig\x12\x9b\x01\n" +
+	"\x13connections_enabled\x18\x01 \x01(\bBj\x82\xce\x18f\n" +
+	" RELIANT_ORGS_CONNECTIONS_ENABLED*BLet org owners and admins create org-owned integration connectionsR\x12connectionsEnabled\x12\xe8\x01\n" +
 	"$github_installation_triggers_enabled\x18\x02 \x01(\bB\x96\x01\x82\xce\x18\x91\x01\n" +
 	"1RELIANT_ORGS_GITHUB_INSTALLATION_TRIGGERS_ENABLED*\\Let an org's GitHub triggers listen through one of the org's linked GitHub App installationsR!githubInstallationTriggersEnabledB@Z>github.com/reliant-labs/reliant/gen/reliant/config/v1;configv1b\x06proto3"
 
