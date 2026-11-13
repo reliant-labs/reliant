@@ -550,19 +550,20 @@ func (s *Service) workflowActivationDefinition(
 ) (*reliantv1.TriggerDefinition, error) {
 	enabled := true
 	def := &reliantv1.TriggerDefinition{
-		Name:             name,
-		ActingIdentity:   msg.ActingIdentity,
-		ProjectId:        msg.ProjectId,
-		WorktreeId:       msg.WorktreeId,
-		Enabled:          &enabled,
-		Workflow:         msg.Workflow,
-		Presets:          msg.Presets,
-		Message:          msg.Message,
-		DaemonId:         msg.DaemonId,
-		NoMachine:        msg.NoMachine,
-		MachinePoolId:    msg.MachinePoolId,
-		NotifyOnComplete: msg.NotifyOnComplete,
-		Source:           &reliantv1.TriggerDefinition_WorkflowTrigger{WorkflowTrigger: wt.GetName()},
+		Name:              name,
+		ActingIdentity:    msg.ActingIdentity,
+		UnattendedFunding: msg.UnattendedFunding,
+		ProjectId:         msg.ProjectId,
+		WorktreeId:        msg.WorktreeId,
+		Enabled:           &enabled,
+		Workflow:          msg.Workflow,
+		Presets:           msg.Presets,
+		Message:           msg.Message,
+		DaemonId:          msg.DaemonId,
+		NoMachine:         msg.NoMachine,
+		MachinePoolId:     msg.MachinePoolId,
+		NotifyOnComplete:  msg.NotifyOnComplete,
+		Source:            &reliantv1.TriggerDefinition_WorkflowTrigger{WorkflowTrigger: wt.GetName()},
 	}
 
 	// The shared prompt is for triggers whose declaration has none: a message
