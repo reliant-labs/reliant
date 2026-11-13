@@ -471,12 +471,16 @@ func chatOwners(cfg *Config) *telemetry.ChatOwnerCache {
 		return nil
 	}
 	repo := cfg.Database
-	return telemetry.NewChatOwnerCache(func(ctx context.Context, chatID string) (string, error) {
+	return telemetry.NewChatOwnerOrgCache(func(ctx context.Context, chatID string) (telemetry.ChatOwner, error) {
 		chat, err := repo.GetChat(ctx, chatID)
 		if err != nil || chat == nil {
-			return "", err
+			return telemetry.ChatOwner{}, err
 		}
-		return chat.UserID, nil
+		owner := telemetry.ChatOwner{UserID: chat.UserID}
+		if chat.OrgID != nil {
+			owner.OrgID = *chat.OrgID
+		}
+		return owner, nil
 	}, time.Hour, 10000)
 }
 

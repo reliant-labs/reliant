@@ -1851,6 +1851,13 @@ message CallLLMOutput {
   // request to a different account of the same provider can drop reasoning the
   // new account cannot verify.
   string provider_account_id = 20 [(reliant) = {visibility_contexts: "advanced"}];
+
+  // TraceParent is this turn's span (invoke_agent) as a W3C traceparent. It
+  // is recorded here — in workflow history — so the execute_tools that runs
+  // this turn's tool calls, on whichever worker it lands, opens each call's
+  // span under the turn that asked for it (internal/telemetry/ai_spans.go).
+  // Empty when the turn was not traced.
+  string trace_parent = 21 [(reliant) = {visibility_contexts: "advanced"}];
 }
 
 // ToolCapabilities is one agent turn's tool capability set: resolved once by
