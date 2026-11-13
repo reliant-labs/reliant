@@ -19,6 +19,7 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/chatselection"
 	"github.com/reliant-labs/reliant/internal/daemonplacement"
@@ -1583,8 +1584,21 @@ func (l *Launcher) recordStartSelection(ctx context.Context, userID string, chat
 	if len(patch) == 0 {
 		return nil
 	}
-	if _, err := chatselection.NewInstrumented(l.repo).Merge(ctx, chat.ID, userID, workflowName, patch, 0); err != nil {
+	sel, err := chatselection.NewInstrumented(l.repo).Merge(ctx, chat.ID, userID, workflowName, patch, 0)
+	if err != nil {
 		return fmt.Errorf("failed to record the chat's selection: %w", err)
+	}
+	// The root model of a start the chat's owner made as a person is their
+	// pick (chat_person_picks); a trigger's, an agent's or the CLI login's
+	// start records none. In the launch transaction, so its error is the
+	// launch's.
+	if _, picked := patch["model"]; !picked || sel == nil || chat.OrgID == nil || *chat.OrgID == "" ||
+		userID != chat.UserID || auth.RequirePerson(ctx, "pick the chat's model") != nil {
+		return nil
+	}
+	key, _ := db.RootModelPick(sel.Params)
+	if err := l.repo.RecordChatPersonPick(ctx, chat.ID, userID, *chat.OrgID, key, sel.ChatProvider); err != nil {
+		return fmt.Errorf("failed to record the person's pick for the chat: %w", err)
 	}
 	return nil
 }

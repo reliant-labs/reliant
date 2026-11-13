@@ -4,6 +4,7 @@ package db
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/reliant-labs/forge/pkg/orm"
@@ -141,4 +142,69 @@ func (r *Repo) ChatFundingOrder(ctx context.Context, chatID string) (string, err
 		return "", err
 	}
 	return string(sel.Policy.Funding), nil
+}
+
+// RecordChatPersonPick records the chat's root model and provider switch, as
+// its selection holds them now, as the pick of userID, a person, in orgID
+// (chat_person_picks). Only the chat handler calls it, for a write made by the
+// chat's owner signed in as a person.
+func (r *Repo) RecordChatPersonPick(ctx context.Context, chatID, userID, orgID, modelKey, chatProvider string) error {
+	return store.PutChatPersonPick(ctx, r.ORM(), chatID, userID, orgID, modelKey, chatProvider, time.Now())
+}
+
+// ChatPersonPickDriver is the provider a person picked for chatID's root in
+// orgID, the one named provider that is consent to spend their own account
+// there (org-provider-accounts §4.4, §10). It is "" when nobody did, when
+// the pick was made in another org, or when the chat's selection no longer
+// holds the picked model and provider switch (a workflow, a preset or an
+// agent changed them since).
+func (r *Repo) ChatPersonPickDriver(ctx context.Context, chatID, orgID string) (string, error) {
+	if chatID == "" || orgID == "" {
+		return "", nil
+	}
+	pick, err := store.GetChatPersonPick(ctx, r.ORM(), chatID)
+	if err != nil || pick == nil || pick.OrgID != orgID {
+		return "", err
+	}
+	sel, err := r.GetChatSelection(ctx, chatID)
+	if err != nil || sel == nil {
+		return "", err
+	}
+	key, driver := RootModelPick(sel.Params)
+	if key != pick.ModelID || sel.ChatProvider != pick.ChatProvider {
+		return "", nil
+	}
+	if pick.ChatProvider != "" {
+		return pick.ChatProvider, nil
+	}
+	return driver, nil
+}
+
+// RootModelPick reads the root model of a chat's selection params ("model",
+// a {id, providers} selector or a legacy "<model>@<driver>" string) as a
+// comparable key and the one provider it names, "" when it names none or
+// several.
+func RootModelPick(params map[string]any) (key, driver string) {
+	var id string
+	var providers []any
+	switch v := params["model"].(type) {
+	case string:
+		id = v
+	case map[string]any:
+		id, _ = v["id"].(string)
+		providers, _ = v["providers"].([]any)
+	}
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return "", ""
+	}
+	if at := strings.LastIndex(id, "@"); at > 0 && at < len(id)-1 {
+		return id, id[at+1:]
+	}
+	if len(providers) == 1 {
+		if p, ok := providers[0].(string); ok && p != "" {
+			return id + "@" + p, p
+		}
+	}
+	return id, ""
 }

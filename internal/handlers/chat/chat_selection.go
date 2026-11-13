@@ -105,7 +105,29 @@ func (s *Service) recordSelection(
 	if sel != nil && (before == nil || before.Version != sel.Version) {
 		s.announceSelection(ctx, userID, chat, sel)
 	}
+	_, pickedModel := patch["model"]
+	if sel != nil && (pickedModel || len(binding) > 0 && binding[0] != nil) {
+		s.recordPersonPick(ctx, userID, chat, sel)
+	}
 	return sel, nil
+}
+
+// recordPersonPick records the chat's root model and provider switch, as sel
+// now holds them, as its owner's own pick (chat_person_picks): the one named
+// provider that is consent to spend their own account in the chat's org, for
+// the root's calls (org-provider-accounts §4.4, §10). Only the chat's owner,
+// signed in as a person, picks: a write by a workflow, an agent, the CLI
+// login or a teammate records nothing, and a pick it changes the selection
+// away from no longer counts (ChatPersonPickDriver compares). A chat with no
+// org has nothing to consent to. Best-effort: with no pick the call asks.
+func (s *Service) recordPersonPick(ctx context.Context, userID string, chat *db.Chat, sel *chatselection.Selection) {
+	if chat.OrgID == nil || *chat.OrgID == "" || userID != chat.UserID || auth.RequirePerson(ctx, "pick the chat's model") != nil {
+		return
+	}
+	key, _ := db.RootModelPick(sel.Params)
+	if err := s.deps.Repo.RecordChatPersonPick(ctx, chat.ID, userID, *chat.OrgID, key, sel.ChatProvider); err != nil {
+		logging.WarnContext(ctx, "Failed to record the person's pick for the chat; its calls ask", "chatID", chat.ID, "error", err)
+	}
 }
 
 // applyMovesToPatch writes each moved model input's value (from effective) into

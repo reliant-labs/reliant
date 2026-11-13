@@ -61,6 +61,10 @@ type PersonalFundingStore interface {
 	// ChatFundingOrder is the order a person chose for the chat
 	// (UpdateChatProviderPolicy, person-only); "" when it inherits.
 	ChatFundingOrder(ctx context.Context, chatID string) (string, error)
+	// ChatPersonPickDriver is the provider the chat's owner picked for its
+	// root through the composer, signed in as a person, in orgID, while the
+	// chat's selection still holds that pick; "" otherwise.
+	ChatPersonPickDriver(ctx context.Context, chatID, orgID string) (string, error)
 }
 
 // fundingNow is the clock of the funding decisions; a variable for tests.
@@ -87,6 +91,10 @@ type fundingPlan struct {
 	// leased is true when a use_personal answer reorders this call to the
 	// person's own accounts first.
 	leased bool
+	// personPick is the provider the person picked for the chat's root
+	// (ChatPersonPickDriver), read only for an attended call of the root
+	// thread; "" otherwise.
+	personPick string
 }
 
 // orgFundedFirstTier reports whether a is paid for by the org and preferred.
@@ -160,6 +168,16 @@ func (r *AccountRouting) fundingPlanFor(ctx context.Context, spec llmCallSpec, a
 		q = nil
 	}
 	plan.question = q
+	// The person's own pick of the root's provider is consent for the
+	// root's attended calls only: never a sub-agent's, never a run with
+	// nobody behind it. Unreadable, there is no pick, and the call asks.
+	if spec.Attended && !spec.Descendant {
+		pick, err := r.Funding.ChatPersonPickDriver(ctx, spec.ChatID, spec.OrgID)
+		if err != nil {
+			logging.WarnContext(ctx, "Could not read the person's pick for the chat; asking", "chatID", spec.ChatID, "error", err)
+		}
+		plan.personPick = pick
+	}
 	// A limited or unusable answer reorders the call to the person's own
 	// accounts while it lasts; an unusable one only until a turn start finds
 	// the org's accounts usable again (checked after routing). An unserved
@@ -400,11 +418,16 @@ func (r *AccountRouting) decideCallFunding(ctx context.Context, spec llmCallSpec
 		return "", nil
 	}
 	// Only a person's own decision is consent: their order (the per-org
-	// setting, or the chat's order, both person-only). A provider named by a
-	// "<model>@<driver>" selector, the run's providers or the chat's provider
-	// switch is not: a workflow, a preset or a spawned agent can name one,
-	// and the server records no proof that a person did. Such a call asks.
+	// setting, or the chat's order, both person-only), or the provider they
+	// picked for the chat's root through the composer (chat_person_picks),
+	// for the root's attended calls on that provider. A provider named by a
+	// workflow's "<model>@<driver>" selector, a run's, preset's or spawn's
+	// providers, or a sub-agent's model is not: software can name one. Such
+	// a call asks. org_only is absolute: no pick lifts it.
 	if plan.order == orgfunding.OrderPersonalFirst {
+		return "", nil
+	}
+	if plan.order != orgfunding.OrderOrgOnly && plan.personPick != "" && plan.personPick == providerDriver {
 		return "", nil
 	}
 	q := core.PersonalFunding{

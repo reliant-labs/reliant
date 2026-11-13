@@ -70,7 +70,7 @@ func (m *MockOrgResolver) ListScope(ctx context.Context, userID string, requeste
 var _ OrgResolver = (*MockOrgResolver)(nil)
 
 // forge:section MockRepository
-// forge:hash=10cf4e0f92ee9fc268bf0b719825553d3694125a3864a128cdba758a2a35ae8f
+// forge:hash=72636403f803e243d9911678c5293968b08cc935ff9f944ed2e6ef0a865589be
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -91,6 +91,7 @@ type MockRepository struct {
 	UpdateChatStateFunc                                      func(context.Context, string, db.ChatState, string) error
 	UpdateChatUnreadFunc                                     func(context.Context, string, bool, string) error
 	SetChatAdoptedFunc                                       func(context.Context, string, string, bool) (bool, error)
+	RecordChatPersonPickFunc                                 func(context.Context, string, string, string, string, string) error
 	SetChatDaemonBlockedFunc                                 func(context.Context, string, bool) error
 	SetChatPausedForMachineFunc                              func(context.Context, string, bool) (bool, error)
 	SetChatQueuedForMachineFunc                              func(context.Context, string, bool) (bool, error)
@@ -336,6 +337,15 @@ func (m *MockRepository) SetChatAdopted(ctx context.Context, chatID string, user
 		return m.SetChatAdoptedFunc(ctx, chatID, userID, adopted)
 	}
 	return false, contractkit.MockNotSet("MockRepository", "SetChatAdopted")
+}
+
+// RecordChatPersonPick records the call and delegates to RecordChatPersonPickFunc when set.
+func (m *MockRepository) RecordChatPersonPick(ctx context.Context, chatID string, userID string, orgID string, modelKey string, chatProvider string) error {
+	m.Recorder.Record("RecordChatPersonPick", ctx, chatID, userID, orgID, modelKey, chatProvider)
+	if m.RecordChatPersonPickFunc != nil {
+		return m.RecordChatPersonPickFunc(ctx, chatID, userID, orgID, modelKey, chatProvider)
+	}
+	return contractkit.MockNotSet("MockRepository", "RecordChatPersonPick")
 }
 
 // SetChatDaemonBlocked records the call and delegates to SetChatDaemonBlockedFunc when set.
