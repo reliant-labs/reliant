@@ -1,7 +1,7 @@
 -- forge:backward-compatible — adds a new table the previous release never reads or writes.
 
 -- Migration: chat_person_picks
--- Created: 2026-11-13T14:14:33Z
+-- Created: 2026-11-13T16:54:39Z
 --
 -- The root model and provider a person picked for a chat in an org, through
 -- the composer, signed in as a person (control-plane
