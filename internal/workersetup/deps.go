@@ -54,6 +54,7 @@ type AccountRoutingStore interface {
 	ThreadFunding(ctx context.Context, threadID string) (funding, orgID, accountID string, found bool, err error)
 	RecordThreadFunding(ctx context.Context, threadID, orgID, funding, accountID string) error
 	ChatFundingOrder(ctx context.Context, chatID string) (string, error)
+	ChatPersonPickDriver(ctx context.Context, chatID, orgID string) (string, error)
 	ListThreadAssignments(ctx context.Context, threadID string) ([]core.Assignment, error)
 	LatestServingAccount(ctx context.Context, threadID string) (string, error)
 }

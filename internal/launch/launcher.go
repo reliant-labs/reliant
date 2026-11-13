@@ -19,6 +19,7 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/chatselection"
 	"github.com/reliant-labs/reliant/internal/daemonplacement"
@@ -1582,6 +1583,14 @@ func (l *Launcher) recordStartSelection(ctx context.Context, userID string, chat
 	patch := l.SelectionPatch(ctx, userID, chat.ProjectID, workflowName, params)
 	if len(patch) == 0 {
 		return nil
+	}
+	// The root model of a start the chat's owner made as a person is their
+	// pick (chat_person_picks), recorded by the selection write itself, in
+	// the launch transaction; a trigger's, an agent's or the CLI login's
+	// start records none.
+	if _, picked := patch["model"]; picked && chat.OrgID != nil && *chat.OrgID != "" &&
+		userID == chat.UserID && auth.RequirePerson(ctx, "pick the chat's model") == nil {
+		ctx = db.WithPersonPick(ctx, db.PersonPick{UserID: userID, OrgID: *chat.OrgID})
 	}
 	if _, err := chatselection.NewInstrumented(l.repo).Merge(ctx, chat.ID, userID, workflowName, patch, 0); err != nil {
 		return fmt.Errorf("failed to record the chat's selection: %w", err)
