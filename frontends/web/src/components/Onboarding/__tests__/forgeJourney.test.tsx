@@ -313,7 +313,7 @@ describe("the forge journey", () => {
       expect(screen.queryByText(/reliant forge/)).toBeNull();
     });
 
-    it("tells the agent story with the shell's CLI, and ends the demo's tour on Sign up and Install", () => {
+    it("tells the agent story with the shell's CLI, and ends the demo's tour on Deploy yours free, Install and Sign up", () => {
       setTourShell("forge");
       const agent = render(<>{presentStep(step("fg-agent")).description}</>);
       expect(screen.getByText(`forge obs trace ${DEMO_TRACE_ID} prod`)).toBeInTheDocument();
@@ -324,6 +324,7 @@ describe("the forge journey", () => {
       // The public demo ends on its call to action, not a command list.
       expect(screen.queryByText("forge scaffold service inventory")).toBeNull();
       expect(screen.getByTestId("demo-cta-end_card")).toBeInTheDocument();
+      expect(screen.getByTestId("demo-cta-deploy")).toHaveTextContent("Deploy yours free");
       expect(screen.getByTestId("demo-cta-signup")).toHaveTextContent("Sign up free");
       expect(screen.getByTestId("demo-cta-install")).toHaveTextContent("Install Forge");
     });
