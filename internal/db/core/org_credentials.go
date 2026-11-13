@@ -41,10 +41,12 @@ type OrgCredentialsPurged struct {
 	// VaultKeys are the org tenant's wrapped data keys: deleting them is the
 	// crypto-shred.
 	VaultKeys int64
+	// SeatReleases are the org's records of seats its admins released.
+	SeatReleases int64
 }
 
 // Total is every row the purge touched.
 func (p OrgCredentialsPurged) Total() int64 {
 	return p.ProviderAccounts + p.Grants + p.Workspaces + p.Attributions + p.ManagedKeys +
-		p.Connections + p.ConnectionEvents + p.OAuthFlows + p.VaultKeys
+		p.Connections + p.ConnectionEvents + p.OAuthFlows + p.VaultKeys + p.SeatReleases
 }
