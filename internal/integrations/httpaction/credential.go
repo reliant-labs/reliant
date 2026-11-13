@@ -84,6 +84,18 @@ type CredentialSource interface {
 	Credential(ctx context.Context, req CredentialRequest) (Credential, error)
 }
 
+// IntegrationGate is a CredentialSource that also decides whether the run
+// may use an integration at all: its org's integrations policy
+// (control-plane docs/design/org-policies.md §4.3). RunAuthenticated asks it
+// once per call, before any credential is chosen, so the policy holds
+// whatever authenticates the call (a saved connection, the step's declared
+// secret, a delegated identity) and for an integration that needs none. The
+// returned context carries the decision to the source's own resolution, which
+// then does not count it again. connauth's Service is one.
+type IntegrationGate interface {
+	AdmitIntegration(ctx context.Context, runID, integrationID string) (context.Context, error)
+}
+
 // Credential error codes, mirroring the connections layer.
 const (
 	CodeFailedPrecondition = "failed_precondition"
@@ -100,6 +112,10 @@ type CredentialError struct {
 	Code    string
 	Message string
 	Err     error
+	// Reason, when set, names the refusal more precisely than Code, for a
+	// caller that branches on it (connections.ReasonIntegrationNotAllowed:
+	// the run's org's policy does not allow the integration).
+	Reason string
 }
 
 func (e *CredentialError) Error() string { return e.Message }
@@ -154,6 +170,18 @@ const ConnectionParam = "connection"
 // Either way the connection must belong to THIS integration, so a token saved
 // for one service can never be pointed at another's host.
 func (r *Runner) RunAuthenticated(ctx context.Context, m *reliantv1.IntegrationManifest, a *reliantv1.ActionSpec, params map[string]any, src CredentialSource, site CallSite) (*Result, error) {
+	// The run's org may not allow this integration at all: refused before
+	// any credential is chosen, so no way of authenticating gets around it.
+	if gate, ok := src.(IntegrationGate); ok && site.RunID != "" {
+		var err error
+		if ctx, err = gate.AdmitIntegration(ctx, site.RunID, m.GetId()); err != nil {
+			var ce *CredentialError
+			if errors.As(err, &ce) {
+				return nil, err
+			}
+			return nil, &CredentialError{Code: CodeInternal, Message: "could not check the organization's integrations policy", Err: err}
+		}
+	}
 	ref, _ := params[ConnectionParam].(string)
 	conn := m.GetConnection()
 	needs := len(conn.GetAuth()) > 0

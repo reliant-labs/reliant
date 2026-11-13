@@ -1,0 +1,15 @@
+version: "v1.18.0"
+date: "2026-11-13"
+title: "2 new features and 1 other change"
+summary: "Every pull request merged since v1.17.0, grouped by its conventional-commit type."
+sections:
+  - title: "Added"
+    items:
+      - title: "orgs: tell an org's owners and admins when a provider rejects one of the org's API keys (org provider accounts §4.7)"
+        description: "[#2702](https://github.com/reliant-labs/reliant/pull/2702)"
+      - title: "web: org Policies page with preview, conflict recovery, history and member view (org-policies W1)"
+        description: "[#2717](https://github.com/reliant-labs/reliant/pull/2717)"
+  - title: "Changed"
+    items:
+      - title: "pin: forge@685069ed7517 + @reliantlabs/forge-web-runtime@0.13.14, as promoted in v1.17.0-rc.6"
+        description: "[#2720](https://github.com/reliant-labs/reliant/pull/2720)"

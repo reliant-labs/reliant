@@ -45,7 +45,8 @@ import {
   type PaletteItem,
 } from "./paletteItems";
 import { useCatalogIntegrations, useCatalogSearch } from "./useCatalogSearch";
-import { useUnavailableIntegrations } from "../../../hooks/connection-queries";
+import { useOrgDisallowedIntegrations, useUnavailableIntegrations } from "../../../hooks/connection-queries";
+import { useActiveOrg } from "../../../hooks/useOrgs";
 
 export interface StepPaletteProps {
   open: boolean;
@@ -127,6 +128,10 @@ function StepPaletteBody({
   // Integrations no connection method serves on this deployment: their rows
   // say so instead of offering a Connect that can only explain why not.
   const unavailableIntegrations = useUnavailableIntegrations();
+  // Integrations the active org's policy refuses in its runs: marked, not
+  // hidden, so nobody builds a workflow that cannot run there.
+  const orgDisallowed = useOrgDisallowedIntegrations();
+  const orgName = useActiveOrg().active?.name || "your organization";
   const search = useCatalogSearch({ query, kind, category, requireQuery: true, enabled: !browsing });
   const browse = useCatalogIntegrations({ kind, category, enabled: browsing });
   const expanded = useCatalogSearch({
@@ -367,6 +372,9 @@ function StepPaletteBody({
     const notAvailable =
       (item.kind === "catalog" && !item.entry.connected && unavailableIntegrations.has(item.entry.integration.id)) ||
       (item.kind === "integration" && !item.listing.connected && unavailableIntegrations.has(item.listing.integration.id));
+    const notAllowed =
+      (item.kind === "catalog" && orgDisallowed.has(item.entry.integration.id)) ||
+      (item.kind === "integration" && orgDisallowed.has(item.listing.integration.id));
     const nested = (item.kind === "catalog" && item.nested) || item.kind === "more-entries" || (item.kind === "builtin" && item.advanced && browsing);
     const disclosure = item.kind === "integration" || item.kind === "advanced-toggle" ? item.expanded : undefined;
     return (
@@ -400,6 +408,11 @@ function StepPaletteBody({
           <RowDescription item={item} entryNoun={entryNoun} />
         </div>
         {item.kind === "catalog" && item.entry.mutates && <Badge label="Changes data" variant="warning" size="md" />}
+        {notAllowed && (
+          <span className="flex-shrink-0 text-xs text-muted-foreground" data-testid="palette-not-allowed">
+            Not allowed in {orgName}
+          </span>
+        )}
         {item.kind === "integration" &&
           (item.listing.connected ? (
             <Badge label="Connected" variant="success" size="md" dot />
@@ -645,7 +658,11 @@ function StepPaletteBody({
         </ul>
 
         <div className="flex items-center justify-between gap-3 border-t border-border/60 px-4 py-2 text-xs text-muted-foreground">
-          {activeEntry && !activeEntry.connected && unavailableIntegrations.has(activeEntry.integration.id) ? (
+          {activeEntry && orgDisallowed.has(activeEntry.integration.id) ? (
+            <span id={`${ids}-connect-hint`}>
+              {orgName}'s policy doesn't allow {activeEntry.integration.displayName} in its workflows. Ask an org admin to allow it.
+            </span>
+          ) : activeEntry && !activeEntry.connected && unavailableIntegrations.has(activeEntry.integration.id) ? (
             <span className="flex items-center gap-2">
               <span id={`${ids}-connect-hint`} className="sr-only">
                 Press Shift Enter to connect.

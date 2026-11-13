@@ -4,6 +4,7 @@ package handlers
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -61,6 +62,10 @@ type PersonalFundingStore interface {
 	// ChatFundingOrder is the order a person chose for the chat
 	// (UpdateChatProviderPolicy, person-only); "" when it inherits.
 	ChatFundingOrder(ctx context.Context, chatID string) (string, error)
+	// ChatPersonPickDriver is the provider the chat's owner picked for its
+	// root through the composer, signed in as a person, in orgID, while the
+	// chat's selection still holds that pick; "" otherwise.
+	ChatPersonPickDriver(ctx context.Context, chatID, orgID string) (string, error)
 }
 
 // fundingNow is the clock of the funding decisions; a variable for tests.
@@ -87,6 +92,10 @@ type fundingPlan struct {
 	// leased is true when a use_personal answer reorders this call to the
 	// person's own accounts first.
 	leased bool
+	// personPick is the provider the person picked for the chat's root
+	// (ChatPersonPickDriver), read only for an attended call of the root
+	// thread; "" otherwise.
+	personPick string
 }
 
 // orgFundedFirstTier reports whether a is paid for by the org and preferred.
@@ -160,6 +169,16 @@ func (r *AccountRouting) fundingPlanFor(ctx context.Context, spec llmCallSpec, a
 		q = nil
 	}
 	plan.question = q
+	// The person's own pick of the root's provider is consent for the
+	// root's attended calls only: never a sub-agent's, never a run with
+	// nobody behind it. Unreadable, there is no pick, and the call asks.
+	if spec.Attended && !spec.Descendant {
+		pick, err := r.Funding.ChatPersonPickDriver(ctx, spec.ChatID, spec.OrgID)
+		if err != nil {
+			logging.WarnContext(ctx, "Could not read the person's pick for the chat; asking", "chatID", spec.ChatID, "error", err)
+		}
+		plan.personPick = pick
+	}
 	// A limited or unusable answer reorders the call to the person's own
 	// accounts while it lasts; an unusable one only until a turn start finds
 	// the org's accounts usable again (checked after routing). An unserved
@@ -186,6 +205,8 @@ func (r *AccountRouting) applyFundingPlan(ctx context.Context, spec llmCallSpec,
 	}
 	if plan.order == orgfunding.OrderPersonalFirst || plan.leased {
 		avail = drivers.PersonalFirst(avail)
+	} else if plan.personPick != "" && plan.order != orgfunding.OrderOrgOnly && !plan.unchecked {
+		avail = r.promotePickWhileOrgLimited(ctx, spec, plan.personPick, avail)
 	}
 	if avail.DriverRank == nil || spec.TurnStart || spec.ThreadID == "" || r.Funding == nil {
 		return avail
@@ -400,11 +421,16 @@ func (r *AccountRouting) decideCallFunding(ctx context.Context, spec llmCallSpec
 		return "", nil
 	}
 	// Only a person's own decision is consent: their order (the per-org
-	// setting, or the chat's order, both person-only). A provider named by a
-	// "<model>@<driver>" selector, the run's providers or the chat's provider
-	// switch is not: a workflow, a preset or a spawned agent can name one,
-	// and the server records no proof that a person did. Such a call asks.
+	// setting, or the chat's order, both person-only), or the provider they
+	// picked for the chat's root through the composer (chat_person_picks),
+	// for the root's attended calls on that provider. A provider named by a
+	// workflow's "<model>@<driver>" selector, a run's, preset's or spawn's
+	// providers, or a sub-agent's model is not: software can name one. Such
+	// a call asks. org_only is absolute: no pick lifts it.
 	if plan.order == orgfunding.OrderPersonalFirst {
+		return "", nil
+	}
+	if plan.order != orgfunding.OrderOrgOnly && plan.personPick != "" && plan.personPick == providerDriver {
 		return "", nil
 	}
 	q := core.PersonalFunding{
@@ -473,6 +499,14 @@ func (r *AccountRouting) fundingOnLimit(ctx context.Context, uc usageLimitContex
 	if reset.IsZero() {
 		reset = facts.ResetAt
 	}
+	// The person's own pick of this provider for the chat's root (read only
+	// for the root's attended calls) is consent: the retry runs on it
+	// (promotePickWhileOrgLimited), with no question and no lease, so no
+	// other provider and no sub-agent gains anything. org_only still wins.
+	if uc.Plan.personPick != "" && uc.Plan.personPick == string(personal.DriverID) && uc.Plan.order != orgfunding.OrderOrgOnly {
+		facts.AlternativeAccount = true
+		return
+	}
 	q := core.PersonalFunding{
 		ChatID: uc.ChatID, UserID: uc.Scope.UserID, OrgID: uc.Scope.OrgID, Reason: core.PersonalFundingLimited, Model: uc.ModelID,
 		PersonalProvider: string(personal.DriverID), PersonalAccountLabel: accountName(*personal),
@@ -484,6 +518,55 @@ func (r *AccountRouting) fundingOnLimit(ctx context.Context, uc usageLimitContex
 		// Granted: the retry runs on the person's own account, and says so.
 		facts.AlternativeAccount = true
 	}
+}
+
+// promotePickWhileOrgLimited is avail with the person's own accounts of
+// driver, the provider they picked for the chat's root (plan.personPick, read
+// only for the root's attended calls), moved ahead of the org's accounts of
+// driver while none of those can serve now (all rate-limited). It is no
+// lease: it is decided per call, for that one provider, and the org's
+// accounts serve again as soon as one can. Any other provider, and a
+// question it cannot answer (no router, a failed read), is left as it is.
+func (r *AccountRouting) promotePickWhileOrgLimited(ctx context.Context, spec llmCallSpec, driver string, avail models.AvailableDrivers) models.AvailableDrivers {
+	d := models.DriverID(driver)
+	var org []models.AccountConfig
+	personal := false
+	for _, a := range avail.Accounts[d] {
+		switch {
+		case orgFundedFirstTier(a):
+			org = append(org, a)
+		case a.Funding == models.FundingPersonal:
+			personal = true
+		}
+	}
+	if len(org) == 0 || !personal || r.Router == nil {
+		return avail
+	}
+	modelID, _, _ := strings.Cut(spec.Selector.ID, "@")
+	usable, _, err := r.Router.Alternatives(ctx, accountrouter.Request{UserID: spec.UserID, Driver: d, ModelID: modelID, Accounts: org}, "")
+	if err != nil || usable {
+		return avail
+	}
+	out := avail
+	out.Accounts = make(map[models.DriverID][]models.AccountConfig, len(avail.Accounts))
+	for id, list := range avail.Accounts {
+		if id != d {
+			out.Accounts[id] = list
+			continue
+		}
+		next := make([]models.AccountConfig, len(list))
+		for i, a := range list {
+			switch {
+			case a.Funding == models.FundingPersonal:
+				a.Tier = models.TierFirst
+			case a.Tier == models.TierFirst:
+				a.Tier = models.TierSecond
+			}
+			next[i] = a
+		}
+		out.Accounts[id] = next
+	}
+	return out
 }
 
 // checkDefaultAccountFunding is checkPersonalFunding for a call routing chose
