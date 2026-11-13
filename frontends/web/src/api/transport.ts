@@ -444,6 +444,18 @@ const errorInterceptor: Interceptor = (next) => async (req) => {
       throw error;
     }
 
+    if (
+      error instanceof ConnectError &&
+      error.code === Code.Unauthenticated &&
+      !req.header.has(AUTH_HEADER)
+    ) {
+      // Sent with no credentials (a signed-out page): the 401 is the answer,
+      // and missingTokenInterceptor already warned. A 401 that carried a
+      // token still falls through to the error log below.
+      logger.debug("[gRPC Client] Unauthenticated request without a token", context);
+      throw error;
+    }
+
     logger.error("[gRPC Client] Request failed:", {
       ...context,
       baseUrl: _currentBaseURL,
