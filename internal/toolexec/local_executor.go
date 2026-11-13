@@ -137,14 +137,7 @@ func (e *LocalToolExecutor) executeTool(
 	stamp := daemonpolicy.OrgStampFrom(contextMap)
 	ctx = daemonpolicy.WithOrgStamp(ctx, stamp)
 	if !stamp.MCPToolAllowed(toolName) {
-		msg := fmt.Sprintf("Your organization does not allow the MCP server of %s for its agents.", toolName)
-		return &ExecutionResult{
-			Success:      false,
-			IsError:      true,
-			Content:      msg,
-			ErrorMessage: "refused by the organization's MCP policy",
-			ErrorCode:    ErrorCodeOrgPolicy,
-		}
+		return orgMCPRefusal(toolName)
 	}
 
 	// Extract context fields
@@ -270,6 +263,13 @@ func (e *LocalToolExecutor) executeTool(
 		}
 	}
 
+	// The org's MCP allowlist, on the server the name actually resolved to:
+	// the name-prefix check above only keeps a disallowed server from being
+	// started, and cannot tell server "a" from server "a__b" by a name.
+	if mcpTool, ok := tool.(interface{ MCPServer() string }); ok && !stamp.MCPServerAllowed(mcpTool.MCPServer()) {
+		return orgMCPRefusal(toolName)
+	}
+
 	// Admitted only once the tool is known to exist, so a daemon without it
 	// still answers TOOL_NOT_FOUND (which is how prefer-daemon falls back).
 	releaseEgress, refusal := e.admitEgress(ctx, toolName, toolInput)
@@ -332,4 +332,15 @@ func boundParamsFrom(contextMap map[string]interface{}) []string {
 		}
 	}
 	return out
+}
+
+// orgMCPRefusal is the result of an MCP tool call the run's org does not allow.
+func orgMCPRefusal(toolName string) *ExecutionResult {
+	return &ExecutionResult{
+		Success:      false,
+		IsError:      true,
+		Content:      fmt.Sprintf("Your organization does not allow the MCP server of %s for its agents.", toolName),
+		ErrorMessage: "refused by the organization's MCP policy",
+		ErrorCode:    ErrorCodeOrgPolicy,
+	}
 }

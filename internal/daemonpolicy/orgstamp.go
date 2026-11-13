@@ -60,11 +60,13 @@ func (s *OrgStamp) MCPServerAllowed(server string) bool {
 	return slices.Contains(s.MCP.AllowedServers, server)
 }
 
-// MCPToolAllowed reports whether s lets the run call the tool named name.
-// Only an MCP tool (mcp__<server>__<tool>) can be refused; it is allowed
-// when it belongs to an allowed server. Matching on the "mcp__<server>__"
-// prefix of each allowed server, rather than splitting the name, keeps a
-// server whose own name contains "__" from being mistaken for another.
+// MCPToolAllowed reports whether a tool named name could belong to a server
+// s allows: an MCP tool (mcp__<server>__<tool>) whose name starts with an
+// allowed server's prefix; any other tool. It is the check before anything
+// starts the tool's server, and it is not enough on its own: a name does not
+// identify its server (allowed "a" and forbidden "a__b" both give
+// "mcp__a__b__x"), so the caller checks the server the name resolved to with
+// MCPServerAllowed before running the tool.
 func (s *OrgStamp) MCPToolAllowed(name string) bool {
 	if s == nil || s.MCP == nil || s.MCP.AllowAll || !strings.HasPrefix(name, "mcp__") {
 		return true

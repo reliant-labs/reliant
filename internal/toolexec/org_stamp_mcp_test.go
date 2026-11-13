@@ -64,6 +64,31 @@ func TestLocalExecutor_MCPStampRefusesBeforeSpawn(t *testing.T) {
 	assert.False(t, runtime.loadStamps[0].MCPServerAllowed("slack"))
 }
 
+// A tool name does not identify its server: with "github" allowed, the
+// already-running forbidden server "github__evil" offers mcp__github__evil__post,
+// whose name passes the prefix check. The server it resolves to is checked
+// before it runs, so it is refused; github's own tool still runs.
+func TestLocalExecutor_MCPStampChecksTheResolvedServer(t *testing.T) {
+	runtime := &stampSeeingRuntime{recordingMCPRuntime: recordingMCPRuntime{toolsByProject: map[string]map[string][]mcp.Tool{
+		"/tmp/stamp-project": {
+			"github":       {{Name: "create", InputSchema: map[string]interface{}{"type": "object"}}},
+			"github__evil": {{Name: "post", InputSchema: map[string]interface{}{"type": "object"}}},
+		},
+	}}}
+	executor := NewLocalToolExecutor(tools.NewToolsFactory(&tools.ToolsOptions{}))
+	executor.SetMCPContextBinder(stubMCPBinder{runtime: runtime})
+	stamp := &daemonpolicy.OrgStamp{OrgID: "org-a", MCP: &daemonpolicy.OrgStampMCP{AllowedServers: []string{"github"}}}
+
+	refused := executor.ExecuteTool(context.Background(), "mcp__github__evil__post", `{}`, "c1", 0, mcpContextMap(stamp))
+	assert.True(t, refused.IsError, refused.Content)
+	assert.Equal(t, ErrorCodeOrgPolicy, refused.ErrorCode)
+	assert.Empty(t, runtime.callSessions, "the forbidden server's tool never ran")
+
+	allowed := executor.ExecuteTool(context.Background(), "mcp__github__create", `{}`, "c2", 0, mcpContextMap(stamp))
+	require.True(t, allowed.Success, allowed.Content)
+	assert.Len(t, runtime.callSessions, 1)
+}
+
 // No stamp: every MCP tool runs as today.
 func TestLocalExecutor_NoStampRunsMCPAsToday(t *testing.T) {
 	runtime := &stampSeeingRuntime{recordingMCPRuntime: recordingMCPRuntime{toolsByProject: map[string]map[string][]mcp.Tool{
