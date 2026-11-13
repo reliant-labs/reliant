@@ -49,6 +49,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/natsutil"
+	"github.com/reliant-labs/reliant/internal/orgpolicy"
 	"github.com/reliant-labs/reliant/internal/orgs"
 	"github.com/reliant-labs/reliant/internal/streaming"
 	"github.com/reliant-labs/reliant/internal/temporal"
@@ -251,6 +252,29 @@ func NewOrgResolver(d OrgResolverDeps) (*orgs.Resolver, error) {
 	// and which of a person's org-paid seats, a run of that org may use
 	// (org-provider-accounts §4.1). Without it no org account is a candidate.
 	drivers.InitializeOrgMembership(resolver)
+	return resolver, nil
+}
+
+// OrgPolicyResolverDeps is the token authority whose store may answer org
+// policies.
+type OrgPolicyResolverDeps struct {
+	Authority tokenauthority.Authority
+}
+
+// NewOrgPolicyResolver is the deployment's org policy resolver
+// (internal/orgpolicy): control-plane's ResolveOrgPolicy, cached, when the
+// token authority is control-plane's AccessTokenInternalService. A
+// self-hosted store has no orgs and so no policies: the resolver is nil, which
+// answers "no policy" for every org. It is also the process's (the background
+// of loops no listener or activity wraps).
+func NewOrgPolicyResolver(d OrgPolicyResolverDeps) (*orgpolicy.Resolver, error) {
+	src, hosted := d.Authority.(orgpolicy.Source)
+	if !hosted {
+		orgpolicy.SetProcessResolver(nil)
+		return nil, nil
+	}
+	resolver := orgpolicy.New(src)
+	orgpolicy.SetProcessResolver(resolver)
 	return resolver, nil
 }
 

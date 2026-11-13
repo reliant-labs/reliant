@@ -1,0 +1,175 @@
+syntax = "proto3";
+
+// OrgPolicyService is where an org's admin policy document is read and edited
+// (docs/design/org-policies.md). The document itself, OrgPolicy, is in
+// controlplane/v1/org_policy.proto.
+//
+// WHO MAY DO WHAT (§6). Every rpc is for HUMAN callers: a machine credential is
+// PermissionDenied, reason "human_only". Every rpc names its org explicitly
+// (org_id is required), so nothing falls back to a default org by omission.
+//   - GetOrgPolicy: any member. Policies bind every member, admins and owners
+//     included, so every member may read them.
+//   - UpdateOrgPolicy, PreviewOrgPolicy: an admin or owner of the org, read
+//     fresh from membership, never a token scope (decision D1).
+//
+// REFUSALS, in the order a stranger learns nothing from (x-forge-error-reason):
+//   human_only, not_org_member, org_unclaimed, admin_required, then
+//   InvalidArgument for a document validation refuses (policy_invalid), then
+//   FailedPrecondition policy_version_conflict for a stale expected_version.
+//
+// NOTHING HERE ENFORCES. Each enforcement point reads the document and decides
+// by its own rollout (§7): this service only stores, validates and versions it.
+package controlplane.v1;
+
+import "buf/validate/validate.proto";
+import "controlplane/v1/org_policy.proto";
+import "forge/v1/forge.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/reliant-labs/control-plane/gen/services/org_policy/v1;org_policyv1";
+
+// OrgPolicyService reads, previews and edits an org's policy document.
+service OrgPolicyService {
+  option (forge.v1.service) = {
+    name: "OrgPolicyService"
+    version: "1.0.0"
+    description: "An org's admin policies: the limits on models, providers, spend, integrations, MCP, approvals and machines"
+  };
+
+  // GetOrgPolicy returns the org's current policy document and its version.
+  // An org with no policy answers version 0 and an empty document: no policy
+  // is an answer, never NotFound. Any member may read it.
+  //
+  // forge:custom — the document of one org, not the CRUD of a table.
+  rpc GetOrgPolicy(GetOrgPolicyRequest) returns (GetOrgPolicyResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+    };
+  }
+
+  // UpdateOrgPolicy replaces the org's whole policy document. Admin or owner.
+  //
+  // Optimistic concurrency: expected_version must equal the stored version
+  // (0 for an org with no policy yet), or the call fails FailedPrecondition,
+  // reason "policy_version_conflict", and changes nothing: a stale editor
+  // fails loudly instead of overwriting a teammate's edit. A document that
+  // changes nothing writes nothing and keeps the version.
+  //
+  // An accepted edit is one new version: the document, its history row, one
+  // org limit-change row per changed field (BillingService.ListOrgLimitChanges,
+  // resources "policy.<section>.<field>") and the activity event commit in ONE
+  // transaction. Clearing every section is how a policy is removed; the
+  // version still moves forward.
+  //
+  // forge:custom — a versioned whole-document write with its history, not
+  // the CRUD of a table.
+  rpc UpdateOrgPolicy(UpdateOrgPolicyRequest) returns (UpdateOrgPolicyResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {
+        verb: "update"
+        target: {
+          kind: "policy"
+          id: "org_id"
+        }
+        scope: "org_id"
+        detail: ["response.policy.version"]
+        writer: ACTIVITY_WRITER_HANDLER
+      }
+    };
+  }
+
+  // PreviewOrgPolicy says what UpdateOrgPolicy would do with a document,
+  // changing nothing: what validation refuses, which fields change, and what
+  // the edit would affect. Admin or owner. A document validation refuses is
+  // an answer here (violations), not an error, so an editor can show every
+  // problem at once.
+  rpc PreviewOrgPolicy(PreviewOrgPolicyRequest) returns (PreviewOrgPolicyResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+      activity: {none: "reads only: validates and compares a proposed document, writes nothing"}
+    };
+  }
+}
+
+// OrgPolicyRecord is one version of an org's policy document.
+message OrgPolicyRecord {
+  string org_id = 1;
+  // version is 0 while the org has never had a policy, then 1, 2, ... one per
+  // accepted edit. It never goes back, including when a policy is cleared.
+  int64 version = 2;
+  // policy is the document. Empty (no sections) means no policy.
+  OrgPolicy policy = 3;
+  // updated_at and updated_by_* name the edit that made this version; unset
+  // for version 0, and the user fields empty when the editor's account is
+  // gone.
+  google.protobuf.Timestamp updated_at = 4;
+  string updated_by_user_id = 5;
+  string updated_by_email = 6;
+}
+
+message GetOrgPolicyRequest {
+  string org_id = 1 [(buf.validate.field).string.min_len = 1];
+}
+
+message GetOrgPolicyResponse {
+  OrgPolicyRecord policy = 1;
+}
+
+message UpdateOrgPolicyRequest {
+  string org_id = 1 [(buf.validate.field).string.min_len = 1];
+  // policy is the whole new document. Unset is the empty document: no policy.
+  OrgPolicy policy = 2;
+  // expected_version is the version the editor read (0 for an org with no
+  // policy yet).
+  int64 expected_version = 3 [(buf.validate.field).int64.gte = 0];
+}
+
+message UpdateOrgPolicyResponse {
+  OrgPolicyRecord policy = 1;
+  // changed is false when the document equalled the stored one: nothing was
+  // written and the version did not move.
+  bool changed = 2;
+}
+
+message PreviewOrgPolicyRequest {
+  string org_id = 1 [(buf.validate.field).string.min_len = 1];
+  OrgPolicy policy = 2;
+}
+
+// OrgPolicyViolation is one reason validation refuses a document.
+message OrgPolicyViolation {
+  // field is the path in the document, e.g. "models.allowed" or
+  // "spend.member_overrides[<user_id>]".
+  string field = 1;
+  string message = 2;
+}
+
+// OrgPolicyFieldChange is one field an edit changes, in the shape of the org's
+// limit-change history.
+message OrgPolicyFieldChange {
+  // resource is "policy.<section>.<field>".
+  string resource = 1;
+  string field = 2;
+  // old_value and new_value are display JSON; old_value is empty when the
+  // field was not set before, new_value is "null" when the edit removes it.
+  string old_value = 3;
+  string new_value = 4;
+}
+
+message PreviewOrgPolicyResponse {
+  // current_version is the stored version, the expected_version to send.
+  int64 current_version = 1;
+  // valid is true when UpdateOrgPolicy would accept the document.
+  bool valid = 2;
+  repeated OrgPolicyViolation violations = 3;
+  // changes are the fields the edit would change; empty when it changes
+  // nothing.
+  repeated OrgPolicyFieldChange changes = 4;
+  // warnings are consequences an admin should see before saving that do not
+  // refuse the document (for instance a rule that would leave unattended runs
+  // with no source the org pays for).
+  repeated string warnings = 5;
+}

@@ -14,7 +14,9 @@ import (
 
 	fat "github.com/reliant-labs/forge/pkg/accesstoken"
 	"github.com/reliant-labs/forge/pkg/observe"
+	"google.golang.org/protobuf/encoding/protojson"
 
+	controlplanev1 "github.com/reliant-labs/reliant/gen/controlplane/controlplane/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 )
 
@@ -466,6 +468,48 @@ func (c *Client) ResolveGoneOrgs(ctx context.Context, orgIDs []string) ([]GoneOr
 		gone = append(gone, GoneOrg{OrgID: g.OrgID, At: g.GoneAt.UTC()})
 	}
 	return gone, nil
+}
+
+// OrgPolicy is one version of an org's admin policy document
+// (control-plane docs/design/org-policies.md).
+type OrgPolicy struct {
+	// Version is 0 while the org has no policy, then moves forward one per
+	// accepted edit, never back.
+	Version int64
+	// Policy is the document; never nil, and empty when there is none.
+	Policy *controlplanev1.OrgPolicy
+}
+
+// ResolveOrgPolicy asks control-plane for orgID's policy document. A control
+// plane that predates the rpc answers ErrUnsupported.
+func (c *Client) ResolveOrgPolicy(ctx context.Context, orgID string) (OrgPolicy, error) {
+	var out struct {
+		// Version is an int64, which protojson writes as a string.
+		Version json.Number     `json:"version"`
+		Policy  json.RawMessage `json:"policy"`
+	}
+	if err := c.call(ctx, "ResolveOrgPolicy", map[string]any{"orgId": orgID}, &out); err != nil {
+		if isUnsupported(err) {
+			return OrgPolicy{}, fmt.Errorf("%w: ResolveOrgPolicy: %w", ErrUnsupported, err)
+		}
+		return OrgPolicy{}, err
+	}
+	p := OrgPolicy{Policy: &controlplanev1.OrgPolicy{}}
+	if out.Version != "" {
+		v, err := out.Version.Int64()
+		if err != nil || v < 0 {
+			return OrgPolicy{}, fmt.Errorf("accesstokenclient: ResolveOrgPolicy: version %q is not a version", out.Version)
+		}
+		p.Version = v
+	}
+	if len(out.Policy) > 0 {
+		// A section or field this release does not know is a rule it does
+		// not enforce yet: it is dropped, never refused.
+		if err := (protojson.UnmarshalOptions{DiscardUnknown: true}).Unmarshal(out.Policy, p.Policy); err != nil {
+			return OrgPolicy{}, fmt.Errorf("accesstokenclient: ResolveOrgPolicy: decoding the policy: %w", err)
+		}
+	}
+	return p, nil
 }
 
 // IsNotFound reports whether err is control-plane's not_found.
