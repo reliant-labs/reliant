@@ -137,6 +137,14 @@ func configuredAccounts(ctx context.Context, repo AvailabilityStore, scope Scope
 // accountDriverConfig shapes one stored account into the credential material its driver needs.
 // ok is false for an account that cannot serve anything (no usable secret, or an expired OAuth
 // session with no refresh token to recover it).
+// orgOwnerID is the org that owns an account, or "" for a person's own.
+func orgOwnerID(owner core.AccountOwner) string {
+	if owner.IsOrg() {
+		return owner.ID
+	}
+	return ""
+}
+
 func accountDriverConfig(ctx context.Context, userID string, acct *core.AccountWithSecrets) (models.DriverConfig, bool) {
 	driverID := models.DriverID(acct.Provider)
 	secret := strings.TrimSpace(acct.Secrets.Secret)
@@ -149,6 +157,7 @@ func accountDriverConfig(ctx context.Context, userID string, acct *core.AccountW
 		AccountID:        acct.ID,
 		AccountLabel:     acct.DisplayLabel(),
 		AccountEmail:     acct.Email,
+		AccountOrgID:     orgOwnerID(acct.Owner()),
 		AccountUUID:      acct.ExternalAccountID,
 		OrganizationUUID: acct.OrganizationID,
 	}

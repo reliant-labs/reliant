@@ -38,8 +38,97 @@ var (
 	ErrInvalidAccountOrder = svcerr.InvalidArgument("account order must list each of the provider's accounts exactly once")
 )
 
+// Account owner kinds: provider_accounts.owner_kind.
+const (
+	AccountOwnerUser = "user"
+	AccountOwnerOrg  = "org"
+)
+
+// OrgOwnerKeyPrefix starts the owner key an org-owned account holds in provider_accounts.user_id
+// ("org:<org_id>"). The schema guarantees no person's row ever starts with it.
+const OrgOwnerKeyPrefix = "org:"
+
+// Org account audiences: provider_accounts.org_access, set exactly on an org-owned row.
+const (
+	OrgAccessMembers  = "members"  // every live member of the org
+	OrgAccessAdmins   = "admins"   // live owners and admins
+	OrgAccessSelected = "selected" // only members holding a provider_account_grants row
+)
+
+// ValidOrgAccess reports whether s is one of the three audiences.
+func ValidOrgAccess(s string) bool {
+	switch s {
+	case OrgAccessMembers, OrgAccessAdmins, OrgAccessSelected:
+		return true
+	}
+	return false
+}
+
+// Attribution sources: provider_accounts.attribution_source, set exactly with attributed_org_id
+// on a person's row that an org pays for.
+const (
+	AttributionWorkspace = "workspace" // a seat matched to the org's bound workspace
+	AttributionApproved  = "approved"  // a seat an org admin approved by hand
+	AttributionManaged   = "managed"   // the managed Reliant key minted in that org
+)
+
+// AccountOwner is who a provider account belongs to: a person (Kind AccountOwnerUser, ID their
+// user id) or an organization (Kind AccountOwnerOrg, ID its org id). It is core.ConnectionOwner's
+// twin. Every store read and write that takes one scopes to that owner in SQL, and the vault
+// tenant an account's secrets are sealed under is chosen from it, so an org's account is never
+// read, written or opened as a person's (its creator's included), nor a person's as an org's.
+//
+// An org-owned row stores Key() ("org:<org_id>") in provider_accounts.user_id
+// (control-plane docs/design/org-provider-accounts.md §3.1); nothing outside the store reads
+// that column raw.
+type AccountOwner struct {
+	Kind string
+	ID   string
+}
+
+// UserAccountOwner is the owner of userID's personal accounts.
+func UserAccountOwner(userID string) AccountOwner {
+	return AccountOwner{Kind: AccountOwnerUser, ID: userID}
+}
+
+// OrgAccountOwner is the owner of orgID's accounts.
+func OrgAccountOwner(orgID string) AccountOwner {
+	return AccountOwner{Kind: AccountOwnerOrg, ID: orgID}
+}
+
+// Valid reports whether o names a real owner: a known kind and a non-empty id, where a person's
+// id never looks like an owner key. UserAccountOwner("org:<id>") is NOT valid: it is neither
+// that org nor any person.
+func (o AccountOwner) Valid() bool {
+	switch o.Kind {
+	case AccountOwnerUser:
+		return o.ID != "" && !strings.HasPrefix(o.ID, OrgOwnerKeyPrefix)
+	case AccountOwnerOrg:
+		return o.ID != ""
+	}
+	return false
+}
+
+// IsOrg reports whether o is an organization.
+func (o AccountOwner) IsOrg() bool { return o.Kind == AccountOwnerOrg }
+
+// Key is the value o's rows hold in provider_accounts.user_id (and provider_account_limits.user_id):
+// the person's id, or "org:<org_id>". An invalid owner's key is "", which no row holds, so a
+// query by it matches nothing.
+func (o AccountOwner) Key() string {
+	if !o.Valid() {
+		return ""
+	}
+	if o.Kind == AccountOwnerOrg {
+		return OrgOwnerKeyPrefix + o.ID
+	}
+	return o.ID
+}
+
 // ProviderAccount is one connected LLM credential. It carries no secrets.
 type ProviderAccount struct {
+	// UserID is the stored owner key (AccountOwner.Key). Read Owner() instead: for an org-owned
+	// account it is not a person.
 	ID, UserID, Provider string
 	AuthKind             AuthKind
 	IdentityKey          string
@@ -56,6 +145,28 @@ type ProviderAccount struct {
 	ExpiresAt            time.Time
 	Scope                string
 	CreatedAt, UpdatedAt time.Time
+
+	// OwnerKind is AccountOwnerUser or AccountOwnerOrg; OrgID is set exactly for an org's account.
+	OwnerKind string
+	OrgID     string
+	// OrgAccess is an org account's audience (OrgAccess*); "" for a person's.
+	OrgAccess string
+	// CreatedByUserID is the admin who added an org account: attribution, never authority.
+	CreatedByUserID string
+	// AttributedOrgID is the org that pays for a person's account (a seat, or the managed key
+	// minted in that org), with AttributionSource saying how; both "" for a plain personal one.
+	AttributedOrgID   string
+	AttributionSource string
+}
+
+// Owner is who a belongs to. A row predating owner_kind reads as its user's.
+func (a ProviderAccount) Owner() AccountOwner {
+	if a.OwnerKind == AccountOwnerOrg {
+		// The schema's CHECK guarantees an org id; were it ever missing, the owner is invalid
+		// (it opens nothing and matches no row) rather than falling back to user_id.
+		return OrgAccountOwner(a.OrgID)
+	}
+	return UserAccountOwner(a.UserID)
 }
 
 // DisplayLabel is Label, else Email, else "<provider> key …<hint>".
@@ -111,7 +222,13 @@ type AccountWithSecrets struct {
 
 // AccountUpsert connects an account, or re-connects the one with the same identity.
 type AccountUpsert struct {
+	// UserID is the person whose account this is. Owner, when set, overrides it: an org-owned
+	// account is written with Owner = OrgAccountOwner(org), OrgAccess and CreatedByUserID, and
+	// may only be an API key.
 	UserID, Provider  string
+	Owner             AccountOwner
+	OrgAccess         string
+	CreatedByUserID   string
 	AuthKind          AuthKind
 	IdentityKey       string
 	Email             string
@@ -129,6 +246,14 @@ type AccountUpsert struct {
 	// it keeps its id, label, pause and limit state, takes the smaller priority and the newer tokens,
 	// and thread assignments are repointed to it.
 	ReplaceIdentityOf string
+}
+
+// AccountOwner is who the written account belongs to: Owner when set, else UserID's.
+func (u AccountUpsert) AccountOwner() AccountOwner {
+	if u.Owner != (AccountOwner{}) {
+		return u.Owner
+	}
+	return UserAccountOwner(u.UserID)
 }
 
 // AccountPatch changes the user-controlled state of an account. Nil fields are left alone.
