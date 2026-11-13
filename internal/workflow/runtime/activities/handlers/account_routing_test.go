@@ -14,6 +14,7 @@ import (
 	"go.temporal.io/sdk/temporal"
 
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/llm"
 	"github.com/reliant-labs/reliant/internal/llm/accountrouter"
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
@@ -121,12 +122,12 @@ type recorderFake struct {
 	observed  []string
 }
 
-func (r *recorderFake) For(_, accountID string) ratelimit.Observer {
+func (r *recorderFake) For(_ core.AccountOwner, accountID string) ratelimit.Observer {
 	r.observed = append(r.observed, accountID)
 	return nopObserver{}
 }
 
-func (r *recorderFake) Bench(_ context.Context, _, accountID string, until time.Time, window string) (time.Time, error) {
+func (r *recorderFake) Bench(_ context.Context, _ core.AccountOwner, accountID string, until time.Time, window string) (time.Time, error) {
 	if r.failBench {
 		return until, errors.New("store down")
 	}

@@ -53,6 +53,12 @@ import (
 // and binds each ciphertext to its account id and column), the advisory-lock-then-read-then-write
 // transactions, the identity merge, and the compare-and-swap loop. Nothing here ever sees a
 // plaintext secret: the sealed columns cross this boundary as ciphertext.
+//
+// Ownership (control-plane docs/design/org-provider-accounts.md §3.1). provider_accounts.user_id
+// holds the account's OWNER KEY: a person's id, or "org:<org_id>" for an org-owned account
+// (owner_kind = 'org'). A `userID` parameter below is that key (core.AccountOwner.Key), never
+// assumed to be a person; the functions that read or open an account take a core.AccountOwner
+// and scope by both the key and owner_kind, so a person's read never returns an org's row.
 
 // SealedProviderAccount is one provider_accounts row: its core metadata plus the sealed columns,
 // still ciphertext.
@@ -87,7 +93,8 @@ var providerAccountSealedColumns = []string{
 // providerAccountMetaColumns is what a write returns: every column core.ProviderAccount carries.
 const providerAccountMetaColumns = `id, user_id, provider, auth_kind, identity_key, label, email, external_account_id,
 	organization_id, organization_name, plan, plan_raw, key_hint, priority, paused_at, needs_reauth_at,
-	needs_reauth_reason, expires_at, scope, created_at, updated_at`
+	needs_reauth_reason, expires_at, scope, created_at, updated_at, owner_kind, org_id, org_access,
+	created_by_user_id, attributed_org_id, attribution_source`
 
 func providerAccountToCore(r *ProviderAccount) core.ProviderAccount {
 	a := core.ProviderAccount{
@@ -98,6 +105,12 @@ func providerAccountToCore(r *ProviderAccount) core.ProviderAccount {
 		Priority: int(r.Priority), PausedAt: r.PausedAt, NeedsReauthAt: r.NeedsReauthAt,
 		NeedsReauthReason: acctText(r.NeedsReauthReason), Scope: acctText(r.Scope),
 		CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt,
+		OwnerKind: r.OwnerKind, OrgID: acctText(r.OrgID), OrgAccess: acctText(r.OrgAccess),
+		CreatedByUserID: acctText(r.CreatedByUserID), AttributedOrgID: acctText(r.AttributedOrgID),
+		AttributionSource: acctText(r.AttributionSource),
+	}
+	if a.OwnerKind == "" {
+		a.OwnerKind = core.AccountOwnerUser // the column default; a write that omits it returns ""
 	}
 	if r.ExpiresAt != nil {
 		a.ExpiresAt = *r.ExpiresAt
@@ -146,20 +159,25 @@ func acctUTC(t *time.Time) *time.Time {
 	return &u
 }
 
-func userProviderAccountsOrder(userID string) []orm.QueryOption {
+func ownerProviderAccountsOrder(owner core.AccountOwner) []orm.QueryOption {
 	return []orm.QueryOption{
-		orm.WhereEq(ProviderAccountFieldUserID, userID),
+		orm.WhereEq(ProviderAccountFieldUserID, owner.Key()),
+		orm.WhereEq(ProviderAccountFieldOwnerKind, owner.Kind),
 		orm.WithOrderBy(ProviderAccountFieldProvider, orm.Asc),
 		orm.WithOrderBy(ProviderAccountFieldPriority, orm.Asc),
 	}
 }
 
-// ListUserProviderAccounts returns the user's accounts, metadata only, by (provider, priority).
-// The builder rather than ListProviderAccount, so the ciphertext stays on disk.
-func ListUserProviderAccounts(ctx context.Context, db orm.Context, userID string) ([]core.ProviderAccount, error) {
+// ListOwnerProviderAccounts returns the owner's accounts, metadata only, by (provider, priority).
+// The builder rather than ListProviderAccount, so the ciphertext stays on disk. An invalid owner
+// has none.
+func ListOwnerProviderAccounts(ctx context.Context, db orm.Context, owner core.AccountOwner) ([]core.ProviderAccount, error) {
+	if !owner.Valid() {
+		return nil, nil
+	}
 	var rows []*ProviderAccount
 	if err := db.Bun().NewSelect().Model(&rows).ExcludeColumn(providerAccountSealedColumns...).
-		Where("user_id = ?", userID).Order("provider", "priority").Scan(ctx); err != nil {
+		Where("user_id = ?", owner.Key()).Where("owner_kind = ?", owner.Kind).Order("provider", "priority").Scan(ctx); err != nil {
 		return nil, err
 	}
 	out := make([]core.ProviderAccount, 0, len(rows))
@@ -169,10 +187,13 @@ func ListUserProviderAccounts(ctx context.Context, db orm.Context, userID string
 	return out, nil
 }
 
-// ListUserProviderAccountsSealed returns the user's accounts with their sealed columns, by
-// (provider, priority).
-func ListUserProviderAccountsSealed(ctx context.Context, db orm.Context, userID string) ([]SealedProviderAccount, error) {
-	rows, err := ListProviderAccount(ctx, db, userProviderAccountsOrder(userID)...)
+// ListOwnerProviderAccountsSealed returns the owner's accounts with their sealed columns, by
+// (provider, priority). An invalid owner has none.
+func ListOwnerProviderAccountsSealed(ctx context.Context, db orm.Context, owner core.AccountOwner) ([]SealedProviderAccount, error) {
+	if !owner.Valid() {
+		return nil, nil
+	}
+	rows, err := ListProviderAccount(ctx, db, ownerProviderAccountsOrder(owner)...)
 	if err != nil {
 		return nil, err
 	}
@@ -183,11 +204,15 @@ func ListUserProviderAccountsSealed(ctx context.Context, db orm.Context, userID 
 	return out, nil
 }
 
-// GetUserProviderAccountSealed returns one of the user's accounts with its sealed columns, or
-// core.ErrProviderAccountNotFound when the user has no account with that id.
-func GetUserProviderAccountSealed(ctx context.Context, db orm.Context, userID, accountID string) (*SealedProviderAccount, error) {
+// GetOwnerProviderAccountSealed returns one of the owner's accounts with its sealed columns, or
+// core.ErrProviderAccountNotFound when the owner has no account with that id.
+func GetOwnerProviderAccountSealed(ctx context.Context, db orm.Context, owner core.AccountOwner, accountID string) (*SealedProviderAccount, error) {
+	if !owner.Valid() {
+		return nil, core.ErrProviderAccountNotFound
+	}
 	rows, err := ListProviderAccount(ctx, db,
-		orm.WhereEq(ProviderAccountFieldID, accountID), orm.WhereEq(ProviderAccountFieldUserID, userID), orm.WithLimit(1))
+		orm.WhereEq(ProviderAccountFieldID, accountID), orm.WhereEq(ProviderAccountFieldUserID, owner.Key()),
+		orm.WhereEq(ProviderAccountFieldOwnerKind, owner.Kind), orm.WithLimit(1))
 	if err != nil {
 		return nil, err
 	}
@@ -232,11 +257,14 @@ func LockProviderAccountByIdentity(ctx context.Context, db orm.Context, userID, 
 	})
 }
 
-// LockUserProviderAccount locks one of the user's accounts, or returns
+// LockOwnerProviderAccount locks one of the owner's accounts, or returns
 // core.ErrProviderAccountNotFound.
-func LockUserProviderAccount(ctx context.Context, db orm.Context, userID, accountID string) (*core.ProviderAccount, error) {
+func LockOwnerProviderAccount(ctx context.Context, db orm.Context, owner core.AccountOwner, accountID string) (*core.ProviderAccount, error) {
+	if !owner.Valid() {
+		return nil, core.ErrProviderAccountNotFound
+	}
 	a, err := lockProviderAccount(ctx, db, func(q *bun.SelectQuery) *bun.SelectQuery {
-		return q.Where("id = ?", accountID).Where("user_id = ?", userID)
+		return q.Where("id = ?", accountID).Where("user_id = ?", owner.Key()).Where("owner_kind = ?", owner.Kind)
 	})
 	if err == nil && a == nil {
 		return nil, core.ErrProviderAccountNotFound
@@ -271,17 +299,32 @@ func NextProviderAccountPriority(ctx context.Context, db orm.Context, userID, pr
 	return n, err
 }
 
+// ProviderAccountOwnership is who a new account belongs to. For an org's account OrgAccess and
+// CreatedByUserID are written too; for a person's they are ignored.
+type ProviderAccountOwnership struct {
+	Owner           core.AccountOwner
+	OrgAccess       string
+	CreatedByUserID string
+}
+
 // InsertProviderAccount writes a new account at priority, created at createdAt, and returns it
 // as stored.
-func InsertProviderAccount(ctx context.Context, db orm.Context, id, userID, provider string, priority int, c ProviderAccountCredential, createdAt time.Time) (core.ProviderAccount, error) {
+func InsertProviderAccount(ctx context.Context, db orm.Context, id string, own ProviderAccountOwnership, provider string, priority int, c ProviderAccountCredential, createdAt time.Time) (core.ProviderAccount, error) {
+	if !own.Owner.Valid() {
+		return core.ProviderAccount{}, fmt.Errorf("invalid account owner %q/%q", own.Owner.Kind, own.Owner.ID)
+	}
 	row := &ProviderAccount{
-		ID: id, UserID: userID, Provider: provider, AuthKind: c.AuthKind, IdentityKey: c.IdentityKey,
+		ID: id, UserID: own.Owner.Key(), OwnerKind: own.Owner.Kind, Provider: provider, AuthKind: c.AuthKind, IdentityKey: c.IdentityKey,
 		Email: acctNullText(c.Email), ExternalAccountID: acctNullText(c.ExternalAccountID),
 		OrganizationID: acctNullText(c.OrganizationID), OrganizationName: acctNullText(c.OrganizationName),
 		Plan: acctNullText(c.Plan), PlanRaw: acctNullText(c.PlanRaw), KeyHint: acctNullText(c.KeyHint),
 		Priority: int32(priority), SecretSealed: c.Secret, RefreshSealed: c.Refresh, IDTokenSealed: c.IDToken,
 		ExpiresAt: acctNullTime(c.ExpiresAt), Scope: acctNullText(c.Scope), LegacySource: acctNullText(c.LegacySource),
 		CreatedAt: createdAt.UTC(), UpdatedAt: c.UpdatedAt.UTC(),
+	}
+	if own.Owner.IsOrg() {
+		row.OrgID, row.OrgAccess = &own.Owner.ID, acctNullText(own.OrgAccess)
+		row.CreatedByUserID = acctNullText(own.CreatedByUserID)
 	}
 	// RETURNING, so the account carries the stored (microsecond) timestamps, as a read would.
 	if err := db.Bun().NewInsert().Model(row).Returning(providerAccountMetaColumns).Scan(ctx); err != nil {
@@ -464,11 +507,12 @@ func DeleteUserProviderAccount(ctx context.Context, db orm.Context, userID, acco
 	return n > 0, err
 }
 
-// ListUserIDsWithProviderAccount returns every user holding an account for provider, by id.
+// ListUserIDsWithProviderAccount returns every person holding an account for provider, by id.
+// An org's account is not a person's, so its owner key is never returned.
 func ListUserIDsWithProviderAccount(ctx context.Context, db orm.Context, provider string) ([]string, error) {
 	var ids []string
 	err := db.Bun().NewSelect().Model((*ProviderAccount)(nil)).Distinct().Column(ProviderAccountFieldUserID).
-		Where("provider = ?", provider).Order(ProviderAccountFieldUserID).Scan(ctx, &ids)
+		Where("provider = ?", provider).Where("owner_kind = ?", core.AccountOwnerUser).Order(ProviderAccountFieldUserID).Scan(ctx, &ids)
 	return ids, err
 }
 

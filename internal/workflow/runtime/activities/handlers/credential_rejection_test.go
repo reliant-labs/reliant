@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
@@ -24,7 +25,7 @@ type markerFake struct {
 }
 
 // MarkNeedsSignIn mirrors the real store: the account stops being offered.
-func (m *markerFake) MarkNeedsSignIn(_ context.Context, _, accountID, _ string) error {
+func (m *markerFake) MarkNeedsSignIn(_ context.Context, _ core.AccountOwner, accountID, _ string) error {
 	if m.err != nil {
 		return m.err
 	}

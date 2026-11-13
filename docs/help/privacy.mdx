@@ -117,6 +117,7 @@ Two kinds of request are not recorded: image and video generation (the generatio
 - which of your chats and runs the call belonged to, and your account ID
 - the provider (for example `anthropic` or `claude`) and the model
 - how the call was paid for: Reliant AI, your own API key, a subscription login, or a local model
+- who paid for it: an organization (with its own API key, a Claude or ChatGPT team seat it pays for, or its Reliant AI credits) or you (your own subscription or API key, or a local model)
 - the number of input, output, cache-read and cache-write tokens
 - whether it succeeded, was cancelled or failed, and for a failure one of a fixed set of categories (rate limit, usage limit, context length, sign-in, timeout, stalled, network or unknown)
 - what the request was for (a chat turn, summarizing a conversation, titling a chat or drafting an automation)
@@ -127,6 +128,8 @@ Two kinds of request are not recorded: image and video generation (the generatio
 **Why we keep it:** to show you your own usage (tokens, models, error rates) and to run the service: spotting a runaway loop, diagnosing a provider outage, and planning capacity.
 
 **Who can see it:** only you, and only your own. Organization admins can't see usage on your own API keys or logins. Usage on Reliant AI is also part of your billing records.
+
+**What an organization keeps of calls it pays for:** for a call made on an organization's API key, a team seat it pays for, or its Reliant AI credits, a daily total per day, account, member, provider, model and purpose (token counts, calls and errors, and time taken), so its admins can see what their accounts are used for. It never includes calls on your own accounts. Deleting your account deletes your rows.
 
 **How long we keep it:** each call's record is deleted **90 days** after the call. We keep a daily total per model, provider, payment type and purpose, with no chat or run IDs, until you delete your account. Deleting your account deletes both.
 

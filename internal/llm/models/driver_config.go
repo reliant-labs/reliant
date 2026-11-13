@@ -31,6 +31,9 @@ type DriverConfig struct {
 
 	AccountID    string // provider_accounts.id; "" only for local / test drivers
 	AccountLabel string // the account's display label, for notices and logs (never a secret)
+	// AccountOrgID is the Reliant org that owns the account; "" for a person's own.
+	// Writes about the account (limits, bench, needs-sign-in) go to its owner.
+	AccountOrgID string
 }
 
 // ProviderRef names a driver, optionally one instance of it: "claude",
