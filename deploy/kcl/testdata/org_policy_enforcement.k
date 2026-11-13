@@ -1,5 +1,5 @@
 # Fixture for cmd/reliant/cmd TestOrgPolicyEnforcementSwitchReachesTheProcess:
-# the org-policy enforcement switches (ServerProcessConfig
+# the org-policy enforcement switches (integrations, mcp) (ServerProcessConfig
 # org_policy_enforcement, control-plane docs/design/org-policies.md §7) as a
 # deployment projects them into the API server and the worker: at the schema
 # default (audit: count, refuse nothing — every enforcement point ships so),
@@ -27,7 +27,7 @@ _process = lambda server: config_gen.ServerProcessConfig -> config_gen.ReliantPr
     }
 }
 
-_enforce = config_gen.ServerProcessConfig {org_policy_enforcement = {integrations = "enforce"}}
+_enforce = config_gen.ServerProcessConfig {org_policy_enforcement = {integrations = "enforce", mcp = "enforce"}}
 
 api_default = config_gen.workloadEnvMap(_process(config_gen.ServerProcessConfig {}), workloads.api_server)
 worker_default = config_gen.workloadEnvMap(_process(config_gen.ServerProcessConfig {}), workloads.temporal_worker)
