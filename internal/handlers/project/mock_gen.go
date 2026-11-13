@@ -56,7 +56,7 @@ func (m *MockOrgResolver) ListScope(ctx context.Context, userID string, requeste
 var _ OrgResolver = (*MockOrgResolver)(nil)
 
 // forge:section MockRepository
-// forge:hash=3f4fb967ecb6cdae2539d526637af13db6a06a3c35e37616b435adb199c93f8f
+// forge:hash=ab5a8803c9b7c5fa66086549bc8263c711c57baf8893ab71e5075226722941ec
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -79,6 +79,10 @@ type MockRepository struct {
 	DeleteProjectFunc                         func(context.Context, string, string) error
 	ProjectOrgMoveBlockersFunc                func(context.Context, string) (*core.ProjectOrgMoveBlockers, error)
 	ProjectOrgMoveEffectsFunc                 func(context.Context, string, string) (*core.ProjectOrgMoveEffects, error)
+	InsertProjectOrgMoveFunc                  func(context.Context, *core.ProjectOrgMove) (*core.ProjectOrgMove, bool, error)
+	FindProjectOrgMoveByRequestFunc           func(context.Context, string, string) (*core.ProjectOrgMove, error)
+	GetProjectOrgMoveFunc                     func(context.Context, string) (*core.ProjectOrgMove, error)
+	ListProjectOrgMovesFunc                   func(context.Context, core.ProjectOrgMoveFilters) ([]*core.ProjectOrgMove, error)
 	UpsertProjectDaemonFunc                   func(context.Context, string, string, string, *string) error
 	RecordObservedProjectDaemonFunc           func(context.Context, string, string, string, *string) (bool, error)
 	UpsertQueuedProjectDaemonFunc             func(context.Context, string, string, string, *string, string) error
@@ -218,6 +222,42 @@ func (m *MockRepository) ProjectOrgMoveEffects(ctx context.Context, projectID st
 		return m.ProjectOrgMoveEffectsFunc(ctx, projectID, toOrgID)
 	}
 	return nil, contractkit.MockNotSet("MockRepository", "ProjectOrgMoveEffects")
+}
+
+// InsertProjectOrgMove records the call and delegates to InsertProjectOrgMoveFunc when set.
+func (m *MockRepository) InsertProjectOrgMove(ctx context.Context, p1 *core.ProjectOrgMove) (*core.ProjectOrgMove, bool, error) {
+	m.Recorder.Record("InsertProjectOrgMove", ctx, p1)
+	if m.InsertProjectOrgMoveFunc != nil {
+		return m.InsertProjectOrgMoveFunc(ctx, p1)
+	}
+	return nil, false, contractkit.MockNotSet("MockRepository", "InsertProjectOrgMove")
+}
+
+// FindProjectOrgMoveByRequest records the call and delegates to FindProjectOrgMoveByRequestFunc when set.
+func (m *MockRepository) FindProjectOrgMoveByRequest(ctx context.Context, actorUserID string, requestKey string) (*core.ProjectOrgMove, error) {
+	m.Recorder.Record("FindProjectOrgMoveByRequest", ctx, actorUserID, requestKey)
+	if m.FindProjectOrgMoveByRequestFunc != nil {
+		return m.FindProjectOrgMoveByRequestFunc(ctx, actorUserID, requestKey)
+	}
+	return nil, contractkit.MockNotSet("MockRepository", "FindProjectOrgMoveByRequest")
+}
+
+// GetProjectOrgMove records the call and delegates to GetProjectOrgMoveFunc when set.
+func (m *MockRepository) GetProjectOrgMove(ctx context.Context, id string) (*core.ProjectOrgMove, error) {
+	m.Recorder.Record("GetProjectOrgMove", ctx, id)
+	if m.GetProjectOrgMoveFunc != nil {
+		return m.GetProjectOrgMoveFunc(ctx, id)
+	}
+	return nil, contractkit.MockNotSet("MockRepository", "GetProjectOrgMove")
+}
+
+// ListProjectOrgMoves records the call and delegates to ListProjectOrgMovesFunc when set.
+func (m *MockRepository) ListProjectOrgMoves(ctx context.Context, f core.ProjectOrgMoveFilters) ([]*core.ProjectOrgMove, error) {
+	m.Recorder.Record("ListProjectOrgMoves", ctx, f)
+	if m.ListProjectOrgMovesFunc != nil {
+		return m.ListProjectOrgMovesFunc(ctx, f)
+	}
+	return nil, contractkit.MockNotSet("MockRepository", "ListProjectOrgMoves")
 }
 
 // UpsertProjectDaemon records the call and delegates to UpsertProjectDaemonFunc when set.
@@ -568,3 +608,29 @@ func (m *MockCloneDispatcher) CloneRepoOntoDaemon(ctx context.Context, jwt strin
 
 // Compile-time check.
 var _ CloneDispatcher = (*MockCloneDispatcher)(nil)
+
+// forge:section MockMoveStarter
+// forge:hash=41a46046c6c08fe0f59812d318b556fae4e4faa39712486d68faf6b4bf937203
+
+// MockMoveStarter is a test mock for the MoveStarter interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockMoveStarter.<Method>Func not set" error.
+type MockMoveStarter struct {
+	contractkit.Recorder
+	StartProjectOrgMoveFunc func(context.Context, string) error
+}
+
+// StartProjectOrgMove records the call and delegates to StartProjectOrgMoveFunc when set.
+func (m *MockMoveStarter) StartProjectOrgMove(ctx context.Context, moveID string) error {
+	m.Recorder.Record("StartProjectOrgMove", ctx, moveID)
+	if m.StartProjectOrgMoveFunc != nil {
+		return m.StartProjectOrgMoveFunc(ctx, moveID)
+	}
+	return contractkit.MockNotSet("MockMoveStarter", "StartProjectOrgMove")
+}
+
+// Compile-time check.
+var _ MoveStarter = (*MockMoveStarter)(nil)

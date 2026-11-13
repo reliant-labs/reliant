@@ -578,6 +578,7 @@ func (g *Graph) newTemporalWorker() (*workersetup.Worker, error) {
 		NATS:                g.NATSConn(),
 		// Every activity's context carries membership (authz).
 		Membership: g.OrgResolver(),
+		Triggers:   g.WorkerTrigger(),
 	})
 }
 
@@ -1224,6 +1225,10 @@ func (g *Graph) newProject() (*project.Service, error) {
 		Router:       g.APIDaemonRouter().NATSDaemonRouter,
 		ControlPlane: hostedControlPlane(g.ServerProcessConfig.GetControlPlane()),
 		Orgs:         g.OrgResolver(),
+		// Moving a project is off until control-plane's half is in prod and
+		// in the rollback target (orgs.project_moves_enabled).
+		OrgRollout: ProjectOrgRollout(g.ApiServerConfig),
+		Moves:      projectOrgMoveStarter{c: g.TemporalClient().Client},
 	})
 }
 

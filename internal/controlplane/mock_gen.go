@@ -14,7 +14,7 @@ import (
 )
 
 // forge:section MockService
-// forge:hash=0dce7da21b4b92907ff63f62110e0a7be20c3c584c13ba350b0ea97f93f8d7f4
+// forge:hash=97e4b2820e8ef9102e6ec82d4d3fad75790fcd5f8c1603eb6837ef6d26d10b8c
 
 // MockService is a test mock for the Service interface.
 //
@@ -39,6 +39,9 @@ type MockService struct {
 	UpsertAutopilotReceiverFunc      func(context.Context, AutopilotReceiver) error
 	DeleteAutopilotReceiverFunc      func(context.Context, string) error
 	ListAutopilotReceiversFunc       func(context.Context) ([]string, error)
+	PrepareProjectOrgMoveFunc        func(context.Context, ProjectOrgMoveStep, string) (int, error)
+	AbortProjectOrgMoveFunc          func(context.Context, ProjectOrgMoveStep) error
+	RecordProjectOrgMoveFunc         func(context.Context, ProjectOrgMoveStep, string, map[string]int64) error
 }
 
 // MintLLMKey records the call and delegates to MintLLMKeyFunc when set.
@@ -174,6 +177,33 @@ func (m *MockService) ListAutopilotReceivers(ctx context.Context) ([]string, err
 		return m.ListAutopilotReceiversFunc(ctx)
 	}
 	return nil, contractkit.MockNotSet("MockService", "ListAutopilotReceivers")
+}
+
+// PrepareProjectOrgMove records the call and delegates to PrepareProjectOrgMoveFunc when set.
+func (m *MockService) PrepareProjectOrgMove(ctx context.Context, s ProjectOrgMoveStep, actorUserID string) (int, error) {
+	m.Recorder.Record("PrepareProjectOrgMove", ctx, s, actorUserID)
+	if m.PrepareProjectOrgMoveFunc != nil {
+		return m.PrepareProjectOrgMoveFunc(ctx, s, actorUserID)
+	}
+	return 0, contractkit.MockNotSet("MockService", "PrepareProjectOrgMove")
+}
+
+// AbortProjectOrgMove records the call and delegates to AbortProjectOrgMoveFunc when set.
+func (m *MockService) AbortProjectOrgMove(ctx context.Context, s ProjectOrgMoveStep) error {
+	m.Recorder.Record("AbortProjectOrgMove", ctx, s)
+	if m.AbortProjectOrgMoveFunc != nil {
+		return m.AbortProjectOrgMoveFunc(ctx, s)
+	}
+	return contractkit.MockNotSet("MockService", "AbortProjectOrgMove")
+}
+
+// RecordProjectOrgMove records the call and delegates to RecordProjectOrgMoveFunc when set.
+func (m *MockService) RecordProjectOrgMove(ctx context.Context, s ProjectOrgMoveStep, projectName string, counts map[string]int64) error {
+	m.Recorder.Record("RecordProjectOrgMove", ctx, s, projectName, counts)
+	if m.RecordProjectOrgMoveFunc != nil {
+		return m.RecordProjectOrgMoveFunc(ctx, s, projectName, counts)
+	}
+	return contractkit.MockNotSet("MockService", "RecordProjectOrgMove")
 }
 
 // Compile-time check.

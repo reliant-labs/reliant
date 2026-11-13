@@ -486,6 +486,11 @@ func moveProjectOrgTriggers(ctx context.Context, db orm.Context, move *core.Proj
 		if t.ConnectionID != nil && orgBound[*t.ConnectionID] {
 			after.ConnectionID = nil
 			counts.BindingsCleared++
+			// It cannot run until someone binds it again, so the move never
+			// turns it back on: its reason says it needs setting up.
+			if t.Enabled {
+				after.PausedReason = core.TriggerPausedOrgMoveSetup
+			}
 		}
 		var reason *string
 		if !after.Enabled && after.PausedReason != "" {
@@ -658,4 +663,101 @@ func ProjectOrgMoveEffects(ctx context.Context, db orm.Context, projectID, toOrg
 		})
 	}
 	return e, nil
+}
+
+// ListProjectOrgMoves lists moves newest first: those out of or into
+// f.OrgID when it is set, else those f.UserID made or whose project they own.
+func ListProjectOrgMoves(ctx context.Context, db orm.Context, f core.ProjectOrgMoveFilters) ([]*core.ProjectOrgMove, error) {
+	limit := f.Limit
+	if limit <= 0 || limit > 100 {
+		limit = 100
+	}
+	var rows []*ProjectOrgMove
+	q := db.Bun().NewSelect().Model(&rows)
+	switch {
+	case f.OrgID != "":
+		q = q.WhereGroup(" AND ", func(q *bun.SelectQuery) *bun.SelectQuery {
+			return q.Where("from_org_id = ?", f.OrgID).WhereOr("to_org_id = ?", f.OrgID)
+		})
+	case f.UserID != "":
+		q = q.WhereGroup(" AND ", func(q *bun.SelectQuery) *bun.SelectQuery {
+			return q.Where("owner_user_id = ?", f.UserID).WhereOr("actor_user_id = ?", f.UserID)
+		})
+	default:
+		return []*core.ProjectOrgMove{}, nil
+	}
+	if err := q.Order("created_at DESC", "id ASC").Limit(int64(limit)).Offset(int64(max(f.Offset, 0))).Scan(ctx); err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return nil, fmt.Errorf("list project moves: %w", err)
+	}
+	out := make([]*core.ProjectOrgMove, 0, len(rows))
+	for _, r := range rows {
+		m, err := projectOrgMoveToCore(r)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, m)
+	}
+	return out, nil
+}
+
+// ListProjectTriggersPausedBy lists the project's triggers the system paused
+// for reason, by id.
+func ListProjectTriggersPausedBy(ctx context.Context, db orm.Context, projectID, reason string) ([]*core.Trigger, error) {
+	var rows []*Trigger
+	if err := db.Bun().NewSelect().Model(&rows).
+		Where("project_id = ?", projectID).
+		Where("NOT enabled").
+		Where("paused_reason = ?", reason).
+		Order("id").
+		Scan(ctx); err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return nil, fmt.Errorf("list the project's paused triggers: %w", err)
+	}
+	return triggersToCore(rows)
+}
+
+// ResumeTriggerPausedBy turns the trigger back on only while it is still
+// paused for reason AND is the row version the caller checked (updated_at =
+// seen): a person who paused, resumed or edited it meanwhile decided, and is
+// not overridden. It reports whether it resumed it.
+func ResumeTriggerPausedBy(ctx context.Context, db orm.Context, id, reason string, seen time.Time) (bool, error) {
+	res, err := db.Bun().NewRaw(`UPDATE triggers SET enabled = true, paused_reason = NULL, updated_at = NOW()
+WHERE id = ? AND NOT enabled AND paused_reason = ? AND updated_at = ?`, id, reason, seen).Exec(ctx)
+	if err != nil {
+		return false, fmt.Errorf("resume trigger %s: %w", id, err)
+	}
+	n, err := res.RowsAffected()
+	return n == 1, err
+}
+
+// ListProjectTriggersResumedSince lists the project's triggers a move turned
+// back on (a trigger_changes row of core.TriggerChangeOrgMoveResumed) at or
+// after since, by id: what a move resumed, read from the history, so a
+// retried step sees what an earlier attempt did.
+func ListProjectTriggersResumedSince(ctx context.Context, db orm.Context, projectID string, since time.Time) ([]*core.Trigger, error) {
+	var rows []*Trigger
+	if err := db.Bun().NewSelect().Model(&rows).
+		Where("project_id = ?", projectID).
+		Where(`EXISTS (SELECT 1 FROM trigger_changes c WHERE c.trigger_id = triggers.id AND c.operation = ? AND c.created_at >= ?)`,
+			core.TriggerChangeOrgMoveResumed, since).
+		Order("id").
+		Scan(ctx); err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return nil, fmt.Errorf("list the project's resumed triggers: %w", err)
+	}
+	return triggersToCore(rows)
+}
+
+// FindProjectOrgMoveByRequest is the move an actor's request key made, or
+// ErrProjectOrgMoveNotFound.
+func FindProjectOrgMoveByRequest(ctx context.Context, db orm.Context, actorUserID, requestKey string) (*core.ProjectOrgMove, error) {
+	var rows []*ProjectOrgMove
+	if err := db.Bun().NewSelect().Model(&rows).
+		Where("actor_user_id = ?", actorUserID).
+		Where("request_key = ?", requestKey).
+		Scan(ctx); err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return nil, fmt.Errorf("read the project move of this request: %w", err)
+	}
+	if len(rows) == 0 {
+		return nil, core.ErrProjectOrgMoveNotFound
+	}
+	return projectOrgMoveToCore(rows[0])
 }

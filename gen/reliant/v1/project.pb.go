@@ -82,6 +82,75 @@ func (ProjectInstallState) EnumDescriptor() ([]byte, []int) {
 	return file_reliant_v1_project_proto_rawDescGZIP(), []int{0}
 }
 
+// ProjectOrgMoveState is where a move is.
+type ProjectOrgMoveState int32
+
+const (
+	ProjectOrgMoveState_PROJECT_ORG_MOVE_STATE_UNSPECIFIED ProjectOrgMoveState = 0
+	// Control-plane is revoking the source organization's secret access.
+	ProjectOrgMoveState_PROJECT_ORG_MOVE_STATE_PREPARING ProjectOrgMoveState = 1
+	// Ready to commit.
+	ProjectOrgMoveState_PROJECT_ORG_MOVE_STATE_PREPARED ProjectOrgMoveState = 2
+	// The project is in the target organization; the last steps (the
+	// activity events, turning triggers back on) are under way.
+	ProjectOrgMoveState_PROJECT_ORG_MOVE_STATE_MOVED ProjectOrgMoveState = 3
+	// Done.
+	ProjectOrgMoveState_PROJECT_ORG_MOVE_STATE_COMPLETED ProjectOrgMoveState = 4
+	// Stopping before it committed: restoring what was revoked.
+	ProjectOrgMoveState_PROJECT_ORG_MOVE_STATE_ABORTING ProjectOrgMoveState = 5
+	// Stopped before it committed; nothing moved. detail says why.
+	ProjectOrgMoveState_PROJECT_ORG_MOVE_STATE_ABORTED ProjectOrgMoveState = 6
+)
+
+// Enum value maps for ProjectOrgMoveState.
+var (
+	ProjectOrgMoveState_name = map[int32]string{
+		0: "PROJECT_ORG_MOVE_STATE_UNSPECIFIED",
+		1: "PROJECT_ORG_MOVE_STATE_PREPARING",
+		2: "PROJECT_ORG_MOVE_STATE_PREPARED",
+		3: "PROJECT_ORG_MOVE_STATE_MOVED",
+		4: "PROJECT_ORG_MOVE_STATE_COMPLETED",
+		5: "PROJECT_ORG_MOVE_STATE_ABORTING",
+		6: "PROJECT_ORG_MOVE_STATE_ABORTED",
+	}
+	ProjectOrgMoveState_value = map[string]int32{
+		"PROJECT_ORG_MOVE_STATE_UNSPECIFIED": 0,
+		"PROJECT_ORG_MOVE_STATE_PREPARING":   1,
+		"PROJECT_ORG_MOVE_STATE_PREPARED":    2,
+		"PROJECT_ORG_MOVE_STATE_MOVED":       3,
+		"PROJECT_ORG_MOVE_STATE_COMPLETED":   4,
+		"PROJECT_ORG_MOVE_STATE_ABORTING":    5,
+		"PROJECT_ORG_MOVE_STATE_ABORTED":     6,
+	}
+)
+
+func (x ProjectOrgMoveState) Enum() *ProjectOrgMoveState {
+	p := new(ProjectOrgMoveState)
+	*p = x
+	return p
+}
+
+func (x ProjectOrgMoveState) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (ProjectOrgMoveState) Descriptor() protoreflect.EnumDescriptor {
+	return file_reliant_v1_project_proto_enumTypes[1].Descriptor()
+}
+
+func (ProjectOrgMoveState) Type() protoreflect.EnumType {
+	return &file_reliant_v1_project_proto_enumTypes[1]
+}
+
+func (x ProjectOrgMoveState) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use ProjectOrgMoveState.Descriptor instead.
+func (ProjectOrgMoveState) EnumDescriptor() ([]byte, []int) {
+	return file_reliant_v1_project_proto_rawDescGZIP(), []int{1}
+}
+
 // Project represents a project in the system
 type Project struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -4293,6 +4362,542 @@ func (x *ProjectOrgMoveMachine) GetInTargetOrg() bool {
 	return false
 }
 
+// ProjectOrgMove is one move of a project to another organization.
+type ProjectOrgMove struct {
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	Id        string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	ProjectId string                 `protobuf:"bytes,2,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
+	// The project's owner, who moved it.
+	OwnerUserId string              `protobuf:"bytes,3,opt,name=owner_user_id,json=ownerUserId,proto3" json:"owner_user_id,omitempty"`
+	ActorUserId string              `protobuf:"bytes,4,opt,name=actor_user_id,json=actorUserId,proto3" json:"actor_user_id,omitempty"`
+	FromOrgId   string              `protobuf:"bytes,5,opt,name=from_org_id,json=fromOrgId,proto3" json:"from_org_id,omitempty"`
+	ToOrgId     string              `protobuf:"bytes,6,opt,name=to_org_id,json=toOrgId,proto3" json:"to_org_id,omitempty"`
+	State       ProjectOrgMoveState `protobuf:"varint,7,opt,name=state,proto3,enum=reliant.v1.ProjectOrgMoveState" json:"state,omitempty"`
+	// Why it stopped, or what a last step waits on; "" otherwise.
+	Detail        string                `protobuf:"bytes,8,opt,name=detail,proto3" json:"detail,omitempty"`
+	Counts        *ProjectOrgMoveCounts `protobuf:"bytes,9,opt,name=counts,proto3" json:"counts,omitempty"`
+	CreatedAt     string                `protobuf:"bytes,10,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	UpdatedAt     string                `protobuf:"bytes,11,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ProjectOrgMove) Reset() {
+	*x = ProjectOrgMove{}
+	mi := &file_reliant_v1_project_proto_msgTypes[65]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ProjectOrgMove) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ProjectOrgMove) ProtoMessage() {}
+
+func (x *ProjectOrgMove) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_project_proto_msgTypes[65]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ProjectOrgMove.ProtoReflect.Descriptor instead.
+func (*ProjectOrgMove) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_project_proto_rawDescGZIP(), []int{65}
+}
+
+func (x *ProjectOrgMove) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *ProjectOrgMove) GetProjectId() string {
+	if x != nil {
+		return x.ProjectId
+	}
+	return ""
+}
+
+func (x *ProjectOrgMove) GetOwnerUserId() string {
+	if x != nil {
+		return x.OwnerUserId
+	}
+	return ""
+}
+
+func (x *ProjectOrgMove) GetActorUserId() string {
+	if x != nil {
+		return x.ActorUserId
+	}
+	return ""
+}
+
+func (x *ProjectOrgMove) GetFromOrgId() string {
+	if x != nil {
+		return x.FromOrgId
+	}
+	return ""
+}
+
+func (x *ProjectOrgMove) GetToOrgId() string {
+	if x != nil {
+		return x.ToOrgId
+	}
+	return ""
+}
+
+func (x *ProjectOrgMove) GetState() ProjectOrgMoveState {
+	if x != nil {
+		return x.State
+	}
+	return ProjectOrgMoveState_PROJECT_ORG_MOVE_STATE_UNSPECIFIED
+}
+
+func (x *ProjectOrgMove) GetDetail() string {
+	if x != nil {
+		return x.Detail
+	}
+	return ""
+}
+
+func (x *ProjectOrgMove) GetCounts() *ProjectOrgMoveCounts {
+	if x != nil {
+		return x.Counts
+	}
+	return nil
+}
+
+func (x *ProjectOrgMove) GetCreatedAt() string {
+	if x != nil {
+		return x.CreatedAt
+	}
+	return ""
+}
+
+func (x *ProjectOrgMove) GetUpdatedAt() string {
+	if x != nil {
+		return x.UpdatedAt
+	}
+	return ""
+}
+
+// ProjectOrgMoveCounts is what a move changed.
+type ProjectOrgMoveCounts struct {
+	state                protoimpl.MessageState `protogen:"open.v1"`
+	Chats                int32                  `protobuf:"varint,1,opt,name=chats,proto3" json:"chats,omitempty"`
+	Runs                 int32                  `protobuf:"varint,2,opt,name=runs,proto3" json:"runs,omitempty"`
+	Triggers             int32                  `protobuf:"varint,3,opt,name=triggers,proto3" json:"triggers,omitempty"`
+	TriggersPaused       int32                  `protobuf:"varint,4,opt,name=triggers_paused,json=triggersPaused,proto3" json:"triggers_paused,omitempty"`
+	TriggersReenabled    int32                  `protobuf:"varint,5,opt,name=triggers_reenabled,json=triggersReenabled,proto3" json:"triggers_reenabled,omitempty"`
+	SharesCleared        int32                  `protobuf:"varint,6,opt,name=shares_cleared,json=sharesCleared,proto3" json:"shares_cleared,omitempty"`
+	BindingsCleared      int32                  `protobuf:"varint,7,opt,name=bindings_cleared,json=bindingsCleared,proto3" json:"bindings_cleared,omitempty"`
+	SecretEntriesRevoked int32                  `protobuf:"varint,8,opt,name=secret_entries_revoked,json=secretEntriesRevoked,proto3" json:"secret_entries_revoked,omitempty"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
+}
+
+func (x *ProjectOrgMoveCounts) Reset() {
+	*x = ProjectOrgMoveCounts{}
+	mi := &file_reliant_v1_project_proto_msgTypes[66]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ProjectOrgMoveCounts) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ProjectOrgMoveCounts) ProtoMessage() {}
+
+func (x *ProjectOrgMoveCounts) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_project_proto_msgTypes[66]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ProjectOrgMoveCounts.ProtoReflect.Descriptor instead.
+func (*ProjectOrgMoveCounts) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_project_proto_rawDescGZIP(), []int{66}
+}
+
+func (x *ProjectOrgMoveCounts) GetChats() int32 {
+	if x != nil {
+		return x.Chats
+	}
+	return 0
+}
+
+func (x *ProjectOrgMoveCounts) GetRuns() int32 {
+	if x != nil {
+		return x.Runs
+	}
+	return 0
+}
+
+func (x *ProjectOrgMoveCounts) GetTriggers() int32 {
+	if x != nil {
+		return x.Triggers
+	}
+	return 0
+}
+
+func (x *ProjectOrgMoveCounts) GetTriggersPaused() int32 {
+	if x != nil {
+		return x.TriggersPaused
+	}
+	return 0
+}
+
+func (x *ProjectOrgMoveCounts) GetTriggersReenabled() int32 {
+	if x != nil {
+		return x.TriggersReenabled
+	}
+	return 0
+}
+
+func (x *ProjectOrgMoveCounts) GetSharesCleared() int32 {
+	if x != nil {
+		return x.SharesCleared
+	}
+	return 0
+}
+
+func (x *ProjectOrgMoveCounts) GetBindingsCleared() int32 {
+	if x != nil {
+		return x.BindingsCleared
+	}
+	return 0
+}
+
+func (x *ProjectOrgMoveCounts) GetSecretEntriesRevoked() int32 {
+	if x != nil {
+		return x.SecretEntriesRevoked
+	}
+	return 0
+}
+
+type MoveProjectToOrgRequest struct {
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	ProjectId string                 `protobuf:"bytes,1,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
+	ToOrgId   string                 `protobuf:"bytes,2,opt,name=to_org_id,json=toOrgId,proto3" json:"to_org_id,omitempty"`
+	// The organization the caller saw the project in: a move from a stale
+	// dialog, after the project already left it, is refused (org_changed).
+	ExpectedFromOrgId string `protobuf:"bytes,3,opt,name=expected_from_org_id,json=expectedFromOrgId,proto3" json:"expected_from_org_id,omitempty"`
+	// The client's idempotency key: a repeat is the same move.
+	RequestKey    string `protobuf:"bytes,4,opt,name=request_key,json=requestKey,proto3" json:"request_key,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MoveProjectToOrgRequest) Reset() {
+	*x = MoveProjectToOrgRequest{}
+	mi := &file_reliant_v1_project_proto_msgTypes[67]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MoveProjectToOrgRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MoveProjectToOrgRequest) ProtoMessage() {}
+
+func (x *MoveProjectToOrgRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_project_proto_msgTypes[67]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MoveProjectToOrgRequest.ProtoReflect.Descriptor instead.
+func (*MoveProjectToOrgRequest) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_project_proto_rawDescGZIP(), []int{67}
+}
+
+func (x *MoveProjectToOrgRequest) GetProjectId() string {
+	if x != nil {
+		return x.ProjectId
+	}
+	return ""
+}
+
+func (x *MoveProjectToOrgRequest) GetToOrgId() string {
+	if x != nil {
+		return x.ToOrgId
+	}
+	return ""
+}
+
+func (x *MoveProjectToOrgRequest) GetExpectedFromOrgId() string {
+	if x != nil {
+		return x.ExpectedFromOrgId
+	}
+	return ""
+}
+
+func (x *MoveProjectToOrgRequest) GetRequestKey() string {
+	if x != nil {
+		return x.RequestKey
+	}
+	return ""
+}
+
+type MoveProjectToOrgResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Move          *ProjectOrgMove        `protobuf:"bytes,1,opt,name=move,proto3" json:"move,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MoveProjectToOrgResponse) Reset() {
+	*x = MoveProjectToOrgResponse{}
+	mi := &file_reliant_v1_project_proto_msgTypes[68]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MoveProjectToOrgResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MoveProjectToOrgResponse) ProtoMessage() {}
+
+func (x *MoveProjectToOrgResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_project_proto_msgTypes[68]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MoveProjectToOrgResponse.ProtoReflect.Descriptor instead.
+func (*MoveProjectToOrgResponse) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_project_proto_rawDescGZIP(), []int{68}
+}
+
+func (x *MoveProjectToOrgResponse) GetMove() *ProjectOrgMove {
+	if x != nil {
+		return x.Move
+	}
+	return nil
+}
+
+type GetProjectOrgMoveRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	MoveId        string                 `protobuf:"bytes,1,opt,name=move_id,json=moveId,proto3" json:"move_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetProjectOrgMoveRequest) Reset() {
+	*x = GetProjectOrgMoveRequest{}
+	mi := &file_reliant_v1_project_proto_msgTypes[69]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetProjectOrgMoveRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetProjectOrgMoveRequest) ProtoMessage() {}
+
+func (x *GetProjectOrgMoveRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_project_proto_msgTypes[69]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetProjectOrgMoveRequest.ProtoReflect.Descriptor instead.
+func (*GetProjectOrgMoveRequest) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_project_proto_rawDescGZIP(), []int{69}
+}
+
+func (x *GetProjectOrgMoveRequest) GetMoveId() string {
+	if x != nil {
+		return x.MoveId
+	}
+	return ""
+}
+
+type GetProjectOrgMoveResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Move          *ProjectOrgMove        `protobuf:"bytes,1,opt,name=move,proto3" json:"move,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetProjectOrgMoveResponse) Reset() {
+	*x = GetProjectOrgMoveResponse{}
+	mi := &file_reliant_v1_project_proto_msgTypes[70]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetProjectOrgMoveResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetProjectOrgMoveResponse) ProtoMessage() {}
+
+func (x *GetProjectOrgMoveResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_project_proto_msgTypes[70]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetProjectOrgMoveResponse.ProtoReflect.Descriptor instead.
+func (*GetProjectOrgMoveResponse) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_project_proto_rawDescGZIP(), []int{70}
+}
+
+func (x *GetProjectOrgMoveResponse) GetMove() *ProjectOrgMove {
+	if x != nil {
+		return x.Move
+	}
+	return nil
+}
+
+type ListProjectOrgMovesRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The organization whose moves in and out to list; unset, the caller's own.
+	OrgId         *string `protobuf:"bytes,1,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
+	Limit         int32   `protobuf:"varint,2,opt,name=limit,proto3" json:"limit,omitempty"`
+	Offset        int32   `protobuf:"varint,3,opt,name=offset,proto3" json:"offset,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListProjectOrgMovesRequest) Reset() {
+	*x = ListProjectOrgMovesRequest{}
+	mi := &file_reliant_v1_project_proto_msgTypes[71]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListProjectOrgMovesRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListProjectOrgMovesRequest) ProtoMessage() {}
+
+func (x *ListProjectOrgMovesRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_project_proto_msgTypes[71]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListProjectOrgMovesRequest.ProtoReflect.Descriptor instead.
+func (*ListProjectOrgMovesRequest) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_project_proto_rawDescGZIP(), []int{71}
+}
+
+func (x *ListProjectOrgMovesRequest) GetOrgId() string {
+	if x != nil && x.OrgId != nil {
+		return *x.OrgId
+	}
+	return ""
+}
+
+func (x *ListProjectOrgMovesRequest) GetLimit() int32 {
+	if x != nil {
+		return x.Limit
+	}
+	return 0
+}
+
+func (x *ListProjectOrgMovesRequest) GetOffset() int32 {
+	if x != nil {
+		return x.Offset
+	}
+	return 0
+}
+
+type ListProjectOrgMovesResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Moves         []*ProjectOrgMove      `protobuf:"bytes,1,rep,name=moves,proto3" json:"moves,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListProjectOrgMovesResponse) Reset() {
+	*x = ListProjectOrgMovesResponse{}
+	mi := &file_reliant_v1_project_proto_msgTypes[72]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListProjectOrgMovesResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListProjectOrgMovesResponse) ProtoMessage() {}
+
+func (x *ListProjectOrgMovesResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_project_proto_msgTypes[72]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListProjectOrgMovesResponse.ProtoReflect.Descriptor instead.
+func (*ListProjectOrgMovesResponse) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_project_proto_rawDescGZIP(), []int{72}
+}
+
+func (x *ListProjectOrgMovesResponse) GetMoves() []*ProjectOrgMove {
+	if x != nil {
+		return x.Moves
+	}
+	return nil
+}
+
 var File_reliant_v1_project_proto protoreflect.FileDescriptor
 
 const file_reliant_v1_project_proto_rawDesc = "" +
@@ -4654,12 +5259,66 @@ const file_reliant_v1_project_proto_rawDesc = "" +
 	"\battached\x18\x03 \x01(\bR\battached\x12!\n" +
 	"\fpinned_chats\x18\x04 \x01(\x05R\vpinnedChats\x12'\n" +
 	"\rin_target_org\x18\x05 \x01(\bH\x00R\vinTargetOrg\x88\x01\x01B\x10\n" +
-	"\x0e_in_target_org*\xa9\x01\n" +
+	"\x0e_in_target_org\"\x8a\x03\n" +
+	"\x0eProjectOrgMove\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1d\n" +
+	"\n" +
+	"project_id\x18\x02 \x01(\tR\tprojectId\x12\"\n" +
+	"\rowner_user_id\x18\x03 \x01(\tR\vownerUserId\x12\"\n" +
+	"\ractor_user_id\x18\x04 \x01(\tR\vactorUserId\x12\x1e\n" +
+	"\vfrom_org_id\x18\x05 \x01(\tR\tfromOrgId\x12\x1a\n" +
+	"\tto_org_id\x18\x06 \x01(\tR\atoOrgId\x125\n" +
+	"\x05state\x18\a \x01(\x0e2\x1f.reliant.v1.ProjectOrgMoveStateR\x05state\x12\x16\n" +
+	"\x06detail\x18\b \x01(\tR\x06detail\x128\n" +
+	"\x06counts\x18\t \x01(\v2 .reliant.v1.ProjectOrgMoveCountsR\x06counts\x12\x1d\n" +
+	"\n" +
+	"created_at\x18\n" +
+	" \x01(\tR\tcreatedAt\x12\x1d\n" +
+	"\n" +
+	"updated_at\x18\v \x01(\tR\tupdatedAt\"\xbc\x02\n" +
+	"\x14ProjectOrgMoveCounts\x12\x14\n" +
+	"\x05chats\x18\x01 \x01(\x05R\x05chats\x12\x12\n" +
+	"\x04runs\x18\x02 \x01(\x05R\x04runs\x12\x1a\n" +
+	"\btriggers\x18\x03 \x01(\x05R\btriggers\x12'\n" +
+	"\x0ftriggers_paused\x18\x04 \x01(\x05R\x0etriggersPaused\x12-\n" +
+	"\x12triggers_reenabled\x18\x05 \x01(\x05R\x11triggersReenabled\x12%\n" +
+	"\x0eshares_cleared\x18\x06 \x01(\x05R\rsharesCleared\x12)\n" +
+	"\x10bindings_cleared\x18\a \x01(\x05R\x0fbindingsCleared\x124\n" +
+	"\x16secret_entries_revoked\x18\b \x01(\x05R\x14secretEntriesRevoked\"\xcd\x01\n" +
+	"\x17MoveProjectToOrgRequest\x12&\n" +
+	"\n" +
+	"project_id\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\tprojectId\x12#\n" +
+	"\tto_org_id\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\atoOrgId\x128\n" +
+	"\x14expected_from_org_id\x18\x03 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x11expectedFromOrgId\x12+\n" +
+	"\vrequest_key\x18\x04 \x01(\tB\n" +
+	"\xbaH\ar\x05\x10\x01\x18\x80\x01R\n" +
+	"requestKey\"J\n" +
+	"\x18MoveProjectToOrgResponse\x12.\n" +
+	"\x04move\x18\x01 \x01(\v2\x1a.reliant.v1.ProjectOrgMoveR\x04move\"<\n" +
+	"\x18GetProjectOrgMoveRequest\x12 \n" +
+	"\amove_id\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06moveId\"K\n" +
+	"\x19GetProjectOrgMoveResponse\x12.\n" +
+	"\x04move\x18\x01 \x01(\v2\x1a.reliant.v1.ProjectOrgMoveR\x04move\"q\n" +
+	"\x1aListProjectOrgMovesRequest\x12\x1a\n" +
+	"\x06org_id\x18\x01 \x01(\tH\x00R\x05orgId\x88\x01\x01\x12\x14\n" +
+	"\x05limit\x18\x02 \x01(\x05R\x05limit\x12\x16\n" +
+	"\x06offset\x18\x03 \x01(\x05R\x06offsetB\t\n" +
+	"\a_org_id\"O\n" +
+	"\x1bListProjectOrgMovesResponse\x120\n" +
+	"\x05moves\x18\x01 \x03(\v2\x1a.reliant.v1.ProjectOrgMoveR\x05moves*\xa9\x01\n" +
 	"\x13ProjectInstallState\x12%\n" +
 	"!PROJECT_INSTALL_STATE_UNSPECIFIED\x10\x00\x12$\n" +
 	" PROJECT_INSTALL_STATE_INSTALLING\x10\x01\x12#\n" +
 	"\x1fPROJECT_INSTALL_STATE_INSTALLED\x10\x02\x12 \n" +
-	"\x1cPROJECT_INSTALL_STATE_FAILED\x10\x032\xc2\x1e\n" +
+	"\x1cPROJECT_INSTALL_STATE_FAILED\x10\x03*\x99\x02\n" +
+	"\x13ProjectOrgMoveState\x12&\n" +
+	"\"PROJECT_ORG_MOVE_STATE_UNSPECIFIED\x10\x00\x12$\n" +
+	" PROJECT_ORG_MOVE_STATE_PREPARING\x10\x01\x12#\n" +
+	"\x1fPROJECT_ORG_MOVE_STATE_PREPARED\x10\x02\x12 \n" +
+	"\x1cPROJECT_ORG_MOVE_STATE_MOVED\x10\x03\x12$\n" +
+	" PROJECT_ORG_MOVE_STATE_COMPLETED\x10\x04\x12#\n" +
+	"\x1fPROJECT_ORG_MOVE_STATE_ABORTING\x10\x05\x12\"\n" +
+	"\x1ePROJECT_ORG_MOVE_STATE_ABORTED\x10\x062\xaa!\n" +
 	"\x0eProjectService\x12\x9b\x01\n" +
 	"\rCreateProject\x12 .reliant.v1.CreateProjectRequest\x1a!.reliant.v1.CreateProjectResponse\"E\xa2\xbb\x18A:?\n" +
 	"\x06create\x125\n" +
@@ -4722,7 +5381,13 @@ const file_reliant_v1_project_proto_rawDesc = "" +
 	"\areclone\x12\x15\n" +
 	"\aproject\x12\n" +
 	"project_id*\tdaemon_id\x12q\n" +
-	"\x15PreviewProjectOrgMove\x12(.reliant.v1.PreviewProjectOrgMoveRequest\x1a).reliant.v1.PreviewProjectOrgMoveResponse\"\x03\x90\x02\x01B:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
+	"\x15PreviewProjectOrgMove\x12(.reliant.v1.PreviewProjectOrgMoveRequest\x1a).reliant.v1.PreviewProjectOrgMoveResponse\"\x03\x90\x02\x01\x12\x91\x01\n" +
+	"\x10MoveProjectToOrg\x12#.reliant.v1.MoveProjectToOrgRequest\x1a$.reliant.v1.MoveProjectToOrgResponse\"2\xa2\xbb\x18.:,\n" +
+	"\bmove_org\x12\x15\n" +
+	"\aproject\x12\n" +
+	"project_id*\tto_org_id\x12e\n" +
+	"\x11GetProjectOrgMove\x12$.reliant.v1.GetProjectOrgMoveRequest\x1a%.reliant.v1.GetProjectOrgMoveResponse\"\x03\x90\x02\x01\x12k\n" +
+	"\x13ListProjectOrgMoves\x12&.reliant.v1.ListProjectOrgMovesRequest\x1a'.reliant.v1.ListProjectOrgMovesResponse\"\x03\x90\x02\x01B:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
 
 var (
 	file_reliant_v1_project_proto_rawDescOnce sync.Once
@@ -4736,166 +5401,186 @@ func file_reliant_v1_project_proto_rawDescGZIP() []byte {
 	return file_reliant_v1_project_proto_rawDescData
 }
 
-var file_reliant_v1_project_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_reliant_v1_project_proto_msgTypes = make([]protoimpl.MessageInfo, 65)
+var file_reliant_v1_project_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
+var file_reliant_v1_project_proto_msgTypes = make([]protoimpl.MessageInfo, 73)
 var file_reliant_v1_project_proto_goTypes = []any{
 	(ProjectInstallState)(0),                    // 0: reliant.v1.ProjectInstallState
-	(*Project)(nil),                             // 1: reliant.v1.Project
-	(*ProjectDaemon)(nil),                       // 2: reliant.v1.ProjectDaemon
-	(*CreateProjectRequest)(nil),                // 3: reliant.v1.CreateProjectRequest
-	(*CreateProjectResponse)(nil),               // 4: reliant.v1.CreateProjectResponse
-	(*ListProjectsRequest)(nil),                 // 5: reliant.v1.ListProjectsRequest
-	(*ListProjectsResponse)(nil),                // 6: reliant.v1.ListProjectsResponse
-	(*GetProjectRequest)(nil),                   // 7: reliant.v1.GetProjectRequest
-	(*GetProjectResponse)(nil),                  // 8: reliant.v1.GetProjectResponse
-	(*UpdateProjectRequest)(nil),                // 9: reliant.v1.UpdateProjectRequest
-	(*UpdateProjectResponse)(nil),               // 10: reliant.v1.UpdateProjectResponse
-	(*DeleteProjectRequest)(nil),                // 11: reliant.v1.DeleteProjectRequest
-	(*DeleteProjectResponse)(nil),               // 12: reliant.v1.DeleteProjectResponse
-	(*TouchProjectRequest)(nil),                 // 13: reliant.v1.TouchProjectRequest
-	(*TouchProjectResponse)(nil),                // 14: reliant.v1.TouchProjectResponse
-	(*GetProjectMetadataRequest)(nil),           // 15: reliant.v1.GetProjectMetadataRequest
-	(*GetProjectMetadataResponse)(nil),          // 16: reliant.v1.GetProjectMetadataResponse
-	(*UpdateProjectMetadataRequest)(nil),        // 17: reliant.v1.UpdateProjectMetadataRequest
-	(*UpdateProjectMetadataResponse)(nil),       // 18: reliant.v1.UpdateProjectMetadataResponse
-	(*GetProjectGitInfoRequest)(nil),            // 19: reliant.v1.GetProjectGitInfoRequest
-	(*GetProjectGitInfoResponse)(nil),           // 20: reliant.v1.GetProjectGitInfoResponse
-	(*GitBranch)(nil),                           // 21: reliant.v1.GitBranch
-	(*GetProjectGitBranchesRequest)(nil),        // 22: reliant.v1.GetProjectGitBranchesRequest
-	(*GetProjectGitBranchesResponse)(nil),       // 23: reliant.v1.GetProjectGitBranchesResponse
-	(*GetProjectInitStatusRequest)(nil),         // 24: reliant.v1.GetProjectInitStatusRequest
-	(*GetProjectInitStatusResponse)(nil),        // 25: reliant.v1.GetProjectInitStatusResponse
-	(*InitializeProjectRequest)(nil),            // 26: reliant.v1.InitializeProjectRequest
-	(*InitializeProjectResponse)(nil),           // 27: reliant.v1.InitializeProjectResponse
-	(*FileChange)(nil),                          // 28: reliant.v1.FileChange
-	(*GetProjectChangesRequest)(nil),            // 29: reliant.v1.GetProjectChangesRequest
-	(*GetProjectChangesResponse)(nil),           // 30: reliant.v1.GetProjectChangesResponse
-	(*Prompt)(nil),                              // 31: reliant.v1.Prompt
-	(*GetProjectPromptsRequest)(nil),            // 32: reliant.v1.GetProjectPromptsRequest
-	(*GetProjectPromptsResponse)(nil),           // 33: reliant.v1.GetProjectPromptsResponse
-	(*SaveProjectPromptsRequest)(nil),           // 34: reliant.v1.SaveProjectPromptsRequest
-	(*SaveProjectPromptsResponse)(nil),          // 35: reliant.v1.SaveProjectPromptsResponse
-	(*InitializeGitRepoRequest)(nil),            // 36: reliant.v1.InitializeGitRepoRequest
-	(*InitializeGitRepoResponse)(nil),           // 37: reliant.v1.InitializeGitRepoResponse
-	(*ListProjectDaemonsForDaemonRequest)(nil),  // 38: reliant.v1.ListProjectDaemonsForDaemonRequest
-	(*ListProjectDaemonsForDaemonResponse)(nil), // 39: reliant.v1.ListProjectDaemonsForDaemonResponse
-	(*ListProjectDaemonsRequest)(nil),           // 40: reliant.v1.ListProjectDaemonsRequest
-	(*ListProjectDaemonsResponse)(nil),          // 41: reliant.v1.ListProjectDaemonsResponse
-	(*MarkProjectInstalledRequest)(nil),         // 42: reliant.v1.MarkProjectInstalledRequest
-	(*MarkProjectInstalledResponse)(nil),        // 43: reliant.v1.MarkProjectInstalledResponse
-	(*CreateProjectFromRepoRequest)(nil),        // 44: reliant.v1.CreateProjectFromRepoRequest
-	(*CreateProjectFromRepoResponse)(nil),       // 45: reliant.v1.CreateProjectFromRepoResponse
-	(*DaemonRepository)(nil),                    // 46: reliant.v1.DaemonRepository
-	(*ListRepositoriesForDaemonRequest)(nil),    // 47: reliant.v1.ListRepositoriesForDaemonRequest
-	(*ListRepositoriesForDaemonResponse)(nil),   // 48: reliant.v1.ListRepositoriesForDaemonResponse
-	(*PullProjectOnDaemonRequest)(nil),          // 49: reliant.v1.PullProjectOnDaemonRequest
-	(*PullProjectOnDaemonResponse)(nil),         // 50: reliant.v1.PullProjectOnDaemonResponse
-	(*RemoveProjectFromDaemonRequest)(nil),      // 51: reliant.v1.RemoveProjectFromDaemonRequest
-	(*RemoveProjectFromDaemonResponse)(nil),     // 52: reliant.v1.RemoveProjectFromDaemonResponse
-	(*AttachProjectToDaemonRequest)(nil),        // 53: reliant.v1.AttachProjectToDaemonRequest
-	(*AttachProjectToDaemonResponse)(nil),       // 54: reliant.v1.AttachProjectToDaemonResponse
-	(*DetachProjectFromDaemonRequest)(nil),      // 55: reliant.v1.DetachProjectFromDaemonRequest
-	(*DetachProjectFromDaemonResponse)(nil),     // 56: reliant.v1.DetachProjectFromDaemonResponse
-	(*RecloneProjectOnDaemonRequest)(nil),       // 57: reliant.v1.RecloneProjectOnDaemonRequest
-	(*RecloneProjectOnDaemonResponse)(nil),      // 58: reliant.v1.RecloneProjectOnDaemonResponse
-	(*PreviewProjectOrgMoveRequest)(nil),        // 59: reliant.v1.PreviewProjectOrgMoveRequest
-	(*PreviewProjectOrgMoveResponse)(nil),       // 60: reliant.v1.PreviewProjectOrgMoveResponse
-	(*ProjectOrgMoveBlockers)(nil),              // 61: reliant.v1.ProjectOrgMoveBlockers
-	(*ProjectOrgMoveBlockedChat)(nil),           // 62: reliant.v1.ProjectOrgMoveBlockedChat
-	(*ProjectOrgMoveEffects)(nil),               // 63: reliant.v1.ProjectOrgMoveEffects
-	(*ProjectOrgMoveTriggerSetup)(nil),          // 64: reliant.v1.ProjectOrgMoveTriggerSetup
-	(*ProjectOrgMoveMachine)(nil),               // 65: reliant.v1.ProjectOrgMoveMachine
-	(v1.ResourceVisibility)(0),                  // 66: reliant.v1.ResourceVisibility
-	(v1.FileChangeStatus)(0),                    // 67: reliant.v1.FileChangeStatus
-	(v1.ChatActivity)(0),                        // 68: reliant.v1.ChatActivity
+	(ProjectOrgMoveState)(0),                    // 1: reliant.v1.ProjectOrgMoveState
+	(*Project)(nil),                             // 2: reliant.v1.Project
+	(*ProjectDaemon)(nil),                       // 3: reliant.v1.ProjectDaemon
+	(*CreateProjectRequest)(nil),                // 4: reliant.v1.CreateProjectRequest
+	(*CreateProjectResponse)(nil),               // 5: reliant.v1.CreateProjectResponse
+	(*ListProjectsRequest)(nil),                 // 6: reliant.v1.ListProjectsRequest
+	(*ListProjectsResponse)(nil),                // 7: reliant.v1.ListProjectsResponse
+	(*GetProjectRequest)(nil),                   // 8: reliant.v1.GetProjectRequest
+	(*GetProjectResponse)(nil),                  // 9: reliant.v1.GetProjectResponse
+	(*UpdateProjectRequest)(nil),                // 10: reliant.v1.UpdateProjectRequest
+	(*UpdateProjectResponse)(nil),               // 11: reliant.v1.UpdateProjectResponse
+	(*DeleteProjectRequest)(nil),                // 12: reliant.v1.DeleteProjectRequest
+	(*DeleteProjectResponse)(nil),               // 13: reliant.v1.DeleteProjectResponse
+	(*TouchProjectRequest)(nil),                 // 14: reliant.v1.TouchProjectRequest
+	(*TouchProjectResponse)(nil),                // 15: reliant.v1.TouchProjectResponse
+	(*GetProjectMetadataRequest)(nil),           // 16: reliant.v1.GetProjectMetadataRequest
+	(*GetProjectMetadataResponse)(nil),          // 17: reliant.v1.GetProjectMetadataResponse
+	(*UpdateProjectMetadataRequest)(nil),        // 18: reliant.v1.UpdateProjectMetadataRequest
+	(*UpdateProjectMetadataResponse)(nil),       // 19: reliant.v1.UpdateProjectMetadataResponse
+	(*GetProjectGitInfoRequest)(nil),            // 20: reliant.v1.GetProjectGitInfoRequest
+	(*GetProjectGitInfoResponse)(nil),           // 21: reliant.v1.GetProjectGitInfoResponse
+	(*GitBranch)(nil),                           // 22: reliant.v1.GitBranch
+	(*GetProjectGitBranchesRequest)(nil),        // 23: reliant.v1.GetProjectGitBranchesRequest
+	(*GetProjectGitBranchesResponse)(nil),       // 24: reliant.v1.GetProjectGitBranchesResponse
+	(*GetProjectInitStatusRequest)(nil),         // 25: reliant.v1.GetProjectInitStatusRequest
+	(*GetProjectInitStatusResponse)(nil),        // 26: reliant.v1.GetProjectInitStatusResponse
+	(*InitializeProjectRequest)(nil),            // 27: reliant.v1.InitializeProjectRequest
+	(*InitializeProjectResponse)(nil),           // 28: reliant.v1.InitializeProjectResponse
+	(*FileChange)(nil),                          // 29: reliant.v1.FileChange
+	(*GetProjectChangesRequest)(nil),            // 30: reliant.v1.GetProjectChangesRequest
+	(*GetProjectChangesResponse)(nil),           // 31: reliant.v1.GetProjectChangesResponse
+	(*Prompt)(nil),                              // 32: reliant.v1.Prompt
+	(*GetProjectPromptsRequest)(nil),            // 33: reliant.v1.GetProjectPromptsRequest
+	(*GetProjectPromptsResponse)(nil),           // 34: reliant.v1.GetProjectPromptsResponse
+	(*SaveProjectPromptsRequest)(nil),           // 35: reliant.v1.SaveProjectPromptsRequest
+	(*SaveProjectPromptsResponse)(nil),          // 36: reliant.v1.SaveProjectPromptsResponse
+	(*InitializeGitRepoRequest)(nil),            // 37: reliant.v1.InitializeGitRepoRequest
+	(*InitializeGitRepoResponse)(nil),           // 38: reliant.v1.InitializeGitRepoResponse
+	(*ListProjectDaemonsForDaemonRequest)(nil),  // 39: reliant.v1.ListProjectDaemonsForDaemonRequest
+	(*ListProjectDaemonsForDaemonResponse)(nil), // 40: reliant.v1.ListProjectDaemonsForDaemonResponse
+	(*ListProjectDaemonsRequest)(nil),           // 41: reliant.v1.ListProjectDaemonsRequest
+	(*ListProjectDaemonsResponse)(nil),          // 42: reliant.v1.ListProjectDaemonsResponse
+	(*MarkProjectInstalledRequest)(nil),         // 43: reliant.v1.MarkProjectInstalledRequest
+	(*MarkProjectInstalledResponse)(nil),        // 44: reliant.v1.MarkProjectInstalledResponse
+	(*CreateProjectFromRepoRequest)(nil),        // 45: reliant.v1.CreateProjectFromRepoRequest
+	(*CreateProjectFromRepoResponse)(nil),       // 46: reliant.v1.CreateProjectFromRepoResponse
+	(*DaemonRepository)(nil),                    // 47: reliant.v1.DaemonRepository
+	(*ListRepositoriesForDaemonRequest)(nil),    // 48: reliant.v1.ListRepositoriesForDaemonRequest
+	(*ListRepositoriesForDaemonResponse)(nil),   // 49: reliant.v1.ListRepositoriesForDaemonResponse
+	(*PullProjectOnDaemonRequest)(nil),          // 50: reliant.v1.PullProjectOnDaemonRequest
+	(*PullProjectOnDaemonResponse)(nil),         // 51: reliant.v1.PullProjectOnDaemonResponse
+	(*RemoveProjectFromDaemonRequest)(nil),      // 52: reliant.v1.RemoveProjectFromDaemonRequest
+	(*RemoveProjectFromDaemonResponse)(nil),     // 53: reliant.v1.RemoveProjectFromDaemonResponse
+	(*AttachProjectToDaemonRequest)(nil),        // 54: reliant.v1.AttachProjectToDaemonRequest
+	(*AttachProjectToDaemonResponse)(nil),       // 55: reliant.v1.AttachProjectToDaemonResponse
+	(*DetachProjectFromDaemonRequest)(nil),      // 56: reliant.v1.DetachProjectFromDaemonRequest
+	(*DetachProjectFromDaemonResponse)(nil),     // 57: reliant.v1.DetachProjectFromDaemonResponse
+	(*RecloneProjectOnDaemonRequest)(nil),       // 58: reliant.v1.RecloneProjectOnDaemonRequest
+	(*RecloneProjectOnDaemonResponse)(nil),      // 59: reliant.v1.RecloneProjectOnDaemonResponse
+	(*PreviewProjectOrgMoveRequest)(nil),        // 60: reliant.v1.PreviewProjectOrgMoveRequest
+	(*PreviewProjectOrgMoveResponse)(nil),       // 61: reliant.v1.PreviewProjectOrgMoveResponse
+	(*ProjectOrgMoveBlockers)(nil),              // 62: reliant.v1.ProjectOrgMoveBlockers
+	(*ProjectOrgMoveBlockedChat)(nil),           // 63: reliant.v1.ProjectOrgMoveBlockedChat
+	(*ProjectOrgMoveEffects)(nil),               // 64: reliant.v1.ProjectOrgMoveEffects
+	(*ProjectOrgMoveTriggerSetup)(nil),          // 65: reliant.v1.ProjectOrgMoveTriggerSetup
+	(*ProjectOrgMoveMachine)(nil),               // 66: reliant.v1.ProjectOrgMoveMachine
+	(*ProjectOrgMove)(nil),                      // 67: reliant.v1.ProjectOrgMove
+	(*ProjectOrgMoveCounts)(nil),                // 68: reliant.v1.ProjectOrgMoveCounts
+	(*MoveProjectToOrgRequest)(nil),             // 69: reliant.v1.MoveProjectToOrgRequest
+	(*MoveProjectToOrgResponse)(nil),            // 70: reliant.v1.MoveProjectToOrgResponse
+	(*GetProjectOrgMoveRequest)(nil),            // 71: reliant.v1.GetProjectOrgMoveRequest
+	(*GetProjectOrgMoveResponse)(nil),           // 72: reliant.v1.GetProjectOrgMoveResponse
+	(*ListProjectOrgMovesRequest)(nil),          // 73: reliant.v1.ListProjectOrgMovesRequest
+	(*ListProjectOrgMovesResponse)(nil),         // 74: reliant.v1.ListProjectOrgMovesResponse
+	(v1.ResourceVisibility)(0),                  // 75: reliant.v1.ResourceVisibility
+	(v1.FileChangeStatus)(0),                    // 76: reliant.v1.FileChangeStatus
+	(v1.ChatActivity)(0),                        // 77: reliant.v1.ChatActivity
 }
 var file_reliant_v1_project_proto_depIdxs = []int32{
-	66, // 0: reliant.v1.Project.visibility:type_name -> reliant.v1.ResourceVisibility
+	75, // 0: reliant.v1.Project.visibility:type_name -> reliant.v1.ResourceVisibility
 	0,  // 1: reliant.v1.ProjectDaemon.install_state:type_name -> reliant.v1.ProjectInstallState
-	1,  // 2: reliant.v1.CreateProjectResponse.project:type_name -> reliant.v1.Project
-	2,  // 3: reliant.v1.CreateProjectResponse.project_daemon:type_name -> reliant.v1.ProjectDaemon
-	1,  // 4: reliant.v1.ListProjectsResponse.projects:type_name -> reliant.v1.Project
-	1,  // 5: reliant.v1.GetProjectResponse.project:type_name -> reliant.v1.Project
-	1,  // 6: reliant.v1.UpdateProjectResponse.project:type_name -> reliant.v1.Project
-	1,  // 7: reliant.v1.UpdateProjectMetadataResponse.project:type_name -> reliant.v1.Project
-	21, // 8: reliant.v1.GetProjectGitBranchesResponse.branches:type_name -> reliant.v1.GitBranch
-	67, // 9: reliant.v1.FileChange.status:type_name -> reliant.v1.FileChangeStatus
-	28, // 10: reliant.v1.GetProjectChangesResponse.files:type_name -> reliant.v1.FileChange
-	31, // 11: reliant.v1.GetProjectPromptsResponse.prompts:type_name -> reliant.v1.Prompt
-	31, // 12: reliant.v1.SaveProjectPromptsRequest.prompts:type_name -> reliant.v1.Prompt
-	31, // 13: reliant.v1.SaveProjectPromptsResponse.prompts:type_name -> reliant.v1.Prompt
-	2,  // 14: reliant.v1.ListProjectDaemonsForDaemonResponse.project_daemons:type_name -> reliant.v1.ProjectDaemon
-	2,  // 15: reliant.v1.ListProjectDaemonsResponse.project_daemons:type_name -> reliant.v1.ProjectDaemon
-	2,  // 16: reliant.v1.MarkProjectInstalledResponse.project_daemon:type_name -> reliant.v1.ProjectDaemon
-	1,  // 17: reliant.v1.CreateProjectFromRepoResponse.project:type_name -> reliant.v1.Project
-	2,  // 18: reliant.v1.CreateProjectFromRepoResponse.project_daemon:type_name -> reliant.v1.ProjectDaemon
-	46, // 19: reliant.v1.ListRepositoriesForDaemonResponse.repositories:type_name -> reliant.v1.DaemonRepository
-	2,  // 20: reliant.v1.AttachProjectToDaemonResponse.project_daemon:type_name -> reliant.v1.ProjectDaemon
-	61, // 21: reliant.v1.PreviewProjectOrgMoveResponse.blockers:type_name -> reliant.v1.ProjectOrgMoveBlockers
-	63, // 22: reliant.v1.PreviewProjectOrgMoveResponse.effects:type_name -> reliant.v1.ProjectOrgMoveEffects
-	62, // 23: reliant.v1.ProjectOrgMoveBlockers.chats:type_name -> reliant.v1.ProjectOrgMoveBlockedChat
-	68, // 24: reliant.v1.ProjectOrgMoveBlockedChat.activity:type_name -> reliant.v1.ChatActivity
-	64, // 25: reliant.v1.ProjectOrgMoveEffects.triggers_needing_setup:type_name -> reliant.v1.ProjectOrgMoveTriggerSetup
-	65, // 26: reliant.v1.ProjectOrgMoveEffects.machines:type_name -> reliant.v1.ProjectOrgMoveMachine
-	3,  // 27: reliant.v1.ProjectService.CreateProject:input_type -> reliant.v1.CreateProjectRequest
-	5,  // 28: reliant.v1.ProjectService.ListProjects:input_type -> reliant.v1.ListProjectsRequest
-	7,  // 29: reliant.v1.ProjectService.GetProject:input_type -> reliant.v1.GetProjectRequest
-	9,  // 30: reliant.v1.ProjectService.UpdateProject:input_type -> reliant.v1.UpdateProjectRequest
-	11, // 31: reliant.v1.ProjectService.DeleteProject:input_type -> reliant.v1.DeleteProjectRequest
-	13, // 32: reliant.v1.ProjectService.TouchProject:input_type -> reliant.v1.TouchProjectRequest
-	15, // 33: reliant.v1.ProjectService.GetProjectMetadata:input_type -> reliant.v1.GetProjectMetadataRequest
-	17, // 34: reliant.v1.ProjectService.UpdateProjectMetadata:input_type -> reliant.v1.UpdateProjectMetadataRequest
-	19, // 35: reliant.v1.ProjectService.GetProjectGitInfo:input_type -> reliant.v1.GetProjectGitInfoRequest
-	22, // 36: reliant.v1.ProjectService.GetProjectGitBranches:input_type -> reliant.v1.GetProjectGitBranchesRequest
-	24, // 37: reliant.v1.ProjectService.GetProjectInitStatus:input_type -> reliant.v1.GetProjectInitStatusRequest
-	26, // 38: reliant.v1.ProjectService.InitializeProject:input_type -> reliant.v1.InitializeProjectRequest
-	29, // 39: reliant.v1.ProjectService.GetProjectChanges:input_type -> reliant.v1.GetProjectChangesRequest
-	32, // 40: reliant.v1.ProjectService.GetProjectPrompts:input_type -> reliant.v1.GetProjectPromptsRequest
-	34, // 41: reliant.v1.ProjectService.SaveProjectPrompts:input_type -> reliant.v1.SaveProjectPromptsRequest
-	36, // 42: reliant.v1.ProjectService.InitializeGitRepo:input_type -> reliant.v1.InitializeGitRepoRequest
-	38, // 43: reliant.v1.ProjectService.ListProjectDaemonsForDaemon:input_type -> reliant.v1.ListProjectDaemonsForDaemonRequest
-	40, // 44: reliant.v1.ProjectService.ListProjectDaemons:input_type -> reliant.v1.ListProjectDaemonsRequest
-	42, // 45: reliant.v1.ProjectService.MarkProjectInstalled:input_type -> reliant.v1.MarkProjectInstalledRequest
-	44, // 46: reliant.v1.ProjectService.CreateProjectFromRepo:input_type -> reliant.v1.CreateProjectFromRepoRequest
-	47, // 47: reliant.v1.ProjectService.ListRepositoriesForDaemon:input_type -> reliant.v1.ListRepositoriesForDaemonRequest
-	49, // 48: reliant.v1.ProjectService.PullProjectOnDaemon:input_type -> reliant.v1.PullProjectOnDaemonRequest
-	51, // 49: reliant.v1.ProjectService.RemoveProjectFromDaemon:input_type -> reliant.v1.RemoveProjectFromDaemonRequest
-	53, // 50: reliant.v1.ProjectService.AttachProjectToDaemon:input_type -> reliant.v1.AttachProjectToDaemonRequest
-	55, // 51: reliant.v1.ProjectService.DetachProjectFromDaemon:input_type -> reliant.v1.DetachProjectFromDaemonRequest
-	57, // 52: reliant.v1.ProjectService.RecloneProjectOnDaemon:input_type -> reliant.v1.RecloneProjectOnDaemonRequest
-	59, // 53: reliant.v1.ProjectService.PreviewProjectOrgMove:input_type -> reliant.v1.PreviewProjectOrgMoveRequest
-	4,  // 54: reliant.v1.ProjectService.CreateProject:output_type -> reliant.v1.CreateProjectResponse
-	6,  // 55: reliant.v1.ProjectService.ListProjects:output_type -> reliant.v1.ListProjectsResponse
-	8,  // 56: reliant.v1.ProjectService.GetProject:output_type -> reliant.v1.GetProjectResponse
-	10, // 57: reliant.v1.ProjectService.UpdateProject:output_type -> reliant.v1.UpdateProjectResponse
-	12, // 58: reliant.v1.ProjectService.DeleteProject:output_type -> reliant.v1.DeleteProjectResponse
-	14, // 59: reliant.v1.ProjectService.TouchProject:output_type -> reliant.v1.TouchProjectResponse
-	16, // 60: reliant.v1.ProjectService.GetProjectMetadata:output_type -> reliant.v1.GetProjectMetadataResponse
-	18, // 61: reliant.v1.ProjectService.UpdateProjectMetadata:output_type -> reliant.v1.UpdateProjectMetadataResponse
-	20, // 62: reliant.v1.ProjectService.GetProjectGitInfo:output_type -> reliant.v1.GetProjectGitInfoResponse
-	23, // 63: reliant.v1.ProjectService.GetProjectGitBranches:output_type -> reliant.v1.GetProjectGitBranchesResponse
-	25, // 64: reliant.v1.ProjectService.GetProjectInitStatus:output_type -> reliant.v1.GetProjectInitStatusResponse
-	27, // 65: reliant.v1.ProjectService.InitializeProject:output_type -> reliant.v1.InitializeProjectResponse
-	30, // 66: reliant.v1.ProjectService.GetProjectChanges:output_type -> reliant.v1.GetProjectChangesResponse
-	33, // 67: reliant.v1.ProjectService.GetProjectPrompts:output_type -> reliant.v1.GetProjectPromptsResponse
-	35, // 68: reliant.v1.ProjectService.SaveProjectPrompts:output_type -> reliant.v1.SaveProjectPromptsResponse
-	37, // 69: reliant.v1.ProjectService.InitializeGitRepo:output_type -> reliant.v1.InitializeGitRepoResponse
-	39, // 70: reliant.v1.ProjectService.ListProjectDaemonsForDaemon:output_type -> reliant.v1.ListProjectDaemonsForDaemonResponse
-	41, // 71: reliant.v1.ProjectService.ListProjectDaemons:output_type -> reliant.v1.ListProjectDaemonsResponse
-	43, // 72: reliant.v1.ProjectService.MarkProjectInstalled:output_type -> reliant.v1.MarkProjectInstalledResponse
-	45, // 73: reliant.v1.ProjectService.CreateProjectFromRepo:output_type -> reliant.v1.CreateProjectFromRepoResponse
-	48, // 74: reliant.v1.ProjectService.ListRepositoriesForDaemon:output_type -> reliant.v1.ListRepositoriesForDaemonResponse
-	50, // 75: reliant.v1.ProjectService.PullProjectOnDaemon:output_type -> reliant.v1.PullProjectOnDaemonResponse
-	52, // 76: reliant.v1.ProjectService.RemoveProjectFromDaemon:output_type -> reliant.v1.RemoveProjectFromDaemonResponse
-	54, // 77: reliant.v1.ProjectService.AttachProjectToDaemon:output_type -> reliant.v1.AttachProjectToDaemonResponse
-	56, // 78: reliant.v1.ProjectService.DetachProjectFromDaemon:output_type -> reliant.v1.DetachProjectFromDaemonResponse
-	58, // 79: reliant.v1.ProjectService.RecloneProjectOnDaemon:output_type -> reliant.v1.RecloneProjectOnDaemonResponse
-	60, // 80: reliant.v1.ProjectService.PreviewProjectOrgMove:output_type -> reliant.v1.PreviewProjectOrgMoveResponse
-	54, // [54:81] is the sub-list for method output_type
-	27, // [27:54] is the sub-list for method input_type
-	27, // [27:27] is the sub-list for extension type_name
-	27, // [27:27] is the sub-list for extension extendee
-	0,  // [0:27] is the sub-list for field type_name
+	2,  // 2: reliant.v1.CreateProjectResponse.project:type_name -> reliant.v1.Project
+	3,  // 3: reliant.v1.CreateProjectResponse.project_daemon:type_name -> reliant.v1.ProjectDaemon
+	2,  // 4: reliant.v1.ListProjectsResponse.projects:type_name -> reliant.v1.Project
+	2,  // 5: reliant.v1.GetProjectResponse.project:type_name -> reliant.v1.Project
+	2,  // 6: reliant.v1.UpdateProjectResponse.project:type_name -> reliant.v1.Project
+	2,  // 7: reliant.v1.UpdateProjectMetadataResponse.project:type_name -> reliant.v1.Project
+	22, // 8: reliant.v1.GetProjectGitBranchesResponse.branches:type_name -> reliant.v1.GitBranch
+	76, // 9: reliant.v1.FileChange.status:type_name -> reliant.v1.FileChangeStatus
+	29, // 10: reliant.v1.GetProjectChangesResponse.files:type_name -> reliant.v1.FileChange
+	32, // 11: reliant.v1.GetProjectPromptsResponse.prompts:type_name -> reliant.v1.Prompt
+	32, // 12: reliant.v1.SaveProjectPromptsRequest.prompts:type_name -> reliant.v1.Prompt
+	32, // 13: reliant.v1.SaveProjectPromptsResponse.prompts:type_name -> reliant.v1.Prompt
+	3,  // 14: reliant.v1.ListProjectDaemonsForDaemonResponse.project_daemons:type_name -> reliant.v1.ProjectDaemon
+	3,  // 15: reliant.v1.ListProjectDaemonsResponse.project_daemons:type_name -> reliant.v1.ProjectDaemon
+	3,  // 16: reliant.v1.MarkProjectInstalledResponse.project_daemon:type_name -> reliant.v1.ProjectDaemon
+	2,  // 17: reliant.v1.CreateProjectFromRepoResponse.project:type_name -> reliant.v1.Project
+	3,  // 18: reliant.v1.CreateProjectFromRepoResponse.project_daemon:type_name -> reliant.v1.ProjectDaemon
+	47, // 19: reliant.v1.ListRepositoriesForDaemonResponse.repositories:type_name -> reliant.v1.DaemonRepository
+	3,  // 20: reliant.v1.AttachProjectToDaemonResponse.project_daemon:type_name -> reliant.v1.ProjectDaemon
+	62, // 21: reliant.v1.PreviewProjectOrgMoveResponse.blockers:type_name -> reliant.v1.ProjectOrgMoveBlockers
+	64, // 22: reliant.v1.PreviewProjectOrgMoveResponse.effects:type_name -> reliant.v1.ProjectOrgMoveEffects
+	63, // 23: reliant.v1.ProjectOrgMoveBlockers.chats:type_name -> reliant.v1.ProjectOrgMoveBlockedChat
+	77, // 24: reliant.v1.ProjectOrgMoveBlockedChat.activity:type_name -> reliant.v1.ChatActivity
+	65, // 25: reliant.v1.ProjectOrgMoveEffects.triggers_needing_setup:type_name -> reliant.v1.ProjectOrgMoveTriggerSetup
+	66, // 26: reliant.v1.ProjectOrgMoveEffects.machines:type_name -> reliant.v1.ProjectOrgMoveMachine
+	1,  // 27: reliant.v1.ProjectOrgMove.state:type_name -> reliant.v1.ProjectOrgMoveState
+	68, // 28: reliant.v1.ProjectOrgMove.counts:type_name -> reliant.v1.ProjectOrgMoveCounts
+	67, // 29: reliant.v1.MoveProjectToOrgResponse.move:type_name -> reliant.v1.ProjectOrgMove
+	67, // 30: reliant.v1.GetProjectOrgMoveResponse.move:type_name -> reliant.v1.ProjectOrgMove
+	67, // 31: reliant.v1.ListProjectOrgMovesResponse.moves:type_name -> reliant.v1.ProjectOrgMove
+	4,  // 32: reliant.v1.ProjectService.CreateProject:input_type -> reliant.v1.CreateProjectRequest
+	6,  // 33: reliant.v1.ProjectService.ListProjects:input_type -> reliant.v1.ListProjectsRequest
+	8,  // 34: reliant.v1.ProjectService.GetProject:input_type -> reliant.v1.GetProjectRequest
+	10, // 35: reliant.v1.ProjectService.UpdateProject:input_type -> reliant.v1.UpdateProjectRequest
+	12, // 36: reliant.v1.ProjectService.DeleteProject:input_type -> reliant.v1.DeleteProjectRequest
+	14, // 37: reliant.v1.ProjectService.TouchProject:input_type -> reliant.v1.TouchProjectRequest
+	16, // 38: reliant.v1.ProjectService.GetProjectMetadata:input_type -> reliant.v1.GetProjectMetadataRequest
+	18, // 39: reliant.v1.ProjectService.UpdateProjectMetadata:input_type -> reliant.v1.UpdateProjectMetadataRequest
+	20, // 40: reliant.v1.ProjectService.GetProjectGitInfo:input_type -> reliant.v1.GetProjectGitInfoRequest
+	23, // 41: reliant.v1.ProjectService.GetProjectGitBranches:input_type -> reliant.v1.GetProjectGitBranchesRequest
+	25, // 42: reliant.v1.ProjectService.GetProjectInitStatus:input_type -> reliant.v1.GetProjectInitStatusRequest
+	27, // 43: reliant.v1.ProjectService.InitializeProject:input_type -> reliant.v1.InitializeProjectRequest
+	30, // 44: reliant.v1.ProjectService.GetProjectChanges:input_type -> reliant.v1.GetProjectChangesRequest
+	33, // 45: reliant.v1.ProjectService.GetProjectPrompts:input_type -> reliant.v1.GetProjectPromptsRequest
+	35, // 46: reliant.v1.ProjectService.SaveProjectPrompts:input_type -> reliant.v1.SaveProjectPromptsRequest
+	37, // 47: reliant.v1.ProjectService.InitializeGitRepo:input_type -> reliant.v1.InitializeGitRepoRequest
+	39, // 48: reliant.v1.ProjectService.ListProjectDaemonsForDaemon:input_type -> reliant.v1.ListProjectDaemonsForDaemonRequest
+	41, // 49: reliant.v1.ProjectService.ListProjectDaemons:input_type -> reliant.v1.ListProjectDaemonsRequest
+	43, // 50: reliant.v1.ProjectService.MarkProjectInstalled:input_type -> reliant.v1.MarkProjectInstalledRequest
+	45, // 51: reliant.v1.ProjectService.CreateProjectFromRepo:input_type -> reliant.v1.CreateProjectFromRepoRequest
+	48, // 52: reliant.v1.ProjectService.ListRepositoriesForDaemon:input_type -> reliant.v1.ListRepositoriesForDaemonRequest
+	50, // 53: reliant.v1.ProjectService.PullProjectOnDaemon:input_type -> reliant.v1.PullProjectOnDaemonRequest
+	52, // 54: reliant.v1.ProjectService.RemoveProjectFromDaemon:input_type -> reliant.v1.RemoveProjectFromDaemonRequest
+	54, // 55: reliant.v1.ProjectService.AttachProjectToDaemon:input_type -> reliant.v1.AttachProjectToDaemonRequest
+	56, // 56: reliant.v1.ProjectService.DetachProjectFromDaemon:input_type -> reliant.v1.DetachProjectFromDaemonRequest
+	58, // 57: reliant.v1.ProjectService.RecloneProjectOnDaemon:input_type -> reliant.v1.RecloneProjectOnDaemonRequest
+	60, // 58: reliant.v1.ProjectService.PreviewProjectOrgMove:input_type -> reliant.v1.PreviewProjectOrgMoveRequest
+	69, // 59: reliant.v1.ProjectService.MoveProjectToOrg:input_type -> reliant.v1.MoveProjectToOrgRequest
+	71, // 60: reliant.v1.ProjectService.GetProjectOrgMove:input_type -> reliant.v1.GetProjectOrgMoveRequest
+	73, // 61: reliant.v1.ProjectService.ListProjectOrgMoves:input_type -> reliant.v1.ListProjectOrgMovesRequest
+	5,  // 62: reliant.v1.ProjectService.CreateProject:output_type -> reliant.v1.CreateProjectResponse
+	7,  // 63: reliant.v1.ProjectService.ListProjects:output_type -> reliant.v1.ListProjectsResponse
+	9,  // 64: reliant.v1.ProjectService.GetProject:output_type -> reliant.v1.GetProjectResponse
+	11, // 65: reliant.v1.ProjectService.UpdateProject:output_type -> reliant.v1.UpdateProjectResponse
+	13, // 66: reliant.v1.ProjectService.DeleteProject:output_type -> reliant.v1.DeleteProjectResponse
+	15, // 67: reliant.v1.ProjectService.TouchProject:output_type -> reliant.v1.TouchProjectResponse
+	17, // 68: reliant.v1.ProjectService.GetProjectMetadata:output_type -> reliant.v1.GetProjectMetadataResponse
+	19, // 69: reliant.v1.ProjectService.UpdateProjectMetadata:output_type -> reliant.v1.UpdateProjectMetadataResponse
+	21, // 70: reliant.v1.ProjectService.GetProjectGitInfo:output_type -> reliant.v1.GetProjectGitInfoResponse
+	24, // 71: reliant.v1.ProjectService.GetProjectGitBranches:output_type -> reliant.v1.GetProjectGitBranchesResponse
+	26, // 72: reliant.v1.ProjectService.GetProjectInitStatus:output_type -> reliant.v1.GetProjectInitStatusResponse
+	28, // 73: reliant.v1.ProjectService.InitializeProject:output_type -> reliant.v1.InitializeProjectResponse
+	31, // 74: reliant.v1.ProjectService.GetProjectChanges:output_type -> reliant.v1.GetProjectChangesResponse
+	34, // 75: reliant.v1.ProjectService.GetProjectPrompts:output_type -> reliant.v1.GetProjectPromptsResponse
+	36, // 76: reliant.v1.ProjectService.SaveProjectPrompts:output_type -> reliant.v1.SaveProjectPromptsResponse
+	38, // 77: reliant.v1.ProjectService.InitializeGitRepo:output_type -> reliant.v1.InitializeGitRepoResponse
+	40, // 78: reliant.v1.ProjectService.ListProjectDaemonsForDaemon:output_type -> reliant.v1.ListProjectDaemonsForDaemonResponse
+	42, // 79: reliant.v1.ProjectService.ListProjectDaemons:output_type -> reliant.v1.ListProjectDaemonsResponse
+	44, // 80: reliant.v1.ProjectService.MarkProjectInstalled:output_type -> reliant.v1.MarkProjectInstalledResponse
+	46, // 81: reliant.v1.ProjectService.CreateProjectFromRepo:output_type -> reliant.v1.CreateProjectFromRepoResponse
+	49, // 82: reliant.v1.ProjectService.ListRepositoriesForDaemon:output_type -> reliant.v1.ListRepositoriesForDaemonResponse
+	51, // 83: reliant.v1.ProjectService.PullProjectOnDaemon:output_type -> reliant.v1.PullProjectOnDaemonResponse
+	53, // 84: reliant.v1.ProjectService.RemoveProjectFromDaemon:output_type -> reliant.v1.RemoveProjectFromDaemonResponse
+	55, // 85: reliant.v1.ProjectService.AttachProjectToDaemon:output_type -> reliant.v1.AttachProjectToDaemonResponse
+	57, // 86: reliant.v1.ProjectService.DetachProjectFromDaemon:output_type -> reliant.v1.DetachProjectFromDaemonResponse
+	59, // 87: reliant.v1.ProjectService.RecloneProjectOnDaemon:output_type -> reliant.v1.RecloneProjectOnDaemonResponse
+	61, // 88: reliant.v1.ProjectService.PreviewProjectOrgMove:output_type -> reliant.v1.PreviewProjectOrgMoveResponse
+	70, // 89: reliant.v1.ProjectService.MoveProjectToOrg:output_type -> reliant.v1.MoveProjectToOrgResponse
+	72, // 90: reliant.v1.ProjectService.GetProjectOrgMove:output_type -> reliant.v1.GetProjectOrgMoveResponse
+	74, // 91: reliant.v1.ProjectService.ListProjectOrgMoves:output_type -> reliant.v1.ListProjectOrgMovesResponse
+	62, // [62:92] is the sub-list for method output_type
+	32, // [32:62] is the sub-list for method input_type
+	32, // [32:32] is the sub-list for extension type_name
+	32, // [32:32] is the sub-list for extension extendee
+	0,  // [0:32] is the sub-list for field type_name
 }
 
 func init() { file_reliant_v1_project_proto_init() }
@@ -4915,13 +5600,14 @@ func file_reliant_v1_project_proto_init() {
 	file_reliant_v1_project_proto_msgTypes[52].OneofWrappers = []any{}
 	file_reliant_v1_project_proto_msgTypes[62].OneofWrappers = []any{}
 	file_reliant_v1_project_proto_msgTypes[64].OneofWrappers = []any{}
+	file_reliant_v1_project_proto_msgTypes[71].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_reliant_v1_project_proto_rawDesc), len(file_reliant_v1_project_proto_rawDesc)),
-			NumEnums:      1,
-			NumMessages:   65,
+			NumEnums:      2,
+			NumMessages:   73,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

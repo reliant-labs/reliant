@@ -1415,6 +1415,16 @@ function handleRefetch(update: UserUpdate) {
     void useGlobalDataStore.getState().refetchModels();
     return;
   }
+  if (rawType === "project_org_moved") {
+    // A project moved to another org with its chats, runs and triggers: every
+    // list that follows the active org is stale, in both orgs.
+    streamInvalidation.invalidate(STREAM_INVALIDATED_SCOPES.projects);
+    streamInvalidation.invalidate(STREAM_INVALIDATED_SCOPES.chats);
+    streamInvalidation.invalidate(STREAM_INVALIDATED_SCOPES.runs);
+    streamInvalidation.invalidate(STREAM_INVALIDATED_SCOPES.triggers);
+    streamInvalidation.invalidate(STREAM_INVALIDATED_SCOPES.inbox);
+    return;
+  }
   const refetchType = rawType as RefetchType | undefined;
   if (!refetchType) {
     logger.warn(`${LOG_PREFIX} Received refetch event with no type`, { data: update.data });

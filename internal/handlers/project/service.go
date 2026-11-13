@@ -8,6 +8,7 @@ import (
 
 	"connectrpc.com/connect"
 
+	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	reliantv1connect "github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/pkg/config"
@@ -43,6 +44,15 @@ type Deps struct {
 	// ignore org_id.
 	// forge:optional-dep
 	Orgs OrgResolver
+	// OrgRollout is the deployment's org rollout gates: MoveProjectToOrg is
+	// refused unless orgs.project_moves_enabled is on (MovesAllowed). Nil is
+	// every gate off.
+	// forge:optional-dep
+	OrgRollout *configv1.OrgsConfig
+	// Moves starts a move's saga (orgmove.ProjectOrgMoveWorkflow). Nil — no
+	// Temporal — refuses MoveProjectToOrg.
+	// forge:optional-dep
+	Moves MoveStarter
 }
 
 // validateDeps returns an error if any required Deps field is nil. The
