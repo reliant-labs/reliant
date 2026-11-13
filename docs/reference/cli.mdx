@@ -2056,6 +2056,12 @@ reason and an expiry date. Each entry accepts that one advisory and nothing else
 expired or incomplete entry fails the gate, and one that matches nothing is reported
 so it can be removed.
 
+The Go scan covers EVERY Go module of the project, not only the one at its root:
+`govulncheck ./...` stops at a nested go.mod, so a tools/ or a sibling module would
+otherwise never be scanned. Modules under vendor/, testdata/, node_modules/ and
+directories whose name starts with . or _ are skipped, as is a module with no Go
+packages; each module's result is printed, and --root-module scans the root alone.
+
 ```
 reliant forge ci vuln-scan [flags]
 ```
@@ -2068,6 +2074,7 @@ reliant forge ci vuln-scan [flags]
 | `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 | `--go` | `bool` | - | Run govulncheck only |
 | `--npm` | `bool` | - | Run npm audit only |
+| `--root-module` | `bool` | - | Scan only the Go module at the project root, not the nested ones |
 
 ---
 
@@ -7804,6 +7811,9 @@ so there is nothing to keep in sync:
 
     forge env up dev -D host_runner=go-run
 
+The same -D is taken by forge env build (to build that variant) and by
+forge env render (to preview it). forge env deploy refuses it.
+
 forge discovers these by parsing the env's KCL with its kcl.mod dependencies
 resolved. It reports the name, and whatever `type` / `default` / `help` the
 declaration passed — those are optional, but an option declared bare shows up
@@ -8492,6 +8502,13 @@ promise otherwise, cli forge watches the tree and reports on stderr every file t
 changed while rendering; --fail-on-write turns that report into a non-zero
 exit for callers that need the guarantee.
 
+-D name=value binds a render option the env's KCL declares (`option("<name>")`), with
+the same parsing and declared-name check as cli forge env up and cli forge env build,
+so the render previews the env under that option: the workloads, host
+commands and manifests it declares. cli forge env options `<env>` lists them. A deploy
+takes no -D (it renders from the repo alone), so a render with -D is a preview
+of the option, not of what cli forge env deploy applies.
+
 Exits non-zero with the KCL error when the environment does not render, so it
 is usable as a CI gate.
 
@@ -8504,6 +8521,7 @@ Examples:
   cli forge env render prod --target workspace-proxy    # only that app's objects
   cli forge env render prod | kubectl diff -f -         # diff the render against a live cluster
   cli forge env render dev --fail-on-write >/dev/null   # assert the render touched nothing
+  cli forge env render dev -D platform=amd64             # the env under a declared option
 
 ```
 reliant forge env render <environment> [flags]
@@ -8524,6 +8542,7 @@ reliant forge env render <environment> [flags]
 | `--no-charts` | `bool` | - | Skip templating declared forge.HelmChart platform deps (no helm, no network); the summary names what was left out |
 | `--no-digest` | `bool` | - | Render image references as the mutable :tag even when a build state captured an immutable digest (matches forge env deploy --no-digest) |
 | `--no-write-check` | `bool` | - | Skip the before/after scan that detects files the render wrote |
+| `--option`, `-D` | `stringArray` | `[]` | Set a render option the env's KCL declares, as name=value (repeatable). Relayed to KCL verbatim — forge does not interpret the value. List an env's options with 'forge env options `<env>`'. |
 | `--tag` | `string` | - | Image tag to render with (default: the same source forge env deploy reads — .forge/state/build-`<env>`.json, then git describe) |
 | `--target` | `stringArray` | `[]` | Print only the named application's objects (the app.kubernetes.io/name group forge env deploy --target selects; repeatable) |
 

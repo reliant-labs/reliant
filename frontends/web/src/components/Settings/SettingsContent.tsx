@@ -11,6 +11,7 @@ import { MCPSettings } from "./MCPSettings";
 import { BranchesSection } from "./BranchesSection";
 import { BrowserSettings } from "./BrowserSettings";
 import { TokenSettings } from "./TokenSettings";
+import { ForgeConnectorsSection } from "./ForgeConnectorsSection";
 import { MembersPage } from "./cloud/members/MembersPage";
 import { GitConnectionsSettings } from "./GitConnectionsSettings";
 import { IntegrationsSettings } from "./IntegrationsSettings";
@@ -87,7 +88,12 @@ export function SettingsContent({ activeSection }: SettingsContentProps) {
       case "mcp":
         return <MCPSettings />;
       case "tokens":
-        return <TokenSettings />;
+        return (
+          <div className="space-y-6">
+            <TokenSettings />
+            <ForgeConnectorsSection />
+          </div>
+        );
       case "member-permissions":
         return <MembersPage />;
       case "git-connections":

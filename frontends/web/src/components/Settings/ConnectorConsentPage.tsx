@@ -1,4 +1,5 @@
 import { ConnectorConsent } from "./ConnectorConsent";
+import { ForgeConnectorConsent } from "./ForgeConnectorConsent";
 
 /**
  * Route wrapper for the OAuth consent screen.
@@ -13,13 +14,17 @@ export function ConnectorConsentPage() {
   const params = new URLSearchParams(window.location.search);
   const clientId = params.get("client_id") ?? "";
   const clientName = params.get("client_name") ?? undefined;
+  // kind=forge: the Reliant Forge connector (/forge/mcp) sends its users here
+  // to choose an organization and projects rather than a machine.
+  const forge = params.get("kind") === "forge";
 
   return (
     <div className="h-full overflow-y-auto px-6">
-      <ConnectorConsent
-        clientId={clientId}
-        clientName={clientName}
-      />
+      {forge ? (
+        <ForgeConnectorConsent clientId={clientId} clientName={clientName} />
+      ) : (
+        <ConnectorConsent clientId={clientId} clientName={clientName} />
+      )}
     </div>
   );
 }

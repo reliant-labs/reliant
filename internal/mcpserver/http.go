@@ -324,7 +324,7 @@ func (a *connectorAuth) grantForCredential(ctx context.Context, token string) (*
 	if err != nil {
 		return nil, err
 	}
-	if !authz.CanAccessPersonal(p.ActingUserID, grant.UserID) {
+	if grant.KindOrDefault() != connectorgrant.KindWorkspace || !authz.CanAccessPersonal(p.ActingUserID, grant.UserID) {
 		return nil, connectorgrant.ErrNotFound
 	}
 	return grant, nil
@@ -417,7 +417,7 @@ type storeResolver struct {
 // (revoked, expired) applies as at authentication time.
 func (r *storeResolver) Resolve(ctx context.Context, grantID string) (*Session, error) {
 	grant, err := r.store.GetGrantByID(ctx, grantID)
-	if err != nil {
+	if err != nil || grant.KindOrDefault() != connectorgrant.KindWorkspace {
 		return nil, errors.New("the connector has been revoked or has expired")
 	}
 	return &Session{
