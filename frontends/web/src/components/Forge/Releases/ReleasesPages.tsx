@@ -22,6 +22,7 @@ import { useCallback, useMemo } from "react";
 import { useNavigate, useParams, useSearch } from "@tanstack/react-router";
 
 import { useForgeConsole } from "../Console/consoleContext";
+import { ConsolePageLead } from "../Console/consoleNavExtras";
 import { consolePath, withSearch } from "../Console/paths";
 import { CloudNotice } from "../SourceNotices";
 import { DeployRunsPanel } from "../Deploy/DeployRuns";
@@ -98,6 +99,7 @@ export function ReleasesPage() {
         releaseHref={releaseHref}
         promote={control}
         scopeIsLocal={roster.envs.some((candidate) => candidate.name === env && candidate.lifecycle === "local")}
+        lead={<ConsolePageLead page={{ kind: "releases" }} />}
       />
       <DeployRunsPanel
         project={forgeProject}

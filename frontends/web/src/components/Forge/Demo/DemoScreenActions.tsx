@@ -53,10 +53,10 @@ function useTourOpen(): boolean {
   return parseTourParam(search.tour) !== null;
 }
 
-export function TakeTheTourButton({ className }: { className?: string }) {
+export function TakeTheTourButton({ className, variant = "ghost" }: { className?: string; variant?: "ghost" | "outline" }) {
   const navigate = useNavigate();
   return (
-    <Button variant="ghost" size="sm" className={className} data-testid="demo-start-tour" onClick={() => {
+    <Button variant={variant} size="sm" className={className} data-testid="demo-start-tour" onClick={() => {
       trackEvent("demo_tour_restarted", {});
       void navigate(TOUR_START as never);
     }}>Take the tour</Button>
@@ -104,7 +104,7 @@ export function DemoScreenActions() {
         <DemoTelemetryNotice className="max-md:hidden before:mx-1.5 before:content-['·']" />
       </span>
       <div className="flex shrink-0 items-center gap-3">
-        {!tourOpen && <TakeTheTourButton className="max-md:hidden" />}
+        {!tourOpen && <TakeTheTourButton className="max-md:hidden" variant="outline" />}
         <span className="max-md:hidden"><InstallForgeLink placement="banner">Install Forge</InstallForgeLink></span>
         <SignUpButton placement="banner" size="md" />
       </div>

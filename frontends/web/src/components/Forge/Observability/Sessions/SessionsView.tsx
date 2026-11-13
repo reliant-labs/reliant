@@ -13,12 +13,12 @@
  * is only valid with the filters that issued it.
  */
 
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import { ChevronLeft, ChevronRight, Search } from "lucide-react";
 
 import Button from "@/components/forge-ui/button";
 import Card from "@/components/forge-ui/card";
-import DataTable, { type DataTableColumn } from "@/components/forge-ui/data_table";
+import DataTable, { useTableDensity, type DataTableColumn } from "@/components/forge-ui/data_table";
 import Mono from "@/components/forge-ui/mono";
 import Status from "@/components/forge-ui/status";
 import Tag from "@/components/forge-ui/tag";
@@ -42,6 +42,7 @@ import { offEnvIds, replayStatus } from "./replayStatus";
 import { ClientName, DeviceSummary } from "../Client";
 import { ClientFilters, hasClientFilters, NO_CLIENT_FILTERS, type ClientFilterValues } from "../ClientFilters";
 import { CONTROL_FIELD, SEGMENTED, segmentTone } from "../../controlStyles";
+import { inRange, ListSummary, plural, useMoreFilters } from "../../Console/ListSummary";
 
 export interface SessionsViewProps {
   scope: ObsScope;
@@ -113,16 +114,23 @@ function SessionList({ scope, rumScope, subject, range, service, text, hasError,
   const rows = sessions.data?.sessions ?? [];
   const filtered = hasError || !!user || !!text || !!service || hasClientFilters(client);
   const page = cursor.length + 1;
+  // A relaxed list (the demo's tidied console) folds the user and client filters behind "More filters".
+  const more = useMoreFilters(!!user || hasClientFilters(client));
 
   return (
     <div className="space-y-3" data-testid="obs-sessions">
-      <SessionToolbar scope={scope} range={range} service={service} text={text} hasError={hasError} user={user} navigate={navigate} />
-      <ClientFilters
-        id="obs-sessions-client"
-        fields={SESSION_CLIENT_FIELDS}
-        values={client}
-        onApply={(next) => navigate({ ...next, ...FIRST_PAGE }, { replace: true })}
-      />
+      <SessionToolbar scope={scope} range={range} service={service} text={text} hasError={hasError} user={user} navigate={navigate} showMore={more.show} moreButton={more.button} />
+      {more.show && (
+        <ClientFilters
+          id="obs-sessions-client"
+          fields={SESSION_CLIENT_FIELDS}
+          values={client}
+          onApply={(next) => navigate({ ...next, ...FIRST_PAGE }, { replace: true })}
+        />
+      )}
+      {sessions.data && !sessions.isLoading && rows.length > 0 && (
+        <ListSummary testId="obs-sessions-summary">{sessionSummary(rows, range, !!sessions.data.nextPageToken || page > 1)}</ListSummary>
+      )}
       {sessions.data && <ObsAsOf updatedAt={sessions.dataUpdatedAt} />}
       {sessions.isLoading ? (
         <Card padding="none">
@@ -222,6 +230,8 @@ function SessionToolbar({
   hasError,
   user,
   navigate,
+  showMore = true,
+  moreButton,
 }: {
   scope: ObsScope;
   range: RangePreset;
@@ -230,6 +240,9 @@ function SessionToolbar({
   hasError: boolean;
   user: string;
   navigate: ObsNavigate;
+  /** The user-id box is in view (a relaxed console folds it behind "More filters"). */
+  showMore?: boolean;
+  moreButton?: ReactNode;
 }) {
   const [pathDraft, setPathDraft] = useState(text);
   const [userDraft, setUserDraft] = useState(user);
@@ -271,7 +284,7 @@ function SessionToolbar({
             data-testid="obs-sessions-path"
           />
         </div>
-        <div className="w-44">
+        {showMore && <div className="w-44">
           <label htmlFor="obs-sessions-user" className="sr-only">
             User id
           </label>
@@ -284,10 +297,11 @@ function SessionToolbar({
             className={INPUT}
             data-testid="obs-sessions-user"
           />
-        </div>
+        </div>}
         <Button type="submit" variant="outline" size="sm" data-testid="obs-sessions-search">
           Search
         </Button>
+        {moreButton}
       </form>
     </div>
   );
@@ -304,6 +318,10 @@ type SessionRow = { session: SessionSummary };
 
 function SessionTable({ sessions, onOpen }: { sessions: SessionSummary[]; onOpen: (id: string) => void }) {
   const now = Date.now();
+  // A relaxed console (the demo's tidied one): the whole row opens the session
+  // (so the id's copy button goes: a button cannot hold another), five columns
+  // and the rest in the picker.
+  const relaxed = useTableDensity() === "relaxed";
   if (sessions.length === 0) {
     return <p className="px-4 py-6 text-sm text-ink-muted">No more sessions in this window.</p>;
   }
@@ -313,8 +331,18 @@ function SessionTable({ sessions, onOpen }: { sessions: SessionSummary[]; onOpen
     {
       key: "session",
       header: "Session",
-      interactive: true,
-      render: (_, { session: s }) => (
+      interactive: !relaxed,
+      render: (_, { session: s }) => relaxed ? (
+        <>
+          <span className="block font-medium text-ink" data-testid={`obs-session-open-${s.sessionId}`}>
+            {sessionTitle(s.service, s.startedMs, { now })}
+          </span>
+          <span className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs font-normal text-ink-muted">
+            {s.userId ? <span className="text-ink">{s.userId}</span> : <span>anonymous</span>}
+            <ReplayMark session={s} />
+          </span>
+        </>
+      ) : (
         <>
           <button
             type="button"
@@ -348,18 +376,21 @@ function SessionTable({ sessions, onOpen }: { sessions: SessionSummary[]; onOpen
     },
     {
       key: "client",
+      optional: true,
       header: "Client",
       className: "max-w-[10rem]",
       render: (_, { session: s }) => <ClientName client={s.client} className="text-xs" testId={`obs-session-client-${s.sessionId}`} />,
     },
     {
       key: "version",
+      optional: true,
       header: "App version",
       className: "max-w-[10rem]",
       render: (_, { session: s }) => <AppVersion session={s} />,
     },
     {
       key: "entry",
+      optional: true,
       header: "Entry",
       // 12rem: the table fits a 1440px laptop beside the nav without a sideways scrollbar.
       className: "max-w-[12rem] truncate",
@@ -370,8 +401,8 @@ function SessionTable({ sessions, onOpen }: { sessions: SessionSummary[]; onOpen
       ),
     },
     { key: "duration", header: "Duration", numeric: true, render: (_, { session: s }) => formatDuration(Math.max(0, s.endedMs - s.startedMs)) },
-    { key: "pages", header: "Pages", numeric: true, render: (_, { session: s }) => formatCount(s.pageViews) },
-    { key: "interactions", header: "Interactions", numeric: true, render: (_, { session: s }) => formatCount(s.interactions) },
+    { key: "pages", header: "Pages", numeric: true, optional: true, render: (_, { session: s }) => formatCount(s.pageViews) },
+    { key: "interactions", header: "Interactions", numeric: true, optional: true, render: (_, { session: s }) => formatCount(s.interactions) },
     {
       key: "errors",
       header: "Errors",
@@ -386,6 +417,8 @@ function SessionTable({ sessions, onOpen }: { sessions: SessionSummary[]; onOpen
       columns={columns}
       data={sessions.map((session) => ({ session }))}
       getRowKey={({ session }) => `${session.service}-${session.sessionId}`}
+      getRowAction={relaxed ? ({ session }) => () => onOpen(session.sessionId) : undefined}
+      getRowLabel={relaxed ? ({ session }) => `Open session ${sessionTitle(session.service, session.startedMs, { now })}` : undefined}
       getRowProps={({ session }) => {
         const playable = replayPlayable(session);
         // Dimmed, not hidden: a session without a playable replay still has a
@@ -430,6 +463,14 @@ function AppVersion({ session: s }: { session: SessionSummary }) {
       {desktop && <span className="truncate text-2xs text-ink-muted">desktop {desktop}</span>}
     </span>
   );
+}
+
+/** The relaxed list's one sentence: how many sessions, how many hit an error, how many can be replayed. */
+function sessionSummary(sessions: SessionSummary[], range: RangePreset, paged: boolean): string {
+  const withErrors = sessions.filter((s) => s.errors > 0).length;
+  const replays = sessions.filter(replayPlayable).length;
+  const where = paged ? "on this page" : inRange(range);
+  return `${plural(sessions.length, "visitor session")} ${where}: ${withErrors === 0 ? "none hit an error" : `${withErrors} hit an error`}, ${replays === sessions.length ? "every one" : replays} can be replayed.`;
 }
 
 /** Whether the row offers a replay worth opening: recorded, and not found unplayable. */

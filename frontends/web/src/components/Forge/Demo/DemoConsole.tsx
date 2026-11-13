@@ -58,6 +58,7 @@ import type { StorageSearch } from "../Storage/storageUrl-model";
 import { DemoBanner } from "./DemoBanner";
 import { DemoNavExtras } from "./DemoNavExtras";
 import { DemoWelcome } from "./DemoWelcome";
+import { AgentCardRow } from "./density75/AgentCards";
 import { DEMO_SECTION_BUILT, FORGE_DEMO_PATH } from "./demoPath";
 import { HowBuiltLink } from "./howBuilt/HowBuiltLink";
 
@@ -186,6 +187,7 @@ export function DemoConsole({ shell: shellProp }: DemoConsoleProps = {}) {
                   {search.section === DEMO_SECTION_BUILT ? (
                     <>
                       {isDemoShell() ? <DemoWelcome /> : <PageHeader density="compact" title="How this app was built" className="mb-0" />}
+                      {isDemoShell() && <AgentCardRow />}
                       <Suspense fallback={<p className="text-sm text-ink-muted">Loading the recorded run…</p>}>
                         <HowThisAppWasBuilt onBack={isDemoShell() ? undefined : leaveBuilt} autoPlay={false} leadWithRecording={isDemoShell()} />
                       </Suspense>

@@ -14,7 +14,10 @@
 import { useMemo, type ReactNode } from "react";
 import { Hammer } from "lucide-react";
 
+import { TableDensityProvider } from "@/components/forge-ui/data_table";
+
 import { ConsoleNavExtrasProvider } from "../Console/consoleNavExtras";
+import { densityPageLead } from "./density75/pageLead";
 import { DemoDrawerActions } from "./DemoScreenActions";
 import { DEMO_SECTION_BUILT, FORGE_DEMO_PATH } from "./demoPath";
 
@@ -29,8 +32,15 @@ export function DemoNavExtras({ builtActive = false, children }: { builtActive?:
       lead: { label: HOW_BUILT_LABEL, href: HOW_BUILT_HREF, icon: <Hammer className="h-4 w-4" aria-hidden="true" />, active: builtActive },
       envOrder: DEMO_ENV_ORDER,
       drawerAppendix: <DemoDrawerActions />,
+      // The tidied console (density scale "75"): an agent line on Errors, Alerts, Traces and Releases, and the releases explainer.
+      pageLead: densityPageLead,
     }),
     [builtActive],
   );
-  return <ConsoleNavExtrasProvider value={value}>{children}</ConsoleNavExtrasProvider>;
+  // Every table and list in the demo reads relaxed: taller rows, chevrons, fewer columns, a summary line.
+  return (
+    <TableDensityProvider value="relaxed">
+      <ConsoleNavExtrasProvider value={value}>{children}</ConsoleNavExtrasProvider>
+    </TableDensityProvider>
+  );
 }

@@ -54,9 +54,13 @@ export function PageEntryTour() {
   return mobile ? <MobilePageDisclosure key={visit} tipKey={key} /> : <VisitTour key={visit} tipKey={key} section={section} />;
 }
 
+/** Whether a section's first visit opens its card by itself (off at density scale "75"). */
+const AUTO_OPEN = false;
+
 function VisitTour({ tipKey, section }: { tipKey: DemoTipKey; section: boolean }) {
   // A section's first visit this session: open by itself. A reload, coming back, or a sub-page does not.
-  const [open, setOpen] = useState(() => section && !demoSession.hasSeenTip(tipKey));
+  // The tidied console (density scale "75") opens no card by itself: "?" still explains the page.
+  const [open, setOpen] = useState(() => AUTO_OPEN && section && !demoSession.hasSeenTip(tipKey));
   // Opened from "?": the reader asked, so the page may scroll to the tip's anchor.
   const [requested, setRequested] = useState(false);
   const restoreFocus = useRef(false);

@@ -30,6 +30,7 @@ import Link from "@/components/forge-ui/link";
 import { DOCS, GettingStarted } from "@/components/Forge/GettingStarted";
 import Mono from "@/components/forge-ui/mono";
 import PageHeader from "@/components/forge-ui/page_header";
+import { ListSummary } from "../Console/ListSummary";
 import { useDoraMetrics, useObservabilityOrg } from "@/hooks/observability-queries";
 import { cn } from "@/lib/utils";
 
@@ -99,6 +100,8 @@ export interface ReleasesListProps {
   promote: PromoteControl;
   /** The scope names a local environment, which runs the working tree and has no releases by design. */
   scopeIsLocal?: boolean;
+  /** A host's line under the title (the public demo's releases explainer); nothing by default. */
+  lead?: ReactNode;
 }
 
 /** The environment a mutating action targets when the scope is not one long-lived environment. */
@@ -107,7 +110,7 @@ function actionEnvOf(env: string, model: ReleaseModel): string | null {
   return referenceEnv(model.longEnvs)?.name ?? null;
 }
 
-export function ReleasesList({ project, env, envs, envsLoading, search, onSearch, releaseHref, promote, scopeIsLocal = false }: ReleasesListProps) {
+export function ReleasesList({ project, env, envs, envsLoading, search, onSearch, releaseHref, promote, scopeIsLocal = false, lead }: ReleasesListProps) {
   const data = useReleaseData(project, envs);
   const [promoting, setPromoting] = useState<string | null>(null);
   const model = data.model;
@@ -132,7 +135,12 @@ export function ReleasesList({ project, env, envs, envsLoading, search, onSearch
   // `forge env deploy` / `forge release cut` from the checkout, and there is no
   // console flow that cuts without deploying (the mockup's button only says so
   // in a toast). Deploying lives on each environment's page.
-  const header = <PageHeader title="Releases" meta={<DeliveryFacts project={project} env={env} scopedEnv={scopedEnv} />} className="mb-0" />;
+  const header = (
+    <>
+      <PageHeader title="Releases" meta={<DeliveryFacts project={project} env={env} scopedEnv={scopedEnv} />} className="mb-0" />
+      {lead}
+    </>
+  );
 
   if (data.releases.error) {
     return (
@@ -249,6 +257,7 @@ export function ReleasesList({ project, env, envs, envsLoading, search, onSearch
           />
         </FilterBar>
 
+        {model && !loading && <ListSummary testId="releases-summary">{releaseSummary(model)}</ListSummary>}
         <ReleaseTable
           model={model}
           rows={rows}
@@ -316,6 +325,14 @@ export function ReleasesList({ project, env, envs, envsLoading, search, onSearch
       )}
     </div>
   );
+}
+
+/** The relaxed list's one sentence: what each environment runs, newest first, and any failed check. */
+function releaseSummary(model: ReleaseModel): string {
+  const live = model.pipeline.filter((cell) => cell.base).map((cell) => `${shortVersion(cell.base!)} in ${cell.env.name}`);
+  const failing = model.rows.filter((row) => row.checks && row.checks.failed > 0).map((row) => shortVersion(row.release.version));
+  const head = `${model.rows.length} release${model.rows.length === 1 ? "" : "s"} recorded. Live now: ${live.join(", ") || "nothing yet"}.`;
+  return failing.length ? `${head} ${failing.join(", ")} failed a check.` : head;
 }
 
 function rowMenu(
@@ -577,6 +594,7 @@ function ReleaseTable({
     {
       key: "commit",
       header: "Commit",
+      optional: true,
       interactive: true,
       render: (_, { row }) =>
         row.release.gitCommit ? <Mono value={row.release.gitCommit} /> : <span className="text-ink-muted">No commit recorded</span>,

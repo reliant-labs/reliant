@@ -46,6 +46,7 @@
 import { useMemo, type CSSProperties, type ReactNode } from "react";
 import { ArrowRight, Boxes, RotateCcw } from "lucide-react";
 
+import { useTableDensity } from "@/components/forge-ui/data_table";
 import { FilterBar, FilterChip, FilterMenu, FilterSearch } from "@/components/forge-ui/filter_bar";
 import Link from "@/components/forge-ui/link";
 import { DOCS, GettingStarted } from "@/components/Forge/GettingStarted";
@@ -881,6 +882,8 @@ function RailLink({ href, children }: { href: string; children: ReactNode }) {
 function RecentReleases({ project, envs, hrefs }: { project: string; envs: StripEnv[]; hrefs: OverviewHrefs }) {
   const releases = useProjectReleases(project);
   const recent = (releases.data ?? []).slice(0, 3);
+  // A relaxed console (the demo's tidied one) wraps the subject instead of cutting it short.
+  const relaxed = useTableDensity() === "relaxed";
   return (
     <Panel title="Recent releases" actions={<RailLink href={hrefs.releases}>All</RailLink>} flush testId="overview-recent-releases">
       {releases.isLoading ? (
@@ -908,7 +911,7 @@ function RecentReleases({ project, envs, hrefs }: { project: string; envs: Strip
                   </span>
                 </div>
                 {(release.subject || release.author) && (
-                  <span className="block truncate text-ink-muted" title={release.subject || undefined}>
+                  <span className={cn("block text-ink-muted", !relaxed && "truncate")} title={release.subject || undefined}>
                     {release.author && <span className="text-ink">{release.author}</span>}
                     {release.author && release.subject ? " · " : ""}
                     {release.subject}

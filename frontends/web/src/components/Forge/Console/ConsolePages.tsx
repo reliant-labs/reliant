@@ -37,6 +37,7 @@ import { DeployStatusUnread, deployStatusUnread } from "./DeployStatusUnread";
 import { DashboardsPage } from "../Observability/Dashboards/DashboardsPages";
 import { MetricsExplorerPage } from "../Observability/Metrics/MetricsExplorerPage";
 import { ObservabilityHost } from "./ObservabilityHost";
+import { ConsolePageLead } from "./consoleNavExtras";
 import { OBS_NAV_LABELS } from "./paths";
 
 // ── Shared pieces ───────────────────────────────────────────────────────────
@@ -162,6 +163,7 @@ export function ObservabilityViewPage() {
   return (
     <Page testId={`console-${page.view}`}>
       <Header title={OBS_NAV_LABELS[page.view]} />
+      <ConsolePageLead page={page} />
       <ObservabilityHost key={page.view} view={page.view} />
     </Page>
   );

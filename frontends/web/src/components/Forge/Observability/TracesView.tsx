@@ -19,7 +19,7 @@
  * it selects among the traces loaded so far.
  */
 
-import { useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   createColumnHelper,
@@ -31,7 +31,7 @@ import {
   useTable,
   type SortingState,
 } from "@tanstack/react-table";
-import { AlertCircle, ArrowDown, ArrowUp, MonitorPlay, Search, X } from "lucide-react";
+import { AlertCircle, ArrowDown, ArrowUp, ChevronRight, MonitorPlay, Search, X } from "lucide-react";
 
 import Card from "@/components/forge-ui/card";
 import Button from "@/components/forge-ui/button";
@@ -57,7 +57,8 @@ import { parseLatParam } from "./Home/SignalTiles";
 import { operationName, rootSpanQuery } from "./traceTitle";
 import { UserIdFilter } from "./UserIdFilter";
 import { useRovingFocus } from "./useRovingFocus";
-import DataTable, { STACK, type DataTableColumn } from "@/components/forge-ui/data_table";
+import DataTable, { ColumnPicker, STACK, useTableDensity, type DataTableColumn } from "@/components/forge-ui/data_table";
+import { inRange, ListSummary, plural, useMoreFilters } from "../Console/ListSummary";
 import { useNarrowViewport } from "@/hooks/useNarrowViewport";
 import { hasClient, type ServiceBuild } from "@/services/controlPlane/observability/client";
 import { clientLabel, ClientSummary } from "./Client";
@@ -73,6 +74,8 @@ const column = createColumnHelper<typeof features, TraceSummary>();
 
 const EMPTY: TraceSummary[] = [];
 const ROW_HEIGHT = 36;
+/** A relaxed console's trace rows (forge-ui TableDensityProvider): room to read and to aim. */
+const RELAXED_ROW_HEIGHT = 56;
 /**
  * A phone's stacked trace card (root operation, then labelled lines for the
  * start, duration, spans and status). Only the virtualizer's first guess:
@@ -220,6 +223,8 @@ function TraceList({
   }, [bandPaging, isFetchingNextPage, fetchNextPage, pagesLoaded]);
   // The band stopped short of the server's last page: say the list is not all of the bucket.
   const bandCapped = banding && !!traces.hasNextPage && !bandPaging;
+  // A relaxed list (the demo's tidied console) folds the user and client filters behind "More filters".
+  const more = useMoreFilters(!!user || hasClientFilters(client));
 
   return (
     <div className="space-y-3" data-testid="obs-traces">
@@ -233,13 +238,18 @@ function TraceList({
         minDuration={minDuration}
         user={user}
         navigate={navigate}
+        showMore={more.show}
+        moreButton={more.button}
       />
-      <ClientFilters
-        id="obs-traces-client"
-        fields={TRACE_CLIENT_FIELDS}
-        values={client}
-        onApply={(next) => navigate(next, { replace: true })}
-      />
+      {more.show && (
+        <ClientFilters
+          id="obs-traces-client"
+          fields={TRACE_CLIENT_FIELDS}
+          values={client}
+          onApply={(next) => navigate(next, { replace: true })}
+        />
+      )}
+      {red && !traces.isLoading && <ListSummary testId="obs-traces-summary">{traceSummary(red, range, rows)}</ListSummary>}
       {sessionId && <SessionFilterBar scope={scope} sessionId={sessionId} navigate={navigate} />}
       {red && red.traceCount > 0 && <RedStrip red={red} />}
       {groupBy.length > 0 && redGroups.length > 0 && (
@@ -321,6 +331,34 @@ function TraceList({
       ) : null}
     </div>
   );
+}
+
+/** Each column's width, in column order (the root operation takes the rest). */
+const TRACE_COLUMN_WIDTHS: [string, string][] = [
+  ["startMs", "w-36"],
+  ["rootOperation", ""],
+  ["rootDurationMs", "w-44"],
+  ["userId", "w-36"],
+  ["client", "w-40"],
+  ["versions", "w-40"],
+  ["spanCount", "w-16"],
+  ["errorCount", "w-24"],
+];
+
+/** The columns a relaxed console folds into the picker. */
+const RELAXED_OPTIONAL = [
+  { key: "userId", header: "User" },
+  { key: "client", header: "Client" },
+  { key: "versions", header: "Versions" },
+  { key: "spanCount", header: "Spans" },
+];
+
+/** The relaxed list's one sentence: how many requests, how many failed, and the slowest loaded. */
+function traceSummary(red: TraceRed, range: RangePreset, rows: TraceSummary[]): string {
+  const failed = Math.round(red.traceCount * red.errorRate);
+  const slowest = rows.reduce<TraceSummary | null>((top, t) => (!top || t.rootDurationMs > top.rootDurationMs ? t : top), null);
+  const head = `${plural(red.traceCount, "trace")} ${inRange(range)}, ${failed > 0 ? `${plural(failed, "failed request")}` : "none failed"}; half finished within ${formatDuration(red.p50Ms)}.`;
+  return slowest ? `${head} Slowest shown: ${operationName(slowest.rootOperation) || slowest.traceId} at ${formatDuration(slowest.rootDurationMs)}.` : head;
 }
 
 /** How many pages (of TRACE_PAGE_SIZE) a latency band reads on its own before it asks the user to load more. */
@@ -406,6 +444,7 @@ function RedGroups({ groups, groupBy, onNarrow }: { groups: TraceRedGroup[]; gro
 
 /** Rate, errors and duration over every trace the filters match in the window — the server's figures, not this page's. */
 function RedStrip({ red }: { red: TraceRed }) {
+  const relaxed = useTableDensity() === "relaxed";
   const facts: [string, string, boolean?][] = [
     ["Traces", formatCount(red.traceCount)],
     ["Rate", formatRate(red.ratePerSecond)],
@@ -422,7 +461,7 @@ function RedStrip({ red }: { red: TraceRed }) {
     >
       {facts.map(([label, value, alert]) => (
         <div key={label}>
-          <dt className="text-xs font-medium uppercase tracking-wide text-ink-muted">{label}</dt>
+          <dt className={cn("text-xs font-medium text-ink-muted", !relaxed && "uppercase tracking-wide")}>{label}</dt>
           <dd className={cn("text-sm font-semibold tabular-nums", alert ? "text-danger-ink" : "text-ink")}>{value}</dd>
         </div>
       ))}
@@ -440,6 +479,8 @@ function TraceToolbar({
   minDuration,
   user,
   navigate,
+  showMore = true,
+  moreButton,
 }: {
   scope: ObsScope;
   range: RangePreset;
@@ -450,6 +491,9 @@ function TraceToolbar({
   minDuration: string | undefined;
   user: string;
   navigate: ObsNavigate;
+  /** The user-id filter is in view (a relaxed console folds it behind "More filters"). */
+  showMore?: boolean;
+  moreButton?: ReactNode;
 }) {
   const [draft, setDraft] = useState(rootSpanName);
   useEffect(() => setDraft(rootSpanName), [rootSpanName]);
@@ -520,7 +564,8 @@ function TraceToolbar({
       >
         Errors only
       </Button>
-      <UserIdFilter id="obs-traces-user" value={user} onChange={(next) => navigate({ user: next }, { replace: true })} />
+      {showMore && <UserIdFilter id="obs-traces-user" value={user} onChange={(next) => navigate({ user: next }, { replace: true })} />}
+      {moreButton}
     </div>
   );
 }
@@ -709,6 +754,14 @@ function TraceTable({
     onSortingChange: setSorting,
   });
   const rows = table.getRowModel().rows;
+  // A relaxed console (the demo's tidied one) shows four columns, the rest in
+  // the header corner's picker, and taller rows with a chevron.
+  const relaxed = useTableDensity() === "relaxed";
+  const [shownOptional, setShownOptional] = useState<Set<string>>(() => new Set());
+  const visible = (id: string) => !relaxed || !RELAXED_OPTIONAL.some((c) => c.key === id) || shownOptional.has(id);
+  const rowHeight = relaxed ? RELAXED_ROW_HEIGHT : ROW_HEIGHT;
+  // The spacer rows span every drawn column: one more and table-fixed adds a phantom column.
+  const spanAll = TRACE_COLUMN_WIDTHS.filter(([id]) => visible(id)).length + (relaxed ? 1 : 0);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const requestFocus = useRovingFocus(scrollRef, "data-trace-index");
@@ -718,7 +771,7 @@ function TraceTable({
   const virtualizer = useVirtualizer({
     count: rows.length,
     getScrollElement: () => scrollRef.current,
-    estimateSize: () => (narrow ? STACKED_ROW_ESTIMATE : ROW_HEIGHT),
+    estimateSize: () => (narrow ? STACKED_ROW_ESTIMATE : rowHeight),
     getItemKey: (index) => rows[index]?.id ?? index,
     overscan: 10,
   });
@@ -764,34 +817,33 @@ function TraceTable({
             table scrolls sideways instead of squeezing the operation, the one
             column a reader opens a trace by, to nothing. 70rem fits a 1440px
             laptop beside the nav without a sideways scrollbar. */}
-        <table className={cn("w-full table-fixed text-sm md:min-w-[70rem]", STACK.table)} data-testid="obs-trace-table">
+        <table className={cn("w-full table-fixed text-sm", relaxed ? "md:min-w-[44rem]" : "md:min-w-[70rem]", STACK.table)} data-testid="obs-trace-table">
           <caption className="sr-only">Traces from {subject}. Activate a root operation to open its waterfall.</caption>
           <colgroup className="max-md:hidden">
-            <col className="w-36" />
-            <col />
-            <col className="w-44" />
-            <col className="w-36" />
-            <col className="w-40" />
-            <col className="w-40" />
-            <col className="w-16" />
-            <col className="w-24" />
+            {TRACE_COLUMN_WIDTHS.filter(([id]) => visible(id)).map(([id, width]) => (
+              <col key={id} className={width} />
+            ))}
+            {relaxed && <col className="w-14" />}
           </colgroup>
           <thead className={cn("sticky top-0 z-10 bg-surface", STACK.head)}>
             {table.getHeaderGroups().map((group) => (
               <tr key={group.id} className="border-b border-border">
-                {group.headers.map((header) => {
+                {group.headers.filter((header) => visible(header.column.id)).map((header) => {
                   const sorted = header.column.getIsSorted();
                   return (
                     <th
                       key={header.id}
                       scope="col"
                       aria-sort={sorted === "asc" ? "ascending" : sorted === "desc" ? "descending" : "none"}
-                      className="px-3 py-2 text-left text-xs font-medium uppercase tracking-wide text-ink-muted"
+                      className={cn(
+                        "px-3 text-left text-xs font-medium text-ink-muted",
+                        relaxed ? "h-11 px-4" : "py-2 uppercase tracking-wide"
+                      )}
                     >
                       <button
                         type="button"
                         onClick={header.column.getToggleSortingHandler()}
-                        className="inline-flex items-center gap-1 rounded-sm uppercase hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        className={cn("inline-flex items-center gap-1 rounded-sm hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-ring", !relaxed && "uppercase")}
                       >
                         <table.FlexRender header={header} />
                         {sorted === "asc" && <ArrowUp className="h-3 w-3" aria-hidden="true" />}
@@ -800,13 +852,29 @@ function TraceTable({
                     </th>
                   );
                 })}
+                {relaxed && (
+                  <th scope="col" className="h-11 px-2 text-right">
+                    <ColumnPicker
+                      columns={RELAXED_OPTIONAL}
+                      shown={shownOptional}
+                      onToggle={(key) =>
+                        setShownOptional((prev) => {
+                          const next = new Set(prev);
+                          if (next.has(key)) next.delete(key);
+                          else next.add(key);
+                          return next;
+                        })
+                      }
+                    />
+                  </th>
+                )}
               </tr>
             ))}
           </thead>
           <tbody className={STACK.body}>
             {padTop > 0 && (
               <tr aria-hidden="true">
-                <td colSpan={6} style={{ height: padTop }} />
+                <td colSpan={spanAll} style={{ height: padTop }} />
               </tr>
             )}
             {items.map((item) => {
@@ -816,16 +884,20 @@ function TraceTable({
               return (
                 <tr
                   key={row.id}
-                  className={cn("border-b border-border/50 hover:bg-ink/5", STACK.row)}
-                  style={narrow ? undefined : { height: ROW_HEIGHT }}
+                  className={cn("border-b border-border/50 hover:bg-ink/5", relaxed && "group/row cursor-pointer", STACK.row)}
+                  style={narrow ? undefined : { height: rowHeight }}
+                  // A relaxed row opens on a click anywhere; the keyboard keeps the operation's button.
+                  onClick={relaxed ? (event) => {
+                    if (!(event.target as HTMLElement).closest("button")) onOpen(trace.traceId);
+                  } : undefined}
                   data-index={item.index}
                   ref={narrow ? virtualizer.measureElement : undefined}
                   data-testid="obs-trace-row"
                   data-trace-id={trace.traceId}
                 >
-                  {row.getAllCells().map((cell) =>
+                  {row.getAllCells().filter((cell) => visible(cell.column.id)).map((cell) =>
                     cell.column.id === "rootOperation" ? (
-                      <th key={cell.id} scope="row" className={cn("px-3 py-1 text-left font-normal", STACK.cell, STACK.title)}>
+                      <th key={cell.id} scope="row" className={cn("py-1 text-left font-normal", relaxed ? "px-4" : "px-3", STACK.cell, STACK.title)}>
                         <button
                           type="button"
                           data-trace-index={item.index}
@@ -842,18 +914,23 @@ function TraceTable({
                       <td
                         key={cell.id}
                         data-label={typeof cell.column.columnDef.header === "string" ? cell.column.columnDef.header : undefined}
-                        className={cn("truncate px-3 py-1", STACK.cell, STACK.labelled)}
+                        className={cn("truncate py-1", relaxed ? "px-4" : "px-3", STACK.cell, STACK.labelled)}
                       >
                         <table.FlexRender cell={cell} />
                       </td>
                     )
+                  )}
+                  {relaxed && (
+                    <td className="px-2 text-right max-md:hidden" aria-hidden="true">
+                      <ChevronRight className="ml-auto h-4 w-4 text-ink-subtle transition-transform group-hover/row:translate-x-0.5 group-hover/row:text-ink" />
+                    </td>
                   )}
                 </tr>
               );
             })}
             {padBottom > 0 && (
               <tr aria-hidden="true">
-                <td colSpan={6} style={{ height: padBottom }} />
+                <td colSpan={spanAll} style={{ height: padBottom }} />
               </tr>
             )}
           </tbody>

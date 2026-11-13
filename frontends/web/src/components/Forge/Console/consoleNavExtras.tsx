@@ -8,9 +8,15 @@
  *
  * `lead.active` means the open page is the lead's own, not a console page: its
  * row is the current one, and the breadcrumb names it.
+ *
+ * `pageLead` is the public demo's one addition to a page body: a line under
+ * the page's title (the demo's "Put an agent on it" card, the Releases
+ * explainer). Null, or no provider, keeps the page as it is.
  */
 
 import { createContext, useContext, type ReactNode } from "react";
+
+import type { ConsolePage } from "./paths";
 
 export interface ConsoleNavExtras {
   lead?: { label: string; href: string; icon?: ReactNode; active: boolean };
@@ -18,6 +24,8 @@ export interface ConsoleNavExtras {
   drawerAppendix?: ReactNode;
   /** The scope control's environments in this order (names it omits keep theirs, after). */
   envOrder?: readonly string[];
+  /** Drawn under `page`'s title, above its body; null for nothing. */
+  pageLead?: (page: ConsolePage) => ReactNode | null;
 }
 
 const ConsoleNavExtrasContext = createContext<ConsoleNavExtras>({});
@@ -28,4 +36,10 @@ export function ConsoleNavExtrasProvider({ value, children }: { value: ConsoleNa
 
 export function useConsoleNavExtras(): ConsoleNavExtras {
   return useContext(ConsoleNavExtrasContext);
+}
+
+/** The host's line under this page's title, or null. */
+export function ConsolePageLead({ page }: { page: ConsolePage }) {
+  const { pageLead } = useConsoleNavExtras();
+  return <>{pageLead?.(page) ?? null}</>;
 }

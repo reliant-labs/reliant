@@ -14,7 +14,7 @@
  * pinned for the rest (hooks/observability-queries.ts useIssues).
  */
 
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Search } from "lucide-react";
 
@@ -52,6 +52,7 @@ import { linkChatToIssue } from "./linkIssueChat";
 import { assigneeFilterOf, assigneeFilterWaitsForMe, assigneeParam, serverAssignee } from "./issueTimelineModel";
 import { ClientFilters, hasClientFilters, NO_CLIENT_FILTERS, type ClientFilterValues } from "../ClientFilters";
 import { CONTROL_FIELD, SEGMENTED, segmentTone } from "../../controlStyles";
+import { inRange, ListSummary, plural, useMoreFilters } from "../../Console/ListSummary";
 
 export interface ErrorsViewProps {
   scope: ObsScope;
@@ -126,16 +127,34 @@ function IssueList({ scope, subject, range, text, service, statuses, platform, s
   const issues = useIssues(waitingForMe || meUnknown ? null : issueScope, filters);
   const rows = useMemo(() => issues.data?.pages.flatMap((page) => page.issues) ?? [], [issues.data]);
   const filtered = statuses.length > 0 || !!platform || !!service || !!text || !!user || hasClientFilters(client) || assigneeFilter.kind !== "anyone";
+  // A relaxed list (the demo's tidied console) folds the second-rank filters behind "More filters".
+  const more = useMoreFilters(!!platform || !!assignee || !!user || hasClientFilters(client));
 
   return (
     <div className="space-y-3" data-testid="obs-errors">
-      <IssueToolbar scope={scope} range={range} text={text} service={service} statuses={statuses} platform={platform} sort={sort} assignee={assignee} user={user} navigate={navigate} />
-      <ClientFilters
-        id="obs-errors-client"
-        fields={ERROR_CLIENT_FIELDS}
-        values={client}
-        onApply={(next) => navigate(next, { replace: true })}
+      <IssueToolbar
+        scope={scope}
+        range={range}
+        text={text}
+        service={service}
+        statuses={statuses}
+        platform={platform}
+        sort={sort}
+        assignee={assignee}
+        user={user}
+        navigate={navigate}
+        showMore={more.show}
+        moreButton={more.button}
       />
+      {more.show && (
+        <ClientFilters
+          id="obs-errors-client"
+          fields={ERROR_CLIENT_FIELDS}
+          values={client}
+          onApply={(next) => navigate(next, { replace: true })}
+        />
+      )}
+      {issues.data && !issues.isLoading && <ListSummary testId="obs-errors-summary">{issueSummary(rows, range, statuses, !!issues.hasNextPage)}</ListSummary>}
       {issues.data && <ObsAsOf updatedAt={issues.dataUpdatedAt} />}
       {meUnknown ? (
         <p className="rounded-lg border border-dashed border-border bg-surface-sunken px-4 py-5 text-sm text-ink-muted" data-testid="obs-errors-mine-unknown">
@@ -191,6 +210,8 @@ function IssueToolbar({
   assignee,
   user,
   navigate,
+  showMore = true,
+  moreButton,
 }: {
   scope: ObsScope;
   range: RangePreset;
@@ -202,6 +223,9 @@ function IssueToolbar({
   assignee: string | undefined;
   user: string;
   navigate: ObsNavigate;
+  /** The second-rank filters (platform, assignee, user id) are in view. */
+  showMore?: boolean;
+  moreButton?: ReactNode;
 }) {
   const members = useOrgMembers(scope.orgId);
   const me = useCurrentIssueUser();
@@ -246,6 +270,7 @@ function IssueToolbar({
             </button>
           ))}
         </div>
+        {showMore && (<>
         <label htmlFor="obs-errors-platform" className="sr-only">
           Platform
         </label>
@@ -282,6 +307,7 @@ function IssueToolbar({
           ))}
           {named && <option value={assignee}>{assignee}</option>}
         </select>
+        </>)}
         <ServiceSelect scope={scope} range={range} value={service} onChange={(next) => navigate({ service: next }, { replace: true })} id="obs-errors-service" />
         <label htmlFor="obs-errors-sort" className="sr-only">
           Sort
@@ -318,7 +344,8 @@ function IssueToolbar({
           />
         </div>
       </form>
-      <UserIdFilter id="obs-errors-user" value={user} onChange={(next) => navigate({ user: next }, { replace: true })} />
+      {showMore && <UserIdFilter id="obs-errors-user" value={user} onChange={(next) => navigate({ user: next }, { replace: true })} />}
+      {moreButton}
       </div>
     </div>
   );
@@ -386,6 +413,7 @@ function IssueTable({
     {
       key: "assignee",
       header: "Assignee",
+      optional: true,
       render: (_, { issue }) => (
         <span className="text-xs" data-testid={`obs-issue-assignee-${issue.id}`}>
           {issue.assignee ? <span className="text-ink">{issue.assignee.name}</span> : <span className="text-ink-muted">—</span>}
@@ -403,7 +431,7 @@ function IssueTable({
         </span>
       ),
     },
-    { key: "trend", header: "Trend", render: (_, { issue }) => <Trend points={issue.trend} label={`${formatCount(issue.events)} events, by hour`} /> },
+    { key: "trend", header: "Trend", optional: true, render: (_, { issue }) => <Trend points={issue.trend} label={`${formatCount(issue.events)} events, by hour`} /> },
     {
       key: "lastSeen",
       header: "Last seen",
@@ -414,6 +442,7 @@ function IssueTable({
     {
       key: "firstSeen",
       header: "First seen",
+      optional: true,
       render: (_, { issue }) => (
         <span className="text-xs text-ink-muted" title={issue.firstSeenMs ? formatWhen(issue.firstSeenMs, now) : undefined}>
           {issue.firstSeenMs ? formatAgo(issue.firstSeenMs, now) : "—"}
@@ -455,6 +484,16 @@ function IssueTable({
       )}
     </Card>
   );
+}
+
+/** The relaxed list's one sentence: how many issues, and how many of each open status. */
+function issueSummary(issues: Issue[], range: RangePreset, statuses: IssueStatus[], more: boolean): string {
+  const what = statuses.length === 0 ? "open issue" : "issue";
+  if (issues.length === 0) return `No ${what}s ${inRange(range)}.`;
+  const counts = ISSUE_STATUSES.map((status) => [status, issues.filter((issue) => issue.status === status).length] as const).filter(([, n]) => n > 0);
+  const events = issues.reduce((sum, issue) => sum + issue.events, 0);
+  const parts = counts.map(([status, n]) => `${n} ${STATUS_LABEL[status].toLowerCase()}`).join(", ");
+  return `${more ? "At least " : ""}${plural(issues.length, what)} ${inRange(range)}: ${parts}. ${plural(events, "error event")} in all.`;
 }
 
 function issueTitle(issue: Issue): string {

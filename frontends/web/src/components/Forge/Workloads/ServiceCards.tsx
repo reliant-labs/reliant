@@ -23,7 +23,9 @@
  */
 
 import { useState, type ReactNode } from "react";
+import { ChevronRight } from "lucide-react";
 
+import { useTableDensity } from "@/components/forge-ui/data_table";
 import Link from "@/components/forge-ui/link";
 import Status from "@/components/forge-ui/status";
 import Tag from "@/components/forge-ui/tag";
@@ -48,6 +50,14 @@ export const CARDS_SHOWN = 10;
  */
 const ROW_GRID =
   "grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1.5 px-4 py-2.5 lg:grid-cols-[minmax(12rem,1fr)_minmax(12rem,1fr)_14rem_6rem_5.5rem] lg:gap-y-0";
+
+/**
+ * A relaxed console's grid (forge-ui TableDensityProvider; the demo's tidied
+ * one): the name, the status and the three request figures, with room, and a
+ * chevron; error logs and alerts are on the workload page the row opens.
+ */
+const RELAXED_ROW_GRID =
+  "grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1.5 px-4 py-3.5 lg:grid-cols-[minmax(12rem,1fr)_minmax(12rem,1fr)_14rem_1.5rem] lg:gap-y-0";
 
 /** Where a row's links go, beyond the Overview's own hrefs. */
 export interface RowHrefs {
@@ -78,6 +88,8 @@ export function ServiceCards({
   empty: ReactNode;
 }) {
   const [all, setAll] = useState(false);
+  const relaxed = useTableDensity() === "relaxed";
+  const grid = relaxed ? RELAXED_ROW_GRID : ROW_GRID;
   if (loading) {
     return (
       <ul className="divide-y divide-border overflow-hidden rounded-lg border border-border bg-surface" aria-label="Services" aria-busy="true">
@@ -102,7 +114,7 @@ export function ServiceCards({
   return (
     <div className="overflow-hidden rounded-lg border border-border bg-surface">
       {/* The column names, once, for a desktop; a phone labels each figure in place. */}
-      <div aria-hidden="true" className={cn(ROW_GRID, "hidden border-b border-border py-2 text-xs text-ink-muted lg:grid")}>
+      <div aria-hidden="true" className={cn(grid, "hidden border-b border-border py-2 text-xs text-ink-muted lg:grid")}>
         <span>Name</span>
         <span>Status</span>
         <span className="grid grid-cols-3 gap-2 text-right">
@@ -110,12 +122,18 @@ export function ServiceCards({
           <span>errors</span>
           <span>p95</span>
         </span>
-        <span className="text-right">Error logs</span>
-        <span className="text-right">Alerts</span>
+        {relaxed ? (
+          <span />
+        ) : (
+          <>
+            <span className="text-right">Error logs</span>
+            <span className="text-right">Alerts</span>
+          </>
+        )}
       </div>
       <ul className="divide-y divide-border" aria-label="Services">
         {shown.map((row) => (
-          <Row key={row.key} row={row} showEnv={showEnv} hosted={hosted} hrefs={hrefs} rowHrefs={rowHrefs} redLoading={redLoading} />
+          <Row key={row.key} row={row} showEnv={showEnv} hosted={hosted} hrefs={hrefs} rowHrefs={rowHrefs} redLoading={redLoading} relaxed={relaxed} />
         ))}
       </ul>
       {rows.length > CARDS_SHOWN && (
@@ -151,6 +169,7 @@ function Row({
   hrefs,
   rowHrefs,
   redLoading,
+  relaxed = false,
 }: {
   row: OverviewRow;
   showEnv: boolean;
@@ -158,12 +177,13 @@ function Row({
   hrefs: OverviewHrefs;
   rowHrefs: RowHrefs;
   redLoading: boolean;
+  relaxed?: boolean;
 }) {
   const unobserved = row.type === "service" && !!row.service.unobserved;
   const href = unobserved ? null : row.type === "process" ? rowHrefs.traces(row.name) : hrefs.workload(row.name, row.envName);
   return (
     <li
-      className={cn(ROW_GRID, "relative min-w-0 transition-colors", href && "hover:bg-ink/5")}
+      className={cn(relaxed ? RELAXED_ROW_GRID : ROW_GRID, "relative min-w-0 transition-colors", href && "group/row cursor-pointer hover:bg-ink/5")}
       data-testid={testIdOf(row, showEnv)}
       data-kind={row.kind}
       data-tone={row.tone}
@@ -209,6 +229,11 @@ function Row({
             <Red row={row} loading={redLoading} />
           </div>
           {/* A phone puts error logs and alerts on one line; a desktop gives each its column. */}
+          {relaxed ? (
+            <span className="hidden lg:block" aria-hidden="true">
+              {href && <ChevronRight className="ml-auto h-4 w-4 text-ink-subtle transition-transform group-hover/row:translate-x-0.5 group-hover/row:text-ink" />}
+            </span>
+          ) : (
           <div className={cn("col-span-2 flex gap-4 text-xs lg:contents", !row.health && !row.alertsFiring && "max-lg:hidden")}>
             <span className="flex items-baseline gap-1 lg:justify-end lg:text-sm">
               <span className="text-ink-muted lg:sr-only">Error logs</span>
@@ -229,6 +254,7 @@ function Row({
               )}
             </span>
           </div>
+          )}
         </>
       )}
     </li>

@@ -1,6 +1,23 @@
-import React, { useState } from "react";
+import React, { createContext, useContext, useState } from "react";
+import { ChevronRight, Columns3 } from "lucide-react";
 
 import Link from "./link";
+import Popover from "./popover";
+
+/**
+ * How dense every DataTable under it reads. "default" is the console's own
+ * (40px rows, every column). "relaxed" is a calmer reading for a visitor
+ * (the public demo's tidied console): 56px rows, a chevron on every row that
+ * opens something, wrapped instead of truncated text, and the columns marked
+ * `optional` behind a column picker in the header corner. Pages may also read
+ * it (useTableDensity) to drop secondary filters or add a summary line.
+ */
+export type TableDensity = "default" | "relaxed";
+const TableDensityContext = createContext<TableDensity>("default");
+export const TableDensityProvider = TableDensityContext.Provider;
+export function useTableDensity(): TableDensity {
+  return useContext(TableDensityContext);
+}
 
 export interface DataTableColumn<T> {
   key: string;
@@ -25,6 +42,12 @@ export interface DataTableColumn<T> {
   srHeader?: boolean;
   /** In a `stacked` table, this column's cell leads each row's card. Defaults to the first column. */
   stackTitle?: boolean;
+  /**
+   * A secondary column: in a "relaxed" table (TableDensityProvider) it is
+   * hidden until the reader picks it from the column picker. No effect at the
+   * default density.
+   */
+  optional?: boolean;
 }
 
 /** Attributes a caller may set on a body row: a test id, a highlight, the current item. */
@@ -131,6 +154,13 @@ const ROW_TARGET =
   "after:absolute after:inset-0 after:content-[''] focus-visible:outline-none focus-visible:after:ring-2 focus-visible:after:ring-inset focus-visible:after:ring-accent";
 
 /**
+ * A relaxed table's body: room above and below each cell, and a sentence a
+ * cell truncates (a title, a subject) wraps instead, so nothing reads "…".
+ */
+const RELAXED_TABLE =
+  "md:[&_tbody_td]:py-3 [&_td_.truncate]:overflow-visible [&_td_.truncate]:whitespace-normal";
+
+/**
  * `stacked`: the phone layout. Variant utilities outrank a column's own
  * `className` (`truncate`, `w-px`), which assumes a column layout that no
  * longer exists below `md`. A labelled cell prints its header from
@@ -186,8 +216,61 @@ function SkeletonRow({ cols, height }: { cols: number; height: string }) {
  *     getRowHref={(s) => `/services/${s.name}`}
  *   />
  */
-export default function DataTable<T extends Record<string, unknown>>({
+/**
+ * The relaxed table's column picker: the `optional` columns, each a checkbox.
+ * Exported for the tables DataTable cannot draw (a virtualized list).
+ */
+export function ColumnPicker({
   columns,
+  shown,
+  onToggle,
+}: {
+  columns: { key: string; header: string }[];
+  shown: Set<string>;
+  onToggle: (key: string) => void;
+}) {
+  const hidden = columns.filter((col) => !shown.has(col.key)).length;
+  return (
+    <Popover
+      align="right"
+      label="Choose columns"
+      panelClassName="w-56 p-2"
+      trigger={(props) => (
+        <button
+          {...props}
+          type="button"
+          title={hidden > 0 ? `${hidden} more column${hidden === 1 ? "" : "s"}` : "Choose columns"}
+          className="inline-flex h-8 items-center gap-1 rounded-md border border-border bg-surface px-2 text-xs font-medium text-ink-muted transition-colors hover:bg-ink/5 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+          data-testid="data-table-columns"
+        >
+          <Columns3 className="h-3.5 w-3.5" aria-hidden="true" />
+          <span className="sr-only">Choose columns</span>
+          {hidden > 0 && <span aria-hidden="true">+{hidden}</span>}
+        </button>
+      )}
+    >
+      <p className="px-2 pb-1.5 pt-1 text-xs font-medium text-ink-muted">More columns</p>
+      <ul className="space-y-0.5">
+        {columns.map((col) => (
+          <li key={col.key}>
+            <label className="flex min-h-9 cursor-pointer items-center gap-2 rounded-md px-2 text-sm text-ink hover:bg-ink/5">
+              <input
+                type="checkbox"
+                checked={shown.has(col.key)}
+                onChange={() => onToggle(col.key)}
+                className="h-4 w-4 rounded border-border-strong text-accent focus:ring-accent"
+              />
+              {col.header}
+            </label>
+          </li>
+        ))}
+      </ul>
+    </Popover>
+  );
+}
+
+export default function DataTable<T extends Record<string, unknown>>({
+  columns: allColumns,
   data,
   onSort,
   onPageChange,
@@ -212,7 +295,14 @@ export default function DataTable<T extends Record<string, unknown>>({
   stacked = false,
   ariaLabel,
 }: DataTableProps<T>) {
-  const rowHeight = compact ? "h-8" : "h-10";
+  const relaxed = useTableDensity() === "relaxed";
+  const optionalColumns = relaxed ? allColumns.filter((col) => col.optional) : [];
+  const [shownOptional, setShownOptional] = useState<Set<string>>(() => new Set());
+  const columns = relaxed ? allColumns.filter((col) => !col.optional || shownOptional.has(col.key)) : allColumns;
+  const hasRowTargets = relaxed && !!(getRowHref || getRowAction);
+  // The relaxed table's trailing column: a chevron on each row that opens something, the column picker in its header.
+  const trailing = relaxed && (hasRowTargets || optionalColumns.length > 0);
+  const rowHeight = relaxed ? "h-14" : compact ? "h-8" : "h-10";
   const titleIndex = Math.max(
     0,
     columns.findIndex((col) => col.stackTitle),
@@ -253,7 +343,7 @@ export default function DataTable<T extends Record<string, unknown>>({
     onSelectionChange?.(data.filter((_, i) => next.has(i)));
   }
 
-  const allCols = selectable ? columns.length + 1 : columns.length;
+  const allCols = columns.length + (selectable ? 1 : 0) + (trailing ? 1 : 0);
 
   // A footer the caller cannot act on is a claim about paging that is not
   // true. Default to showing it only when paging is actually wired up.
@@ -271,7 +361,7 @@ export default function DataTable<T extends Record<string, unknown>>({
         <table
           className={`min-w-full border-collapse ${layout === "fixed" ? "w-full table-fixed" : ""} ${
             stacked ? STACK.table : ""
-          }`}
+          } ${relaxed ? RELAXED_TABLE : ""}`}
           aria-label={ariaLabel}
         >
           <thead className={stacked ? STACK.head : undefined}>
@@ -298,7 +388,7 @@ export default function DataTable<T extends Record<string, unknown>>({
                         : "descending"
                       : undefined
                   }
-                  className={`h-9 whitespace-nowrap px-4 text-xs font-medium text-ink-muted ${
+                  className={`${relaxed ? "h-11" : "h-9"} whitespace-nowrap px-4 text-xs font-medium text-ink-muted ${
                     col.numeric ? "text-right" : "text-left"
                   } ${col.headerClassName ?? ""}`}
                   style={col.width ? { width: col.width } : undefined}
@@ -321,6 +411,26 @@ export default function DataTable<T extends Record<string, unknown>>({
                   )}
                 </th>
               ))}
+              {trailing && (
+                <th scope="col" className="h-11 w-12 px-2 text-right">
+                  {optionalColumns.length > 0 ? (
+                    <ColumnPicker
+                      columns={optionalColumns}
+                      shown={shownOptional}
+                      onToggle={(key) =>
+                        setShownOptional((prev) => {
+                          const next = new Set(prev);
+                          if (next.has(key)) next.delete(key);
+                          else next.add(key);
+                          return next;
+                        })
+                      }
+                    />
+                  ) : (
+                    <span className="sr-only">Open</span>
+                  )}
+                </th>
+              )}
             </tr>
           </thead>
           <tbody className={stacked ? STACK.body : undefined}>
@@ -346,7 +456,7 @@ export default function DataTable<T extends Record<string, unknown>>({
                     <tr
                       {...rowAttributes}
                       className={`border-t border-border/70 first:border-t-0 ${
-                        href || action ? "relative cursor-pointer hover:bg-ink/5" : ""
+                        href || action ? `relative cursor-pointer hover:bg-ink/5 ${relaxed ? "group/row" : ""}` : ""
                       } ${selected.has(i) ? "bg-accent-surface" : ""} ${stacked ? STACK.row : ""} ${
                         rowClassName ?? ""
                       }`}
@@ -400,6 +510,13 @@ export default function DataTable<T extends Record<string, unknown>>({
                           </td>
                         );
                       })}
+                      {trailing && (
+                        <td className={`${rowHeight} w-12 px-2 text-right align-middle ${stacked ? "max-md:hidden" : ""}`} aria-hidden="true">
+                          {(href || action) && (
+                            <ChevronRight className="ml-auto h-4 w-4 text-ink-subtle transition-transform group-hover/row:translate-x-0.5 group-hover/row:text-ink" />
+                          )}
+                        </td>
+                      )}
                     </tr>
                     {detail != null && detail !== false && (
                       <tr data-row-detail="true">

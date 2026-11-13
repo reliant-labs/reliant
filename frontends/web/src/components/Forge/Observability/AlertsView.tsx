@@ -50,6 +50,7 @@ import { ExploreLink } from "./Metrics/ExploreLink";
 import { ObsError, ObsLoadingRows } from "./ObsStates";
 import { useObsReadOnly } from "./obsReadOnly";
 import { SEGMENTED, segmentTone } from "../controlStyles";
+import { ListSummary, plural } from "../Console/ListSummary";
 
 export const ALERTS_TAB_LABELS: Record<AlertsTab, string> = {
   firing: "Firing",
@@ -154,6 +155,10 @@ export function AlertsView({ orgId, place, envIds, range, tab, rule, navigate }:
         )}
       </div>
 
+      {tab === "firing" && !alerts.isLoading && !alerts.error && (
+        <ListSummary testId="obs-alerts-summary">{alertSummary(firing, rules.length)}</ListSummary>
+      )}
+
       {tab === "rules" ? (
         <RulesTab rules={rules} environments={environments} firing={firing} selected={rule} navigate={navigate} />
       ) : notConfigured ? (
@@ -201,6 +206,17 @@ export function AlertsView({ orgId, place, envIds, range, tab, rule, navigate }:
 }
 
 /** The matchers that silence exactly this alert instance: its rule and its own labels (never a reliant_* one). */
+/** The relaxed console's one sentence over the Firing tab: what is firing, out of how many rules. */
+function alertSummary(active: AlertInstance[], ruleCount: number): string {
+  const firingNow = active.filter((a) => a.state === "firing");
+  const pending = active.length - firingNow.length;
+  const rulesPart = `${plural(ruleCount, "rule")} watching this app`;
+  if (active.length === 0) return `Nothing is firing. ${rulesPart}.`;
+  const names = [...new Set(firingNow.map((a) => a.rule))];
+  const lead = firingNow.length > 0 ? `${plural(firingNow.length, "alert")} firing (${names.join(", ")})` : "Nothing firing";
+  return `${lead}${pending > 0 ? `, ${pending} pending` : ""}. ${rulesPart}.`;
+}
+
 export function silenceMatchersFor(alert: Pick<AlertInstance, "rule" | "labels">) {
   const labels: Record<string, string> = { ...alert.labels, alertname: alert.rule };
   return Object.keys(labels)
