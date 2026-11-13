@@ -178,11 +178,18 @@ func newProjectServiceClient(conn *connection) reliantv1connect.ProjectServiceCl
 // connection's server, creating the project if needed. This is the entry point
 // 'workflow run --project-path' calls.
 func resolveProjectPathToID(ctx context.Context, conn *connection, path string) (string, error) {
+	return resolveProjectPathToIDOn(ctx, conn, path, "")
+}
+
+// resolveProjectPathToIDOn is resolveProjectPathToID for the folder on one
+// machine (daemonID; "" is the user's default machine): the project is found,
+// attached or created there (CreateProjectRequest.daemon_id).
+func resolveProjectPathToIDOn(ctx context.Context, conn *connection, path, daemonID string) (string, error) {
 	absPath, err := filepath.Abs(path)
 	if err != nil {
 		return "", fmt.Errorf("resolving project path: %w", err)
 	}
-	return resolveProjectID(ctx, newProjectServiceClient(conn), absPath)
+	return resolveProjectIDOn(ctx, newProjectServiceClient(conn), absPath, daemonID)
 }
 
 // resolveProjectID maps an absolute path to a project ID: it returns the ID of
@@ -199,7 +206,16 @@ func resolveProjectPathToID(ctx context.Context, conn *connection, path string) 
 // It also closes the find-then-create race that AlreadyExists existed to
 // paper over.
 func resolveProjectID(ctx context.Context, client projectResolverClient, absPath string) (string, error) {
+	return resolveProjectIDOn(ctx, client, absPath, "")
+}
+
+// resolveProjectIDOn is resolveProjectID on the machine daemonID ("" is the
+// user's default machine, as resolveProjectID).
+func resolveProjectIDOn(ctx context.Context, client projectResolverClient, absPath, daemonID string) (string, error) {
 	req := &reliantv1.CreateProjectRequest{Name: filepath.Base(absPath), Path: absPath}
+	if daemonID != "" {
+		req.DaemonId = &daemonID
+	}
 	resp, err := client.CreateProject(ctx, connect.NewRequest(req))
 	if err == nil {
 		return resp.Msg.GetProject().GetId(), nil
