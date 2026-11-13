@@ -13,6 +13,8 @@ import (
 	"github.com/reliant-labs/reliant/internal/orgs"
 )
 
+var _ OrgResolver = flakyOrgs{}
+
 // flakyOrgs is an org resolver whose default-org lookup fails: the moment an
 // approval is evaluated may see that while the write a moment later does not.
 type flakyOrgs struct{ defaultErr error }
@@ -20,6 +22,9 @@ type flakyOrgs struct{ defaultErr error }
 func (flakyOrgs) Named(context.Context, string, string) (string, error) { return "", nil }
 func (f flakyOrgs) DefaultOrg(context.Context, string) (string, error) {
 	return "", f.defaultErr
+}
+func (flakyOrgs) LiveMembersFresh(context.Context, string, string) (int, bool, error) {
+	return 0, false, nil
 }
 func (flakyOrgs) ActingOrg(context.Context, string, string) (string, error) { return "", nil }
 func (flakyOrgs) ListScope(context.Context, string, string, orgs.Backfill) (*core.OrgScope, error) {
