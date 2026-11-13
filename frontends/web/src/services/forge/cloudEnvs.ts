@@ -225,10 +225,16 @@ function observedStateOf(state: DeployObservedState | undefined): string {
   return (DeployObservedState[state] ?? "unknown").toLowerCase();
 }
 
+// DEPLOY_SUSPEND_REASON_CLAIMABLE_EXPIRED = 4 on the control plane. The vendored
+// proto (proto-vendor/controlplane) does not carry it until the next re-vendor, so
+// the wire value is named here; swap for DeploySuspendReason.CLAIMABLE_EXPIRED then.
+const CLAIMABLE_EXPIRED_WIRE_VALUE = 4;
+
 function suspendReasonOf(reason: DeploySuspendReason | undefined): string {
   if (reason === DeploySuspendReason.OWNER) return "owner";
   if (reason === DeploySuspendReason.NO_COMPUTE_PLAN) return "no_compute_plan";
   if (reason === DeploySuspendReason.BILLING_LAPSED) return "billing_lapsed";
+  if ((reason as number | undefined) === CLAIMABLE_EXPIRED_WIRE_VALUE) return "claimable_expired";
   return "unspecified";
 }
 

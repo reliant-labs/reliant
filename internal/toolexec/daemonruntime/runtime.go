@@ -2052,7 +2052,7 @@ func (d *daemonClient) executeTool(s *gatewaySession, req *reliantv1.ToolRequest
 	if admissionErr != nil {
 		d.sendToolResult(s, req.RequestId, &toolexec.ExecutionResult{
 			Success: false, IsError: true, Content: admissionErr.Error(),
-			ErrorMessage: admissionErr.Error(), ErrorCode: "RECOVERY_FINALIZING",
+			ErrorMessage: admissionErr.Error(), ErrorCode: toolexec.ErrorCodeRecoveryFinalizing,
 		})
 		return
 	}

@@ -1304,6 +1304,7 @@ func (g *Graph) newStreaming() (*streaminghandler.Service, error) {
 		Deltas:      g.StreamingHub().Hub,
 		UserUpdates: g.UserUpdateHub(),
 		ChatUpdates: g.ChatUpdateHub(),
+		Orgs:        g.OrgResolver(),
 	})
 }
 

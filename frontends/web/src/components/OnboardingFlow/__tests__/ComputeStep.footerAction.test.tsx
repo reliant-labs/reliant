@@ -80,7 +80,7 @@ vi.mock("@/services/controlPlane/reliantAI", () => ({
 import { ComputeStep } from "../steps/ComputeStep";
 import { StepFooterOutlet, StepFooterProvider } from "../StepFooter";
 
-function renderInCard(initialPlan: Partial<LaunchPlan> = {}) {
+function renderInCard(initialPlan: Partial<LaunchPlan> = { compute: "cloud_paid" }) {
   const updatePlan = vi.fn(async (_updates: Partial<LaunchPlan>) => {});
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false, gcTime: 0 } },
@@ -154,7 +154,7 @@ describe("ComputeStep — the way forward is in the card footer", () => {
   });
 
   it("records the picked machine when the footer action is clicked", async () => {
-    const updatePlan = renderInCard({ computePlanId: "plan_compute_xl" });
+    const updatePlan = renderInCard({ compute: "cloud_paid", computePlanId: "plan_compute_xl" });
     await act(async () => {
       fireEvent.click(
         within(screen.getByTestId("card-footer")).getByRole("button", {
@@ -169,7 +169,7 @@ describe("ComputeStep — the way forward is in the card footer", () => {
 
   it("with Free chosen and nothing connected, the footer says it is waiting", () => {
     renderInCard();
-    fireEvent.click(screen.getByRole("button", { name: /Use your own computer/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Your own computer/ }));
     const footer = screen.getByTestId("card-footer");
     expect(within(footer).queryByRole("button", { name: /^Continue with / })).toBeNull();
     expect(within(footer).getByRole("button", { name: /Waiting for your computer/ })).toBeDisabled();

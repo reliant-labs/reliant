@@ -47,3 +47,13 @@ func (r *Repo) ListSharedProjects(ctx context.Context, f core.SharedProjectFilte
 func (r *Repo) ListShareEvents(ctx context.Context, kind core.ShareKind, resourceID string) ([]*core.ShareEvent, error) {
 	return store.ListShareEvents(ctx, r.ORM(), kind, resourceID)
 }
+
+// LatestOrgUpdateSequence is the newest sequence of an org's feed.
+func (r *Repo) LatestOrgUpdateSequence(ctx context.Context, orgID string) (int64, error) {
+	return store.LatestOrgUpdateSequence(ctx, r.ORM(), orgID)
+}
+
+// OrgUpdatesSince reads an org's feed after sinceSeq, ascending.
+func (r *Repo) OrgUpdatesSince(ctx context.Context, orgID string, sinceSeq int64, limit int) ([]core.OrgUpdate, error) {
+	return store.OrgUpdatesSince(ctx, r.ORM(), orgID, sinceSeq, limit)
+}

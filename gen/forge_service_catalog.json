@@ -32990,6 +32990,16 @@
           "auth_required": true
         },
         {
+          "id": "reliant.v1.StreamingService/StreamOrgUpdates",
+          "name": "StreamOrgUpdates",
+          "input": "reliant.v1.StreamOrgUpdatesRequest",
+          "output": "reliant.v1.OrgStreamEvent",
+          "client_streaming": false,
+          "server_streaming": true,
+          "idempotency": "NO_SIDE_EFFECTS",
+          "auth_required": true
+        },
+        {
           "id": "reliant.v1.StreamingService/StreamUserUpdates",
           "name": "StreamUserUpdates",
           "input": "reliant.v1.StreamUserUpdatesRequest",
@@ -33041,6 +33051,24 @@
             "Activity": {
               "Mutating": false
             }
+          },
+          {
+            "Name": "StreamOrgUpdates",
+            "InputType": "StreamOrgUpdatesRequest",
+            "OutputType": "OrgStreamEvent",
+            "ClientStreaming": false,
+            "ServerStreaming": true,
+            "AuthRequired": true,
+            "Errors": null,
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
+            "InputTypeFQ": "reliant.v1.StreamOrgUpdatesRequest",
+            "OutputTypeFQ": "reliant.v1.OrgStreamEvent",
+            "InputProtoFile": "reliant/v1/streaming.proto",
+            "OutputProtoFile": "reliant/v1/streaming.proto",
+            "Activity": {
+              "Mutating": false
+            }
           }
         ],
         "ProtoFile": "reliant/v1/streaming.proto",
@@ -33078,6 +33106,26 @@
               "MessageType": "reliant.v1.ChatUserUpdates"
             }
           ],
+          "OrgStreamEvent": [
+            {
+              "Name": "updates",
+              "ProtoType": "message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.OrgUpdateBatch"
+            },
+            {
+              "Name": "caught_up",
+              "ProtoType": "message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.OrgCaughtUp"
+            },
+            {
+              "Name": "heartbeat",
+              "ProtoType": "message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.Heartbeat"
+            }
+          ],
           "StreamChatUpdatesRequest": [
             {
               "Name": "chat_id",
@@ -33098,6 +33146,18 @@
               "Name": "tool_bodies",
               "ProtoType": "enum",
               "IsOptional": true
+            }
+          ],
+          "StreamOrgUpdatesRequest": [
+            {
+              "Name": "org_id",
+              "ProtoType": "string",
+              "IsOptional": true
+            },
+            {
+              "Name": "since_seq",
+              "ProtoType": "int64",
+              "IsOptional": false
             }
           ],
           "StreamUserUpdatesRequest": [
@@ -33555,6 +33615,87 @@
               "map_value_kind": "string"
             }
           ],
+          "reliant.v1.OrgCaughtUp": [
+            {
+              "name": "latest_sequence",
+              "kind": "int64"
+            }
+          ],
+          "reliant.v1.OrgStreamEvent": [
+            {
+              "name": "updates",
+              "kind": "message",
+              "type_name": "reliant.v1.OrgUpdateBatch",
+              "oneof": "event"
+            },
+            {
+              "name": "caught_up",
+              "kind": "message",
+              "type_name": "reliant.v1.OrgCaughtUp",
+              "oneof": "event"
+            },
+            {
+              "name": "heartbeat",
+              "kind": "message",
+              "type_name": "reliant.v1.Heartbeat",
+              "oneof": "event"
+            }
+          ],
+          "reliant.v1.OrgUpdate": [
+            {
+              "name": "sequence_number",
+              "kind": "int64"
+            },
+            {
+              "name": "type",
+              "kind": "enum",
+              "type_name": "reliant.v1.OrgUpdateType"
+            },
+            {
+              "name": "resource_kind",
+              "kind": "string"
+            },
+            {
+              "name": "resource_id",
+              "kind": "string"
+            },
+            {
+              "name": "owner_user_id",
+              "kind": "string"
+            },
+            {
+              "name": "project_id",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "title",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "activity",
+              "kind": "enum",
+              "type_name": "reliant.v1.ChatActivity",
+              "optional": true
+            },
+            {
+              "name": "created_at",
+              "kind": "string"
+            }
+          ],
+          "reliant.v1.OrgUpdateBatch": [
+            {
+              "name": "updates",
+              "kind": "message",
+              "type_name": "reliant.v1.OrgUpdate",
+              "repeated": true
+            },
+            {
+              "name": "latest_sequence",
+              "kind": "int64"
+            }
+          ],
           "reliant.v1.StreamChatUpdatesRequest": [
             {
               "name": "chat_id",
@@ -33574,6 +33715,17 @@
               "kind": "enum",
               "type_name": "reliant.v1.ToolBodyMode",
               "optional": true
+            }
+          ],
+          "reliant.v1.StreamOrgUpdatesRequest": [
+            {
+              "name": "org_id",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "since_seq",
+              "kind": "int64"
             }
           ],
           "reliant.v1.StreamUserUpdatesRequest": [
@@ -33762,7 +33914,12 @@
           "reliant.v1.Message": "reliant/v1/chat.proto",
           "reliant.v1.MessageSender": "reliant/v1/chat.proto",
           "reliant.v1.NodeExecutionState": "reliant/v1/streaming.proto",
+          "reliant.v1.OrgCaughtUp": "reliant/v1/streaming.proto",
+          "reliant.v1.OrgStreamEvent": "reliant/v1/streaming.proto",
+          "reliant.v1.OrgUpdate": "reliant/v1/streaming.proto",
+          "reliant.v1.OrgUpdateBatch": "reliant/v1/streaming.proto",
           "reliant.v1.StreamChatUpdatesRequest": "reliant/v1/streaming.proto",
+          "reliant.v1.StreamOrgUpdatesRequest": "reliant/v1/streaming.proto",
           "reliant.v1.StreamUserUpdatesRequest": "reliant/v1/streaming.proto",
           "reliant.v1.UserStreamEvent": "reliant/v1/streaming.proto",
           "reliant.v1.UserSyncInfo": "reliant/v1/streaming.proto",
@@ -33779,6 +33936,16 @@
             "AGENT_MESSAGE_KIND_FAILED",
             "AGENT_MESSAGE_KIND_HUMAN_MESSAGE",
             "AGENT_MESSAGE_KIND_RUN_MESSAGE"
+          ],
+          "reliant.v1.ChatActivity": [
+            "CHAT_ACTIVITY_IDLE",
+            "CHAT_ACTIVITY_RUNNING",
+            "CHAT_ACTIVITY_AWAITING_INPUT",
+            "CHAT_ACTIVITY_ERROR",
+            "CHAT_ACTIVITY_PAUSED",
+            "CHAT_ACTIVITY_WAITING_FOR_DAEMON",
+            "CHAT_ACTIVITY_QUEUED_FOR_MACHINE",
+            "CHAT_ACTIVITY_WAITING_FOR_USAGE_LIMIT"
           ],
           "reliant.v1.ChatUpdateType": [
             "CHAT_UPDATE_TYPE_UNSPECIFIED",
@@ -33845,6 +34012,13 @@
             "NODE_EXECUTION_STATUS_CANCELLED",
             "NODE_EXECUTION_STATUS_SKIPPED"
           ],
+          "reliant.v1.OrgUpdateType": [
+            "ORG_UPDATE_TYPE_UNSPECIFIED",
+            "ORG_UPDATE_TYPE_SHARED",
+            "ORG_UPDATE_TYPE_UNSHARED",
+            "ORG_UPDATE_TYPE_CHANGED",
+            "ORG_UPDATE_TYPE_DELETED"
+          ],
           "reliant.v1.StreamingState": [
             "STREAMING_STATE_UNSPECIFIED",
             "STREAMING_STATE_STREAMING",
@@ -33906,6 +34080,16 @@
             4,
             5,
             6
+          ],
+          "reliant.v1.ChatActivity": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7
           ],
           "reliant.v1.ChatUpdateType": [
             0,
@@ -33972,6 +34156,13 @@
             5,
             6
           ],
+          "reliant.v1.OrgUpdateType": [
+            0,
+            1,
+            2,
+            3,
+            4
+          ],
           "reliant.v1.StreamingState": [
             0,
             1,
@@ -34029,6 +34220,10 @@
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
             "GoName": "AgentMessageKind"
           },
+          "reliant.v1.ChatActivity": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "ChatActivity"
+          },
           "reliant.v1.ChatUpdateType": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
             "GoName": "ChatUpdateType"
@@ -34052,6 +34247,10 @@
           "reliant.v1.NodeExecutionStatus": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
             "GoName": "NodeExecutionStatus"
+          },
+          "reliant.v1.OrgUpdateType": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "OrgUpdateType"
           },
           "reliant.v1.StreamingState": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
@@ -37085,6 +37284,11 @@
             {
               "name": "last_oom_kill_at_ms",
               "kind": "int64"
+            },
+            {
+              "name": "health",
+              "kind": "message",
+              "type_name": "reliant.v1.MachineHealth"
             }
           ],
           "reliant.v1.DaemonKillProcessRequest": [
@@ -37735,6 +37939,25 @@
             }
           ],
           "reliant.v1.LocalModelRefresh": [],
+          "reliant.v1.MachineHealth": [
+            {
+              "name": "state",
+              "kind": "enum",
+              "type_name": "reliant.v1.MachineHealthState"
+            },
+            {
+              "name": "code",
+              "kind": "string"
+            },
+            {
+              "name": "reason",
+              "kind": "string"
+            },
+            {
+              "name": "since_ms",
+              "kind": "int64"
+            }
+          ],
           "reliant.v1.ProcessOutputChunkMessage": [
             {
               "name": "process_id",
@@ -38495,6 +38718,7 @@
           "reliant.v1.LocalModelInfo": "reliant/v1/tools_daemon.proto",
           "reliant.v1.LocalModelInventory": "reliant/v1/tools_daemon.proto",
           "reliant.v1.LocalModelRefresh": "reliant/v1/tools_daemon.proto",
+          "reliant.v1.MachineHealth": "reliant/v1/tools_daemon.proto",
           "reliant.v1.ProcessOutputChunkMessage": "reliant/v1/tools_daemon.proto",
           "reliant.v1.ProcessOutputSubscribeMessage": "reliant/v1/tools_daemon.proto",
           "reliant.v1.ProcessOutputUnsubscribeMessage": "reliant/v1/tools_daemon.proto",
@@ -38539,6 +38763,11 @@
             "FILE_CHANGE_TYPE_UPDATED",
             "FILE_CHANGE_TYPE_DELETED"
           ],
+          "reliant.v1.MachineHealthState": [
+            "MACHINE_HEALTH_STATE_UNSPECIFIED",
+            "MACHINE_HEALTH_STATE_OK",
+            "MACHINE_HEALTH_STATE_DEGRADED"
+          ],
           "reliant.v1.TerminalSessionEvent.EventType": [
             "EVENT_TYPE_UNSPECIFIED",
             "EVENT_TYPE_CREATED",
@@ -38558,6 +38787,11 @@
             2,
             3
           ],
+          "reliant.v1.MachineHealthState": [
+            0,
+            1,
+            2
+          ],
           "reliant.v1.TerminalSessionEvent.EventType": [
             0,
             1,
@@ -38573,6 +38807,10 @@
           "reliant.v1.FileChangeType": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
             "GoName": "FileChangeType"
+          },
+          "reliant.v1.MachineHealthState": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "MachineHealthState"
           },
           "reliant.v1.TerminalSessionEvent.EventType": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
@@ -51003,6 +51241,19 @@
       "candidates": [],
       "providers": [
         "StreamingHub"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Streaming",
+      "field": "Orgs",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/streaming.OrgFeedResolver",
+      "methods": [],
+      "candidates": [
+        "OrgResolver"
+      ],
+      "providers": [
+        "OrgResolver"
       ],
       "resolution": "composition_expression"
     },
