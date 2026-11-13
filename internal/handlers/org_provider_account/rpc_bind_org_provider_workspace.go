@@ -34,6 +34,9 @@ func (s *Service) BindOrgProviderWorkspace(
 	if err := s.gated(); err != nil {
 		return nil, err
 	}
+	if err := s.seatsGated(); err != nil {
+		return nil, err
+	}
 	// Only the caller's own accounts: another person's id is NotFound, as everywhere.
 	mine, err := s.deps.Store.ListProviderAccounts(ctx, userID)
 	if err != nil {
@@ -71,7 +74,17 @@ func (s *Service) BindOrgProviderWorkspace(
 	if !created {
 		activity.Skip(ctx) // already bound to this org
 	}
+	// Every live member's sign-in already in the workspace becomes the org's seat now; later
+	// sign-ins are matched as they connect. A failure here leaves the binding in place and
+	// those members are matched at their next sign-in, so it does not fail the bind.
+	seats := 0
+	if s.deps.Seats != nil {
+		if seats, err = s.deps.Seats.MatchWorkspace(ctx, w); err != nil {
+			s.deps.Logger.WarnContext(ctx, "matching a bound workspace's sign-ins to the org failed",
+				"org_id", orgID, "provider", w.Provider, "matched", seats, "error", err)
+		}
+	}
 	s.deps.Logger.InfoContext(ctx, "org provider workspace bound",
-		"org_id", orgID, "provider", w.Provider, "created", created, "user_id", userID)
+		"org_id", orgID, "provider", w.Provider, "created", created, "seats_matched", seats, "user_id", userID)
 	return connect.NewResponse(&pb.BindOrgProviderWorkspaceResponse{Workspace: workspaceProto(w), Created: created}), nil
 }

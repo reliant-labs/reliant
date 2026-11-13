@@ -22,6 +22,7 @@ import (
 	org_provider_account "github.com/reliant-labs/reliant/internal/handlers/org_provider_account"
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/orgs"
+	"github.com/reliant-labs/reliant/internal/seatmatch"
 )
 
 // These tests run the service over a real database (control-plane
@@ -76,10 +77,18 @@ type env struct {
 	enabled  bool
 	keysSeen []string
 	reject   bool
+	seats    *seatmatch.MockService
 }
 
 func newEnv(t *testing.T, enabled bool) *env {
 	t.Helper()
+	return newEnvWith(t, &configv1.OrgsConfig{ProviderAccountsEnabled: enabled, ProviderWorkspaceSeatsEnabled: enabled})
+}
+
+// newEnvWith is newEnv with the deployment's org rollout gates as given.
+func newEnvWith(t *testing.T, rollout *configv1.OrgsConfig) *env {
+	t.Helper()
+	enabled := rollout.GetProviderAccountsEnabled()
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 	r := &roles{role: map[string]map[string]string{}}
@@ -88,10 +97,13 @@ func newEnv(t *testing.T, enabled bool) *env {
 	r.set(org, memberID, orgs.RoleMember)
 	r.set(org, demoted, orgs.RoleAdmin)
 	r.set("org-2", strayID, orgs.RoleAdmin)
-	e := &env{t: t, repo: repo, roles: r, enabled: enabled}
+	e := &env{t: t, repo: repo, roles: r, enabled: enabled, seats: &seatmatch.MockService{
+		MatchWorkspaceFunc: func(context.Context, core.OrgProviderWorkspace) (int, error) { return 0, nil },
+	}}
 	e.svc = org_provider_account.NewTestOrgProviderAccount(t, org_provider_account.WithOrgProviderAccountDeps(org_provider_account.Deps{
 		Store:      repo,
-		OrgRollout: &configv1.OrgsConfig{ProviderAccountsEnabled: enabled},
+		OrgRollout: rollout,
+		Seats:      e.seats,
 		ValidateKey: func(_ context.Context, _ models.Family, key string) (bool, string) {
 			e.keysSeen = append(e.keysSeen, key)
 			if e.reject {
@@ -577,6 +589,11 @@ func TestBindOnlyFromTheCallersOwnTeamPlanAccount(t *testing.T) {
 	again, err := bind(f.ownTeam)
 	require.NoError(t, err)
 	assert.False(t, again.Created)
+	// Each bind matches the sign-ins already in the workspace to the org.
+	matched := e.seats.Calls("MatchWorkspace")
+	require.Len(t, matched, 2)
+	assert.Equal(t, core.OrgProviderWorkspace{OrgID: org, Provider: "claude", ExternalOrgID: "ws-new"},
+		withoutBindMeta(matched[0].Args[1].(core.OrgProviderWorkspace)))
 
 	// Another org's admin, in the same workspace, cannot make it pay for theirs.
 	e.roles.set("org-2", "zed", orgs.RoleAdmin)
@@ -595,6 +612,26 @@ func TestBindOnlyFromTheCallersOwnTeamPlanAccount(t *testing.T) {
 	assert.Equal(t, f.seat, list.Msg.Seats[0].AccountId)
 	assert.Equal(t, memberID, list.Msg.Seats[0].UserId)
 	assert.Equal(t, "ws-1", list.Msg.Seats[0].GetExternalOrgId())
+}
+
+func withoutBindMeta(w core.OrgProviderWorkspace) core.OrgProviderWorkspace {
+	return core.OrgProviderWorkspace{OrgID: w.OrgID, Provider: w.Provider, ExternalOrgID: w.ExternalOrgID}
+}
+
+// Binding also needs orgs.provider_workspace_seats_enabled: a release a rollback could return to
+// may not honour a seat's org yet. Adding an org's own API key does not.
+func TestBindNeedsTheSeatsGate(t *testing.T) {
+	t.Parallel()
+	e := newEnvWith(t, &configv1.OrgsConfig{ProviderAccountsEnabled: true})
+	f := e.seed()
+	ctx := e.person(adminID)
+	_, err := e.svc.BindOrgProviderWorkspace(ctx, connect.NewRequest(&pb.BindOrgProviderWorkspaceRequest{OrgId: org, AccountId: f.ownTeam}))
+	requireRefused(t, err, connect.CodeFailedPrecondition, "")
+	assert.Zero(t, e.seats.CallCount("MatchWorkspace"))
+	_, err = e.svc.AddOrgProviderAPIKey(ctx, connect.NewRequest(&pb.AddOrgProviderAPIKeyRequest{
+		OrgId: org, Provider: "openai", Label: "Ops", ApiKey: "sk-openai-org-seats-gate-0001", Access: pb.OrgProviderAccountAccess_ORG_PROVIDER_ACCOUNT_ACCESS_MEMBERS,
+	}))
+	require.NoError(t, err, "org keys need only provider_accounts_enabled")
 }
 
 // A grant names a live member of the org; anyone else is refused before anything is written.

@@ -101,6 +101,17 @@ func (s *Service) gated() error {
 		"adding organization AI accounts is not enabled on this deployment"))
 }
 
+// seatsGated refuses a bind while the deployment has not enabled org-paid seats
+// (orgs.provider_workspace_seats_enabled): a release a rollback could return to may not honour
+// a seat's org yet.
+func (s *Service) seatsGated() error {
+	if s.deps.OrgRollout != nil && s.deps.OrgRollout.GetProviderWorkspaceSeatsEnabled() {
+		return nil
+	}
+	return svcerr.Wrap(svcerr.FailedPrecondition(
+		"paying for members' provider workspace seats is not enabled on this deployment"))
+}
+
 // label validates an org account's label: required, at most maxLabelRunes.
 func label(raw string) (string, error) {
 	l := strings.TrimSpace(raw)

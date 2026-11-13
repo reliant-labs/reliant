@@ -71,6 +71,7 @@
         "Run",
         "Scenario",
         "ScheduleSyncer",
+        "Seatmatch",
         "Settings",
         "Sharing",
         "Streaming",
@@ -51680,6 +51681,43 @@
       "implementation_candidates": []
     },
     {
+      "id": "Seatmatch",
+      "name": "Seatmatch",
+      "kind": "component",
+      "type": "github.com/reliant-labs/reliant/internal/seatmatch.Service",
+      "source": {
+        "path": "internal/seatmatch/service.go",
+        "symbol": "New"
+      },
+      "methods": [],
+      "implementation_candidates": [
+        {
+          "type": "*github.com/reliant-labs/reliant/internal/seatmatch.MockService",
+          "source": {
+            "path": "internal/seatmatch/mock_gen.go",
+            "symbol": "MockService"
+          },
+          "methods": []
+        },
+        {
+          "type": "*github.com/reliant-labs/reliant/internal/seatmatch.forgeMiddlewareService",
+          "source": {
+            "path": "internal/seatmatch/middleware_gen.go",
+            "symbol": "forgeMiddlewareService"
+          },
+          "methods": []
+        },
+        {
+          "type": "*github.com/reliant-labs/reliant/internal/seatmatch.service",
+          "source": {
+            "path": "internal/seatmatch/service.go",
+            "symbol": "service"
+          },
+          "methods": []
+        }
+      ]
+    },
+    {
       "id": "Settings",
       "name": "Settings",
       "kind": "component",
@@ -52896,6 +52934,19 @@
     },
     {
       "consumer": "OrgProviderAccount",
+      "field": "Seats",
+      "interface": "github.com/reliant-labs/reliant/internal/seatmatch.Service",
+      "methods": [],
+      "candidates": [
+        "Seatmatch"
+      ],
+      "providers": [
+        "Seatmatch"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "OrgProviderAccount",
       "field": "Store",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/org_provider_account.Store",
       "methods": [],
@@ -53220,6 +53271,41 @@
       "resolution": "composition_expression"
     },
     {
+      "consumer": "Seatmatch",
+      "field": "Members",
+      "interface": "github.com/reliant-labs/reliant/internal/seatmatch.Members",
+      "methods": [],
+      "candidates": [
+        "OrgResolver"
+      ],
+      "providers": [
+        "OrgResolver"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Seatmatch",
+      "field": "Rollout",
+      "interface": "github.com/reliant-labs/reliant/internal/seatmatch.Rollout",
+      "methods": [],
+      "candidates": [],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "Seatmatch",
+      "field": "Store",
+      "interface": "github.com/reliant-labs/reliant/internal/seatmatch.Store",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
       "consumer": "Settings",
       "field": "ChatWaker",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/settings.ChatWaker",
@@ -53252,6 +53338,19 @@
       ],
       "providers": [
         "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Settings",
+      "field": "Seats",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/settings.SeatMatcher",
+      "methods": [],
+      "candidates": [
+        "Seatmatch"
+      ],
+      "providers": [
+        "Seatmatch"
       ],
       "resolution": "composition_expression"
     },
@@ -54023,6 +54122,14 @@
       "component": "Project.ControlPlane",
       "source": {
         "path": "internal/handlers/project/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "Seatmatch.Rollout",
+      "source": {
+        "path": "internal/seatmatch/service.go",
         "symbol": "New"
       }
     },

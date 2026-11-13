@@ -95,6 +95,37 @@ func InsertOrgProviderWorkspace(ctx context.Context, db orm.Context, w core.OrgP
 	return orgProviderWorkspaceToCore(cur), false, nil
 }
 
+// GetProviderWorkspaceBinding returns the binding of provider's workspace externalOrgID (one org
+// holds it at most: org_provider_workspaces_one_org), or nil when it is not bound.
+func GetProviderWorkspaceBinding(ctx context.Context, db orm.Context, provider, externalOrgID string) (*core.OrgProviderWorkspace, error) {
+	if provider == "" || externalOrgID == "" {
+		return nil, nil
+	}
+	rows, err := ListOrgProviderWorkspace(ctx, db, orm.WhereEq(OrgProviderWorkspaceFieldProvider, provider),
+		orm.WhereEq(OrgProviderWorkspaceFieldExternalOrgID, externalOrgID), orm.WithLimit(1))
+	if err != nil || len(rows) == 0 {
+		return nil, err
+	}
+	w := orgProviderWorkspaceToCore(rows[0])
+	return &w, nil
+}
+
+// LockOrgProviderWorkspaceShared reports whether orgID holds the binding, holding a share lock on
+// it until the caller's transaction ends: an unbind (which deletes the row) waits for the
+// caller, and the caller waits for an unbind in flight and then finds no binding. So a seat the
+// caller attributes under the lock is never left behind by an unbind that cleared its seats first.
+func LockOrgProviderWorkspaceShared(ctx context.Context, db orm.Context, orgID, provider, externalOrgID string) (bool, error) {
+	// A row lock cannot go with an aggregate, so this reads the row itself.
+	var ids []string
+	err := db.Bun().NewSelect().Model((*OrgProviderWorkspace)(nil)).Column("org_id").
+		Where("org_id = ?", orgID).Where("provider = ?", provider).Where("external_org_id = ?", externalOrgID).
+		For("SHARE").Scan(ctx, &ids)
+	if err != nil {
+		return false, err
+	}
+	return len(ids) > 0, nil
+}
+
 // DeleteOrgProviderWorkspace removes one of orgID's bindings and reports whether there was one.
 func DeleteOrgProviderWorkspace(ctx context.Context, db orm.Context, orgID, provider, externalOrgID string) (bool, error) {
 	res, err := db.Bun().NewDelete().Model((*OrgProviderWorkspace)(nil)).

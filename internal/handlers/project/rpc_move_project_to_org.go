@@ -119,6 +119,11 @@ func (s *Service) MoveProjectToOrg(
 // moveWait for it to commit or stop, answering the move as it is then.
 func (s *Service) followMove(ctx context.Context, move *core.ProjectOrgMove) (*connect.Response[pb.MoveProjectToOrgResponse], error) {
 	if move.State.Open() {
+		// MoveProjectToOrg refuses before recording a move when Moves is nil;
+		// a move already recorded cannot be started without it either.
+		if s.deps.Moves == nil {
+			return nil, svcerr.Unavailable("moving projects between organizations is not available")
+		}
 		if err := s.deps.Moves.StartProjectOrgMove(ctx, move.ID); err != nil {
 			return nil, svcerr.WrapOr(err, svcerr.Unavailable("could not start the move; try again"))
 		}

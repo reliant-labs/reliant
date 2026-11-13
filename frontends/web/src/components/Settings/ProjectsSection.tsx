@@ -9,12 +9,14 @@ import { openAddProject } from "@/store/addProjectDialogStore";
 import { logger } from "@/lib/logger";
 import { toast } from "@/lib/toast-manager";
 import { useProjects } from "@/hooks/project-queries";
+import { useActiveOrg } from "@/hooks/useOrgs";
 import { useProjectStore, type Project } from "@/store/projectStore";
 
 import { RemoveProjectModal } from "../Projects/RemoveProjectModal";
 import { ADD_PROJECT_LABEL, NO_PROJECTS_COPY, PROJECT_DEFINITION } from "../Projects/projectCopy";
 import { SettingsPageHeader } from "./SettingsPageHeader";
 import { CurrentProjectDetails } from "./projects/CurrentProjectDetails";
+import { MoveProjectOrgDialog } from "./projects/MoveProjectOrgDialog";
 import { ProjectMachines } from "./projects/ProjectMachines";
 import { ProjectsTable } from "./projects/ProjectsTable";
 import { projectMatchesQuery, sortProjectsForSettings } from "./projects/projectSource";
@@ -44,6 +46,9 @@ export function ProjectsSection() {
   const [pendingRemoval, setPendingRemoval] = useState<Project | null>(null);
   const [isRemoving, setIsRemoving] = useState(false);
   const [openingProjectId, setOpeningProjectId] = useState<string | null>(null);
+  const [movingProject, setMovingProject] = useState<Project | null>(null);
+  // Moving a project needs a second org to move it to.
+  const { canSwitch: canSwitchOrg } = useActiveOrg();
 
   const sortedProjects = useMemo(
     () => sortProjectsForSettings(projects, currentProject?.id),
@@ -214,7 +219,38 @@ export function ProjectsSection() {
             }
           />
         )}
+
+        {currentProject && canSwitchOrg && (
+          <section
+            aria-labelledby="settings-projects-danger"
+            className="flex flex-col gap-3 rounded-lg border border-danger-border px-4 py-3"
+            data-testid="settings-projects-danger-zone"
+          >
+            <h2 id="settings-projects-danger" className="text-sm font-semibold text-foreground">
+              Danger zone
+            </h2>
+            <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-foreground">Move {currentProject.name} to another organization</p>
+                <p className="text-xs text-muted-foreground">
+                  Its chats, runs and automations go with it, and its next run bills the new organization.
+                </p>
+              </div>
+              <Button variant="danger" size="sm" onClick={() => setMovingProject(currentProject)}>
+                Move project…
+              </Button>
+            </div>
+          </section>
+        )}
       </div>
+
+      {movingProject && (
+        <MoveProjectOrgDialog
+          project={movingProject}
+          isOpen={!!movingProject}
+          onClose={() => setMovingProject(null)}
+        />
+      )}
 
       <RemoveProjectModal
         isOpen={!!pendingRemoval}
