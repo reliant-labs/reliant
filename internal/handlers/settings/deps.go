@@ -15,6 +15,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
+	"github.com/reliant-labs/reliant/internal/seatmatch"
 )
 
 // Repository is everything the settings handlers read and write.
@@ -51,4 +52,10 @@ type Repository interface {
 // a provider; *chat.Service satisfies it.
 type ChatWaker interface {
 	WakeUserChats(ctx context.Context, userID, why string) int
+}
+
+// SeatMatcher brings a sign-in in line with the org workspace bindings once it is connected
+// or signed in to again; seatmatch.Service satisfies it.
+type SeatMatcher interface {
+	MatchAccount(ctx context.Context, userID, accountID string) (seatmatch.Outcome, error)
 }

@@ -94,17 +94,34 @@ func (r *Repo) ListOrgSeats(ctx context.Context, orgID string) ([]core.ProviderA
 	return seats, nil
 }
 
-// ReleaseOrgSeat makes one seat orgID pays for the member's personal account again.
+// ReleaseOrgSeat makes one seat orgID pays for the member's personal account again, and records
+// that releasedBy released it, so the binding matcher never makes it the org's seat again (§6).
 // core.ErrOrgSeatNotFound when the account is not one of the org's seats.
-func (r *Repo) ReleaseOrgSeat(ctx context.Context, orgID, accountID string) error {
-	released, err := store.ClearProviderAccountAttribution(ctx, r.ORM(), orgID, accountID, seatSources, r.accounts.now())
-	if err != nil {
-		return err
-	}
-	if !released {
-		return core.ErrOrgSeatNotFound
-	}
-	return nil
+func (r *Repo) ReleaseOrgSeat(ctx context.Context, orgID, accountID, releasedBy string) error {
+	return r.accounts.ReleaseOrgSeat(ctx, orgID, accountID, releasedBy)
+}
+
+// ProviderWorkspaceBinding returns the binding of provider's workspace externalOrgID, or nil.
+func (r *Repo) ProviderWorkspaceBinding(ctx context.Context, provider, externalOrgID string) (*core.OrgProviderWorkspace, error) {
+	return store.GetProviderWorkspaceBinding(ctx, r.ORM(), provider, externalOrgID)
+}
+
+// ListWorkspaceSignIns returns every person's sign-in in provider's workspace externalOrgID.
+func (r *Repo) ListWorkspaceSignIns(ctx context.Context, provider, externalOrgID string) ([]core.ProviderAccount, error) {
+	return store.ListWorkspaceSignIns(ctx, r.ORM(), provider, externalOrgID)
+}
+
+// AttributeWorkspaceSeat makes accountID, a person's sign-in in w, w's org's seat while the
+// binding exists; reports whether it did (seatmatch).
+func (r *Repo) AttributeWorkspaceSeat(ctx context.Context, w core.OrgProviderWorkspace, accountID string) (bool, error) {
+	return r.accounts.AttributeWorkspaceSeat(ctx, w, accountID)
+}
+
+// ClearWorkspaceSeat makes accountID, a seat orgID's binding matched, the person's own again;
+// reports whether it did (seatmatch).
+func (r *Repo) ClearWorkspaceSeat(ctx context.Context, orgID, accountID string) (bool, error) {
+	return store.ClearProviderAccountAttribution(ctx, r.ORM(), orgID, accountID,
+		[]string{core.AttributionWorkspace}, r.accounts.now())
 }
 
 // seatSources are the attribution sources of a seat: a person's sign-in the org pays for. The
@@ -203,7 +220,45 @@ func (s *accountStore) UnbindOrgProviderWorkspace(ctx context.Context, orgID, pr
 		if !deleted {
 			return core.ErrProviderWorkspaceNotFound
 		}
-		_, err = store.ClearWorkspaceAttributions(ctx, s.db, orgID, provider, externalOrgID, s.now())
+		if _, err := store.ClearWorkspaceAttributions(ctx, s.db, orgID, provider, externalOrgID, s.now()); err != nil {
+			return err
+		}
+		// The org's releases in it go too, so binding it again starts afresh. Accounts before
+		// releases, the order ReleaseOrgSeat locks them in.
+		_, err = store.DeleteWorkspaceSeatReleases(ctx, s.db, orgID, provider, externalOrgID)
 		return err
+	})
+}
+
+// AttributeWorkspaceSeat attributes accountID to w's org under a share lock on the binding, so an
+// unbind either sees the new seat (and clears it) or has already removed the binding (and this
+// attributes nothing).
+func (s *accountStore) AttributeWorkspaceSeat(ctx context.Context, w core.OrgProviderWorkspace, accountID string) (bool, error) {
+	var done bool
+	err := s.inTx(ctx, func(ctx context.Context) error {
+		bound, err := store.LockOrgProviderWorkspaceShared(ctx, s.db, w.OrgID, w.Provider, w.ExternalOrgID)
+		if err != nil || !bound {
+			return err
+		}
+		done, err = store.AttributeWorkspaceSeat(ctx, s.db, w, accountID, s.now())
+		return err
+	})
+	return done, err
+}
+
+// ReleaseOrgSeat clears one of orgID's seats and records the release in one transaction.
+func (s *accountStore) ReleaseOrgSeat(ctx context.Context, orgID, accountID, releasedBy string) error {
+	if releasedBy == "" {
+		return errors.New("a release records who made it")
+	}
+	return s.inTx(ctx, func(ctx context.Context) error {
+		released, err := store.ClearProviderAccountAttribution(ctx, s.db, orgID, accountID, seatSources, s.now())
+		if err != nil {
+			return err
+		}
+		if !released {
+			return core.ErrOrgSeatNotFound
+		}
+		return store.InsertOrgSeatRelease(ctx, s.db, orgID, accountID, releasedBy, s.now())
 	})
 }

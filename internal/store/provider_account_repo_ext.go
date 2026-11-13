@@ -585,6 +585,57 @@ func ClearProviderAccountAttribution(ctx context.Context, db orm.Context, orgID,
 	return n > 0, err
 }
 
+// providerWorkspaceIDOf is the SQL of a sign-in's workspace id, core.ProviderWorkspaceID's rule,
+// over the provider_accounts row aliased alias ("" for the bare table). Callers also require
+// auth_kind 'oauth', which the rule needs.
+func providerWorkspaceIDOf(alias string) string {
+	p := ""
+	if alias != "" {
+		p = alias + "."
+	}
+	return "(CASE " + p + "provider WHEN 'claude' THEN " + p + "organization_id WHEN 'codex' THEN " + p + "external_account_id END)"
+}
+
+// ListWorkspaceSignIns returns every person's sign-in in provider's workspace externalOrgID,
+// metadata only, by (user, priority).
+func ListWorkspaceSignIns(ctx context.Context, db orm.Context, provider, externalOrgID string) ([]core.ProviderAccount, error) {
+	if provider == "" || externalOrgID == "" {
+		return nil, nil
+	}
+	var rows []*ProviderAccount
+	if err := db.Bun().NewSelect().Model(&rows).ExcludeColumn(providerAccountSealedColumns...).
+		Where("owner_kind = ?", core.AccountOwnerUser).Where("auth_kind = ?", string(core.AuthKindOAuth)).
+		Where("provider = ?", provider).Where(providerWorkspaceIDOf("")+" = ?", externalOrgID).
+		Order("user_id", "priority").Scan(ctx); err != nil {
+		return nil, err
+	}
+	out := make([]core.ProviderAccount, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, providerAccountToCore(r))
+	}
+	return out, nil
+}
+
+// AttributeWorkspaceSeat makes accountID, a person's sign-in in w, w's org's seat (source
+// 'workspace') and reports whether it did. It does nothing to an account that is attributed
+// already, is no longer in w, or w's org released (org_seat_releases). That the binding still
+// exists is the caller's to hold (LockOrgProviderWorkspaceShared, in the same transaction).
+func AttributeWorkspaceSeat(ctx context.Context, db orm.Context, w core.OrgProviderWorkspace, accountID string, now time.Time) (bool, error) {
+	res, err := db.Bun().NewRaw(`UPDATE provider_accounts SET
+			attributed_org_id = ?0, attribution_source = ?4, updated_at = ?5
+		WHERE id = ?3 AND owner_kind = ?6 AND auth_kind = ?7 AND provider = ?1
+		  AND `+providerWorkspaceIDOf("")+` = ?2
+		  AND attributed_org_id IS NULL
+		  AND NOT EXISTS (SELECT 1 FROM org_seat_releases r WHERE r.org_id = ?0 AND r.account_id = provider_accounts.id)`,
+		w.OrgID, w.Provider, w.ExternalOrgID, accountID, core.AttributionWorkspace, now.UTC(),
+		core.AccountOwnerUser, string(core.AuthKindOAuth)).Exec(ctx)
+	if err != nil {
+		return false, err
+	}
+	n, err := res.RowsAffected()
+	return n > 0, err
+}
+
 // ClearWorkspaceAttributions makes every sign-in a binding of orgID matched (attribution source
 // 'workspace', in workspace externalOrgID of provider) a personal account again, and returns how
 // many it changed. Which column holds a sign-in's workspace is core.ProviderWorkspaceID's rule.
@@ -592,7 +643,7 @@ func ClearWorkspaceAttributions(ctx context.Context, db orm.Context, orgID, prov
 	res, err := db.Bun().NewRaw(`UPDATE provider_accounts SET
 			attributed_org_id = NULL, attribution_source = NULL, updated_at = ?3
 		WHERE attributed_org_id = ?0 AND attribution_source = ?4 AND provider = ?1 AND auth_kind = ?5
-		  AND (CASE provider WHEN 'claude' THEN organization_id WHEN 'codex' THEN external_account_id END) = ?2`,
+		  AND `+providerWorkspaceIDOf("")+` = ?2`,
 		orgID, provider, externalOrgID, now.UTC(), core.AttributionWorkspace, string(core.AuthKindOAuth)).Exec(ctx)
 	if err != nil {
 		return 0, err

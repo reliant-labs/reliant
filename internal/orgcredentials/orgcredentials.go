@@ -201,7 +201,7 @@ func (s *Sweeper) SweepGoneOrgs(ctx context.Context) (core.OrgCredentialsPurged,
 					"provider_accounts", purged.ProviderAccounts, "grants", purged.Grants,
 					"workspaces", purged.Workspaces, "seats_released", purged.Attributions,
 					"managed_keys", purged.ManagedKeys, "connections", purged.Connections,
-					"vault_keys", purged.VaultKeys)
+					"vault_keys", purged.VaultKeys, "seat_release_records", purged.SeatReleases)
 			}
 			add(&total, purged)
 		}
@@ -222,6 +222,7 @@ func add(t *core.OrgCredentialsPurged, p core.OrgCredentialsPurged) {
 	t.ConnectionEvents += p.ConnectionEvents
 	t.OAuthFlows += p.OAuthFlows
 	t.VaultKeys += p.VaultKeys
+	t.SeatReleases += p.SeatReleases
 }
 
 // Run sweeps every interval until ctx ends. A failed sweep is logged and
