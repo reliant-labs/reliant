@@ -77,6 +77,11 @@ type Service interface {
 	// are gone, and since when. An org not reported is live or unknown. A
 	// control plane that predates the rpc answers ErrUnsupported.
 	ResolveGoneOrgs(ctx context.Context, orgIDs []string) ([]GoneOrg, error)
+	// ResolveOrgPolicy returns orgID's admin policy document and its
+	// version: version 0 and the empty document when it has none. An error
+	// is never "no policy". A control plane that predates the rpc answers
+	// ErrUnsupported.
+	ResolveOrgPolicy(ctx context.Context, orgID string) (OrgPolicy, error)
 }
 
 // Introspector is what a validator needs. *Client and *CachedIntrospector

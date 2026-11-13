@@ -88,6 +88,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm/keyvalidate"
 	"github.com/reliant-labs/reliant/internal/llm/providerusage"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
+	"github.com/reliant-labs/reliant/internal/orgpolicy"
 	"github.com/reliant-labs/reliant/internal/orgs"
 	"github.com/reliant-labs/reliant/internal/queueddelivery"
 	"github.com/reliant-labs/reliant/internal/runs"
@@ -151,6 +152,12 @@ func (g *Graph) newOrgResolver() (*orgs.Resolver, error) {
 	})
 }
 
+func (g *Graph) newOrgPolicyResolver() (*orgpolicy.Resolver, error) {
+	return NewOrgPolicyResolver(OrgPolicyResolverDeps{
+		Authority: g.TokenAuthority(),
+	})
+}
+
 func (g *Graph) newTLSFiles() (*TLSFiles, error) {
 	return NewTLSFiles(TLSFilesDeps{
 		TLS:     g.ServerProcessConfig.GetTls(),
@@ -198,6 +205,8 @@ func (g *Graph) newDaemonListener() (*grpcserver.DaemonListener, error) {
 		Logger:  g.Log,
 		// Every request's context carries membership (authz).
 		Membership: g.OrgResolver(),
+		// ... and the org policy resolver beside it (orgpolicy).
+		Policies: g.OrgPolicyResolver(),
 	})
 }
 
@@ -579,7 +588,9 @@ func (g *Graph) newTemporalWorker() (*workersetup.Worker, error) {
 		NATS:                g.NATSConn(),
 		// Every activity's context carries membership (authz).
 		Membership: g.OrgResolver(),
-		Triggers:   g.WorkerTrigger(),
+		// ... and the org policy resolver beside it (orgpolicy).
+		Policies: g.OrgPolicyResolver(),
+		Triggers: g.WorkerTrigger(),
 	})
 }
 
@@ -674,6 +685,8 @@ func (g *Graph) newAPIListener() (*grpcserver.APIListener, error) {
 		Logger: g.Log,
 		// Every request's context carries membership (authz).
 		Membership: g.OrgResolver(),
+		// ... and the org policy resolver beside it (orgpolicy).
+		Policies: g.OrgPolicyResolver(),
 	})
 }
 

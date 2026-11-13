@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"connectrpc.com/connect"
 
@@ -30,6 +31,12 @@ type Store interface {
 	ListThreadAssignments(ctx context.Context, threadID string) ([]core.Assignment, error)
 	LatestServingAccount(ctx context.Context, threadID string) (string, error)
 	EmitUserRefetch(ctx context.Context, userID string, refetchType db.RefetchType, opts db.RefetchOpts) error
+	// A chat's question before it moves from its org's accounts to the
+	// person's own, and the person's per-org preference (org-provider-accounts §10).
+	GetChatPersonalFunding(ctx context.Context, chatID string) (*core.PersonalFunding, error)
+	AnswerPersonalFunding(ctx context.Context, chatID, userID, state string, now time.Time) (*core.PersonalFunding, error)
+	GetSettingValue(ctx context.Context, userID, key string) (string, bool)
+	SetString(ctx context.Context, userID string, projectID *string, key, value string) error
 }
 
 // Deps holds dependencies for the provider_account service. The rpc methods on *Service are

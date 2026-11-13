@@ -121,6 +121,12 @@ type Request struct {
 	// ref for another driver is ignored.
 	Preferred string
 	Mode      RoutingMode
+	// Upgrade lets a thread whose account is usable move up to a better tier
+	// that has a usable account (ReasonOrgAvailable). Set at a turn start
+	// only, never between the tool steps of one turn (control-plane
+	// docs/design/org-provider-accounts.md §4.5, D6): the move costs one
+	// prompt-cache miss.
+	Upgrade bool
 }
 
 // Why a thread got the account it did (Result.Reason).
@@ -130,6 +136,9 @@ const (
 	ReasonRemoved  = "removed"  // its account is gone, or unusable for a reason the caller did not report
 	ReasonUnserved = "unserved" // its account's catalog does not include the model
 	ReasonPinned   = "pinned"   // the caller's preferred account
+	// ReasonOrgAvailable: a better tier (the org's accounts, by default) can
+	// serve the thread again, and the thread moved up at a turn start.
+	ReasonOrgAvailable = "org_available"
 )
 
 // Result is the account chosen for a thread.
