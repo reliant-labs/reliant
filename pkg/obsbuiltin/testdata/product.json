@@ -1,0 +1,284 @@
+{
+  "version": "forge.dashboards/v1",
+  "sections": [
+    {
+      "id": "glance",
+      "title": "At a glance",
+      "description": "Visits and how deep they go: page views, visits, views per visit, bounce rate, visit duration and every product event. Each figure opens beside its change against the previous period."
+    },
+    {
+      "id": "pages",
+      "title": "Pages",
+      "description": "The routes people view, the ones visits start on and the ones they leave from."
+    },
+    {
+      "id": "events",
+      "title": "Goals and events",
+      "description": "The conversions declared in forge.Analytics, every product event by name, and the records people write through the generated CRUD handlers."
+    },
+    {
+      "id": "funnels",
+      "title": "Funnels",
+      "description": "Visit to sign-up to activation, built in, and every forge.Funnel counted by visitor or person."
+    },
+    {
+      "id": "experiments",
+      "title": "Experiments",
+      "description": "Feature-flag exposures (flag_evaluated, from trackExposure or the OpenFeature hook) and how each variant's people went on to activate. Descriptive, not a significance test; empty until an exposure is recorded."
+    }
+  ],
+  "id": "product",
+  "title": "shop: product",
+  "description": "What people do in the product: visits and page views (cookieless, by the platform's daily visitor hash), the pages visits start and end on, declared goals, every product event, the records written through the generated CRUD handlers, the built-in visit → sign-up → activation funnel, declared funnels and flag exposures. Hosted environments only: a local forge env up has no product_events table.",
+  "group": "product",
+  "replaces": [
+    "usage"
+  ],
+  "filters": [
+    {
+      "id": "env",
+      "label": "deployment.environment.name",
+      "field": "deployment.environment.name"
+    }
+  ],
+  "defaultRange": "7d",
+  "defaultCompare": "period",
+  "panels": [
+    {
+      "section": "glance",
+      "id": "pageviews",
+      "title": "Page views",
+      "description": "page_viewed events in the range. The trend is each UTC day's.",
+      "kind": "sql",
+      "sql": "WITH web AS (\n  SELECT Timestamp AS ts, EnvId, DayVisitor AS h, UserId, EventName, Props, Country, DeviceType, Browser, OS\n  FROM product_events\n  WHERE Timestamp \u003e= {from:DateTime64(9)} AND Timestamp \u003c {to:DateTime64(9)} AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, EnvId)) AND Client IN ('web', 'landing') AND DayVisitor != '' AND DeviceType != 'bot'\n    AND EventName NOT IN ('auth_signed_in', 'auth_signed_out', 'flag_evaluated', 'page_engaged', 'auth_accounts')),\nvisits AS (\n  SELECT EnvId, h, vix, min(ts) AS start, max(ts) AS stop,\n         countIf(EventName = 'page_viewed') AS views,\n         countIf(EventName != 'page_viewed') AS actions,\n         argMinIf(Props['route'], ts, EventName = 'page_viewed') AS entry_route,\n         argMaxIf(Props['route'], ts, EventName = 'page_viewed') AS exit_route,\n         argMinIf(lower(Props['referrer_host']), ts, EventName = 'page_viewed') AS ref,\n         argMinIf(Props['referrer_path'], ts, EventName = 'page_viewed') AS ref_path,\n         argMinIf(lower(if(Props['utm_source'] != '', Props['utm_source'], Props['ref'])), ts, EventName = 'page_viewed') AS src,\n         argMinIf(lower(Props['utm_medium']), ts, EventName = 'page_viewed') AS med,\n         argMinIf(Props['utm_campaign'], ts, EventName = 'page_viewed') AS campaign,\n         argMinIf(Props['utm_term'], ts, EventName = 'page_viewed') AS term,\n         argMinIf(Props['utm_content'], ts, EventName = 'page_viewed') AS content,\n         argMinIf(Props['click_id'], ts, EventName = 'page_viewed') AS click,\n         anyIf(Country, Country != '') AS country, anyIf(DeviceType, DeviceType != '') AS device,\n         anyIf(Browser, Browser != '') AS browser, anyIf(OS, OS != '') AS os\n  FROM (\n    SELECT *, sum(brk) OVER (PARTITION BY EnvId, h ORDER BY ts ROWS UNBOUNDED PRECEDING) AS vix\n    FROM (\n      SELECT *, dateDiff('second',\n               lagInFrame(ts, 1, ts - INTERVAL 1 HOUR) OVER (PARTITION BY EnvId, h ORDER BY ts\n                                                         ROWS BETWEEN 1 PRECEDING AND CURRENT ROW), ts) \u003e 1800 AS brk\n      FROM web))\n  GROUP BY EnvId, h, vix)\nSELECT sum(views) AS \"Page views\" FROM visits",
+      "trendSql": "WITH web AS (\n  SELECT Timestamp AS ts, EnvId, DayVisitor AS h, UserId, EventName, Props, Country, DeviceType, Browser, OS\n  FROM product_events\n  WHERE Timestamp \u003e= {from:DateTime64(9)} AND Timestamp \u003c {to:DateTime64(9)} AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, EnvId)) AND Client IN ('web', 'landing') AND DayVisitor != '' AND DeviceType != 'bot'\n    AND EventName NOT IN ('auth_signed_in', 'auth_signed_out', 'flag_evaluated', 'page_engaged', 'auth_accounts')),\nvisits AS (\n  SELECT EnvId, h, vix, min(ts) AS start, max(ts) AS stop,\n         countIf(EventName = 'page_viewed') AS views,\n         countIf(EventName != 'page_viewed') AS actions,\n         argMinIf(Props['route'], ts, EventName = 'page_viewed') AS entry_route,\n         argMaxIf(Props['route'], ts, EventName = 'page_viewed') AS exit_route,\n         argMinIf(lower(Props['referrer_host']), ts, EventName = 'page_viewed') AS ref,\n         argMinIf(Props['referrer_path'], ts, EventName = 'page_viewed') AS ref_path,\n         argMinIf(lower(if(Props['utm_source'] != '', Props['utm_source'], Props['ref'])), ts, EventName = 'page_viewed') AS src,\n         argMinIf(lower(Props['utm_medium']), ts, EventName = 'page_viewed') AS med,\n         argMinIf(Props['utm_campaign'], ts, EventName = 'page_viewed') AS campaign,\n         argMinIf(Props['utm_term'], ts, EventName = 'page_viewed') AS term,\n         argMinIf(Props['utm_content'], ts, EventName = 'page_viewed') AS content,\n         argMinIf(Props['click_id'], ts, EventName = 'page_viewed') AS click,\n         anyIf(Country, Country != '') AS country, anyIf(DeviceType, DeviceType != '') AS device,\n         anyIf(Browser, Browser != '') AS browser, anyIf(OS, OS != '') AS os\n  FROM (\n    SELECT *, sum(brk) OVER (PARTITION BY EnvId, h ORDER BY ts ROWS UNBOUNDED PRECEDING) AS vix\n    FROM (\n      SELECT *, dateDiff('second',\n               lagInFrame(ts, 1, ts - INTERVAL 1 HOUR) OVER (PARTITION BY EnvId, h ORDER BY ts\n                                                         ROWS BETWEEN 1 PRECEDING AND CURRENT ROW), ts) \u003e 1800 AS brk\n      FROM web))\n  GROUP BY EnvId, h, vix)\nSELECT toDate(start) AS day, sum(views) AS \"Page views\" FROM visits GROUP BY day ORDER BY day",
+      "display": {
+        "color": "cyan"
+      },
+      "unit": "count",
+      "width": 6,
+      "height": 4
+    },
+    {
+      "section": "glance",
+      "id": "visits",
+      "title": "Visits",
+      "description": "Visits in the range: one visitor's events with gaps of 30 minutes or less. The trend is each UTC day's.",
+      "kind": "sql",
+      "sql": "WITH web AS (\n  SELECT Timestamp AS ts, EnvId, DayVisitor AS h, UserId, EventName, Props, Country, DeviceType, Browser, OS\n  FROM product_events\n  WHERE Timestamp \u003e= {from:DateTime64(9)} AND Timestamp \u003c {to:DateTime64(9)} AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, EnvId)) AND Client IN ('web', 'landing') AND DayVisitor != '' AND DeviceType != 'bot'\n    AND EventName NOT IN ('auth_signed_in', 'auth_signed_out', 'flag_evaluated', 'page_engaged', 'auth_accounts')),\nvisits AS (\n  SELECT EnvId, h, vix, min(ts) AS start, max(ts) AS stop,\n         countIf(EventName = 'page_viewed') AS views,\n         countIf(EventName != 'page_viewed') AS actions,\n         argMinIf(Props['route'], ts, EventName = 'page_viewed') AS entry_route,\n         argMaxIf(Props['route'], ts, EventName = 'page_viewed') AS exit_route,\n         argMinIf(lower(Props['referrer_host']), ts, EventName = 'page_viewed') AS ref,\n         argMinIf(Props['referrer_path'], ts, EventName = 'page_viewed') AS ref_path,\n         argMinIf(lower(if(Props['utm_source'] != '', Props['utm_source'], Props['ref'])), ts, EventName = 'page_viewed') AS src,\n         argMinIf(lower(Props['utm_medium']), ts, EventName = 'page_viewed') AS med,\n         argMinIf(Props['utm_campaign'], ts, EventName = 'page_viewed') AS campaign,\n         argMinIf(Props['utm_term'], ts, EventName = 'page_viewed') AS term,\n         argMinIf(Props['utm_content'], ts, EventName = 'page_viewed') AS content,\n         argMinIf(Props['click_id'], ts, EventName = 'page_viewed') AS click,\n         anyIf(Country, Country != '') AS country, anyIf(DeviceType, DeviceType != '') AS device,\n         anyIf(Browser, Browser != '') AS browser, anyIf(OS, OS != '') AS os\n  FROM (\n    SELECT *, sum(brk) OVER (PARTITION BY EnvId, h ORDER BY ts ROWS UNBOUNDED PRECEDING) AS vix\n    FROM (\n      SELECT *, dateDiff('second',\n               lagInFrame(ts, 1, ts - INTERVAL 1 HOUR) OVER (PARTITION BY EnvId, h ORDER BY ts\n                                                         ROWS BETWEEN 1 PRECEDING AND CURRENT ROW), ts) \u003e 1800 AS brk\n      FROM web))\n  GROUP BY EnvId, h, vix)\nSELECT count() AS \"Visits\" FROM visits",
+      "trendSql": "WITH web AS (\n  SELECT Timestamp AS ts, EnvId, DayVisitor AS h, UserId, EventName, Props, Country, DeviceType, Browser, OS\n  FROM product_events\n  WHERE Timestamp \u003e= {from:DateTime64(9)} AND Timestamp \u003c {to:DateTime64(9)} AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, EnvId)) AND Client IN ('web', 'landing') AND DayVisitor != '' AND DeviceType != 'bot'\n    AND EventName NOT IN ('auth_signed_in', 'auth_signed_out', 'flag_evaluated', 'page_engaged', 'auth_accounts')),\nvisits AS (\n  SELECT EnvId, h, vix, min(ts) AS start, max(ts) AS stop,\n         countIf(EventName = 'page_viewed') AS views,\n         countIf(EventName != 'page_viewed') AS actions,\n         argMinIf(Props['route'], ts, EventName = 'page_viewed') AS entry_route,\n         argMaxIf(Props['route'], ts, EventName = 'page_viewed') AS exit_route,\n         argMinIf(lower(Props['referrer_host']), ts, EventName = 'page_viewed') AS ref,\n         argMinIf(Props['referrer_path'], ts, EventName = 'page_viewed') AS ref_path,\n         argMinIf(lower(if(Props['utm_source'] != '', Props['utm_source'], Props['ref'])), ts, EventName = 'page_viewed') AS src,\n         argMinIf(lower(Props['utm_medium']), ts, EventName = 'page_viewed') AS med,\n         argMinIf(Props['utm_campaign'], ts, EventName = 'page_viewed') AS campaign,\n         argMinIf(Props['utm_term'], ts, EventName = 'page_viewed') AS term,\n         argMinIf(Props['utm_content'], ts, EventName = 'page_viewed') AS content,\n         argMinIf(Props['click_id'], ts, EventName = 'page_viewed') AS click,\n         anyIf(Country, Country != '') AS country, anyIf(DeviceType, DeviceType != '') AS device,\n         anyIf(Browser, Browser != '') AS browser, anyIf(OS, OS != '') AS os\n  FROM (\n    SELECT *, sum(brk) OVER (PARTITION BY EnvId, h ORDER BY ts ROWS UNBOUNDED PRECEDING) AS vix\n    FROM (\n      SELECT *, dateDiff('second',\n               lagInFrame(ts, 1, ts - INTERVAL 1 HOUR) OVER (PARTITION BY EnvId, h ORDER BY ts\n                                                         ROWS BETWEEN 1 PRECEDING AND CURRENT ROW), ts) \u003e 1800 AS brk\n      FROM web))\n  GROUP BY EnvId, h, vix)\nSELECT toDate(start) AS day, count() AS \"Visits\" FROM visits GROUP BY day ORDER BY day",
+      "display": {
+        "color": "cyan"
+      },
+      "unit": "count",
+      "width": 6,
+      "height": 4
+    },
+    {
+      "section": "glance",
+      "id": "views-per-visit",
+      "title": "Views per visit",
+      "description": "Page views over visits.",
+      "kind": "sql",
+      "sql": "WITH web AS (\n  SELECT Timestamp AS ts, EnvId, DayVisitor AS h, UserId, EventName, Props, Country, DeviceType, Browser, OS\n  FROM product_events\n  WHERE Timestamp \u003e= {from:DateTime64(9)} AND Timestamp \u003c {to:DateTime64(9)} AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, EnvId)) AND Client IN ('web', 'landing') AND DayVisitor != '' AND DeviceType != 'bot'\n    AND EventName NOT IN ('auth_signed_in', 'auth_signed_out', 'flag_evaluated', 'page_engaged', 'auth_accounts')),\nvisits AS (\n  SELECT EnvId, h, vix, min(ts) AS start, max(ts) AS stop,\n         countIf(EventName = 'page_viewed') AS views,\n         countIf(EventName != 'page_viewed') AS actions,\n         argMinIf(Props['route'], ts, EventName = 'page_viewed') AS entry_route,\n         argMaxIf(Props['route'], ts, EventName = 'page_viewed') AS exit_route,\n         argMinIf(lower(Props['referrer_host']), ts, EventName = 'page_viewed') AS ref,\n         argMinIf(Props['referrer_path'], ts, EventName = 'page_viewed') AS ref_path,\n         argMinIf(lower(if(Props['utm_source'] != '', Props['utm_source'], Props['ref'])), ts, EventName = 'page_viewed') AS src,\n         argMinIf(lower(Props['utm_medium']), ts, EventName = 'page_viewed') AS med,\n         argMinIf(Props['utm_campaign'], ts, EventName = 'page_viewed') AS campaign,\n         argMinIf(Props['utm_term'], ts, EventName = 'page_viewed') AS term,\n         argMinIf(Props['utm_content'], ts, EventName = 'page_viewed') AS content,\n         argMinIf(Props['click_id'], ts, EventName = 'page_viewed') AS click,\n         anyIf(Country, Country != '') AS country, anyIf(DeviceType, DeviceType != '') AS device,\n         anyIf(Browser, Browser != '') AS browser, anyIf(OS, OS != '') AS os\n  FROM (\n    SELECT *, sum(brk) OVER (PARTITION BY EnvId, h ORDER BY ts ROWS UNBOUNDED PRECEDING) AS vix\n    FROM (\n      SELECT *, dateDiff('second',\n               lagInFrame(ts, 1, ts - INTERVAL 1 HOUR) OVER (PARTITION BY EnvId, h ORDER BY ts\n                                                         ROWS BETWEEN 1 PRECEDING AND CURRENT ROW), ts) \u003e 1800 AS brk\n      FROM web))\n  GROUP BY EnvId, h, vix)\nSELECT round(sum(views) / nullIf(count(), 0), 2) AS \"Views per visit\" FROM visits",
+      "display": {
+        "color": "cyan"
+      },
+      "width": 6,
+      "height": 4
+    },
+    {
+      "section": "glance",
+      "id": "bounce",
+      "title": "Bounce rate",
+      "description": "The share of visits with exactly one page view and nothing else (Plausible's definition).",
+      "kind": "sql",
+      "sql": "WITH web AS (\n  SELECT Timestamp AS ts, EnvId, DayVisitor AS h, UserId, EventName, Props, Country, DeviceType, Browser, OS\n  FROM product_events\n  WHERE Timestamp \u003e= {from:DateTime64(9)} AND Timestamp \u003c {to:DateTime64(9)} AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, EnvId)) AND Client IN ('web', 'landing') AND DayVisitor != '' AND DeviceType != 'bot'\n    AND EventName NOT IN ('auth_signed_in', 'auth_signed_out', 'flag_evaluated', 'page_engaged', 'auth_accounts')),\nvisits AS (\n  SELECT EnvId, h, vix, min(ts) AS start, max(ts) AS stop,\n         countIf(EventName = 'page_viewed') AS views,\n         countIf(EventName != 'page_viewed') AS actions,\n         argMinIf(Props['route'], ts, EventName = 'page_viewed') AS entry_route,\n         argMaxIf(Props['route'], ts, EventName = 'page_viewed') AS exit_route,\n         argMinIf(lower(Props['referrer_host']), ts, EventName = 'page_viewed') AS ref,\n         argMinIf(Props['referrer_path'], ts, EventName = 'page_viewed') AS ref_path,\n         argMinIf(lower(if(Props['utm_source'] != '', Props['utm_source'], Props['ref'])), ts, EventName = 'page_viewed') AS src,\n         argMinIf(lower(Props['utm_medium']), ts, EventName = 'page_viewed') AS med,\n         argMinIf(Props['utm_campaign'], ts, EventName = 'page_viewed') AS campaign,\n         argMinIf(Props['utm_term'], ts, EventName = 'page_viewed') AS term,\n         argMinIf(Props['utm_content'], ts, EventName = 'page_viewed') AS content,\n         argMinIf(Props['click_id'], ts, EventName = 'page_viewed') AS click,\n         anyIf(Country, Country != '') AS country, anyIf(DeviceType, DeviceType != '') AS device,\n         anyIf(Browser, Browser != '') AS browser, anyIf(OS, OS != '') AS os\n  FROM (\n    SELECT *, sum(brk) OVER (PARTITION BY EnvId, h ORDER BY ts ROWS UNBOUNDED PRECEDING) AS vix\n    FROM (\n      SELECT *, dateDiff('second',\n               lagInFrame(ts, 1, ts - INTERVAL 1 HOUR) OVER (PARTITION BY EnvId, h ORDER BY ts\n                                                         ROWS BETWEEN 1 PRECEDING AND CURRENT ROW), ts) \u003e 1800 AS brk\n      FROM web))\n  GROUP BY EnvId, h, vix)\nSELECT round(avg(views = 1 AND actions = 0), 4) AS \"Bounce rate\" FROM visits",
+      "display": {
+        "color": "slate"
+      },
+      "unit": "percent",
+      "width": 6,
+      "height": 4
+    },
+    {
+      "section": "glance",
+      "id": "visit-duration",
+      "title": "Visit duration",
+      "description": "The average time from a visit's first event to its last; a bounce lasts 0 and counts.",
+      "kind": "sql",
+      "sql": "WITH web AS (\n  SELECT Timestamp AS ts, EnvId, DayVisitor AS h, UserId, EventName, Props, Country, DeviceType, Browser, OS\n  FROM product_events\n  WHERE Timestamp \u003e= {from:DateTime64(9)} AND Timestamp \u003c {to:DateTime64(9)} AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, EnvId)) AND Client IN ('web', 'landing') AND DayVisitor != '' AND DeviceType != 'bot'\n    AND EventName NOT IN ('auth_signed_in', 'auth_signed_out', 'flag_evaluated', 'page_engaged', 'auth_accounts')),\nvisits AS (\n  SELECT EnvId, h, vix, min(ts) AS start, max(ts) AS stop,\n         countIf(EventName = 'page_viewed') AS views,\n         countIf(EventName != 'page_viewed') AS actions,\n         argMinIf(Props['route'], ts, EventName = 'page_viewed') AS entry_route,\n         argMaxIf(Props['route'], ts, EventName = 'page_viewed') AS exit_route,\n         argMinIf(lower(Props['referrer_host']), ts, EventName = 'page_viewed') AS ref,\n         argMinIf(Props['referrer_path'], ts, EventName = 'page_viewed') AS ref_path,\n         argMinIf(lower(if(Props['utm_source'] != '', Props['utm_source'], Props['ref'])), ts, EventName = 'page_viewed') AS src,\n         argMinIf(lower(Props['utm_medium']), ts, EventName = 'page_viewed') AS med,\n         argMinIf(Props['utm_campaign'], ts, EventName = 'page_viewed') AS campaign,\n         argMinIf(Props['utm_term'], ts, EventName = 'page_viewed') AS term,\n         argMinIf(Props['utm_content'], ts, EventName = 'page_viewed') AS content,\n         argMinIf(Props['click_id'], ts, EventName = 'page_viewed') AS click,\n         anyIf(Country, Country != '') AS country, anyIf(DeviceType, DeviceType != '') AS device,\n         anyIf(Browser, Browser != '') AS browser, anyIf(OS, OS != '') AS os\n  FROM (\n    SELECT *, sum(brk) OVER (PARTITION BY EnvId, h ORDER BY ts ROWS UNBOUNDED PRECEDING) AS vix\n    FROM (\n      SELECT *, dateDiff('second',\n               lagInFrame(ts, 1, ts - INTERVAL 1 HOUR) OVER (PARTITION BY EnvId, h ORDER BY ts\n                                                         ROWS BETWEEN 1 PRECEDING AND CURRENT ROW), ts) \u003e 1800 AS brk\n      FROM web))\n  GROUP BY EnvId, h, vix)\nSELECT round(avg(dateDiff('second', start, stop))) AS \"Visit duration\" FROM visits",
+      "display": {
+        "color": "cyan"
+      },
+      "unit": "s",
+      "width": 12,
+      "height": 4
+    },
+    {
+      "section": "glance",
+      "id": "events",
+      "title": "Product events",
+      "description": "Every product event in the range, automatic or tracked by the app, signed in or anonymous, browser or server.",
+      "kind": "sql",
+      "sql": "SELECT count() AS \"Product events\" FROM product_events WHERE Timestamp \u003e= {from:DateTime64(9)} AND Timestamp \u003c {to:DateTime64(9)} AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, EnvId))",
+      "trendSql": "SELECT toDate(Timestamp) AS day, count() AS \"Product events\" FROM product_events WHERE Timestamp \u003e= {from:DateTime64(9)} AND Timestamp \u003c {to:DateTime64(9)} AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, EnvId)) GROUP BY day ORDER BY day",
+      "display": {
+        "color": "fuchsia"
+      },
+      "unit": "count",
+      "width": 12,
+      "height": 4
+    },
+    {
+      "section": "pages",
+      "id": "top-pages",
+      "title": "Pages",
+      "description": "Each route's page views, distinct visitor-days, signed-in users, and the visits that started (Entries) and ended (Exits) on it.",
+      "kind": "sql",
+      "sql": "WITH web AS (\n  SELECT Timestamp AS ts, EnvId, DayVisitor AS h, UserId, EventName, Props, Country, DeviceType, Browser, OS\n  FROM product_events\n  WHERE Timestamp \u003e= {from:DateTime64(9)} AND Timestamp \u003c {to:DateTime64(9)} AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, EnvId)) AND Client IN ('web', 'landing') AND DayVisitor != '' AND DeviceType != 'bot'\n    AND EventName NOT IN ('auth_signed_in', 'auth_signed_out', 'flag_evaluated', 'page_engaged', 'auth_accounts')),\nvisits AS (\n  SELECT EnvId, h, vix, min(ts) AS start, max(ts) AS stop,\n         countIf(EventName = 'page_viewed') AS views,\n         countIf(EventName != 'page_viewed') AS actions,\n         argMinIf(Props['route'], ts, EventName = 'page_viewed') AS entry_route,\n         argMaxIf(Props['route'], ts, EventName = 'page_viewed') AS exit_route,\n         argMinIf(lower(Props['referrer_host']), ts, EventName = 'page_viewed') AS ref,\n         argMinIf(Props['referrer_path'], ts, EventName = 'page_viewed') AS ref_path,\n         argMinIf(lower(if(Props['utm_source'] != '', Props['utm_source'], Props['ref'])), ts, EventName = 'page_viewed') AS src,\n         argMinIf(lower(Props['utm_medium']), ts, EventName = 'page_viewed') AS med,\n         argMinIf(Props['utm_campaign'], ts, EventName = 'page_viewed') AS campaign,\n         argMinIf(Props['utm_term'], ts, EventName = 'page_viewed') AS term,\n         argMinIf(Props['utm_content'], ts, EventName = 'page_viewed') AS content,\n         argMinIf(Props['click_id'], ts, EventName = 'page_viewed') AS click,\n         anyIf(Country, Country != '') AS country, anyIf(DeviceType, DeviceType != '') AS device,\n         anyIf(Browser, Browser != '') AS browser, anyIf(OS, OS != '') AS os\n  FROM (\n    SELECT *, sum(brk) OVER (PARTITION BY EnvId, h ORDER BY ts ROWS UNBOUNDED PRECEDING) AS vix\n    FROM (\n      SELECT *, dateDiff('second',\n               lagInFrame(ts, 1, ts - INTERVAL 1 HOUR) OVER (PARTITION BY EnvId, h ORDER BY ts\n                                                         ROWS BETWEEN 1 PRECEDING AND CURRENT ROW), ts) \u003e 1800 AS brk\n      FROM web))\n  GROUP BY EnvId, h, vix),\np AS (SELECT Props['route'] AS route, count() AS views, uniqExact((EnvId, h)) AS visitors, uniqExactIf((EnvId, UserId), UserId != '') AS users\n      FROM web WHERE EventName = 'page_viewed' GROUP BY route),\nen AS (SELECT entry_route AS route, count() AS entries FROM visits WHERE entry_route != '' GROUP BY route),\nex AS (SELECT exit_route AS route, count() AS exits FROM visits WHERE exit_route != '' GROUP BY route)\nSELECT p.route AS \"Route\", p.views AS \"Views\", p.visitors AS \"Visitors\", p.users AS \"Signed-in users\", en.entries AS \"Entries\", ex.exits AS \"Exits\"\nFROM p LEFT JOIN en ON en.route = p.route LEFT JOIN ex ON ex.route = p.route\nORDER BY \"Views\" DESC, \"Route\" LIMIT 50",
+      "width": 24,
+      "height": 9
+    },
+    {
+      "section": "pages",
+      "id": "entry-pages",
+      "title": "Entry pages",
+      "description": "Visits by the route they started on: the share that bounced, and the share whose visitor signed up the same day.",
+      "kind": "sql",
+      "sql": "WITH web AS (\n  SELECT Timestamp AS ts, EnvId, DayVisitor AS h, UserId, EventName, Props, Country, DeviceType, Browser, OS\n  FROM product_events\n  WHERE Timestamp \u003e= {from:DateTime64(9)} AND Timestamp \u003c {to:DateTime64(9)} AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, EnvId)) AND Client IN ('web', 'landing') AND DayVisitor != '' AND DeviceType != 'bot'\n    AND EventName NOT IN ('auth_signed_in', 'auth_signed_out', 'flag_evaluated', 'page_engaged', 'auth_accounts')),\nvisits AS (\n  SELECT EnvId, h, vix, min(ts) AS start, max(ts) AS stop,\n         countIf(EventName = 'page_viewed') AS views,\n         countIf(EventName != 'page_viewed') AS actions,\n         argMinIf(Props['route'], ts, EventName = 'page_viewed') AS entry_route,\n         argMaxIf(Props['route'], ts, EventName = 'page_viewed') AS exit_route,\n         argMinIf(lower(Props['referrer_host']), ts, EventName = 'page_viewed') AS ref,\n         argMinIf(Props['referrer_path'], ts, EventName = 'page_viewed') AS ref_path,\n         argMinIf(lower(if(Props['utm_source'] != '', Props['utm_source'], Props['ref'])), ts, EventName = 'page_viewed') AS src,\n         argMinIf(lower(Props['utm_medium']), ts, EventName = 'page_viewed') AS med,\n         argMinIf(Props['utm_campaign'], ts, EventName = 'page_viewed') AS campaign,\n         argMinIf(Props['utm_term'], ts, EventName = 'page_viewed') AS term,\n         argMinIf(Props['utm_content'], ts, EventName = 'page_viewed') AS content,\n         argMinIf(Props['click_id'], ts, EventName = 'page_viewed') AS click,\n         anyIf(Country, Country != '') AS country, anyIf(DeviceType, DeviceType != '') AS device,\n         anyIf(Browser, Browser != '') AS browser, anyIf(OS, OS != '') AS os\n  FROM (\n    SELECT *, sum(brk) OVER (PARTITION BY EnvId, h ORDER BY ts ROWS UNBOUNDED PRECEDING) AS vix\n    FROM (\n      SELECT *, dateDiff('second',\n               lagInFrame(ts, 1, ts - INTERVAL 1 HOUR) OVER (PARTITION BY EnvId, h ORDER BY ts\n                                                         ROWS BETWEEN 1 PRECEDING AND CURRENT ROW), ts) \u003e 1800 AS brk\n      FROM web))\n  GROUP BY EnvId, h, vix),\nstitch AS (\n  SELECT EnvId, DayVisitor AS h, any(UserId) AS uid, toDate(max(Timestamp)) AS d\n  FROM product_events\n  WHERE Timestamp \u003e= {from:DateTime64(9)} AND Timestamp \u003c {to:DateTime64(9)} AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, EnvId)) AND DayVisitor != '' AND UserId != '' AND Privacy = ''\n  GROUP BY EnvId, h HAVING uniqExact(UserId) = 1),\nsu AS (\n  SELECT * FROM (\n    SELECT EnvId, UserId, min(Timestamp) AS at, toDate(min(Timestamp)) AS d,\n           argMinIf(DayVisitor, Timestamp, DayVisitor != '') AS own_h,\n           argMin(Props['method'], Timestamp) AS method, argMin(Props['provider'], Timestamp) AS provider,\n           argMin(Props['social_provider'], Timestamp) AS social, argMin(Props['verified'], Timestamp) AS verified\n    FROM product_events\n    WHERE EventName = 'auth_signed_up' AND UserId != '' AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, EnvId)) AND Timestamp \u003e= {to:DateTime64(9)} - INTERVAL 90 DAY AND Timestamp \u003c {to:DateTime64(9)}\n    GROUP BY EnvId, UserId)\n  WHERE at \u003e= {from:DateTime64(9)} AND at \u003c {to:DateTime64(9)}),\nsu_h AS (\n  SELECT su.EnvId AS EnvId, su.UserId AS UserId, su.at AS at, su.d AS d,\n         if(su.own_h != '', su.own_h, l.h) AS h,\n         su.method AS method, su.provider AS provider, su.social AS social, su.verified AS verified\n  FROM su LEFT JOIN (SELECT EnvId, uid, d, any(h) AS h FROM stitch GROUP BY EnvId, uid, d HAVING count() = 1) AS l\n    ON l.EnvId = su.EnvId AND l.uid = su.UserId AND l.d = su.d)\nSELECT entry_route AS \"Entry page\", count() AS \"Visits\",\n       round(100 * avg(views = 1 AND actions = 0), 1) AS \"Bounce %\",\n       round(100 * countIf((EnvId, h) IN (SELECT EnvId, h FROM su_h WHERE h != '')) / count(), 1) AS \"Sign-up %\"\nFROM visits WHERE entry_route != ''\nGROUP BY entry_route ORDER BY \"Visits\" DESC, \"Entry page\" LIMIT 50",
+      "width": 12,
+      "height": 9
+    },
+    {
+      "section": "pages",
+      "id": "exit-pages",
+      "title": "Exit pages",
+      "description": "Visits by the route they ended on, and the exit rate: exits over the route's page views.",
+      "kind": "sql",
+      "sql": "WITH web AS (\n  SELECT Timestamp AS ts, EnvId, DayVisitor AS h, UserId, EventName, Props, Country, DeviceType, Browser, OS\n  FROM product_events\n  WHERE Timestamp \u003e= {from:DateTime64(9)} AND Timestamp \u003c {to:DateTime64(9)} AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, EnvId)) AND Client IN ('web', 'landing') AND DayVisitor != '' AND DeviceType != 'bot'\n    AND EventName NOT IN ('auth_signed_in', 'auth_signed_out', 'flag_evaluated', 'page_engaged', 'auth_accounts')),\nvisits AS (\n  SELECT EnvId, h, vix, min(ts) AS start, max(ts) AS stop,\n         countIf(EventName = 'page_viewed') AS views,\n         countIf(EventName != 'page_viewed') AS actions,\n         argMinIf(Props['route'], ts, EventName = 'page_viewed') AS entry_route,\n         argMaxIf(Props['route'], ts, EventName = 'page_viewed') AS exit_route,\n         argMinIf(lower(Props['referrer_host']), ts, EventName = 'page_viewed') AS ref,\n         argMinIf(Props['referrer_path'], ts, EventName = 'page_viewed') AS ref_path,\n         argMinIf(lower(if(Props['utm_source'] != '', Props['utm_source'], Props['ref'])), ts, EventName = 'page_viewed') AS src,\n         argMinIf(lower(Props['utm_medium']), ts, EventName = 'page_viewed') AS med,\n         argMinIf(Props['utm_campaign'], ts, EventName = 'page_viewed') AS campaign,\n         argMinIf(Props['utm_term'], ts, EventName = 'page_viewed') AS term,\n         argMinIf(Props['utm_content'], ts, EventName = 'page_viewed') AS content,\n         argMinIf(Props['click_id'], ts, EventName = 'page_viewed') AS click,\n         anyIf(Country, Country != '') AS country, anyIf(DeviceType, DeviceType != '') AS device,\n         anyIf(Browser, Browser != '') AS browser, anyIf(OS, OS != '') AS os\n  FROM (\n    SELECT *, sum(brk) OVER (PARTITION BY EnvId, h ORDER BY ts ROWS UNBOUNDED PRECEDING) AS vix\n    FROM (\n      SELECT *, dateDiff('second',\n               lagInFrame(ts, 1, ts - INTERVAL 1 HOUR) OVER (PARTITION BY EnvId, h ORDER BY ts\n                                                         ROWS BETWEEN 1 PRECEDING AND CURRENT ROW), ts) \u003e 1800 AS brk\n      FROM web))\n  GROUP BY EnvId, h, vix),\nex AS (SELECT exit_route AS route, count() AS exits FROM visits WHERE exit_route != '' GROUP BY route),\np AS (SELECT Props['route'] AS route, count() AS views FROM web WHERE EventName = 'page_viewed' GROUP BY route)\nSELECT ex.route AS \"Exit page\", ex.exits AS \"Exits\", round(100 * ex.exits / nullIf(p.views, 0), 1) AS \"Exit rate %\"\nFROM ex LEFT JOIN p ON p.route = ex.route\nORDER BY \"Exits\" DESC, \"Exit page\" LIMIT 50",
+      "width": 12,
+      "height": 9
+    },
+    {
+      "section": "events",
+      "id": "goals",
+      "title": "Goals",
+      "description": "One row per goal declared in forge.Analytics: the persons who reached it (a signed-in user, the user a same-day sign-in links a visitor to, else the visitor-day), every time it was reached, and its conversion rate: persons over the range's visitor-days.",
+      "kind": "sql",
+      "sql": "WITH web AS (\n  SELECT Timestamp AS ts, EnvId, DayVisitor AS h, UserId, EventName, Props, Country, DeviceType, Browser, OS\n  FROM product_events\n  WHERE Timestamp \u003e= {from:DateTime64(9)} AND Timestamp \u003c {to:DateTime64(9)} AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, EnvId)) AND Client IN ('web', 'landing') AND DayVisitor != '' AND DeviceType != 'bot'\n    AND EventName NOT IN ('auth_signed_in', 'auth_signed_out', 'flag_evaluated', 'page_engaged', 'auth_accounts')),\nstitch AS (\n  SELECT EnvId, DayVisitor AS h, any(UserId) AS uid, toDate(max(Timestamp)) AS d\n  FROM product_events\n  WHERE Timestamp \u003e= {from:DateTime64(9)} AND Timestamp \u003c {to:DateTime64(9)} AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, EnvId)) AND DayVisitor != '' AND UserId != '' AND Privacy = ''\n  GROUP BY EnvId, h HAVING uniqExact(UserId) = 1),\npersons AS (\n  SELECT e.ts AS ts, e.EnvId AS EnvId, e.EventName AS EventName, e.Props AS Props, e.UserId AS UserId,\n         multiIf(e.UserId != '', concat('u:', e.UserId),\n                 l.uid != '' AND e.Privacy = '', concat('u:', l.uid),\n                 e.VisitorId != '', concat('v:', e.VisitorId),\n                 e.DayVisitor != '', concat('d:', e.DayVisitor), '') AS person\n  FROM (SELECT Timestamp AS ts, EnvId, EventName, Props, UserId, VisitorId, DayVisitor, Privacy\n        FROM product_events WHERE Timestamp \u003e= {from:DateTime64(9)} AND Timestamp \u003c {to:DateTime64(9)} AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, EnvId)) AND DeviceType != 'bot' AND ((EventName = 'purchase') OR (EventName = 'page_viewed' AND Props['route'] = '/pricing'))) AS e\n  LEFT JOIN stitch AS l ON l.EnvId = e.EnvId AND l.h = e.DayVisitor),\nhits AS (SELECT goal, EnvId, person FROM persons ARRAY JOIN arrayFilter(g -\u003e g != '', [if(EventName = 'purchase', 'checkout', ''), if(EventName = 'page_viewed' AND Props['route'] = '/pricing', 'pricing', '')]) AS goal)\nSELECT transform(d.goal, ['checkout', 'pricing'], ['Checkout', 'pricing'], d.goal) AS \"Goal\",\n       uniqExactIf((h.EnvId, h.person), h.person != '') AS \"Persons\",\n       countIf(h.goal != '') AS \"Total\",\n       round(100 * uniqExactIf((h.EnvId, h.person), h.person != '') / nullIf((SELECT uniqExact((EnvId, h)) FROM web), 0), 2) AS \"Conversion %\"\nFROM (SELECT arrayJoin(['checkout', 'pricing']) AS goal) AS d\nLEFT JOIN hits AS h ON h.goal = d.goal\nGROUP BY d.goal ORDER BY indexOf(['checkout', 'pricing'], d.goal)",
+      "width": 24,
+      "height": 7
+    },
+    {
+      "section": "events",
+      "id": "events-by-name",
+      "title": "Events by name",
+      "description": "Every product event in the range but page views: how often, by how many persons, and when it was last seen.",
+      "kind": "sql",
+      "sql": "WITH stitch AS (\n  SELECT EnvId, DayVisitor AS h, any(UserId) AS uid, toDate(max(Timestamp)) AS d\n  FROM product_events\n  WHERE Timestamp \u003e= {from:DateTime64(9)} AND Timestamp \u003c {to:DateTime64(9)} AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, EnvId)) AND DayVisitor != '' AND UserId != '' AND Privacy = ''\n  GROUP BY EnvId, h HAVING uniqExact(UserId) = 1),\npersons AS (\n  SELECT e.ts AS ts, e.EnvId AS EnvId, e.EventName AS EventName, e.Props AS Props, e.UserId AS UserId,\n         multiIf(e.UserId != '', concat('u:', e.UserId),\n                 l.uid != '' AND e.Privacy = '', concat('u:', l.uid),\n                 e.VisitorId != '', concat('v:', e.VisitorId),\n                 e.DayVisitor != '', concat('d:', e.DayVisitor), '') AS person\n  FROM (SELECT Timestamp AS ts, EnvId, EventName, Props, UserId, VisitorId, DayVisitor, Privacy\n        FROM product_events WHERE Timestamp \u003e= {from:DateTime64(9)} AND Timestamp \u003c {to:DateTime64(9)} AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, EnvId)) AND DeviceType != 'bot' AND EventName NOT IN ('page_viewed', 'auth_accounts')) AS e\n  LEFT JOIN stitch AS l ON l.EnvId = e.EnvId AND l.h = e.DayVisitor)\nSELECT EventName AS \"Event\", count() AS \"Events\", uniqExactIf((EnvId, person), person != '') AS \"Persons\",\n       toDateTime(max(ts), 'UTC') AS \"Last seen\"\nFROM persons GROUP BY EventName ORDER BY \"Events\" DESC, \"Event\" LIMIT 50",
+      "width": 24,
+      "height": 9
+    },
+    {
+      "section": "events",
+      "id": "records-by-entity",
+      "title": "Records written per entity",
+      "description": "The automatic CRUD product events (creates, updates and deletes together), one colour per entity, stacked: the top edge is every write.",
+      "kind": "sql",
+      "sql": "SELECT toStartOfInterval(Timestamp, toIntervalSecond({step:UInt32})) AS t,\n       replaceRegexpOne(EventName, '_(created|updated|deleted)$', '') AS entity,\n       count() AS records\nFROM product_events\nWHERE match(EventName, '_(created|updated|deleted)$') AND Timestamp \u003e= {from:DateTime64(9)} AND Timestamp \u003c {to:DateTime64(9)} AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, EnvId))\nGROUP BY t, entity ORDER BY t",
+      "display": {
+        "style": "bars",
+        "stack": true,
+        "topN": 12
+      },
+      "width": 12,
+      "height": 8
+    },
+    {
+      "section": "events",
+      "id": "actions-per-entity",
+      "title": "Creates, updates and deletes per entity",
+      "description": "The CRUD mix of each entity in the range: one bar per entity, a colour per action.",
+      "kind": "sql",
+      "sql": "SELECT replaceRegexpOne(EventName, '_(created|updated|deleted)$', '') AS entity,\n       countIf(endsWith(EventName, '_created')) AS \"Created\",\n       countIf(endsWith(EventName, '_updated')) AS \"Updated\",\n       countIf(endsWith(EventName, '_deleted')) AS \"Deleted\"\nFROM product_events\nWHERE match(EventName, '_(created|updated|deleted)$') AND Timestamp \u003e= {from:DateTime64(9)} AND Timestamp \u003c {to:DateTime64(9)} AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, EnvId))\nGROUP BY entity ORDER BY count() DESC, entity LIMIT 20",
+      "display": {
+        "style": "bars",
+        "stack": true,
+        "colors": {
+          "Created": "cyan",
+          "Deleted": "amber",
+          "Updated": "violet"
+        }
+      },
+      "width": 12,
+      "height": 8
+    },
+    {
+      "section": "funnels",
+      "id": "funnel-activation",
+      "title": "Visit → sign-up → activation",
+      "description": "Visitor-days in the range, the sign-ups of the range (persons; a sign-up with no visit, an API sign-up or one on another device, counts too), and those that reached the first order_created event within 7d of signing up. The first step counts visitor-days, the others persons.",
+      "kind": "sql",
+      "sql": "WITH web AS (\n  SELECT Timestamp AS ts, EnvId, DayVisitor AS h, UserId, EventName, Props, Country, DeviceType, Browser, OS\n  FROM product_events\n  WHERE Timestamp \u003e= {from:DateTime64(9)} AND Timestamp \u003c {to:DateTime64(9)} AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, EnvId)) AND Client IN ('web', 'landing') AND DayVisitor != '' AND DeviceType != 'bot'\n    AND EventName NOT IN ('auth_signed_in', 'auth_signed_out', 'flag_evaluated', 'page_engaged', 'auth_accounts')),\nstitch AS (\n  SELECT EnvId, DayVisitor AS h, any(UserId) AS uid, toDate(max(Timestamp)) AS d\n  FROM product_events\n  WHERE Timestamp \u003e= {from:DateTime64(9)} AND Timestamp \u003c {to:DateTime64(9)} AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, EnvId)) AND DayVisitor != '' AND UserId != '' AND Privacy = ''\n  GROUP BY EnvId, h HAVING uniqExact(UserId) = 1),\nsu AS (\n  SELECT * FROM (\n    SELECT EnvId, UserId, min(Timestamp) AS at, toDate(min(Timestamp)) AS d,\n           argMinIf(DayVisitor, Timestamp, DayVisitor != '') AS own_h,\n           argMin(Props['method'], Timestamp) AS method, argMin(Props['provider'], Timestamp) AS provider,\n           argMin(Props['social_provider'], Timestamp) AS social, argMin(Props['verified'], Timestamp) AS verified\n    FROM product_events\n    WHERE EventName = 'auth_signed_up' AND UserId != '' AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, EnvId)) AND Timestamp \u003e= {to:DateTime64(9)} - INTERVAL 90 DAY AND Timestamp \u003c {to:DateTime64(9)}\n    GROUP BY EnvId, UserId)\n  WHERE at \u003e= {from:DateTime64(9)} AND at \u003c {to:DateTime64(9)}),\nsu_h AS (\n  SELECT su.EnvId AS EnvId, su.UserId AS UserId, su.at AS at, su.d AS d,\n         if(su.own_h != '', su.own_h, l.h) AS h,\n         su.method AS method, su.provider AS provider, su.social AS social, su.verified AS verified\n  FROM su LEFT JOIN (SELECT EnvId, uid, d, any(h) AS h FROM stitch GROUP BY EnvId, uid, d HAVING count() = 1) AS l\n    ON l.EnvId = su.EnvId AND l.uid = su.UserId AND l.d = su.d),\nact AS (\n  SELECT EnvId, UserId, concat('u:', UserId) AS person, min(Timestamp) AS at\n  FROM product_events\n  WHERE UserId != '' AND EventName = 'order_created' AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, EnvId)) AND Timestamp \u003e= {from:DateTime64(9)} AND Timestamp \u003c {to:DateTime64(9)} + INTERVAL 604800 SECOND\n  GROUP BY EnvId, UserId)\nSELECT step AS \"Step\", n AS \"Persons\"\nFROM (\n  SELECT 1 AS i, 'Visited' AS step, (SELECT uniqExact((EnvId, h)) FROM web) AS n\n  UNION ALL\n  SELECT 2, 'Signed up', (SELECT count() FROM su_h)\n  UNION ALL\n  SELECT 3, 'Activated', (SELECT countIf(x.UserId != '' AND x.at \u003e= s.at AND x.at \u003c s.at + INTERVAL 604800 SECOND)\n                          FROM su_h AS s LEFT JOIN act AS x ON x.EnvId = s.EnvId AND x.UserId = s.UserId))\nORDER BY i",
+      "display": {
+        "style": "funnel",
+        "color": "fuchsia"
+      },
+      "width": 18,
+      "height": 8
+    },
+    {
+      "section": "funnels",
+      "id": "signups-from-visit",
+      "title": "Sign-ups from a visit",
+      "description": "The share of the range's sign-ups linked to a visit: the sign-up carried a visitor hash, or a same-day sign-in links one to the user. The rest signed up through the API or on another device.",
+      "kind": "sql",
+      "sql": "WITH stitch AS (\n  SELECT EnvId, DayVisitor AS h, any(UserId) AS uid, toDate(max(Timestamp)) AS d\n  FROM product_events\n  WHERE Timestamp \u003e= {from:DateTime64(9)} AND Timestamp \u003c {to:DateTime64(9)} AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, EnvId)) AND DayVisitor != '' AND UserId != '' AND Privacy = ''\n  GROUP BY EnvId, h HAVING uniqExact(UserId) = 1),\nsu AS (\n  SELECT * FROM (\n    SELECT EnvId, UserId, min(Timestamp) AS at, toDate(min(Timestamp)) AS d,\n           argMinIf(DayVisitor, Timestamp, DayVisitor != '') AS own_h,\n           argMin(Props['method'], Timestamp) AS method, argMin(Props['provider'], Timestamp) AS provider,\n           argMin(Props['social_provider'], Timestamp) AS social, argMin(Props['verified'], Timestamp) AS verified\n    FROM product_events\n    WHERE EventName = 'auth_signed_up' AND UserId != '' AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, EnvId)) AND Timestamp \u003e= {to:DateTime64(9)} - INTERVAL 90 DAY AND Timestamp \u003c {to:DateTime64(9)}\n    GROUP BY EnvId, UserId)\n  WHERE at \u003e= {from:DateTime64(9)} AND at \u003c {to:DateTime64(9)}),\nsu_h AS (\n  SELECT su.EnvId AS EnvId, su.UserId AS UserId, su.at AS at, su.d AS d,\n         if(su.own_h != '', su.own_h, l.h) AS h,\n         su.method AS method, su.provider AS provider, su.social AS social, su.verified AS verified\n  FROM su LEFT JOIN (SELECT EnvId, uid, d, any(h) AS h FROM stitch GROUP BY EnvId, uid, d HAVING count() = 1) AS l\n    ON l.EnvId = su.EnvId AND l.uid = su.UserId AND l.d = su.d)\nSELECT round(countIf(h != '') / nullIf(count(), 0), 4) AS \"From a visit\" FROM su_h",
+      "display": {
+        "color": "fuchsia"
+      },
+      "unit": "percent",
+      "width": 6,
+      "height": 4
+    },
+    {
+      "section": "funnels",
+      "id": "funnel-buy",
+      "title": "Buy",
+      "description": "Product events in order (page_viewed → add_to_cart → purchase), within 1d, counted per person (the signed-in user, else the user a same-day sign-in links a visitor to, else the visitor-day).",
+      "kind": "sql",
+      "sql": "SELECT ['page_viewed', 'add_to_cart', 'purchase'][i] AS \"Step\", countIf(level \u003e= i) AS \"Persons\"\nFROM (\n  SELECT windowFunnel(86400)(toDateTime(ts), EventName = 'page_viewed', EventName = 'add_to_cart', EventName = 'purchase') AS level\n  FROM (WITH stitch AS (\n  SELECT EnvId, DayVisitor AS h, any(UserId) AS uid, toDate(max(Timestamp)) AS d\n  FROM product_events\n  WHERE Timestamp \u003e= {from:DateTime64(9)} AND Timestamp \u003c {to:DateTime64(9)} AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, EnvId)) AND DayVisitor != '' AND UserId != '' AND Privacy = ''\n  GROUP BY EnvId, h HAVING uniqExact(UserId) = 1),\npersons AS (\n  SELECT e.ts AS ts, e.EnvId AS EnvId, e.EventName AS EventName, e.Props AS Props, e.UserId AS UserId,\n         multiIf(e.UserId != '', concat('u:', e.UserId),\n                 l.uid != '' AND e.Privacy = '', concat('u:', l.uid),\n                 e.VisitorId != '', concat('v:', e.VisitorId),\n                 e.DayVisitor != '', concat('d:', e.DayVisitor), '') AS person\n  FROM (SELECT Timestamp AS ts, EnvId, EventName, Props, UserId, VisitorId, DayVisitor, Privacy\n        FROM product_events WHERE Timestamp \u003e= {from:DateTime64(9)} AND Timestamp \u003c {to:DateTime64(9)} AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, EnvId)) AND DeviceType != 'bot' AND EventName IN ('page_viewed', 'add_to_cart', 'purchase')) AS e\n  LEFT JOIN stitch AS l ON l.EnvId = e.EnvId AND l.h = e.DayVisitor)\nSELECT EnvId, person AS k, ts, EventName FROM persons WHERE person != '')\n  GROUP BY EnvId, k)\nARRAY JOIN range(1, 4) AS i\nGROUP BY i ORDER BY i",
+      "display": {
+        "style": "funnel",
+        "color": "fuchsia"
+      },
+      "width": 24,
+      "height": 8
+    },
+    {
+      "section": "funnels",
+      "id": "funnel-browse",
+      "title": "browse",
+      "description": "Product events in order (page_viewed → add_to_cart), within 1h, counted per visitor-day (the platform's daily visitor hash).",
+      "kind": "sql",
+      "sql": "SELECT ['page_viewed', 'add_to_cart'][i] AS \"Step\", countIf(level \u003e= i) AS \"Visitors\"\nFROM (\n  SELECT windowFunnel(3600)(toDateTime(ts), EventName = 'page_viewed', EventName = 'add_to_cart') AS level\n  FROM (SELECT EnvId, DayVisitor AS k, Timestamp AS ts, EventName FROM product_events WHERE Timestamp \u003e= {from:DateTime64(9)} AND Timestamp \u003c {to:DateTime64(9)} AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, EnvId)) AND DayVisitor != '' AND DeviceType != 'bot' AND EventName IN ('page_viewed', 'add_to_cart'))\n  GROUP BY EnvId, k)\nARRAY JOIN range(1, 3) AS i\nGROUP BY i ORDER BY i",
+      "display": {
+        "style": "funnel",
+        "color": "fuchsia"
+      },
+      "width": 24,
+      "height": 8
+    },
+    {
+      "section": "experiments",
+      "id": "flag-exposure",
+      "title": "Flag exposures",
+      "description": "Each flag and variant: the persons exposed in the range, and the share of them whose first the first order_created event came within 7d after their first exposure. Descriptive, not a significance test.",
+      "kind": "sql",
+      "sql": "WITH stitch AS (\n  SELECT EnvId, DayVisitor AS h, any(UserId) AS uid, toDate(max(Timestamp)) AS d\n  FROM product_events\n  WHERE Timestamp \u003e= {from:DateTime64(9)} AND Timestamp \u003c {to:DateTime64(9)} AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, EnvId)) AND DayVisitor != '' AND UserId != '' AND Privacy = ''\n  GROUP BY EnvId, h HAVING uniqExact(UserId) = 1),\npersons AS (\n  SELECT e.ts AS ts, e.EnvId AS EnvId, e.EventName AS EventName, e.Props AS Props, e.UserId AS UserId,\n         multiIf(e.UserId != '', concat('u:', e.UserId),\n                 l.uid != '' AND e.Privacy = '', concat('u:', l.uid),\n                 e.VisitorId != '', concat('v:', e.VisitorId),\n                 e.DayVisitor != '', concat('d:', e.DayVisitor), '') AS person\n  FROM (SELECT Timestamp AS ts, EnvId, EventName, Props, UserId, VisitorId, DayVisitor, Privacy\n        FROM product_events WHERE Timestamp \u003e= {from:DateTime64(9)} AND Timestamp \u003c {to:DateTime64(9)} AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, EnvId)) AND DeviceType != 'bot' AND EventName = 'flag_evaluated') AS e\n  LEFT JOIN stitch AS l ON l.EnvId = e.EnvId AND l.h = e.DayVisitor),\nact AS (\n  SELECT EnvId, UserId, concat('u:', UserId) AS person, min(Timestamp) AS at\n  FROM product_events\n  WHERE UserId != '' AND EventName = 'order_created' AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, EnvId)) AND Timestamp \u003e= {from:DateTime64(9)} AND Timestamp \u003c {to:DateTime64(9)} + INTERVAL 604800 SECOND\n  GROUP BY EnvId, UserId),\nx AS (SELECT Props['flag'] AS flag, Props['variant'] AS variant, EnvId, person, min(ts) AS first_at\n      FROM persons WHERE person != '' GROUP BY flag, variant, EnvId, person)\nSELECT x.flag AS \"Flag\", x.variant AS \"Variant\", count() AS \"Exposed persons\",\n       round(100 * countIf(y.UserId != '' AND y.at \u003e= x.first_at AND y.at \u003c x.first_at + INTERVAL 604800 SECOND) / count(), 1) AS \"Activated %\"\nFROM x LEFT JOIN act AS y ON y.EnvId = x.EnvId AND y.person = x.person\nGROUP BY x.flag, x.variant ORDER BY \"Flag\", \"Variant\"",
+      "width": 24,
+      "height": 8
+    }
+  ]
+}

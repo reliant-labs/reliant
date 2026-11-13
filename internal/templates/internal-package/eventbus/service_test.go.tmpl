@@ -1,0 +1,49 @@
+// yours: scaffolded once, never touched again — forge will not overwrite this file
+// Event-bus test scaffolding; canonical pattern in `forge skill load testing/patterns`.
+package {{.Name}}
+
+import (
+	"context"
+	"log/slog"
+	"testing"
+{{- if .HasConfig}}
+
+	"{{.Module}}/pkg/config"
+{{- end}}
+)
+
+func TestPublishSubscribe(t *testing.T) {
+	bus, err := New(Deps{
+		Logger: slog.Default(),
+{{- if .HasConfig}}
+		Config: &config.Config{},
+{{- end}}
+	})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	ctx := context.Background()
+	received := make(chan Event, 1)
+
+	if err := bus.Subscribe(ctx, "test.topic", func(ctx context.Context, e Event) error {
+		received <- e
+		return nil
+	}); err != nil {
+		t.Fatalf("Subscribe failed: %v", err)
+	}
+
+	evt := Event{ID: "1", Type: "test.created", Payload: []byte(`{"foo":"bar"}`)}
+	if err := bus.Publish(ctx, "test.topic", evt); err != nil {
+		t.Fatalf("Publish failed: %v", err)
+	}
+
+	select {
+	case got := <-received:
+		if got.ID != evt.ID {
+			t.Errorf("got event ID %q, want %q", got.ID, evt.ID)
+		}
+	default:
+		t.Fatal("no event received")
+	}
+}

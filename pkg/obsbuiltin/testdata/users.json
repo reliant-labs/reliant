@@ -1,0 +1,278 @@
+{
+  "version": "forge.dashboards/v1",
+  "sections": [
+    {
+      "id": "glance",
+      "title": "At a glance",
+      "description": "Accounts, and the users active in the range: new against returning, and how habitual the product is. Each figure opens beside its change against the previous period."
+    },
+    {
+      "id": "engagement",
+      "title": "Engagement",
+      "description": "Whether people come back: each week's new, retained, resurrected and churned users, how many days of the last four weeks people were active, weekly sign-up cohorts, and how long sign-ups take to activate."
+    },
+    {
+      "id": "auth",
+      "title": "Authentication",
+      "description": "How people sign up and sign in, from the standard auth events (auth_signed_up, auth_signed_in): managed sign-in reports them with no code; any other auth reports them with observe.TrackAuth or trackAuthEvent."
+    },
+    {
+      "id": "people",
+      "title": "People",
+      "description": "The most active users by their opaque id. Names and emails stay with the identity provider."
+    }
+  ],
+  "id": "users",
+  "title": "shop: users",
+  "description": "Who uses the product: accounts, active users (any signed-in product event), new users (sign-ups, or the users first seen when the environment reports no sign-ups) and returning users, engagement, weekly retention and how people sign up and sign in. A user is counted once per environment. Hosted environments only: a local forge env up has no product_events table.",
+  "group": "product",
+  "filters": [
+    {
+      "id": "env",
+      "label": "deployment.environment.name",
+      "field": "deployment.environment.name"
+    }
+  ],
+  "defaultRange": "30d",
+  "defaultCompare": "period",
+  "panels": [
+    {
+      "section": "glance",
+      "id": "accounts",
+      "title": "Accounts",
+      "description": "Accounts in the environment's identity instance, from the platform's daily auth_accounts snapshot (the newest in the 3 days before the end of the range). An environment with no snapshot shows its distinct users seen in the 90 days before the end of the range instead. The trend is each day's snapshot.",
+      "kind": "sql",
+      "sql": "SELECT sum(if(has_snapshot, snapshot, toInt64(seen))) AS \"Accounts\"\nFROM (\n    SELECT EnvId,\n           countIf(EventName = 'auth_accounts' AND Timestamp \u003e= {to:DateTime64(9)} - INTERVAL 3 DAY) \u003e 0 AS has_snapshot,\n           argMaxIf(toInt64OrZero(Props['total']), Timestamp, EventName = 'auth_accounts' AND Timestamp \u003e= {to:DateTime64(9)} - INTERVAL 3 DAY) AS snapshot,\n           uniqExactIf(UserId, UserId != '' AND EventName NOT IN ('auth_signed_out', 'auth_accounts')) AS seen\n    FROM product_events\n    WHERE Timestamp \u003e= {to:DateTime64(9)} - INTERVAL 90 DAY AND Timestamp \u003c {to:DateTime64(9)} AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, EnvId)) AND (EventName = 'auth_accounts' OR (UserId != '' AND EventName NOT IN ('auth_signed_out', 'auth_accounts')))\n    GROUP BY EnvId)",
+      "trendSql": "SELECT day, sum(total) AS \"Accounts\"\nFROM (\n    SELECT toDate(Timestamp) AS day, EnvId, argMax(toInt64OrZero(Props['total']), Timestamp) AS total\n    FROM product_events\n    WHERE EventName = 'auth_accounts' AND Timestamp \u003e= {from:DateTime64(9)} AND Timestamp \u003c {to:DateTime64(9)} AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, EnvId))\n    GROUP BY day, EnvId)\nGROUP BY day ORDER BY day",
+      "display": {
+        "color": "slate",
+        "exact": true
+      },
+      "unit": "count",
+      "width": 6,
+      "height": 4
+    },
+    {
+      "section": "glance",
+      "id": "active",
+      "title": "Active users",
+      "description": "Distinct users with any signed-in product event in the range (a sign-in, the daily session heartbeat, a CRUD write, an app event). The trend is each UTC day's.",
+      "kind": "sql",
+      "sql": "SELECT uniqExact((EnvId, UserId)) AS \"Active users\"\nFROM product_events\nWHERE UserId != '' AND EventName NOT IN ('auth_signed_out', 'auth_accounts') AND Timestamp \u003e= {from:DateTime64(9)} AND Timestamp \u003c {to:DateTime64(9)} AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, EnvId))",
+      "trendSql": "SELECT toDate(Timestamp) AS day, uniqExact((EnvId, UserId)) AS \"Active users\"\nFROM product_events\nWHERE UserId != '' AND EventName NOT IN ('auth_signed_out', 'auth_accounts') AND Timestamp \u003e= {from:DateTime64(9)} AND Timestamp \u003c {to:DateTime64(9)} AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, EnvId))\nGROUP BY day ORDER BY day",
+      "display": {
+        "color": "blue",
+        "exact": true
+      },
+      "unit": "count",
+      "width": 6,
+      "height": 4
+    },
+    {
+      "section": "glance",
+      "id": "new",
+      "title": "New users",
+      "description": "New users are the users whose first auth_signed_up is in the range; in an environment that reported no sign-up in the 90 days before the end of the range, the users first seen in the range instead (the Authentication section says which). The trend is each UTC day's.",
+      "kind": "sql",
+      "sql": "SELECT count() AS \"New users\"\nFROM (SELECT EnvId, UserId, if(reports = 1, signed_up_at, first_at) AS NewAt, reports AS ReportsSignups\nFROM (\n  SELECT EnvId, UserId, first_at, signed_up_at, has_signup, max(has_signup) OVER (PARTITION BY EnvId) AS reports\n  FROM (\n    SELECT EnvId, UserId, min(Timestamp) AS first_at, minIf(Timestamp, EventName = 'auth_signed_up') AS signed_up_at,\n           toUInt8(countIf(EventName = 'auth_signed_up') \u003e 0) AS has_signup\n    FROM product_events\n    WHERE UserId != '' AND EventName NOT IN ('auth_signed_out', 'auth_accounts') AND Timestamp \u003e= {to:DateTime64(9)} - INTERVAL 90 DAY AND Timestamp \u003c {to:DateTime64(9)} AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, EnvId))\n    GROUP BY EnvId, UserId))\nWHERE has_signup = 1 OR reports = 0)\nWHERE NewAt \u003e= {from:DateTime64(9)}",
+      "trendSql": "SELECT toDate(NewAt) AS day, count() AS \"New users\"\nFROM (SELECT EnvId, UserId, if(reports = 1, signed_up_at, first_at) AS NewAt, reports AS ReportsSignups\nFROM (\n  SELECT EnvId, UserId, first_at, signed_up_at, has_signup, max(has_signup) OVER (PARTITION BY EnvId) AS reports\n  FROM (\n    SELECT EnvId, UserId, min(Timestamp) AS first_at, minIf(Timestamp, EventName = 'auth_signed_up') AS signed_up_at,\n           toUInt8(countIf(EventName = 'auth_signed_up') \u003e 0) AS has_signup\n    FROM product_events\n    WHERE UserId != '' AND EventName NOT IN ('auth_signed_out', 'auth_accounts') AND Timestamp \u003e= {to:DateTime64(9)} - INTERVAL 90 DAY AND Timestamp \u003c {to:DateTime64(9)} AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, EnvId))\n    GROUP BY EnvId, UserId))\nWHERE has_signup = 1 OR reports = 0)\nWHERE NewAt \u003e= {from:DateTime64(9)}\nGROUP BY day ORDER BY day",
+      "display": {
+        "color": "amber",
+        "exact": true
+      },
+      "unit": "count",
+      "width": 6,
+      "height": 4
+    },
+    {
+      "section": "glance",
+      "id": "returning",
+      "title": "Returning users",
+      "description": "Active users in the range who are not new in it.",
+      "kind": "sql",
+      "sql": "SELECT uniqExact((EnvId, UserId)) AS \"Returning users\"\nFROM product_events\nWHERE UserId != '' AND EventName NOT IN ('auth_signed_out', 'auth_accounts') AND Timestamp \u003e= {from:DateTime64(9)} AND Timestamp \u003c {to:DateTime64(9)} AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, EnvId))\n  AND (EnvId, UserId) NOT IN (SELECT EnvId, UserId FROM (SELECT EnvId, UserId, if(reports = 1, signed_up_at, first_at) AS NewAt, reports AS ReportsSignups\nFROM (\n  SELECT EnvId, UserId, first_at, signed_up_at, has_signup, max(has_signup) OVER (PARTITION BY EnvId) AS reports\n  FROM (\n    SELECT EnvId, UserId, min(Timestamp) AS first_at, minIf(Timestamp, EventName = 'auth_signed_up') AS signed_up_at,\n           toUInt8(countIf(EventName = 'auth_signed_up') \u003e 0) AS has_signup\n    FROM product_events\n    WHERE UserId != '' AND EventName NOT IN ('auth_signed_out', 'auth_accounts') AND Timestamp \u003e= {to:DateTime64(9)} - INTERVAL 90 DAY AND Timestamp \u003c {to:DateTime64(9)} AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, EnvId))\n    GROUP BY EnvId, UserId))\nWHERE has_signup = 1 OR reports = 0) WHERE NewAt \u003e= {from:DateTime64(9)})",
+      "display": {
+        "color": "cyan",
+        "exact": true
+      },
+      "unit": "count",
+      "width": 6,
+      "height": 4
+    },
+    {
+      "section": "glance",
+      "id": "dau-wau-mau",
+      "title": "Daily, weekly and monthly active users",
+      "description": "Distinct signed-in users each UTC day, and over the 7 and 30 days ending that day.",
+      "kind": "sql",
+      "sql": "SELECT addDays(seen, offset) AS day, uniqExactIf((EnvId, UserId), offset = 0) AS \"Daily active\",\n       uniqExactIf((EnvId, UserId), offset \u003c 7) AS \"Weekly active\",\n       uniqExact((EnvId, UserId)) AS \"Monthly active\"\nFROM (\n    SELECT DISTINCT EnvId, UserId, toDate(Timestamp) AS seen\n    FROM product_events\n    WHERE UserId != '' AND EventName NOT IN ('auth_signed_out', 'auth_accounts') AND Timestamp \u003e= toStartOfDay({from:DateTime64(9)}) - INTERVAL 29 DAY AND Timestamp \u003c {to:DateTime64(9)} AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, EnvId))\n)\nARRAY JOIN range(30) AS offset\nWHERE day \u003e= toDate({from:DateTime64(9)}) AND toDateTime(day) \u003c {to:DateTime64(9)}\nGROUP BY day ORDER BY day",
+      "minStep": "1d",
+      "display": {
+        "style": "line",
+        "colors": {
+          "Daily active": "blue",
+          "Monthly active": "violet",
+          "Weekly active": "cyan"
+        }
+      },
+      "width": 18,
+      "height": 8
+    },
+    {
+      "section": "glance",
+      "id": "stickiness",
+      "title": "Stickiness (DAU / MAU)",
+      "description": "The average daily active users over the average 30-day active users across the range's days: how habitual the product is. DAU over MAU, not Statsig's rolling stickiness.",
+      "kind": "sql",
+      "sql": "SELECT round(avg(dau) / nullIf(avg(mau), 0), 4) AS \"DAU / MAU\"\nFROM (\nSELECT addDays(seen, offset) AS day, uniqExactIf((EnvId, UserId), offset = 0) AS dau, uniqExact((EnvId, UserId)) AS mau\nFROM (\n    SELECT DISTINCT EnvId, UserId, toDate(Timestamp) AS seen\n    FROM product_events\n    WHERE UserId != '' AND EventName NOT IN ('auth_signed_out', 'auth_accounts') AND Timestamp \u003e= toStartOfDay({from:DateTime64(9)}) - INTERVAL 29 DAY AND Timestamp \u003c {to:DateTime64(9)} AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, EnvId))\n)\nARRAY JOIN range(30) AS offset\nWHERE day \u003e= toDate({from:DateTime64(9)}) AND toDateTime(day) \u003c {to:DateTime64(9)}\nGROUP BY day ORDER BY day)",
+      "display": {
+        "color": "violet"
+      },
+      "unit": "percent",
+      "width": 6,
+      "height": 4
+    },
+    {
+      "section": "engagement",
+      "id": "lifecycle-weekly",
+      "title": "Lifecycle per week",
+      "description": "Each ISO week's active users in exactly one class: new (their sign-up week), retained (also active the week before), resurrected (back after a week or more away), and below zero the users active the week before but not this week (churned). The current week counts no churn until it is over.",
+      "kind": "sql",
+      "sql": "WITH\nu AS (\n  SELECT EnvId, UserId, groupUniqArray(toMonday(Timestamp)) AS wks\n  FROM product_events\n  WHERE UserId != '' AND EventName NOT IN ('auth_signed_out', 'auth_accounts') AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, EnvId)) AND Timestamp \u003e= toMonday({from:DateTime64(9)}) - INTERVAL 7 DAY AND Timestamp \u003c {to:DateTime64(9)}\n  GROUP BY EnvId, UserId),\ns AS (SELECT EnvId, UserId, toMonday(NewAt) AS sw FROM (SELECT EnvId, UserId, if(reports = 1, signed_up_at, first_at) AS NewAt, reports AS ReportsSignups\nFROM (\n  SELECT EnvId, UserId, first_at, signed_up_at, has_signup, max(has_signup) OVER (PARTITION BY EnvId) AS reports\n  FROM (\n    SELECT EnvId, UserId, min(Timestamp) AS first_at, minIf(Timestamp, EventName = 'auth_signed_up') AS signed_up_at,\n           toUInt8(countIf(EventName = 'auth_signed_up') \u003e 0) AS has_signup\n    FROM product_events\n    WHERE UserId != '' AND EventName NOT IN ('auth_signed_out', 'auth_accounts') AND Timestamp \u003e= {to:DateTime64(9)} - INTERVAL 90 DAY AND Timestamp \u003c {to:DateTime64(9)} AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, EnvId))\n    GROUP BY EnvId, UserId))\nWHERE has_signup = 1 OR reports = 0))\nSELECT week, countIf(state = 'new') AS \"New\", countIf(state = 'retained') AS \"Retained\",\n       countIf(state = 'resurrected') AS \"Resurrected\", -countIf(state = 'churned') AS \"Churned\"\nFROM (\n  SELECT wk AS week, multiIf(s.sw = wk, 'new', has(u.wks, wk - 7), 'retained', 'resurrected') AS state\n  FROM u ARRAY JOIN u.wks AS wk\n  LEFT JOIN s ON s.EnvId = u.EnvId AND s.UserId = u.UserId\n  UNION ALL\n  SELECT wk + 7 AS week, 'churned' AS state\n  FROM u ARRAY JOIN u.wks AS wk\n  WHERE NOT has(u.wks, wk + 7) AND wk + 7 \u003c toMonday({to:DateTime64(9)}))\nWHERE week \u003e= toMonday({from:DateTime64(9)}) AND toDateTime(week) \u003c {to:DateTime64(9)}\nGROUP BY week ORDER BY week",
+      "minStep": "7d",
+      "display": {
+        "style": "bars",
+        "stack": true,
+        "colors": {
+          "Churned": "danger",
+          "New": "amber",
+          "Resurrected": "cyan",
+          "Retained": "blue"
+        }
+      },
+      "width": 24,
+      "height": 9
+    },
+    {
+      "section": "engagement",
+      "id": "power-users-l28",
+      "title": "Power users (L28)",
+      "description": "Users by the number of days they were active in the 28 days ending at the end of the range (whatever range is selected): a curve leaning right is a habit.",
+      "kind": "sql",
+      "sql": "SELECT toString(days) AS \"Days active\", count() AS \"Users\"\nFROM (\n    SELECT EnvId, UserId, uniqExact(toDate(Timestamp)) AS days\n    FROM product_events\n    WHERE UserId != '' AND EventName NOT IN ('auth_signed_out', 'auth_accounts') AND Timestamp \u003e= {to:DateTime64(9)} - INTERVAL 28 DAY AND Timestamp \u003c {to:DateTime64(9)} AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, EnvId))\n    GROUP BY EnvId, UserId)\nGROUP BY days ORDER BY days",
+      "display": {
+        "style": "bars",
+        "colors": {
+          "Users": "blue"
+        }
+      },
+      "width": 12,
+      "height": 8
+    },
+    {
+      "section": "engagement",
+      "id": "time-to-activation",
+      "title": "Time to activation",
+      "description": "The range's sign-ups by the time from signing up to the first order_created event. Not yet: no activation by the end of the range.",
+      "kind": "sql",
+      "sql": "WITH su AS (\n  SELECT * FROM (\n    SELECT EnvId, UserId, min(Timestamp) AS at, toDate(min(Timestamp)) AS d,\n           argMinIf(DayVisitor, Timestamp, DayVisitor != '') AS own_h,\n           argMin(Props['method'], Timestamp) AS method, argMin(Props['provider'], Timestamp) AS provider,\n           argMin(Props['social_provider'], Timestamp) AS social, argMin(Props['verified'], Timestamp) AS verified\n    FROM product_events\n    WHERE EventName = 'auth_signed_up' AND UserId != '' AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, EnvId)) AND Timestamp \u003e= {to:DateTime64(9)} - INTERVAL 90 DAY AND Timestamp \u003c {to:DateTime64(9)}\n    GROUP BY EnvId, UserId)\n  WHERE at \u003e= {from:DateTime64(9)} AND at \u003c {to:DateTime64(9)}),\nact AS (\n  SELECT EnvId, UserId, concat('u:', UserId) AS person, min(Timestamp) AS at\n  FROM product_events\n  WHERE UserId != '' AND EventName = 'order_created' AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, EnvId)) AND Timestamp \u003e= {from:DateTime64(9)} AND Timestamp \u003c {to:DateTime64(9)}\n  GROUP BY EnvId, UserId)\nSELECT bucket AS \"Time to activation\", count() AS \"Sign-ups\"\nFROM (\n  SELECT multiIf(x.UserId = '', 'Not yet',\n                 secs \u003c 3600, '\u003c 1 hour', secs \u003c 86400, '1-24 hours', secs \u003c 3 * 86400, '1-3 days', secs \u003c 7 * 86400, '3-7 days', '\u003e 7 days') AS bucket\n  FROM (\n    SELECT x.UserId AS UserId, greatest(0, dateDiff('second', s.at, x.at)) AS secs\n    FROM su AS s LEFT JOIN act AS x ON x.EnvId = s.EnvId AND x.UserId = s.UserId) AS x)\nGROUP BY bucket ORDER BY indexOf(['\u003c 1 hour', '1-24 hours', '1-3 days', '3-7 days', '\u003e 7 days', 'Not yet'], bucket)",
+      "display": {
+        "style": "bars",
+        "colors": {
+          "Sign-ups": "fuchsia"
+        }
+      },
+      "width": 12,
+      "height": 8
+    },
+    {
+      "section": "engagement",
+      "id": "retention-cohorts",
+      "title": "Weekly retention by sign-up cohort",
+      "description": "One row per weekly cohort of new users (by the Monday, UTC, of their sign-up, or first event when sign-ups are not reported), the 12 weeks before the end of the range, with its size. Each cell is the share of the cohort active in week N after it (W0 is the sign-up week, 100% by construction). A week that has not happened yet is empty, not churn.",
+      "kind": "sql",
+      "sql": "SELECT concat(toString(cohort), ' · ', toString(count()), if(count() = 1, ' user', ' users')) AS \"Cohort (week of)\",\n       if(toDateTime(cohort + INTERVAL 0 WEEK) \u003c {to:DateTime64(9)}, round(countIf(has(weeks, cohort + INTERVAL 0 WEEK)) / count(), 4), NULL) AS \"W0\",\n       if(toDateTime(cohort + INTERVAL 1 WEEK) \u003c {to:DateTime64(9)}, round(countIf(has(weeks, cohort + INTERVAL 1 WEEK)) / count(), 4), NULL) AS \"W1\",\n       if(toDateTime(cohort + INTERVAL 2 WEEK) \u003c {to:DateTime64(9)}, round(countIf(has(weeks, cohort + INTERVAL 2 WEEK)) / count(), 4), NULL) AS \"W2\",\n       if(toDateTime(cohort + INTERVAL 3 WEEK) \u003c {to:DateTime64(9)}, round(countIf(has(weeks, cohort + INTERVAL 3 WEEK)) / count(), 4), NULL) AS \"W3\",\n       if(toDateTime(cohort + INTERVAL 4 WEEK) \u003c {to:DateTime64(9)}, round(countIf(has(weeks, cohort + INTERVAL 4 WEEK)) / count(), 4), NULL) AS \"W4\",\n       if(toDateTime(cohort + INTERVAL 5 WEEK) \u003c {to:DateTime64(9)}, round(countIf(has(weeks, cohort + INTERVAL 5 WEEK)) / count(), 4), NULL) AS \"W5\",\n       if(toDateTime(cohort + INTERVAL 6 WEEK) \u003c {to:DateTime64(9)}, round(countIf(has(weeks, cohort + INTERVAL 6 WEEK)) / count(), 4), NULL) AS \"W6\",\n       if(toDateTime(cohort + INTERVAL 7 WEEK) \u003c {to:DateTime64(9)}, round(countIf(has(weeks, cohort + INTERVAL 7 WEEK)) / count(), 4), NULL) AS \"W7\",\n       if(toDateTime(cohort + INTERVAL 8 WEEK) \u003c {to:DateTime64(9)}, round(countIf(has(weeks, cohort + INTERVAL 8 WEEK)) / count(), 4), NULL) AS \"W8\",\n       if(toDateTime(cohort + INTERVAL 9 WEEK) \u003c {to:DateTime64(9)}, round(countIf(has(weeks, cohort + INTERVAL 9 WEEK)) / count(), 4), NULL) AS \"W9\",\n       if(toDateTime(cohort + INTERVAL 10 WEEK) \u003c {to:DateTime64(9)}, round(countIf(has(weeks, cohort + INTERVAL 10 WEEK)) / count(), 4), NULL) AS \"W10\",\n       if(toDateTime(cohort + INTERVAL 11 WEEK) \u003c {to:DateTime64(9)}, round(countIf(has(weeks, cohort + INTERVAL 11 WEEK)) / count(), 4), NULL) AS \"W11\"\nFROM (\n    SELECT c.cohort AS cohort, a.weeks AS weeks\n    FROM (SELECT EnvId, UserId, toMonday(NewAt) AS cohort FROM (SELECT EnvId, UserId, if(reports = 1, signed_up_at, first_at) AS NewAt, reports AS ReportsSignups\nFROM (\n  SELECT EnvId, UserId, first_at, signed_up_at, has_signup, max(has_signup) OVER (PARTITION BY EnvId) AS reports\n  FROM (\n    SELECT EnvId, UserId, min(Timestamp) AS first_at, minIf(Timestamp, EventName = 'auth_signed_up') AS signed_up_at,\n           toUInt8(countIf(EventName = 'auth_signed_up') \u003e 0) AS has_signup\n    FROM product_events\n    WHERE UserId != '' AND EventName NOT IN ('auth_signed_out', 'auth_accounts') AND Timestamp \u003e= {to:DateTime64(9)} - INTERVAL 90 DAY AND Timestamp \u003c {to:DateTime64(9)} AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, EnvId))\n    GROUP BY EnvId, UserId))\nWHERE has_signup = 1 OR reports = 0)\n          WHERE NewAt \u003e= toMonday({to:DateTime64(9)}) - INTERVAL 11 WEEK) AS c\n    INNER JOIN (SELECT EnvId, UserId, groupUniqArray(toMonday(Timestamp)) AS weeks\n                FROM product_events\n                WHERE UserId != '' AND EventName NOT IN ('auth_signed_out', 'auth_accounts') AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, EnvId)) AND Timestamp \u003e= toMonday({to:DateTime64(9)}) - INTERVAL 11 WEEK AND Timestamp \u003c {to:DateTime64(9)}\n                GROUP BY EnvId, UserId) AS a\n      ON a.EnvId = c.EnvId AND a.UserId = c.UserId)\nGROUP BY cohort ORDER BY cohort",
+      "display": {
+        "style": "heatmap",
+        "color": "blue"
+      },
+      "unit": "percent",
+      "width": 24,
+      "height": 11
+    },
+    {
+      "section": "auth",
+      "id": "signups-by-method",
+      "title": "Sign-ups by method",
+      "description": "Each day's sign-ups (first auth_signed_up per user) by method: password, passkey, magic link, social, invite or sso.",
+      "kind": "sql",
+      "sql": "WITH su AS (\n  SELECT * FROM (\n    SELECT EnvId, UserId, min(Timestamp) AS at, toDate(min(Timestamp)) AS d,\n           argMinIf(DayVisitor, Timestamp, DayVisitor != '') AS own_h,\n           argMin(Props['method'], Timestamp) AS method, argMin(Props['provider'], Timestamp) AS provider,\n           argMin(Props['social_provider'], Timestamp) AS social, argMin(Props['verified'], Timestamp) AS verified\n    FROM product_events\n    WHERE EventName = 'auth_signed_up' AND UserId != '' AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, EnvId)) AND Timestamp \u003e= {to:DateTime64(9)} - INTERVAL 90 DAY AND Timestamp \u003c {to:DateTime64(9)}\n    GROUP BY EnvId, UserId)\n  WHERE at \u003e= {from:DateTime64(9)} AND at \u003c {to:DateTime64(9)})\nSELECT toDate(at) AS day, if(method = '', 'unknown', method) AS method, count() AS \"Sign-ups\"\nFROM su GROUP BY day, method ORDER BY day, method",
+      "minStep": "1d",
+      "display": {
+        "style": "bars",
+        "stack": true
+      },
+      "width": 12,
+      "height": 8
+    },
+    {
+      "section": "auth",
+      "id": "signins-by-method",
+      "title": "Sign-ins by method",
+      "description": "Sign-ins that verified a credential (auth_signed_in with kind = credential) each day, by method. Events, not users: the sign-in attempts that succeeded.",
+      "kind": "sql",
+      "sql": "SELECT toDate(Timestamp) AS day, if(Props['method'] = '', 'unknown', Props['method']) AS method, count() AS \"Sign-ins\"\nFROM product_events\nWHERE EventName = 'auth_signed_in' AND Props['kind'] = 'credential' AND Timestamp \u003e= {from:DateTime64(9)} AND Timestamp \u003c {to:DateTime64(9)} AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, EnvId))\nGROUP BY day, method ORDER BY day, method",
+      "minStep": "1d",
+      "display": {
+        "style": "bars",
+        "stack": true
+      },
+      "width": 12,
+      "height": 8
+    },
+    {
+      "section": "auth",
+      "id": "verified-share",
+      "title": "Verified sign-ups",
+      "description": "The share of the range's sign-ups that arrived verified (auth_signed_up verified = true).",
+      "kind": "sql",
+      "sql": "WITH su AS (\n  SELECT * FROM (\n    SELECT EnvId, UserId, min(Timestamp) AS at, toDate(min(Timestamp)) AS d,\n           argMinIf(DayVisitor, Timestamp, DayVisitor != '') AS own_h,\n           argMin(Props['method'], Timestamp) AS method, argMin(Props['provider'], Timestamp) AS provider,\n           argMin(Props['social_provider'], Timestamp) AS social, argMin(Props['verified'], Timestamp) AS verified\n    FROM product_events\n    WHERE EventName = 'auth_signed_up' AND UserId != '' AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, EnvId)) AND Timestamp \u003e= {to:DateTime64(9)} - INTERVAL 90 DAY AND Timestamp \u003c {to:DateTime64(9)}\n    GROUP BY EnvId, UserId)\n  WHERE at \u003e= {from:DateTime64(9)} AND at \u003c {to:DateTime64(9)})\nSELECT round(countIf(verified = 'true') / nullIf(count(), 0), 4) AS \"Verified\"\nFROM su",
+      "display": {
+        "color": "fuchsia"
+      },
+      "unit": "percent",
+      "width": 6,
+      "height": 4
+    },
+    {
+      "section": "auth",
+      "id": "signups-by-provider",
+      "title": "Sign-ups by provider",
+      "description": "The range's sign-ups by auth provider, and the social provider of a social sign-up (forge/google).",
+      "kind": "sql",
+      "sql": "WITH su AS (\n  SELECT * FROM (\n    SELECT EnvId, UserId, min(Timestamp) AS at, toDate(min(Timestamp)) AS d,\n           argMinIf(DayVisitor, Timestamp, DayVisitor != '') AS own_h,\n           argMin(Props['method'], Timestamp) AS method, argMin(Props['provider'], Timestamp) AS provider,\n           argMin(Props['social_provider'], Timestamp) AS social, argMin(Props['verified'], Timestamp) AS verified\n    FROM product_events\n    WHERE EventName = 'auth_signed_up' AND UserId != '' AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, EnvId)) AND Timestamp \u003e= {to:DateTime64(9)} - INTERVAL 90 DAY AND Timestamp \u003c {to:DateTime64(9)}\n    GROUP BY EnvId, UserId)\n  WHERE at \u003e= {from:DateTime64(9)} AND at \u003c {to:DateTime64(9)})\nSELECT if(social != '', concat(if(provider = '', 'unknown', provider), '/', social), if(provider = '', 'unknown', provider)) AS \"Provider\",\n       count() AS \"Sign-ups\", round(100 * count() / sum(count()) OVER (), 1) AS \"Share %\"\nFROM su GROUP BY \"Provider\" ORDER BY \"Sign-ups\" DESC, \"Provider\"",
+      "width": 6,
+      "height": 8
+    },
+    {
+      "section": "auth",
+      "id": "auth-sources",
+      "title": "Where auth events come from",
+      "description": "The clients that reported auth events in the range (backend, web, …). A last row says when the environment reports no sign-ups, so new users are the ones first seen.",
+      "kind": "sql",
+      "sql": "SELECT client AS \"Client\", signups AS \"Sign-ups\", credential AS \"Sign-ins (credential)\", resumed AS \"Sign-ins (resumed)\", signouts AS \"Sign-outs\"\nFROM (\n  SELECT 0 AS o, if(Client = '', 'unknown', Client) AS client,\n         countIf(EventName = 'auth_signed_up') AS signups,\n         countIf(EventName = 'auth_signed_in' AND Props['kind'] = 'credential') AS credential,\n         countIf(EventName = 'auth_signed_in' AND Props['kind'] = 'resumed') AS resumed,\n         countIf(EventName = 'auth_signed_out') AS signouts\n  FROM product_events\n  WHERE EventName IN ('auth_signed_up', 'auth_signed_in', 'auth_signed_out') AND Timestamp \u003e= {from:DateTime64(9)} AND Timestamp \u003c {to:DateTime64(9)} AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, EnvId))\n  GROUP BY client\n  UNION ALL\n  SELECT 1, 'sign-ups not reported: new users are the users first seen', 0, 0, 0, 0\n  FROM (SELECT count() AS n FROM product_events WHERE EventName = 'auth_signed_up' AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, EnvId)) AND Timestamp \u003e= {to:DateTime64(9)} - INTERVAL 90 DAY AND Timestamp \u003c {to:DateTime64(9)})\n  WHERE n = 0)\nORDER BY o, client",
+      "width": 12,
+      "height": 8
+    },
+    {
+      "section": "people",
+      "id": "most-active-users",
+      "title": "Most active users",
+      "description": "Signed-in users by product events in the range, with the days they were active and when they were last seen. `forge obs sessions \u003cenv\u003e --user \u003cid\u003e` lists a user's sessions.",
+      "kind": "sql",
+      "sql": "SELECT UserId AS \"User\", count() AS \"Events\",\n       uniqExact(toDate(Timestamp)) AS \"Active days\",\n       uniqExact(EventName) AS \"Distinct events\",\n       toDateTime(max(Timestamp), 'UTC') AS \"Last seen\"\nFROM product_events\nWHERE UserId != '' AND EventName NOT IN ('auth_signed_out', 'auth_accounts') AND Timestamp \u003e= {from:DateTime64(9)} AND Timestamp \u003c {to:DateTime64(9)} AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, EnvId))\nGROUP BY UserId ORDER BY count() DESC, UserId LIMIT 25",
+      "width": 24,
+      "height": 9
+    }
+  ]
+}
