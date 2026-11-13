@@ -49,7 +49,7 @@ func (r *Repo) AskPersonalFunding(ctx context.Context, q core.PersonalFunding, n
 			return err
 		}
 		open := (cur.State == core.PersonalFundingAsked || cur.State == core.PersonalFundingKeepWaiting) &&
-			cur.Reason == q.Reason && cur.Model == q.Model && cur.OrgID == q.OrgID
+			cur.Reason == q.Reason && cur.Model == q.Model && cur.OrgID == q.OrgID && cur.UserID == q.UserID
 		if open {
 			if q.OrgResetAt != nil && (cur.OrgResetAt == nil || !cur.OrgResetAt.Equal(*q.OrgResetAt)) {
 				cur.OrgResetAt, cur.UpdatedAt = q.OrgResetAt, now.UTC()

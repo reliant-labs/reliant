@@ -151,6 +151,12 @@ func (r *AccountRouting) fundingPlanFor(ctx context.Context, spec llmCallSpec, a
 	if err != nil {
 		logging.WarnContext(ctx, "Could not read the chat's funding question; deciding without it", "chatID", spec.ChatID, "error", err)
 	}
+	if q != nil && (q.UserID != spec.UserID || q.OrgID != spec.OrgID) {
+		// A question, or a lease, is one person's answer about one org's
+		// accounts: it is never honoured for another person or in another
+		// org (a chat whose project moved), and the next ask replaces it.
+		q = nil
+	}
 	plan.question = q
 	// A limited or unusable answer reorders the call to the person's own
 	// accounts while it lasts; an unusable one only until a turn start finds
@@ -310,16 +316,24 @@ func (r *AccountRouting) replacedOrgFunding(ctx context.Context, spec llmCallSpe
 // recordThreadFunding remembers who pays for the thread's calls from this one
 // on (thread_funding): what replacedOrgFunding reads once that account is gone.
 // It runs only for a call that goes ahead, so a held call keeps the org's
-// provenance and the next attempt asks again. A failed write is logged: it
-// loses provenance for one later decision, which then counts only the router's
-// own signals.
-func (r *AccountRouting) recordThreadFunding(ctx context.Context, spec llmCallSpec, acct *routedAccount) {
+// provenance and the next attempt asks again. It fails closed: an org-funded
+// call whose provenance cannot be written is not made (a retryable error),
+// since a later deletion of that account would then go unseen. A personal or
+// local call's provenance only ever widens what asks, so its failed write is
+// logged.
+func (r *AccountRouting) recordThreadFunding(ctx context.Context, spec llmCallSpec, acct *routedAccount) error {
 	if r.Funding == nil || spec.ThreadID == "" || acct == nil || acct.Config.AccountID == "" || acct.Config.Funding == "" {
-		return
+		return nil
 	}
-	if err := r.Funding.RecordThreadFunding(ctx, spec.ThreadID, spec.OrgID, acct.Config.Funding, acct.Config.AccountID); err != nil {
-		logging.WarnContext(ctx, "Could not record who pays for the thread", "threadID", spec.ThreadID, "error", err)
+	err := r.Funding.RecordThreadFunding(ctx, spec.ThreadID, spec.OrgID, acct.Config.Funding, acct.Config.AccountID)
+	if err == nil {
+		return nil
 	}
+	if models.OrgFunded(acct.Config.Funding) {
+		return fmt.Errorf("record who pays for the thread before an org-funded call: %w", err)
+	}
+	logging.WarnContext(ctx, "Could not record who pays for the thread", "threadID", spec.ThreadID, "error", err)
+	return nil
 }
 
 // checkPersonalFunding is the decision after routing (§10.1 cases 2 and 3):
@@ -332,10 +346,16 @@ func (r *AccountRouting) checkPersonalFunding(ctx context.Context, spec llmCallS
 		return "", nil
 	}
 	notice, err = r.decideCallFunding(ctx, spec, plan, avail, acct, providerDriver, modelID)
-	if err == nil {
-		r.recordThreadFunding(ctx, spec, acct)
+	if err != nil {
+		return "", err
 	}
-	return notice, err
+	if err := r.recordThreadFunding(ctx, spec, acct); err != nil {
+		// Without the thread's provenance on record, a later deletion of the
+		// org's account could move the thread to the person's own without
+		// asking: make no call, and let the activity retry.
+		return "", err
+	}
+	return notice, nil
 }
 
 // decideCallFunding is checkPersonalFunding's decision for a routed account.

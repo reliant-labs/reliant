@@ -123,6 +123,9 @@ type Service interface {
 	// that changes nothing stores nothing and keeps the version.
 	Merge(ctx context.Context, chatID, userID, workflowName string, patch map[string]any, expectedVersion int64) (*Selection, error)
 	// SetPolicy replaces the provider policy, with the same version rules.
+	// Only a person changes its Funding (auth.RequirePerson): for anyone else
+	// an unspecified Funding keeps the current one, and another is refused,
+	// decided under the record's lock.
 	SetPolicy(ctx context.Context, chatID, userID, workflowName string, policy ProviderPolicy, expectedVersion int64) (*Selection, error)
 	// Copy gives toChatID a copy of fromChatID's selection (BranchChat).
 	Copy(ctx context.Context, fromChatID, toChatID, userID string) error

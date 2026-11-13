@@ -40,6 +40,8 @@ type fundingFake struct {
 	threadFundingErr error
 	// chatOrder is the order a person chose for each chat.
 	chatOrder map[string]string
+	// recordErr fails RecordThreadFunding.
+	recordErr error
 }
 
 func newFundingFake() *fundingFake {
@@ -122,6 +124,9 @@ func (f *fundingFake) ThreadFunding(_ context.Context, threadID string) (string,
 func (f *fundingFake) RecordThreadFunding(_ context.Context, threadID, orgID, funding, accountID string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if f.recordErr != nil {
+		return f.recordErr
+	}
 	f.threadFunding[threadID] = [3]string{funding, orgID, accountID}
 	return nil
 }
@@ -689,4 +694,73 @@ func TestHistoryStartsTurn(t *testing.T) {
 	assert.True(t, historyStartsTurn([]message.Message{msg(message.Assistant), msg(message.Agent), msg(message.System)}))
 	assert.False(t, historyStartsTurn([]message.Message{msg(message.User), msg(message.Assistant), msg(message.Tool)}))
 	assert.False(t, historyStartsTurn(nil))
+}
+
+// A question or lease is one person's answer about one org's accounts (review
+// round 3, B2): once the chat's project moves to another org (or the row names
+// another person), it is not honoured, and the next call asks afresh.
+func TestPersonalFunding_LeaseIsBoundToItsOrgAndPerson(t *testing.T) {
+	const otherOrg = "org-other"
+	otherKey := func(id string) models.AccountConfig {
+		a := acmeKey(id)
+		a.AccountOrgID = otherOrg
+		return a
+	}
+	for _, tc := range []struct {
+		name       string
+		user, org  string
+		specOrg    string
+		orgAccount models.AccountConfig
+	}{
+		{"the project moved to another org", "u1", fundOrg, otherOrg, otherKey("other-key")},
+		{"another person's answer", "someone-else", fundOrg, fundOrg, acmeKey("acme-key")},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			withAvailableDrivers(t, tiered(tc.orgAccount, myCodex("my-codex")))
+			env := newFundingEnv(t, "", "")
+			env.store.rows["chat-1"] = &core.PersonalFunding{ChatID: "chat-1", UserID: tc.user, OrgID: tc.org,
+				State: core.PersonalFundingUsePersonal, Reason: core.PersonalFundingUnserved, Model: "gpt-5.6-sol", Announced: true}
+			_, err := env.resolve(t, "root", "gpt-5.6-sol", func(s *llmCallSpec) { s.OrgID = tc.specOrg })
+			isWait(t, err)
+			assert.NotContains(t, env.built, "my-codex", "the old answer spends nothing")
+			q := env.store.row("chat-1")
+			require.NotNil(t, q)
+			assert.Equal(t, core.PersonalFundingAsked, q.State, "the chat asks afresh")
+			assert.Equal(t, tc.specOrg, q.OrgID)
+			assert.Equal(t, "u1", q.UserID)
+		})
+	}
+}
+
+// Provenance fails closed (review round 3, B3): an org-funded call whose
+// provenance cannot be recorded is not made; once the write works it is, and
+// after the org's last key is deleted the thread asks.
+func TestPersonalFunding_ProvenanceWriteFailsClosed(t *testing.T) {
+	withAvailableDrivers(t, tiered(acmeKey("acme-key"), personal(claudeAccount("my-claude", "me@me.com", 0))))
+	env := newFundingEnv(t, "", "")
+	env.store.recordErr = errors.New("db down")
+	_, err := env.resolve(t, "thread-a", routeModel+"@anthropic")
+	require.Error(t, err, "no org-funded call without its provenance")
+	var failure *types.UsageLimitFailure
+	assert.False(t, errors.As(err, &failure), "a retryable error, not a funding wait")
+	assert.Empty(t, env.built)
+
+	env.store.recordErr = nil
+	res, err := env.resolve(t, "thread-a", routeModel+"@anthropic")
+	require.NoError(t, err)
+	assert.Equal(t, "acme-key", res.Account.Config.AccountID)
+
+	withAvailableDrivers(t, tiered(personal(claudeAccount("my-claude", "me@me.com", 0))))
+	env.routing.Store.(*routerFake).assignments = map[string]string{}
+	_, err = env.resolve(t, "thread-a", routeModel)
+	isWait(t, err)
+	require.NotNil(t, env.store.row("chat-1"))
+	assert.Equal(t, core.PersonalFundingUnusable, env.store.row("chat-1").Reason)
+
+	// A personal call's failed provenance write is not a reason to refuse it.
+	env2 := newFundingEnv(t, "", "")
+	env2.store.recordErr = errors.New("db down")
+	res, err = env2.resolve(t, "thread-b", routeModel+"@claude")
+	require.NoError(t, err)
+	assert.Equal(t, "my-claude", res.Account.Config.AccountID)
 }
