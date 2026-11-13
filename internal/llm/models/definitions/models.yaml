@@ -48,6 +48,10 @@
 # moment its first text model lands.
 tags:
   powerful:
+    # Claude 5.2 Fable leads, but only the claude subscription driver serves it.
+    # 5.1 comes next so every other Claude provider (anthropic, openrouter,
+    # reliant, vertexai) and any account not yet on 5.2 still resolves to Fable.
+    - {model: claude-5.2-fable, thinking_level: xhigh}
     - {model: claude-5.1-fable, thinking_level: xhigh}
     - {model: gpt-6.1-astra, thinking_level: xhigh}
     - {model: gpt-6-astra, thinking_level: xhigh}
@@ -345,8 +349,8 @@ models:
   # general agent and orchestrators ask for flagship. It is deliberately NOT
   # in [moderate] — implementation runs on Sonnet 5.5 at high. Nor is it
   # listed under `powerful` — that would collapse the powerful tier onto the
-  # flagship model; `powerful` stays on fable-5.1 until that is an explicit
-  # decision.
+  # flagship model; `powerful` stays on Fable (5.2, then 5.1) until that is an
+  # explicit decision.
   #
   # Its 2.1.280 capture sends max_tokens 128000, twice every other Claude entry.
   - id: claude-5.5-opus
@@ -408,9 +412,11 @@ models:
       temperature_mode: omit
       thinking_mode: adaptive
 
-  # Claude 5.1 Fable leads the `powerful` list, ahead of gpt-6-astra,
-  # gpt-5.6-sol and gemini-3.8-flash, so a bare [powerful] selector resolves
-  # here.
+  # Claude 5.1 Fable is second in the `powerful` list, right after Claude 5.2
+  # Fable and ahead of gpt-6.1-astra, gpt-5.6-sol and gemini-3.8-flash. 5.2 is
+  # served only on the claude subscription driver, so a bare [powerful] selector
+  # resolves here on every other Claude provider, and on a subscription account
+  # that is not served 5.2 yet.
   - id: claude-5.1-fable
     name: Claude 5.1 Fable
     visibility: user
@@ -440,8 +446,10 @@ models:
       thinking_mode: adaptive
 
   # Claude 5.2 Fable is served on the Claude subscription driver only, from the
-  # .dev/claude/fable-5.2.{curl,json} capture (max_tokens 128000). It carries no
-  # tags: `powerful` stays on fable-5.1 until moving it is an explicit decision.
+  # .dev/claude/fable-5.2.{curl,json} capture (max_tokens 128000). It leads the
+  # `powerful` list (at xhigh), with fable-5.1 right after it as the fallback for
+  # every provider that does not serve 5.2. It is deliberately NOT in [flagship]
+  # or [reasoning]: powerful and flagship stay distinct tiers.
   # It is served at the 1M window: the driver sends the context-1m beta.
   - id: claude-5.2-fable
     name: Claude 5.2 Fable
@@ -1229,7 +1237,8 @@ models:
   # Gemini 3.5–3.8 Flash.
   #
   # 3.8 Flash is the Gemini flagship and is `powerful`; it is listed after
-  # fable/astra/sol under [powerful] so that tier still resolves to fable, and
+  # fable-5.2/fable-5.1/astra/sol under [powerful] so that tier still resolves
+  # to fable, and
   # after the Claude/GPT flagships under [flagship]. The other three live in
   # the FAST/MODERATE section below.
   - id: gemini-3.8-flash
