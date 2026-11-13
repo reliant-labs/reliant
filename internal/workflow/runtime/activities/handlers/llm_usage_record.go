@@ -41,9 +41,12 @@ type llmUsageCall struct {
 	// Request is the driver-level request number of a request the driver
 	// failed and retried inside the call (RetryWait.Attempt); 0 is the request
 	// that ended the call.
-	Request     int
-	Provider    string
-	Model       string
+	Request  int
+	Provider string
+	Model    string
+	// AccountID is the provider account that served the request
+	// (usageAccountID); "" when it was not routed to one.
+	AccountID   string
 	LatencyMs   int64
 	Usage       llm.TokenUsage
 	Err         error
@@ -80,6 +83,7 @@ func recordLLMUsage(ctx context.Context, c llmUsageCall) {
 		RunID:            info.WorkflowExecution.RunID,
 		Provider:         c.Provider,
 		Model:            c.Model,
+		AccountID:        c.AccountID,
 		AuthMode:         llmUsageAuthMode(c.Provider),
 		Purpose:          c.Purpose,
 		InputTokens:      c.Usage.InputTokens,
@@ -192,11 +196,11 @@ func recordDriverRetries(ctx context.Context, call llmUsageCall, retries *driver
 
 // recordLLMCallUsage is CallLLM's turn: the streamed request it makes, plus
 // every request its driver failed and retried along the way.
-func (a *CallLLMActivity) recordLLMCallUsage(ctx context.Context, chat *db.Chat, provider, modelID string, latencyMs int64, usage llm.TokenUsage, callErr error, interrupted bool, retries *driverRetries) {
+func (a *CallLLMActivity) recordLLMCallUsage(ctx context.Context, chat *db.Chat, provider, modelID, accountID string, latencyMs int64, usage llm.TokenUsage, callErr error, interrupted bool, retries *driverRetries) {
 	call := llmUsageCall{
 		Recorder: a.repo, UserID: chat.UserID, ChatID: chat.ID,
 		Purpose: store.LLMPurposeChat, Ordinal: 1,
-		Provider: provider, Model: modelID, LatencyMs: latencyMs,
+		Provider: provider, Model: modelID, AccountID: accountID, LatencyMs: latencyMs,
 		Usage: usage, Err: callErr, Interrupted: interrupted,
 	}
 	if retries != nil {
@@ -243,6 +247,7 @@ func (m *usageMeter) streamAndAccumulate(ctx context.Context, resolved *resolved
 		Recorder: m.recorder, UserID: m.userID, ChatID: m.chatID,
 		Purpose: m.purpose, Ordinal: m.n,
 		Provider: usageProvider(resolved, resolved.Driver), Model: resolvedUsageModel(resolved),
+		AccountID: usageAccountID(resolved),
 	}
 	recordDriverRetries(ctx, call, retries)
 	call.LatencyMs = retries.finalLatencyMs(callLatencyMs)
@@ -335,6 +340,16 @@ func llmUsageErrorClass(err error) string {
 
 // usageProvider is the provider that served the call: the registry's choice,
 // or the driver's own name when an injected resolver supplied the model.
+// usageAccountID is the provider account that served resolved: the routed
+// account, or "" when the call was not routed to one (a local model, a
+// provider with no accounts, routing off).
+func usageAccountID(resolved *resolvedLLMCall) string {
+	if resolved == nil || resolved.Account == nil {
+		return ""
+	}
+	return resolved.Account.Config.AccountID
+}
+
 func usageProvider(resolved *resolvedLLMCall, driver llm.Driver) string {
 	if resolved.ProviderDriver != "" {
 		return resolved.ProviderDriver

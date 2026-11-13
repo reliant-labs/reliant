@@ -26,7 +26,7 @@
 --
 -- Every CHECK is added NOT VALID, so the ACCESS EXCLUSIVE lock is held only for
 -- the catalog change, never a scan; new and updated rows are checked from this
--- commit on. 20261113014942_provider_accounts_org_owner_validate validates the
+-- commit on. 20261113034240_provider_accounts_org_owner_validate validates the
 -- existing rows in its own transaction under SHARE UPDATE EXCLUSIVE. Every
 -- existing row has owner_kind 'user', a person's id and NULL in the new
 -- columns, so validation cannot fail.

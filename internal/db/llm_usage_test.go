@@ -128,7 +128,7 @@ func TestLLMUsageTablesHoldNoContent(t *testing.T) {
 			"provider": "text", "model": "text", "auth_mode": "text", "purpose": "text", "outcome": "text", "error_class": "text",
 			"input_tokens": "bigint", "output_tokens": "bigint", "cache_read_tokens": "bigint",
 			"cache_write_tokens": "bigint", "latency_ms": "bigint", "attempt": "integer",
-			"created_at": "timestamp with time zone", "funding": "text",
+			"created_at": "timestamp with time zone", "funding": "text", "account_id": "text",
 		},
 		"llm_call_usage_daily": {
 			"user_id": "text", "org_id": "text", "provider": "text", "model": "text", "auth_mode": "text", "purpose": "text",

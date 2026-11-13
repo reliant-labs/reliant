@@ -1,9 +1,9 @@
--- forge:backward-compatible — validates existing rows against the CHECKs 20261113014921 added NOT VALID; every existing row is a person's with the new columns NULL, so all pass, and nothing is written.
+-- forge:backward-compatible — validates existing rows against the CHECKs 20261113034239 added NOT VALID; every existing row is a person's with the new columns NULL, so all pass, and nothing is written.
 
 -- Migration: provider_accounts_org_owner_validate
 -- Created: 2026-11-13T01:49:42Z
 --
--- Validate the CHECKs 20261113014921_provider_accounts_org_owner added NOT
+-- Validate the CHECKs 20261113034239_provider_accounts_org_owner added NOT
 -- VALID, in their own transaction: VALIDATE CONSTRAINT holds SHARE UPDATE
 -- EXCLUSIVE, which does not block account reads or writes while it scans.
 -- lock_timeout bounds the wait.

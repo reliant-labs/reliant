@@ -2101,7 +2101,7 @@ streamLoop:
 	if streamInterrupted {
 		usageErr = nil
 	}
-	a.recordLLMCallUsage(ctx, chat, usageProvider(resolved, driver), resolvedModelID, llmLatencyMs, streamState.usage, streamErr, streamInterrupted, streamState.retries)
+	a.recordLLMCallUsage(ctx, chat, usageProvider(resolved, driver), resolvedModelID, usageAccountID(resolved), llmLatencyMs, streamState.usage, streamErr, streamInterrupted, streamState.retries)
 	a.logLLMUsage(ctx, chat, driver, llmLatencyMs, streamState.usage, usageErr, shape, shapeDiff)
 	a.trackLLMCallCompleted(ctx, chat, driver, rtx.WorkflowID, rtx.StepID, llmLatencyMs, streamState.usage, usageErr)
 

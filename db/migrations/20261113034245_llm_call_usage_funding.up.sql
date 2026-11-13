@@ -18,7 +18,7 @@
 -- A closed-set label, not content: TestLLMUsageTablesHoldNoContent and the
 -- privacy page list it. ADD COLUMN with a constant default is a catalog change,
 -- not a rewrite. The CHECK is added NOT VALID, so the lock is held only for
--- the catalog change; 20261113015205_llm_call_usage_funding_validate validates
+-- the catalog change; 20261113034246_llm_call_usage_funding_validate validates
 -- the existing rows (all '') in its own transaction.
 SET LOCAL lock_timeout = '5s';
 ALTER TABLE llm_call_usage ADD COLUMN funding text NOT NULL DEFAULT '';

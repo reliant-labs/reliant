@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/llm/drivers"
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/llm/ratelimit"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
@@ -67,7 +68,7 @@ func TestRouting_ALimitedOrgKeyIsBenchedForTheOrg(t *testing.T) {
 			reset := time.Date(2030, 1, 2, 3, 0, 0, 0, time.UTC)
 			refusal := &ratelimit.UsageLimitError{Provider: "Anthropic", StatusCode: 429, ResetAt: reset, Window: "five_hour"}
 			got := env.routing.usageLimitFailure(context.Background(), refusal, usageLimitContext{
-				UserID: "u1", ThreadID: "t", Driver: tc.acct.DriverID, ModelID: routeModel, Account: first.Account,
+				Scope: drivers.PersonalScope("u1"), ThreadID: "t", Driver: tc.acct.DriverID, ModelID: routeModel, Account: first.Account,
 			})
 			var failure *types.UsageLimitFailure
 			require.ErrorAs(t, got, &failure)
@@ -94,7 +95,7 @@ func TestCredentialRejection_MarksTheOrgsKeyOnTheOrg(t *testing.T) {
 			require.Equal(t, "a", first.Account.Config.AccountID)
 
 			got := env.routing.credentialRejection(context.Background(), rejectedKey(), usageLimitContext{
-				UserID: "u1", ThreadID: "t", Driver: "anthropic", ModelID: routeModel, Account: first.Account})
+				Scope: drivers.PersonalScope("u1"), ThreadID: "t", Driver: "anthropic", ModelID: routeModel, Account: first.Account})
 			var failure *types.UsageLimitFailure
 			require.ErrorAs(t, got, &failure)
 			assert.Equal(t, []string{"a"}, marker.marked)

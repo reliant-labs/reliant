@@ -117,6 +117,7 @@ Two kinds of request are not recorded: image and video generation (the generatio
 - which of your chats and runs the call belonged to, and your account ID
 - the provider (for example `anthropic` or `claude`) and the model
 - how the call was paid for: Reliant AI, your own API key, a subscription login, or a local model
+- which of your connected accounts served it (an internal account ID; the key itself is never recorded)
 - who paid for it: an organization (with its own API key, a Claude or ChatGPT team seat it pays for, or its Reliant AI credits) or you (your own subscription or API key, or a local model)
 - the number of input, output, cache-read and cache-write tokens
 - whether it succeeded, was cancelled or failed, and for a failure one of a fixed set of categories (rate limit, usage limit, context length, sign-in, timeout, stalled, network or unknown)
