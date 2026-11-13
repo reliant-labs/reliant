@@ -546,6 +546,9 @@ func resolveLLMCallOnce(ctx context.Context, resolver drivers.DriverResolver, sp
 				if spec.ChatProvider != "" {
 					return nil, providerSwitchHold(spec.ChatProvider, ownSelector, err)
 				}
+				if spec.scope().OrgFundedOnly() {
+					return nil, noOrgAccountError(err, selector)
+				}
 				return nil, resolutionError(err, availableDrivers)
 			}
 		}
@@ -833,6 +836,30 @@ func resolutionError(err error, available models.AvailableDrivers) error {
 		msg += ". Connect a provider that serves this model in Settings → Providers"
 	}
 	return &resolveFailure{msg: msg, cause: err}
+}
+
+// noOrgAccountError is the resolution failure of an unattended run that may
+// spend only its org's own sources, when none of them serves its model
+// (control-plane docs/design/org-provider-accounts.md §11.4, I5). It is never
+// moved onto the owner's own accounts: the turn pauses with the reason, keeps
+// drivererrors.ErrNoServableProvider in its chain (failed once, not retried),
+// and goes on when an org account is added, resumed, re-keyed or granted,
+// which wakes the org's blocked chats, or when a person resumes it.
+func noOrgAccountError(err error, selector models.ModelSelector) error {
+	model := "its model"
+	switch {
+	case selector.ID != "":
+		id, _, _ := strings.Cut(selector.ID, "@")
+		model = id
+	case len(selector.Tags) > 0:
+		model = "the " + strings.Join(selector.Tags, ", ") + " model"
+	}
+	return &resolveFailure{
+		msg: "failed to resolve model: this automation runs only on its organization's AI accounts, and none of them can run " + model +
+			". An admin can add an org API key or enable Reliant credits, or you can change the automation's model; " +
+			"it goes on by itself once an organization account can run it",
+		cause: err,
+	}
 }
 
 // withRunProviders gives a model selector that names no provider the

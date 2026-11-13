@@ -1467,6 +1467,7 @@ func (g *Graph) newOrgProviderAccount() (*org_provider_account.Service, error) {
 		ValidateKey: keyvalidate.Validate,
 		OrgRollout:  g.ApiServerConfig.GetOrgs(), // NewOrgProviderAccount sets the same, from the config it is given
 		Seats:       g.Seatmatch(),
+		ChatWaker:   orgAccountChatWaker(g.Database(), g.TemporalClient()),
 	})
 }
 

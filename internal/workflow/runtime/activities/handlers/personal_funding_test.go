@@ -13,6 +13,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/llm/accountrouter"
+	"github.com/reliant-labs/reliant/internal/llm/drivererrors"
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/llm/ratelimit"
 	"github.com/reliant-labs/reliant/internal/models/message"
@@ -953,4 +954,23 @@ func TestPersonalFunding_RootPickKeepsTheOrgFirst(t *testing.T) {
 	res, err := env.resolve(t, "root", routeModel)
 	require.NoError(t, err)
 	assert.Equal(t, "acme-key", res.Account.Config.AccountID)
+}
+
+// An unattended run that may spend only its org's sources, none of which
+// serves its model, fails the call with the no_org_account reason through
+// the real resolution path: no personal driver is built, and the failure is
+// one the runtime pauses on rather than retries (§11.4).
+func TestUnattendedOrgOnly_NoOrgSourceFailsWithTheReason(t *testing.T) {
+	withAvailableDrivers(t, tiered())
+	env := newFundingEnv(t, "", "")
+	_, err := env.resolve(t, "root", "gpt-5.6-sol@codex", func(s *llmCallSpec) { s.Attended, s.UnattendedAnySource = false, false })
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "this automation runs only on its organization's AI accounts, and none of them can run gpt-5.6-sol")
+	assert.ErrorIs(t, err, drivererrors.ErrNoServableProvider)
+	assert.Empty(t, env.built)
+
+	// An attended run on the same empty providers keeps today's wording.
+	_, err = env.resolve(t, "root", "gpt-5.6-sol@codex")
+	require.Error(t, err)
+	assert.NotContains(t, err.Error(), "organization's AI accounts")
 }
