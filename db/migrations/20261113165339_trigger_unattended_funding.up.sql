@@ -1,7 +1,7 @@
 -- forge:backward-compatible — a new nullable column the previous release neither reads nor writes; every existing row is NULL, which reads as 'any', so every trigger runs as it does today.
 
 -- Migration: trigger_unattended_funding
--- Created: 2026-11-13T14:18:30Z
+-- Created: 2026-11-13T16:53:39Z
 --
 -- Which AI accounts the runs a trigger fires may spend (control-plane
 -- docs/design/org-provider-accounts.md §11.3, I4). A trigger's run has nobody
