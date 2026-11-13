@@ -4,6 +4,7 @@ package store
 import (
 	"context"
 	"fmt"
+	"sync/atomic"
 
 	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/uptrace/bun/dialect/pgdialect"
@@ -137,7 +138,38 @@ func deleteUserProject(ctx context.Context, db orm.Context, id, userID string, c
 	if !owned {
 		return nil
 	}
+	for round := 1; ; round++ {
+		if err := purgeProjectContents(ctx, db, id, chatBatch, worktreeBatch, updateBatch); err != nil {
+			return err
+		}
+		if hook := projectDeleteBeforeFinal.Load(); hook != nil {
+			(*hook)(ctx, id)
+		}
+		deleted, err := deleteProjectRow(ctx, db, id, userID)
+		if err != nil {
+			return fmt.Errorf("delete project: %w", err)
+		}
+		if deleted {
+			return nil
+		}
+		if round == projectDeleteMaxRounds {
+			return fmt.Errorf("delete project: chats or worktrees kept arriving through %d rounds; delete it again", round)
+		}
+	}
+}
 
+// projectDeleteMaxRounds bounds how many times a delete goes back to the
+// batch loops because chats or worktrees arrived while they ran.
+const projectDeleteMaxRounds = 5
+
+// projectDeleteBeforeFinal, when set (tests only), runs after the batch loops
+// and before the project row's transaction, with the project's id: where a
+// concurrent write that lands after the loops passed lands.
+var projectDeleteBeforeFinal atomic.Pointer[func(ctx context.Context, projectID string)]
+
+// purgeProjectContents runs the batch loops: the project's chats with
+// everything stored under them, its worktrees, then its remaining updates.
+func purgeProjectContents(ctx context.Context, db orm.Context, id string, chatBatch, worktreeBatch, updateBatch int) error {
 	// Chats, with everything stored under them.
 	for {
 		var n int
@@ -181,25 +213,54 @@ func deleteUserProject(ctx context.Context, db orm.Context, id, userID string, c
 			SELECT id FROM user_updates WHERE project_id = ?0 LIMIT ?1)`, id); err != nil {
 		return fmt.Errorf("delete project: user updates: %w", err)
 	}
-
-	// The project, and the little that still cascades from it: its repos,
-	// plans, triggers, configs, machine catalogs, and any chat, worktree or
-	// update written since the loops above passed it.
-	err := projectDeleteBatch(ctx, db, func(ctx context.Context) error {
-		_, err := db.Bun().NewRaw(`DELETE FROM projects WHERE id = ?0 AND user_id = ?1`, id, userID).Exec(ctx)
-		return err
-	})
-	if err != nil {
-		return fmt.Errorf("delete project: %w", err)
-	}
 	return nil
+}
+
+// deleteProjectRow deletes the project row, and the little that still
+// cascades from it: its repos, plans, triggers, configs, machine catalogs and
+// any update written since the loops passed. It reports false, deleting
+// nothing, when a chat or worktree arrived after the loops passed it: a chat's
+// workflows, chat_updates and other rows with no foreign key would not go with
+// the cascade, so the caller runs the loops again instead.
+//
+// FOR UPDATE on the project row is what makes the recheck the last word: every
+// insert of a chat or worktree takes a key share on it, which conflicts, so
+// one in flight is waited for (and then seen) and one that starts later waits
+// for this transaction and then fails its foreign key.
+func deleteProjectRow(ctx context.Context, db orm.Context, id, userID string) (bool, error) {
+	deleted := false
+	err := projectDeleteBatch(ctx, db, func(ctx context.Context) error {
+		var locked []string
+		if err := db.Bun().NewRaw(`SELECT id FROM projects WHERE id = ?0 AND user_id = ?1 FOR UPDATE`, id, userID).Scan(ctx, &locked); err != nil {
+			return fmt.Errorf("lock the project: %w", err)
+		}
+		if len(locked) == 0 {
+			deleted = true // gone already (a concurrent delete)
+			return nil
+		}
+		var arrived bool
+		if err := db.Bun().NewRaw(`SELECT EXISTS (SELECT 1 FROM chats WHERE project_id = ?0)
+			OR EXISTS (SELECT 1 FROM worktrees WHERE project_id = ?0)`, id).Scan(ctx, &arrived); err != nil {
+			return fmt.Errorf("recheck the project's chats and worktrees: %w", err)
+		}
+		if arrived {
+			return nil
+		}
+		if _, err := db.Bun().NewRaw(`DELETE FROM projects WHERE id = ?0 AND user_id = ?1`, id, userID).Exec(ctx); err != nil {
+			return err
+		}
+		deleted = true
+		return nil
+	})
+	return deleted, err
 }
 
 // projectDeleteUntilShort runs a `DELETE ... LIMIT ?1` statement for the
 // project, one transaction a batch, until a batch removes fewer rows than the
 // limit. It stops on a short batch rather than an empty one so that rows
 // arriving while it runs cannot keep it going forever; the project row's own
-// cascade takes the stragglers.
+// cascade takes the stragglers (deleteProjectRow sends a late chat or worktree
+// back through the loops instead).
 func projectDeleteUntilShort(ctx context.Context, db orm.Context, batch int, query, projectID string) error {
 	for {
 		var n int64
