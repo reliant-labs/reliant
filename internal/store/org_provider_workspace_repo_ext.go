@@ -36,6 +36,76 @@
 //	}
 package store
 
+import (
+	"context"
+	"time"
+
+	"github.com/reliant-labs/forge/pkg/orm"
+
+	"github.com/reliant-labs/reliant/internal/db/core"
+)
+
+// Provider workspaces an org pays for (org-provider-accounts.md §3.4).
+
+func orgProviderWorkspaceToCore(r *OrgProviderWorkspace) core.OrgProviderWorkspace {
+	return core.OrgProviderWorkspace{
+		OrgID: r.OrgID, Provider: r.Provider, ExternalOrgID: r.ExternalOrgID, DisplayName: r.DisplayName,
+		BoundByUserID: r.BoundByUserID, BoundAt: r.BoundAt,
+	}
+}
+
+// ListOrgProviderWorkspacesOf returns orgID's bindings, by (provider, bound_at).
+func ListOrgProviderWorkspacesOf(ctx context.Context, db orm.Context, orgID string) ([]core.OrgProviderWorkspace, error) {
+	if orgID == "" {
+		return nil, nil
+	}
+	rows, err := ListOrgProviderWorkspace(ctx, db, orm.WhereEq(OrgProviderWorkspaceFieldOrgID, orgID),
+		orm.WithOrderBy(OrgProviderWorkspaceFieldProvider, orm.Asc), orm.WithOrderBy(OrgProviderWorkspaceFieldBoundAt, orm.Asc))
+	if err != nil {
+		return nil, err
+	}
+	out := make([]core.OrgProviderWorkspace, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, orgProviderWorkspaceToCore(r))
+	}
+	return out, nil
+}
+
+// InsertOrgProviderWorkspace binds w to its org. created is false, and the stored binding is
+// returned, when the org already holds it. A workspace bound to ANOTHER org fails with the
+// unique violation of OrgProviderWorkspaceConstraintOneOrg, which the caller classifies.
+func InsertOrgProviderWorkspace(ctx context.Context, db orm.Context, w core.OrgProviderWorkspace, now time.Time) (core.OrgProviderWorkspace, bool, error) {
+	row := &OrgProviderWorkspace{
+		OrgID: w.OrgID, Provider: w.Provider, ExternalOrgID: w.ExternalOrgID, DisplayName: w.DisplayName,
+		BoundByUserID: w.BoundByUserID, BoundAt: now.UTC(),
+	}
+	res, err := db.Bun().NewInsert().Model(row).On("CONFLICT (org_id, provider, external_org_id) DO NOTHING").Exec(ctx)
+	if err != nil {
+		return core.OrgProviderWorkspace{}, false, err
+	}
+	if n, err := res.RowsAffected(); err != nil {
+		return core.OrgProviderWorkspace{}, false, err
+	} else if n > 0 {
+		return orgProviderWorkspaceToCore(row), true, nil
+	}
+	cur, err := GetOrgProviderWorkspaceByPK(ctx, db, w.OrgID, w.Provider, w.ExternalOrgID)
+	if err != nil {
+		return core.OrgProviderWorkspace{}, false, err
+	}
+	return orgProviderWorkspaceToCore(cur), false, nil
+}
+
+// DeleteOrgProviderWorkspace removes one of orgID's bindings and reports whether there was one.
+func DeleteOrgProviderWorkspace(ctx context.Context, db orm.Context, orgID, provider, externalOrgID string) (bool, error) {
+	res, err := db.Bun().NewDelete().Model((*OrgProviderWorkspace)(nil)).
+		Where("org_id = ?", orgID).Where("provider = ?", provider).Where("external_org_id = ?", externalOrgID).Exec(ctx)
+	if err != nil {
+		return false, err
+	}
+	n, err := res.RowsAffected()
+	return n > 0, err
+}
+
 // OrgProviderWorkspaceExtra carries fields on OrgProviderWorkspace that are NOT columns — computed
 // values, transient state, anything derived rather than stored. OrgProviderWorkspace is
 // embedded on OrgProviderWorkspaceExtra (see org_provider_workspace_orm.go), so a field added here is a field on

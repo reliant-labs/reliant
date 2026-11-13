@@ -402,8 +402,18 @@ type OrgsConfig struct {
 	// return to, honour it. Off, naming an installation on a trigger is refused
 	// and no trigger is ever bound.
 	GithubInstallationTriggersEnabled bool `protobuf:"varint,2,opt,name=github_installation_triggers_enabled,json=githubInstallationTriggersEnabled,proto3" json:"github_installation_triggers_enabled,omitempty"`
-	unknownFields                     protoimpl.UnknownFields
-	sizeCache                         protoimpl.SizeCache
+	// Lets an org's owners and admins add org-owned AI provider accounts (API
+	// keys) and bind a provider workspace whose members' seats the org pays for
+	// (control-plane docs/design/org-provider-accounts.md §3.5, §14 P4). Off by
+	// default. A release before this one is blind to org accounts (no person's
+	// id is an org's owner key), so a rollback narrows what serves, never
+	// widens it; turn it on once the routing that serves them (P5) is in every
+	// API server and worker. Listing, editing, pausing, rotating and deleting an
+	// org account, unbinding a workspace and releasing a seat are never gated,
+	// so an admin can always stop the org's spend.
+	ProviderAccountsEnabled bool `protobuf:"varint,3,opt,name=provider_accounts_enabled,json=providerAccountsEnabled,proto3" json:"provider_accounts_enabled,omitempty"`
+	unknownFields           protoimpl.UnknownFields
+	sizeCache               protoimpl.SizeCache
 }
 
 func (x *OrgsConfig) Reset() {
@@ -446,6 +456,13 @@ func (x *OrgsConfig) GetConnectionsEnabled() bool {
 func (x *OrgsConfig) GetGithubInstallationTriggersEnabled() bool {
 	if x != nil {
 		return x.GithubInstallationTriggersEnabled
+	}
+	return false
+}
+
+func (x *OrgsConfig) GetProviderAccountsEnabled() bool {
+	if x != nil {
+		return x.ProviderAccountsEnabled
 	}
 	return false
 }
@@ -520,13 +537,15 @@ const file_reliant_config_v1_api_server_config_proto_rawDesc = "" +
 	"\x04orgs\x18U \x01(\v2\x1d.reliant.config.v1.OrgsConfigR\x04orgs:\x95\x01\xbaHx\x1av\n" +
 	"\x15auth_api_key_required\x12&AUTH_MODE=apikey requires AUTH_API_KEY\x1a5this.auth_mode != 'apikey' || this.auth_api_key != ''\xca\xc1\x18\x16\n" +
 	"\areliant\x12\x06server\x12\x03apiJ\x04\b\x05\x10\x06J\x04\b\n" +
-	"\x10\vJ\x04\b\v\x10\fJ\x04\b\f\x10\rJ\x04\b\r\x10\x0eJ\x04\b\x0e\x10\x0fJ\x04\b\x13\x10\x14J\x04\b\x14\x10\x15J\x04\b(\x10)J\x04\b2\x103J\x04\b3\x104J\x04\b<\x10=J\x04\bF\x10GJ\x04\bZ\x10[R\rcontrol_planeR\bdatabaseR\x04natsR\btemporalR\x03tlsR\x05drainR\bdata_dirR\x10streaming_driverR\fintegrationsR\robservabilityR\x06sentryR\tanalyticsR\x03llmR\apreview\"\x95\x03\n" +
+	"\x10\vJ\x04\b\v\x10\fJ\x04\b\f\x10\rJ\x04\b\r\x10\x0eJ\x04\b\x0e\x10\x0fJ\x04\b\x13\x10\x14J\x04\b\x14\x10\x15J\x04\b(\x10)J\x04\b2\x103J\x04\b3\x104J\x04\b<\x10=J\x04\bF\x10GJ\x04\bZ\x10[R\rcontrol_planeR\bdatabaseR\x04natsR\btemporalR\x03tlsR\x05drainR\bdata_dirR\x10streaming_driverR\fintegrationsR\robservabilityR\x06sentryR\tanalyticsR\x03llmR\apreview\"\xdd\x04\n" +
 	"\n" +
 	"OrgsConfig\x12\x9b\x01\n" +
 	"\x13connections_enabled\x18\x01 \x01(\bBj\x82\xce\x18f\n" +
 	" RELIANT_ORGS_CONNECTIONS_ENABLED*BLet org owners and admins create org-owned integration connectionsR\x12connectionsEnabled\x12\xe8\x01\n" +
 	"$github_installation_triggers_enabled\x18\x02 \x01(\bB\x96\x01\x82\xce\x18\x91\x01\n" +
-	"1RELIANT_ORGS_GITHUB_INSTALLATION_TRIGGERS_ENABLED*\\Let an org's GitHub triggers listen through one of the org's linked GitHub App installationsR!githubInstallationTriggersEnabledB@Z>github.com/reliant-labs/reliant/gen/reliant/config/v1;configv1b\x06proto3"
+	"1RELIANT_ORGS_GITHUB_INSTALLATION_TRIGGERS_ENABLED*\\Let an org's GitHub triggers listen through one of the org's linked GitHub App installationsR!githubInstallationTriggersEnabled\x12\xc5\x01\n" +
+	"\x19provider_accounts_enabled\x18\x03 \x01(\bB\x88\x01\x82\xce\x18\x83\x01\n" +
+	"&RELIANT_ORGS_PROVIDER_ACCOUNTS_ENABLED*YLet org owners and admins add org-owned AI provider accounts and bind provider workspacesR\x17providerAccountsEnabledB@Z>github.com/reliant-labs/reliant/gen/reliant/config/v1;configv1b\x06proto3"
 
 var (
 	file_reliant_config_v1_api_server_config_proto_rawDescOnce sync.Once

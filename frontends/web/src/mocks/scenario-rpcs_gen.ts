@@ -255,6 +255,22 @@ export type ScenarioRpcHandlers =
     "reliant.v1.ModelEndpointService/TestModelEndpoint"?: (req: import("@/gen/reliant/v1/model_endpoint_pb").TestModelEndpointRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/model_endpoint_pb").TestModelEndpointResponseSchema>>;
   }
 
+  // forge:section reliant.v1.OrgProviderAccountService
+  // forge:hash=b9cf7bde366109b7ecd93cf0a4f1605ccbc0e19b7bf2321351b1eed139105cc4
+  & {
+    "reliant.v1.OrgProviderAccountService/ListOrgProviderAccounts"?: (req: import("@/gen/reliant/v1/org_provider_account_pb").ListOrgProviderAccountsRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/org_provider_account_pb").ListOrgProviderAccountsResponseSchema>>;
+    "reliant.v1.OrgProviderAccountService/AddOrgProviderAPIKey"?: (req: import("@/gen/reliant/v1/org_provider_account_pb").AddOrgProviderAPIKeyRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/org_provider_account_pb").AddOrgProviderAPIKeyResponseSchema>>;
+    "reliant.v1.OrgProviderAccountService/RotateOrgProviderAPIKey"?: (req: import("@/gen/reliant/v1/org_provider_account_pb").RotateOrgProviderAPIKeyRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/org_provider_account_pb").RotateOrgProviderAPIKeyResponseSchema>>;
+    "reliant.v1.OrgProviderAccountService/UpdateOrgProviderAccount"?: (req: import("@/gen/reliant/v1/org_provider_account_pb").UpdateOrgProviderAccountRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/org_provider_account_pb").UpdateOrgProviderAccountResponseSchema>>;
+    "reliant.v1.OrgProviderAccountService/ReorderOrgProviderAccounts"?: (req: import("@/gen/reliant/v1/org_provider_account_pb").ReorderOrgProviderAccountsRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/org_provider_account_pb").ReorderOrgProviderAccountsResponseSchema>>;
+    "reliant.v1.OrgProviderAccountService/SetOrgProviderAccountGrants"?: (req: import("@/gen/reliant/v1/org_provider_account_pb").SetOrgProviderAccountGrantsRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/org_provider_account_pb").SetOrgProviderAccountGrantsResponseSchema>>;
+    "reliant.v1.OrgProviderAccountService/DeleteOrgProviderAccount"?: (req: import("@/gen/reliant/v1/org_provider_account_pb").DeleteOrgProviderAccountRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/org_provider_account_pb").DeleteOrgProviderAccountResponseSchema>>;
+    "reliant.v1.OrgProviderAccountService/ListOrgProviderWorkspaces"?: (req: import("@/gen/reliant/v1/org_provider_account_pb").ListOrgProviderWorkspacesRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/org_provider_account_pb").ListOrgProviderWorkspacesResponseSchema>>;
+    "reliant.v1.OrgProviderAccountService/BindOrgProviderWorkspace"?: (req: import("@/gen/reliant/v1/org_provider_account_pb").BindOrgProviderWorkspaceRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/org_provider_account_pb").BindOrgProviderWorkspaceResponseSchema>>;
+    "reliant.v1.OrgProviderAccountService/UnbindOrgProviderWorkspace"?: (req: import("@/gen/reliant/v1/org_provider_account_pb").UnbindOrgProviderWorkspaceRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/org_provider_account_pb").UnbindOrgProviderWorkspaceResponseSchema>>;
+    "reliant.v1.OrgProviderAccountService/ReleaseOrgProviderSeat"?: (req: import("@/gen/reliant/v1/org_provider_account_pb").ReleaseOrgProviderSeatRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/org_provider_account_pb").ReleaseOrgProviderSeatResponseSchema>>;
+  }
+
   // forge:section reliant.v1.PackageCommandsService
   // forge:hash=3f70e08889d40328b3aa7716cc9e55bc2feb1071ba48fe9b928b14cfad376320
   & {

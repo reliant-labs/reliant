@@ -39,7 +39,7 @@ import (
 // ReasonOrgAdminRequired is the x-forge-error-reason of an admin-only action
 // refused because the caller is not an admin or owner of the org, or their
 // role could not be confirmed.
-const ReasonOrgAdminRequired = "org_admin_required"
+const ReasonOrgAdminRequired = orgs.ReasonOrgAdminRequired
 
 // RequireAdmin refuses unless userID, signed in as a person, is an admin or
 // owner of orgID by a fresh read of their role (authz.RequireOrgAdmin): a

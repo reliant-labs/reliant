@@ -1,0 +1,392 @@
+// Copyright (c) 2025 Reliant Labs. All rights reserved.
+syntax = "proto3";
+
+package reliant.v1;
+
+import "forge/v1/forge.proto";
+import "reliant/v1/provider_account.proto";
+
+option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
+
+// OrgProviderAccountService manages the AI provider accounts an organization
+// owns and pays for (control-plane docs/design/org-provider-accounts.md §3,
+// §6, §7): the org's API keys, who in the org may use each one, and the
+// Claude Team / ChatGPT Business workspaces whose members' seats the org pays
+// for.
+//
+// Who may do what:
+//
+//   - Every rpc is a person's act: a credential an agent or a script can hold
+//     (the CLI login, an rlat_ access token, an org automation token) is
+//     PermissionDenied with reason human_only.
+//   - Everything but ListOrgProviderAccounts needs an owner or admin of the
+//     org, with the role read from control-plane at the call (never a cached
+//     role, so a just-demoted admin cannot act): anyone else is
+//     PermissionDenied with reason org_admin_required.
+//   - ListOrgProviderAccounts answers any live member: an owner or admin sees
+//     each account whole, a member sees its provider, label and status only,
+//     never the masked key, its grants or its usage.
+//
+// No rpc ever returns a key: an org key is write-only. Admins see its last
+// four characters (masked_key); nobody reads it back.
+//
+// Adding an account and binding a workspace are refused (FailedPrecondition)
+// until the deployment enables them (ApiServerConfig
+// orgs.provider_accounts_enabled). Deleting, pausing, rotating, editing,
+// unbinding and releasing are never gated, so an admin can always stop the
+// org's spend.
+//
+// An account id or workspace of another org answers NotFound, so ids cannot
+// be enumerated across orgs.
+service OrgProviderAccountService {
+  // ListOrgProviderAccounts returns the org's accounts grouped by provider in
+  // priority order. An owner or admin sees each whole; a member sees only
+  // its provider, label and status.
+  // forge:custom — scoped to an org, read by role: never secret-bearing, a member's view is narrowed
+  rpc ListOrgProviderAccounts(ListOrgProviderAccountsRequest) returns (ListOrgProviderAccountsResponse) {}
+
+  // AddOrgProviderAPIKey validates a pasted API key against its provider with
+  // one cheap call, then stores it as an account of the org, sealed under the
+  // org's vault tenant. A key the org already holds for that provider is the
+  // same account (created = false).
+  rpc AddOrgProviderAPIKey(AddOrgProviderAPIKeyRequest) returns (AddOrgProviderAPIKeyResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "add"
+        target: {
+          kind: "provider_account"
+          id: "response.account.account.id"
+          label: "response.account.account.label"
+        }
+        scope: "org_id"
+        detail: ["provider", "access"]
+      }
+    };
+  }
+
+  // RotateOrgProviderAPIKey replaces an org account's key in place: the
+  // account keeps its id, label, order, access, grants, limit state and the
+  // threads assigned to it, and a needs-attention mark is cleared. The new key
+  // is validated first.
+  rpc RotateOrgProviderAPIKey(RotateOrgProviderAPIKeyRequest) returns (RotateOrgProviderAPIKeyResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "rotate"
+        target: {
+          kind: "provider_account"
+          id: "account_id"
+          label: "response.account.account.label"
+        }
+        scope: "org_id"
+      }
+    };
+  }
+
+  // UpdateOrgProviderAccount renames, pauses or resumes an org account, or
+  // changes who in the org may use it. Unset fields are left alone.
+  // forge:custom — only label, paused and access are writable; status is derived
+  rpc UpdateOrgProviderAccount(UpdateOrgProviderAccountRequest) returns (UpdateOrgProviderAccountResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "update"
+        target: {
+          kind: "provider_account"
+          id: "account_id"
+          label: "response.account.account.label"
+        }
+        scope: "org_id"
+        detail: ["paused", "access"]
+      }
+    };
+  }
+
+  // ReorderOrgProviderAccounts sets the order of one provider's org accounts:
+  // the In-order sequence of the org's tier. account_ids must be exactly the
+  // org's accounts of that provider.
+  rpc ReorderOrgProviderAccounts(ReorderOrgProviderAccountsRequest) returns (ReorderOrgProviderAccountsResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "reorder"
+        target: {
+          kind: "provider_account_order"
+          id: "provider"
+        }
+        scope: "org_id"
+      }
+    };
+  }
+
+  // SetOrgProviderAccountGrants sets the members an org account is granted to
+  // (who may use it while its access is SELECTED). user_ids replaces the
+  // whole set: a member already granted keeps their grant, one left out
+  // loses it. Every user must be a live member of the org.
+  rpc SetOrgProviderAccountGrants(SetOrgProviderAccountGrantsRequest) returns (SetOrgProviderAccountGrantsResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "set_grants"
+        target: {
+          kind: "provider_account"
+          id: "account_id"
+          label: "response.account.account.label"
+        }
+        scope: "org_id"
+      }
+    };
+  }
+
+  // DeleteOrgProviderAccount removes an org account and destroys its sealed
+  // key. Its grants, limit state and thread assignments go with it; threads
+  // that used it move to another account at their next call.
+  // forge:custom — destroys the sealed key and re-densifies the provider's order
+  rpc DeleteOrgProviderAccount(DeleteOrgProviderAccountRequest) returns (DeleteOrgProviderAccountResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "delete"
+        target: {
+          kind: "provider_account"
+          id: "account_id"
+        }
+        scope: "org_id"
+      }
+    };
+  }
+
+  // ListOrgProviderWorkspaces returns the provider workspaces bound to the
+  // org and the members' seats attributed to it.
+  // forge:custom — an admin read joining each binding to the seats it matched
+  rpc ListOrgProviderWorkspaces(ListOrgProviderWorkspacesRequest) returns (ListOrgProviderWorkspacesResponse) {}
+
+  // BindOrgProviderWorkspace binds the Claude Team/Enterprise or ChatGPT
+  // Business/Team workspace of one of the caller's OWN sign-ins to the org.
+  // The workspace id is read from that account's provider-issued identity,
+  // never typed, so nobody can bind a workspace they are not in. One
+  // workspace pays for one org: a workspace already bound to another org is
+  // AlreadyExists. Binding it to the same org again is a no-op
+  // (created = false).
+  rpc BindOrgProviderWorkspace(BindOrgProviderWorkspaceRequest) returns (BindOrgProviderWorkspaceResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "bind"
+        target: {
+          kind: "provider_workspace"
+          id: "response.workspace.external_org_id"
+          label: "response.workspace.display_name"
+        }
+        scope: "org_id"
+        detail: ["response.workspace.provider"]
+      }
+    };
+  }
+
+  // UnbindOrgProviderWorkspace removes a binding. The seats it matched are
+  // personal again: their attribution to the org is cleared.
+  rpc UnbindOrgProviderWorkspace(UnbindOrgProviderWorkspaceRequest) returns (UnbindOrgProviderWorkspaceResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "unbind"
+        target: {
+          kind: "provider_workspace"
+          id: "external_org_id"
+        }
+        scope: "org_id"
+        detail: ["provider"]
+      }
+    };
+  }
+
+  // ReleaseOrgProviderSeat stops the org paying for one member's seat: the
+  // account's attribution to the org is cleared and it is the member's
+  // personal account again. The managed Reliant key is not a seat and cannot
+  // be released.
+  rpc ReleaseOrgProviderSeat(ReleaseOrgProviderSeatRequest) returns (ReleaseOrgProviderSeatResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "release"
+        target: {
+          kind: "provider_account"
+          id: "account_id"
+        }
+        scope: "org_id"
+      }
+    };
+  }
+}
+
+// OrgProviderAccountAccess is who in the org may use an org account.
+enum OrgProviderAccountAccess {
+  ORG_PROVIDER_ACCOUNT_ACCESS_UNSPECIFIED = 0;
+  // Every live member of the org (the default when adding one).
+  ORG_PROVIDER_ACCOUNT_ACCESS_MEMBERS = 1;
+  // Live owners and admins.
+  ORG_PROVIDER_ACCOUNT_ACCESS_ADMINS = 2;
+  // Only the members it is granted to (SetOrgProviderAccountGrants). A grant
+  // counts only while the member stays in the org: one who leaves and rejoins
+  // starts with none.
+  ORG_PROVIDER_ACCOUNT_ACCESS_SELECTED = 3;
+}
+
+// OrgProviderAccount is one account an org owns.
+message OrgProviderAccount {
+  // The account. An owner or admin sees it whole. A member sees only id,
+  // provider, provider_display_name, auth_kind, label, priority, status,
+  // limited_until and created_at: never masked_key, usage windows or a
+  // needs-attention reason.
+  ProviderAccount account = 1;
+  // Who in the org may use it.
+  OrgProviderAccountAccess access = 2;
+  // The admin who added it: attribution only. Owners and admins only.
+  optional string created_by_user_id = 3;
+  // The members it is granted to. Owners and admins only; they count only
+  // while access is SELECTED.
+  repeated OrgProviderAccountGrant grants = 4;
+}
+
+// OrgProviderAccountGrant is one member's grant of an org account.
+message OrgProviderAccountGrant {
+  string user_id = 1;
+  // The admin who granted it.
+  string granted_by_user_id = 2;
+  // RFC 3339 UTC.
+  string granted_at = 3;
+}
+
+message ListOrgProviderAccountsRequest {
+  string org_id = 1;
+}
+message ListOrgProviderAccountsResponse {
+  repeated OrgProviderAccount accounts = 1;
+  // Whether the caller is an owner or admin of the org (and so sees each
+  // account whole, and may change them).
+  bool caller_is_admin = 2;
+  // Whether this deployment lets the org add accounts and bind workspaces
+  // (ApiServerConfig orgs.provider_accounts_enabled).
+  bool adding_enabled = 3;
+}
+
+message AddOrgProviderAPIKeyRequest {
+  string org_id = 1;
+  // An API-key driver: "anthropic", "openai", "gemini" or "openrouter".
+  string provider = 2;
+  // Write-only: never returned by any rpc.
+  string api_key = 3;
+  // What members see, e.g. "Acme prod". Required.
+  string label = 4;
+  // Who may use it. Unset is MEMBERS.
+  OrgProviderAccountAccess access = 5;
+}
+message AddOrgProviderAPIKeyResponse {
+  OrgProviderAccount account = 1;
+  bool created = 2;
+}
+
+message RotateOrgProviderAPIKeyRequest {
+  string org_id = 1;
+  string account_id = 2;
+  // The new key, for the account's own provider. Write-only.
+  string api_key = 3;
+}
+message RotateOrgProviderAPIKeyResponse {
+  OrgProviderAccount account = 1;
+}
+
+message UpdateOrgProviderAccountRequest {
+  string org_id = 1;
+  string account_id = 2;
+  // A new label; it cannot be empty.
+  optional string label = 3;
+  optional bool paused = 4;
+  optional OrgProviderAccountAccess access = 5;
+}
+message UpdateOrgProviderAccountResponse {
+  OrgProviderAccount account = 1;
+}
+
+message ReorderOrgProviderAccountsRequest {
+  string org_id = 1;
+  string provider = 2;
+  repeated string account_ids = 3;
+}
+message ReorderOrgProviderAccountsResponse {
+  // The provider's org accounts in their new order.
+  repeated OrgProviderAccount accounts = 1;
+}
+
+message SetOrgProviderAccountGrantsRequest {
+  string org_id = 1;
+  string account_id = 2;
+  // The members the account is granted to, replacing the current set.
+  repeated string user_ids = 3;
+}
+message SetOrgProviderAccountGrantsResponse {
+  OrgProviderAccount account = 1;
+}
+
+message DeleteOrgProviderAccountRequest {
+  string org_id = 1;
+  string account_id = 2;
+}
+message DeleteOrgProviderAccountResponse {}
+
+// OrgProviderWorkspace is a provider workspace an org pays for.
+message OrgProviderWorkspace {
+  // "claude" or "codex".
+  string provider = 1;
+  // The provider's id of the workspace: the Claude organization uuid, or the
+  // ChatGPT workspace (chatgpt_account_id).
+  string external_org_id = 2;
+  // The provider's name for it.
+  string display_name = 3;
+  // The admin who bound it.
+  string bound_by_user_id = 4;
+  // RFC 3339 UTC.
+  string bound_at = 5;
+}
+
+// OrgProviderSeat is a member's own sign-in the org pays for.
+message OrgProviderSeat {
+  string account_id = 1;
+  // The member whose sign-in it is.
+  string user_id = 2;
+  string provider = 3;
+  // The sign-in's email at the provider.
+  optional string email = 4;
+  // Normalized plan: "team", "business", "enterprise", …
+  optional string plan = 5;
+  // How the seat was matched: "workspace" (a bound workspace) or "approved".
+  string attribution_source = 6;
+  // The workspace it is in (external_org_id of a binding), when known.
+  optional string external_org_id = 7;
+}
+
+message ListOrgProviderWorkspacesRequest {
+  string org_id = 1;
+}
+message ListOrgProviderWorkspacesResponse {
+  repeated OrgProviderWorkspace workspaces = 1;
+  repeated OrgProviderSeat seats = 2;
+}
+
+message BindOrgProviderWorkspaceRequest {
+  string org_id = 1;
+  // One of the caller's own Claude or Codex sign-ins on a team plan (Claude
+  // Team/Enterprise, ChatGPT Team/Business/Enterprise).
+  string account_id = 2;
+}
+message BindOrgProviderWorkspaceResponse {
+  OrgProviderWorkspace workspace = 1;
+  bool created = 2;
+}
+
+message UnbindOrgProviderWorkspaceRequest {
+  string org_id = 1;
+  string provider = 2;
+  string external_org_id = 3;
+}
+message UnbindOrgProviderWorkspaceResponse {}
+
+message ReleaseOrgProviderSeatRequest {
+  string org_id = 1;
+  // The member's account whose attribution to the org is cleared.
+  string account_id = 2;
+}
+message ReleaseOrgProviderSeatResponse {}

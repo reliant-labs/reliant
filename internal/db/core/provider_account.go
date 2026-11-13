@@ -72,6 +72,70 @@ const (
 	AttributionManaged   = "managed"   // the managed Reliant key minted in that org
 )
 
+var (
+	// ErrOrgAPIKeyInUse: a rotation to a key the org already holds as another of its accounts.
+	ErrOrgAPIKeyInUse = svcerr.AlreadyExists("that key is already another of the organization's accounts")
+	// ErrProviderWorkspaceNotFound covers a binding that does not exist and one of another org.
+	ErrProviderWorkspaceNotFound = svcerr.NotFound("provider workspace")
+	// ErrProviderWorkspaceBoundElsewhere: the workspace already pays for another org
+	// (org_provider_workspaces_one_org). It never names that org.
+	ErrProviderWorkspaceBoundElsewhere = svcerr.AlreadyExists("that workspace is already bound to another organization")
+	// ErrOrgSeatNotFound covers an account that is not a seat the org pays for: a personal one,
+	// another org's seat, or the managed key minted in the org (which is not released).
+	ErrOrgSeatNotFound = svcerr.NotFound("seat")
+)
+
+// OrgAPIKey is the new credential of an org's API-key account being rotated: its identity
+// (APIKeyIdentityKey over the org's owner key), display hint and the key itself. Never log it.
+type OrgAPIKey struct {
+	IdentityKey, KeyHint, Secret string
+}
+
+// OrgAccountGrant is one member's grant of an org account whose audience is OrgAccessSelected
+// (provider_account_grants). It counts only while the member is live and GrantedAt is at or after
+// their membership began (org-provider-accounts.md §3.3); the store records it, routing judges it.
+type OrgAccountGrant struct {
+	AccountID, OrgID, UserID, GrantedByUserID string
+	GrantedAt                                 time.Time
+}
+
+// OrgProviderWorkspace is a provider workspace an org pays for (org_provider_workspaces): a
+// Claude Team/Enterprise organization or a ChatGPT Business/Team workspace. Members' sign-ins in
+// it are the org's seats.
+type OrgProviderWorkspace struct {
+	OrgID, Provider, ExternalOrgID, DisplayName, BoundByUserID string
+	BoundAt                                                    time.Time
+}
+
+// ProviderWorkspaceID is the provider's id of the workspace a sign-in belongs to, the value a
+// binding's external_org_id holds: the Claude token's organization uuid, or the Codex JWT's
+// chatgpt_account_id. "" for any other account, which has no workspace. It is provider-issued
+// identity the account was connected with, never a value a person typed.
+func ProviderWorkspaceID(a ProviderAccount) string {
+	if a.AuthKind != AuthKindOAuth {
+		return ""
+	}
+	switch a.Provider {
+	case "claude":
+		return a.OrganizationID
+	case "codex":
+		return a.ExternalAccountID
+	}
+	return ""
+}
+
+// TeamPlan reports whether plan (NormalizePlan's vocabulary) is a provider workspace an org pays
+// per seat for: Claude Team or Enterprise, ChatGPT Team, Business or Enterprise.
+func TeamPlan(provider, plan string) bool {
+	switch provider {
+	case "claude":
+		return plan == "team" || plan == "enterprise"
+	case "codex":
+		return plan == "team" || plan == "business" || plan == "enterprise"
+	}
+	return false
+}
+
 // AccountOwner is who a provider account belongs to: a person (Kind AccountOwnerUser, ID their
 // user id) or an organization (Kind AccountOwnerOrg, ID its org id). It is core.ConnectionOwner's
 // twin. Every store read and write that takes one scopes to that owner in SQL, and the vault
