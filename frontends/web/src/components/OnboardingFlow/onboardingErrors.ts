@@ -119,9 +119,11 @@ export function describeKeyError(
       message: "Rate limit exceeded. Please wait and try again.",
     };
   }
+  // Anything unclassified gets a fixed sentence: the provider's response body
+  // can carry account details, and the banner is visible to session replay.
   return {
     code: "key_validation_failed",
-    message: errorText || DEFAULT_KEY_MESSAGE,
+    message: DEFAULT_KEY_MESSAGE,
   };
 }
 

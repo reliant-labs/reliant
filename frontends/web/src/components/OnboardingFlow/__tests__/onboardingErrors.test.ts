@@ -54,12 +54,18 @@ describe("describeKeyError", () => {
     ).toBe("key_data_policy");
   });
 
-  it("anything else keeps the provider's text on screen under a generic code", () => {
-    const failure = describeKeyError("Validation failed: dial tcp: i/o timeout", "openai");
+  it("anything else shows a fixed sentence, never the provider's text, under a generic code", () => {
+    const providerBody =
+      'Validation failed: 400 Bad Request {"error":{"message":"org acme-corp (ops@acme.test) is suspended"}}';
+    const failure = describeKeyError(providerBody, "openai");
     expect(failure).toEqual({
       code: "key_validation_failed",
-      message: "Validation failed: dial tcp: i/o timeout",
+      message: "Validation failed. Please check your API key.",
     });
+    expect(failure.message).not.toContain("acme");
+    expect(describeKeyError("", "openai").message).toBe(
+      "Validation failed. Please check your API key.",
+    );
   });
 });
 
