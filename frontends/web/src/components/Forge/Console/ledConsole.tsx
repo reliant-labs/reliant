@@ -19,9 +19,10 @@
  *    the per-environment columns and the deploy log (`led`).
  *
  * Every sentence is built from the page's own data (Observability/Leads/
- * leadStory.ts), so it reads the same for any project. A host adds what is
- * its own through LedConsoleHost: the demo its Home and "How it was built"
- * rows, its agent cards and its sample shop's plain explanations.
+ * leadStory.ts), so it reads the same for any project. It is the console's
+ * default (ConsoleLayout); a host adds what is its own through
+ * LedConsoleHost: the demo its Home and "How it was built" rows, its agent
+ * cards and its sample shop's plain explanations.
  */
 
 import { useMemo, type ReactNode } from "react";
@@ -37,7 +38,7 @@ import { DetailDensityProvider, type DetailDensity } from "../Observability/deta
 import { IssueLead, SessionLead, TraceLead } from "../Observability/Leads/DetailLeads";
 import { ErrorsLead, SessionsLead, TracesLead, type LeadHref } from "../Observability/Leads/ListLeads";
 import { useForgeConsole } from "./consoleContext";
-import { ConsoleNavExtrasProvider, type ConsoleNavExtras } from "./consoleNavExtras";
+import { ConsoleNavExtrasProvider, useConsoleNavExtras, type ConsoleNavExtras } from "./consoleNavExtras";
 import { ENV_ALL } from "./envScope";
 import { buildGroupedConsoleNav, groupedCrumbs, PAGE_SUBTITLES, type ProductAnalyticsHub } from "./groupedNav";
 import type { ObsNavView } from "./paths";
@@ -160,7 +161,17 @@ const LED_SPACING = "contents md:[&_main]:pt-4 [&_[data-density=compact]_h1]:tex
 
 const NO_HOST: LedConsoleHost = {};
 
+/**
+ * The led console for `children`. Under a host's own led console (the public
+ * demo wraps the console's layout in one) it adds nothing: the outer host's
+ * additions stand.
+ */
 export function LedConsoleProvider({ host = NO_HOST, children }: { host?: LedConsoleHost; children: ReactNode }) {
+  const outer = useConsoleNavExtras();
+  return outer.led ? <>{children}</> : <LedConsole host={host}>{children}</LedConsole>;
+}
+
+function LedConsole({ host, children }: { host: LedConsoleHost; children: ReactNode }) {
   const search = useRouterState({ select: (s) => s.location.search }) as Record<string, unknown>;
   const value = useMemo(() => ledNavExtras(host, search), [host, search]);
   return (

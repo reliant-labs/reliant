@@ -507,6 +507,17 @@ describe("the nav", () => {
     expect(screen.getByRole("link", { name: /Alerts/ })).toHaveTextContent("2");
   });
 
+  it("is the led console's grouped nav, with each view under its group in the breadcrumb", async () => {
+    renderAt("/forge/p/alpha/observability/errors?env=prod");
+    await screen.findByTestId("page");
+    const nav = screen.getByRole("navigation", { name: "alpha" });
+    for (const row of ["Overview", "Issues", "Performance", "Sessions", "Releases", "More tools"]) expect(within(nav).getByText(row)).toBeInTheDocument();
+    // The console's own "Observability" parent is gone; its views sit in their groups.
+    expect(within(nav).queryByText("Observability")).toBeNull();
+    expect(screen.getByRole("link", { name: "Errors" })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("navigation", { name: /breadcrumb/i })).toHaveTextContent("Issues›Errors");
+  });
+
   it("marks an environment whose deploy is queued", async () => {
     roster.prodHolds = [{ kind: "billing", promotionId: "p", reason: "", fix: "", actionUrl: "", callerCanResolve: false }];
     renderAt("/forge/p/alpha/environments");
