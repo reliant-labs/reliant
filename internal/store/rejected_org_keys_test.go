@@ -11,43 +11,64 @@ import (
 	"github.com/reliant-labs/reliant/internal/store"
 )
 
-// The rejected org keys the inbox asks about are those of the orgs the person
-// has a footprint in: a project there, a grant, a seat it pays for, or a key
-// they added. A key that works, a person's own rejected key, and an org they
-// have nothing in are not listed. Whether they may see it is decided by role.
-func TestListRejectedOrgKeysNear(t *testing.T) {
+// The rejected org keys of the orgs asked about, and only those: a key that
+// works, another org's, and a person's own rejected key are not listed.
+func TestListRejectedOrgKeysIn(t *testing.T) {
 	f := newCredFixture(t)
 	ctx := context.Background()
 	reject := func(id string) {
 		f.exec(`UPDATE provider_accounts SET needs_reauth_at = $2, needs_reauth_reason = 'rejected' WHERE id = $1`, id, credT0)
 	}
-	f.mvProject("p-1") // mvOwner's project in mvSrc
-	for _, k := range []struct{ id, org string }{
-		{"k-project", mvSrc}, {"k-grant", "org-grant"}, {"k-seat", "org-seat"}, {"k-mine", "org-added"},
-		{"k-elsewhere", "org-else"}, {"k-fine", mvSrc},
-	} {
-		f.orgKey(k.id, k.org)
-	}
-	for _, id := range []string{"k-project", "k-grant", "k-seat", "k-mine", "k-elsewhere"} {
-		reject(id)
-	}
-	f.grant("k-grant", "org-grant", mvOwner, credT0)
-	f.personal("seat", mvOwner, "org-seat", "workspace")
-	f.exec(`UPDATE provider_accounts SET created_by_user_id = $1 WHERE id = 'k-mine'`, mvOwner)
-	f.personal("own-dead", mvOwner, "", "")
-	reject("own-dead")
-
-	got, err := store.ListRejectedOrgKeysNear(ctx, f.env.ORM, mvOwner)
+	any, err := store.HasRejectedOrgKeys(ctx, f.env.ORM)
 	require.NoError(t, err)
-	var ids []string
-	for _, a := range got {
-		ids = append(ids, a.ID)
-		assert.NotNil(t, a.NeedsReauthAt)
-		assert.NotEmpty(t, a.OrgID)
-	}
-	assert.ElementsMatch(t, []string{"k-project", "k-grant", "k-seat", "k-mine"}, ids)
+	assert.False(t, any)
 
-	none, err := store.ListRejectedOrgKeysNear(ctx, f.env.ORM, "nobody")
+	f.orgKey("k-acme", "acme")
+	f.orgKey("k-acme-fine", "acme")
+	f.orgKey("k-beta", "beta")
+	f.personal("own-dead", "member", "", "")
+	reject("own-dead")
+	any, err = store.HasRejectedOrgKeys(ctx, f.env.ORM)
+	require.NoError(t, err)
+	assert.False(t, any, "a person's own rejected key is not an org's")
+
+	reject("k-acme")
+	reject("k-beta")
+	any, err = store.HasRejectedOrgKeys(ctx, f.env.ORM)
+	require.NoError(t, err)
+	assert.True(t, any)
+
+	got, err := store.ListRejectedOrgKeysIn(ctx, f.env.ORM, []string{"acme", "gamma"})
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+	assert.Equal(t, "k-acme", got[0].ID)
+	assert.Equal(t, "acme", got[0].OrgID)
+	require.NotNil(t, got[0].NeedsReauthAt)
+	none, err := store.ListRejectedOrgKeysIn(ctx, f.env.ORM, nil)
 	require.NoError(t, err)
 	assert.Empty(t, none)
+}
+
+// The partial index the inbox's probe reads exists on the migrated schema, is
+// valid (a CONCURRENTLY build that failed leaves an invalid one), indexes
+// org_id, and covers exactly the org rows that need attention.
+func TestRejectedOrgKeysIndex(t *testing.T) {
+	f := newCredFixture(t)
+	var (
+		valid     bool
+		columns   string
+		predicate string
+	)
+	require.NoError(t, f.env.SQL.QueryRowContext(context.Background(), `
+		SELECT i.indisvalid,
+		       (SELECT string_agg(a.attname, ',' ORDER BY k.n) FROM unnest(i.indkey) WITH ORDINALITY AS k(attnum, n)
+		          JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = k.attnum),
+		       pg_get_expr(i.indpred, i.indrelid)
+		FROM pg_index i JOIN pg_class c ON c.oid = i.indexrelid
+		WHERE c.relname = 'provider_accounts_org_needs_attention'`).Scan(&valid, &columns, &predicate),
+		"the index exists")
+	assert.True(t, valid)
+	assert.Equal(t, "org_id", columns)
+	assert.Contains(t, predicate, "owner_kind = 'org'")
+	assert.Contains(t, predicate, "needs_reauth_at IS NOT NULL")
 }

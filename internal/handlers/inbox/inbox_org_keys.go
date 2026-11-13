@@ -22,32 +22,83 @@ import (
 // inboxOrgKeyRejectedPrefix keys a rejected org key: the account and when it was rejected.
 const inboxOrgKeyRejectedPrefix = "org_provider_key_rejected:"
 
-// orgKeyItems returns the rejected keys of the orgs userID administers. The candidate orgs are
-// those userID has a footprint in (Repository.ListRejectedOrgKeysNear), and each is decided by
-// userID's role there (cached like membership): an owner or admin sees its keys; anyone else, an
-// unknown role or an outage, sees none.
+// callerJWTKey carries the caller's session into the shared inbox read, which
+// asks the control plane for their orgs as them.
+type callerJWTKey struct{}
+
+func withCallerJWT(ctx context.Context, jwt string) context.Context {
+	if jwt == "" {
+		return ctx
+	}
+	return context.WithValue(ctx, callerJWTKey{}, jwt)
+}
+
+func callerJWT(ctx context.Context) string {
+	jwt, _ := ctx.Value(callerJWTKey{}).(string)
+	return jwt
+}
+
+// adminOrgsTTL bounds how long a user's administered orgs are reused across inbox reads: the
+// badge polls, and a role change shows within it, like orgs.CacheTTL.
+const adminOrgsTTL = 30 * time.Second
+
+type adminOrgsEntry struct {
+	ids     []string
+	expires time.Time
+}
+
+// orgKeyItems returns the rejected keys of the orgs userID administers. Which orgs those are is
+// control-plane's live answer (ListMyOrganizations, asked as the caller), never a guess from
+// local rows: an owner or admin with nothing of their own in the org still hears of it. Nothing
+// is asked while no org has a rejected key. An outage, a machine credential (which has no orgs to
+// list) and a deployment with no control plane show nothing (fail closed).
 func (s *Service) orgKeyItems(ctx context.Context, userID string) ([]*reliantv1.InboxItem, error) {
-	if s.deps.Orgs == nil {
+	jwt := callerJWT(ctx)
+	if s.deps.MyOrgs == nil || jwt == "" {
 		return nil, nil
 	}
-	keys, err := s.deps.Repo.ListRejectedOrgKeysNear(ctx, userID)
-	if err != nil || len(keys) == 0 {
+	any, err := s.deps.Repo.HasRejectedOrgKeys(ctx)
+	if err != nil || !any {
 		return nil, err
 	}
-	admin := map[string]bool{}
-	var items []*reliantv1.InboxItem
+	orgIDs, err := s.adminOrgIDs(ctx, userID, jwt)
+	if err != nil || len(orgIDs) == 0 {
+		return nil, err
+	}
+	keys, err := s.deps.Repo.ListRejectedOrgKeysIn(ctx, orgIDs)
+	if err != nil {
+		return nil, err
+	}
+	items := make([]*reliantv1.InboxItem, 0, len(keys))
 	for _, a := range keys {
-		isAdmin, decided := admin[a.OrgID]
-		if !decided {
-			role, ok, rerr := s.deps.Orgs.Role(ctx, userID, a.OrgID)
-			isAdmin = rerr == nil && ok && (role == orgs.RoleOwner || role == orgs.RoleAdmin)
-			admin[a.OrgID] = isAdmin
-		}
-		if isAdmin {
-			items = append(items, orgKeyRejectedItem(a))
-		}
+		items = append(items, orgKeyRejectedItem(a))
 	}
 	return items, nil
+}
+
+// adminOrgIDs is the orgs userID is a live owner or admin of, per control-plane, cached for
+// adminOrgsTTL.
+func (s *Service) adminOrgIDs(ctx context.Context, userID, jwt string) ([]string, error) {
+	if v, ok := s.adminOrgs.Load(userID); ok {
+		if e := v.(adminOrgsEntry); time.Now().Before(e.expires) {
+			return e.ids, nil
+		}
+	}
+	if s.deps.MyOrgs == nil {
+		return nil, nil
+	}
+	mine, err := s.deps.MyOrgs.ListMyOrganizations(ctx, jwt)
+	if err != nil {
+		return nil, err
+	}
+	var ids []string
+	for _, o := range mine {
+		if o.Role == orgs.RoleOwner || o.Role == orgs.RoleAdmin {
+			ids = append(ids, o.ID)
+		}
+	}
+	s.adminOrgs.Store(userID, adminOrgsEntry{ids: ids, expires: time.Now().Add(adminOrgsTTL)})
+	return ids, nil
 }
 
 // orgKeyRejectedItem is the inbox item of one rejected org key.

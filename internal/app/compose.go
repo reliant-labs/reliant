@@ -1136,6 +1136,9 @@ func (g *Graph) newInbox() (*inbox.Service, error) {
 		Repo:    g.Database(),
 		Sweeper: g.WorktreeSweep(),
 		Orgs:    g.OrgResolver(),
+		// The caller's live orgs, asked of the control plane as the caller;
+		// nil when self-hosted. A nil Service converts to a nil OrgLister.
+		MyOrgs: hostedControlPlane(g.ServerProcessConfig.GetControlPlane()),
 	})
 }
 

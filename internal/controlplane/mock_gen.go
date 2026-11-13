@@ -14,7 +14,7 @@ import (
 )
 
 // forge:section MockService
-// forge:hash=97e4b2820e8ef9102e6ec82d4d3fad75790fcd5f8c1603eb6837ef6d26d10b8c
+// forge:hash=0f1c8603c20165de4393bfc7b115a01bba11d969353a59c5ad1b6c0bce56e990
 
 // MockService is a test mock for the Service interface.
 //
@@ -27,6 +27,7 @@ type MockService struct {
 	MintLLMKeyFunc                   func(context.Context, string, string) (LLMKey, error)
 	MintDaemonResumeTokenFunc        func(context.Context, string, string, string) (DaemonResumeToken, error)
 	RevokeDaemonResumeTokensFunc     func(context.Context, string, string) error
+	ListMyOrganizationsFunc          func(context.Context, string) ([]MyOrganization, error)
 	PreviewAccountDeletionWalletFunc func(context.Context, string) (*AccountDeletionWalletQuote, error)
 	DeleteCurrentUserAccountFunc     func(context.Context, string) (*AccountDeletionResult, error)
 	CloneRepoOntoDaemonFunc          func(context.Context, string, CloneRepoRequest) (CloneRepoResult, error)
@@ -69,6 +70,15 @@ func (m *MockService) RevokeDaemonResumeTokens(ctx context.Context, jwt string, 
 		return m.RevokeDaemonResumeTokensFunc(ctx, jwt, daemonID)
 	}
 	return contractkit.MockNotSet("MockService", "RevokeDaemonResumeTokens")
+}
+
+// ListMyOrganizations records the call and delegates to ListMyOrganizationsFunc when set.
+func (m *MockService) ListMyOrganizations(ctx context.Context, jwt string) ([]MyOrganization, error) {
+	m.Recorder.Record("ListMyOrganizations", ctx, jwt)
+	if m.ListMyOrganizationsFunc != nil {
+		return m.ListMyOrganizationsFunc(ctx, jwt)
+	}
+	return nil, contractkit.MockNotSet("MockService", "ListMyOrganizations")
 }
 
 // PreviewAccountDeletionWallet records the call and delegates to PreviewAccountDeletionWalletFunc when set.

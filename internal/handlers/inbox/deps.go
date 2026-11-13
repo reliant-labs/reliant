@@ -7,6 +7,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/controlplane"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/launch"
@@ -17,9 +18,12 @@ import (
 // OrgResolver answers ListInbox's org question. *orgs.Resolver is one.
 type OrgResolver interface {
 	ListScope(ctx context.Context, userID, requested string, stamp orgs.Backfill) (*core.OrgScope, error)
-	// Role is userID's role in orgID (orgs.Resolver.Role): who is told of the org's rejected
-	// API keys. ok is false when it is unknown; err is an outage.
-	Role(ctx context.Context, userID, orgID string) (role string, ok bool, err error)
+}
+
+// OrgLister lists the caller's live org memberships with their role in each, from the
+// control plane (controlplane.Service.ListMyOrganizations), as the caller: jwt is their session.
+type OrgLister interface {
+	ListMyOrganizations(ctx context.Context, jwt string) ([]controlplane.MyOrganization, error)
 }
 
 // Repository is the slice of *db.Repo the inbox handlers use. It
@@ -39,9 +43,10 @@ type Repository interface {
 	AssignUnassignedOrg(ctx context.Context, userID, orgID string) error
 
 	ListInboxPending(ctx context.Context, userID string) ([]*core.InboxPending, error)
-	// ListRejectedOrgKeysNear is the rejected org-owned API keys of the orgs userID has a
-	// footprint in; the inbox lists them to those orgs' owners and admins.
-	ListRejectedOrgKeysNear(ctx context.Context, userID string) ([]core.ProviderAccount, error)
+	// HasRejectedOrgKeys and ListRejectedOrgKeysIn are the rejected org-owned API keys the
+	// inbox lists to their orgs' owners and admins.
+	HasRejectedOrgKeys(ctx context.Context) (bool, error)
+	ListRejectedOrgKeysIn(ctx context.Context, orgIDs []string) ([]core.ProviderAccount, error)
 	ListDismissedInboxItemIDs(ctx context.Context, userID string, itemIDs []string) (map[string]bool, error)
 	DismissInboxItems(ctx context.Context, userID string, itemIDs []string, at time.Time) error
 	RestoreInboxItems(ctx context.Context, userID string, itemIDs []string) error

@@ -612,22 +612,28 @@ func ClearWorkspaceAttributions(ctx context.Context, db orm.Context, orgID, prov
 type ProviderAccountExtra struct {
 }
 
-// ListRejectedOrgKeysNear returns the org-owned accounts that need attention (a key the provider
-// rejected, until it is rotated) of the orgs userID has a footprint in: a project of theirs in
-// the org, a grant to one of its accounts, a seat it pays for, or a key they added. Metadata
-// only, by (org, provider, priority). Whether userID may see them (an owner or admin) is the
-// caller's to decide; the footprint only bounds how many orgs it has to ask about.
-func ListRejectedOrgKeysNear(ctx context.Context, db orm.Context, userID string) ([]core.ProviderAccount, error) {
-	if userID == "" {
+// HasRejectedOrgKeys reports whether any org-owned account needs attention (a key the provider
+// rejected, until it is rotated): a probe on the partial index provider_accounts_org_needs_attention,
+// so an inbox read with nothing to report asks no one about anything.
+func HasRejectedOrgKeys(ctx context.Context, db orm.Context) (bool, error) {
+	var ids []string
+	if err := db.Bun().NewRaw(`SELECT id FROM provider_accounts
+		WHERE owner_kind = 'org' AND needs_reauth_at IS NOT NULL LIMIT 1`).Scan(ctx, &ids); err != nil {
+		return false, err
+	}
+	return len(ids) > 0, nil
+}
+
+// ListRejectedOrgKeysIn returns the org-owned accounts of orgIDs that need attention, metadata
+// only, by (org, provider, priority).
+func ListRejectedOrgKeysIn(ctx context.Context, db orm.Context, orgIDs []string) ([]core.ProviderAccount, error) {
+	if len(orgIDs) == 0 {
 		return nil, nil
 	}
 	var rows []*ProviderAccount
 	if err := db.Bun().NewSelect().Model(&rows).ExcludeColumn(providerAccountSealedColumns...).
 		Where("owner_kind = ?", core.AccountOwnerOrg).Where("needs_reauth_at IS NOT NULL").
-		Where(`(org_id IN (SELECT org_id FROM projects WHERE user_id = ?0 AND org_id IS NOT NULL)
-			OR org_id IN (SELECT org_id FROM provider_account_grants WHERE user_id = ?0)
-			OR org_id IN (SELECT attributed_org_id FROM provider_accounts WHERE user_id = ?0 AND attributed_org_id IS NOT NULL)
-			OR created_by_user_id = ?0)`, userID).
+		Where("org_id IN (?)", bun.List(orgIDs)).
 		Order("org_id", "provider", "priority").Scan(ctx); err != nil {
 		return nil, err
 	}

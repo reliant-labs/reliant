@@ -65,9 +65,6 @@ var userScopedReads = map[string]string{
 	// The takeover decides each offer: its offeree and offerer must be live
 	// members of its org, or an admin of it asked (internal/orgtakeover).
 	"ListPendingTriggerOffers": readCallersFilter,
-	// The inbox lists a rejected org key only to the org's owners and admins:
-	// it asks the caller's role in each org the rows name (orgs.Resolver.Role).
-	"ListRejectedOrgKeysNear": readCallersFilter,
 	// The account loader counts a grant only for a live member of the org,
 	// and only when it postdates their current membership (internal/llm/
 	// drivers, org-provider-accounts §3.3).

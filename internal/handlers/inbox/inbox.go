@@ -105,7 +105,7 @@ func (s *Service) ListInbox(
 		return nil, err
 	}
 
-	read, err := s.sharedRead(ctx, userID)
+	read, err := s.sharedRead(withCallerJWT(ctx, auth.BearerToken(req.Header().Get("Authorization"))), userID)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list inbox"))
 	}

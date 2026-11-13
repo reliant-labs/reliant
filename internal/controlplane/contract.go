@@ -47,6 +47,12 @@ type Service interface {
 	// caller holds that is bound to daemonID.
 	RevokeDaemonResumeTokens(ctx context.Context, jwt, daemonID string) error
 
+	// ListMyOrganizations is every org the caller (jwt, a person's session)
+	// is a live member of, with their role in each, read live from the
+	// control plane (OrganizationService.ListMyOrganizations). A machine
+	// credential is refused there: it has no orgs to list.
+	ListMyOrganizations(ctx context.Context, jwt string) ([]MyOrganization, error)
+
 	// PreviewAccountDeletionWallet asks the control plane what deleting the
 	// caller's account would refund and forfeit. Changes nothing.
 	PreviewAccountDeletionWallet(ctx context.Context, jwt string) (*AccountDeletionWalletQuote, error)
@@ -177,4 +183,10 @@ type Deps struct {
 	Sign func() (string, error)
 	// HTTPClient carries every call. Nil uses a client with a 30s timeout.
 	HTTPClient *http.Client
+}
+
+// MyOrganization is one org the caller belongs to and their role in it ("owner", "admin" or
+// "member").
+type MyOrganization struct {
+	ID, Role string
 }
