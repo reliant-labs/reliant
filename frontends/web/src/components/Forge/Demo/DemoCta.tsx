@@ -27,7 +27,7 @@ import { cn } from "@/lib/utils";
 import { InstallForgeSheet } from "./InstallForgeSheet";
 
 /** Where a CTA sits: the landing UTM's `utm_content`, and analytics' `placement`. */
-export type DemoCtaPlacement = "banner" | "corner" | "end_card" | "page_card" | "toast" | "tour_intro";
+export type DemoCtaPlacement = "banner" | "corner" | "end_card" | "page_card" | "toast" | "tour_intro" | "agent_sheet" | "landing";
 
 /** The landing page's start checklist: deploy an app with one command, no account. */
 export const DEPLOY_START_URL = "https://reliantlabs.io/products/forge";

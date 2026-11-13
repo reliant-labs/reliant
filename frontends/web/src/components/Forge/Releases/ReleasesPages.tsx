@@ -30,6 +30,7 @@ import { usePromoteFlow } from "../Promote/usePromoteFlow";
 import { usePromoterNames } from "./useReleaseData";
 import { ReleaseDetail, type ReleaseDetailSearch } from "./ReleaseDetail";
 import { ReleasesList, type ReleasesSearch } from "./ReleasesList";
+import { useConsoleNavExtras } from "../Console/consoleNavExtras";
 import type { ReleaseEnv } from "./releaseModel";
 
 /** The roster's recorded, deployed environments, as the Releases pages need them: prod first, previews apart. */
@@ -81,6 +82,7 @@ export function ReleasesPage() {
   const { envs, loading } = useReleaseEnvs();
   const { control, dialog } = usePromoteFlow();
   const names = usePromoterNames(forgeProject);
+  const { led } = useConsoleNavExtras();
   const releaseHref = useCallback(
     (version: string, extra?: Record<string, unknown>) => href({ kind: "release", version }, extra),
     [href]
@@ -99,13 +101,13 @@ export function ReleasesPage() {
         promote={control}
         scopeIsLocal={roster.envs.some((candidate) => candidate.name === env && candidate.lifecycle === "local")}
       />
-      <DeployRunsPanel
+      {!led && <DeployRunsPanel
         project={forgeProject}
         env={env === ENV_ALL ? null : env}
         names={names}
         hrefs={{ release: (version) => href({ kind: "release", version }) }}
         openId={search.deploy ?? null}
-      />
+      />}
       {dialog}
     </div>
   );

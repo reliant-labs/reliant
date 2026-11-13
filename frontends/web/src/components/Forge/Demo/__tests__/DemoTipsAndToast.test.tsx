@@ -126,7 +126,7 @@ it("drawer hides the callout, then closing it reveals the new page without consu
   }finally{drawer.remove();trigger.remove();}
 });
 it("explicit guided tour links suppress the automatic page card", async () => {
-  renderDemo("/forge/demo?view=overview&tour=forge:fg-intro");
+  renderDemo("/forge/p/shop?tour=forge:fg-intro");
   expect(await screen.findByTestId("tour-card")).toHaveTextContent("What is Forge?");
   expect(screen.queryByTestId("tour-callout")).toBeNull();
   expect(screen.getByTestId("tour-next")).toHaveTextContent("Next");
@@ -155,7 +155,7 @@ it("only a trace-less link to a trace step is legacy; one that carries its trace
   expect(isLegacyDemoTourLink({ view: "logs", tour: "forge:fg-logs" })).toBe(false);
 });
 it("a logs tour link that carries its trace runs the guided step, not the page card", async () => {
-  renderDemo(`/forge/demo?view=traces&trace=${DEMO_TRACE_ID}&tour=forge:fg-logs`);
+  renderDemo(`/forge/p/shop/observability/traces?trace=${DEMO_TRACE_ID}&tour=forge:fg-logs`);
   const callout = await screen.findByTestId("tour-callout");
   expect(callout).toHaveTextContent("What that request logged");
   expect(callout).not.toHaveTextContent(DEMO_TIPS.logs.body);
@@ -186,7 +186,7 @@ it.each(["/forge/p/shop", "/forge/demo?view=overview&tour=forge:fg-intro", "/for
   expect(screen.queryByTestId("forge-demo-banner")).toBeNull();
 });
 it("hides Take the tour while a tour is open", async()=>{
-  renderDemo("/forge/demo?view=overview&tour=forge:fg-intro");
+  renderDemo("/forge/p/shop?tour=forge:fg-intro");
   const row = await screen.findByTestId("demo-screen-actions");
   expect(row).not.toHaveTextContent("Take the tour");
 });
