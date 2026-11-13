@@ -98,6 +98,9 @@ func (s *Service) CreateTrigger(
 	if trigger.OrgID, err = s.triggerOrg(ctx, userID, req.Msg.GetOrgId(), project); err != nil {
 		return nil, err
 	}
+	if trigger.UnattendedFunding, err = s.unattendedFundingFor(ctx, userID, trigger.OrgID, def.UnattendedFunding, nil); err != nil {
+		return nil, err
+	}
 	if err := s.bindOrgGitHubApp(ctx, userID, def, trigger); err != nil {
 		return nil, err
 	}
@@ -294,6 +297,9 @@ func (s *Service) UpdateTrigger(
 		}
 	}
 	if updated.OrgID, err = s.updatedTriggerOrg(ctx, existing.UserID, existing, source, target); err != nil {
+		return nil, err
+	}
+	if updated.UnattendedFunding, err = s.unattendedFundingFor(ctx, existing.UserID, updated.OrgID, def.UnattendedFunding, existing); err != nil {
 		return nil, err
 	}
 	if err := s.bindOrgGitHubApp(ctx, existing.UserID, def, updated); err != nil {

@@ -1087,7 +1087,7 @@ func (s *Service) SendMessage(
 // fails the send (retryable) rather than accepting it unattended.
 func (s *Service) recordPersonTurn(ctx context.Context, userID string, chat *db.Chat) error {
 	kind := core.TriggerEventKind(chat.LaunchKind)
-	launched := (chat.TriggerID != nil && kind.Unattended()) || kind == core.TriggerEventKindAgentStartRun
+	launched := kind.Unattended() || kind == core.TriggerEventKindAgentStartRun
 	if !launched {
 		return nil
 	}

@@ -202,6 +202,11 @@ func ReplaceTrigger(ctx context.Context, db orm.Context, t *core.Trigger) error 
 		// definition that stays disabled keeps the reason it has.
 		columns = append(append([]string(nil), columns...), TriggerFieldPausedReason)
 	}
+	if t.UnattendedFunding != "" {
+		// Written only when the caller decided it: a write back that never
+		// read the stamp must not clear it (NULL reads as any, a loosening).
+		columns = append(append([]string(nil), columns...), TriggerFieldUnattendedFunding)
+	}
 	if err := writeTrigger(ctx, db, row, "definition", columns...); err != nil {
 		return err
 	}
@@ -480,6 +485,10 @@ func triggerFromCore(t *core.Trigger) (*Trigger, error) {
 		reason := t.PausedReason
 		row.PausedReason = &reason
 	}
+	if t.UnattendedFunding != "" {
+		funding := string(t.UnattendedFunding)
+		row.UnattendedFunding = &funding
+	}
 	return row, nil
 }
 
@@ -524,6 +533,9 @@ func triggerToCore(row *Trigger) (*core.Trigger, error) {
 	}
 	if row.MachinePoolID != nil {
 		t.MachinePoolID = *row.MachinePoolID
+	}
+	if row.UnattendedFunding != nil {
+		t.UnattendedFunding = core.UnattendedFunding(*row.UnattendedFunding)
 	}
 	// A reason the previous release left on a trigger it re-enabled (it
 	// does not know the column) means nothing.

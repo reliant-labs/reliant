@@ -288,3 +288,40 @@ func TestThreadFundingPersistsAcrossAccountDeletion(t *testing.T) {
 	require.NoError(t, f.env.Repo.DeleteChat(ctx, "c-1"))
 	assert.Equal(t, 0, f.count(`SELECT count(*) FROM thread_funding`), "it goes with its thread")
 }
+
+// The move re-stamps every moved trigger's unattended funding for the target
+// org, as if created there (org-provider-accounts §11.3): org_only when it
+// has two or more live members, any for a solo org and when the count is
+// unknown. A trigger that did not move keeps its stamp.
+func TestMoveProjectOrgRestampsTheMovedTriggers(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		commit func(id string) core.ProjectOrgMoveCommit
+		want   string
+	}{
+		{"a team org", func(id string) core.ProjectOrgMoveCommit {
+			return core.ProjectOrgMoveCommit{MoveID: id, TargetLiveMembers: 2, TargetLiveMembersKnown: true}
+		}, "org_only"},
+		{"a solo org", func(id string) core.ProjectOrgMoveCommit {
+			return core.ProjectOrgMoveCommit{MoveID: id, TargetLiveMembers: 1, TargetLiveMembersKnown: true}
+		}, "any"},
+		{"an unknown count", func(id string) core.ProjectOrgMoveCommit { return core.ProjectOrgMoveCommit{MoveID: id} }, "any"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newCredFixture(t)
+			ctx := context.Background()
+			f.mvProject("p-move")
+			f.mvTrigger("t-1", "p-move")
+			f.mvProject("p-stay")
+			f.mvTrigger("t-stay", "p-stay")
+			_, err := f.env.ORM.Bun().NewRaw(`UPDATE triggers SET unattended_funding = 'org_only' WHERE id = 't-stay'`).Exec(ctx)
+			require.NoError(t, err)
+			move := f.mvPrepared("p-move")
+			_, err = f.env.Repo.MoveProjectOrg(ctx, tc.commit(move.ID))
+			require.NoError(t, err)
+			assert.Equal(t, 1, f.count(`SELECT count(*) FROM triggers WHERE id = 't-1' AND unattended_funding = $1`, tc.want))
+			assert.Equal(t, 1, f.count(`SELECT count(*) FROM triggers WHERE id = 't-stay' AND unattended_funding = 'org_only'`),
+				"a trigger that did not move keeps its stamp")
+		})
+	}
+}
