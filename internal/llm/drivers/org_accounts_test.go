@@ -482,3 +482,29 @@ func TestCheckAccountScope(t *testing.T) {
 	require.ErrorAs(t, CheckAccountScope(ctx, PersonalScope("u"), models.DriverConfig{AccountID: "a", AttributedOrgID: "org-x"}), &refused,
 		"a seat never serves a call that names no org")
 }
+
+// PersonalFirst puts the person's own accounts first and the org-paid ones
+// second; the managed key keeps its place; nothing tiered, nothing changes.
+func TestPersonalFirst(t *testing.T) {
+	t.Parallel()
+	repo := &orgFakeRepo{
+		user: "u",
+		mine: []core.AccountWithSecrets{claudeSignIn("seat", "u", "org-x"), claudeSignIn("mine", "u", ""), managedKey("managed", "u", "")},
+		orgs: map[string][]core.AccountWithSecrets{"org-x": {orgKey("org-key", "org-x", core.OrgAccessMembers, 0)}},
+	}
+	members := &fakeMembers{ok: true, answer: map[string]accesstokenclient.OrgMembership{"org-x": {OrgID: "org-x", Member: true}}}
+	avail := loaded(t, repo, members, Scope{UserID: "u", OrgID: "org-x", Attended: true})
+	flipped := PersonalFirst(avail)
+
+	assert.Equal(t, "mine", flipped.Drivers["claude"].AccountID)
+	assert.Equal(t, models.TierFirst, flipped.Accounts["claude"][0].Tier)
+	assert.Equal(t, "seat", flipped.Accounts["claude"][1].AccountID)
+	assert.Equal(t, models.TierSecond, flipped.Accounts["claude"][1].Tier)
+	assert.Equal(t, models.TierSecond, flipped.Accounts["anthropic"][0].Tier)
+	assert.Equal(t, models.TierSecond, flipped.Accounts["reliant"][0].Tier)
+	assert.Equal(t, models.TierFirst, flipped.DriverRank["claude"])
+	assert.Equal(t, "seat", avail.Drivers["claude"].AccountID, "the input is not modified")
+
+	plain := loaded(t, &orgFakeRepo{user: "u", mine: []core.AccountWithSecrets{claudeSignIn("mine", "u", "")}}, members, PersonalScope("u"))
+	assert.Equal(t, plain, PersonalFirst(plain))
+}

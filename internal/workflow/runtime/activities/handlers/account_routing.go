@@ -101,6 +101,10 @@ type AccountRouting struct {
 	// Credentials takes an account whose API key the provider rejected out of
 	// rotation. Optional: without it a rejected key fails the turn as before.
 	Credentials CredentialMarker
+	// Funding holds each chat's question before it moves from its org's
+	// accounts to the person's own (§10). Optional: without it a call that
+	// would make that move waits, never asks and never spends.
+	Funding PersonalFundingStore
 }
 
 func (r *AccountRouting) active() bool {
@@ -162,7 +166,11 @@ func (e *allAccountsLimited) Unwrap() error { return e.UsageLimitError }
 // routeAccount picks the account of providerDriver that serves this thread.
 // It returns nil, nil when routing does not apply (no router, no per-account
 // driver builder, a provider with no accounts, an injected resolver).
-func routeAccount(ctx context.Context, spec llmCallSpec, avail models.AvailableDrivers, providerDriver, modelID string) (*routedAccount, error) {
+//
+// upgrade lets a thread on a usable account move up to a better tier: at a
+// turn start, or while the chat waits on its funding question (no call was
+// made, so no prompt cache is lost).
+func routeAccount(ctx context.Context, spec llmCallSpec, avail models.AvailableDrivers, providerDriver, modelID string, upgrade bool) (*routedAccount, error) {
 	if !spec.Routing.active() {
 		return nil, nil
 	}
@@ -184,6 +192,7 @@ func routeAccount(ctx context.Context, spec llmCallSpec, avail models.AvailableD
 		Accounts:  accounts,
 		Preferred: spec.Failover.PreferredAccount[providerDriver],
 		Mode:      spec.Routing.routingMode(ctx, spec.UserID, driver),
+		Upgrade:   upgrade,
 	})
 	var all *accountrouter.ErrAllLimited
 	if errors.As(err, &all) {
@@ -253,6 +262,12 @@ type usageLimitContext struct {
 	// request was not routed.
 	Account *routedAccount
 	Policy  types.FailoverPolicy
+	// ChatID and Plan are the chat's funding plan (fundingPlanFor), for the
+	// question before the person's own account replaces the org's (§10).
+	// OrgFundedLimited says the refused tier was the org's.
+	ChatID           string
+	Plan             fundingPlan
+	OrgFundedLimited bool
 }
 
 // usageLimitFailure turns a usage-limit refusal into a *types.UsageLimitFailure
@@ -316,6 +331,10 @@ func (r *AccountRouting) usageLimitFailure(ctx context.Context, err error, uc us
 			facts.ProviderEarliestReset, facts.ProviderResetIsProbe = earliest.At, earliest.Probe
 		}
 	}
+	if !synthetic && uc.Account != nil {
+		uc.OrgFundedLimited = uc.OrgFundedLimited || limitedTierIsOrgFunded(uc.Account.Accounts, uc.ModelID)
+	}
+	r.fundingOnLimit(ctx, uc, &facts)
 	if !facts.AlternativeAccount {
 		facts.FallbackModel = r.fallbackModel(ctx, uc)
 	}

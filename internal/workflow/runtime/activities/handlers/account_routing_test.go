@@ -419,7 +419,7 @@ func TestRouting_FailuresDegradeToTheDefaultBehaviour(t *testing.T) {
 			return accountrouter.Result{}, errors.New("db down")
 		}}
 		acct, err := routeAccount(context.Background(), llmCallSpec{UserID: "u", ThreadID: "t", Routing: env.routing},
-			driversWith(claudeAccount("a", "alice@acme.com", 0)), "claude", routeModel)
+			driversWith(claudeAccount("a", "alice@acme.com", 0)), "claude", routeModel, false)
 		require.NoError(t, err)
 		assert.Nil(t, acct)
 	})
@@ -429,7 +429,7 @@ func TestRouting_FailuresDegradeToTheDefaultBehaviour(t *testing.T) {
 		env.routing.DriverFor = nil
 		assert.False(t, env.routing.active())
 		acct, err := routeAccount(context.Background(), llmCallSpec{UserID: "u", ThreadID: "t", Routing: env.routing},
-			driversWith(claudeAccount("a", "alice@acme.com", 0)), "claude", routeModel)
+			driversWith(claudeAccount("a", "alice@acme.com", 0)), "claude", routeModel, false)
 		require.NoError(t, err)
 		assert.Nil(t, acct, "an account is never assigned that cannot then be used")
 	})

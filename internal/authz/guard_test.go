@@ -21,18 +21,20 @@ import (
 // that compares a UserID field must ask this package, so the rule (and, from
 // phase 4, the org) lives in one place.
 var rawComparisonAllowed = map[string]string{
-	"internal/triggers/origin.go:fromWrite":                                           "matches two rows' owners (an integration write and its trigger), no caller",
-	"internal/triggers/workflowevent/dispatch.go:Dispatch":                            "matches a run event to the triggers of the same user, no caller",
-	"internal/db/repository_impl.go:UpsertDaemon":                                     "re-registration consistency: the same user re-registering the same daemon",
-	"internal/db/trigger_takeover.go:AdoptTrigger":                                    "compare-and-swap: the locked row still has the owner the adoption decided on, no caller",
-	"internal/db/trigger_takeover.go:CreateTriggerOffer":                              "compare-and-swap: the locked row still has the owner the offer was made for, no caller",
-	"internal/handlers/automation_takeover/takeover.go:offerState":                    "matches a trigger to the owner its offer was made for (adopted or not since), no caller",
-	"internal/handlers/streaming/org_stream.go:sendOrgUpdates":                        "leaves the caller's own rows out of the org feed they may already read in full; not an access decision",
-	"internal/tokenauthority/localstore.go:MintForUser":                               "self-hosted orgs: the only org a user has is their own id",
-	"internal/tokenauthority/memory.go:MintForUser":                                   "self-hosted orgs: the only org a user has is their own id",
-	"internal/workflow/workflowlisttest/workflowlisttest.go:GetProjectWithUserCheck":  "test fake of the store's owner-filtered read",
-	"internal/workflow/workflowlisttest/workflowlisttest.go:ListWorkflowDraftsByUser": "test fake of the store's owner-filtered list",
-	"internal/workflow/workflowlisttest/workflowlisttest.go:draftBySlug":              "test fake of the store's owner-filtered read",
+	"internal/triggers/origin.go:fromWrite":                                            "matches two rows' owners (an integration write and its trigger), no caller",
+	"internal/triggers/workflowevent/dispatch.go:Dispatch":                             "matches a run event to the triggers of the same user, no caller",
+	"internal/db/repository_impl.go:UpsertDaemon":                                      "re-registration consistency: the same user re-registering the same daemon",
+	"internal/db/personal_funding.go:AskPersonalFunding":                               "matches a stored funding question to the (user, org) it is asked of, so an open question is not re-asked; no caller",
+	"internal/workflow/runtime/activities/handlers/personal_funding.go:fundingPlanFor": "binds a stored funding answer to the (user, org) of the run it was given for; no caller",
+	"internal/db/trigger_takeover.go:AdoptTrigger":                                     "compare-and-swap: the locked row still has the owner the adoption decided on, no caller",
+	"internal/db/trigger_takeover.go:CreateTriggerOffer":                               "compare-and-swap: the locked row still has the owner the offer was made for, no caller",
+	"internal/handlers/automation_takeover/takeover.go:offerState":                     "matches a trigger to the owner its offer was made for (adopted or not since), no caller",
+	"internal/handlers/streaming/org_stream.go:sendOrgUpdates":                         "leaves the caller's own rows out of the org feed they may already read in full; not an access decision",
+	"internal/tokenauthority/localstore.go:MintForUser":                                "self-hosted orgs: the only org a user has is their own id",
+	"internal/tokenauthority/memory.go:MintForUser":                                    "self-hosted orgs: the only org a user has is their own id",
+	"internal/workflow/workflowlisttest/workflowlisttest.go:GetProjectWithUserCheck":   "test fake of the store's owner-filtered read",
+	"internal/workflow/workflowlisttest/workflowlisttest.go:ListWorkflowDraftsByUser":  "test fake of the store's owner-filtered list",
+	"internal/workflow/workflowlisttest/workflowlisttest.go:draftBySlug":               "test fake of the store's owner-filtered read",
 }
 
 // rawComparisonAllowedDirs are whole layers below the decision: the store's

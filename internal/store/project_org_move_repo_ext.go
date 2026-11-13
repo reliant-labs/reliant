@@ -281,6 +281,21 @@ WHERE t.id = tpa.thread_id AND c.id = t.chat_id AND c.project_id = ?0
   AND ((a.owner_kind = 'org' AND a.org_id IS DISTINCT FROM ?1)
     OR (a.attributed_org_id IS NOT NULL AND a.attributed_org_id IS DISTINCT FROM ?1))`
 
+// moveProjectOrgPersonalFundingSQL clears the moved chats' personal-funding
+// questions and answers (org-provider-accounts.md §10): each was asked, and any
+// lease granted, about the source org's accounts. In the target org a chat asks
+// afresh. Their threads' funding provenance (thread_funding) names the source
+// org, so it no longer counts there, and is cleared with them.
+const moveProjectOrgPersonalFundingSQL = `
+DELETE FROM chat_personal_funding f
+USING chats c
+WHERE c.id = f.chat_id AND c.project_id = ?0 AND f.org_id IS DISTINCT FROM ?1`
+
+const moveProjectOrgThreadFundingSQL = `
+DELETE FROM thread_funding tf
+USING threads t, chats c
+WHERE t.id = tf.thread_id AND c.id = t.chat_id AND c.project_id = ?0 AND tf.org_id IS DISTINCT FROM ?1`
+
 // MoveProjectOrg is the move's transaction (design §3.2). It runs inside the
 // caller's transaction (ReadCommitted), after the caller took the project
 // owner's org lock (LockUserOrgs) first, and in this order:
@@ -427,6 +442,13 @@ func MoveProjectOrg(ctx context.Context, db orm.Context, c core.ProjectOrgMoveCo
 	// Their threads' sticky accounts another org funds.
 	if _, err := db.Bun().NewRaw(moveProjectOrgAccountAssignmentsSQL, move.ProjectID, move.ToOrgID).Exec(ctx); err != nil {
 		return nil, fmt.Errorf("clear the moved chats' org account assignments: %w", err)
+	}
+	// Their personal-funding questions, leases and provenance, all about the source org.
+	if _, err := db.Bun().NewRaw(moveProjectOrgPersonalFundingSQL, move.ProjectID, move.ToOrgID).Exec(ctx); err != nil {
+		return nil, fmt.Errorf("clear the moved chats' personal funding answers: %w", err)
+	}
+	if _, err := db.Bun().NewRaw(moveProjectOrgThreadFundingSQL, move.ProjectID, move.ToOrgID).Exec(ctx); err != nil {
+		return nil, fmt.Errorf("clear the moved chats' thread funding: %w", err)
 	}
 
 	// Its triggers.

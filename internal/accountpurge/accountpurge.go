@@ -264,6 +264,9 @@ var purgeSteps = []step{
 	{"llm_call_usage_daily", `DELETE FROM llm_call_usage_daily WHERE user_id = $1`},
 	// The org-funded rollup an org admin reads: the member's rows go with them.
 	{"llm_org_usage_daily", `DELETE FROM llm_org_usage_daily WHERE user_id = $1`},
+	// A chat's question before it uses the person's own account (§10): it names
+	// their account's label. Chats cascade it too; this covers a chat kept.
+	{"chat_personal_funding", `DELETE FROM chat_personal_funding WHERE user_id = $1`},
 
 	// The durable first-session marker (app_first_session analytics): when the
 	// user first used the app. No users table cascades it.

@@ -183,6 +183,12 @@ type AvailableDrivers struct {
 	// resolution is exactly as before. The registry's tie-break is TierFor,
 	// per model.
 	DriverRank map[DriverID]AccountTier
+
+	// StickyDriver, when set, is the provider a thread is already on between
+	// the tool steps of one turn: TierFor ranks it above every tier for a
+	// model it serves, so a better tier is taken up at the next turn start,
+	// never mid-turn (org-provider-accounts §4.5, D6).
+	StickyDriver DriverID
 }
 
 // TierFor is driver's best tier among its accounts that serve modelID
@@ -191,14 +197,18 @@ type AvailableDrivers struct {
 // driver's account that cannot serve the model does not lift the driver for
 // it. TierSecond when the driver has no account serving it.
 func (a AvailableDrivers) TierFor(driver DriverID, modelID string) AccountTier {
-	best := TierSecond
+	best, serves := TierSecond, false
 	for _, acct := range a.Accounts[driver] {
 		if acct.Serves != nil && !acct.Serves(modelID) {
 			continue
 		}
+		serves = true
 		if acct.Tier < best {
 			best = acct.Tier
 		}
+	}
+	if serves && driver == a.StickyDriver {
+		return TierFirst - 1
 	}
 	return best
 }

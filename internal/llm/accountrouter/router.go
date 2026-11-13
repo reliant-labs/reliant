@@ -141,7 +141,7 @@ func (r *router) Assign(ctx context.Context, req Request) (Result, error) {
 		if assigned != nil && assigned.AccountID != "" {
 			prevID = assigned.AccountID
 			prev = findView(views, prevID)
-			if prev != nil && prev.state == stateOK {
+			if prev != nil && prev.state == stateOK && (!req.Upgrade || !betterTierUsable(views, prev.cfg.Tier)) {
 				return Result{Account: prev.cfg}, nil
 			}
 		}
@@ -283,6 +283,17 @@ func bestTier(views []accountView) []accountView {
 	return out
 }
 
+// betterTierUsable reports whether an account of a better tier than tier is
+// usable now.
+func betterTierUsable(views []accountView, tier models.AccountTier) bool {
+	for _, v := range views {
+		if v.state == stateOK && v.cfg.Tier < tier {
+			return true
+		}
+	}
+	return false
+}
+
 // leastUsed returns a uniformly random account from the lowest usage band.
 func (r *router) leastUsed(ctx context.Context, req Request, usable []accountView, now time.Time) accountView {
 	ids := make([]string, len(usable))
@@ -381,6 +392,9 @@ func leaveReason(prev *accountView) string {
 		return ReasonRemoved
 	}
 	switch prev.state {
+	case stateOK:
+		// Usable, and left only for a better tier (Request.Upgrade).
+		return ReasonOrgAvailable
 	case stateLimited:
 		return ReasonLimited
 	case stateUnserved:

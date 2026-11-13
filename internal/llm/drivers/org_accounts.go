@@ -4,6 +4,7 @@ package drivers
 import (
 	"context"
 	"fmt"
+	"slices"
 	"sync"
 
 	"github.com/reliant-labs/reliant/internal/accesstokenclient"
@@ -272,4 +273,46 @@ func CheckAccountScope(ctx context.Context, scope Scope, cfg models.DriverConfig
 		return err
 	}
 	return nil
+}
+
+// PersonalFirst is avail with the person's own accounts preferred over the
+// org-paid ones: the order a person chose for an org (personal_first), or a
+// lease they granted while the org's accounts cannot serve (§4.4, §10). The
+// managed Reliant key keeps its place. With no org-paid account it returns
+// avail unchanged.
+func PersonalFirst(avail models.AvailableDrivers) models.AvailableDrivers {
+	tiered := false
+	for _, list := range avail.Accounts {
+		for _, a := range list {
+			tiered = tiered || a.Tier == models.TierFirst
+		}
+	}
+	if !tiered {
+		return avail
+	}
+	out := avail
+	out.Accounts = make(map[models.DriverID][]models.AccountConfig, len(avail.Accounts))
+	out.Drivers = make(map[models.DriverID]models.DriverConfig, len(avail.Drivers))
+	for d, cfg := range avail.Drivers {
+		out.Drivers[d] = cfg
+	}
+	for driverID, list := range avail.Accounts {
+		next := make([]models.AccountConfig, len(list))
+		for i, a := range list {
+			switch {
+			case a.Funding == models.FundingPersonal:
+				a.Tier = models.TierFirst
+			case a.Tier == models.TierFirst:
+				a.Tier = models.TierSecond
+			}
+			next[i] = a
+		}
+		slices.SortStableFunc(next, func(a, b models.AccountConfig) int { return int(a.Tier) - int(b.Tier) })
+		out.Accounts[driverID] = next
+		if len(next) > 0 {
+			out.Drivers[driverID] = next[0].DriverConfig
+		}
+	}
+	out.DriverRank = driverRank(out.Accounts)
+	return out
 }

@@ -413,6 +413,7 @@ func (a *CompactActivity) generateCompactionSummaryOnProvider(ctx context.Contex
 		Attended:            chatAttended(chat),
 		UnattendedAnySource: chatUnattendedAnySource(chat),
 		SessionID:           chat.ID, // Use chat ID as thread ID for Anthropic
+		ChatID:              chat.ID,
 		Temperature:         &temperature,
 		// The summary is a request over this thread's own prefix, so it goes to
 		// the thread's account.
