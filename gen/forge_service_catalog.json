@@ -48,6 +48,7 @@
         "Message",
         "ModelEndpoint",
         "NATSConn",
+        "OrgCredentialSweep",
         "OrgProviderAccount",
         "OrgResolver",
         "PackageCommands",
@@ -50669,6 +50670,18 @@
       "implementation_candidates": []
     },
     {
+      "id": "OrgCredentialSweep",
+      "name": "OrgCredentialSweep",
+      "kind": "provider",
+      "type": "*github.com/reliant-labs/reliant/internal/app.OrgCredentialSweep",
+      "source": {
+        "path": "internal/app/org_credentials_sweep.go",
+        "symbol": "NewOrgCredentialSweep"
+      },
+      "methods": [],
+      "implementation_candidates": []
+    },
+    {
       "id": "OrgProviderAccount",
       "name": "OrgProviderAccount",
       "kind": "component",
@@ -52181,6 +52194,19 @@
       "candidates": [],
       "providers": [],
       "resolution": "unresolved"
+    },
+    {
+      "consumer": "OrgCredentialSweep",
+      "field": "Authority",
+      "interface": "github.com/reliant-labs/reliant/internal/tokenauthority.Authority",
+      "methods": [],
+      "candidates": [
+        "TokenAuthority"
+      ],
+      "providers": [
+        "TokenAuthority"
+      ],
+      "resolution": "composition_expression"
     },
     {
       "consumer": "OrgProviderAccount",
