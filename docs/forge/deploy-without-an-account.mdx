@@ -104,6 +104,8 @@ Opening the claim link signs you up for free, or signs you in, and moves the dep
 - A static site stays free: one hosted static site per account, under the [static free tier](/forge/hosting#billing).
 - A backend gets its outbound internet back. A service and its managed Postgres need [paid app hosting](/forge/hosting#billing) to keep running long term.
 
+For failed model calls, claim first, sign in with `forge login`, keep the provider key in a backend [managed secret](/forge/secrets), then redeploy without `--claimable` and verify an actual server-side model request. Never ship a provider key in a static site. Do not assume an unclaimed deploy can reach Reliant's gateway: its credentials may remain blank. [LLM provider & recovery](/forge/llm-provider) covers the tested configuration, the gateway's limitations and the final request you must verify.
+
 ## Limits
 
 | Limit | Detail |

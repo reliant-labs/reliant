@@ -208,6 +208,7 @@
               },
               "forge/hosting",
               "forge/secrets",
+              "forge/llm-provider",
               "forge/custom-domains",
               "forge/sign-in"
             ]
