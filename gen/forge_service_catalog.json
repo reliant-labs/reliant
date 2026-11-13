@@ -17253,6 +17253,22 @@
               "name": "last_run_chat_id",
               "kind": "string",
               "optional": true
+            },
+            {
+              "name": "incident_key",
+              "kind": "string"
+            },
+            {
+              "name": "attention_state",
+              "kind": "string"
+            },
+            {
+              "name": "failure_class",
+              "kind": "string"
+            },
+            {
+              "name": "detail",
+              "kind": "string"
             }
           ],
           "reliant.v1.InboxAutomationLaunchFailed": [
@@ -47453,6 +47469,33 @@
               "name": "permissions",
               "kind": "string",
               "repeated": true
+            },
+            {
+              "name": "attention",
+              "kind": "message",
+              "type_name": "reliant.v1.WorkflowAttention"
+            }
+          ],
+          "reliant.v1.WorkflowAttention": [
+            {
+              "name": "key",
+              "kind": "string"
+            },
+            {
+              "name": "on_start",
+              "kind": "string"
+            },
+            {
+              "name": "recovery_timeout",
+              "kind": "string"
+            },
+            {
+              "name": "on_success",
+              "kind": "string"
+            },
+            {
+              "name": "on_failure",
+              "kind": "string"
             }
           ],
           "reliant.v1.WorkflowConcurrency": [
@@ -47789,6 +47832,7 @@
           "reliant.v1.WebhookHmac": "reliant/v1/trigger.proto",
           "reliant.v1.WebhookSource": "reliant/v1/trigger.proto",
           "reliant.v1.Workflow": "reliant/v1/workflow_v2.proto",
+          "reliant.v1.WorkflowAttention": "reliant/v1/workflow_v2.proto",
           "reliant.v1.WorkflowConcurrency": "reliant/v1/workflow_v2.proto",
           "reliant.v1.WorkflowEventSource": "reliant/v1/trigger.proto",
           "reliant.v1.WorkflowListItem": "reliant/v1/workflow.proto",

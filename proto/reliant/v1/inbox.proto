@@ -378,6 +378,12 @@ message InboxAutomationFailing {
   TriggerHealth health = 1;
   // The run to open: the newest launched firing's chat, when it still exists.
   optional string last_run_chat_id = 2;
+  // Set for attention-managed incidents; absent/empty retains legacy behavior.
+  string incident_key = 3;
+  string attention_state = 4;
+  // unsuccessful, execution_error, or recovery_expired when known.
+  string failure_class = 5;
+  string detail = 6;
 }
 
 // InboxAutomationNeedsSetup is an automation waiting for its owner to finish
