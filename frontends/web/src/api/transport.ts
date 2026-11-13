@@ -226,8 +226,6 @@ const LONG_TIMEOUT_METHODS: Record<string, number> = {
   StreamUserUpdates: 0,
   StreamChatUpdates: 0,
   StreamProcessOutput: 0,
-  // The org feed (#2645): open for as long as the page is, like the two
-  // update streams.
   StreamOrgUpdates: 0,
 };
 

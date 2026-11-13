@@ -32,6 +32,7 @@
       "RunService",
       "ScenarioService",
       "SettingsService",
+      "SharingService",
       "SystemService",
       "TaskService",
       "TerminalService",
