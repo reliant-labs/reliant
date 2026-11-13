@@ -41,6 +41,9 @@ const (
 	// StreamingServiceStreamChatUpdatesProcedure is the fully-qualified name of the StreamingService's
 	// StreamChatUpdates RPC.
 	StreamingServiceStreamChatUpdatesProcedure = "/reliant.v1.StreamingService/StreamChatUpdates"
+	// StreamingServiceStreamOrgUpdatesProcedure is the fully-qualified name of the StreamingService's
+	// StreamOrgUpdates RPC.
+	StreamingServiceStreamOrgUpdatesProcedure = "/reliant.v1.StreamingService/StreamOrgUpdates"
 )
 
 // StreamingServiceClient is a client for the reliant.v1.StreamingService service.
@@ -55,6 +58,22 @@ type StreamingServiceClient interface {
 	// (messages, approvals, tool calls, streaming deltas, ...). Answers NotFound
 	// for a chat that does not exist or is not the caller's.
 	StreamChatUpdates(context.Context, *connect.Request[v1.StreamChatUpdatesRequest]) (*connect.ServerStreamForClient[v1.ChatStreamEvent], error)
+	// StreamOrgUpdates opens an organization's feed of what its members shared
+	// (control-plane docs/design/org-sharing.md §5.2): a replay of the org's
+	// coarse events since since_seq, exactly one caught_up, then live events,
+	// for the "Shared with the org" list. One row per event, never one per
+	// viewer, and never the transcript: a chat's detail is its own
+	// StreamChatUpdates, opened when a viewer opens it. The caller's own
+	// chats and projects are left out (their own list has them).
+	//
+	// The org must be one the caller is a live member of (PERMISSION_DENIED
+	// otherwise; unset: their default org), the caller must be a person signed
+	// in to the app (PERMISSION_DENIED, person_required), and membership is
+	// asked again while the stream is open: a member removed from the org has
+	// the stream ended. since_seq 0 (or a cursor ahead of the feed) replays
+	// nothing: the client reads ListSharedChats/ListSharedProjects and follows
+	// from the caught_up sequence.
+	StreamOrgUpdates(context.Context, *connect.Request[v1.StreamOrgUpdatesRequest]) (*connect.ServerStreamForClient[v1.OrgStreamEvent], error)
 }
 
 // NewStreamingServiceClient constructs a client for the reliant.v1.StreamingService service. By
@@ -82,6 +101,13 @@ func NewStreamingServiceClient(httpClient connect.HTTPClient, baseURL string, op
 			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
+		streamOrgUpdates: connect.NewClient[v1.StreamOrgUpdatesRequest, v1.OrgStreamEvent](
+			httpClient,
+			baseURL+StreamingServiceStreamOrgUpdatesProcedure,
+			connect.WithSchema(streamingServiceMethods.ByName("StreamOrgUpdates")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -89,6 +115,7 @@ func NewStreamingServiceClient(httpClient connect.HTTPClient, baseURL string, op
 type streamingServiceClient struct {
 	streamUserUpdates *connect.Client[v1.StreamUserUpdatesRequest, v1.UserStreamEvent]
 	streamChatUpdates *connect.Client[v1.StreamChatUpdatesRequest, v1.ChatStreamEvent]
+	streamOrgUpdates  *connect.Client[v1.StreamOrgUpdatesRequest, v1.OrgStreamEvent]
 }
 
 // StreamUserUpdates calls reliant.v1.StreamingService.StreamUserUpdates.
@@ -99,6 +126,11 @@ func (c *streamingServiceClient) StreamUserUpdates(ctx context.Context, req *con
 // StreamChatUpdates calls reliant.v1.StreamingService.StreamChatUpdates.
 func (c *streamingServiceClient) StreamChatUpdates(ctx context.Context, req *connect.Request[v1.StreamChatUpdatesRequest]) (*connect.ServerStreamForClient[v1.ChatStreamEvent], error) {
 	return c.streamChatUpdates.CallServerStream(ctx, req)
+}
+
+// StreamOrgUpdates calls reliant.v1.StreamingService.StreamOrgUpdates.
+func (c *streamingServiceClient) StreamOrgUpdates(ctx context.Context, req *connect.Request[v1.StreamOrgUpdatesRequest]) (*connect.ServerStreamForClient[v1.OrgStreamEvent], error) {
+	return c.streamOrgUpdates.CallServerStream(ctx, req)
 }
 
 // StreamingServiceHandler is an implementation of the reliant.v1.StreamingService service.
@@ -113,6 +145,22 @@ type StreamingServiceHandler interface {
 	// (messages, approvals, tool calls, streaming deltas, ...). Answers NotFound
 	// for a chat that does not exist or is not the caller's.
 	StreamChatUpdates(context.Context, *connect.Request[v1.StreamChatUpdatesRequest], *connect.ServerStream[v1.ChatStreamEvent]) error
+	// StreamOrgUpdates opens an organization's feed of what its members shared
+	// (control-plane docs/design/org-sharing.md §5.2): a replay of the org's
+	// coarse events since since_seq, exactly one caught_up, then live events,
+	// for the "Shared with the org" list. One row per event, never one per
+	// viewer, and never the transcript: a chat's detail is its own
+	// StreamChatUpdates, opened when a viewer opens it. The caller's own
+	// chats and projects are left out (their own list has them).
+	//
+	// The org must be one the caller is a live member of (PERMISSION_DENIED
+	// otherwise; unset: their default org), the caller must be a person signed
+	// in to the app (PERMISSION_DENIED, person_required), and membership is
+	// asked again while the stream is open: a member removed from the org has
+	// the stream ended. since_seq 0 (or a cursor ahead of the feed) replays
+	// nothing: the client reads ListSharedChats/ListSharedProjects and follows
+	// from the caught_up sequence.
+	StreamOrgUpdates(context.Context, *connect.Request[v1.StreamOrgUpdatesRequest], *connect.ServerStream[v1.OrgStreamEvent]) error
 }
 
 // NewStreamingServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -136,12 +184,21 @@ func NewStreamingServiceHandler(svc StreamingServiceHandler, opts ...connect.Han
 		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
+	streamingServiceStreamOrgUpdatesHandler := connect.NewServerStreamHandler(
+		StreamingServiceStreamOrgUpdatesProcedure,
+		svc.StreamOrgUpdates,
+		connect.WithSchema(streamingServiceMethods.ByName("StreamOrgUpdates")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/reliant.v1.StreamingService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case StreamingServiceStreamUserUpdatesProcedure:
 			streamingServiceStreamUserUpdatesHandler.ServeHTTP(w, r)
 		case StreamingServiceStreamChatUpdatesProcedure:
 			streamingServiceStreamChatUpdatesHandler.ServeHTTP(w, r)
+		case StreamingServiceStreamOrgUpdatesProcedure:
+			streamingServiceStreamOrgUpdatesHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -157,4 +214,8 @@ func (UnimplementedStreamingServiceHandler) StreamUserUpdates(context.Context, *
 
 func (UnimplementedStreamingServiceHandler) StreamChatUpdates(context.Context, *connect.Request[v1.StreamChatUpdatesRequest], *connect.ServerStream[v1.ChatStreamEvent]) error {
 	return connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.StreamingService.StreamChatUpdates is not implemented"))
+}
+
+func (UnimplementedStreamingServiceHandler) StreamOrgUpdates(context.Context, *connect.Request[v1.StreamOrgUpdatesRequest], *connect.ServerStream[v1.OrgStreamEvent]) error {
+	return connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.StreamingService.StreamOrgUpdates is not implemented"))
 }
