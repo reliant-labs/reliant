@@ -16,8 +16,8 @@ import (
 // A chat paused on a policy refusal goes on by itself once its org's policy
 // changes: a cap raised or removed, a model allowed. Control-plane tells
 // reliant nothing, so the Watcher asks: every org a refusal was met in is
-// watched, its policy re-resolved every WatchInterval, and the first answer
-// with a different version wakes the org's blocked chats (a capacity wake,
+// watched, its policy re-resolved every WatchInterval, and each fresh answer
+// with a newer version than the last one seen wakes the org's blocked chats (a capacity wake,
 // the one adding an account sends). A wake is owed until it reaches every
 // chat: a delivery an outage interrupted is retried, with backoff, for the
 // runs it missed. A capacity wake is idempotent, so a chat woken twice only
@@ -61,8 +61,11 @@ type Watcher struct {
 }
 
 type watched struct {
-	// version is the policy version the refusal was met under; -1 when it
-	// could not be read, so the first answer read counts as a change.
+	// version is the policy version the refusal was met under: the baseline
+	// a change is measured from. -1 while it is unknown (the policy could
+	// not be read fresh when the refusal was met); the first fresh answer
+	// then SETS the baseline and wakes nothing, so an outage's recovery is
+	// never mistaken for a policy change.
 	version int64
 	until   time.Time
 
@@ -91,7 +94,7 @@ func (w *Watcher) Watch(ctx context.Context, orgID string) {
 		return
 	}
 	version := int64(-1)
-	if p, err := w.r.Resolve(ctx, orgID); err == nil {
+	if p, err := w.r.Resolve(ctx, orgID); err == nil && !p.Stale {
 		version = p.Version
 	}
 	w.mu.Lock()
@@ -99,18 +102,24 @@ func (w *Watcher) Watch(ctx context.Context, orgID string) {
 	until := w.now().Add(WatchFor)
 	if cur, ok := w.orgs[orgID]; ok {
 		// The version the first refusal was met under stands: a change since
-		// then is what the waiting chats are waiting for.
+		// then is what the waiting chats are waiting for. An unknown one is
+		// learned from this refusal's fresh answer.
 		cur.until = until
+		if cur.version < 0 && !cur.changed {
+			cur.version = version
+		}
 		return
 	}
 	w.orgs[orgID] = &watched{version: version, until: until}
 }
 
 // Check re-resolves every watched org once and owes a wake to each whose
-// policy version changed, then delivers what is owed. An org is forgotten
-// only once its wake reached every chat, or when it expires; a delivery a
-// database or Temporal outage interrupted is retried with backoff, and only
-// for the runs it missed.
+// policy moved to a newer version (judged on fresh answers only, against a
+// baseline itself taken from a fresh answer), then delivers what is owed. A
+// delivery a database or Temporal outage interrupted is retried with backoff,
+// and only for the runs it missed. An org stays watched for its whole window
+// (WatchFor after its last refusal), so each later loosening wakes it again;
+// it is forgotten when the window ends with nothing owed.
 func (w *Watcher) Check(ctx context.Context) {
 	if w == nil {
 		return
@@ -119,7 +128,7 @@ func (w *Watcher) Check(ctx context.Context) {
 	now := w.now()
 	due := make([]string, 0, len(w.orgs))
 	for org, wt := range w.orgs {
-		if !now.Before(wt.until) {
+		if !now.Before(wt.until) && !wt.changed {
 			delete(w.orgs, org)
 			continue
 		}
@@ -138,25 +147,47 @@ func (w *Watcher) checkOrg(ctx context.Context, org string) {
 		w.mu.Unlock()
 		return
 	}
-	changed, version, retryAt := wt.changed, wt.version, wt.retryAt
+	owed, version, retryAt := wt.changed, wt.version, wt.retryAt
 	pending := append([]string(nil), wt.pending...)
 	w.mu.Unlock()
 
-	const why = "the organization's policy changed"
-	if !changed {
+	if !owed {
 		p, err := w.r.Resolve(ctx, org)
-		if err != nil || p.Stale || p.Version == version {
+		if err != nil || p.Stale {
+			// Only a fresh answer says anything about the policy now.
 			return
 		}
+		w.mu.Lock()
+		cur, ok := w.orgs[org]
+		switch {
+		case !ok:
+			w.mu.Unlock()
+			return
+		case cur.version < 0:
+			// The first fresh answer since a refusal met during an outage is
+			// the baseline, not a change.
+			cur.version = p.Version
+			w.mu.Unlock()
+			return
+		case p.Version <= cur.version:
+			w.mu.Unlock()
+			return
+		}
+		// A newer policy: the org's wake is owed from here until delivered,
+		// and the next change is measured from this version.
+		cur.version, cur.changed, cur.pending, cur.attempts = p.Version, true, nil, 0
+		w.mu.Unlock()
 		logging.InfoContext(ctx, "orgpolicy: the policy of an org with refused work changed; waking its blocked chats",
 			"org_id", org, "from_version", version, "to_version", p.Version)
+		pending = nil
 	} else if w.now().Before(retryAt) {
 		return
 	}
 
+	const why = "the organization's policy changed"
 	var failed []string
 	var err error
-	if changed && len(pending) > 0 {
+	if len(pending) > 0 {
 		failed = w.wake.WakeRuns(ctx, pending, why)
 	} else {
 		failed, err = w.wake.WakeOrgChats(ctx, org, why)
@@ -169,10 +200,11 @@ func (w *Watcher) checkOrg(ctx context.Context, org string) {
 		return
 	}
 	if err == nil && len(failed) == 0 {
-		delete(w.orgs, org)
+		// Delivered. The org stays watched until its window ends, so a
+		// later change (a second loosening) wakes it again.
+		cur.changed, cur.pending, cur.attempts, cur.retryAt = false, nil, 0, time.Time{}
 		return
 	}
-	cur.changed = true
 	if err == nil {
 		cur.pending = failed
 	} // a listing failure leaves pending as it was: nil owes the whole org
