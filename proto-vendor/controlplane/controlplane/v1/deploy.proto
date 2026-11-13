@@ -137,6 +137,9 @@ enum DeploySuspendReason {
   // The compute subscription lapsed past grace (BillingLapsed). Fix: settle
   // the invoice.
   DEPLOY_SUSPEND_REASON_BILLING_LAPSED = 3;
+  // An unclaimed claimable deploy reached its expiry and the platform
+  // suspended it (ClaimableExpired). Fix: claim it before it is purged.
+  DEPLOY_SUSPEND_REASON_CLAIMABLE_EXPIRED = 4;
 }
 
 // DeployVerdict is forge's deploystate verdict: whether what was OBSERVED is

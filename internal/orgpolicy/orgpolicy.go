@@ -19,7 +19,13 @@
 // point. "No policy" is an answer like any other and is cached the same way.
 // A newer version is never replaced by an older one: once a versioned policy
 // is known, an older answer, or a control plane that no longer has the rpc,
-// is a failed confirmation (below), never a fresh answer.
+// is a failed confirmation (below), never a fresh answer. "Known" is a
+// per-org high-water mark (the highest version ever confirmed) that outlives
+// the cached document: evicting a document never forgets that its org has a
+// versioned policy, so a failed confirmation of an evicted document is
+// Unavailable at once. A process restart starts with no high-water marks;
+// that is inherent, and acceptable because a rollout restarts reliant against
+// the current control plane.
 //
 // ── WHEN CONTROL-PLANE CANNOT BE REACHED (D10) ───────────────────────
 //
@@ -125,6 +131,11 @@ type Resolver struct {
 
 	mu      sync.Mutex
 	entries map[string]*entry
+	// high is the highest version ever confirmed per org. Eviction drops an
+	// org's document (entries), never its high-water mark, so a later older
+	// or unsupported answer can never pass for "no policy". One small record
+	// per org asked about in this process's life: bounded by the orgs.
+	high map[string]int64
 }
 
 // entry is what is held for one org: its last good answer, the last failure,
@@ -149,7 +160,7 @@ func New(src Source) *Resolver {
 	if src == nil {
 		return nil
 	}
-	return &Resolver{src: src, ttl: CacheTTL, grace: Grace, retry: retryAfter, now: time.Now, entries: map[string]*entry{}}
+	return &Resolver{src: src, ttl: CacheTTL, grace: Grace, retry: retryAfter, now: time.Now, entries: map[string]*entry{}, high: map[string]int64{}}
 }
 
 // Resolve returns orgID's policy. "No policy" is a successful answer; an
@@ -219,17 +230,22 @@ func (r *Resolver) fetch(ctx context.Context, orgID string, e *entry) (Policy, e
 	defer r.mu.Unlock()
 	e.inflight = nil
 	r.evictLocked(now, e)
-	known := !e.fetched.IsZero() && e.policy.Version > 0
+	high := r.high[orgID]
+	known := high > 0
 	switch {
-	case err == nil && known && got.Version < e.policy.Version:
+	case err == nil && known && got.Version < high:
 		// Versions only move forward. An answer older than the policy held
 		// confirms nothing: it is a failed confirmation, like an outage, so
 		// the held document keeps its fetched time and Grace runs out on it.
-		err = fmt.Errorf("control-plane answered version %d of a policy already known at version %d", got.Version, e.policy.Version)
+		// With the document evicted there is nothing to serve: Unavailable.
+		err = fmt.Errorf("control-plane answered version %d of a policy already known at version %d", got.Version, high)
 	case err == nil:
 		p := Policy{OrgID: orgID, Version: got.Version, Doc: got.Policy}
 		if p.Doc == nil {
 			p.Doc = &controlplanev1.OrgPolicy{}
+		}
+		if p.Version > high {
+			r.high[orgID] = p.Version
 		}
 		e.policy, e.fetched, e.failed, e.retryAt = p, now, nil, time.Time{}
 		return p, nil

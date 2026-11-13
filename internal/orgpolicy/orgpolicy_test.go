@@ -403,3 +403,42 @@ func TestCacheIsPartitionedByOrg(t *testing.T) {
 	}
 	_ = c
 }
+
+// byOrg answers each org from its own script.
+type byOrg map[string]*scripted
+
+func (b byOrg) ResolveOrgPolicy(ctx context.Context, orgID string) (accesstokenclient.OrgPolicy, error) {
+	return b[orgID].ResolveOrgPolicy(ctx, orgID)
+}
+
+// Evicting an org's document never forgets that the org has a versioned
+// policy: A is known at v4, A's document expires, B's fetch evicts it, and
+// then an unsupported or an older answer for A is Unavailable at once (there
+// is no document left to serve), never "no policy".
+func TestEvictionKeepsTheHighWaterMark(t *testing.T) {
+	t.Parallel()
+	for name, later := range map[string]reply{
+		"unsupported":   {err: unsupported},
+		"older version": {version: 2},
+		"version zero":  {version: 0},
+	} {
+		src := byOrg{
+			"org-a": {replies: []reply{{version: 4, doc: machines}, later}},
+			"org-b": {replies: []reply{{version: 1, doc: machines}}},
+		}
+		r, c := newResolver(src)
+		mustResolve(t, r, "org-a")
+		c.advance(Grace + time.Second)
+		mustResolve(t, r, "org-b") // its fetch evicts org-a's expired document
+		r.mu.Lock()
+		_, held := r.entries["org-a"]
+		r.mu.Unlock()
+		if held {
+			t.Fatalf("%s: org-a's expired document was not evicted; the test proves nothing", name)
+		}
+		p, err := r.Resolve(context.Background(), "org-a")
+		if !IsUnavailable(err) {
+			t.Fatalf("%s after eviction: %+v, %v; want unavailable", name, p, err)
+		}
+	}
+}
