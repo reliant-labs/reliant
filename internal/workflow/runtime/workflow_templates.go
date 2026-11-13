@@ -70,8 +70,9 @@ func ResolveWorkflowTemplates(raw map[string]interface{}, inputs map[string]inte
 	// event fires the trigger (see wfyaml.IsRuntimeEvaluatedTopLevelKey).
 	// on_failure's nodes read the failure and the node outputs of a run that
 	// is already over, and finally's how it ended. concurrency.key is rendered
-	// by the trigger layer per firing, over `trigger` alone.
-	for _, key := range []string{"triggers", "on_failure", "finally", "concurrency"} {
+	// by the trigger layer per firing, over `trigger` alone. Attention keys are
+	// evaluated once by the root launch runtime, never this generic resolver.
+	for _, key := range []string{"triggers", "on_failure", "finally", "concurrency", "attention"} {
 		if wfyaml.IsRuntimeEvaluatedTopLevelKey(key) {
 			topLevelSkip[key] = true
 		}

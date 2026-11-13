@@ -3569,6 +3569,16 @@ func (r *Repo) FiringsSinceLastSuccess(ctx context.Context, userID string, trigg
 	return store.FiringsSinceLastSuccess(ctx, r.ORM(), userID, triggerIDs, perTrigger)
 }
 
+// FiringsSinceLastUnmanagedSuccess returns the legacy inbox failure episode.
+// Attention-managed actors are excluded before the success boundary and cap;
+// callers needing diagnostic health continue to use the unfiltered reads.
+func (r *Repo) FiringsSinceLastUnmanagedSuccess(ctx context.Context, userID string, triggerIDs []string, perTrigger int) (map[string][]*core.TriggerEventWithRun, error) {
+	if userID == "" {
+		return nil, fmt.Errorf("user ID cannot be empty")
+	}
+	return store.FiringsSinceLastUnmanagedSuccess(ctx, r.ORM(), userID, triggerIDs, perTrigger)
+}
+
 // GetLatestTriggerEvent returns the trigger's latest firing, optionally
 // filtered by outcome, and (nil, nil) when it has never fired.
 func (r *Repo) GetLatestTriggerEvent(ctx context.Context, triggerID string, outcome *core.TriggerEventOutcome) (*core.TriggerEvent, error) {

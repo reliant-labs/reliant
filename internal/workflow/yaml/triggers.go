@@ -58,13 +58,15 @@ const triggerSourceOneof protoreflect.Name = "source"
 // and the outputs of a run that has ended. `concurrency` too: its key is a
 // template over `trigger` alone (triggerspec.CompileConcurrencyKey), rendered
 // by the trigger layer per firing, and a hand-started run has no trigger
-// payload to render it against.
+// payload to render it against. `attention` is evaluated once by the root
+// unattended launch runtime over finalized inputs, never the generic resolver.
 var runtimeEvaluatedTopLevelKeys = map[string]bool{
 	"outputs":     true,
 	"triggers":    true,
 	"on_failure":  true,
 	"finally":     true,
 	"concurrency": true,
+	"attention":   true,
 }
 
 // IsRuntimeEvaluatedTopLevelKey reports whether a top-level workflow key's

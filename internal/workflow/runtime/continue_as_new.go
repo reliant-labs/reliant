@@ -351,11 +351,12 @@ func newContinueAsNewError(ctx workflow.Context, input WorkflowInput, nodeID str
 		resume.CapacityParked = childTracker.capacitySlot.isParked()
 	}
 	return workflow.NewContinueAsNewError(ctx, DynamicWorkflow, WorkflowInput{
-		ChatID:       input.ChatID,
-		WorkflowName: input.WorkflowName,
-		Inputs:       input.Inputs,
-		ExecContext:  input.ExecContext,
-		Trigger:      input.Trigger,
-		Resume:       resume,
+		ChatID:           input.ChatID,
+		WorkflowName:     input.WorkflowName,
+		Inputs:           input.Inputs,
+		ExecContext:      input.ExecContext,
+		Trigger:          input.Trigger,
+		Resume:           resume,
+		AttentionHandoff: attentionHandoff(ctx),
 	})
 }
