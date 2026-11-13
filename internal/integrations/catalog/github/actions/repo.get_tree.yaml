@@ -9,7 +9,8 @@ description: >-
   directory, which a large repository needs: results longer than about
   30,000 characters are cut short. truncated is true when the tree is
   larger than GitHub returns at once (100,000 entries). Omit ref for the
-  default branch.
+  default branch. A directory or ref that does not exist answers missing
+  true with no entries, not an error, as repo.get_content does.
 keywords: [tree, files, list, paths, structure, layout, find file, ls]
 placement: server
 mutates: false
@@ -42,10 +43,72 @@ request:
   query: { recursive: "1" }
   # GitHub serves up to 7 MB of tree before it truncates.
   max_response_bytes: 10485760
-  errors: { $ref: ../schemas/github_errors.yaml }
+  errors:
+    # A directory or ref that is not there is an answer, not a failure, as it
+    # is for repo.get_content: an agent exploring a repository asks for paths
+    # that may not exist, and three such errors in a row (different paths,
+    # same text) tripped the repeated-tool-error breaker and ended the run.
+    # GitHub answers the same 404 for a repository this connection cannot
+    # see, so the note says which cases it can be (see output.select).
+    - status: 404
+      accept: true
+      when: >-
+        type(response) == map && response.?message.orValue('') == 'Not Found'
+    - status: 401
+      retryable: false
+      message: "GitHub rejected the credential ({{ response.?message.orValue('bad credentials') }}): reconnect GitHub in Settings."
+    - status: 403
+      when: >-
+        headers[?'x-ratelimit-remaining'].orValue('') == '0' ||
+        headers[?'retry-after'].hasValue() ||
+        (type(response) == map && type(response.?message.orValue(null)) == string &&
+         response.message.matches('(?i)rate limit'))
+      retryable: true
+      message: { $ref: ../schemas/github_rate_limited.yaml }
+    - status: 429
+      retryable: true
+      message: { $ref: ../schemas/github_rate_limited.yaml }
+    - status: 403
+      retryable: false
+      message: >-
+        GitHub refused the request: {{ response.?message.orValue('forbidden') }}.
+        The connection lacks permission for this action (the GitHub App's
+        permissions, its installation, or your role on the repository).
+    - status: 404
+      retryable: false
+      message: >-
+        GitHub returned not found: the resource does not exist, or this
+        connection cannot see it (is the Reliant GitHub App installed on the
+        repository?).
+    - status: 410
+      retryable: false
+      message: "GitHub returned gone: {{ response.?message.orValue('this feature is disabled for the repository') }}."
+    - status: 422
+      retryable: false
+      message: >-
+        GitHub validation failed: {{ response.?message.orValue('Validation Failed') }}.
+        Errors: {{ type(response) == map && type(response.?errors.orValue(null)) == list ?
+          response.errors.map(e, type(e) == string ? e :
+            (type(e.?field.orValue(null)) == string ? e.field + ': ' : '') +
+            (type(e.?message.orValue(null)) == string ? e.message :
+             type(e.?code.orValue(null)) == string ? e.code : 'invalid')) : [] }}
 output:
   select: >-
-    {"sha": response.sha,
+    status == 404 ?
+      {"missing": true,
+       "sha": null,
+       "truncated": false,
+       "entries": [],
+       "note": (params.?path.hasValue() ?
+         "No directory " + params.path : "No tree") +
+         (params.?ref.hasValue() ? " at " + params.ref : " on the default branch") +
+         ". GitHub answers the same when the ref does not exist or this connection cannot see " +
+         params.owner + "/" + params.repo +
+         (params.?path.hasValue() ? "; omit path to tell a missing directory from a missing ref." :
+          params.?ref.hasValue() ? "; omit ref to tell a missing ref from an unreachable repository." :
+          " (is the Reliant GitHub App installed on it?).")} :
+    {"missing": false,
+     "sha": response.sha,
      "truncated": response.?truncated.orValue(false),
      "entries": response.tree.map(e, {
        "path": params.?path.hasValue() ? params.path + '/' + e.path : e.path,
@@ -54,7 +117,9 @@ output:
   schema:
     type: object
     properties:
-      sha: { type: string, description: The tree's SHA. }
+      missing: { type: boolean, description: "Nothing exists at path and ref (see note); entries is empty." }
+      note: { type: string, description: "For missing: what the absence can mean." }
+      sha: { type: [string, "null"], description: The tree's SHA; null when missing. }
       truncated: { type: boolean, description: GitHub returned only part of a very large tree. }
       entries:
         type: array

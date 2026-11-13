@@ -933,6 +933,39 @@ func TestRepoGetTreeOfOneDirectoryOnTheDefaultBranch(t *testing.T) {
 	assert.Equal(t, []any{map[string]any{"path": "internal/llm/tools.go", "type": "blob", "size": 1200.0}}, out["entries"])
 }
 
+// A directory or ref that does not exist is an answer, not an error, as for
+// repo.get_content: three such errors in a row (different paths, same text)
+// ended a pr-review run through the repeated-tool-error breaker.
+func TestRepoGetTreeOfAMissingPathIsNotAnError(t *testing.T) {
+	notFound := jsonReply(404, `{"message":"Not Found","documentation_url":"https://docs.github.com/rest","status":"404"}`)
+	f := newFake(t)
+	f.on("GET", "/repos/acme/app/git/trees/main:docs/design", notFound)
+	out := data(t, f.run("repo.get_tree", map[string]any{"owner": "acme", "repo": "app", "ref": "main", "path": "docs/design"}))
+	assert.Equal(t, true, out["missing"])
+	assert.Equal(t, []any{}, out["entries"])
+	assert.Nil(t, out["sha"])
+	assert.Contains(t, out["note"], "No directory docs/design at main")
+	assert.Contains(t, out["note"], "omit path to tell")
+
+	f = newFake(t)
+	f.on("GET", "/repos/acme/app/git/trees/HEAD", notFound)
+	out = data(t, f.run("repo.get_tree", map[string]any{"owner": "acme", "repo": "app"}))
+	assert.Equal(t, true, out["missing"])
+	assert.Contains(t, out["note"], "is the Reliant GitHub App installed on it?")
+
+	// A tree that exists says so.
+	f = newFake(t)
+	f.on("GET", "/repos/acme/app/git/trees/HEAD", jsonReply(200, treeJSON))
+	assert.Equal(t, false, data(t, f.run("repo.get_tree", map[string]any{"owner": "acme", "repo": "app"}))["missing"])
+
+	// Any other 404 is still an error.
+	f = newFake(t)
+	f.on("GET", "/repos/acme/app/git/trees/HEAD", jsonReply(404, `{"message":"Git Repository is empty.","status":"404"}`))
+	res, err := f.try("repo.get_tree", map[string]any{"owner": "acme", "repo": "app"})
+	require.NoError(t, err)
+	assert.True(t, res.IsError)
+}
+
 func TestCodeSearchReturnsFilesAndMatchedFragments(t *testing.T) {
 	f := newFake(t)
 	f.on("GET", "/search/code", jsonReply(200, `{
@@ -1157,8 +1190,8 @@ func TestErrorMappingForEveryAction(t *testing.T) {
 	testkit.Slow(t, "runs every action against every error case over an HTTP test server")
 	for id, params := range minimal {
 		for _, tc := range errorCases {
-			if id == "repo.get_content" && tc.status == 404 {
-				continue // a missing path is an answer: TestRepoGetContentOfAMissingPathIsNotAnError
+			if (id == "repo.get_content" || id == "repo.get_tree") && tc.status == 404 {
+				continue // a missing path is an answer: TestRepoGetContentOfAMissingPathIsNotAnError, TestRepoGetTreeOfAMissingPathIsNotAnError
 			}
 			t.Run(id+"/"+tc.name, func(t *testing.T) {
 				f := newFake(t)
