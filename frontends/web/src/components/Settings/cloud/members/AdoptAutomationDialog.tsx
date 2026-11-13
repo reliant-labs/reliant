@@ -20,12 +20,18 @@ import Modal from "@/components/forge-ui/modal";
 import type { Trigger as ProtoTrigger } from "@/gen/reliant/v1/trigger_pb";
 import { useAcceptTriggerOffer, useAdoptTrigger } from "@/hooks/automation-takeover-service-hooks_gen";
 import { useProjectDaemonInstalls, useProjects } from "@/hooks/project-queries";
+import { jsToProtoValue } from "@/api/proto-utils";
 import { triggerFromProto } from "@/hooks/trigger-model";
 import { useDaemonStatus } from "@/hooks/useDaemonStatus";
+import { declaredTriggers } from "@/lib/declaredTriggers";
+import { inputsMappedByEveryTrigger } from "@/lib/setupInputs";
 import { cn } from "@/lib/utils";
 
 import { buildDaemonChoices, NO_MACHINE, NO_MACHINE_LABEL } from "../../../Automations/daemonChoices";
 import { WebhookCredentialPanel } from "../../../Automations/dialog/WebhookCredentialPanel";
+import { useWorkflowDefinition } from "../../../workflow/useWorkflowDefinition";
+import { RunWorkflowForm, type RunWorkflowFormStatus } from "../../../workflow/run/RunWorkflowForm";
+import { EMPTY_RUN_VALUE, type RunWorkflowValue } from "../../../workflow/run/runWorkflowValues";
 import { needsSigningSecret, SELECT_CLASS, sourceLabel, takeoverErrorMessage } from "./takeover";
 
 /** paramNames are the inputs the trigger sets; their old values are withheld. */
@@ -72,6 +78,22 @@ function AdoptForm({ orgId, target, onClose, onDone }: { orgId: string; target: 
   const [secret, setSecret] = useState("");
   const [params, setParams] = useState<Record<string, ParamInput>>({});
   const encoded = useMemo(() => encodeParams(params), [params]);
+  // The workflow's own typed inputs, as the adopter's project resolves it:
+  // the same form (and the same value encoding) creating an automation uses.
+  // Only when it does not resolve there (the departed owner's own saved
+  // workflow, not forked yet) does the dialog fall back to typing each
+  // input by hand.
+  const workflowRef = target.trigger.workflow;
+  const definition = useWorkflowDefinition(projectId || undefined, workflowRef || undefined);
+  const schemaKnown = !!workflowRef && !!definition.workflowDef && !definition.error;
+  const [runValue, setRunValue] = useState<RunWorkflowValue>(EMPTY_RUN_VALUE);
+  const [runStatus, setRunStatus] = useState<RunWorkflowFormStatus | null>(null);
+  // An activation's inputs its declaration maps from each event are the
+  // event's, never the adopter's (the server refuses them).
+  const mapped = useMemo(() => {
+    if (!definition.workflowDef || !target.trigger.workflowTrigger) return [];
+    return inputsMappedByEveryTrigger(declaredTriggers(definition.workflowDef).filter((d) => d.name === target.trigger.workflowTrigger));
+  }, [definition.workflowDef, target.trigger.workflowTrigger]);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<Result | null>(null);
   const adopt = useAdoptTrigger({ meta: { silenceErrorToast: true } });
@@ -111,10 +133,15 @@ function AdoptForm({ orgId, target, onClose, onDone }: { orgId: string; target: 
       daemonId: chosenMachine === NO_MACHINE ? "" : chosenMachine,
       noMachine: chosenMachine === NO_MACHINE,
       webhookHmacSecret: wantsSecret ? secret : undefined,
-      // Only what the adopter typed, as the type they chose; an input left
-      // blank is not sent. The server validates each against the workflow's
-      // inputs as theirs, and names one it refuses.
-      params: encoded.values,
+      // Only what the adopter set. With the workflow's schema, each value is
+      // its declared type (RunWorkflowForm), encoded exactly as a create
+      // encodes it; without one, the type the adopter chose. The server
+      // validates each against the workflow's inputs as theirs, and names one
+      // it refuses.
+      params: schemaKnown
+        ? Object.fromEntries(Object.entries(runValue.params).map(([k, v]) => [k, jsToProtoValue(v)]))
+        : encoded.values,
+      presets: schemaKnown ? Object.fromEntries(Object.entries(runValue.presets).filter(([, v]) => !!v)) : {},
     };
     try {
       const resp =
@@ -128,7 +155,10 @@ function AdoptForm({ orgId, target, onClose, onDone }: { orgId: string; target: 
     }
   };
 
-  const ready = !!projectId && !!chosenMachine && (!wantsSecret || secret.trim() !== "") && Object.keys(encoded.errors).length === 0;
+  const inputsReady = schemaKnown
+    ? !!runStatus && !runStatus.loading && runStatus.missingRequired.length === 0
+    : !definition.loading && Object.keys(encoded.errors).length === 0;
+  const ready = !!projectId && !!chosenMachine && (!wantsSecret || secret.trim() !== "") && inputsReady;
 
   return (
     <form className="space-y-4" onSubmit={(e) => void submit(e)} data-testid="adopt-form">
@@ -186,11 +216,35 @@ function AdoptForm({ orgId, target, onClose, onDone }: { orgId: string; target: 
           <p className="text-xs text-muted-foreground">The previous owner&apos;s secret is not carried. Give the sender this one too.</p>
         </div>
       )}
-      {target.paramNames.length > 0 && (
+      {schemaKnown ? (
+        <div className="space-y-2" data-testid="adopt-typed-inputs">
+          <p className="text-sm font-medium text-foreground">Inputs</p>
+          <p className="text-xs text-muted-foreground">
+            Its previous owner&apos;s values are not carried: they may have been their tokens or addresses. Set your own.
+          </p>
+          <RunWorkflowForm
+            projectId={projectId}
+            workflowRef={workflowRef}
+            value={runValue}
+            onChange={setRunValue}
+            onStatusChange={setRunStatus}
+            showValidation
+            applyDefaultPresets
+            excludeInputs={mapped}
+            hideWorktree
+            hideInputsLabel
+          />
+        </div>
+      ) : definition.loading && !!workflowRef ? (
+        <p className="text-sm text-muted-foreground" role="status">
+          Loading its inputs…
+        </p>
+      ) : target.paramNames.length > 0 && (
         <fieldset className="space-y-3" data-testid="adopt-params">
           <legend className="text-sm font-medium text-foreground">Inputs</legend>
           <p className="text-xs text-muted-foreground">
-            Its previous owner&apos;s values are not carried: they may have been their tokens or addresses. Enter your own, or leave one blank.
+            Its previous owner&apos;s values are not carried: they may have been their tokens or addresses. Its workflow
+            could not be read in this project, so enter your own by type, or leave one blank.
           </p>
           {target.paramNames.map((name) => (
             <ParamField
