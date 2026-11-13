@@ -30,24 +30,41 @@ brew install reliant-labs/reliant/forge                                         
 Run this at the app's root, where its `package.json` is:
 
 ```bash
-forge project new --in-place --kind site --name my-site   # adds forge.yaml and deploy/kcl/; your files are untouched
-git add -A && git commit -m "Add forge deploy config"     # so the release records a commit
-forge env deploy prod --claimable --plan-only             # checks locally and asks the platform; creates nothing
-forge env deploy prod --claimable                         # build, publish, print the URL and the claim link
+npx -y @reliantlabs/forge@latest env deploy prod --claimable
 ```
+
+That one command adopts the app where it stands, then builds and publishes it. It adds `forge.yaml`, `deploy/kcl/`, `AGENTS.md` and forge's `.gitignore` entries, and leaves the app's own files alone. No git repository or commit is needed. It needs forge v1.5.0 or later: use `@latest`, because an older cached forge refuses with "add forge first" instead of adopting the app.
+
+To check before you deploy, add `--plan-only`:
+
+```bash
+npx -y @reliantlabs/forge@latest env deploy prod --claimable --plan-only
+```
+
+It checks locally and creates nothing on the platform; it does adopt the app (adds `forge.yaml`, `deploy/kcl/`, `AGENTS.md` and the `.gitignore` entries). Run it first and the app is already a forge project when you deploy.
 
 A Next.js app must build as a static export: set `output: "export"` in `next.config.*`. `forge lint --static-export` lists, with file and line, anything an export can't serve, such as a dynamic route without `generateStaticParams`, a server action or `cookies()`. An app that needs a server at request time can't use this path.
 
-To deploy a folder of plain HTML, first add a `package.json` with `"scripts": {"build": "vite build"}` and `vite` as a devDependency, run `npm install`, then follow the steps above.
+To deploy a folder of plain HTML, first add a `package.json` with `"scripts": {"build": "vite build"}` and `vite` as a devDependency, run `npm install`, then run the command above.
+
+<Note>
+On forge v1.4.0 or earlier, adopt the app first with `forge project new --in-place --kind site --name my-site` (commit the new files if you want the release to record a commit), then run `forge env deploy prod --claimable`.
+</Note>
 
 ## Deploy a new static site
 
+Start from an empty folder, or create one:
+
 ```bash
-forge project new my-site --kind site                           # a Next.js static export
-forge project new my-site --kind site --frontend-kind vite-spa  # or a Vite single-page app
+npx -y @reliantlabs/forge@latest project new my-site --kind site                           # a Next.js static export
+npx -y @reliantlabs/forge@latest project new my-site --kind site --frontend-kind vite-spa  # or a Vite single-page app
 cd my-site
-forge env deploy prod --claimable
+npx -y @reliantlabs/forge@latest env deploy prod --claimable
 ```
+
+In an empty folder you're already in, add `--in-place` and leave out the name and the `cd`. A new site starts as a placeholder page: build what you want in it, then deploy.
+
+[`forge start`](/reference/cli#reliant-forge-start) prints this same split for the folder you run it in: an app that's already there deploys with one command, and an empty folder starts with `forge project new`.
 
 ## Deploy a Go API with Postgres
 
