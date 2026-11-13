@@ -770,6 +770,16 @@ func (r *Repo) CountMessagesInThread(ctx context.Context, threadID string) (int,
 	return r.countMessages(ctx, orm.WhereEq(store.MessageFieldThreadID, threadID))
 }
 
+// ClaimUserActivation records messageID as userID's activation when it is
+// their first typed message ever and no activation is recorded, reporting
+// whether this call recorded it (store.ClaimUserActivation).
+func (r *Repo) ClaimUserActivation(ctx context.Context, userID, chatID, messageID string) (bool, error) {
+	if userID == "" || chatID == "" || messageID == "" {
+		return false, fmt.Errorf("user, chat and message IDs are required")
+	}
+	return store.ClaimUserActivation(ctx, r.ORM(), userID, chatID, messageID)
+}
+
 // GetMessagesByContextWindow loads messages from a specific context window.
 // This is used by the threads package for CW chain resolution.
 func (r *Repo) GetMessagesByContextWindow(ctx context.Context, contextWindowID string, maxOrdinal *int64) ([]*Message, error) {
