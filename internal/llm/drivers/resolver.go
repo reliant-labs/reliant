@@ -163,8 +163,10 @@ func GetDriverForModel(model models.Model, driverID models.Family, opts ...llm.D
 	return &baseDriver{client: driverClient, model: options.Model}, nil
 }
 
-// GetDriver allows injecting a custom driver function for testing
-var GetDriver func(ctx context.Context, userID string, preferences models.Preferences, opts ...llm.DriverOption) (llm.Driver, error) = defaultGetDriver
+// GetDriver resolves a driver for preferences from the accounts scope may draw
+// on (the default account of the chosen provider). A variable so tests can
+// inject a driver.
+var GetDriver func(ctx context.Context, scope Scope, preferences models.Preferences, opts ...llm.DriverOption) (llm.Driver, error) = defaultGetDriver
 
 // ReplayMode holds the current replay configuration
 var ReplayMode struct {
@@ -196,8 +198,11 @@ func tokenRefresherForAccount(ctx context.Context, driverID models.DriverID, use
 	return buildAccountRefresher(ctx, driverID, userID, accountID, refresh)
 }
 
-// defaultGetDriver tries to get a driver using the provided model preferences
-func defaultGetDriver(ctx context.Context, userID string, preferences models.Preferences, opts ...llm.DriverOption) (llm.Driver, error) {
+// defaultGetDriver tries to get a driver using the provided model preferences,
+// over the same scoped candidates the account router sees, so the default
+// account can never come from a different set than a routed one.
+func defaultGetDriver(ctx context.Context, scope Scope, preferences models.Preferences, opts ...llm.DriverOption) (llm.Driver, error) {
+	userID := scope.UserID
 	// Check if we're in replay mode
 	if ReplayMode.Enabled && ReplayMode.Driver != nil {
 		return ReplayMode.Driver, nil
@@ -225,7 +230,7 @@ func defaultGetDriver(ctx context.Context, userID string, preferences models.Pre
 		model := def.ToModel()
 
 		// Get available drivers
-		availableDrivers := GetAvailableDrivers(ctx, userID)
+		availableDrivers := GetAvailableDrivers(ctx, scope)
 
 		var driverConfig models.DriverConfig
 		var found bool

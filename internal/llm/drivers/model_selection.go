@@ -25,7 +25,7 @@ import (
 // String-to-object conversion happens at the gRPC ingestion boundary only.
 //
 // Returns nil if the model can be resolved, or an error with actionable guidance.
-func ValidateModelSelector(ctx context.Context, userID string, selector interface{}) error {
+func ValidateModelSelector(ctx context.Context, scope Scope, selector interface{}) error {
 	// Convert selector to models.ModelSelector
 	ms, err := toModelSelector(selector)
 	if err != nil {
@@ -54,7 +54,7 @@ func ValidateModelSelector(ctx context.Context, userID string, selector interfac
 
 	// Get available drivers/providers for the user. A failed settings read is
 	// not "no API keys": it must stay distinguishable so callers can retry it.
-	availableDrivers, err := LookupAvailableDrivers(ctx, userID)
+	availableDrivers, err := LookupAvailableDrivers(ctx, scope)
 	if err != nil {
 		return err
 	}

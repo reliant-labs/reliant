@@ -93,7 +93,7 @@ func TestUsageRefreshThatShowsCapacityUnbenchesTheAccountForTheRouterAndWakesThe
 
 	routing := accountRouting(repo, nil)
 	assign := func() (accountrouter.Result, error) {
-		avail := drivers.GetAvailableDrivers(ctx, user)
+		avail := drivers.GetAvailableDrivers(ctx, drivers.PersonalScope(user))
 		return routing.Router.Assign(ctx, accountrouter.Request{
 			UserID: user, ThreadID: agentThread, Driver: "claude", ModelID: "claude-5.5-opus",
 			Accounts: avail.Accounts["claude"],

@@ -41,7 +41,7 @@ func (subscriptionAndKeyRepo) ListAccountLimits(context.Context, string) (map[st
 
 func bothConnected(t *testing.T) models.AvailableDrivers {
 	t.Helper()
-	available, err := buildAvailableDrivers(context.Background(), subscriptionAndKeyRepo{}, "user-1", noReportClients)
+	available, err := buildAvailableDrivers(context.Background(), subscriptionAndKeyRepo{}, PersonalScope("user-1"), noReportClients)
 	require.NoError(t, err)
 	return available
 }
