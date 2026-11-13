@@ -120,11 +120,17 @@ func TestMachinePolicy_CallerCredentialsNeverReachAnOldDaemon(t *testing.T) {
 			require.True(t, res.Success, res.Content)
 			require.Len(t, router.sent, 1)
 			wire := router.sent[0].ToolInput
-			for _, secret := range []string{"AWS_SECRET_ACCESS_KEY", "wJalrXUtnFEMI", "GOOGLE_APPLICATION_CREDENTIALS",
-				"RELIANT_TOKEN", "rlat_abcdefghijklmnop", "OPENAI_API_KEY", "sk-abcdefghij"} {
+			for _, secret := range []string{"wJalrXUtnFEMI", "/home/u/key.json", "rlat_abcdefghijklmnop", "sk-abcdefghij"} {
 				assert.NotContains(t, wire, secret)
 			}
-			assert.Contains(t, wire, `"KEEP":"1"`)
+			var in struct {
+				Env map[string]string `json:"env"`
+			}
+			require.NoError(t, json.Unmarshal([]byte(wire), &in))
+			for _, name := range []string{"AWS_SECRET_ACCESS_KEY", "GOOGLE_APPLICATION_CREDENTIALS", "RELIANT_TOKEN", "OPENAI_API_KEY"} {
+				assert.Empty(t, in.Env[name], "%s is emptied, so an old daemon's inherited value is too", name)
+			}
+			assert.Equal(t, "1", in.Env["KEEP"])
 			assert.Contains(t, wire, `"credentials":"none"`)
 		})
 	}

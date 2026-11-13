@@ -280,7 +280,7 @@ func TestNeutralizeEnvDropsCallerCredentials(t *testing.T) {
 		"RELIANT_CHAT_ID":                "chat-1",
 	})
 	for _, gone := range []string{"AWS_SECRET_ACCESS_KEY", "GOOGLE_APPLICATION_CREDENTIALS", "RELIANT_TOKEN", "OPENAI_API_KEY", "PROXY"} {
-		if v, ok := env[gone]; ok {
+		if v := env[gone]; v != "" {
 			t.Errorf("%s survived as %q", gone, v)
 		}
 	}
@@ -289,5 +289,39 @@ func TestNeutralizeEnvDropsCallerCredentials(t *testing.T) {
 	}
 	if env["KEEP"] != "1" || env["RELIANT_CHAT_ID"] != "chat-1" {
 		t.Errorf("a plain variable was dropped: %v", env)
+	}
+}
+
+// A daemon that predates `credentials: none` (before 2026-10-14) builds a
+// command's environment as its own, inherited, with the request's env
+// appended (the later assignment wins). Under an org's forced
+// credentials:none the request's env is NeutralizeEnv's: the credentials
+// such a daemon commonly inherits come out empty or pointed at nothing.
+func TestNeutralEnvEmptiesInheritedCredentialsOnAnOldDaemon(t *testing.T) {
+	inherited := []string{
+		"PATH=/usr/bin", "HOME=/home/u",
+		"AWS_ACCESS_KEY_ID=AKIAABCDEFGHIJKLMNOP", "AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+		"AWS_SESSION_TOKEN=FwoGZXIvYXdzEJr", "GOOGLE_APPLICATION_CREDENTIALS=/home/u/key.json",
+		"AZURE_CLIENT_SECRET=s3cr3t", "RELIANT_TOKEN=rlat_abcdefghijklmnop", "OPENAI_API_KEY=sk-abcdefghijklmnopqrstuvwxyz",
+		"NPM_TOKEN=npm_abcdef", "DATABASE_URL=postgres://u:p@db/x", "GH_TOKEN=ghp_inherited",
+	}
+	// The old daemon: inherited, then the request's env (map order is
+	// irrelevant; each name is assigned once).
+	env := map[string]string{}
+	for _, kv := range inherited {
+		name, value, _ := strings.Cut(kv, "=")
+		env[name] = value
+	}
+	for name, value := range NeutralizeEnv(map[string]string{"KEEP": "1"}) {
+		env[name] = value
+	}
+	for _, name := range []string{"AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN", "GOOGLE_APPLICATION_CREDENTIALS",
+		"AZURE_CLIENT_SECRET", "RELIANT_TOKEN", "OPENAI_API_KEY", "NPM_TOKEN", "DATABASE_URL", "GH_TOKEN"} {
+		if env[name] != "" {
+			t.Errorf("%s = %q reaches the command on an old daemon", name, env[name])
+		}
+	}
+	if env["PATH"] != "/usr/bin" || env["KEEP"] != "1" {
+		t.Errorf("a plain variable was lost: %v", env)
 	}
 }
