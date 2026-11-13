@@ -234,11 +234,12 @@ test.describe('the demo page-entry tour', () => {
     await expect(page.getByTestId('tour-callout')).toHaveCount(0);
     await expect(page.getByTestId('onboarding-nav-bar')).toHaveCount(0);
   });
-  test('legacy logs link has no prerequisite or cross-site sequence', async ({page}) => {
+  test('legacy logs link opens the console Logs with no prerequisite or cross-site sequence', async ({page}) => {
+    // An old /forge/demo?view=…&tour= link redirects to the console page it names (#2687).
     await openDemo(page, '/forge/demo?shell=demo&view=logs&tour=forge:fg-logs');
     await expect(page.getByTestId('tour-callout')).toContainText('Logs', LOADED);
     await page.getByTestId('tour-next').click();
     await expect(page.getByTestId('tour-callout')).toHaveCount(0);
-    await expect(page).toHaveURL(/view=logs/);
+    await expect(page).toHaveURL(/\/forge\/p\/shop\/observability\/logs\?/);
   });
 });
