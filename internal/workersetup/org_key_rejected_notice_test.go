@@ -44,8 +44,13 @@ func (s *recordingStarter) ExecuteWorkflow(_ context.Context, o client.StartWork
 // and a start that fails send nothing or change nothing.
 func TestCredentialMarker_StartsTheNoticeOfARejectedOrgKey(t *testing.T) {
 	marked := time.Date(2030, 1, 2, 3, 4, 5, 0, time.UTC)
+	confirms := map[string]int{}
 	store := func(err error) *MockAccountCredentialStore {
-		return &MockAccountCredentialStore{PatchOwnedProviderAccountFunc: func(_ context.Context, owner core.AccountOwner, id string, p core.AccountPatch) (core.ProviderAccount, error) {
+		return &MockAccountCredentialStore{ConfirmOrgKeyNoticeFunc: func(_ context.Context, org, id string, at time.Time) error {
+			require.Equal(t, marked, at)
+			confirms[org+"/"+id]++
+			return nil
+		}, PatchOwnedProviderAccountFunc: func(_ context.Context, owner core.AccountOwner, id string, p core.AccountPatch) (core.ProviderAccount, error) {
 			if err != nil {
 				return core.ProviderAccount{}, err
 			}
@@ -66,6 +71,7 @@ func TestCredentialMarker_StartsTheNoticeOfARejectedOrgKey(t *testing.T) {
 		assert.Equal(t, s.started[0].ID, s.started[1].ID, "one incident, one workflow id")
 		assert.Equal(t, "org-key-rejected/org-acme/acct-1/2030-01-02T03:04:05Z", s.started[0].ID)
 		assert.Equal(t, "q", s.started[0].TaskQueue)
+		assert.Equal(t, 2, confirms["org-acme/acct-1"], "each accepted start is confirmed")
 		assert.Equal(t, controlplane.OrgKeyRejectedNotice{
 			OrgID: "org-acme", IncidentKey: "2030-01-02T03:04:05Z", AccountID: "acct-1",
 			Provider: "Anthropic API", Label: "prod", KeyHint: "a1b2", Reason: "401 invalid key",
@@ -83,9 +89,25 @@ func TestCredentialMarker_StartsTheNoticeOfARejectedOrgKey(t *testing.T) {
 		require.Error(t, m.MarkNeedsSignIn(context.Background(), core.OrgAccountOwner("org-acme"), "acct-1", "401"))
 		assert.Empty(t, s.started)
 	})
-	t.Run("a start that fails leaves the mark standing", func(t *testing.T) {
-		m := credentialMarker{repo: store(nil), notices: queue(&recordingStarter{err: errors.New("temporal down")})}
+	t.Run("a start that fails leaves the mark standing and unconfirmed; the next rejection starts it", func(t *testing.T) {
+		clear(confirms)
+		s := &recordingStarter{err: errors.New("temporal down")}
+		m := credentialMarker{repo: store(nil), notices: queue(s)}
 		assert.NoError(t, m.MarkNeedsSignIn(context.Background(), core.OrgAccountOwner("org-acme"), "acct-1", "401"))
+		assert.Zero(t, confirms["org-acme/acct-1"], "not confirmed")
+
+		s.err = nil
+		assert.NoError(t, m.MarkNeedsSignIn(context.Background(), core.OrgAccountOwner("org-acme"), "acct-1", "401"))
+		require.Len(t, s.started, 1)
+		assert.Equal(t, "org-key-rejected/org-acme/acct-1/2030-01-02T03:04:05Z", s.started[0].ID)
+		assert.Equal(t, 1, confirms["org-acme/acct-1"])
+	})
+	t.Run("an incident already started counts as confirmed", func(t *testing.T) {
+		clear(confirms)
+		s := &recordingStarter{err: serviceerror.NewWorkflowExecutionAlreadyStarted("started", "", "")}
+		m := credentialMarker{repo: store(nil), notices: queue(s)}
+		assert.NoError(t, m.MarkNeedsSignIn(context.Background(), core.OrgAccountOwner("org-acme"), "acct-1", "401"))
+		assert.Equal(t, 1, confirms["org-acme/acct-1"])
 	})
 	t.Run("no temporal", func(t *testing.T) {
 		m := credentialMarker{repo: store(nil)}
@@ -157,4 +179,47 @@ func TestOrgKeyRejectedNotice_NothingToSendEndsIt(t *testing.T) {
 	require.NoError(t, runNotice(t, admins))
 	assert.Equal(t, 1, admins.calls)
 	require.NoError(t, runNotice(t, nil))
+}
+
+// sweepStore is the notices still to start, and the confirms recorded.
+type sweepStore struct {
+	pending   []core.ProviderAccount
+	confirmed []string
+}
+
+func (s *sweepStore) ListUnstartedOrgKeyNotices(context.Context, int) ([]core.ProviderAccount, error) {
+	return s.pending, nil
+}
+
+func (s *sweepStore) ConfirmOrgKeyNotice(_ context.Context, org, id string, _ time.Time) error {
+	s.confirmed = append(s.confirmed, org+"/"+id)
+	return nil
+}
+
+// The sweep starts every rejected org key whose notice was never confirmed,
+// with the reason the mark recorded, and confirms each Temporal accepted (an
+// already-started one included); one it could not start stays for the next
+// sweep.
+func TestSweepOrgKeyNotices_StartsTheUnconfirmed(t *testing.T) {
+	marked := time.Date(2030, 1, 2, 3, 4, 5, 0, time.UTC)
+	store := &sweepStore{pending: []core.ProviderAccount{
+		{ID: "acct-1", OrgID: "org-acme", OwnerKind: core.AccountOwnerOrg, Provider: "anthropic", NeedsReauthAt: &marked, NeedsReauthReason: "401 invalid key"},
+		{ID: "acct-2", OrgID: "org-acme", OwnerKind: core.AccountOwnerOrg, Provider: "openai", NeedsReauthAt: &marked},
+	}}
+	s := &recordingStarter{err: errors.New("temporal down")}
+	q := orgKeyNoticeQueue{starter: s, taskQueue: "q"}
+	assert.Equal(t, 0, sweepOrgKeyNotices(context.Background(), store, q))
+	assert.Empty(t, store.confirmed, "nothing started, nothing confirmed")
+
+	s.err = nil
+	assert.Equal(t, 2, sweepOrgKeyNotices(context.Background(), store, q))
+	assert.Equal(t, []string{"org-acme/acct-1", "org-acme/acct-2"}, store.confirmed)
+	require.Len(t, s.notices, 2)
+	assert.Equal(t, "401 invalid key", s.notices[0].Reason)
+	assert.Equal(t, "org-key-rejected/org-acme/acct-1/2030-01-02T03:04:05Z", s.started[0].ID)
+
+	store.confirmed = nil
+	s.err = serviceerror.NewWorkflowExecutionAlreadyStarted("started", "", "")
+	assert.Equal(t, 2, sweepOrgKeyNotices(context.Background(), store, q), "already started is started")
+	assert.Len(t, store.confirmed, 2)
 }

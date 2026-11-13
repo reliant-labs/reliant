@@ -15,6 +15,8 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 
 	"github.com/reliant-labs/reliant/internal/controlplane"
+	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/logging"
 )
 
@@ -128,4 +130,83 @@ func orgKeyNoticeQueueFor(cfg *Config) orgKeyNoticeQueue {
 		return orgKeyNoticeQueue{}
 	}
 	return orgKeyNoticeQueue{starter: cfg.TemporalClient, taskQueue: cfg.taskQueueName()}
+}
+
+// orgKeyNotice is the notice of acct's current mark, in orgID.
+func orgKeyNotice(orgID string, acct core.ProviderAccount, reason string) controlplane.OrgKeyRejectedNotice {
+	return controlplane.OrgKeyRejectedNotice{
+		OrgID: orgID, IncidentKey: acct.NeedsReauthAt.UTC().Format(time.RFC3339Nano), AccountID: acct.ID,
+		Provider: models.ProviderDisplayName(acct.Provider), Label: acct.Label, KeyHint: acct.KeyHint, Reason: reason,
+	}
+}
+
+// orgKeyNoticeConfirmer records that a notice's workflow was accepted.
+type orgKeyNoticeConfirmer interface {
+	ConfirmOrgKeyNotice(ctx context.Context, orgID, accountID string, markedAt time.Time) error
+}
+
+// startAndConfirmOrgKeyNotice starts n's workflow and, once Temporal has
+// accepted it (or already had it), records that on the account. Either step
+// failing leaves the mark unconfirmed, so it is started again later.
+func startAndConfirmOrgKeyNotice(ctx context.Context, store orgKeyNoticeConfirmer, q orgKeyNoticeQueue, n controlplane.OrgKeyRejectedNotice) error {
+	markedAt, err := time.Parse(time.RFC3339Nano, n.IncidentKey)
+	if err != nil {
+		return fmt.Errorf("read the incident of the notice: %w", err)
+	}
+	if err := startOrgKeyNotice(ctx, q.starter, q.taskQueue, n); err != nil {
+		return fmt.Errorf("start the notice: %w", err)
+	}
+	if err := store.ConfirmOrgKeyNotice(ctx, n.OrgID, n.AccountID, markedAt); err != nil {
+		return fmt.Errorf("record that the notice started: %w", err)
+	}
+	return nil
+}
+
+// OrgKeyNoticeSweepInterval is how often a worker starts the notices whose
+// start was never confirmed: a Temporal outage at the moment of the
+// rejection delays the email by at most this.
+const OrgKeyNoticeSweepInterval = 10 * time.Minute
+
+// orgKeyNoticeSweepBatch bounds one sweep's starts.
+const orgKeyNoticeSweepBatch = 100
+
+// sweepOrgKeyNotices starts every rejected org key's notice whose start was
+// never confirmed, and reports how many it started. The reason is not kept
+// with the mark beyond needs_reauth_reason, which is what it sends.
+func sweepOrgKeyNotices(ctx context.Context, store OrgKeyNoticeStore, q orgKeyNoticeQueue) int {
+	pending, err := store.ListUnstartedOrgKeyNotices(ctx, orgKeyNoticeSweepBatch)
+	if err != nil {
+		logging.WarnContext(ctx, "Could not list the rejected org keys whose notice never started", "error", err)
+		return 0
+	}
+	started := 0
+	for _, acct := range pending {
+		if acct.NeedsReauthAt == nil || acct.OrgID == "" {
+			continue
+		}
+		if err := startAndConfirmOrgKeyNotice(ctx, store, q, orgKeyNotice(acct.OrgID, acct, acct.NeedsReauthReason)); err != nil {
+			logging.WarnContext(ctx, "Could not start a rejected org key's notice; the next sweep retries it",
+				"orgID", acct.OrgID, "accountID", acct.ID, "error", err)
+			continue
+		}
+		started++
+	}
+	if started > 0 {
+		logging.InfoContext(ctx, "Started the notices of rejected org keys whose start was never confirmed", "started", started)
+	}
+	return started
+}
+
+// runOrgKeyNoticeSweep sweeps at once and every interval until ctx ends.
+func runOrgKeyNoticeSweep(ctx context.Context, store OrgKeyNoticeStore, q orgKeyNoticeQueue, interval time.Duration) {
+	t := time.NewTicker(interval)
+	defer t.Stop()
+	for {
+		sweepOrgKeyNotices(ctx, store, q)
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+		}
+	}
 }

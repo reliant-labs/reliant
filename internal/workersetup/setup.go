@@ -388,7 +388,15 @@ func NewWorker(cfg *Config) (*Worker, *v2.ActivityRegistry, error) {
 		)
 	}
 
-	return newWorker(w, fatal), registry, nil
+	out := newWorker(w, fatal)
+	// Rejected org keys whose notice never started (a Temporal outage at the
+	// rejection) are started here, where the notice's workflow runs.
+	if q := orgKeyNoticeQueueFor(cfg); q.starter != nil && cfg.Database != nil {
+		out.background = append(out.background, func(ctx context.Context) {
+			runOrgKeyNoticeSweep(ctx, cfg.Database, q, OrgKeyNoticeSweepInterval)
+		})
+	}
+	return out, registry, nil
 }
 
 // workerOptions is the shared worker's worker.Options, gomaxprocs being the

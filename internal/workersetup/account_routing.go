@@ -8,7 +8,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/controlplane"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/llm/accountrouter"
-	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/handlers"
 )
@@ -132,17 +131,16 @@ func (m credentialMarker) MarkNeedsSignIn(ctx context.Context, owner core.Accoun
 }
 
 // notifyOrgAdmins starts the notice of the rejected key (OrgKeyRejectedNoticeWorkflow).
-// The incident is when the key was first marked: a mark keeps its time until
-// the key is rotated, so every worker that meets the same rejection, and every
-// retry, names the same incident and starts the same workflow. A start that
-// fails is logged; the mark stands and the inbox lists it whatever happens here.
+// The mark is the durable intent: the account's needs_reauth_at, kept until the
+// key is rotated, names the incident, and reauth_notice_for records once
+// Temporal accepted its workflow. Every rejection of a marked org key starts
+// it again (the same workflow id, so a duplicate is a no-op) and confirms it;
+// a start that fails leaves it unconfirmed for the next rejection or the
+// worker's sweep (sweepOrgKeyNotices). The mark stands, and the inbox lists
+// it, whatever happens here.
 func (m credentialMarker) notifyOrgAdmins(ctx context.Context, orgID string, acct core.ProviderAccount, reason string) {
-	n := controlplane.OrgKeyRejectedNotice{
-		OrgID: orgID, IncidentKey: acct.NeedsReauthAt.UTC().Format(time.RFC3339Nano), AccountID: acct.ID,
-		Provider: models.ProviderDisplayName(acct.Provider), Label: acct.Label, KeyHint: acct.KeyHint, Reason: reason,
-	}
-	if err := startOrgKeyNotice(ctx, m.notices.starter, m.notices.taskQueue, n); err != nil {
-		logging.ErrorContext(ctx, "Could not start emailing the org's admins about a rejected key; the inbox still lists it",
+	if err := startAndConfirmOrgKeyNotice(ctx, m.repo, m.notices, orgKeyNotice(orgID, acct, reason)); err != nil {
+		logging.WarnContext(ctx, "Could not start emailing the org's admins about a rejected key; the sweep retries it",
 			"orgID", orgID, "accountID", acct.ID, "error", err)
 	}
 }
