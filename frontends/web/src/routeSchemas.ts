@@ -333,6 +333,11 @@ export const SETTINGS_SECTION_IDS = [
   // The org's admin policies (control-plane docs/design/org-policies.md §6):
   // members read them, admins and owners edit them. Cloud-only, beside Members.
   "policies",
+  // The AI accounts the active org pays for (control-plane
+  // docs/design/org-provider-accounts.md §7): its API keys and team
+  // workspaces. Members read them, owners and admins manage them. Cloud-only,
+  // beside Members.
+  "org-ai-accounts",
   // Machines. Shown in every build: registered machines, and the outside AI
   // apps granted access to each, exist without a control plane too. Was
   // `environments`; /settings/environments redirects here.

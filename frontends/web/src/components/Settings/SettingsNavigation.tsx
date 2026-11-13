@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { cn } from "../../lib/utils";
-import { Sparkles, Keyboard, Info, List, Monitor, Code, User, Shield, ShieldCheck, Lock, FolderOpen, Globe, GitBranch, Bell, KeyRound, Github, CreditCard, Server, Layers, Zap, MessageSquare, Plug, ChevronRight } from "lucide-react";
+import { Bot, Sparkles, Keyboard, Info, List, Monitor, Code, User, Shield, ShieldCheck, Lock, FolderOpen, Globe, GitBranch, Bell, KeyRound, Github, CreditCard, Server, Layers, Zap, MessageSquare, Plug, ChevronRight } from "lucide-react";
 import Tooltip from "../forge-ui/tooltip";
 import { McpIcon } from "../icons/McpIcon";
 import { hasControlPlane } from "../../services/controlPlane/config";
@@ -56,6 +56,7 @@ const sectionGroups: SectionGroup[] = [
             { id: "billing" as const, label: "Billing & usage", icon: CreditCard },
             { id: "member-permissions" as const, label: "Members", icon: Shield },
             { id: "policies" as const, label: "Policies", icon: ShieldCheck },
+            { id: "org-ai-accounts" as const, label: "AI accounts", icon: Bot },
           ]
         : []),
       { id: "privacy", label: "Privacy", icon: Lock },
