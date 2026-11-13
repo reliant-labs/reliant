@@ -270,10 +270,10 @@ func TestCredentialsNone_KeepsTheAgentShellMarker(t *testing.T) {
 // and secret-shaped values are dropped before the neutral assignments.
 func TestNeutralizeEnvDropsCallerCredentials(t *testing.T) {
 	env := NeutralizeEnv(map[string]string{
-		"AWS_SECRET_ACCESS_KEY":          "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+		"AWS_SECRET_ACCESS_KEY":          "fake-aws-secret-value",
 		"GOOGLE_APPLICATION_CREDENTIALS": "/home/u/.gcp/key.json",
-		"RELIANT_TOKEN":                  "rlat_abcdefghijklmnop",
-		"OPENAI_API_KEY":                 "sk-abcdefghijklmnopqrstuvwxyz",
+		"RELIANT_TOKEN":                  "fake-reliant-token",
+		"OPENAI_API_KEY":                 "fake-openai-key",
 		"PROXY":                          "https://user:hunter2@proxy.example:8080",
 		"GH_TOKEN":                       "ghp_from_caller",
 		"KEEP":                           "1",
@@ -300,10 +300,10 @@ func TestNeutralizeEnvDropsCallerCredentials(t *testing.T) {
 func TestNeutralEnvEmptiesInheritedCredentialsOnAnOldDaemon(t *testing.T) {
 	inherited := []string{
 		"PATH=/usr/bin", "HOME=/home/u",
-		"AWS_ACCESS_KEY_ID=AKIAABCDEFGHIJKLMNOP", "AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
-		"AWS_SESSION_TOKEN=FwoGZXIvYXdzEJr", "GOOGLE_APPLICATION_CREDENTIALS=/home/u/key.json",
-		"AZURE_CLIENT_SECRET=s3cr3t", "RELIANT_TOKEN=rlat_abcdefghijklmnop", "OPENAI_API_KEY=sk-abcdefghijklmnopqrstuvwxyz",
-		"NPM_TOKEN=npm_abcdef", "DATABASE_URL=postgres://u:p@db/x", "GH_TOKEN=ghp_inherited",
+		"AWS_ACCESS_KEY_ID=fake-access-key-id", "AWS_SECRET_ACCESS_KEY=fake-aws-secret-value",
+		"AWS_SESSION_TOKEN=fake-session-token", "GOOGLE_APPLICATION_CREDENTIALS=/home/u/key.json",
+		"AZURE_CLIENT_SECRET=s3cr3t", "RELIANT_TOKEN=fake-reliant-token", "OPENAI_API_KEY=fake-openai-key",
+		"NPM_TOKEN=fake-npm-token", "DATABASE_URL=postgres://u:p@db/x", "GH_TOKEN=ghp_inherited",
 	}
 	// The old daemon: inherited, then the request's env (map order is
 	// irrelevant; each name is assigned once).

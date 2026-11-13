@@ -108,9 +108,9 @@ func TestMachinePolicy_ShellInputForcedAndStamped(t *testing.T) {
 // changes nothing worth counting but is neutralised all the same.
 func TestMachinePolicy_CallerCredentialsNeverReachAnOldDaemon(t *testing.T) {
 	setMachines(t, orgpolicy.EnforcementEnforce)
-	env := `"env":{"AWS_SECRET_ACCESS_KEY":"wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",` +
-		`"GOOGLE_APPLICATION_CREDENTIALS":"/home/u/key.json","RELIANT_TOKEN":"rlat_abcdefghijklmnop",` +
-		`"OPENAI_API_KEY":"sk-abcdefghijklmnopqrstuvwxyz","KEEP":"1"}`
+	env := `"env":{"AWS_SECRET_ACCESS_KEY":"fake-aws-secret-value",` +
+		`"GOOGLE_APPLICATION_CREDENTIALS":"/home/u/key.json","RELIANT_TOKEN":"fake-reliant-token",` +
+		`"OPENAI_API_KEY":"fake-openai-key","KEEP":"1"}`
 	for name, input := range map[string]string{
 		"credentials unset":      `{"command":"aws s3 ls",` + env + `}`,
 		"credentials none given": `{"command":"aws s3 ls","credentials":"none",` + env + `}`,
@@ -120,7 +120,7 @@ func TestMachinePolicy_CallerCredentialsNeverReachAnOldDaemon(t *testing.T) {
 			require.True(t, res.Success, res.Content)
 			require.Len(t, router.sent, 1)
 			wire := router.sent[0].ToolInput
-			for _, secret := range []string{"wJalrXUtnFEMI", "/home/u/key.json", "rlat_abcdefghijklmnop", "sk-abcdefghij"} {
+			for _, secret := range []string{"fake-aws-secret-value", "/home/u/key.json", "fake-reliant-token", "fake-openai-key"} {
 				assert.NotContains(t, wire, secret)
 			}
 			var in struct {
