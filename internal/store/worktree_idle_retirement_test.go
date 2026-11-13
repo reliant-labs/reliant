@@ -58,6 +58,9 @@ func TestArchiveRecoverableIdleNeverOverwritesSavedRecoveryProvenance(t *testing
 	}
 }
 
+// A spawned thread's own pending, active or paused run holds the workspace it
+// was spawned into. Its parent chat's runs do not (bug 94324f76;
+// worktree_thread_scope_test.go).
 func TestArchiveRecoverableIdleExcludesSpawnedThreadAndPausedRuns(t *testing.T) {
 	for _, status := range []core.WorkflowStatus{core.Pending(), core.Active(), core.Paused()} {
 		t.Run(fmt.Sprint(status), func(t *testing.T) {
@@ -66,7 +69,8 @@ func TestArchiveRecoverableIdleExcludesSpawnedThreadAndPausedRuns(t *testing.T) 
 			chat := landedFixture(t, env, "parent-a")
 			child := &core.Worktree{ID: "child-b", ProjectID: storetest.SeedProjectID, Name: "child-b", Path: "/tmp/child-b", Branch: "child"}
 			require.NoError(t, env.Repo.CreateWorktree(ctx, child))
-			require.NoError(t, env.Repo.CreateWorkflow(ctx, newWorkflow("wf", chat.ID, nil, status, time.Now())))
+			// The run on the spawned thread (newWorkflow's thread is its id).
+			require.NoError(t, env.Repo.CreateWorkflow(ctx, newWorkflow("child", chat.ID, nil, status, time.Now())))
 			mustExecConv(t, env, `INSERT INTO threads (id,chat_id,created_at,origin,status,worktree_id) VALUES ('child',$1,NOW(),'spawn',2,$2)`, chat.ID, child.ID)
 			ok, err := store.ArchiveRecoverableIdleWorktree(ctx, env.ORM, child.ID, time.Now().Add(time.Hour))
 			require.NoError(t, err)

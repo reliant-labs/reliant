@@ -99,8 +99,8 @@ func (r *Repo) GetLiveChatIDForWorktree(ctx context.Context, worktreeID string) 
 	return store.GetLiveChatIDForWorktree(ctx, r.ORM(), worktreeID)
 }
 
-// ListWorktreeIDsWithRunningChat reports which of worktreeIDs have a bound
-// chat whose run is pending or active.
+// ListWorktreeIDsWithRunningChat reports which of worktreeIDs have a run going
+// in them: a bound chat's run, or a bound thread's own (store.WorktreeRunActivities).
 func (r *Repo) ListWorktreeIDsWithRunningChat(ctx context.Context, worktreeIDs []string) (map[string]bool, error) {
 	return store.ListWorktreeIDsWithRunningChat(ctx, r.ORM(), worktreeIDs)
 }

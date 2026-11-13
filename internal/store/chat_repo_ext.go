@@ -45,7 +45,6 @@ import (
 
 	"github.com/reliant-labs/forge/pkg/crud"
 	"github.com/reliant-labs/forge/pkg/orm"
-	"github.com/uptrace/bun/dialect/pgdialect"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
 )
@@ -61,34 +60,23 @@ func GetLiveChatIDForWorktree(ctx context.Context, db orm.Context, worktreeID st
 	return id, err
 }
 
-// ListWorktreeIDsWithRunningChat conservatively excludes both chat and
-// spawned-thread workspace bindings while their chat has a pending, active or
-// paused/resumable run, or a thread parked on a provider wait that has not
-// reached its resume time (providerWaitSQL). A thread can override its
-// chat's workspace.
+// ListWorktreeIDsWithRunningChat reports which of worktreeIDs have a run going
+// in them: a run of a chat bound to the worktree, or of a thread bound to it
+// (a sub-agent spawned into it) and that thread's own descendants, including
+// paused/resumable runs and provider waits that have not reached their resume
+// time. It is WorktreeRunActivities' Running, read from the one definition
+// (worktreeRunActivitySQL), so the sweep's pre-filter and the row-locked
+// archive check can never disagree about what "running" means.
 func ListWorktreeIDsWithRunningChat(ctx context.Context, db orm.Context, worktreeIDs []string) (map[string]bool, error) {
 	out := make(map[string]bool)
-	if len(worktreeIDs) == 0 {
-		return out, nil
-	}
-	var ids []string
-	err := db.Bun().NewRaw(`WITH bindings AS (
- SELECT id AS chat_id, worktree_id FROM chats WHERE worktree_id = ANY(?0::text[])
- UNION
- SELECT chat_id, worktree_id FROM threads WHERE worktree_id = ANY(?0::text[])
-)
-SELECT DISTINCT b.worktree_id FROM bindings b JOIN workflows w ON w.chat_id = b.chat_id
-WHERE w.state IN (?1, ?2) OR (w.state = ?3 AND w.stop_reason = ?4)
-UNION
-SELECT b.worktree_id FROM bindings b JOIN provider_backoff pb ON pb.chat_id = b.chat_id
-WHERE `+providerWaitSQL+` AND pb.resume_at >= NOW()`,
-		pgdialect.Array(worktreeIDs), core.WorkflowStatePending, core.WorkflowStateActive,
-		core.WorkflowStateStopped, core.StopReasonPaused).Scan(ctx, &ids)
-	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+	acts, err := WorktreeRunActivities(ctx, db, worktreeIDs)
+	if err != nil {
 		return nil, err
 	}
-	for _, id := range ids {
-		out[id] = true
+	for id, a := range acts {
+		if a.Running {
+			out[id] = true
+		}
 	}
 	return out, nil
 }
