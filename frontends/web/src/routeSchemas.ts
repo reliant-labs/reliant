@@ -330,6 +330,9 @@ export const SETTINGS_SECTION_IDS = [
   // organization to grant within, so SettingsNavigation gates the entry on
   // hasControlPlane. Route: /settings/member-permissions.
   "member-permissions",
+  // The org's admin policies (control-plane docs/design/org-policies.md §6):
+  // members read them, admins and owners edit them. Cloud-only, beside Members.
+  "policies",
   // Machines. Shown in every build: registered machines, and the outside AI
   // apps granted access to each, exist without a control plane too. Was
   // `environments`; /settings/environments redirects here.
