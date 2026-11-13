@@ -1464,10 +1464,11 @@ func APIOrgProviderAccounts(api *configv1.ApiServerConfig) bool {
 }
 
 // NewOrgProviderAccount builds the API server's OrgProviderAccountService
-// from d, with its rollout gate (Deps.AddingEnabled) read from api
-// (APIOrgProviderAccounts). newOrgProviderAccount and the config-path test
-// both build it here, so the test proves the wiring production runs.
+// from d, with its rollout gates (Deps.OrgRollout) read from api: ApiServerConfig
+// orgs, whose provider_accounts_enabled is APIOrgProviderAccounts.
+// newOrgProviderAccount and the config-path test both build it here, so the
+// test proves the wiring production runs.
 func NewOrgProviderAccount(api *configv1.ApiServerConfig, d org_provider_account.Deps) (*org_provider_account.Service, error) {
-	d.AddingEnabled = APIOrgProviderAccounts(api)
+	d.OrgRollout = api.GetOrgs()
 	return org_provider_account.New(d)
 }

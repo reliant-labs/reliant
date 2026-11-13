@@ -13,6 +13,7 @@ import (
 
 	"connectrpc.com/connect"
 
+	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	reliantv1connect "github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -55,10 +56,13 @@ type Deps struct {
 	// ValidateKey checks a pasted API key against its provider with one cheap call before it is
 	// stored (keyvalidate.Validate in production). ok=false carries a message for the admin.
 	ValidateKey func(ctx context.Context, provider models.Family, apiKey string) (ok bool, message string)
-	// AddingEnabled lets an org's owners and admins add accounts and bind workspaces
-	// (ApiServerConfig orgs.provider_accounts_enabled, app.APIOrgProviderAccounts). Off, the
-	// default, refuses both with FailedPrecondition; nothing else is gated.
-	AddingEnabled bool
+	// OrgRollout holds the org rollout gates (ApiServerConfig orgs, app.NewOrgProviderAccount);
+	// its provider_accounts_enabled lets an org's owners and admins add accounts and bind
+	// workspaces. Unset or off, the default, refuses both with FailedPrecondition; nothing else
+	// is gated.
+	//
+	// forge:optional-dep
+	OrgRollout *configv1.OrgsConfig
 }
 
 // validateDeps returns an error if any required Deps field is nil. The

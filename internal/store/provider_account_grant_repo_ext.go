@@ -76,7 +76,7 @@ func ListOrgProviderAccountGrants(ctx context.Context, db orm.Context, orgID str
 func ReplaceProviderAccountGrants(ctx context.Context, db orm.Context, orgID, accountID string, userIDs []string, grantedBy string, now time.Time) error {
 	del := db.Bun().NewDelete().Model((*ProviderAccountGrant)(nil)).Where("account_id = ?", accountID)
 	if len(userIDs) > 0 {
-		del = del.Where("user_id NOT IN (?)", bun.In(userIDs))
+		del = del.Where("user_id NOT IN (?)", bun.List(userIDs))
 	}
 	if _, err := del.Exec(ctx); err != nil {
 		return err

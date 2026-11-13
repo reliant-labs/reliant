@@ -13,6 +13,7 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 
+	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/authz"
@@ -89,8 +90,8 @@ func newEnv(t *testing.T, enabled bool) *env {
 	r.set("org-2", strayID, orgs.RoleAdmin)
 	e := &env{t: t, repo: repo, roles: r, enabled: enabled}
 	e.svc = org_provider_account.NewTestOrgProviderAccount(t, org_provider_account.WithOrgProviderAccountDeps(org_provider_account.Deps{
-		Store:         repo,
-		AddingEnabled: enabled,
+		Store:      repo,
+		OrgRollout: &configv1.OrgsConfig{ProviderAccountsEnabled: enabled},
 		ValidateKey: func(_ context.Context, _ models.Family, key string) (bool, string) {
 			e.keysSeen = append(e.keysSeen, key)
 			if e.reject {

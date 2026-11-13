@@ -35,6 +35,6 @@ func (s *Service) ListOrgProviderAccounts(
 	return connect.NewResponse(&pb.ListOrgProviderAccountsResponse{
 		Accounts:      v.protoAll(accounts, ""),
 		CallerIsAdmin: isAdmin,
-		AddingEnabled: s.deps.AddingEnabled,
+		AddingEnabled: s.addingEnabled(),
 	}), nil
 }

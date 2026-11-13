@@ -1427,10 +1427,10 @@ func (g *Graph) newAutomationTakeover() (*automation_takeover.Service, error) {
 // (NewOrgProviderAccount); nothing else it does is.
 func (g *Graph) newOrgProviderAccount() (*org_provider_account.Service, error) {
 	return NewOrgProviderAccount(g.ApiServerConfig, org_provider_account.Deps{
-		Logger:        g.Log,
-		Config:        g.Cfg,
-		Store:         g.Database(),
-		ValidateKey:   keyvalidate.Validate,
-		AddingEnabled: false, // TODO: AddingEnabled is configuration — declare a config block (see forge architecture skill)
+		Logger:      g.Log,
+		Config:      g.Cfg,
+		Store:       g.Database(),
+		ValidateKey: keyvalidate.Validate,
+		OrgRollout:  g.ApiServerConfig.GetOrgs(), // NewOrgProviderAccount sets the same, from the config it is given
 	})
 }

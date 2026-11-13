@@ -49,7 +49,7 @@ func addOrgProviderAccountThrough(t *testing.T, api *configv1.ApiServerConfig) e
 // newOrgProviderAccount calls) builds the service with the gate it reads. At
 // the schema default, and in this repo's dev and demo envs, the gate is off and
 // an org admin's add is refused; set, it is admitted. The service tests set
-// Deps.AddingEnabled directly, so without this a flipped default, a dropped
+// Deps.OrgRollout directly, so without this a flipped default, a dropped
 // env-map entry or a dropped wiring would go unseen.
 func TestOrgProviderAccountsGateReachesTheService(t *testing.T) {
 	testkit.Slow(t, "evaluates deploy/kcl through `forge kcl eval`",

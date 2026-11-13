@@ -577,7 +577,7 @@ func ClearProviderAccountAttribution(ctx context.Context, db orm.Context, orgID,
 	res, err := db.Bun().NewUpdate().Model((*ProviderAccount)(nil)).
 		Set("attributed_org_id = NULL").Set("attribution_source = NULL").Set("updated_at = ?", now.UTC()).
 		Where("id = ?", accountID).Where("attributed_org_id = ?", orgID).
-		Where("attribution_source IN (?)", bun.In(sources)).Exec(ctx)
+		Where("attribution_source IN (?)", bun.List(sources)).Exec(ctx)
 	if err != nil {
 		return false, err
 	}
