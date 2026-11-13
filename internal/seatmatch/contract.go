@@ -79,6 +79,8 @@ type Store interface {
 	AttributeWorkspaceSeat(ctx context.Context, w core.OrgProviderWorkspace, accountID string) (bool, error)
 	// ClearWorkspaceSeat makes accountID, a seat orgID's binding matched
 	// (source 'workspace'), the person's own again; reports whether it did.
+	// It re-decides under the account's lock: a seat a binding of orgID
+	// covers by then (a rebind matched it again) is left alone.
 	ClearWorkspaceSeat(ctx context.Context, orgID, accountID string) (bool, error)
 }
 

@@ -257,6 +257,13 @@ func LockProviderAccountByIdentity(ctx context.Context, db orm.Context, userID, 
 	})
 }
 
+// LockProviderAccountByID locks a person's account by id, metadata only; nil when there is none.
+func LockProviderAccountByID(ctx context.Context, db orm.Context, accountID string) (*core.ProviderAccount, error) {
+	return lockProviderAccount(ctx, db, func(q *bun.SelectQuery) *bun.SelectQuery {
+		return q.Where("id = ?", accountID).Where("owner_kind = ?", core.AccountOwnerUser)
+	})
+}
+
 // LockOwnerProviderAccount locks one of the owner's accounts, or returns
 // core.ErrProviderAccountNotFound.
 func LockOwnerProviderAccount(ctx context.Context, db orm.Context, owner core.AccountOwner, accountID string) (*core.ProviderAccount, error) {

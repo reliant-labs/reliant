@@ -117,11 +117,10 @@ func (r *Repo) AttributeWorkspaceSeat(ctx context.Context, w core.OrgProviderWor
 	return r.accounts.AttributeWorkspaceSeat(ctx, w, accountID)
 }
 
-// ClearWorkspaceSeat makes accountID, a seat orgID's binding matched, the person's own again;
-// reports whether it did (seatmatch).
+// ClearWorkspaceSeat makes accountID, a seat orgID's binding matched, the person's own again
+// when no binding of orgID covers its workspace any more; reports whether it did (seatmatch).
 func (r *Repo) ClearWorkspaceSeat(ctx context.Context, orgID, accountID string) (bool, error) {
-	return store.ClearProviderAccountAttribution(ctx, r.ORM(), orgID, accountID,
-		[]string{core.AttributionWorkspace}, r.accounts.now())
+	return r.accounts.ClearWorkspaceSeat(ctx, orgID, accountID)
 }
 
 // seatSources are the attribution sources of a seat: a person's sign-in the org pays for. The
@@ -244,6 +243,37 @@ func (s *accountStore) AttributeWorkspaceSeat(ctx context.Context, w core.OrgPro
 		return err
 	})
 	return done, err
+}
+
+// ClearWorkspaceSeat decides and clears in one transaction, so a decision made from an older
+// read can never undo a newer attribution. It locks the account row first, then reads the
+// binding with a fresh statement (READ COMMITTED: it sees every bind committed before it), and
+// clears only a seat of orgID, source 'workspace', whose current workspace no binding of orgID
+// covers. A rebind's rematch either committed before the lock (the read finds its binding: no
+// clear) or waits on the lock and then attributes the row this clears. Lock order is the account,
+// then the binding unlocked, so it cannot deadlock with AttributeWorkspaceSeat (binding, then
+// account) or an unbind (binding, then accounts).
+func (s *accountStore) ClearWorkspaceSeat(ctx context.Context, orgID, accountID string) (bool, error) {
+	var cleared bool
+	err := s.inTx(ctx, func(ctx context.Context) error {
+		a, err := store.LockProviderAccountByID(ctx, s.db, accountID)
+		if err != nil || a == nil || a.AttributedOrgID != orgID || a.AttributionSource != core.AttributionWorkspace {
+			return err
+		}
+		if ws := core.ProviderWorkspaceID(*a); ws != "" {
+			b, err := store.GetProviderWorkspaceBinding(ctx, s.db, a.Provider, ws)
+			if err != nil {
+				return err
+			}
+			if b != nil && b.OrgID == orgID {
+				return nil // still the org's seat
+			}
+		}
+		cleared, err = store.ClearProviderAccountAttribution(ctx, s.db, orgID, accountID,
+			[]string{core.AttributionWorkspace}, s.now())
+		return err
+	})
+	return cleared, err
 }
 
 // ReleaseOrgSeat clears one of orgID's seats and records the release in one transaction.

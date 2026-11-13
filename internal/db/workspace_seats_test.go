@@ -101,7 +101,9 @@ func TestWorkspaceSeatAttribution(t *testing.T) {
 	assert.False(t, cleared, "another org's clear touches nothing")
 	cleared, err = repo.ClearWorkspaceSeat(ctx, "org-1", eve.ID)
 	require.NoError(t, err)
-	assert.True(t, cleared)
+	assert.False(t, cleared, "the org's binding still covers it: a stale decision to clear is refused")
+	org, _ = attribution(eve.ID)
+	assert.Equal(t, "org-1", org)
 
 	// Unbinding forgets the org's releases in the workspace: binding again starts afresh.
 	require.NoError(t, repo.UnbindOrgProviderWorkspace(ctx, "org-1", "claude", "ws-a"))
@@ -113,4 +115,54 @@ func TestWorkspaceSeatAttribution(t *testing.T) {
 	done, err = repo.AttributeWorkspaceSeat(ctx, ws, dana.ID)
 	require.NoError(t, err)
 	assert.True(t, done, "a rebind matches a seat released under the old binding")
+}
+
+// The clear is decided under the account's lock (review of #2698, B1): an unbind, a rebind and
+// the rebind's rematch all land between a matcher's read ("no binding covers this seat") and its
+// clear, and the delayed clear leaves the new attribution alone. Once the binding is really gone,
+// the same clear goes through.
+func TestWorkspaceSeatClearIsDecidedAtomically(t *testing.T) {
+	t.Parallel()
+	repo, raw, cleanup := SetupTestDBWithRawDB(t)
+	defer cleanup()
+	ctx := context.Background()
+	orgOf := func(id string) string {
+		t.Helper()
+		var o *string
+		require.NoError(t, raw.QueryRowContext(ctx, `SELECT attributed_org_id FROM provider_accounts WHERE id=$1`, id).Scan(&o))
+		if o == nil {
+			return ""
+		}
+		return *o
+	}
+	dana := mustUpsert(t, repo, claudeUpsert("dana", "dana", "ws-a", "t", "r"))
+	ws := core.OrgProviderWorkspace{OrgID: "org-1", Provider: "claude", ExternalOrgID: "ws-a", DisplayName: "A", BoundByUserID: "ada"}
+	_, _, err := repo.BindOrgProviderWorkspace(ctx, ws)
+	require.NoError(t, err)
+	done, err := repo.AttributeWorkspaceSeat(ctx, ws, dana.ID)
+	require.NoError(t, err)
+	require.True(t, done)
+
+	// A matcher read the seat while the workspace was unbound...
+	require.NoError(t, repo.UnbindOrgProviderWorkspace(ctx, "org-1", "claude", "ws-a"))
+	// ...then the admin bound it again and the rematch attributed the seat anew...
+	_, _, err = repo.BindOrgProviderWorkspace(ctx, ws)
+	require.NoError(t, err)
+	done, err = repo.AttributeWorkspaceSeat(ctx, ws, dana.ID)
+	require.NoError(t, err)
+	require.True(t, done)
+	// ...and only now does the matcher's clear run.
+	cleared, err := repo.ClearWorkspaceSeat(ctx, "org-1", dana.ID)
+	require.NoError(t, err)
+	assert.False(t, cleared)
+	assert.Equal(t, "org-1", orgOf(dana.ID), "the new attribution survives the delayed clear")
+
+	// A seat no binding covers (here: its row says org-1, the binding is gone and nothing
+	// cleared it) is cleared.
+	_, err = raw.ExecContext(ctx, `DELETE FROM org_provider_workspaces WHERE org_id = 'org-1'`)
+	require.NoError(t, err)
+	cleared, err = repo.ClearWorkspaceSeat(ctx, "org-1", dana.ID)
+	require.NoError(t, err)
+	assert.True(t, cleared)
+	assert.Empty(t, orgOf(dana.ID))
 }
