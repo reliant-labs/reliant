@@ -12,7 +12,7 @@ import { describe, expect, it, vi } from "vitest";
 import { OrgUpdateSchema, OrgUpdateType } from "@/gen/reliant/v1/streaming_pb";
 import { chatKeys } from "@/hooks/chat-queries";
 import { sharingServiceKeys } from "@/hooks/sharing-service-hooks_gen";
-import { applyOrgUpdates } from "@/hooks/sharing-queries";
+import { applyOrgUpdates, memberNamesBySubject } from "@/hooks/sharing-queries";
 
 function invalidated(updates: Parameters<typeof applyOrgUpdates>[1]) {
   const client = new QueryClient();
@@ -40,5 +40,25 @@ describe("applyOrgUpdates", () => {
 
   it("leaves a project's id out of the chat details", () => {
     expect(invalidated([row(OrgUpdateType.UNSHARED, "project")])).toEqual([{ queryKey: sharingServiceKeys.all }]);
+  });
+});
+
+describe("memberNamesBySubject", () => {
+  // A chat's userId is the owner's sign-in subject; the roster's userId is
+  // control-plane's own id. Names are keyed by the former (externalId).
+  it("keys each member by their sign-in subject, the name they set else their email", () => {
+    const roster = [
+      { userId: "cp-1", externalId: "sub-dana", name: "Dana", email: "dana@acme.test" },
+      { userId: "cp-2", externalId: "sub-lee", name: "", email: "lee@acme.test" },
+    ];
+    const names = memberNamesBySubject(roster);
+    expect(names.get("sub-dana")).toBe("Dana");
+    expect(names.get("sub-lee")).toBe("lee@acme.test");
+    expect(names.has("cp-1")).toBe(false);
+  });
+
+  it("names nobody from a control plane that predates externalId", () => {
+    const roster = [{ userId: "cp-1", externalId: "", name: "Dana", email: "d@acme.test" }];
+    expect(memberNamesBySubject(roster).size).toBe(0);
   });
 });

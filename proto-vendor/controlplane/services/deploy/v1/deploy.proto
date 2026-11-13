@@ -296,6 +296,69 @@ service DeployService {
     };
   }
 
+  // --- Rollback floors ------------------------------------------------
+  //
+  // A rollback floor is "never bind this environment to a release older than
+  // X" (controlplane.v1.DeployRollbackFloor). Promote refuses a target that
+  // fails an active floor with reason `below_rollback_floor`; there is no
+  // flag that skips it. Changing floors is its own audited act: every set and
+  // every lift carries the caller's principal and a non-empty reason, is an
+  // append-only row, and is an activity event. Anyone who may promote may
+  // set, lower, clear or lift (owner decision, 2026-11-08) — the audit is the
+  // guard rail. A server that implements these advertises
+  // GetCapabilities.rollback_floors.
+
+  // SetRollbackFloor sets an ORDER floor: at a named release (source manual)
+  // or at the release the environment runs now (current; source
+  // roll_forward_only — "roll forward only from here"). A floor the
+  // environment's current release would fail is refused (InvalidArgument):
+  // the current binding always satisfies every active floor.
+  rpc SetRollbackFloor(SetRollbackFloorRequest) returns (SetRollbackFloorResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {
+        verb: "set_floor"
+        target: {
+          kind: "release"
+          id: "response.floor.version"
+          label: "response.floor.version"
+        }
+        env: "environment_id"
+        detail: [
+          "reason",
+          "response.floor.source",
+          "response.floor.id"
+        ]
+      }
+    };
+  }
+  // LiftRollbackFloor lifts floors — named ones (`floor lift`), every order
+  // floor above a release followed by a manual floor at it (`floor lower`),
+  // or every order floor (`floor clear`) — as one transaction. A declared
+  // floor lifts only by id, and only with every declaration it requires
+  // acknowledged. Each lifted floor (and the floor `lower` sets) is its own
+  // activity event.
+  rpc LiftRollbackFloor(LiftRollbackFloorRequest) returns (LiftRollbackFloorResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {
+        verb: "lift_floor"
+        target: {
+          kind: "environment"
+          id: "environment_id"
+        }
+        env: "environment_id"
+        detail: ["reason"]
+        writer: ACTIVITY_WRITER_HANDLER
+      }
+    };
+  }
+  // ListRollbackFloors returns an environment's floors, oldest first: the
+  // active ones, or every one with include_lifted.
+  rpc ListRollbackFloors(ListRollbackFloorsRequest) returns (ListRollbackFloorsResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
+
   // There is no Rollback RPC. A rollback claims to undo a release it cannot
   // undo — the release already ran its migrations and wrote data — so
   // recovery is ROLL FORWARD: cut a release with the fix and Promote it.
@@ -777,6 +840,27 @@ service DeployService {
     option (forge.v1.method) = {auth_required: true};
   }
 
+  // GetProjectTopology returns one forge project's release/environment
+  // topology: forge's `env status --json` document, assembled from this
+  // control plane's records by forge's own pkg/topology. No daemon and no
+  // checkout are involved.
+  //
+  // WHAT IT READS: the environment rows (with their declared shapes), each
+  // environment's current promotion, the project's newest releases, the
+  // bundle each promotion names, the reconciler's observations, the hosted
+  // deployments' observed images, and the declared-environment catalog
+  // sealed into the project's newest RELEASED bundle — which is how an env
+  // declared in code but never recorded here (a file ledger, or an env never
+  // built) still appears, as `tracked: false`.
+  //
+  // MEMBER (machine: deploy:read), the same scoping as GetLiveView. Another
+  // org's project, an unknown project and a project nobody has deployed are
+  // the same answer: a report with no environments. It names no secret value
+  // and no machine path.
+  rpc GetProjectTopology(GetDeployProjectTopologyRequest) returns (GetDeployProjectTopologyResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
+
   // PlanDeploy computes what deploying a bundle WOULD do, and writes nothing.
   //
   // IT IS A SEPARATE READ-ONLY RPC RATHER THAN A dry_run FLAG ON Promote, and
@@ -941,6 +1025,13 @@ message GetDeployCapabilitiesResponse {
   //   promotion that ships the bundle freezes the snapshot (snapshot,
   //   snapshot_digest, bundle_id, bundle_digest on DeployPromotion).
   repeated string snapshot_features = 5;
+
+  // Rollback floors are implemented: Promote enforces them (refusal
+  // `below_rollback_floor`) and raises declared floors, and SetRollbackFloor,
+  // LiftRollbackFloor, ListRollbackFloors, PromoteReleaseRequest.
+  // raise_floor_reason and DeployEnvironment.rollback_floors are live. forge
+  // sends none of them to a server that does not say so.
+  bool rollback_floors = 6;
 }
 
 message ResolveHostedProjectRequest {
@@ -1356,6 +1447,13 @@ message PromoteReleaseRequest {
   // org. A person must be a member of it; a machine credential may name only
   // its own org.
   optional string org_id = 16;
+
+  // Also set a roll-forward-only rollback floor at the promoted release, in
+  // the promote's own transaction, with this reason (`forge env deploy <env>
+  // <v> --floor "<why>"`): "deploy this, and never come back below it". On a
+  // re-promote of the bound release the floor is still set if none is active
+  // at it. Empty: no floor (declared floors are raised regardless).
+  string raise_floor_reason = 17;
 }
 
 message PromoteReleaseResponse {
@@ -1365,6 +1463,84 @@ message PromoteReleaseResponse {
   // and nothing needs to be re-run. Also set on an idempotent re-promote of a
   // release that is still queued.
   repeated controlplane.v1.DeployHold holds = 2;
+  // The rollback floors THIS call raised: a declared floor for declarations
+  // the release carries that no active floor required, and the order floor
+  // raise_floor_reason asked for.
+  repeated controlplane.v1.DeployRollbackFloor floors_raised = 3;
+}
+
+message SetRollbackFloorRequest {
+  string environment_id = 1 [(buf.validate.field).string.min_len = 1];
+  // Where the floor goes: a release version (manual), or the release the
+  // environment runs now, resolved under its row lock (roll_forward_only).
+  oneof at {
+    string version = 2;
+    bool current = 3;
+  }
+  // Why. Required; recorded on the floor and in the activity stream.
+  string reason = 4 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 1024
+  }];
+  // The caller's view of the environment's current promotion, as on
+  // Promote: "floor at what I saw" must not land on a release someone
+  // promoted a second ago.
+  oneof expected_current {
+    string expected_current_promotion_id = 5;
+    bool expect_unbound = 6;
+  }
+  // Automation identity when no human sets it; a person is identified from
+  // their claims.
+  string set_by_actor = 7;
+  // The org this request acts in (docs/orgs.md). Unset: the caller's default
+  // org. A person must be a member of it; a machine credential may name only
+  // its own org.
+  optional string org_id = 8;
+}
+
+message SetRollbackFloorResponse {
+  controlplane.v1.DeployRollbackFloor floor = 1;
+}
+
+message LiftRollbackFloorRequest {
+  string environment_id = 1 [(buf.validate.field).string.min_len = 1];
+  // Floors to lift by id (`floor lift`).
+  repeated string floor_ids = 2;
+  // `floor lower <env> <version>`: lift every active order floor that refuses
+  // this release, then set a manual order floor at it, in one transaction.
+  string lower_to_version = 3;
+  // `floor clear`: lift every active order floor. Declared floors are kept:
+  // they lift only by id.
+  bool clear_order_floors = 4;
+  // Why. Required; recorded on every lift and in the activity stream.
+  string reason = 5 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 1024
+  }];
+  // For a declared floor: every declaration it requires, which the lifter
+  // vouches no longer applies (typically: the rollout that raised the floor
+  // never ran its migrator).
+  repeated controlplane.v1.DeployDeclarationRef acknowledged = 6;
+  string lifted_by_actor = 7;
+  optional string org_id = 8;
+}
+
+message LiftRollbackFloorResponse {
+  // The floors lifted, as they read after the lift.
+  repeated controlplane.v1.DeployRollbackFloor lifted = 1;
+  // The floor `lower` set, when it set one.
+  controlplane.v1.DeployRollbackFloor set = 2;
+}
+
+message ListRollbackFloorsRequest {
+  string environment_id = 1 [(buf.validate.field).required = true];
+  // Also return lifted floors, with their lifts. Unset: active floors only.
+  optional bool include_lifted = 2;
+  optional string org_id = 3;
+}
+
+message ListRollbackFloorsResponse {
+  repeated controlplane.v1.DeployRollbackFloor floors = 1;
 }
 
 // === Scale and status ===
@@ -2254,6 +2430,32 @@ message GetDeployEnvironmentShapeResponse {
   DeploySourceProvenance declared_by = 2;
   // When it was declared. Unset exactly when declared_shape is.
   google.protobuf.Timestamp declared_at = 3;
+}
+
+message GetDeployProjectTopologyRequest {
+  // The forge project (forge.yaml `name`). "" is the legacy project, as on
+  // GetLiveView.
+  string project = 1;
+  // Narrow the report to these environments. Empty: every environment. The
+  // header (releases, latest release) is the project's either way, so a
+  // narrowed row's lag is still measured against the whole project.
+  repeated string envs = 2 [(buf.validate.field).repeated.max_items = 100];
+  // The org this request acts in (docs/orgs.md). Unset: the caller's default
+  // org. A person must be a member of it; a machine credential may name only
+  // its own org.
+  optional string org_id = 3;
+}
+
+message GetDeployProjectTopologyResponse {
+  // forge pkg/topology Report, as JSON with snake_case keys — the document
+  // `forge env status --json` prints, plus the additive fields a control
+  // plane fills: `source: "control_plane"`, `catalog` (which released bundle
+  // the declared-env list came from; absent when none carried one), and per
+  // environment `tracked`, `bundle_digest`, `bundle_git` and, on images the
+  // platform observed, `observed_by: "platform"`.
+  google.protobuf.Struct report = 1;
+  // When the report was assembled.
+  google.protobuf.Timestamp computed_at = 2;
 }
 
 // === Plans ===
