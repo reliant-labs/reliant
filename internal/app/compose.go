@@ -162,7 +162,8 @@ func (g *Graph) newOrgPolicyWatcher() (*OrgPolicyWatcher, error) {
 
 func (g *Graph) newOrgPolicyResolver() (*orgpolicy.Resolver, error) {
 	return NewOrgPolicyResolver(OrgPolicyResolverDeps{
-		Authority: g.TokenAuthority(),
+		Authority:   g.TokenAuthority(),
+		Enforcement: g.ServerProcessConfig.GetOrgPolicyEnforcement(),
 	})
 }
 

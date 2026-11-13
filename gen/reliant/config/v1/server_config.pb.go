@@ -54,8 +54,11 @@ type ServerProcessConfig struct {
 	Llm             *LLMConfig           `protobuf:"bytes,11,opt,name=llm,proto3" json:"llm,omitempty"`
 	Preview         *PreviewConfig       `protobuf:"bytes,12,opt,name=preview,proto3" json:"preview,omitempty"`
 	Network         *NetworkConfig       `protobuf:"bytes,13,opt,name=network,proto3" json:"network,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// The org-policy enforcement switches every server role applies (the API
+	// server's own org rollout gates are ApiServerConfig's OrgsConfig).
+	OrgPolicyEnforcement *OrgPolicyEnforcementConfig `protobuf:"bytes,14,opt,name=org_policy_enforcement,json=orgPolicyEnforcement,proto3" json:"org_policy_enforcement,omitempty"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
 }
 
 func (x *ServerProcessConfig) Reset() {
@@ -172,6 +175,71 @@ func (x *ServerProcessConfig) GetNetwork() *NetworkConfig {
 	return nil
 }
 
+func (x *ServerProcessConfig) GetOrgPolicyEnforcement() *OrgPolicyEnforcementConfig {
+	if x != nil {
+		return x.OrgPolicyEnforcement
+	}
+	return nil
+}
+
+// OrgPolicyEnforcementConfig is the platform's switch per org-policy
+// enforcement point (control-plane docs/design/org-policies.md §7, D12):
+//
+//	off      the point never consults a policy: today's behaviour exactly;
+//	audit    it counts and logs what the org's policy would refuse, and
+//	         refuses nothing, whatever the policy's own mode says;
+//	enforce  each policy section's own mode decides: ENFORCE refuses, AUDIT
+//	         counts.
+//
+// A new point ships in audit and is flipped to enforce with the evidence its
+// audit counts give. Only these three values: a kill switch must not fail
+// open on a typo.
+type OrgPolicyEnforcementConfig struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Allowed integrations (§4.3): a run's use of a connection, an
+	// integration trigger's routing and polling.
+	Integrations  string `protobuf:"bytes,1,opt,name=integrations,proto3" json:"integrations,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *OrgPolicyEnforcementConfig) Reset() {
+	*x = OrgPolicyEnforcementConfig{}
+	mi := &file_reliant_config_v1_server_config_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *OrgPolicyEnforcementConfig) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*OrgPolicyEnforcementConfig) ProtoMessage() {}
+
+func (x *OrgPolicyEnforcementConfig) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_config_v1_server_config_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use OrgPolicyEnforcementConfig.ProtoReflect.Descriptor instead.
+func (*OrgPolicyEnforcementConfig) Descriptor() ([]byte, []int) {
+	return file_reliant_config_v1_server_config_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *OrgPolicyEnforcementConfig) GetIntegrations() string {
+	if x != nil {
+		return x.Integrations
+	}
+	return ""
+}
+
 // NetworkConfig is the network reach of the dials a user steers from a server
 // role: fetch, websearch, sourcegraph, model-endpoint probes and local-model
 // routes. The rules every config here follows are in config.proto's header.
@@ -191,7 +259,7 @@ type NetworkConfig struct {
 
 func (x *NetworkConfig) Reset() {
 	*x = NetworkConfig{}
-	mi := &file_reliant_config_v1_server_config_proto_msgTypes[1]
+	mi := &file_reliant_config_v1_server_config_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -203,7 +271,7 @@ func (x *NetworkConfig) String() string {
 func (*NetworkConfig) ProtoMessage() {}
 
 func (x *NetworkConfig) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_config_v1_server_config_proto_msgTypes[1]
+	mi := &file_reliant_config_v1_server_config_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -216,7 +284,7 @@ func (x *NetworkConfig) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use NetworkConfig.ProtoReflect.Descriptor instead.
 func (*NetworkConfig) Descriptor() ([]byte, []int) {
-	return file_reliant_config_v1_server_config_proto_rawDescGZIP(), []int{1}
+	return file_reliant_config_v1_server_config_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *NetworkConfig) GetAllowPrivateEgress() bool {
@@ -242,7 +310,7 @@ type NatsConfig struct {
 
 func (x *NatsConfig) Reset() {
 	*x = NatsConfig{}
-	mi := &file_reliant_config_v1_server_config_proto_msgTypes[2]
+	mi := &file_reliant_config_v1_server_config_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -254,7 +322,7 @@ func (x *NatsConfig) String() string {
 func (*NatsConfig) ProtoMessage() {}
 
 func (x *NatsConfig) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_config_v1_server_config_proto_msgTypes[2]
+	mi := &file_reliant_config_v1_server_config_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -267,7 +335,7 @@ func (x *NatsConfig) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use NatsConfig.ProtoReflect.Descriptor instead.
 func (*NatsConfig) Descriptor() ([]byte, []int) {
-	return file_reliant_config_v1_server_config_proto_rawDescGZIP(), []int{2}
+	return file_reliant_config_v1_server_config_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *NatsConfig) GetUrl() string {
@@ -303,7 +371,7 @@ type TemporalConfig struct {
 
 func (x *TemporalConfig) Reset() {
 	*x = TemporalConfig{}
-	mi := &file_reliant_config_v1_server_config_proto_msgTypes[3]
+	mi := &file_reliant_config_v1_server_config_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -315,7 +383,7 @@ func (x *TemporalConfig) String() string {
 func (*TemporalConfig) ProtoMessage() {}
 
 func (x *TemporalConfig) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_config_v1_server_config_proto_msgTypes[3]
+	mi := &file_reliant_config_v1_server_config_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -328,7 +396,7 @@ func (x *TemporalConfig) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TemporalConfig.ProtoReflect.Descriptor instead.
 func (*TemporalConfig) Descriptor() ([]byte, []int) {
-	return file_reliant_config_v1_server_config_proto_rawDescGZIP(), []int{3}
+	return file_reliant_config_v1_server_config_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *TemporalConfig) GetHost() string {
@@ -369,7 +437,7 @@ type ServerTLSConfig struct {
 
 func (x *ServerTLSConfig) Reset() {
 	*x = ServerTLSConfig{}
-	mi := &file_reliant_config_v1_server_config_proto_msgTypes[4]
+	mi := &file_reliant_config_v1_server_config_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -381,7 +449,7 @@ func (x *ServerTLSConfig) String() string {
 func (*ServerTLSConfig) ProtoMessage() {}
 
 func (x *ServerTLSConfig) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_config_v1_server_config_proto_msgTypes[4]
+	mi := &file_reliant_config_v1_server_config_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -394,7 +462,7 @@ func (x *ServerTLSConfig) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ServerTLSConfig.ProtoReflect.Descriptor instead.
 func (*ServerTLSConfig) Descriptor() ([]byte, []int) {
-	return file_reliant_config_v1_server_config_proto_rawDescGZIP(), []int{4}
+	return file_reliant_config_v1_server_config_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *ServerTLSConfig) GetCertFile() string {
@@ -422,7 +490,7 @@ var File_reliant_config_v1_server_config_proto protoreflect.FileDescriptor
 
 const file_reliant_config_v1_server_config_proto_rawDesc = "" +
 	"\n" +
-	"%reliant/config/v1/server_config.proto\x12\x11reliant.config.v1\x1a(reliant/config/v1/analytics_config.proto\x1a,reliant/config/v1/control_plane_config.proto\x1a+reliant/config/v1/integrations_config.proto\x1a\"reliant/config/v1/llm_config.proto\x1a,reliant/config/v1/observability_config.proto\x1a&reliant/config/v1/preview_config.proto\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\"\x8d\a\n" +
+	"%reliant/config/v1/server_config.proto\x12\x11reliant.config.v1\x1a(reliant/config/v1/analytics_config.proto\x1a,reliant/config/v1/control_plane_config.proto\x1a+reliant/config/v1/integrations_config.proto\x1a\"reliant/config/v1/llm_config.proto\x1a,reliant/config/v1/observability_config.proto\x1a&reliant/config/v1/preview_config.proto\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\"\xf2\a\n" +
 	"\x13ServerProcessConfig\x12J\n" +
 	"\rcontrol_plane\x18\x01 \x01(\v2%.reliant.config.v1.ControlPlaneConfigR\fcontrolPlane\x121\n" +
 	"\x04nats\x18\x02 \x01(\v2\x1d.reliant.config.v1.NatsConfigR\x04nats\x12=\n" +
@@ -438,10 +506,14 @@ const file_reliant_config_v1_server_config_proto_rawDesc = "" +
 	" \x01(\v2\".reliant.config.v1.AnalyticsConfigR\tanalytics\x12.\n" +
 	"\x03llm\x18\v \x01(\v2\x1c.reliant.config.v1.LLMConfigR\x03llm\x12:\n" +
 	"\apreview\x18\f \x01(\v2 .reliant.config.v1.PreviewConfigR\apreview\x12:\n" +
-	"\anetwork\x18\r \x01(\v2 .reliant.config.v1.NetworkConfigR\anetwork:\x17\xca\xc1\x18\x13\n" +
+	"\anetwork\x18\r \x01(\v2 .reliant.config.v1.NetworkConfigR\anetwork\x12c\n" +
+	"\x16org_policy_enforcement\x18\x0e \x01(\v2-.reliant.config.v1.OrgPolicyEnforcementConfigR\x14orgPolicyEnforcement:\x17\xca\xc1\x18\x13\n" +
 	"\areliant\x1a\b\n" +
 	"\x06serverJ\x04\b\t\x10\n" +
-	"R\x06sentry\"\x83\x02\n" +
+	"R\x06sentry\"\xe9\x01\n" +
+	"\x1aOrgPolicyEnforcementConfig\x12\xca\x01\n" +
+	"\fintegrations\x18\x01 \x01(\tB\xa5\x01\x82\xce\x18\xa0\x01\n" +
+	",RELIANT_ORGS_POLICY_ENFORCEMENT_INTEGRATIONS\x1a\x05audit*THow the org integrations policy applies: off, audit (count, never refuse) or enforceJ\x03offJ\x05auditJ\aenforceR\fintegrations\"\x83\x02\n" +
 	"\rNetworkConfig\x12\xf1\x01\n" +
 	"\x14allow_private_egress\x18\x01 \x01(\bB\xbe\x01\x82\xce\x18\xb9\x01\n" +
 	"\x1cRELIANT_ALLOW_PRIVATE_EGRESS*\x98\x01Let user-steered server-side requests (fetch, websearch, model endpoints) reach private, loopback and link-local addresses; self-hosted deployments onlyR\x12allowPrivateEgress\"\xec\x01\n" +
@@ -480,36 +552,38 @@ func file_reliant_config_v1_server_config_proto_rawDescGZIP() []byte {
 	return file_reliant_config_v1_server_config_proto_rawDescData
 }
 
-var file_reliant_config_v1_server_config_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
+var file_reliant_config_v1_server_config_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
 var file_reliant_config_v1_server_config_proto_goTypes = []any{
-	(*ServerProcessConfig)(nil), // 0: reliant.config.v1.ServerProcessConfig
-	(*NetworkConfig)(nil),       // 1: reliant.config.v1.NetworkConfig
-	(*NatsConfig)(nil),          // 2: reliant.config.v1.NatsConfig
-	(*TemporalConfig)(nil),      // 3: reliant.config.v1.TemporalConfig
-	(*ServerTLSConfig)(nil),     // 4: reliant.config.v1.ServerTLSConfig
-	(*ControlPlaneConfig)(nil),  // 5: reliant.config.v1.ControlPlaneConfig
-	(*IntegrationsConfig)(nil),  // 6: reliant.config.v1.IntegrationsConfig
-	(*ObservabilityConfig)(nil), // 7: reliant.config.v1.ObservabilityConfig
-	(*AnalyticsConfig)(nil),     // 8: reliant.config.v1.AnalyticsConfig
-	(*LLMConfig)(nil),           // 9: reliant.config.v1.LLMConfig
-	(*PreviewConfig)(nil),       // 10: reliant.config.v1.PreviewConfig
+	(*ServerProcessConfig)(nil),        // 0: reliant.config.v1.ServerProcessConfig
+	(*OrgPolicyEnforcementConfig)(nil), // 1: reliant.config.v1.OrgPolicyEnforcementConfig
+	(*NetworkConfig)(nil),              // 2: reliant.config.v1.NetworkConfig
+	(*NatsConfig)(nil),                 // 3: reliant.config.v1.NatsConfig
+	(*TemporalConfig)(nil),             // 4: reliant.config.v1.TemporalConfig
+	(*ServerTLSConfig)(nil),            // 5: reliant.config.v1.ServerTLSConfig
+	(*ControlPlaneConfig)(nil),         // 6: reliant.config.v1.ControlPlaneConfig
+	(*IntegrationsConfig)(nil),         // 7: reliant.config.v1.IntegrationsConfig
+	(*ObservabilityConfig)(nil),        // 8: reliant.config.v1.ObservabilityConfig
+	(*AnalyticsConfig)(nil),            // 9: reliant.config.v1.AnalyticsConfig
+	(*LLMConfig)(nil),                  // 10: reliant.config.v1.LLMConfig
+	(*PreviewConfig)(nil),              // 11: reliant.config.v1.PreviewConfig
 }
 var file_reliant_config_v1_server_config_proto_depIdxs = []int32{
-	5,  // 0: reliant.config.v1.ServerProcessConfig.control_plane:type_name -> reliant.config.v1.ControlPlaneConfig
-	2,  // 1: reliant.config.v1.ServerProcessConfig.nats:type_name -> reliant.config.v1.NatsConfig
-	3,  // 2: reliant.config.v1.ServerProcessConfig.temporal:type_name -> reliant.config.v1.TemporalConfig
-	4,  // 3: reliant.config.v1.ServerProcessConfig.tls:type_name -> reliant.config.v1.ServerTLSConfig
-	6,  // 4: reliant.config.v1.ServerProcessConfig.integrations:type_name -> reliant.config.v1.IntegrationsConfig
-	7,  // 5: reliant.config.v1.ServerProcessConfig.observability:type_name -> reliant.config.v1.ObservabilityConfig
-	8,  // 6: reliant.config.v1.ServerProcessConfig.analytics:type_name -> reliant.config.v1.AnalyticsConfig
-	9,  // 7: reliant.config.v1.ServerProcessConfig.llm:type_name -> reliant.config.v1.LLMConfig
-	10, // 8: reliant.config.v1.ServerProcessConfig.preview:type_name -> reliant.config.v1.PreviewConfig
-	1,  // 9: reliant.config.v1.ServerProcessConfig.network:type_name -> reliant.config.v1.NetworkConfig
-	10, // [10:10] is the sub-list for method output_type
-	10, // [10:10] is the sub-list for method input_type
-	10, // [10:10] is the sub-list for extension type_name
-	10, // [10:10] is the sub-list for extension extendee
-	0,  // [0:10] is the sub-list for field type_name
+	6,  // 0: reliant.config.v1.ServerProcessConfig.control_plane:type_name -> reliant.config.v1.ControlPlaneConfig
+	3,  // 1: reliant.config.v1.ServerProcessConfig.nats:type_name -> reliant.config.v1.NatsConfig
+	4,  // 2: reliant.config.v1.ServerProcessConfig.temporal:type_name -> reliant.config.v1.TemporalConfig
+	5,  // 3: reliant.config.v1.ServerProcessConfig.tls:type_name -> reliant.config.v1.ServerTLSConfig
+	7,  // 4: reliant.config.v1.ServerProcessConfig.integrations:type_name -> reliant.config.v1.IntegrationsConfig
+	8,  // 5: reliant.config.v1.ServerProcessConfig.observability:type_name -> reliant.config.v1.ObservabilityConfig
+	9,  // 6: reliant.config.v1.ServerProcessConfig.analytics:type_name -> reliant.config.v1.AnalyticsConfig
+	10, // 7: reliant.config.v1.ServerProcessConfig.llm:type_name -> reliant.config.v1.LLMConfig
+	11, // 8: reliant.config.v1.ServerProcessConfig.preview:type_name -> reliant.config.v1.PreviewConfig
+	2,  // 9: reliant.config.v1.ServerProcessConfig.network:type_name -> reliant.config.v1.NetworkConfig
+	1,  // 10: reliant.config.v1.ServerProcessConfig.org_policy_enforcement:type_name -> reliant.config.v1.OrgPolicyEnforcementConfig
+	11, // [11:11] is the sub-list for method output_type
+	11, // [11:11] is the sub-list for method input_type
+	11, // [11:11] is the sub-list for extension type_name
+	11, // [11:11] is the sub-list for extension extendee
+	0,  // [0:11] is the sub-list for field type_name
 }
 
 func init() { file_reliant_config_v1_server_config_proto_init() }
@@ -529,7 +603,7 @@ func file_reliant_config_v1_server_config_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_reliant_config_v1_server_config_proto_rawDesc), len(file_reliant_config_v1_server_config_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   5,
+			NumMessages:   6,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

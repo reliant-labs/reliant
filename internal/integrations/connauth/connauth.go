@@ -159,6 +159,9 @@ func (s *source) actingCredential(ctx context.Context, req httpaction.Credential
 	if _, hasBot := manifest.Method(req.Connection, manifest.AuthDelegated); !hasBot {
 		return nil, false, nil
 	}
+	if err := s.admitIntegration(ctx, req); err != nil {
+		return nil, true, err
+	}
 	if req.ConnectionID != "" {
 		// A saved connection is somebody's own credential. Using it would write
 		// as that person, and quietly ignoring it would hide a contradictory
@@ -220,6 +223,9 @@ func (s *source) orgActingCredential(ctx context.Context, req httpaction.Credent
 	if !ok || !org.OwnsConnectionID(req.ConnectionID) {
 		return nil, false, nil
 	}
+	if err := s.admitIntegration(ctx, req); err != nil {
+		return nil, true, err
+	}
 	orgs, ok := s.resolver.(runOrgs)
 	if !ok {
 		return nil, true, &httpaction.CredentialError{Code: httpaction.CodeFailedPrecondition,
@@ -255,6 +261,39 @@ func (s *source) orgActingCredential(ctx context.Context, req httpaction.Credent
 		return nil, true, &httpaction.CredentialError{Code: httpaction.CodeInternal, Message: "the delegated authority failed", Err: err}
 	}
 	return cred, true, err
+}
+
+// integrationPolicy is the run's org's integrations policy, for a use that
+// reaches no saved connection through the resolver (whose lookup applies it
+// itself): an identity a delegated authority holds, the org's or the bot's.
+// *connections.Resolver is one.
+type integrationPolicy interface {
+	AdmitIntegration(ctx context.Context, runID, integrationID string) (context.Context, error)
+}
+
+// AdmitIntegration implements Service (and httpaction.IntegrationGate).
+func (s *source) AdmitIntegration(ctx context.Context, runID, integrationID string) (context.Context, error) {
+	if s == nil {
+		return ctx, nil
+	}
+	gate, ok := s.resolver.(integrationPolicy)
+	if !ok || runID == "" {
+		return ctx, nil
+	}
+	ctx, err := gate.AdmitIntegration(ctx, runID, integrationID)
+	if err != nil {
+		return ctx, mapError(err)
+	}
+	return ctx, nil
+}
+
+// admitIntegration refuses req when the run's org's policy does not allow its
+// integration (org-policies §4.3), and lets it through when the resolver
+// cannot judge (a fake without the method). A use the action runner already
+// judged is refused alike and not counted again.
+func (s *source) admitIntegration(ctx context.Context, req httpaction.CredentialRequest) error {
+	_, err := s.AdmitIntegration(ctx, req.RunID, req.IntegrationID)
+	return err
 }
 
 // ownerErr is a failure to read a run's owner or org as a credential error.
@@ -384,7 +423,7 @@ func mapError(err error) error {
 	case connections.CodeInvalidArgument:
 		code = httpaction.CodeInvalidArgument
 	}
-	return &httpaction.CredentialError{Code: code, Message: ce.Message, Err: err}
+	return &httpaction.CredentialError{Code: code, Message: ce.Message, Err: err, Reason: ce.Reason}
 }
 
 // ForUser implements Service.

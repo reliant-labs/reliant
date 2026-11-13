@@ -65,6 +65,32 @@ message ServerProcessConfig {
   LLMConfig llm = 11;
   PreviewConfig preview = 12;
   NetworkConfig network = 13;
+  // The org-policy enforcement switches every server role applies (the API
+  // server's own org rollout gates are ApiServerConfig's OrgsConfig).
+  OrgPolicyEnforcementConfig org_policy_enforcement = 14;
+}
+
+// OrgPolicyEnforcementConfig is the platform's switch per org-policy
+// enforcement point (control-plane docs/design/org-policies.md §7, D12):
+//
+//   off      the point never consults a policy: today's behaviour exactly;
+//   audit    it counts and logs what the org's policy would refuse, and
+//            refuses nothing, whatever the policy's own mode says;
+//   enforce  each policy section's own mode decides: ENFORCE refuses, AUDIT
+//            counts.
+//
+// A new point ships in audit and is flipped to enforce with the evidence its
+// audit counts give. Only these three values: a kill switch must not fail
+// open on a typo.
+message OrgPolicyEnforcementConfig {
+  // Allowed integrations (§4.3): a run's use of a connection, an
+  // integration trigger's routing and polling.
+  string integrations = 1 [(forge.v1.config) = {
+    env_var: "RELIANT_ORGS_POLICY_ENFORCEMENT_INTEGRATIONS"
+    default_value: "audit"
+    allowed_values: ["off", "audit", "enforce"]
+    description: "How the org integrations policy applies: off, audit (count, never refuse) or enforce"
+  }];
 }
 
 // NetworkConfig is the network reach of the dials a user steers from a server

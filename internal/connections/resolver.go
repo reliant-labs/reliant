@@ -14,6 +14,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/orgpolicy"
 	"github.com/reliant-labs/reliant/internal/vault"
 )
 
@@ -357,10 +358,57 @@ func (r *Resolver) Usable(ctx context.Context, call CallSite, refs []Ref) (map[R
 	}
 	out := make(map[Ref]error, len(refs))
 	for _, ref := range refs {
-		_, err := r.lookup(ctx, a, ref)
+		// Quiet: asked before every model turn with no use behind it, so it
+		// applies the org's integrations policy without counting it.
+		_, err := r.lookup(ctx, a, ref, true)
 		out[ref] = err
 	}
 	return out, nil
+}
+
+// AdmitIntegration answers whether the org runID belongs to allows
+// integrationID in its runs (control-plane docs/design/org-policies.md
+// §4.3): nil when it does, or when nothing refuses it (no org, no policy on
+// integrations, audit); the typed refusal IntegrationNotAllowed when the
+// policy refuses it; CodeUnavailable when the policy must be read and cannot
+// be. It is the boundary of one use, before any credential is chosen (a
+// catalog action whatever authenticates it: a saved connection, a declared
+// secret, a delegated identity, nothing at all), and counts the use once: the
+// returned context marks it judged (orgpolicy.WithJudged), so lookup, asked
+// again below it, refuses alike without counting again.
+func (r *Resolver) AdmitIntegration(ctx context.Context, runID, integrationID string) (context.Context, error) {
+	a, err := r.actorOf(ctx, runID)
+	if err != nil {
+		return ctx, err
+	}
+	d, err := admitIntegration(ctx, a, integrationID, false)
+	return orgpolicy.WithJudged(ctx, d), err
+}
+
+// admitIntegration applies the org's integrations policy to a use of
+// integrationID that acts as a. quiet judges without counting (Usable).
+func admitIntegration(ctx context.Context, a actor, integrationID string, quiet bool) (orgpolicy.Decision, error) {
+	d, err := orgpolicy.JudgeIntegration(ctx, a.orgID, integrationID, quiet)
+	if err != nil {
+		return d, &Error{Code: CodeUnavailable, Message: "could not read your organization's policy; try again", Err: err}
+	}
+	if d.Refused {
+		return d, IntegrationNotAllowed(integrationID)
+	}
+	return d, nil
+}
+
+// IntegrationNotAllowed is the refusal of a use of integrationID that the
+// run's org's policy does not allow: FailedPrecondition, reason
+// ReasonIntegrationNotAllowed, a message the node shows as the reason.
+// Permanent until an admin changes the policy, so a workflow must not retry
+// it.
+func IntegrationNotAllowed(integrationID string) *Error {
+	return &Error{
+		Code:    CodeFailedPrecondition,
+		Reason:  ReasonIntegrationNotAllowed,
+		Message: fmt.Sprintf("your organization's policy does not allow the %s integration in its runs; ask an org admin to allow it", integrationID),
+	}
 }
 
 // usableConnection is what lookup establishes: the connection a ref names for
@@ -381,7 +429,20 @@ type usableConnection struct {
 // §7.3). An integration alone names the actor's own default and nothing else:
 // it never falls back to the org's (D10), so a call that used to fail with
 // "no connection" does not start acting as the org's account.
-func (r *Resolver) lookup(ctx context.Context, a actor, ref Ref) (*usableConnection, error) {
+//
+// The org's integrations policy is applied here (org-policies §4.3), for
+// every door: an integration the use's org does not allow is refused with
+// IntegrationNotAllowed before any connection is looked for, so the refusal
+// is never mistaken for "no connection" and redirected to a delegated
+// authority. A ref that names only a connection id is judged by the
+// connection's integration once it is found. quiet applies the policy
+// without counting the decision (Usable).
+func (r *Resolver) lookup(ctx context.Context, a actor, ref Ref, quiet bool) (*usableConnection, error) {
+	if ref.IntegrationID != "" {
+		if _, err := admitIntegration(ctx, a, ref.IntegrationID, quiet); err != nil {
+			return nil, err
+		}
+	}
 	var (
 		conn *core.Connection
 		err  error
@@ -411,6 +472,11 @@ func (r *Resolver) lookup(ctx context.Context, a actor, ref Ref) (*usableConnect
 	}
 	if ref.IntegrationID != "" && conn.IntegrationID != ref.IntegrationID {
 		return nil, newError(CodeFailedPrecondition, "connection %q is for %q, not %q", conn.Name, conn.IntegrationID, ref.IntegrationID)
+	}
+	if ref.IntegrationID == "" {
+		if _, err := admitIntegration(ctx, a, conn.IntegrationID, quiet); err != nil {
+			return nil, err
+		}
 	}
 	switch conn.Status {
 	case core.ConnectionStatusActive:
@@ -458,7 +524,7 @@ func mayUse(ctx context.Context, a actor, conn *core.Connection) error {
 // the acting user, also for an org's connection, so an admin can answer "who
 // posted as our bot".
 func (r *Resolver) resolve(ctx context.Context, a actor, ref Ref, use core.ConnectionEvent) (*Resolved, error) {
-	found, err := r.lookup(ctx, a, ref)
+	found, err := r.lookup(ctx, a, ref, false)
 	if err != nil {
 		return nil, err
 	}

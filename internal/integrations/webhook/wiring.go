@@ -16,6 +16,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/integrations/gmail"
 	"github.com/reliant-labs/reliant/internal/integrations/httpaction"
 	"github.com/reliant-labs/reliant/internal/netguard"
+	"github.com/reliant-labs/reliant/internal/triggers"
 	"github.com/reliant-labs/reliant/internal/vault"
 )
 
@@ -72,6 +73,14 @@ func NewInbound(store Store, intake Intake, registry *Registry, v Vault, publicU
 // such providers answer 503.
 func (in *Inbound) WithConnectionSecrets(secrets ConnectionSecrets) *Inbound {
 	in.events.opts.ConnectionSecrets = secrets
+	return in
+}
+
+// WithAutoPause lets the app-level receiver pause a trigger whose org's
+// policy does not allow its integration (EventsOptions.AutoPause). Without
+// it, such a trigger is still never routed to, just not paused.
+func (in *Inbound) WithAutoPause(p *triggers.AutoPause) *Inbound {
+	in.events.opts.AutoPause = p
 	return in
 }
 
