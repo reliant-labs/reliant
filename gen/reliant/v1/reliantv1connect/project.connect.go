@@ -113,6 +113,9 @@ const (
 	// ProjectServiceRecloneProjectOnDaemonProcedure is the fully-qualified name of the ProjectService's
 	// RecloneProjectOnDaemon RPC.
 	ProjectServiceRecloneProjectOnDaemonProcedure = "/reliant.v1.ProjectService/RecloneProjectOnDaemon"
+	// ProjectServicePreviewProjectOrgMoveProcedure is the fully-qualified name of the ProjectService's
+	// PreviewProjectOrgMove RPC.
+	ProjectServicePreviewProjectOrgMoveProcedure = "/reliant.v1.ProjectService/PreviewProjectOrgMove"
 )
 
 // ProjectServiceClient is a client for the reliant.v1.ProjectService service.
@@ -235,6 +238,13 @@ type ProjectServiceClient interface {
 	// local-only changes are lost; UI must confirm before calling. The
 	// project_daemons row is updated with the new cloned_at.
 	RecloneProjectOnDaemon(context.Context, *connect.Request[v1.RecloneProjectOnDaemonRequest]) (*connect.Response[v1.RecloneProjectOnDaemonResponse], error)
+	// PreviewProjectOrgMove says what moving the project to another
+	// organization would do, and what running work refuses it now
+	// (control-plane docs/design/org-project-move.md §2, §4, §5). It changes
+	// nothing. Only the project's owner may ask, signed in as a person, while
+	// an admin or owner of the project's organization and a live member of
+	// the target; anyone else is refused as the move itself would refuse them.
+	PreviewProjectOrgMove(context.Context, *connect.Request[v1.PreviewProjectOrgMoveRequest]) (*connect.Response[v1.PreviewProjectOrgMoveResponse], error)
 }
 
 // NewProjectServiceClient constructs a client for the reliant.v1.ProjectService service. By
@@ -404,6 +414,13 @@ func NewProjectServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			connect.WithSchema(projectServiceMethods.ByName("RecloneProjectOnDaemon")),
 			connect.WithClientOptions(opts...),
 		),
+		previewProjectOrgMove: connect.NewClient[v1.PreviewProjectOrgMoveRequest, v1.PreviewProjectOrgMoveResponse](
+			httpClient,
+			baseURL+ProjectServicePreviewProjectOrgMoveProcedure,
+			connect.WithSchema(projectServiceMethods.ByName("PreviewProjectOrgMove")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -435,6 +452,7 @@ type projectServiceClient struct {
 	attachProjectToDaemon       *connect.Client[v1.AttachProjectToDaemonRequest, v1.AttachProjectToDaemonResponse]
 	detachProjectFromDaemon     *connect.Client[v1.DetachProjectFromDaemonRequest, v1.DetachProjectFromDaemonResponse]
 	recloneProjectOnDaemon      *connect.Client[v1.RecloneProjectOnDaemonRequest, v1.RecloneProjectOnDaemonResponse]
+	previewProjectOrgMove       *connect.Client[v1.PreviewProjectOrgMoveRequest, v1.PreviewProjectOrgMoveResponse]
 }
 
 // CreateProject calls reliant.v1.ProjectService.CreateProject.
@@ -567,6 +585,11 @@ func (c *projectServiceClient) RecloneProjectOnDaemon(ctx context.Context, req *
 	return c.recloneProjectOnDaemon.CallUnary(ctx, req)
 }
 
+// PreviewProjectOrgMove calls reliant.v1.ProjectService.PreviewProjectOrgMove.
+func (c *projectServiceClient) PreviewProjectOrgMove(ctx context.Context, req *connect.Request[v1.PreviewProjectOrgMoveRequest]) (*connect.Response[v1.PreviewProjectOrgMoveResponse], error) {
+	return c.previewProjectOrgMove.CallUnary(ctx, req)
+}
+
 // ProjectServiceHandler is an implementation of the reliant.v1.ProjectService service.
 type ProjectServiceHandler interface {
 	// CreateProject creates a new project
@@ -687,6 +710,13 @@ type ProjectServiceHandler interface {
 	// local-only changes are lost; UI must confirm before calling. The
 	// project_daemons row is updated with the new cloned_at.
 	RecloneProjectOnDaemon(context.Context, *connect.Request[v1.RecloneProjectOnDaemonRequest]) (*connect.Response[v1.RecloneProjectOnDaemonResponse], error)
+	// PreviewProjectOrgMove says what moving the project to another
+	// organization would do, and what running work refuses it now
+	// (control-plane docs/design/org-project-move.md §2, §4, §5). It changes
+	// nothing. Only the project's owner may ask, signed in as a person, while
+	// an admin or owner of the project's organization and a live member of
+	// the target; anyone else is refused as the move itself would refuse them.
+	PreviewProjectOrgMove(context.Context, *connect.Request[v1.PreviewProjectOrgMoveRequest]) (*connect.Response[v1.PreviewProjectOrgMoveResponse], error)
 }
 
 // NewProjectServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -852,6 +882,13 @@ func NewProjectServiceHandler(svc ProjectServiceHandler, opts ...connect.Handler
 		connect.WithSchema(projectServiceMethods.ByName("RecloneProjectOnDaemon")),
 		connect.WithHandlerOptions(opts...),
 	)
+	projectServicePreviewProjectOrgMoveHandler := connect.NewUnaryHandler(
+		ProjectServicePreviewProjectOrgMoveProcedure,
+		svc.PreviewProjectOrgMove,
+		connect.WithSchema(projectServiceMethods.ByName("PreviewProjectOrgMove")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/reliant.v1.ProjectService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case ProjectServiceCreateProjectProcedure:
@@ -906,6 +943,8 @@ func NewProjectServiceHandler(svc ProjectServiceHandler, opts ...connect.Handler
 			projectServiceDetachProjectFromDaemonHandler.ServeHTTP(w, r)
 		case ProjectServiceRecloneProjectOnDaemonProcedure:
 			projectServiceRecloneProjectOnDaemonHandler.ServeHTTP(w, r)
+		case ProjectServicePreviewProjectOrgMoveProcedure:
+			projectServicePreviewProjectOrgMoveHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -1017,4 +1056,8 @@ func (UnimplementedProjectServiceHandler) DetachProjectFromDaemon(context.Contex
 
 func (UnimplementedProjectServiceHandler) RecloneProjectOnDaemon(context.Context, *connect.Request[v1.RecloneProjectOnDaemonRequest]) (*connect.Response[v1.RecloneProjectOnDaemonResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ProjectService.RecloneProjectOnDaemon is not implemented"))
+}
+
+func (UnimplementedProjectServiceHandler) PreviewProjectOrgMove(context.Context, *connect.Request[v1.PreviewProjectOrgMoveRequest]) (*connect.Response[v1.PreviewProjectOrgMoveResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ProjectService.PreviewProjectOrgMove is not implemented"))
 }

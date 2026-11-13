@@ -470,25 +470,9 @@ func moveProjectOrgTriggers(ctx context.Context, db orm.Context, move *core.Proj
 	if err != nil {
 		return err
 	}
-	// The org connections the triggers name. A target-org connection
-	// cannot be bound to a trigger of the source, but if one were, it
-	// would be the target's to keep.
-	var bound []string
-	for _, t := range before {
-		if t.ConnectionID != nil {
-			bound = append(bound, *t.ConnectionID)
-		}
-	}
-	orgBound := map[string]bool{}
-	if len(bound) > 0 {
-		var ids []string
-		if err := db.Bun().NewRaw(`SELECT id FROM connections WHERE id IN (?) AND owner_kind = ? AND org_id IS DISTINCT FROM ?`,
-			bun.List(bound), core.ConnectionOwnerOrg, move.ToOrgID).Scan(ctx, &ids); err != nil && !errors.Is(err, sql.ErrNoRows) {
-			return fmt.Errorf("read the triggers' connections: %w", err)
-		}
-		for _, id := range ids {
-			orgBound[id] = true
-		}
+	orgBound, err := orgBoundConnections(ctx, db, before, move.ToOrgID)
+	if err != nil {
+		return err
 	}
 	to := move.ToOrgID
 	for _, t := range before {
@@ -539,4 +523,139 @@ var restampMovedTriggerFunding = func(context.Context, orm.Context, core.Project
 // ProjectOrgMoveExtra carries fields on ProjectOrgMove that are NOT columns.
 // Every field MUST carry the `bun:"-"` tag.
 type ProjectOrgMoveExtra struct {
+}
+
+// orgBoundConnections is the set of connections among triggers' bindings
+// that an org owns, other than toOrgID: the source org's, which a move
+// clears and never carries. A target-org connection cannot be bound to a
+// trigger of the source, but if one were, it would be the target's to keep.
+func orgBoundConnections(ctx context.Context, db orm.Context, triggers []*core.Trigger, toOrgID string) (map[string]bool, error) {
+	var bound []string
+	for _, t := range triggers {
+		if t.ConnectionID != nil {
+			bound = append(bound, *t.ConnectionID)
+		}
+	}
+	orgBound := map[string]bool{}
+	if len(bound) == 0 {
+		return orgBound, nil
+	}
+	var ids []string
+	if err := db.Bun().NewRaw(`SELECT id FROM connections WHERE id IN (?) AND owner_kind = ? AND org_id IS DISTINCT FROM ?`,
+		bun.List(bound), core.ConnectionOwnerOrg, toOrgID).Scan(ctx, &ids); err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return nil, fmt.Errorf("read the triggers' connections: %w", err)
+	}
+	for _, id := range ids {
+		orgBound[id] = true
+	}
+	return orgBound, nil
+}
+
+// boundToOrgInstallation reports whether a trigger listens through an org's
+// GitHub App installation (core.IntegrationConfig.Installation). It only
+// reads the binding: the gated bind stays its one writer.
+func boundToOrgInstallation(t *core.Trigger) bool {
+	// Only the one key is decoded, so another trigger kind's config shape
+	// cannot fail the read.
+	var cfg struct {
+		Installation string `json:"installation"`
+	}
+	if json.Unmarshal(t.Config, &cfg) != nil {
+		return false
+	}
+	return cfg.Installation != ""
+}
+
+const projectOrgMoveCountsSQL = `
+SELECT
+    (SELECT count(*) FROM chats c WHERE c.project_id = ?0) AS chats,
+    (SELECT count(*) FROM workflows w WHERE w.chat_id IN (SELECT c.id FROM chats c WHERE c.project_id = ?0)) AS runs,
+    (SELECT count(*) FROM chats c WHERE c.project_id = ?0 AND c.visibility IS NOT NULL)
+        + (SELECT count(*) FROM projects p WHERE p.id = ?0 AND p.visibility IS NOT NULL) AS shares,
+    (SELECT COALESCE(p.forge_project_name, '') FROM projects p WHERE p.id = ?0) AS forge_project_name`
+
+// projectOrgMoveMachinesSQL is every machine the project is attached to or
+// a chat of it is pinned to, with its name when reliant knows the machine.
+const projectOrgMoveMachinesSQL = `
+WITH m AS (
+    SELECT pd.daemon_id, true AS attached, 0 AS pinned FROM project_daemons pd WHERE pd.project_id = ?0
+    UNION ALL
+    SELECT c.active_daemon_id, false, count(*) FROM chats c
+    WHERE c.project_id = ?0 AND c.active_daemon_id IS NOT NULL AND c.active_daemon_id <> ''
+    GROUP BY c.active_daemon_id
+)
+SELECT m.daemon_id, COALESCE(NULLIF(d.name, ''), d.hostname, '') AS name, bool_or(m.attached) AS attached, sum(m.pinned)::int AS pinned_chats
+FROM m LEFT JOIN daemons d ON d.id = m.daemon_id
+GROUP BY m.daemon_id, d.name, d.hostname
+ORDER BY m.daemon_id`
+
+// ProjectOrgMoveEffects reads what moving projectID to toOrgID would do, as
+// reliant can tell it (design §1.2): the preview's counts, the triggers that
+// will need setting up again in the target, and the machines the project
+// keeps using. It reads, it does not lock: the commit decides again.
+func ProjectOrgMoveEffects(ctx context.Context, db orm.Context, projectID, toOrgID string) (*core.ProjectOrgMoveEffects, error) {
+	var counts struct {
+		Chats            int    `bun:"chats"`
+		Runs             int    `bun:"runs"`
+		Shares           int    `bun:"shares"`
+		ForgeProjectName string `bun:"forge_project_name"`
+	}
+	if err := db.Bun().NewRaw(projectOrgMoveCountsSQL, projectID).Scan(ctx, &counts); err != nil {
+		return nil, fmt.Errorf("count what the move changes: %w", err)
+	}
+	e := &core.ProjectOrgMoveEffects{
+		Chats:            counts.Chats,
+		Runs:             counts.Runs,
+		SharesToClear:    counts.Shares,
+		ForgeProjectName: counts.ForgeProjectName,
+	}
+
+	rows, err := ListTrigger(ctx, db,
+		orm.WhereEq(TriggerFieldProjectID, projectID),
+		orm.WithOrderBy(TriggerFieldName, orm.Asc),
+		orm.WithOrderBy(TriggerFieldID, orm.Asc))
+	if err != nil {
+		return nil, fmt.Errorf("read the project's triggers: %w", err)
+	}
+	triggers, err := triggersToCore(rows)
+	if err != nil {
+		return nil, err
+	}
+	orgBound, err := orgBoundConnections(ctx, db, triggers, toOrgID)
+	if err != nil {
+		return nil, err
+	}
+	e.Triggers = len(triggers)
+	for _, t := range triggers {
+		if t.Enabled {
+			e.TriggersToPause++
+		}
+		switch {
+		case t.ConnectionID != nil && orgBound[*t.ConnectionID]:
+			e.OrgBindingsToClear++
+			e.TriggersNeedingSetup = append(e.TriggersNeedingSetup, core.ProjectOrgMoveTriggerSetup{
+				TriggerID: t.ID, Name: t.Name, Reason: core.ProjectOrgMoveSetupOrgConnection,
+			})
+		case boundToOrgInstallation(t):
+			e.TriggersNeedingSetup = append(e.TriggersNeedingSetup, core.ProjectOrgMoveTriggerSetup{
+				TriggerID: t.ID, Name: t.Name, Reason: core.ProjectOrgMoveSetupOrgGitHubInstallation,
+			})
+		}
+	}
+
+	var machines []struct {
+		DaemonID    string `bun:"daemon_id"`
+		Name        string `bun:"name"`
+		Attached    bool   `bun:"attached"`
+		PinnedChats int    `bun:"pinned_chats"`
+	}
+	if err := db.Bun().NewRaw(projectOrgMoveMachinesSQL, projectID).Scan(ctx, &machines); err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return nil, fmt.Errorf("read the project's machines: %w", err)
+	}
+	for _, m := range machines {
+		e.Machines = append(e.Machines, core.ProjectOrgMoveMachine{
+			DaemonID: m.DaemonID, Name: m.Name, Attached: m.Attached, PinnedChats: m.PinnedChats,
+		})
+	}
+	return e, nil
 }

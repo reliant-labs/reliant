@@ -311,7 +311,7 @@ export type ScenarioRpcHandlers =
   }
 
   // forge:section reliant.v1.ProjectService
-  // forge:hash=4cdf43c57810610941de72e957d87ee2328b2d27e2747b16cc418547faa4e85c
+  // forge:hash=7c54acdd95380106349f9b50cd28dc15205ee596139feb48669f5f092a0bc724
   & {
     "reliant.v1.ProjectService/CreateProject"?: (req: import("@/gen/reliant/v1/project_pb").CreateProjectRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/project_pb").CreateProjectResponseSchema>>;
     "reliant.v1.ProjectService/ListProjects"?: (req: import("@/gen/reliant/v1/project_pb").ListProjectsRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/project_pb").ListProjectsResponseSchema>>;
@@ -339,6 +339,7 @@ export type ScenarioRpcHandlers =
     "reliant.v1.ProjectService/AttachProjectToDaemon"?: (req: import("@/gen/reliant/v1/project_pb").AttachProjectToDaemonRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/project_pb").AttachProjectToDaemonResponseSchema>>;
     "reliant.v1.ProjectService/DetachProjectFromDaemon"?: (req: import("@/gen/reliant/v1/project_pb").DetachProjectFromDaemonRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/project_pb").DetachProjectFromDaemonResponseSchema>>;
     "reliant.v1.ProjectService/RecloneProjectOnDaemon"?: (req: import("@/gen/reliant/v1/project_pb").RecloneProjectOnDaemonRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/project_pb").RecloneProjectOnDaemonResponseSchema>>;
+    "reliant.v1.ProjectService/PreviewProjectOrgMove"?: (req: import("@/gen/reliant/v1/project_pb").PreviewProjectOrgMoveRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/project_pb").PreviewProjectOrgMoveResponseSchema>>;
   }
 
   // forge:section reliant.v1.ProviderAccountService

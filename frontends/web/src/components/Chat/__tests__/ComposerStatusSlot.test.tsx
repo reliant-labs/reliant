@@ -54,6 +54,7 @@ const LABELS: Record<StatusSlotItemId, string> = {
   oom: "Machine ran out of memory",
   disk: "Disk almost full",
   resume: "mac is suspended",
+  "org-moved": "In Globex",
   queued: "2 queued",
   background: "3 running",
 };

@@ -86,6 +86,7 @@ export type StatusSlotItemId =
   | "oom"
   | "disk"
   | "resume"
+  | "org-moved"
   | "queued"
   | "background";
 
@@ -97,8 +98,9 @@ export const STATUS_SLOT_PRIORITY: Record<StatusSlotItemId, number> = {
   oom: 4,
   disk: 5,
   resume: 6,
-  queued: 7,
-  background: 8,
+  "org-moved": 7,
+  queued: 8,
+  background: 9,
 };
 
 /** Ambient items: what is going on, not what went wrong. */

@@ -123,6 +123,59 @@ func (b *ProjectOrgMoveBlockers) Empty() bool {
 	return b == nil || (b.ChatsTotal == 0 && b.LiveRuns == 0 && b.BackgroundProcesses == 0)
 }
 
+// ProjectOrgMoveEffects is what moving a project would do (design §1.2), as
+// reliant can tell it: the preview's half that is not control-plane's.
+type ProjectOrgMoveEffects struct {
+	// Chats is every chat of the project, archived included; Runs every run
+	// of those chats; Triggers every trigger of the project.
+	Chats    int
+	Runs     int
+	Triggers int
+	// TriggersToPause is the enabled triggers the move pauses.
+	TriggersToPause int
+	// TriggersNeedingSetup are the triggers that will stay paused until
+	// set up again in the target, and why.
+	TriggersNeedingSetup []ProjectOrgMoveTriggerSetup
+	// SharesToClear counts the project (when shared) and its shared chats.
+	SharesToClear int
+	// OrgBindingsToClear counts the triggers bound to an org connection the
+	// target does not own.
+	OrgBindingsToClear int
+	// Machines are the machines the project is attached to or a chat of it
+	// is pinned to, ordered by id. The move changes none of them.
+	Machines []ProjectOrgMoveMachine
+	// ForgeProjectName is the hosted forge project name the project deploys
+	// as; "" for none.
+	ForgeProjectName string
+}
+
+// Why a trigger stays paused after a move (ProjectOrgMoveTriggerSetup.Reason).
+const (
+	// ProjectOrgMoveSetupOrgConnection: it is bound to the source org's
+	// connection, which the move clears.
+	ProjectOrgMoveSetupOrgConnection = "org_connection"
+	// ProjectOrgMoveSetupOrgGitHubInstallation: it listens through an org's
+	// GitHub App installation, which must be linked to the target.
+	ProjectOrgMoveSetupOrgGitHubInstallation = "org_github_installation"
+)
+
+// ProjectOrgMoveTriggerSetup is one trigger a move leaves paused, and why.
+type ProjectOrgMoveTriggerSetup struct {
+	TriggerID string
+	Name      string
+	Reason    string
+}
+
+// ProjectOrgMoveMachine is one machine a moved project keeps using.
+type ProjectOrgMoveMachine struct {
+	DaemonID string
+	Name     string
+	// Attached: the project has a checkout there (project_daemons).
+	Attached bool
+	// PinnedChats counts the project's chats pinned to it.
+	PinnedChats int
+}
+
 // ProjectOrgMoveCommit is the input of the move's transaction.
 type ProjectOrgMoveCommit struct {
 	// MoveID names the move row, in state prepared; the row decides the
