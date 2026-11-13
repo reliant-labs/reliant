@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/llm/accountrouter"
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
 	"github.com/reliant-labs/reliant/internal/llm/models"
@@ -14,9 +15,11 @@ import (
 )
 
 // CredentialMarker takes an account whose credential the provider rejected out
-// of rotation (needs-sign-in), until the user reconnects it.
+// of rotation (needs-sign-in), until its owner reconnects it. owner is the
+// account's (accountOwner): for an org's key the mark is on the org's row, so it
+// leaves every member's candidates at once.
 type CredentialMarker interface {
-	MarkNeedsSignIn(ctx context.Context, userID, accountID, reason string) error
+	MarkNeedsSignIn(ctx context.Context, owner core.AccountOwner, accountID, reason string) error
 }
 
 // credentialRejection handles a provider refusing a routed account's own API
@@ -40,7 +43,7 @@ func (r *AccountRouting) credentialRejection(ctx context.Context, err error, uc 
 		return nil
 	}
 	reason := "the provider rejected the saved API key: " + err.Error()
-	if merr := r.Credentials.MarkNeedsSignIn(ctx, uc.Scope.UserID, cfg.AccountID, reason); merr != nil {
+	if merr := r.Credentials.MarkNeedsSignIn(ctx, accountOwner(uc.Scope.UserID, cfg.DriverConfig), cfg.AccountID, reason); merr != nil {
 		logging.WarnContext(ctx, "[Failover] Could not take a rejected API key out of rotation",
 			"userID", uc.Scope.UserID, "provider", string(uc.Driver), "accountID", cfg.AccountID, "error", merr)
 		return nil

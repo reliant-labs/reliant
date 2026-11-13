@@ -100,7 +100,7 @@ func TestAvailableDrivers_PausedAbsentLimitedPresentNeedsSignInAbsent(t *testing
 	_, err = repo.PatchProviderAccount(ctx, user, broken.ID, core.AccountPatch{NeedsReauth: &reason})
 	require.NoError(t, err)
 	until := time.Now().Add(time.Hour).UTC().Truncate(time.Second)
-	require.NoError(t, repo.BenchAccount(ctx, user, limited.ID, until, "5h", false))
+	require.NoError(t, repo.BenchAccount(ctx, core.UserAccountOwner(user), limited.ID, until, "5h", false))
 
 	available := availableFor(t, repo, user)
 	ids := []string{}
@@ -130,7 +130,7 @@ func TestAvailableDrivers_AFullyLimitedProviderStaysResolvable(t *testing.T) {
 	defer cleanup()
 	const user = "all-limited"
 	a := addClaude(t, repo, user, "alice")
-	require.NoError(t, repo.BenchAccount(context.Background(), user, a.ID, time.Now().Add(time.Hour), "5h", false))
+	require.NoError(t, repo.BenchAccount(context.Background(), core.UserAccountOwner(user), a.ID, time.Now().Add(time.Hour), "5h", false))
 
 	available := availableFor(t, repo, user)
 	require.Contains(t, available.Drivers, models.DriverID("claude"))
@@ -279,7 +279,7 @@ func TestRefreshMergeKeepsTheAccountWithTheRealIdentity(t *testing.T) {
 	label := "work"
 	_, err := repo.PatchProviderAccount(ctx, user, real.ID, core.AccountPatch{Label: &label})
 	require.NoError(t, err)
-	require.NoError(t, repo.BenchAccount(ctx, user, real.ID, time.Now().Add(time.Hour), "five_hour", false))
+	require.NoError(t, repo.BenchAccount(ctx, core.UserAccountOwner(user), real.ID, time.Now().Add(time.Hour), "five_hour", false))
 	require.NoError(t, repo.ScheduleUsagePoll(ctx, real.ID, time.Now().Add(time.Minute), 0, ""))
 
 	time.Sleep(2 * time.Millisecond) // a clock tick: the placeholder's timestamps follow the real row's

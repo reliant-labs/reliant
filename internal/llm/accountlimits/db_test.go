@@ -56,9 +56,9 @@ func TestDBTwoRecordersNeverRegressAnAccount(t *testing.T) {
 	r2 := accountlimits.NewRecorder(repo, time.Now)
 
 	// Worker 2 saw the NEWER response; worker 1's older write arrives after it.
-	r2.For("u1", a.ID).ObserveRateLimits(ctx, snapshot(now, ratelimit.StatusAllowed, 0.70))
+	r2.For(core.UserAccountOwner("u1"), a.ID).ObserveRateLimits(ctx, snapshot(now, ratelimit.StatusAllowed, 0.70))
 	r2.Close()
-	r1.For("u1", a.ID).ObserveRateLimits(ctx, snapshot(now.Add(-time.Minute), ratelimit.StatusAllowed, 0.30))
+	r1.For(core.UserAccountOwner("u1"), a.ID).ObserveRateLimits(ctx, snapshot(now.Add(-time.Minute), ratelimit.StatusAllowed, 0.30))
 	r1.Close()
 
 	got, err := repo.ListAccountLimits(ctx, "u1")
@@ -82,7 +82,7 @@ func TestDBRejectedSnapshotBenchesTheAccountAndAnAllowedOneLiftsIt(t *testing.T)
 
 	now := time.Now().UTC()
 	rej := snapshot(now, ratelimit.StatusRejected, 1)
-	rec.For("u1", a.ID).ObserveRateLimits(ctx, rej)
+	rec.For(core.UserAccountOwner("u1"), a.ID).ObserveRateLimits(ctx, rej)
 	require.Eventually(t, func() bool {
 		l, _ := repo.ListAccountLimits(ctx, "u1")
 		return l[a.ID].LimitedUntil != nil
@@ -94,7 +94,7 @@ func TestDBRejectedSnapshotBenchesTheAccountAndAnAllowedOneLiftsIt(t *testing.T)
 	assert.Equal(t, core.AccountLimited, a.Status(ptr(l[a.ID]), now))
 
 	// The provider is plainly serving again (an early reset): the bench lifts.
-	rec.For("u1", a.ID).ObserveRateLimits(ctx, snapshot(now.Add(time.Second), ratelimit.StatusAllowed, 0.05))
+	rec.For(core.UserAccountOwner("u1"), a.ID).ObserveRateLimits(ctx, snapshot(now.Add(time.Second), ratelimit.StatusAllowed, 0.05))
 	require.Eventually(t, func() bool {
 		l, _ := repo.ListAccountLimits(ctx, "u1")
 		return l[a.ID].LimitedUntil == nil
@@ -114,7 +114,7 @@ func TestDBBenchReturnsTheEffectiveUntilAndSchedulesAConfirmation(t *testing.T) 
 
 	// A limits row has to exist for the confirmation poll to be scheduled onto: Bench creates it.
 	reset := now.Add(2 * time.Hour)
-	got, err := rec.Bench(ctx, "u1", a.ID, reset, "seven_day")
+	got, err := rec.Bench(ctx, core.UserAccountOwner("u1"), a.ID, reset, "seven_day")
 	require.NoError(t, err)
 	assert.True(t, got.Equal(reset))
 
@@ -127,13 +127,13 @@ func TestDBBenchReturnsTheEffectiveUntilAndSchedulesAConfirmation(t *testing.T) 
 
 	// An unknown reset benches for the first probe rung.
 	b := upsert(t, repo, "u1", "codex", "carol")
-	got, err = rec.Bench(ctx, "u1", b.ID, time.Time{}, "")
+	got, err = rec.Bench(ctx, core.UserAccountOwner("u1"), b.ID, time.Time{}, "")
 	require.NoError(t, err)
 	assert.True(t, got.Equal(now.Add(5*time.Minute)), "got %v", got)
 	l, _ = repo.ListAccountLimits(ctx, "u1")
 	assert.Equal(t, 1, l[b.ID].LimitedProbes)
 
-	_, err = rec.Bench(ctx, "u1", "no-such-account", time.Time{}, "")
+	_, err = rec.Bench(ctx, core.UserAccountOwner("u1"), "no-such-account", time.Time{}, "")
 	assert.ErrorIs(t, err, core.ErrProviderAccountNotFound)
 }
 

@@ -255,7 +255,7 @@ func TestListShowsStatusAndStoredWindows(t *testing.T) {
 	assert.InDelta(t, 0.82, got[0].Windows[0].GetUsedFraction(), 1e-9)
 	assert.Equal(t, pb.UsageSource_USAGE_SOURCE_HEADERS, got[0].UsageSource)
 
-	require.NoError(t, e.repo.BenchAccount(as(user), user, acct.ID, time.Now().Add(time.Hour), "5h", false))
+	require.NoError(t, e.repo.BenchAccount(as(user), core.UserAccountOwner(user), acct.ID, time.Now().Add(time.Hour), "5h", false))
 	assert.Equal(t, pb.ProviderAccountStatus_PROVIDER_ACCOUNT_STATUS_LIMITED, e.list(user)[0].Status)
 	assert.NotNil(t, e.list(user)[0].LimitedUntil)
 }

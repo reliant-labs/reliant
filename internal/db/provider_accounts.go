@@ -34,6 +34,24 @@ func (r *Repo) GetProviderAccountWithSecrets(ctx context.Context, userID, accoun
 	return r.accounts.GetProviderAccountWithSecrets(ctx, userID, accountID)
 }
 
+// The *Owned* methods take an account's owner: a person or an org (core.AccountOwner). The
+// userID methods are the person-scoped forms and never reach an org's account.
+
+// ListOwnedProviderAccounts returns the owner's accounts, metadata only, by (provider, priority).
+func (r *Repo) ListOwnedProviderAccounts(ctx context.Context, owner core.AccountOwner) ([]core.ProviderAccount, error) {
+	return r.accounts.ListOwnedProviderAccounts(ctx, owner)
+}
+
+// GetOwnedProviderAccountWithSecrets opens one of the owner's accounts under the owner's vault tenant.
+func (r *Repo) GetOwnedProviderAccountWithSecrets(ctx context.Context, owner core.AccountOwner, accountID string) (*core.AccountWithSecrets, error) {
+	return r.accounts.GetOwnedProviderAccountWithSecrets(ctx, owner, accountID)
+}
+
+// PatchOwnedProviderAccount patches one of the owner's accounts.
+func (r *Repo) PatchOwnedProviderAccount(ctx context.Context, owner core.AccountOwner, accountID string, p core.AccountPatch) (core.ProviderAccount, error) {
+	return r.accounts.PatchOwnedProviderAccount(ctx, owner, accountID, p)
+}
+
 // UpsertProviderAccount inserts at priority max+1, or updates the row with the same identity
 // (fresh secrets, needs_reauth cleared; label, priority and pause are kept).
 func (r *Repo) UpsertProviderAccount(ctx context.Context, u core.AccountUpsert) (core.ProviderAccount, bool, error) {
@@ -73,10 +91,11 @@ func (r *Repo) UpsertAccountLimitSnapshot(ctx context.Context, s core.LimitState
 	return r.accounts.UpsertAccountLimitSnapshot(ctx, s)
 }
 
-// BenchAccount refuses the account until `until` (GREATEST with an existing bench). probe marks
-// an unknown-reset bench: it increments limited_probes; otherwise the count resets to 0.
-func (r *Repo) BenchAccount(ctx context.Context, userID, accountID string, until time.Time, window string, probe bool) error {
-	return r.accounts.BenchAccount(ctx, userID, accountID, until, window, probe)
+// BenchAccount refuses one of the owner's accounts until `until` (GREATEST with an existing
+// bench). probe marks an unknown-reset bench: it increments limited_probes; otherwise the count
+// resets to 0.
+func (r *Repo) BenchAccount(ctx context.Context, owner core.AccountOwner, accountID string, until time.Time, window string, probe bool) error {
+	return r.accounts.BenchAccount(ctx, owner, accountID, until, window, probe)
 }
 
 // LeaseUsagePolls returns ids whose usage_api_next_at <= now and pushes each to now+lease, so

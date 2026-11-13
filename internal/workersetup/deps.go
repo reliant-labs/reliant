@@ -32,7 +32,7 @@ type AccountAssignmentStore interface {
 // AccountCredentialStore is what credentialMarker writes: the needs-sign-in
 // mark on an account whose key the provider rejected.
 type AccountCredentialStore interface {
-	PatchProviderAccount(ctx context.Context, userID, accountID string, p core.AccountPatch) (core.ProviderAccount, error)
+	PatchOwnedProviderAccount(ctx context.Context, owner core.AccountOwner, accountID string, p core.AccountPatch) (core.ProviderAccount, error)
 }
 
 // AccountRoutingStore is what accountRouting wires: the router's store, the

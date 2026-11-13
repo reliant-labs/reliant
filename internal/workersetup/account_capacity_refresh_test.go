@@ -87,7 +87,7 @@ func TestUsageRefreshThatShowsCapacityUnbenchesTheAccountForTheRouterAndWakesThe
 	// The provider refused alice on its 5-hour window, and benched it until
 	// the reset. The agent's thread is pinned to alice.
 	reset := now.Add(3 * time.Hour).Truncate(time.Second)
-	require.NoError(t, repo.BenchAccount(ctx, user, alice.ID, reset, "five_hour", false))
+	require.NoError(t, repo.BenchAccount(ctx, core.UserAccountOwner(user), alice.ID, reset, "five_hour", false))
 	_, err = repo.SetThreadAssignment(ctx, core.Assignment{ThreadID: agentThread, Provider: "claude", AccountID: alice.ID, AssignedAt: now, Reason: accountrouter.ReasonInitial}, "")
 	require.NoError(t, err)
 
