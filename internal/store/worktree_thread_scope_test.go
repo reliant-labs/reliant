@@ -111,6 +111,30 @@ func TestWorktreeRunActivities_ASubAgentsOwnWorkHoldsItsWorktree(t *testing.T) {
 	}
 }
 
+// A nested sub-agent spawned into a workspace of its own is judged there, not
+// in its ancestor's: its live run holds "nested" and leaves "sub" retirable.
+func TestWorktreeRunActivities_ANestedSubAgentInItsOwnWorktreeDoesNotHoldTheAncestors(t *testing.T) {
+	env := storetest.New(t)
+	ctx := context.Background()
+	chat := orchestrator(t, env)
+	nested := &core.Worktree{ID: "nested", ProjectID: storetest.SeedProjectID, Name: "nested", Path: "/tmp/nested", Branch: "nested"}
+	require.NoError(t, env.Repo.CreateWorktree(ctx, nested))
+	mustExecConv(t, env, `INSERT INTO workflows (id, chat_id, parent_id, workflow_name, thread, created_at, state, stop_reason)
+		VALUES ('wf-nested', $1, 'wf-sub', 'wf', 't-nested', NOW(), 2, 0)`, chat.ID)
+	mustExecConv(t, env, `INSERT INTO workflows (id, chat_id, parent_id, workflow_name, thread, created_at, state, stop_reason)
+		VALUES ('wf-nested-child', $1, 'wf-nested', 'wf', 't-nested-child', NOW(), 1, 0)`, chat.ID)
+	mustExecConv(t, env, `INSERT INTO threads (id, chat_id, parent_thread_id, workflow_id, created_at, origin, status, worktree_id)
+		VALUES ('t-nested', $1, 't-sub', 'wf-nested', NOW(), 'spawn', 2, 'nested')`, chat.ID)
+
+	acts, err := store.WorktreeRunActivities(ctx, env.ORM, []string{"sub", "nested"})
+	require.NoError(t, err)
+	require.True(t, acts["nested"].Running, "the nested sub-agent's run holds its own workspace")
+	require.False(t, acts["sub"].Running, "and not its ancestor's, nor do the runs it started")
+	ok, err := store.ArchiveRecoverableIdleWorktree(ctx, env.ORM, "sub", time.Now().Add(-72*time.Hour))
+	require.NoError(t, err)
+	require.True(t, ok, "the ancestor's quiet workspace is retired")
+}
+
 // A worktree bound to the chat itself keeps the chat's whole scope: every run
 // of a chat works in the chat's workspace.
 func TestWorktreeRunActivities_AChatBoundWorktreeKeepsTheChatsScope(t *testing.T) {

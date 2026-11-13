@@ -676,7 +676,9 @@ const providerWaitSQL = `pb.waiting_since IS NOT NULL`
 //   - A THREAD bound to it (threads.worktree_id: a sub-agent spawned into it):
 //     only that thread's own work counts — the runs on it (workflows.thread),
 //     the run that owns it (threads.workflow_id), their descendant runs
-//     (workflows.parent_id), the descendant threads that have no binding of
+//     (workflows.parent_id) up to one on a thread bound to another worktree,
+//     which that worktree judges instead (along with everything below it),
+//     the descendant threads that have no binding of
 //     their own (threads.parent_thread_id), and the provider waits of those
 //     threads. Never its parent chat's other runs: an orchestrator chat runs
 //     for days, and counting its runs held every worktree any of its
@@ -714,6 +716,9 @@ WITH RECURSIVE lineage AS (
     FROM lineage l JOIN workflows f ON f.chat_id = l.chat_id AND (f.thread = l.thread_id OR f.id = l.workflow_id)
     UNION
     SELECT r.worktree_id, f.id FROM runs r JOIN workflows f ON f.parent_id = r.id
+    WHERE NOT EXISTS (SELECT 1 FROM threads t WHERE t.chat_id = f.chat_id
+        AND (t.id = f.thread OR t.workflow_id = f.id)
+        AND t.worktree_id IS NOT NULL AND t.worktree_id <> r.worktree_id)
 ), activity AS (
     SELECT c.worktree_id,
         (EXISTS (SELECT 1 FROM workflows f WHERE f.chat_id = c.id
