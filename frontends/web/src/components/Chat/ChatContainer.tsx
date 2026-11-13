@@ -102,14 +102,17 @@ export function ChatContainer({
     return msgs;
   }, [storeMessages, streamingMessages]);
 
-  const approvals = useApprovals(chatId).data?.approvals ?? NO_APPROVALS;
+  const currentChat = useChat(chatId);
+  // A viewer of a shared chat has no approvals to read or act on: the server
+  // answers ListApprovalsByChat as not found for them, so it is not asked.
+  const approvalsChatId = currentChat?.viewerAccess ? undefined : chatId;
+  const approvals = useApprovals(approvalsChatId).data?.approvals ?? NO_APPROVALS;
   const errorEvents = useErrorEvents(chatId);
   const infoEvents = useInfoEvents(chatId);
   const runOutputs = useRunOutputs(chatId);
-  const currentChat = useChat(chatId);
   const connectionStatus = useGlobalUpdatesStore((s) => s.connectionStatus);
   const isChatBusy = useIsChatRunning(chatId);
-  const pendingApprovals = usePendingApprovals(chatId).data?.approvals ?? NO_APPROVALS;
+  const pendingApprovals = usePendingApprovals(approvalsChatId).data?.approvals ?? NO_APPROVALS;
 
   // Self-healing subscription invariant: this component renders the active
   // chat, so it's the natural place to assert "the rendered chat is the

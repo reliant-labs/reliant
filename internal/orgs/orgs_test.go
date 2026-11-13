@@ -22,8 +22,11 @@ import (
 type fakeSource struct {
 	members  map[string]map[string]bool
 	defaults map[string]string
-	err      error
-	calls    int
+	// roles[user][org] is a member's role; a member with none answers no
+	// role, as a control plane that predates the field does.
+	roles map[string]map[string]string
+	err   error
+	calls int
 }
 
 func (f *fakeSource) ResolveOrgMembership(_ context.Context, userID, orgID string) (accesstokenclient.OrgMembership, error) {
@@ -35,7 +38,11 @@ func (f *fakeSource) ResolveOrgMembership(_ context.Context, userID, orgID strin
 		def := f.defaults[userID]
 		return accesstokenclient.OrgMembership{OrgID: def, Member: def != ""}, nil
 	}
-	return accesstokenclient.OrgMembership{OrgID: orgID, Member: f.members[userID][orgID]}, nil
+	m := accesstokenclient.OrgMembership{OrgID: orgID, Member: f.members[userID][orgID]}
+	if m.Member {
+		m.Role = f.roles[userID][orgID]
+	}
+	return m, nil
 }
 
 func newFake() *fakeSource {

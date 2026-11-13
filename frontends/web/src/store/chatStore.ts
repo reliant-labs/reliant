@@ -945,7 +945,9 @@ interface ChatStoreState {
   // deferPersist skips recording the chat as the worktree's active chat: a
   // caller still resolving the chat's worktree context calls persistActiveChat
   // once that context is current (see selectChatWithWorktreeContext).
-  selectChat: (chat: Chat, options?: { deferPersist?: boolean; openEntry?: ChatOpenEntry }) => void;
+  // retryRefused asks the server again for a chat whose stream it refused
+  // before (a shared chat shared again; openSharedChat).
+  selectChat: (chat: Chat, options?: { deferPersist?: boolean; openEntry?: ChatOpenEntry; retryRefused?: boolean }) => void;
   persistActiveChat: (chatId: string) => void;
   clearCurrentChat: (worktreeId?: string | null) => void;
 
@@ -1486,7 +1488,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
   },
 
   // Select a chat (make it active and load its data)
-  selectChat: (chat: Chat, options?: { deferPersist?: boolean; openEntry?: ChatOpenEntry }) => {
+  selectChat: (chat: Chat, options?: { deferPersist?: boolean; openEntry?: ChatOpenEntry; retryRefused?: boolean }) => {
     // Start profiler session here since this is the reliable entry point for tab switching
     tabSwitchProfiler.startSession(chat.id);
 
@@ -1628,7 +1630,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     if (tabSwitchProfiler.isEnabled()) {
       tabSwitchProfiler.mark("subscribeToChatDetails-call");
     }
-    getGlobalUpdatesStore()?.subscribeToChatDetails(chat.id);
+    getGlobalUpdatesStore()?.subscribeToChatDetails(chat.id, { retryRefused: options?.retryRefused });
     if (tabSwitchProfiler.isEnabled()) {
       tabSwitchProfiler.mark("subscribeToChatDetails-end");
     }

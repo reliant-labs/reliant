@@ -26,6 +26,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/reliant/internal/llm"
+	"github.com/reliant-labs/reliant/internal/llm/drivers"
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/llm/ratelimit"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
@@ -134,7 +135,7 @@ func TestGenerateTitle_ARejectedKeyLeavesRotation(t *testing.T) {
 	// Resolution reads the user's accounts per call and leaves out one needing
 	// sign-in, as drivers.LookupAvailableDrivers does.
 	orig := lookupAvailableDrivers
-	lookupAvailableDrivers = func(context.Context, string) (models.AvailableDrivers, error) {
+	lookupAvailableDrivers = func(context.Context, drivers.Scope) (models.AvailableDrivers, error) {
 		var live []models.AccountConfig
 		for _, acct := range []models.AccountConfig{a, b} {
 			if !slices.Contains(marker.marked, acct.AccountID) {

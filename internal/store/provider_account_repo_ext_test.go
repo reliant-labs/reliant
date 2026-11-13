@@ -93,7 +93,7 @@ func TestProviderAccountSecretsRoundTripSealed(t *testing.T) {
 		}
 	}
 
-	got, err := store.GetUserProviderAccountSealed(ctx, env.ORM, "u1", a.ID)
+	got, err := store.GetOwnerProviderAccountSealed(ctx, env.ORM, core.UserAccountOwner("u1"), a.ID)
 	if err != nil {
 		t.Fatalf("GetUserProviderAccountSealed: %v", err)
 	}
@@ -133,7 +133,7 @@ func TestProviderAccountReads(t *testing.T) {
 		IdentityKey: "k1", KeyHint: "abcd", Secrets: core.AccountSecrets{Secret: "sk-1"}})
 	other := l6Account(t, env, l6Upsert("u2", "carol", "s3", "r3"))
 
-	meta, err := store.ListUserProviderAccounts(ctx, env.ORM, "u1")
+	meta, err := store.ListOwnerProviderAccounts(ctx, env.ORM, core.UserAccountOwner("u1"))
 	if err != nil {
 		t.Fatalf("ListUserProviderAccounts: %v", err)
 	}
@@ -146,7 +146,7 @@ func TestProviderAccountReads(t *testing.T) {
 		t.Fatalf("ListUserProviderAccounts order = %v, want claude by priority, then openai", meta)
 	}
 
-	sealed, err := store.ListUserProviderAccountsSealed(ctx, env.ORM, "u1")
+	sealed, err := store.ListOwnerProviderAccountsSealed(ctx, env.ORM, core.UserAccountOwner("u1"))
 	if err != nil {
 		t.Fatalf("ListUserProviderAccountsSealed: %v", err)
 	}
@@ -168,12 +168,12 @@ func TestProviderAccountReads(t *testing.T) {
 		t.Fatalf("bob has no refresh token, got ciphertext %q", sealed[1].Refresh)
 	}
 
-	got, err := store.GetUserProviderAccountSealed(ctx, env.ORM, "u1", a.ID)
+	got, err := store.GetOwnerProviderAccountSealed(ctx, env.ORM, core.UserAccountOwner("u1"), a.ID)
 	if err != nil {
 		t.Fatalf("GetUserProviderAccountSealed: %v", err)
 	}
 	requireSame(t, "GetUserProviderAccountSealed", got.ProviderAccount, withSecrets[0].ProviderAccount)
-	if _, err := store.GetUserProviderAccountSealed(ctx, env.ORM, "u1", other.ID); !errors.Is(err, core.ErrProviderAccountNotFound) {
+	if _, err := store.GetOwnerProviderAccountSealed(ctx, env.ORM, core.UserAccountOwner("u1"), other.ID); !errors.Is(err, core.ErrProviderAccountNotFound) {
 		t.Fatalf("another user's account: err = %v, want ErrProviderAccountNotFound", err)
 	}
 	if _, err := env.Repo.GetProviderAccountWithSecrets(ctx, "u1", other.ID); !errors.Is(err, core.ErrProviderAccountNotFound) {
@@ -242,12 +242,12 @@ func TestProviderAccountLocks(t *testing.T) {
 		if none, err := store.LockProviderAccountByIdentity(ctx, env.ORM, "u1", "claude", "nobody"); err != nil || none != nil {
 			t.Errorf("LockProviderAccountByIdentity(absent) = %v, %v; want nil, nil", none, err)
 		}
-		byID, err := store.LockUserProviderAccount(ctx, env.ORM, "u1", b.ID)
+		byID, err := store.LockOwnerProviderAccount(ctx, env.ORM, core.UserAccountOwner("u1"), b.ID)
 		if err != nil {
 			return err
 		}
 		requireSame(t, "LockUserProviderAccount", *byID, twin[1])
-		if _, err := store.LockUserProviderAccount(ctx, env.ORM, "u2", b.ID); !errors.Is(err, core.ErrProviderAccountNotFound) {
+		if _, err := store.LockOwnerProviderAccount(ctx, env.ORM, core.UserAccountOwner("u2"), b.ID); !errors.Is(err, core.ErrProviderAccountNotFound) {
 			t.Errorf("LockUserProviderAccount(another user) err = %v, want ErrProviderAccountNotFound", err)
 		}
 		mirror, err := store.LockLegacyMirror(ctx, env.ORM, "u1", "claude", "claude_auth_tokens")
@@ -284,7 +284,7 @@ func TestProviderAccountCredentialWrites(t *testing.T) {
 	ctx := context.Background()
 	at := time.Date(2026, 10, 1, 12, 0, 0, 0, time.UTC)
 
-	inserted, err := store.InsertProviderAccount(ctx, env.ORM, "acct-1", "u1", "openai", 0, store.ProviderAccountCredential{
+	inserted, err := store.InsertProviderAccount(ctx, env.ORM, "acct-1", store.ProviderAccountOwnership{Owner: core.UserAccountOwner("u1")}, "openai", 0, store.ProviderAccountCredential{
 		AuthKind: core.AuthKindAPIKey, IdentityKey: "k1", KeyHint: "wxyz", Secret: []byte("ciphertext-1"),
 		LegacySource: "api_keys", UpdatedAt: at.Add(time.Minute),
 	}, at)
@@ -302,7 +302,7 @@ func TestProviderAccountCredentialWrites(t *testing.T) {
 	if src, _ := store.ProviderAccountLegacySource(ctx, env.ORM, "acct-1"); src == nil || *src != "api_keys" {
 		t.Fatalf("legacy_source = %v, want api_keys", src)
 	}
-	if _, err := store.InsertProviderAccount(ctx, env.ORM, "acct-2", "u1", "openai", 1, store.ProviderAccountCredential{
+	if _, err := store.InsertProviderAccount(ctx, env.ORM, "acct-2", store.ProviderAccountOwnership{Owner: core.UserAccountOwner("u1")}, "openai", 1, store.ProviderAccountCredential{
 		AuthKind: core.AuthKindAPIKey, IdentityKey: "k1", Secret: []byte("x"), UpdatedAt: at}, at); err == nil {
 		t.Fatal("a second account with the same identity inserted")
 	}
@@ -385,7 +385,7 @@ func TestProviderAccountStandingWrites(t *testing.T) {
 	if _, err := env.Repo.PatchProviderAccount(ctx, "u1", a.ID, core.AccountPatch{Label: &label, Paused: ptr(false), NeedsReauth: ptr("")}); err != nil {
 		t.Fatalf("Repo.PatchProviderAccount: %v", err)
 	}
-	meta, _ := store.ListUserProviderAccounts(ctx, env.ORM, "u1")
+	meta, _ := store.ListOwnerProviderAccounts(ctx, env.ORM, core.UserAccountOwner("u1"))
 	if meta[0].Label != "Home" || meta[0].PausedAt != nil || meta[0].NeedsReauthAt != nil || meta[0].NeedsReauthReason != "" {
 		t.Fatalf("after Repo.PatchProviderAccount the store reads %+v", meta[0])
 	}
@@ -408,7 +408,7 @@ func TestProviderAccountStandingWrites(t *testing.T) {
 	if err := env.Repo.ReorderProviderAccounts(ctx, "u1", "claude", []string{a.ID, b.ID, c.ID}); err != nil {
 		t.Fatalf("Repo.ReorderProviderAccounts: %v", err)
 	}
-	meta, _ = store.ListUserProviderAccounts(ctx, env.ORM, "u1")
+	meta, _ = store.ListOwnerProviderAccounts(ctx, env.ORM, core.UserAccountOwner("u1"))
 	if meta[0].ID != a.ID || meta[1].ID != b.ID || meta[2].ID != c.ID {
 		t.Fatalf("after the Repository's reorder the store orders %v", meta)
 	}
@@ -426,7 +426,7 @@ func TestProviderAccountStandingWrites(t *testing.T) {
 			t.Fatalf("Repo.SetThreadAssignment: %v", err)
 		}
 	}
-	before, _ := store.GetUserProviderAccountSealed(ctx, env.ORM, "u1", b.ID)
+	before, _ := store.GetOwnerProviderAccountSealed(ctx, env.ORM, core.UserAccountOwner("u1"), b.ID)
 	l6InTx(t, env, func(ctx context.Context) error {
 		if err := store.MoveThreadAssignments(ctx, env.ORM, c.ID, b.ID); err != nil {
 			return err
@@ -526,7 +526,7 @@ func TestProviderAccountLimitQueries(t *testing.T) {
 	if ok, err := store.BenchProviderAccount(ctx, env.ORM, "u1", a.ID, now.Add(2*time.Hour), "5h", true, now); err != nil || !ok {
 		t.Fatalf("BenchProviderAccount = %v, %v", ok, err)
 	}
-	if err := env.Repo.BenchAccount(ctx, "u1", a.ID, now.Add(time.Hour), "1h", true); err != nil {
+	if err := env.Repo.BenchAccount(ctx, core.UserAccountOwner("u1"), a.ID, now.Add(time.Hour), "1h", true); err != nil {
 		t.Fatalf("Repo.BenchAccount: %v", err)
 	}
 	got, _ = store.GetAccountLimitState(ctx, env.ORM, a.ID)
@@ -768,7 +768,7 @@ func TestLegacyCredentialCopyQueries(t *testing.T) {
 			t.Error("the copy's advisory lock is not the previous release's key")
 		}
 		rowErr, err := store.InLegacyImportSavepoint(ctx, env.ORM, func() error {
-			if _, err := store.InsertProviderAccount(ctx, env.ORM, "rolled-back", "u1", "openai", 0, store.ProviderAccountCredential{
+			if _, err := store.InsertProviderAccount(ctx, env.ORM, "rolled-back", store.ProviderAccountOwnership{Owner: core.UserAccountOwner("u1")}, "openai", 0, store.ProviderAccountCredential{
 				AuthKind: core.AuthKindAPIKey, IdentityKey: "k", Secret: []byte("x"), UpdatedAt: time.Now()}, time.Now()); err != nil {
 				return err
 			}
@@ -786,7 +786,7 @@ func TestLegacyCredentialCopyQueries(t *testing.T) {
 			t.Errorf("InLegacyImportSavepoint(failing statement) = %v, %v", rowErr, err)
 		}
 		rowErr, err = store.InLegacyImportSavepoint(ctx, env.ORM, func() error {
-			_, err := store.InsertProviderAccount(ctx, env.ORM, "kept", "u1", "openai", 0, store.ProviderAccountCredential{
+			_, err := store.InsertProviderAccount(ctx, env.ORM, "kept", store.ProviderAccountOwnership{Owner: core.UserAccountOwner("u1")}, "openai", 0, store.ProviderAccountCredential{
 				AuthKind: core.AuthKindAPIKey, IdentityKey: "k", Secret: []byte("x"), UpdatedAt: time.Now()}, time.Now())
 			return err
 		})

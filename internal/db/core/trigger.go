@@ -349,6 +349,47 @@ type IntegrationConfig struct {
 	// PollInterval is a Go duration for polled integrations; empty means the
 	// integration's default.
 	PollInterval string `json:"poll_interval,omitempty"`
+	// Installation, when set, is the GitHub App installation (its id, in
+	// decimal) of the trigger's org that the trigger listens through
+	// (org-sharing.md §7.1): only an event from that installation reaches it,
+	// and still only while its owner can see the event's repository. Empty
+	// listens on every installation the owner's own access covers.
+	Installation string `json:"installation,omitempty"`
+}
+
+// ActivationInstallationKey is the one activation-owned key of an integration
+// trigger's config (IntegrationConfig.Installation): the org GitHub App
+// installation the activation is bound to. A declaration never states it, so
+// re-projecting a declared activation keeps the row's value
+// (CarryActivationConfig here, store.SetTriggerProjection in SQL).
+const ActivationInstallationKey = "installation"
+
+// CarryActivationConfig returns next, a config rebuilt from a workflow's
+// declaration, with what the ACTIVATION owns in prev carried over: today the
+// org GitHub App installation it was bound to (IntegrationConfig.Installation),
+// which no declaration states. Re-projecting an activation must never drop
+// it: that would silently widen the trigger to every installation its owner
+// can see. next is returned unchanged when prev binds nothing or either does
+// not parse as an integration config.
+func CarryActivationConfig(prev, next json.RawMessage) json.RawMessage {
+	var was map[string]any
+	if json.Unmarshal(prev, &was) != nil {
+		return next
+	}
+	installation, _ := was[ActivationInstallationKey].(string)
+	if installation == "" {
+		return next
+	}
+	var cfg map[string]any
+	if json.Unmarshal(next, &cfg) != nil || cfg == nil {
+		return next
+	}
+	cfg[ActivationInstallationKey] = installation
+	raw, err := json.Marshal(cfg)
+	if err != nil {
+		return next
+	}
+	return raw
 }
 
 // WorkflowEventConfig is Trigger.Config for TriggerKindWorkflowEvent.

@@ -37,7 +37,7 @@ func TestDefaultGetDriver_ExplicitDriverThatCannotServeTheModelFails(t *testing.
 	require.True(t, models.CanDriverUseModel("openrouter", models.ModelID("claude-5-sonnet")),
 		"precondition: openrouter does, so a silent fallback had somewhere to go")
 
-	driver, err := defaultGetDriver(ctx, userID, models.Preferences{{ModelID: "claude-5-sonnet@reliant"}})
+	driver, err := defaultGetDriver(ctx, PersonalScope(userID), models.Preferences{{ModelID: "claude-5-sonnet@reliant"}})
 
 	require.Error(t, err, "an unservable explicit driver must fail, got driver %v", driverName(driver))
 	assert.Contains(t, err.Error(), "reliant")
@@ -55,7 +55,7 @@ func TestDefaultGetDriver_UnpinnedModelStillAutoSelects(t *testing.T) {
 	userID := "unpinned-driver-user"
 	db.SeedProviderAccount(t, repo, userID, "openrouter", "sk-or-test")
 
-	driver, err := defaultGetDriver(ctx, userID, models.Preferences{{ModelID: "claude-5-sonnet"}})
+	driver, err := defaultGetDriver(ctx, PersonalScope(userID), models.Preferences{{ModelID: "claude-5-sonnet"}})
 
 	require.NoError(t, err)
 	assert.Equal(t, "openrouter", driverName(driver))

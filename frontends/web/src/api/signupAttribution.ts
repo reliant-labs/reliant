@@ -31,7 +31,12 @@ let refusedThisPageLoad = false;
  */
 export const signupAttributionInterceptor: Interceptor = (next) => async (req) => {
   const held = req.stream || refusedThisPageLoad ? undefined : readSignupAttribution();
-  if (!held) return await next(req);
+  if (!held) {
+    // Header-free means absent: an earlier attempt with this same request
+    // object (a retry above this interceptor) may have left the header on it.
+    req.header.delete(SIGNUP_ATTRIBUTION_HEADER);
+    return await next(req);
+  }
   req.header.set(SIGNUP_ATTRIBUTION_HEADER, held);
   try {
     const res = await next(req);
@@ -41,7 +46,12 @@ export const signupAttributionInterceptor: Interceptor = (next) => async (req) =
     if (!isNetworkFailure(err)) throw err;
     refusedThisPageLoad = true;
     req.header.delete(SIGNUP_ATTRIBUTION_HEADER);
-    return await next(req);
+    try {
+      return await next(req);
+    } finally {
+      // Whatever the header-free retry did, the request leaves without it.
+      req.header.delete(SIGNUP_ATTRIBUTION_HEADER);
+    }
   }
 };
 

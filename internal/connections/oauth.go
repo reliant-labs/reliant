@@ -35,9 +35,9 @@ const AppCallbackPath = "/connections/oauth/callback"
 // brokerStore is what the broker needs from persistence.
 type brokerStore interface {
 	CreateConnection(ctx context.Context, c *core.Connection, secrets []core.ConnectionSecret, ev core.ConnectionEvent) error
-	ReauthorizeConnection(ctx context.Context, userID, id string, upd core.ConnectionUpdate, secrets []core.ConnectionSecret, ev core.ConnectionEvent) (*core.Connection, error)
-	GetConnection(ctx context.Context, userID, id string) (*core.Connection, error)
-	FindByExternalAccount(ctx context.Context, userID, integrationID, externalAccountID string) (*core.Connection, error)
+	ReauthorizeOwnedConnection(ctx context.Context, owner core.ConnectionOwner, id string, upd core.ConnectionUpdate, secrets []core.ConnectionSecret, ev core.ConnectionEvent) (*core.Connection, error)
+	GetOwnedConnection(ctx context.Context, owner core.ConnectionOwner, id string) (*core.Connection, error)
+	FindOwnedByExternalAccount(ctx context.Context, owner core.ConnectionOwner, integrationID, externalAccountID string) (*core.Connection, error)
 	CreateOAuthFlow(ctx context.Context, f *core.OAuthFlow) error
 	PeekOAuthFlow(ctx context.Context, stateHash []byte, now time.Time) (*core.OAuthFlow, error)
 	ConsumeOAuthFlow(ctx context.Context, stateHash []byte, now time.Time) (*core.OAuthFlow, error)
@@ -70,6 +70,8 @@ type Broker struct {
 	appOrigins map[string]bool
 	now        func() time.Time
 	exchanger  *oauth2.Exchanger
+	// orgConnections lets a flow connect for an org (Service.WithOrgConnections).
+	orgConnections bool
 }
 
 // NewBroker builds the broker. publicURL is this server's externally reachable
@@ -120,10 +122,43 @@ type StartParams struct {
 	// (http://127.0.0.1:<port>/...). When set, the redirect is relayed there
 	// instead of to ClientOrigin.
 	LoopbackRedirect string
+	// OrgID, when set, connects (or, with ReconnectID, reconnects) a
+	// connection of that organization, which UserID must be an owner or
+	// admin of when the flow starts and again when it finishes (org.go).
+	OrgID string
 }
 
 // userBinder is what a flow is bound to: the user who started it.
 func userBinder(userID string) string { return "user:" + userID }
+
+// flowBinder is what a flow is bound to: the user who started it, and the
+// org it connects for when it is an org's. Binding the org too means a
+// release that predates org connections, which checks userBinder alone,
+// refuses an org flow instead of finishing it as a personal connection.
+func flowBinder(userID, orgID string) string {
+	if orgID == "" {
+		return userBinder(userID)
+	}
+	return userBinder(userID) + "\x00org:" + orgID
+}
+
+// flowOwner is who a flow's connection belongs to.
+func flowOwner(flow *core.OAuthFlow) core.ConnectionOwner {
+	if flow.OrgID != "" {
+		return core.OrgConnectionOwner(flow.OrgID)
+	}
+	return core.UserConnectionOwner(flow.UserID)
+}
+
+// requireOrgFlow is the gate on an org flow, at its start and again at its
+// finish: org connections are enabled here, and userID is an owner or admin
+// of orgID right now.
+func (b *Broker) requireOrgFlow(ctx context.Context, userID, orgID string) error {
+	if !b.orgConnections {
+		return errOrgConnectionsDisabled()
+	}
+	return requireOrgAdmin(ctx, userID, orgID)
+}
 
 func binderHash(binder string) []byte {
 	sum := sha256.Sum256([]byte("oauth-session\x00" + binder))
@@ -264,6 +299,13 @@ func (b *Broker) Start(ctx context.Context, p StartParams) (string, error) {
 	if p.UserID == "" {
 		return "", newError(CodeInvalidArgument, "an authenticated user is required")
 	}
+	owner := core.UserConnectionOwner(p.UserID)
+	if p.OrgID != "" {
+		if err := b.requireOrgFlow(ctx, p.UserID, p.OrgID); err != nil {
+			return "", err
+		}
+		owner = core.OrgConnectionOwner(p.OrgID)
+	}
 	redirectAfter, ok := SafeRedirectAfter(p.RedirectAfter)
 	if !ok {
 		return "", newError(CodeInvalidArgument, "redirect_after must be a relative path")
@@ -280,7 +322,7 @@ func (b *Broker) Start(ctx context.Context, p StartParams) (string, error) {
 	// connection's own, so it cannot be moved to another tenant.
 	params := p.Params
 	if p.ReconnectID != "" {
-		conn, err := b.store.GetConnection(ctx, p.UserID, p.ReconnectID)
+		conn, err := b.store.GetOwnedConnection(ctx, owner, p.ReconnectID)
 		if err != nil {
 			return "", mapStoreErr(err)
 		}
@@ -316,7 +358,7 @@ func (b *Broker) Start(ctx context.Context, p StartParams) (string, error) {
 		return "", &Error{Code: CodeInternal, Message: "sealing pkce verifier", Err: err}
 	}
 	if err := b.store.CreateOAuthFlow(ctx, &core.OAuthFlow{
-		StateHash: hash, UserID: p.UserID, SessionIDHash: binderHash(userBinder(p.UserID)), IntegrationID: prov.ID,
+		StateHash: hash, UserID: p.UserID, SessionIDHash: binderHash(flowBinder(p.UserID, p.OrgID)), IntegrationID: prov.ID, OrgID: p.OrgID,
 		PKCEVerifierSealed: sealed, RedirectAfter: redirectAfter, ReconnectConnectionID: p.ReconnectID,
 		ConnectionName: strings.TrimSpace(p.Name), Params: params, ReturnTo: returnTo, ExpiresAt: b.now().Add(FlowTTL),
 	}); err != nil {
@@ -358,6 +400,10 @@ type CompleteParams struct {
 	Code       string
 	// UserID is the authenticated caller finishing the flow.
 	UserID string
+	// Person is whether the caller's credential is a person's, not one an
+	// agent can hold (auth.RequirePerson): an org flow is finished only by a
+	// person.
+	Person bool
 }
 
 // Completion is what a finished flow produced.
@@ -385,8 +431,18 @@ func (b *Broker) Complete(ctx context.Context, p CompleteParams) (*Completion, e
 	}
 	// Login-CSRF defence: the flow must be finished by the user who started
 	// it, not merely by someone holding a valid state and code.
-	if !constantTimeEqual(flow.SessionIDHash, binderHash(userBinder(p.UserID))) {
+	if !constantTimeEqual(flow.SessionIDHash, binderHash(flowBinder(p.UserID, flow.OrgID))) {
 		return nil, newError(CodeFailedPrecondition, "this authorization was started by a different account")
+	}
+	// An org flow is finished only by someone who is STILL an owner or admin
+	// of the org (read fresh), while org connections are still enabled.
+	if flow.OrgID != "" {
+		if !p.Person {
+			return nil, HumanOnly()
+		}
+		if err := b.requireOrgFlow(ctx, p.UserID, flow.OrgID); err != nil {
+			return nil, err
+		}
 	}
 	if p.ProviderID != "" && p.ProviderID != flow.IntegrationID {
 		return nil, newError(CodeFailedPrecondition, "this authorization was started for a different integration")
@@ -467,10 +523,11 @@ func (b *Broker) Complete(ctx context.Context, p CompleteParams) (*Completion, e
 type plainField struct{ field, value string }
 
 func (b *Broker) upsert(ctx context.Context, flow *core.OAuthFlow, prov *Provider, who Identity, scopes []string, expires *time.Time, plain []plainField) (*core.Connection, error) {
+	owner := flowOwner(flow)
 	var existing *core.Connection
 	switch {
 	case flow.ReconnectConnectionID != "":
-		c, err := b.store.GetConnection(ctx, flow.UserID, flow.ReconnectConnectionID)
+		c, err := b.store.GetOwnedConnection(ctx, owner, flow.ReconnectConnectionID)
 		if err != nil {
 			return nil, mapStoreErr(err)
 		}
@@ -480,7 +537,7 @@ func (b *Broker) upsert(ctx context.Context, flow *core.OAuthFlow, prov *Provide
 		}
 		existing = c
 	case who.ExternalAccountID != "":
-		c, err := b.store.FindByExternalAccount(ctx, flow.UserID, prov.ID, who.ExternalAccountID)
+		c, err := b.store.FindOwnedByExternalAccount(ctx, owner, prov.ID, who.ExternalAccountID)
 		if err == nil {
 			existing = c
 		} else if !errors.Is(err, core.ErrConnectionNotFound) {
@@ -494,7 +551,7 @@ func (b *Broker) upsert(ctx context.Context, flow *core.OAuthFlow, prov *Provide
 	}
 	sealed := make([]core.ConnectionSecret, 0, len(plain))
 	for _, s := range plain {
-		ct, err := b.vault.Seal(ctx, vault.UserTenant(flow.UserID), []byte(s.value), SecretAAD(id, s.field))
+		ct, err := b.vault.Seal(ctx, tenantFor(owner), []byte(s.value), SecretAAD(id, s.field))
 		if err != nil {
 			return nil, &Error{Code: CodeInternal, Message: "sealing credential", Err: err}
 		}
@@ -508,7 +565,7 @@ func (b *Broker) upsert(ctx context.Context, flow *core.OAuthFlow, prov *Provide
 	if existing != nil {
 		kind := core.ConnectionEventReconnected
 		ev := userEvent(kind, flow.UserID)
-		conn, err := b.store.ReauthorizeConnection(ctx, flow.UserID, id, core.ConnectionUpdate{
+		conn, err := b.store.ReauthorizeOwnedConnection(ctx, owner, id, core.ConnectionUpdate{
 			AccountLabel: who.AccountLabel, ExternalAccountID: who.ExternalAccountID, SenderID: who.SenderID, Scopes: scopes,
 			OAuthClient: prov.ClientID, AccessExpiresAt: expires,
 		}, sealed, ev)
@@ -527,6 +584,11 @@ func (b *Broker) upsert(ctx context.Context, flow *core.OAuthFlow, prov *Provide
 		AuthKind: core.ConnectionAuthOAuth2, Name: name, Scopes: scopes, Status: core.ConnectionStatusActive,
 		AccessExpiresAt: expires, Params: flow.Params,
 	}
+	if owner.Kind == core.ConnectionOwnerOrg {
+		// user_id stays the admin who connected it: attribution only.
+		org := owner.ID
+		conn.OwnerKind, conn.OrgID = core.ConnectionOwnerOrg, &org
+	}
 	if who.AccountLabel != "" {
 		conn.AccountLabel = &who.AccountLabel
 	}
@@ -541,7 +603,7 @@ func (b *Broker) upsert(ctx context.Context, flow *core.OAuthFlow, prov *Provide
 	if err := b.store.CreateConnection(ctx, conn, sealed, userEvent(core.ConnectionEventCreated, flow.UserID)); err != nil {
 		return nil, mapStoreErr(err)
 	}
-	return b.store.GetConnection(ctx, flow.UserID, id)
+	return b.store.GetOwnedConnection(ctx, owner, id)
 }
 
 func uuidConnID() string { return "conn_" + strings.ReplaceAll(uuid.NewString(), "-", "") }

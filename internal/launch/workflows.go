@@ -610,7 +610,7 @@ func (l *Launcher) validateChatWorkflowInputsAt(ctx context.Context, userID stri
 	// explained error in the chat (models.ProviderUnavailableError.Explain).
 	modelSelectors := ExtractModelSelectors(finalInputs, wf.GetInputs(), "")
 	for inputPath, selector := range modelSelectors {
-		if err := drivers.ValidateModelSelector(ctx, userID, selector); err != nil {
+		if err := drivers.ValidateModelSelector(ctx, drivers.PersonalScope(userID), selector); err != nil {
 			if errors.Is(err, drivererrors.ErrNoServableProvider) {
 				logging.InfoContext(ctx, "Model input has no servable provider now; leaving it to the run to explain",
 					"input", inputPath, "workflow", workflowName, "reason", err.Error())
@@ -650,7 +650,7 @@ func (l *Launcher) SubstituteUnservableModels(ctx context.Context, userID string
 	if err != nil {
 		return nil
 	}
-	available, err := drivers.LookupAvailableDrivers(ctx, userID)
+	available, err := drivers.LookupAvailableDrivers(ctx, drivers.PersonalScope(userID))
 	if err != nil {
 		// Validation reports the failed settings read.
 		return nil

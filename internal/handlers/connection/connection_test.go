@@ -18,6 +18,7 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/connections"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/integrations/catalog"
@@ -67,6 +68,7 @@ var responseFieldAllowList = map[string]bool{
 	"reliant.v1.ConnectionEvent.tool_call_id":              true,
 	"reliant.v1.ConnectionEvent.actor":                     true,
 	"reliant.v1.ConnectionEvent.at":                        true,
+	"reliant.v1.ConnectionEvent.user_id":                   true,
 	"reliant.v1.Connection.id":                             true,
 	"reliant.v1.Connection.integration_id":                 true,
 	"reliant.v1.Connection.auth_kind":                      true,
@@ -89,6 +91,9 @@ var responseFieldAllowList = map[string]bool{
 	// an email address), never a credential: it is what their events carry
 	// in the clear as trigger.sender.id.
 	"reliant.v1.Connection.sender_id": true,
+	// Who owns the connection (a person or an org) and which org: ids.
+	"reliant.v1.Connection.owner_kind": true,
+	"reliant.v1.Connection.org_id":     true,
 }
 
 func walkMessage(md protoreflect.MessageDescriptor, seen map[protoreflect.FullName]bool, visit func(protoreflect.FieldDescriptor)) {
@@ -183,6 +188,9 @@ func TestConnectionServiceRequestSecretsAreDebugRedacted(t *testing.T) {
 type connectionFixture struct {
 	svc *Service
 	raw *sql.DB
+	// conns is the connections service svc serves, for a test that builds a
+	// Service with more deps over the same store.
+	conns *connections.Service
 }
 
 func newConnectionFixture(t *testing.T) *connectionFixture {
@@ -209,8 +217,9 @@ func newConnectionFixtureWithEnv(t *testing.T, getenv func(string) string) *conn
 	tokens := connections.NewTokenSource(store, v, providers, nil)
 	broker := connections.NewBroker(store, v, providers, nil, "https://api.reliant.example").
 		WithAppOrigins([]string{"https://app.reliant.example", "*", "app://bundle"})
-	svc := NewTestConnection(t, WithConnectionDeps(Deps{Connections: connections.NewService(store, v, providers, tokens, broker, nil)}))
-	return &connectionFixture{svc: svc, raw: raw}
+	conns := connections.NewService(store, v, providers, tokens, broker, nil).WithOrgConnections(true)
+	svc := NewTestConnection(t, WithConnectionDeps(Deps{Connections: conns}))
+	return &connectionFixture{svc: svc, raw: raw, conns: conns}
 }
 
 // StartOAuth relays the provider's redirect back to the web app the request
@@ -302,6 +311,51 @@ func TestConnectionService_CreateListGetNeverReturnSecret(t *testing.T) {
 }
 
 type fmtStringer interface{ String() string }
+
+// An org's connections are listed only when the request names the org, and
+// only to a live member of it; every row says whose it is. An old client,
+// which never names an org, sees exactly its own, as before.
+func TestConnectionService_ListConnectionsAddsTheNamedOrgsConnections(t *testing.T) {
+	f := newConnectionFixture(t)
+	mine := f.createKey(t, "dana", "http", "mine")
+	if _, err := f.raw.Exec(`INSERT INTO connections (id, owner_kind, user_id, org_id, integration_id, auth_kind, name, status)
+		VALUES ('conn-org', 'org', 'admin', 'org-1', 'http', 'api_key', 'Org key', 'active')`); err != nil {
+		t.Fatal(err)
+	}
+	members := orgMembership{"org-1": {"admin": true, "dana": true}}
+	as := func(user string) context.Context { return authz.WithMembership(asConnUser(user), members) }
+	list := func(ctx context.Context, org *string) (*connect.Response[reliantv1.ListConnectionsResponse], error) {
+		return f.svc.ListConnections(ctx, connect.NewRequest(&reliantv1.ListConnectionsRequest{OrgId: org}))
+	}
+
+	own, err := list(as("dana"), nil)
+	require.NoError(t, err)
+	require.Len(t, own.Msg.Connections, 1)
+	require.Equal(t, mine.Id, own.Msg.Connections[0].Id)
+	require.Equal(t, reliantv1.ConnectionOwnerKind_CONNECTION_OWNER_KIND_USER, own.Msg.Connections[0].OwnerKind)
+	require.Empty(t, own.Msg.Connections[0].OrgId)
+
+	org := "org-1"
+	both, err := list(as("dana"), &org)
+	require.NoError(t, err)
+	require.Len(t, both.Msg.Connections, 2)
+	got := both.Msg.Connections[1]
+	require.Equal(t, "conn-org", got.Id)
+	require.Equal(t, reliantv1.ConnectionOwnerKind_CONNECTION_OWNER_KIND_ORG, got.OwnerKind)
+	require.Equal(t, "org-1", got.OrgId)
+
+	_, err = list(as("mallory"), &org)
+	requireConnectCode(t, err, connect.CodePermissionDenied)
+	// The admin who created it reaches it as the org's, never as their own.
+	_, err = f.svc.GetConnection(as("admin"), connect.NewRequest(&reliantv1.GetConnectionRequest{Id: "conn-org"}))
+	requireConnectCode(t, err, connect.CodeNotFound)
+}
+
+type orgMembership map[string]map[string]bool
+
+func (m orgMembership) IsMember(_ context.Context, userID, orgID string) (bool, bool, error) {
+	return m[orgID][userID], true, nil
+}
 
 func TestConnectionService_OtherUserGetsNotFoundEverywhere(t *testing.T) {
 	f := newConnectionFixture(t)
@@ -441,4 +495,66 @@ func TestConnectionService_DefaultRenameDeleteEvents(t *testing.T) {
 	require.NoError(t, err)
 	_, err = f.svc.GetConnection(alice, connect.NewRequest(&reliantv1.GetConnectionRequest{Id: b.Id}))
 	requireConnectCode(t, err, connect.CodeNotFound)
+}
+
+// orgRoleMembership names roles: org -> user -> role.
+type orgRoleMembership map[string]map[string]string
+
+func (m orgRoleMembership) IsMember(_ context.Context, userID, orgID string) (bool, bool, error) {
+	_, ok := m[orgID][userID]
+	return ok, true, nil
+}
+
+func (m orgRoleMembership) RoleFresh(_ context.Context, userID, orgID string) (string, bool, error) {
+	return m[orgID][userID], true, nil
+}
+
+// Administering an org's connection is a person's act: an admin signed in to
+// the app may, the same admin through a credential an agent can hold (the CLI
+// login, an access token) is refused with reason human_only, and a member is
+// refused whatever they hold.
+func TestConnectionService_OrgConnectionAdministrationIsHumanOnly(t *testing.T) {
+	f := newConnectionFixture(t)
+	roles := orgRoleMembership{"org-1": {"ada": "admin", "dana": "member"}}
+	as := func(user string, c auth.Credential) context.Context {
+		return auth.WithCredential(authz.WithMembership(asConnUser(user), roles), c)
+	}
+	org := "org-1"
+	create := func(ctx context.Context, name string) (*connect.Response[reliantv1.CreateApiKeyConnectionResponse], error) {
+		return f.svc.CreateApiKeyConnection(ctx, connect.NewRequest(&reliantv1.CreateApiKeyConnectionRequest{
+			IntegrationId: "http", Name: name, Kind: reliantv1.ApiKeyConnectionKind_API_KEY_CONNECTION_KIND_API_KEY,
+			Fields: map[string]string{"api_key": "sk-org-secret-1"}, OwnerOrgId: &org,
+		}))
+	}
+	for _, c := range []auth.Credential{auth.CredentialAccessToken, auth.CredentialOAuthClient, auth.CredentialUnknown} {
+		_, err := create(as("ada", c), "by-token")
+		requireConnectCode(t, err, connect.CodePermissionDenied)
+		var ce *connect.Error
+		require.ErrorAs(t, err, &ce)
+		require.Equal(t, connections.ReasonHumanOnly, ce.Meta().Get(svcerr.ReasonHeader), "%v", c)
+	}
+	_, err := create(as("dana", auth.CredentialSession), "by-member")
+	requireConnectCode(t, err, connect.CodePermissionDenied)
+
+	made, err := create(as("ada", auth.CredentialSession), "by-person")
+	require.NoError(t, err)
+	got := made.Msg.Connection
+	require.Equal(t, reliantv1.ConnectionOwnerKind_CONNECTION_OWNER_KIND_ORG, got.OwnerKind)
+	require.Equal(t, "org-1", got.OrgId)
+	require.NotContains(t, made.Msg.String(), "sk-org-secret-1")
+
+	// A member reads it, with any credential; only a person who is an admin
+	// renames or deletes it.
+	read, err := f.svc.GetConnection(as("dana", auth.CredentialAccessToken), connect.NewRequest(&reliantv1.GetConnectionRequest{Id: got.Id, OwnerOrgId: &org}))
+	require.NoError(t, err)
+	require.Equal(t, got.Id, read.Msg.Connection.Id)
+	_, err = f.svc.DeleteConnection(as("ada", auth.CredentialAccessToken), connect.NewRequest(&reliantv1.DeleteConnectionRequest{Id: got.Id, OwnerOrgId: &org}))
+	requireConnectCode(t, err, connect.CodePermissionDenied)
+	_, err = f.svc.DeleteConnection(as("dana", auth.CredentialSession), connect.NewRequest(&reliantv1.DeleteConnectionRequest{Id: got.Id, OwnerOrgId: &org}))
+	requireConnectCode(t, err, connect.CodePermissionDenied)
+	// Without owner_org_id the id names the caller's own: the org's is not found.
+	_, err = f.svc.DeleteConnection(as("ada", auth.CredentialSession), connect.NewRequest(&reliantv1.DeleteConnectionRequest{Id: got.Id}))
+	requireConnectCode(t, err, connect.CodeNotFound)
+	_, err = f.svc.DeleteConnection(as("ada", auth.CredentialSession), connect.NewRequest(&reliantv1.DeleteConnectionRequest{Id: got.Id, OwnerOrgId: &org}))
+	require.NoError(t, err)
 }

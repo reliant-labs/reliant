@@ -30,6 +30,7 @@ describe("MachineFilterMenu", () => {
   it("is an icon at rest with All machines, and names a filter when one is on", () => {
     renderMenu(null);
     expect(screen.getByTestId("machine-filter-trigger")).toHaveAccessibleName("Filter by machine. Showing All machines");
+    expect(screen.getByTestId("machine-filter-trigger").querySelector("svg")).toHaveClass("lucide-monitor");
     expect(screen.queryByTestId("machine-filter-label")).toBeNull();
   });
 

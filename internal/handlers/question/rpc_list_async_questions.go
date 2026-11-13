@@ -31,12 +31,15 @@ func (s *Service) ListAsyncQuestions(
 	if req.Msg.ChatId == "" {
 		return nil, svcerr.InvalidArgument("chat_id is required")
 	}
+	// Serves viewers of a shared chat, as read-only cards.
+	ctx = authz.WithViewerReads(ctx)
 
 	chat, err := s.deps.Repo.GetChatRow(ctx, req.Msg.ChatId)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}
-	if !authz.CanReadChat(ctx, userID, chat) {
+	access, denied := authz.ReadChatAccess(ctx, userID, chat)
+	if denied != nil {
 		return nil, svcerr.NotFound("chat")
 	}
 
@@ -44,10 +47,5 @@ func (s *Service) ListAsyncQuestions(
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list async questions"))
 	}
-
-	resp := &pb.ListAsyncQuestionsResponse{Questions: make([]*pb.QuestionInfo, 0, len(questions))}
-	for _, q := range questions {
-		resp.Questions = append(resp.Questions, questionToProto(q))
-	}
-	return connect.NewResponse(resp), nil
+	return connect.NewResponse(&pb.ListAsyncQuestionsResponse{Questions: questionsToProto(questions, access)}), nil
 }

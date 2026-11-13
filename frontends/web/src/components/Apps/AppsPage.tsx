@@ -37,7 +37,7 @@ import { consolePath } from "../Forge/Console/paths";
 import { AreaShell } from "../Layout/AreaShell";
 import { envHealth, LiveLink } from "./appParts";
 import { useStartBuildingApp } from "./startBuilding";
-import { RunFromTerminal } from "../ForgeShell/RunFromTerminal";
+import { ForgeFirstRun } from "../ForgeShell/ForgeFirstRun";
 
 export function AppsPage() {
   return (
@@ -97,15 +97,7 @@ export function AppsBody({ variant = "reliant" }: { variant?: "reliant" | "forge
       <AvailabilityNote availability={availability} detail={detail} />
       {!loading && apps.length === 0 ? (
         forge ? (
-          <RunFromTerminal
-            title="Nothing deployed yet"
-            description="Deploy a forge project from its checkout and it shows up here, with the links to open it, one per environment."
-            commands={[
-              { label: "Sign the forge CLI in to this account", command: "forge login" },
-              { label: "Deploy to production", command: "forge env deploy prod" },
-            ]}
-            testId="apps-empty"
-          />
+          <ForgeFirstRun testId="apps-empty" />
         ) : (
           <NoApps onBuild={startBuilding} />
         )

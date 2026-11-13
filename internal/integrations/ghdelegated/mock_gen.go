@@ -17,7 +17,7 @@ import (
 )
 
 // forge:section MockService
-// forge:hash=61e8af3e0094b172a2eedee381fe546b184c35111a94af2107b432b093e2f87c
+// forge:hash=c3cc6bc16d2166454539ff03ee9e4978836a4f5db99dc65630c6865c04c1505c
 
 // MockService is a test mock for the Service interface.
 //
@@ -27,8 +27,10 @@ import (
 // "MockService.<Method>Func not set" error.
 type MockService struct {
 	contractkit.Recorder
-	ActingCredentialFunc func(context.Context, string, httpaction.CredentialRequest) (httpaction.Credential, error)
-	CredentialFunc       func(context.Context, string) (httpaction.Credential, error)
+	ActingCredentialFunc    func(context.Context, string, httpaction.CredentialRequest) (httpaction.Credential, error)
+	CredentialFunc          func(context.Context, string) (httpaction.Credential, error)
+	OwnsConnectionIDFunc    func(string) bool
+	OrgActingCredentialFunc func(context.Context, string, string, httpaction.CredentialRequest) (httpaction.Credential, error)
 }
 
 // ActingCredential records the call and delegates to ActingCredentialFunc when set.
@@ -47,6 +49,24 @@ func (m *MockService) Credential(ctx context.Context, ownerUserID string) (httpa
 		return m.CredentialFunc(ctx, ownerUserID)
 	}
 	return *new(httpaction.Credential), contractkit.MockNotSet("MockService", "Credential")
+}
+
+// OwnsConnectionID records the call and delegates to OwnsConnectionIDFunc when set.
+func (m *MockService) OwnsConnectionID(id string) bool {
+	m.Recorder.Record("OwnsConnectionID", id)
+	if m.OwnsConnectionIDFunc != nil {
+		return m.OwnsConnectionIDFunc(id)
+	}
+	return false
+}
+
+// OrgActingCredential records the call and delegates to OrgActingCredentialFunc when set.
+func (m *MockService) OrgActingCredential(ctx context.Context, ownerUserID string, orgID string, req httpaction.CredentialRequest) (httpaction.Credential, error) {
+	m.Recorder.Record("OrgActingCredential", ctx, ownerUserID, orgID, req)
+	if m.OrgActingCredentialFunc != nil {
+		return m.OrgActingCredentialFunc(ctx, ownerUserID, orgID, req)
+	}
+	return *new(httpaction.Credential), contractkit.MockNotSet("MockService", "OrgActingCredential")
 }
 
 // Compile-time check.

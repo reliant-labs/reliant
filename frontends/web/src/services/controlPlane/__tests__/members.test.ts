@@ -31,6 +31,7 @@ import {
   listMembers,
   listMembershipActivity,
   memberErrorMessage,
+  memberNamesBySubject,
   removeMember,
   revokeInvitation,
   seatSummary,
@@ -92,10 +93,38 @@ describe("wire mapping", () => {
     );
     const page = await listMembers(ORG);
     expect(page.members).toEqual([
-      { userId: "u_ada", email: "ada@example.com", name: "Ada", avatarUrl: "", role: "owner", joinedAt: JOINED, isFounder: true },
+      { userId: "u_ada", email: "ada@example.com", name: "Ada", avatarUrl: "", role: "owner", joinedAt: JOINED, isFounder: true, externalId: "" },
     ]);
     expect(page.nextPageToken).toBe("p2");
     expect(page.seats).toEqual({ members: 1, pendingInvitations: 2, limit: 3 });
+  });
+
+  // A shared chat names its owner by their sign-in subject: the roster must
+  // carry externalId from the wire into the model, and the lookup keyed by it
+  // must find them. An older control plane sends no externalId: nobody named.
+  it("carries each member's sign-in subject through to the shared-chat owner lookup", async () => {
+    setTransport(
+      mockTransport({
+        "OrganizationService.ListMembers": {
+          response: {
+            members: [
+              { userId: "u_ada", externalId: "sub-ada", email: "ada@example.com", name: "Ada", role: "owner" },
+              { userId: "u_lee", externalId: "sub-lee", email: "lee@example.com", name: "", role: "member" },
+              { userId: "u_old", email: "old@example.com", name: "Old", role: "member" },
+            ],
+          },
+        },
+      }),
+    );
+    const page = await listMembers(ORG);
+    expect(page.members.map((m) => m.externalId)).toEqual(["sub-ada", "sub-lee", ""]);
+
+    const names = memberNamesBySubject(page.members);
+    expect(names.get("sub-ada")).toBe("Ada");
+    expect(names.get("sub-lee")).toBe("lee@example.com");
+    expect(names.has("u_ada")).toBe(false);
+    expect([...names.values()]).not.toContain("Old");
+    expect(names.size).toBe(2);
   });
 
   it("sends the trimmed address and role, and returns the copy-link fallback", async () => {

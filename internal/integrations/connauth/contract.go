@@ -113,6 +113,24 @@ type ActingBroker interface {
 	ActingCredential(ctx context.Context, ownerUserID string, req httpaction.CredentialRequest) (httpaction.Credential, error)
 }
 
+// OrgActingBroker is an ActingBroker that can also speak as an ORG's own
+// identity: the GitHub App installation an org linked
+// (control-plane docs/design/org-sharing.md §7.1), which a call names by a
+// connection id the broker owns ("controlplane:github-app:<installation>").
+// Optional. Naming it is the explicit choice (D10): a call that names no
+// connection never reaches it.
+type OrgActingBroker interface {
+	ActingBroker
+	// OwnsConnectionID reports whether id names one of this broker's org
+	// identities.
+	OwnsConnectionID(id string) bool
+	// OrgActingCredential returns the credential req.ConnectionID names, for
+	// a run of orgID owned by ownerUserID, who the caller has established is
+	// a live member of orgID. Errors are *httpaction.CredentialError and
+	// final, as ActingCredential's.
+	OrgActingCredential(ctx context.Context, ownerUserID, orgID string, req httpaction.CredentialRequest) (httpaction.Credential, error)
+}
+
 // DelegatedBroker turns a run owner into a credential obtained from an
 // external authority at call time. ownerUserID is reliant's user id for the
 // run's owner (the IdP subject). The returned credential must pin itself to

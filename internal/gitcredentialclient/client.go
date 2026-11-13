@@ -28,6 +28,8 @@ const (
 	reasonAppNotInstalled  = "github_app_not_installed"
 	reasonAppPermissions   = "github_app_permissions"
 	reasonOwnerCannotPush  = "github_owner_cannot_push"
+	reasonAppNotLinked     = "github_app_not_linked"
+	reasonNotOrgMember     = "not_org_member"
 )
 
 // Client calls control-plane's GitCredentialInternalService.
@@ -94,12 +96,18 @@ func (c *Client) MintInstallationToken(ctx context.Context, req InstallationRequ
 	if len(req.Permissions) > 0 {
 		body["permissions"] = req.Permissions
 	}
+	if org := strings.TrimSpace(req.OrgID); org != "" {
+		body["orgId"] = org
+	}
 	var out struct {
 		Token          string    `json:"token"`
 		ExpiresAt      time.Time `json:"expiresAt"`
 		BotLogin       string    `json:"botLogin"`
 		ActingForLogin string    `json:"actingForLogin"`
 		Repository     string    `json:"repository"`
+		// int64 crosses Connect JSON as a string; absent from a control
+		// plane that predates it.
+		InstallationID json.Number `json:"installationId"`
 	}
 	if err := c.call(ctx, "MintInstallationToken", body, &out); err != nil {
 		return InstallationToken{}, err
@@ -107,13 +115,51 @@ func (c *Client) MintInstallationToken(ctx context.Context, req InstallationRequ
 	if out.Token == "" {
 		return InstallationToken{}, errors.New("gitcredentialclient: control-plane returned an empty installation token")
 	}
+	var installationID int64
+	if out.InstallationID != "" {
+		id, err := out.InstallationID.Int64()
+		if err != nil || id < 0 {
+			return InstallationToken{}, errors.New("gitcredentialclient: control-plane returned an invalid installation id")
+		}
+		installationID = id
+	}
 	return InstallationToken{
 		Token:          Token{accessToken: out.Token, ExpiresAt: &out.ExpiresAt},
 		ExpiresAt:      out.ExpiresAt,
 		BotLogin:       out.BotLogin,
 		ActingForLogin: out.ActingForLogin,
 		Repository:     out.Repository,
+		InstallationID: installationID,
 	}, nil
+}
+
+// ListOrgGitHubInstallations asks control-plane for the installations orgID
+// has linked.
+func (c *Client) ListOrgGitHubInstallations(ctx context.Context, orgID string) ([]OrgInstallation, error) {
+	if strings.TrimSpace(orgID) == "" {
+		return nil, errors.New("gitcredentialclient: org id is required")
+	}
+	var out struct {
+		Installations []struct {
+			// int64 crosses Connect JSON as a string.
+			InstallationID json.Number `json:"installationId"`
+			AccountLogin   string      `json:"accountLogin"`
+			AccountType    string      `json:"accountType"`
+			Suspended      bool        `json:"suspended"`
+		} `json:"installations"`
+	}
+	if err := c.call(ctx, "ListOrgGitHubInstallations", map[string]string{"orgId": orgID}, &out); err != nil {
+		return nil, err
+	}
+	list := make([]OrgInstallation, 0, len(out.Installations))
+	for _, in := range out.Installations {
+		id, err := in.InstallationID.Int64()
+		if err != nil || id <= 0 {
+			return nil, fmt.Errorf("gitcredentialclient: control-plane returned an invalid installation id")
+		}
+		list = append(list, OrgInstallation{InstallationID: id, AccountLogin: in.AccountLogin, AccountType: in.AccountType, Suspended: in.Suspended})
+	}
+	return list, nil
 }
 
 // call POSTs one Connect unary JSON request to the internal service and decodes
@@ -178,6 +224,8 @@ var reasonErrors = map[string]error{
 	reasonAppNotInstalled:  ErrAppNotInstalled,
 	reasonAppPermissions:   ErrAppPermissions,
 	reasonOwnerCannotPush:  ErrOwnerCannotPush,
+	reasonAppNotLinked:     ErrAppNotLinked,
+	reasonNotOrgMember:     ErrNotOrgMember,
 }
 
 // A Token holds plaintext by design, so it must not print it.

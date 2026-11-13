@@ -43,7 +43,7 @@ func TestBuildAvailableDrivers_CodexUsesPersistedAccessToken(t *testing.T) {
 
 	seedCodex(t, repo, userID, validToken, "refresh-token")
 
-	availableDrivers, err := buildAvailableDrivers(ctx, repo, userID, noReportClients)
+	availableDrivers, err := buildAvailableDrivers(ctx, repo, PersonalScope(userID), noReportClients)
 	require.NoError(t, err)
 
 	cfg, ok := availableDrivers.Drivers["codex"]
@@ -68,7 +68,7 @@ func TestBuildAvailableDrivers_CodexExpiredTokenIsRefreshable(t *testing.T) {
 	seedCodex(t, repo, userID, expiredToken, "refresh-token")
 	db.SeedProviderAccount(t, repo, userID, "openai", "sk-openai-test")
 
-	availableDrivers, err := buildAvailableDrivers(ctx, repo, userID, noReportClients)
+	availableDrivers, err := buildAvailableDrivers(ctx, repo, PersonalScope(userID), noReportClients)
 	require.NoError(t, err)
 
 	cfg, hasCodex := availableDrivers.Drivers["codex"]
@@ -95,7 +95,7 @@ func TestBuildAvailableDrivers_CodexExpiredWithoutRefreshTokenIsSkipped(t *testi
 
 	seedCodex(t, repo, userID, expiredToken, "")
 
-	availableDrivers, err := buildAvailableDrivers(ctx, repo, userID, noReportClients)
+	availableDrivers, err := buildAvailableDrivers(ctx, repo, PersonalScope(userID), noReportClients)
 	require.NoError(t, err)
 
 	_, hasCodex := availableDrivers.Drivers["codex"]
@@ -113,7 +113,7 @@ func TestBuildAvailableDrivers_ReliantConfiguredViaProviderAPIKey(t *testing.T) 
 
 	db.SeedProviderAccount(t, repo, userID, "reliant", validRlat)
 
-	availableDrivers, err := buildAvailableDrivers(ctx, repo, userID, noReportClients)
+	availableDrivers, err := buildAvailableDrivers(ctx, repo, PersonalScope(userID), noReportClients)
 	require.NoError(t, err)
 
 	cfg, ok := availableDrivers.Drivers["reliant"]
@@ -132,7 +132,7 @@ func TestBuildAvailableDrivers_ReliantNotConfiguredWithoutKey(t *testing.T) {
 
 	db.SeedProviderAccount(t, repo, userID, "anthropic", "sk-ant-test")
 
-	availableDrivers, err := buildAvailableDrivers(ctx, repo, userID, noReportClients)
+	availableDrivers, err := buildAvailableDrivers(ctx, repo, PersonalScope(userID), noReportClients)
 	require.NoError(t, err)
 
 	_, hasReliant := availableDrivers.Drivers["reliant"]
@@ -152,7 +152,7 @@ func TestBuildAvailableDrivers_ReliantLegacyKeyIsSkippedAndReported(t *testing.T
 	userID := "test-user"
 	db.SeedProviderAccount(t, repo, userID, "reliant", "rlnt_abcdef0123456789")
 
-	available, err := buildAvailableDrivers(ctx, repo, userID, noReportClients)
+	available, err := buildAvailableDrivers(ctx, repo, PersonalScope(userID), noReportClients)
 	require.NoError(t, err)
 	_, has := available.Drivers["reliant"]
 	assert.False(t, has, "legacy rlnt_ key must not register the reliant driver")

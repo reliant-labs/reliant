@@ -15,7 +15,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file reliant/v1/connection.proto.
  */
 export const file_reliant_v1_connection: GenFile = /*@__PURE__*/
-  fileDesc("ChtyZWxpYW50L3YxL2Nvbm5lY3Rpb24ucHJvdG8SCnJlbGlhbnQudjEi3QMKCkNvbm5lY3Rpb24SCgoCaWQYASABKAkSFgoOaW50ZWdyYXRpb25faWQYAiABKAkSMQoJYXV0aF9raW5kGAMgASgOMh4ucmVsaWFudC52MS5Db25uZWN0aW9uQXV0aEtpbmQSDAoEbmFtZRgEIAEoCRIVCg1hY2NvdW50X2xhYmVsGAUgASgJEhsKE2V4dGVybmFsX2FjY291bnRfaWQYBiABKAkSDgoGc2NvcGVzGAcgAygJEiwKBnN0YXR1cxgIIAEoDjIcLnJlbGlhbnQudjEuQ29ubmVjdGlvblN0YXR1cxIVCg1zdGF0dXNfcmVhc29uGAkgASgJEhIKCmlzX2RlZmF1bHQYCiABKAgSGQoRYWNjZXNzX2V4cGlyZXNfYXQYCyABKAkSFAoMbGFzdF91c2VkX2F0GAwgASgJEhIKCmNyZWF0ZWRfYXQYDSABKAkSEgoKdXBkYXRlZF9hdBgOIAEoCRIyCgZwYXJhbXMYDyADKAsyIi5yZWxpYW50LnYxLkNvbm5lY3Rpb24uUGFyYW1zRW50cnkSEQoJc2VuZGVyX2lkGBAgASgJGi0KC1BhcmFtc0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEipgEKC0ludGVncmF0aW9uEgoKAmlkGAEgASgJEhQKDGRpc3BsYXlfbmFtZRgCIAEoCRIyCgdtZXRob2RzGAYgAygLMiEucmVsaWFudC52MS5JbnRlZ3JhdGlvbkF1dGhNZXRob2QSQQoRY29ubmVjdGlvbl9wYXJhbXMYByADKAsyJi5yZWxpYW50LnYxLkludGVncmF0aW9uQ29ubmVjdGlvblBhcmFtIvIBChVJbnRlZ3JhdGlvbkF1dGhNZXRob2QSLAoEa2luZBgBIAEoDjIeLnJlbGlhbnQudjEuQ29ubmVjdGlvbkF1dGhLaW5kEhEKCWF2YWlsYWJsZRgCIAEoCBIaChJ1bmF2YWlsYWJsZV9yZWFzb24YAyABKAkSSAoMZmllbGRfbGFiZWxzGAQgAygLMjIucmVsaWFudC52MS5JbnRlZ3JhdGlvbkF1dGhNZXRob2QuRmllbGRMYWJlbHNFbnRyeRoyChBGaWVsZExhYmVsc0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEijwEKGkludGVncmF0aW9uQ29ubmVjdGlvblBhcmFtEgwKBG5hbWUYASABKAkSFAoMZGlzcGxheV9uYW1lGAIgASgJEhMKC2Rlc2NyaXB0aW9uGAMgASgJEg8KB3BhdHRlcm4YBCABKAkSFQoNZGVmYXVsdF92YWx1ZRgFIAEoCRIQCghyZXF1aXJlZBgGIAEoCCIZChdMaXN0SW50ZWdyYXRpb25zUmVxdWVzdCJJChhMaXN0SW50ZWdyYXRpb25zUmVzcG9uc2USLQoMaW50ZWdyYXRpb25zGAEgAygLMhcucmVsaWFudC52MS5JbnRlZ3JhdGlvbiJIChZMaXN0Q29ubmVjdGlvbnNSZXF1ZXN0EhsKDmludGVncmF0aW9uX2lkGAEgASgJSACIAQFCEQoPX2ludGVncmF0aW9uX2lkIkYKF0xpc3RDb25uZWN0aW9uc1Jlc3BvbnNlEisKC2Nvbm5lY3Rpb25zGAEgAygLMhYucmVsaWFudC52MS5Db25uZWN0aW9uIiIKFEdldENvbm5lY3Rpb25SZXF1ZXN0EgoKAmlkGAEgASgJIkMKFUdldENvbm5lY3Rpb25SZXNwb25zZRIqCgpjb25uZWN0aW9uGAEgASgLMhYucmVsaWFudC52MS5Db25uZWN0aW9uIuYCCh1DcmVhdGVBcGlLZXlDb25uZWN0aW9uUmVxdWVzdBIWCg5pbnRlZ3JhdGlvbl9pZBgBIAEoCRIMCgRuYW1lGAIgASgJEi4KBGtpbmQYAyABKA4yIC5yZWxpYW50LnYxLkFwaUtleUNvbm5lY3Rpb25LaW5kEkoKBmZpZWxkcxgEIAMoCzI1LnJlbGlhbnQudjEuQ3JlYXRlQXBpS2V5Q29ubmVjdGlvblJlcXVlc3QuRmllbGRzRW50cnlCA4ABARJFCgZwYXJhbXMYBSADKAsyNS5yZWxpYW50LnYxLkNyZWF0ZUFwaUtleUNvbm5lY3Rpb25SZXF1ZXN0LlBhcmFtc0VudHJ5Gi0KC0ZpZWxkc0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEaLQoLUGFyYW1zRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ASJMCh5DcmVhdGVBcGlLZXlDb25uZWN0aW9uUmVzcG9uc2USKgoKY29ubmVjdGlvbhgBIAEoCzIWLnJlbGlhbnQudjEuQ29ubmVjdGlvbiLsAQoRU3RhcnRPQXV0aFJlcXVlc3QSFgoOaW50ZWdyYXRpb25faWQYASABKAkSDAoEbmFtZRgCIAEoCRIUCgxyZWNvbm5lY3RfaWQYAyABKAkSFgoOcmVkaXJlY3RfYWZ0ZXIYBCABKAkSOQoGcGFyYW1zGAUgAygLMikucmVsaWFudC52MS5TdGFydE9BdXRoUmVxdWVzdC5QYXJhbXNFbnRyeRIZChFsb29wYmFja19yZWRpcmVjdBgGIAEoCRotCgtQYXJhbXNFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBIisKElN0YXJ0T0F1dGhSZXNwb25zZRIVCg1hdXRob3JpemVfdXJsGAEgASgJIj0KFENvbXBsZXRlT0F1dGhSZXF1ZXN0EhIKBXN0YXRlGAEgASgJQgOAAQESEQoEY29kZRgCIAEoCUIDgAEBIlsKFUNvbXBsZXRlT0F1dGhSZXNwb25zZRIqCgpjb25uZWN0aW9uGAEgASgLMhYucmVsaWFudC52MS5Db25uZWN0aW9uEhYKDnJlZGlyZWN0X2FmdGVyGAIgASgJIiMKFVRlc3RDb25uZWN0aW9uUmVxdWVzdBIKCgJpZBgBIAEoCSJgChZUZXN0Q29ubmVjdGlvblJlc3BvbnNlEgoKAm9rGAEgASgIEg4KBnByb2JlZBgCIAEoCBIVCg1hY2NvdW50X2xhYmVsGAMgASgJEhMKC2Vycm9yX2NsYXNzGAQgASgJIjMKF1JlbmFtZUNvbm5lY3Rpb25SZXF1ZXN0EgoKAmlkGAEgASgJEgwKBG5hbWUYAiABKAkiRgoYUmVuYW1lQ29ubmVjdGlvblJlc3BvbnNlEioKCmNvbm5lY3Rpb24YASABKAsyFi5yZWxpYW50LnYxLkNvbm5lY3Rpb24iKQobU2V0RGVmYXVsdENvbm5lY3Rpb25SZXF1ZXN0EgoKAmlkGAEgASgJIkoKHFNldERlZmF1bHRDb25uZWN0aW9uUmVzcG9uc2USKgoKY29ubmVjdGlvbhgBIAEoCzIWLnJlbGlhbnQudjEuQ29ubmVjdGlvbiIlChdEZWxldGVDb25uZWN0aW9uUmVxdWVzdBIKCgJpZBgBIAEoCSIaChhEZWxldGVDb25uZWN0aW9uUmVzcG9uc2UilAEKD0Nvbm5lY3Rpb25FdmVudBIKCgJpZBgBIAEoAxIVCg1jb25uZWN0aW9uX2lkGAIgASgJEgwKBGtpbmQYAyABKAkSDgoGcnVuX2lkGAQgASgJEg8KB25vZGVfaWQYBSABKAkSFAoMdG9vbF9jYWxsX2lkGAYgASgJEg0KBWFjdG9yGAcgASgJEgoKAmF0GAggASgJImYKG0xpc3RDb25uZWN0aW9uRXZlbnRzUmVxdWVzdBISCgJpZBgBIAEoCUIGukgDyAEBEg0KBWxpbWl0GAIgASgFEhYKCWJlZm9yZV9pZBgDIAEoA0gAiAEBQgwKCl9iZWZvcmVfaWQiSwocTGlzdENvbm5lY3Rpb25FdmVudHNSZXNwb25zZRIrCgZldmVudHMYASADKAsyGy5yZWxpYW50LnYxLkNvbm5lY3Rpb25FdmVudCrgAQoSQ29ubmVjdGlvbkF1dGhLaW5kEiQKIENPTk5FQ1RJT05fQVVUSF9LSU5EX1VOU1BFQ0lGSUVEEAASHwobQ09OTkVDVElPTl9BVVRIX0tJTkRfT0FVVEgyEAESIAocQ09OTkVDVElPTl9BVVRIX0tJTkRfQVBJX0tFWRADEh4KGkNPTk5FQ1RJT05fQVVUSF9LSU5EX0JBU0lDEAQSHQoZQ09OTkVDVElPTl9BVVRIX0tJTkRfTk9ORRAFEiIKHkNPTk5FQ1RJT05fQVVUSF9LSU5EX0RFTEVHQVRFRBAGKpYBChBDb25uZWN0aW9uU3RhdHVzEiEKHUNPTk5FQ1RJT05fU1RBVFVTX1VOU1BFQ0lGSUVEEAASHAoYQ09OTkVDVElPTl9TVEFUVVNfQUNUSVZFEAESIgoeQ09OTkVDVElPTl9TVEFUVVNfTkVFRFNfUkVBVVRIEAISHQoZQ09OTkVDVElPTl9TVEFUVVNfUkVWT0tFRBADKocBChRBcGlLZXlDb25uZWN0aW9uS2luZBInCiNBUElfS0VZX0NPTk5FQ1RJT05fS0lORF9VTlNQRUNJRklFRBAAEiMKH0FQSV9LRVlfQ09OTkVDVElPTl9LSU5EX0FQSV9LRVkQARIhCh1BUElfS0VZX0NPTk5FQ1RJT05fS0lORF9CQVNJQxACMvAMChFDb25uZWN0aW9uU2VydmljZRJfChBMaXN0SW50ZWdyYXRpb25zEiMucmVsaWFudC52MS5MaXN0SW50ZWdyYXRpb25zUmVxdWVzdBokLnJlbGlhbnQudjEuTGlzdEludGVncmF0aW9uc1Jlc3BvbnNlIgASXAoPTGlzdENvbm5lY3Rpb25zEiIucmVsaWFudC52MS5MaXN0Q29ubmVjdGlvbnNSZXF1ZXN0GiMucmVsaWFudC52MS5MaXN0Q29ubmVjdGlvbnNSZXNwb25zZSIAElYKDUdldENvbm5lY3Rpb24SIC5yZWxpYW50LnYxLkdldENvbm5lY3Rpb25SZXF1ZXN0GiEucmVsaWFudC52MS5HZXRDb25uZWN0aW9uUmVzcG9uc2UiABLPAQoWQ3JlYXRlQXBpS2V5Q29ubmVjdGlvbhIpLnJlbGlhbnQudjEuQ3JlYXRlQXBpS2V5Q29ubmVjdGlvblJlcXVlc3QaKi5yZWxpYW50LnYxLkNyZWF0ZUFwaUtleUNvbm5lY3Rpb25SZXNwb25zZSJeorsYWjpYCgZjcmVhdGUSPgoKY29ubmVjdGlvbhIWcmVzcG9uc2UuY29ubmVjdGlvbi5pZBoYcmVzcG9uc2UuY29ubmVjdGlvbi5uYW1lKg5pbnRlZ3JhdGlvbl9pZBKsAQoKU3RhcnRPQXV0aBIdLnJlbGlhbnQudjEuU3RhcnRPQXV0aFJlcXVlc3QaHi5yZWxpYW50LnYxLlN0YXJ0T0F1dGhSZXNwb25zZSJforsYWzpZOldPQXV0aCBoYW5kc2hha2UgaW4gZmxpZ2h0OiBub3RoaW5nIGlzIHN0b3JlZCB1bnRpbCBDb21wbGV0ZU9BdXRoIHJlY29yZHMgdGhlIGNvbm5lY3Rpb24SyQEKDUNvbXBsZXRlT0F1dGgSIC5yZWxpYW50LnYxLkNvbXBsZXRlT0F1dGhSZXF1ZXN0GiEucmVsaWFudC52MS5Db21wbGV0ZU9BdXRoUmVzcG9uc2Uic6K7GG86bQoHY29ubmVjdBI+Cgpjb25uZWN0aW9uEhZyZXNwb25zZS5jb25uZWN0aW9uLmlkGhhyZXNwb25zZS5jb25uZWN0aW9uLm5hbWUqInJlc3BvbnNlLmNvbm5lY3Rpb24uaW50ZWdyYXRpb25faWQSzwEKDlRlc3RDb25uZWN0aW9uEiEucmVsaWFudC52MS5UZXN0Q29ubmVjdGlvblJlcXVlc3QaIi5yZWxpYW50LnYxLlRlc3RDb25uZWN0aW9uUmVzcG9uc2UidqK7GHI6cDpucHJvYmVzIHRoZSBsaXZlIGNyZWRlbnRpYWw7IHJlZnJlc2hpbmcgdGhlIGFjY291bnQgbGFiZWwgaXQgZGV0ZWN0cyBpcyBib29ra2VlcGluZywgbm90IGEgY2hhbmdlIGEgcGVyc29uIG1hZGUShQEKEFJlbmFtZUNvbm5lY3Rpb24SIy5yZWxpYW50LnYxLlJlbmFtZUNvbm5lY3Rpb25SZXF1ZXN0GiQucmVsaWFudC52MS5SZW5hbWVDb25uZWN0aW9uUmVzcG9uc2UiJqK7GCI6IAoGcmVuYW1lEhYKCmNvbm5lY3Rpb24SAmlkGgRuYW1lEs4BChRTZXREZWZhdWx0Q29ubmVjdGlvbhInLnJlbGlhbnQudjEuU2V0RGVmYXVsdENvbm5lY3Rpb25SZXF1ZXN0GigucmVsaWFudC52MS5TZXREZWZhdWx0Q29ubmVjdGlvblJlc3BvbnNlImOiuxhfOl0KC3NldF9kZWZhdWx0EioKCmNvbm5lY3Rpb24SAmlkGhhyZXNwb25zZS5jb25uZWN0aW9uLm5hbWUqInJlc3BvbnNlLmNvbm5lY3Rpb24uaW50ZWdyYXRpb25faWQSXwoQRGVsZXRlQ29ubmVjdGlvbhIjLnJlbGlhbnQudjEuRGVsZXRlQ29ubmVjdGlvblJlcXVlc3QaJC5yZWxpYW50LnYxLkRlbGV0ZUNvbm5lY3Rpb25SZXNwb25zZSIAEmsKFExpc3RDb25uZWN0aW9uRXZlbnRzEicucmVsaWFudC52MS5MaXN0Q29ubmVjdGlvbkV2ZW50c1JlcXVlc3QaKC5yZWxpYW50LnYxLkxpc3RDb25uZWN0aW9uRXZlbnRzUmVzcG9uc2UiAEI6WjhnaXRodWIuY29tL3JlbGlhbnQtbGFicy9yZWxpYW50L2dlbi9yZWxpYW50L3YxO3JlbGlhbnR2MWIGcHJvdG8z", [file_buf_validate_validate, file_forge_v1_forge]);
+  fileDesc("ChtyZWxpYW50L3YxL2Nvbm5lY3Rpb24ucHJvdG8SCnJlbGlhbnQudjEiogQKCkNvbm5lY3Rpb24SCgoCaWQYASABKAkSFgoOaW50ZWdyYXRpb25faWQYAiABKAkSMQoJYXV0aF9raW5kGAMgASgOMh4ucmVsaWFudC52MS5Db25uZWN0aW9uQXV0aEtpbmQSDAoEbmFtZRgEIAEoCRIVCg1hY2NvdW50X2xhYmVsGAUgASgJEhsKE2V4dGVybmFsX2FjY291bnRfaWQYBiABKAkSDgoGc2NvcGVzGAcgAygJEiwKBnN0YXR1cxgIIAEoDjIcLnJlbGlhbnQudjEuQ29ubmVjdGlvblN0YXR1cxIVCg1zdGF0dXNfcmVhc29uGAkgASgJEhIKCmlzX2RlZmF1bHQYCiABKAgSGQoRYWNjZXNzX2V4cGlyZXNfYXQYCyABKAkSFAoMbGFzdF91c2VkX2F0GAwgASgJEhIKCmNyZWF0ZWRfYXQYDSABKAkSEgoKdXBkYXRlZF9hdBgOIAEoCRIyCgZwYXJhbXMYDyADKAsyIi5yZWxpYW50LnYxLkNvbm5lY3Rpb24uUGFyYW1zRW50cnkSEQoJc2VuZGVyX2lkGBAgASgJEjMKCm93bmVyX2tpbmQYESABKA4yHy5yZWxpYW50LnYxLkNvbm5lY3Rpb25Pd25lcktpbmQSDgoGb3JnX2lkGBIgASgJGi0KC1BhcmFtc0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEipgEKC0ludGVncmF0aW9uEgoKAmlkGAEgASgJEhQKDGRpc3BsYXlfbmFtZRgCIAEoCRIyCgdtZXRob2RzGAYgAygLMiEucmVsaWFudC52MS5JbnRlZ3JhdGlvbkF1dGhNZXRob2QSQQoRY29ubmVjdGlvbl9wYXJhbXMYByADKAsyJi5yZWxpYW50LnYxLkludGVncmF0aW9uQ29ubmVjdGlvblBhcmFtIvIBChVJbnRlZ3JhdGlvbkF1dGhNZXRob2QSLAoEa2luZBgBIAEoDjIeLnJlbGlhbnQudjEuQ29ubmVjdGlvbkF1dGhLaW5kEhEKCWF2YWlsYWJsZRgCIAEoCBIaChJ1bmF2YWlsYWJsZV9yZWFzb24YAyABKAkSSAoMZmllbGRfbGFiZWxzGAQgAygLMjIucmVsaWFudC52MS5JbnRlZ3JhdGlvbkF1dGhNZXRob2QuRmllbGRMYWJlbHNFbnRyeRoyChBGaWVsZExhYmVsc0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEijwEKGkludGVncmF0aW9uQ29ubmVjdGlvblBhcmFtEgwKBG5hbWUYASABKAkSFAoMZGlzcGxheV9uYW1lGAIgASgJEhMKC2Rlc2NyaXB0aW9uGAMgASgJEg8KB3BhdHRlcm4YBCABKAkSFQoNZGVmYXVsdF92YWx1ZRgFIAEoCRIQCghyZXF1aXJlZBgGIAEoCCIZChdMaXN0SW50ZWdyYXRpb25zUmVxdWVzdCJJChhMaXN0SW50ZWdyYXRpb25zUmVzcG9uc2USLQoMaW50ZWdyYXRpb25zGAEgAygLMhcucmVsaWFudC52MS5JbnRlZ3JhdGlvbiJoChZMaXN0Q29ubmVjdGlvbnNSZXF1ZXN0EhsKDmludGVncmF0aW9uX2lkGAEgASgJSACIAQESEwoGb3JnX2lkGAIgASgJSAGIAQFCEQoPX2ludGVncmF0aW9uX2lkQgkKB19vcmdfaWQiRgoXTGlzdENvbm5lY3Rpb25zUmVzcG9uc2USKwoLY29ubmVjdGlvbnMYASADKAsyFi5yZWxpYW50LnYxLkNvbm5lY3Rpb24iTgoUR2V0Q29ubmVjdGlvblJlcXVlc3QSCgoCaWQYASABKAkSGQoMb3duZXJfb3JnX2lkGAIgASgJSACIAQFCDwoNX293bmVyX29yZ19pZCJDChVHZXRDb25uZWN0aW9uUmVzcG9uc2USKgoKY29ubmVjdGlvbhgBIAEoCzIWLnJlbGlhbnQudjEuQ29ubmVjdGlvbiKSAwodQ3JlYXRlQXBpS2V5Q29ubmVjdGlvblJlcXVlc3QSFgoOaW50ZWdyYXRpb25faWQYASABKAkSDAoEbmFtZRgCIAEoCRIuCgRraW5kGAMgASgOMiAucmVsaWFudC52MS5BcGlLZXlDb25uZWN0aW9uS2luZBJKCgZmaWVsZHMYBCADKAsyNS5yZWxpYW50LnYxLkNyZWF0ZUFwaUtleUNvbm5lY3Rpb25SZXF1ZXN0LkZpZWxkc0VudHJ5QgOAAQESRQoGcGFyYW1zGAUgAygLMjUucmVsaWFudC52MS5DcmVhdGVBcGlLZXlDb25uZWN0aW9uUmVxdWVzdC5QYXJhbXNFbnRyeRIZCgxvd25lcl9vcmdfaWQYBiABKAlIAIgBARotCgtGaWVsZHNFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBGi0KC1BhcmFtc0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAFCDwoNX293bmVyX29yZ19pZCJMCh5DcmVhdGVBcGlLZXlDb25uZWN0aW9uUmVzcG9uc2USKgoKY29ubmVjdGlvbhgBIAEoCzIWLnJlbGlhbnQudjEuQ29ubmVjdGlvbiKYAgoRU3RhcnRPQXV0aFJlcXVlc3QSFgoOaW50ZWdyYXRpb25faWQYASABKAkSDAoEbmFtZRgCIAEoCRIUCgxyZWNvbm5lY3RfaWQYAyABKAkSFgoOcmVkaXJlY3RfYWZ0ZXIYBCABKAkSOQoGcGFyYW1zGAUgAygLMikucmVsaWFudC52MS5TdGFydE9BdXRoUmVxdWVzdC5QYXJhbXNFbnRyeRIZChFsb29wYmFja19yZWRpcmVjdBgGIAEoCRIZCgxvd25lcl9vcmdfaWQYByABKAlIAIgBARotCgtQYXJhbXNFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBQg8KDV9vd25lcl9vcmdfaWQiKwoSU3RhcnRPQXV0aFJlc3BvbnNlEhUKDWF1dGhvcml6ZV91cmwYASABKAkiPQoUQ29tcGxldGVPQXV0aFJlcXVlc3QSEgoFc3RhdGUYASABKAlCA4ABARIRCgRjb2RlGAIgASgJQgOAAQEiWwoVQ29tcGxldGVPQXV0aFJlc3BvbnNlEioKCmNvbm5lY3Rpb24YASABKAsyFi5yZWxpYW50LnYxLkNvbm5lY3Rpb24SFgoOcmVkaXJlY3RfYWZ0ZXIYAiABKAkiTwoVVGVzdENvbm5lY3Rpb25SZXF1ZXN0EgoKAmlkGAEgASgJEhkKDG93bmVyX29yZ19pZBgCIAEoCUgAiAEBQg8KDV9vd25lcl9vcmdfaWQiYAoWVGVzdENvbm5lY3Rpb25SZXNwb25zZRIKCgJvaxgBIAEoCBIOCgZwcm9iZWQYAiABKAgSFQoNYWNjb3VudF9sYWJlbBgDIAEoCRITCgtlcnJvcl9jbGFzcxgEIAEoCSJfChdSZW5hbWVDb25uZWN0aW9uUmVxdWVzdBIKCgJpZBgBIAEoCRIMCgRuYW1lGAIgASgJEhkKDG93bmVyX29yZ19pZBgDIAEoCUgAiAEBQg8KDV9vd25lcl9vcmdfaWQiRgoYUmVuYW1lQ29ubmVjdGlvblJlc3BvbnNlEioKCmNvbm5lY3Rpb24YASABKAsyFi5yZWxpYW50LnYxLkNvbm5lY3Rpb24iVQobU2V0RGVmYXVsdENvbm5lY3Rpb25SZXF1ZXN0EgoKAmlkGAEgASgJEhkKDG93bmVyX29yZ19pZBgCIAEoCUgAiAEBQg8KDV9vd25lcl9vcmdfaWQiSgocU2V0RGVmYXVsdENvbm5lY3Rpb25SZXNwb25zZRIqCgpjb25uZWN0aW9uGAEgASgLMhYucmVsaWFudC52MS5Db25uZWN0aW9uIlEKF0RlbGV0ZUNvbm5lY3Rpb25SZXF1ZXN0EgoKAmlkGAEgASgJEhkKDG93bmVyX29yZ19pZBgCIAEoCUgAiAEBQg8KDV9vd25lcl9vcmdfaWQiGgoYRGVsZXRlQ29ubmVjdGlvblJlc3BvbnNlIqUBCg9Db25uZWN0aW9uRXZlbnQSCgoCaWQYASABKAMSFQoNY29ubmVjdGlvbl9pZBgCIAEoCRIMCgRraW5kGAMgASgJEg4KBnJ1bl9pZBgEIAEoCRIPCgdub2RlX2lkGAUgASgJEhQKDHRvb2xfY2FsbF9pZBgGIAEoCRINCgVhY3RvchgHIAEoCRIKCgJhdBgIIAEoCRIPCgd1c2VyX2lkGAkgASgJIpIBChtMaXN0Q29ubmVjdGlvbkV2ZW50c1JlcXVlc3QSEgoCaWQYASABKAlCBrpIA8gBARINCgVsaW1pdBgCIAEoBRIWCgliZWZvcmVfaWQYAyABKANIAIgBARIZCgxvd25lcl9vcmdfaWQYBCABKAlIAYgBAUIMCgpfYmVmb3JlX2lkQg8KDV9vd25lcl9vcmdfaWQiSwocTGlzdENvbm5lY3Rpb25FdmVudHNSZXNwb25zZRIrCgZldmVudHMYASADKAsyGy5yZWxpYW50LnYxLkNvbm5lY3Rpb25FdmVudCrgAQoSQ29ubmVjdGlvbkF1dGhLaW5kEiQKIENPTk5FQ1RJT05fQVVUSF9LSU5EX1VOU1BFQ0lGSUVEEAASHwobQ09OTkVDVElPTl9BVVRIX0tJTkRfT0FVVEgyEAESIAocQ09OTkVDVElPTl9BVVRIX0tJTkRfQVBJX0tFWRADEh4KGkNPTk5FQ1RJT05fQVVUSF9LSU5EX0JBU0lDEAQSHQoZQ09OTkVDVElPTl9BVVRIX0tJTkRfTk9ORRAFEiIKHkNPTk5FQ1RJT05fQVVUSF9LSU5EX0RFTEVHQVRFRBAGKpYBChBDb25uZWN0aW9uU3RhdHVzEiEKHUNPTk5FQ1RJT05fU1RBVFVTX1VOU1BFQ0lGSUVEEAASHAoYQ09OTkVDVElPTl9TVEFUVVNfQUNUSVZFEAESIgoeQ09OTkVDVElPTl9TVEFUVVNfTkVFRFNfUkVBVVRIEAISHQoZQ09OTkVDVElPTl9TVEFUVVNfUkVWT0tFRBADKnsKE0Nvbm5lY3Rpb25Pd25lcktpbmQSJQohQ09OTkVDVElPTl9PV05FUl9LSU5EX1VOU1BFQ0lGSUVEEAASHgoaQ09OTkVDVElPTl9PV05FUl9LSU5EX1VTRVIQARIdChlDT05ORUNUSU9OX09XTkVSX0tJTkRfT1JHEAIqhwEKFEFwaUtleUNvbm5lY3Rpb25LaW5kEicKI0FQSV9LRVlfQ09OTkVDVElPTl9LSU5EX1VOU1BFQ0lGSUVEEAASIwofQVBJX0tFWV9DT05ORUNUSU9OX0tJTkRfQVBJX0tFWRABEiEKHUFQSV9LRVlfQ09OTkVDVElPTl9LSU5EX0JBU0lDEAIy8AwKEUNvbm5lY3Rpb25TZXJ2aWNlEl8KEExpc3RJbnRlZ3JhdGlvbnMSIy5yZWxpYW50LnYxLkxpc3RJbnRlZ3JhdGlvbnNSZXF1ZXN0GiQucmVsaWFudC52MS5MaXN0SW50ZWdyYXRpb25zUmVzcG9uc2UiABJcCg9MaXN0Q29ubmVjdGlvbnMSIi5yZWxpYW50LnYxLkxpc3RDb25uZWN0aW9uc1JlcXVlc3QaIy5yZWxpYW50LnYxLkxpc3RDb25uZWN0aW9uc1Jlc3BvbnNlIgASVgoNR2V0Q29ubmVjdGlvbhIgLnJlbGlhbnQudjEuR2V0Q29ubmVjdGlvblJlcXVlc3QaIS5yZWxpYW50LnYxLkdldENvbm5lY3Rpb25SZXNwb25zZSIAEs8BChZDcmVhdGVBcGlLZXlDb25uZWN0aW9uEikucmVsaWFudC52MS5DcmVhdGVBcGlLZXlDb25uZWN0aW9uUmVxdWVzdBoqLnJlbGlhbnQudjEuQ3JlYXRlQXBpS2V5Q29ubmVjdGlvblJlc3BvbnNlIl6iuxhaOlgKBmNyZWF0ZRI+Cgpjb25uZWN0aW9uEhZyZXNwb25zZS5jb25uZWN0aW9uLmlkGhhyZXNwb25zZS5jb25uZWN0aW9uLm5hbWUqDmludGVncmF0aW9uX2lkEqwBCgpTdGFydE9BdXRoEh0ucmVsaWFudC52MS5TdGFydE9BdXRoUmVxdWVzdBoeLnJlbGlhbnQudjEuU3RhcnRPQXV0aFJlc3BvbnNlIl+iuxhbOlk6V09BdXRoIGhhbmRzaGFrZSBpbiBmbGlnaHQ6IG5vdGhpbmcgaXMgc3RvcmVkIHVudGlsIENvbXBsZXRlT0F1dGggcmVjb3JkcyB0aGUgY29ubmVjdGlvbhLJAQoNQ29tcGxldGVPQXV0aBIgLnJlbGlhbnQudjEuQ29tcGxldGVPQXV0aFJlcXVlc3QaIS5yZWxpYW50LnYxLkNvbXBsZXRlT0F1dGhSZXNwb25zZSJzorsYbzptCgdjb25uZWN0Ej4KCmNvbm5lY3Rpb24SFnJlc3BvbnNlLmNvbm5lY3Rpb24uaWQaGHJlc3BvbnNlLmNvbm5lY3Rpb24ubmFtZSoicmVzcG9uc2UuY29ubmVjdGlvbi5pbnRlZ3JhdGlvbl9pZBLPAQoOVGVzdENvbm5lY3Rpb24SIS5yZWxpYW50LnYxLlRlc3RDb25uZWN0aW9uUmVxdWVzdBoiLnJlbGlhbnQudjEuVGVzdENvbm5lY3Rpb25SZXNwb25zZSJ2orsYcjpwOm5wcm9iZXMgdGhlIGxpdmUgY3JlZGVudGlhbDsgcmVmcmVzaGluZyB0aGUgYWNjb3VudCBsYWJlbCBpdCBkZXRlY3RzIGlzIGJvb2trZWVwaW5nLCBub3QgYSBjaGFuZ2UgYSBwZXJzb24gbWFkZRKFAQoQUmVuYW1lQ29ubmVjdGlvbhIjLnJlbGlhbnQudjEuUmVuYW1lQ29ubmVjdGlvblJlcXVlc3QaJC5yZWxpYW50LnYxLlJlbmFtZUNvbm5lY3Rpb25SZXNwb25zZSImorsYIjogCgZyZW5hbWUSFgoKY29ubmVjdGlvbhICaWQaBG5hbWUSzgEKFFNldERlZmF1bHRDb25uZWN0aW9uEicucmVsaWFudC52MS5TZXREZWZhdWx0Q29ubmVjdGlvblJlcXVlc3QaKC5yZWxpYW50LnYxLlNldERlZmF1bHRDb25uZWN0aW9uUmVzcG9uc2UiY6K7GF86XQoLc2V0X2RlZmF1bHQSKgoKY29ubmVjdGlvbhICaWQaGHJlc3BvbnNlLmNvbm5lY3Rpb24ubmFtZSoicmVzcG9uc2UuY29ubmVjdGlvbi5pbnRlZ3JhdGlvbl9pZBJfChBEZWxldGVDb25uZWN0aW9uEiMucmVsaWFudC52MS5EZWxldGVDb25uZWN0aW9uUmVxdWVzdBokLnJlbGlhbnQudjEuRGVsZXRlQ29ubmVjdGlvblJlc3BvbnNlIgASawoUTGlzdENvbm5lY3Rpb25FdmVudHMSJy5yZWxpYW50LnYxLkxpc3RDb25uZWN0aW9uRXZlbnRzUmVxdWVzdBooLnJlbGlhbnQudjEuTGlzdENvbm5lY3Rpb25FdmVudHNSZXNwb25zZSIAQjpaOGdpdGh1Yi5jb20vcmVsaWFudC1sYWJzL3JlbGlhbnQvZ2VuL3JlbGlhbnQvdjE7cmVsaWFudHYxYgZwcm90bzM", [file_buf_validate_validate, file_forge_v1_forge]);
 
 /**
  * Connection is metadata only. There is deliberately no field that could hold
@@ -118,6 +118,21 @@ export type Connection = Message<"reliant.v1.Connection"> & {
    * @generated from field: string sender_id = 16;
    */
   senderId: string;
+
+  /**
+   * Who the connection belongs to. An org connection's other fields describe
+   * the org's account (its Slack bot, its API key), not the caller's.
+   *
+   * @generated from field: reliant.v1.ConnectionOwnerKind owner_kind = 17;
+   */
+  ownerKind: ConnectionOwnerKind;
+
+  /**
+   * The organization of an org connection; empty for a personal one.
+   *
+   * @generated from field: string org_id = 18;
+   */
+  orgId: string;
 };
 
 /**
@@ -290,6 +305,16 @@ export type ListConnectionsRequest = Message<"reliant.v1.ListConnectionsRequest"
    * @generated from field: optional string integration_id = 1;
    */
   integrationId?: string | undefined;
+
+  /**
+   * OrgId adds that organization's connections (owner_kind ORG) to the
+   * caller's own, for a caller who is a live member of it
+   * (PERMISSION_DENIED otherwise). Unset lists only the caller's own, as
+   * before this field existed.
+   *
+   * @generated from field: optional string org_id = 2;
+   */
+  orgId?: string | undefined;
 };
 
 /**
@@ -324,6 +349,16 @@ export type GetConnectionRequest = Message<"reliant.v1.GetConnectionRequest"> & 
    * @generated from field: string id = 1;
    */
   id: string;
+
+  /**
+   * OwnerOrgId, when set, makes this about a connection of that
+   * organization (owner_kind ORG) instead of the caller's own. Any live member of it may read one.
+   * It is never filled in for the caller (it is not org_id, which the web
+   * app fills with the active org): acting on an org's account is explicit.
+   *
+   * @generated from field: optional string owner_org_id = 2;
+   */
+  ownerOrgId?: string | undefined;
 };
 
 /**
@@ -384,6 +419,17 @@ export type CreateApiKeyConnectionRequest = Message<"reliant.v1.CreateApiKeyConn
    * @generated from field: map<string, string> params = 5;
    */
   params: { [key: string]: string };
+
+  /**
+   * OwnerOrgId, when set, makes this about a connection of that
+   * organization (owner_kind ORG) instead of the caller's own. Only an owner or admin of it, signed in to the app as a person, may.
+   * The deployment must enable org connections (orgs.connections_enabled).
+   * It is never filled in for the caller (it is not org_id, which the web
+   * app fills with the active org): acting on an org's account is explicit.
+   *
+   * @generated from field: optional string owner_org_id = 6;
+   */
+  ownerOrgId?: string | undefined;
 };
 
 /**
@@ -456,6 +502,19 @@ export type StartOAuthRequest = Message<"reliant.v1.StartOAuthRequest"> & {
    * @generated from field: string loopback_redirect = 6;
    */
   loopbackRedirect: string;
+
+  /**
+   * OwnerOrgId, when set, makes this about a connection of that
+   * organization (owner_kind ORG) instead of the caller's own. A new connection, or with reconnect_id a
+   * reconnect of one of the org's. Only an owner or admin of it, signed in to the app as a person, may. The same person must
+   * finish the flow, and must still be an owner or admin then. The
+   * deployment must enable org connections (orgs.connections_enabled).
+   * It is never filled in for the caller (it is not org_id, which the web
+   * app fills with the active org): acting on an org's account is explicit.
+   *
+   * @generated from field: optional string owner_org_id = 7;
+   */
+  ownerOrgId?: string | undefined;
 };
 
 /**
@@ -534,6 +593,16 @@ export type TestConnectionRequest = Message<"reliant.v1.TestConnectionRequest"> 
    * @generated from field: string id = 1;
    */
   id: string;
+
+  /**
+   * OwnerOrgId, when set, makes this about a connection of that
+   * organization (owner_kind ORG) instead of the caller's own. Only an owner or admin of it, signed in to the app as a person, may.
+   * It is never filled in for the caller (it is not org_id, which the web
+   * app fills with the active org): acting on an org's account is explicit.
+   *
+   * @generated from field: optional string owner_org_id = 2;
+   */
+  ownerOrgId?: string | undefined;
 };
 
 /**
@@ -593,6 +662,16 @@ export type RenameConnectionRequest = Message<"reliant.v1.RenameConnectionReques
    * @generated from field: string name = 2;
    */
   name: string;
+
+  /**
+   * OwnerOrgId, when set, makes this about a connection of that
+   * organization (owner_kind ORG) instead of the caller's own. Only an owner or admin of it, signed in to the app as a person, may.
+   * It is never filled in for the caller (it is not org_id, which the web
+   * app fills with the active org): acting on an org's account is explicit.
+   *
+   * @generated from field: optional string owner_org_id = 3;
+   */
+  ownerOrgId?: string | undefined;
 };
 
 /**
@@ -627,6 +706,17 @@ export type SetDefaultConnectionRequest = Message<"reliant.v1.SetDefaultConnecti
    * @generated from field: string id = 1;
    */
   id: string;
+
+  /**
+   * OwnerOrgId, when set, makes this about a connection of that
+   * organization (owner_kind ORG) instead of the caller's own. Only an owner or admin of it, signed in to the app as a person, may. The org's default is what a
+   * picker offers first; an unnamed reference never falls back to it.
+   * It is never filled in for the caller (it is not org_id, which the web
+   * app fills with the active org): acting on an org's account is explicit.
+   *
+   * @generated from field: optional string owner_org_id = 2;
+   */
+  ownerOrgId?: string | undefined;
 };
 
 /**
@@ -661,6 +751,16 @@ export type DeleteConnectionRequest = Message<"reliant.v1.DeleteConnectionReques
    * @generated from field: string id = 1;
    */
   id: string;
+
+  /**
+   * OwnerOrgId, when set, makes this about a connection of that
+   * organization (owner_kind ORG) instead of the caller's own. Only an owner or admin of it, signed in to the app as a person, may.
+   * It is never filled in for the caller (it is not org_id, which the web
+   * app fills with the active org): acting on an org's account is explicit.
+   *
+   * @generated from field: optional string owner_org_id = 2;
+   */
+  ownerOrgId?: string | undefined;
 };
 
 /**
@@ -731,6 +831,15 @@ export type ConnectionEvent = Message<"reliant.v1.ConnectionEvent"> & {
    * @generated from field: string at = 8;
    */
   at: string;
+
+  /**
+   * The person the event is attributed to: who acted, also on an org's
+   * connection (the member whose run used it), so an org admin can tell who
+   * used the org's account.
+   *
+   * @generated from field: string user_id = 9;
+   */
+  userId: string;
 };
 
 /**
@@ -760,6 +869,17 @@ export type ListConnectionEventsRequest = Message<"reliant.v1.ListConnectionEven
    * @generated from field: optional int64 before_id = 3;
    */
   beforeId?: bigint | undefined;
+
+  /**
+   * OwnerOrgId, when set, makes this about a connection of that
+   * organization (owner_kind ORG) instead of the caller's own. Only an owner or admin of it, signed in to the app as a person, may. They see every member's use
+   * of it (ConnectionEvent.user_id).
+   * It is never filled in for the caller (it is not org_id, which the web
+   * app fills with the active org): acting on an org's account is explicit.
+   *
+   * @generated from field: optional string owner_org_id = 4;
+   */
+  ownerOrgId?: string | undefined;
 };
 
 /**
@@ -868,6 +988,42 @@ export const ConnectionStatusSchema: GenEnum<ConnectionStatus> = /*@__PURE__*/
   enumDesc(file_reliant_v1_connection, 1);
 
 /**
+ * ConnectionOwnerKind is who a connection belongs to.
+ *
+ * @generated from enum reliant.v1.ConnectionOwnerKind
+ */
+export enum ConnectionOwnerKind {
+  /**
+   * A server that predates org connections sends this; read it as USER.
+   *
+   * @generated from enum value: CONNECTION_OWNER_KIND_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * The caller's own: only they use it, and only they manage it.
+   *
+   * @generated from enum value: CONNECTION_OWNER_KIND_USER = 1;
+   */
+  USER = 1,
+
+  /**
+   * An organization's (org_id): any live member may use it in that org's
+   * runs, naming it explicitly; only the org's admins and owners manage it.
+   * A reference that names only an integration never falls back to it.
+   *
+   * @generated from enum value: CONNECTION_OWNER_KIND_ORG = 2;
+   */
+  ORG = 2,
+}
+
+/**
+ * Describes the enum reliant.v1.ConnectionOwnerKind.
+ */
+export const ConnectionOwnerKindSchema: GenEnum<ConnectionOwnerKind> = /*@__PURE__*/
+  enumDesc(file_reliant_v1_connection, 2);
+
+/**
  * @generated from enum reliant.v1.ApiKeyConnectionKind
  */
 export enum ApiKeyConnectionKind {
@@ -899,7 +1055,7 @@ export enum ApiKeyConnectionKind {
  * Describes the enum reliant.v1.ApiKeyConnectionKind.
  */
 export const ApiKeyConnectionKindSchema: GenEnum<ApiKeyConnectionKind> = /*@__PURE__*/
-  enumDesc(file_reliant_v1_connection, 2);
+  enumDesc(file_reliant_v1_connection, 3);
 
 /**
  * ConnectionService manages a user's saved logins to external services

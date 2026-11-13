@@ -29,7 +29,8 @@ import { cn } from "../../lib/utils";
 import { useSurface } from "../../lib/surfaceContext";
 import { GenericToolRenderer, ToolContentArea, type ToolRenderContext, type ToolResultData } from "./tool-renderers";
 import { TruncatedOutputNotice } from "./tool-renderers/TruncatedOutputNotice";
-import { ToolBodyError, ToolBodyPlaceholder } from "./tool-renderers/ToolBodyPending";
+import { ToolBodyError, ToolBodyPlaceholder, ToolResultWithheld } from "./tool-renderers/ToolBodyPending";
+import { viewerSafeResult } from "../../lib/viewerResults";
 import { useElidedToolBodies } from "./useElidedToolBodies";
 import { fetchFullToolResult, useFullToolResult } from "../../hooks/tool-result-queries";
 import { useChat, useChatMessages, useStreamingMessages, useToolCallStates } from "../../store/chatStoreHooks";
@@ -302,7 +303,7 @@ interface ToolExecutionProps {
 
 function ToolExecutionComponent({
   toolCall,
-  toolResult,
+  toolResult: sentResult,
   onApprove,
   onDeny,
   onCancel,
@@ -314,6 +315,15 @@ function ToolExecutionComponent({
   onSelectThread,
   density = "compact",
 }: ToolExecutionProps) {
+  // A viewer of another member's shared chat never sees a tool's result,
+  // however it arrived (the server elides them; this does not rely on it):
+  // everything below reads the result through this.
+  const currentChat = useChat(chatId || "");
+  const isViewer = !!currentChat?.viewerAccess;
+  const toolResult = useMemo(
+    () => viewerSafeResult(sentResult, toolCall.name, isViewer),
+    [sentResult, toolCall.name, isViewer],
+  );
   const toolNameLower = (toolCall.name || '').toLowerCase();
   const toolBaseName = baseToolName(toolCall.name || '');
   const isViewOnlyToolFlag = isViewOnlyTool(toolNameLower);
@@ -368,6 +378,7 @@ function ToolExecutionComponent({
     result: toolResult,
     shown: isExpanded || (needsApprovalNow && showRichContent),
     expanded: isExpanded,
+    viewer: isViewer,
   });
   const contentResult = bodies.result;
   const toggleExpanded = () => {
@@ -399,7 +410,6 @@ function ToolExecutionComponent({
   );
   const showTruncatedNotice = isTruncatedResult && fullResultContent === undefined;
 
-  const currentChat = useChat(chatId || "");
   const chatWorktreeId = currentChat?.worktreeId;
   const chatMessages = useChatMessages(chatId || undefined);
   const streamingMessages = useStreamingMessages(chatId || "");
@@ -867,7 +877,12 @@ function ToolExecutionComponent({
   // The content area's body: the renderer once every elided body is here,
   // else a placeholder sized from the body, or the error with Retry.
   const renderToolContent = (content: React.ReactNode): React.ReactNode =>
-    bodies.ready ? content : bodies.failed ? (
+    bodies.ready ? (
+      <>
+        {content}
+        {bodies.withheld && <ToolResultWithheld />}
+      </>
+    ) : bodies.failed ? (
       <ToolBodyError onRetry={bodies.retry} />
     ) : (
       <ToolBodyPlaceholder bytes={bodies.bytes} />

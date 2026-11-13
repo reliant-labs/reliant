@@ -53,7 +53,7 @@ func (s *Service) PrepareActivation(ctx context.Context, user, operation string,
 
 // savedDefinition is a saved activation as the definition an edit starts from.
 func savedDefinition(existing *core.Trigger) (*pb.TriggerDefinition, error) {
-	rendered, err := triggers.ToProto(existing, nil, nil, nil)
+	rendered, err := renderTrigger(existing, nil, nil, nil)
 	if err != nil {
 		return nil, svcerr.Wrap(err)
 	}
@@ -230,7 +230,7 @@ func (s *Service) prepareAgentActivationDecided(ctx context.Context, user, opera
 	if operation != tools.ToolCreateTriggerActivation && operation != tools.ToolUpdateTriggerActivation && operation != tools.ToolEnableTrigger {
 		return nil, tools.ActivationPreview{}, none, refused("unknown activation operation")
 	}
-	row, err := s.triggerFromDefinition(ctx, user, def, existing)
+	row, err := s.activationRow(ctx, user, def, existing)
 	if err != nil {
 		return nil, tools.ActivationPreview{}, none, tools.RefuseActivation("activation settings rejected ("+svcerr.Code(err).String()+")", err)
 	}
@@ -269,7 +269,9 @@ func (s *Service) prepareAgentActivationDecided(ctx context.Context, user, opera
 	}
 	// Resolve the default connection before approval, so a changed default
 	// cannot silently redirect a previously approved activation.
-	def.ConnectionId = row.ConnectionID
+	// An org GitHub App installation is carried too: it has no ConnectionID,
+	// and dropping it would apply the activation unbound.
+	def.ConnectionId = effectiveConnectionID(row)
 	closure, err := s.activationSnapshot(ctx, user, def, wf)
 	if err != nil {
 		return nil, tools.ActivationPreview{}, none, tools.RefuseActivation("workflow dependencies could not be resolved for approval ("+svcerr.Code(err).String()+")", err)

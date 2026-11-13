@@ -13,7 +13,7 @@
  * names what it shows, so a list missing some chats always says why.
  */
 
-import { Check, ChevronDown, Server } from "lucide-react";
+import { Check, ChevronDown, Monitor } from "lucide-react";
 
 import { DaemonStatus, type DaemonInfo } from "@/gen/reliant/v1/daemon_registry_pb";
 import { chatMachineOptions, isAwakeMachine, isStartingMachine } from "../../lib/chatMachine";
@@ -109,7 +109,7 @@ export function MachineFilterMenu({
                 : "w-6 justify-center text-muted-foreground hover:bg-muted/60 hover:text-foreground",
             )}
           >
-            <Server className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+            <Monitor className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
             {filtered && (
               <>
                 <span className="min-w-0 truncate" data-testid="machine-filter-label">
