@@ -93,7 +93,7 @@ func TestChatAttendance(t *testing.T) {
 		{"a person's chat is attended", chatOf("c", string(core.TriggerEventKindChatStart), nil), nil, verdictAttended},
 		{"Run now of a workflow is attended", chatOf("c", string(core.TriggerEventKindManualRun), nil), nil, verdictAttended},
 		{"a chat that predates launch events is attended", chatOf("c", "", nil), nil, verdictAttended},
-		{"an unattended kind with no stored trigger is attended", chatOf("c", scheduled, nil), nil, verdictAttended},
+		{"a trigger's run whose trigger was deleted is still unattended", chatOf("c", scheduled, nil), &attendanceStore{}, verdictUnattended},
 		{"a scheduled trigger's run is unattended", chatOf("c", scheduled, strPtr("t1")), &attendanceStore{}, verdictUnattended},
 		{"a webhook trigger's run is unattended",
 			chatOf("c", string(core.TriggerEventKindWebhook), strPtr("t1")), &attendanceStore{}, verdictUnattended},
@@ -139,8 +139,10 @@ func TestChatAttendance(t *testing.T) {
 			assert.Equal(t, tc.want, chatAttended(context.Background(), store, tc.chat))
 			who := chatAttendance(context.Background(), store, tc.chat)
 			assert.Equal(t, tc.want == verdictAttended, who.attended)
-			assert.Equal(t, tc.want == verdictUnattended, who.anySource,
-				"a resolved automation keeps every source until P11's stamp (I4); an undecided run gets the org's only")
+			// A deleted trigger has no stamp to read: the org's sources only.
+			triggerGone := tc.chat.TriggerID == nil && tc.chat.LaunchKind != string(core.TriggerEventKindAgentStartRun)
+			assert.Equal(t, tc.want == verdictUnattended && !triggerGone, who.anySource,
+				"a resolved automation spends what its NULL stamp allows (I4); an undecided run, or one whose trigger is gone, the org's only")
 		})
 	}
 	t.Run("no chat is the person's own", func(t *testing.T) {
@@ -322,6 +324,7 @@ func TestChatAttendance_UnattendedRunFollowsTheTriggersStamp(t *testing.T) {
 			&attendanceStore{stamps: map[string]core.UnattendedFunding{"t1": core.UnattendedFundingOrgOnly}}, false},
 		{"a trigger that cannot be read spends the org's own only", chatOf("c", scheduled, strPtr("t1")),
 			&attendanceStore{triggerErr: errors.New("db down")}, false},
+		{"a trigger deleted since it fired spends the org's own only", chatOf("c", scheduled, nil), &attendanceStore{}, false},
 		{"an agent-started run follows its root trigger's org_only", chatOf("child", started, nil), &attendanceStore{
 			chats:   map[string]*db.Chat{"root": chatOf("root", scheduled, strPtr("t1"))},
 			parents: map[string]string{"child": "root"},

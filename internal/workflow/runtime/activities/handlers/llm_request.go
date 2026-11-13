@@ -233,7 +233,8 @@ func chatAttendance(ctx context.Context, store AttendanceStore, chat *db.Chat) a
 // triggerMaySpendAnySource reads the unattended-funding stamp of the trigger
 // that launched root, a resolved unattended run (§11.3, I4): any, or a trigger
 // that predates the stamp (NULL), may draw on every source; org_only may not.
-// A trigger that cannot be read gets the org's sources only (fail closed).
+// A trigger that cannot be read, or one deleted since it fired (the launch
+// keeps its kind, not its trigger), gets the org's sources only (fail closed).
 func triggerMaySpendAnySource(ctx context.Context, store AttendanceStore, root *db.Chat) bool {
 	if root == nil || root.TriggerID == nil {
 		return false
@@ -260,7 +261,10 @@ func attendedFrom(ctx context.Context, store AttendanceStore, chat *db.Chat) (at
 			return verdictAttended, nil
 		}
 		launched := core.TriggerEventKind(chat.LaunchKind)
-		triggered := chat.TriggerID != nil && launched.Unattended()
+		// The launch's kind decides, never whether its trigger still
+		// exists: deleting a trigger clears its launch events' trigger_id,
+		// and must not turn its runs into attended ones.
+		triggered := launched.Unattended()
 		if !triggered && launched != core.TriggerEventKindAgentStartRun {
 			return verdictAttended, nil
 		}
