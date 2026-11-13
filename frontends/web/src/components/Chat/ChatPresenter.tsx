@@ -33,6 +33,7 @@ import { ResumeDaemonPill } from "./ResumeDaemonPill";
 import { ComposerStatusSlot, RecoveryBanner, StatusSlotItem } from "./ComposerStatusSlot";
 import { OomKillBanner } from "./OomKillBanner";
 import { DiskPressureBanner } from "./DiskPressureBanner";
+import { MachineHealthBanner } from "./MachineHealthBanner";
 import { OrgMovedBanner } from "./OrgMovedBanner";
 import { ComposerWakeStatus } from "./ComposerWakeStatus";
 import { ContinueWithoutMachineButton, NoMachineComposerHint } from "./NoMachine";
@@ -917,6 +918,12 @@ export const ChatPresenter = memo(function ChatPresenter({
                 {!noMachine && (
                   <StatusSlotItem id="oom">
                     <OomKillBanner />
+                  </StatusSlotItem>
+                )}
+                {/* Health banner — the chat's machine is connected but cannot start processes */}
+                {!noMachine && (
+                  <StatusSlotItem id="machine-health">
+                    <MachineHealthBanner daemonId={currentChat?.activeDaemonId} />
                   </StatusSlotItem>
                 )}
                 {/* Disk banner — a volume on the chat's machine is (nearly) full */}

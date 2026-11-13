@@ -12706,6 +12706,11 @@
               "name": "pools",
               "kind": "string",
               "repeated": true
+            },
+            {
+              "name": "health",
+              "kind": "message",
+              "type_name": "reliant.v1.MachineHealth"
             }
           ],
           "reliant.v1.DeleteMachinePoolRequest": [
@@ -12967,6 +12972,25 @@
             {
               "name": "probed_at",
               "kind": "string"
+            }
+          ],
+          "reliant.v1.MachineHealth": [
+            {
+              "name": "state",
+              "kind": "enum",
+              "type_name": "reliant.v1.MachineHealthState"
+            },
+            {
+              "name": "code",
+              "kind": "string"
+            },
+            {
+              "name": "reason",
+              "kind": "string"
+            },
+            {
+              "name": "since_ms",
+              "kind": "int64"
             }
           ],
           "reliant.v1.MachinePool": [
@@ -13351,6 +13375,7 @@
           "reliant.v1.LocalModelEndpoint": "reliant/v1/tools_daemon.proto",
           "reliant.v1.LocalModelInfo": "reliant/v1/tools_daemon.proto",
           "reliant.v1.LocalModelInventory": "reliant/v1/tools_daemon.proto",
+          "reliant.v1.MachineHealth": "reliant/v1/tools_daemon.proto",
           "reliant.v1.MachinePool": "reliant/v1/daemon_registry.proto",
           "reliant.v1.MachinePoolMember": "reliant/v1/daemon_registry.proto",
           "reliant.v1.MachinePoolSpec": "reliant/v1/daemon_registry.proto",
@@ -13398,6 +13423,11 @@
             "DISK_GUARD_STATE_UNSPECIFIED",
             "DISK_GUARD_STATE_RECLAIMING",
             "DISK_GUARD_STATE_REFUSING_HEAVY"
+          ],
+          "reliant.v1.MachineHealthState": [
+            "MACHINE_HEALTH_STATE_UNSPECIFIED",
+            "MACHINE_HEALTH_STATE_OK",
+            "MACHINE_HEALTH_STATE_DEGRADED"
           ]
         },
         "EnumNumbers": {
@@ -13423,6 +13453,11 @@
             0,
             1,
             2
+          ],
+          "reliant.v1.MachineHealthState": [
+            0,
+            1,
+            2
           ]
         },
         "EnumGoRefs": {
@@ -13437,6 +13472,10 @@
           "reliant.v1.DiskGuardState": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
             "GoName": "DiskGuardState"
+          },
+          "reliant.v1.MachineHealthState": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "MachineHealthState"
           }
         }
       }
