@@ -95,7 +95,7 @@ func (f *credFixture) orgConnection(id, org string) {
 func (f *credFixture) oauthFlow(id, org string) {
 	f.t.Helper()
 	f.exec(`INSERT INTO oauth_flows (state_hash, user_id, session_id_hash, integration_id, pkce_verifier_sealed, expires_at, org_id)
-		VALUES (convert_to($1, 'UTF8'), 'admin', '\x01', 'slack', '\x01', now() + interval '10 minutes', $2)`, "state-"+id, org)
+		VALUES (convert_to($1, 'UTF8'), 'admin', '\x01', 'slack', '\x01', $3, $2)`, "state-"+id, org, credT0.Add(10*time.Minute))
 }
 
 func TestListProviderAccountGrantMembers_PagesDistinctPairsInOrder(t *testing.T) {
@@ -213,10 +213,10 @@ func TestPurgeOrgCredentials_RemovesTheOrgsAndOnlyTheOrgs(t *testing.T) {
 		ID: "chat-1", Title: "c", ProjectID: storetest.SeedProjectID, UserID: storetest.SeedUserID,
 		CreatedAt: now, UpdatedAt: now, LastActive: now,
 	}))
-	f.exec(`INSERT INTO threads (id, chat_id, origin, created_at) VALUES ('thread-1', 'chat-1', 'main', now())`)
+	f.exec(`INSERT INTO threads (id, chat_id, origin, created_at) VALUES ('thread-1', 'chat-1', 'main', $1)`, credT0)
 	f.exec(`INSERT INTO thread_provider_accounts (thread_id, provider, account_id, assigned_at, reason)
-		VALUES ('thread-1', 'anthropic', 'k-org-gone', now(), 'initial'),
-		       ('thread-1', 'openrouter', 'k-org-live', now(), 'initial')`)
+		VALUES ('thread-1', 'anthropic', 'k-org-gone', $1, 'initial'),
+		       ('thread-1', 'openrouter', 'k-org-live', $1, 'initial')`, credT0)
 
 	purged, err := store.PurgeOrgCredentials(ctx, f.env.ORM, "org-gone")
 	require.NoError(t, err)

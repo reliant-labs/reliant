@@ -3,8 +3,11 @@ package orgcredentials_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"sort"
 	"testing"
 	"time"
@@ -163,6 +166,36 @@ func TestSweepStaleGrants_KeepsOnlyGrantsOfTheCurrentMembership(t *testing.T) {
 	n, err = s.SweepStaleGrants(ctx)
 	require.NoError(t, err)
 	assert.Zero(t, n)
+}
+
+// Over the wire: control-plane answers an unknown or deleted user with an empty
+// response, naming no org (control-plane access_token_internal
+// ResolveOrgMembership). That is a negative about the org asked, so the
+// deleted account's grants go; an answer explicitly about another org still
+// deletes nothing.
+func TestSweepStaleGrants_AnEmptyAnswerOnTheWireIsNoMember(t *testing.T) {
+	f := newFixture(t)
+	f.orgKey("k1", "org-a")
+	f.grant("k1", "org-a", "deleted-user", t0.Add(-time.Hour))
+	f.grant("k1", "org-a", "elsewhere", t0.Add(-time.Hour))
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		w.Header().Set("Content-Type", "application/json")
+		if body["userId"] == "deleted-user" {
+			_, _ = w.Write([]byte(`{}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"orgId":"org-b"}`))
+	}))
+	defer srv.Close()
+	cp := accesstokenclient.New(accesstokenclient.Deps{BaseURL: srv.URL, Sign: func() (string, error) { return "signed", nil }})
+	s := orgcredentials.New(orgcredentials.Deps{Store: f.env.Repo, Membership: cp, GoneOrgs: cp, Now: fixedNow})
+
+	n, err := s.SweepStaleGrants(context.Background())
+	require.NoError(t, err)
+	assert.EqualValues(t, 1, n)
+	assert.Equal(t, []string{"k1/elsewhere"}, f.grants())
 }
 
 // The sweep pages through every member, so a long table is swept whole.

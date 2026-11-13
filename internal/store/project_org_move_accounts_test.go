@@ -70,7 +70,7 @@ func (f *credFixture) mvTrigger(id, projectID string) {
 func (f *credFixture) assign(threadID, provider, accountID string) {
 	f.t.Helper()
 	f.exec(`INSERT INTO thread_provider_accounts (thread_id, provider, account_id, assigned_at, reason)
-		VALUES ($1, $2, $3, now(), 'initial')`, threadID, provider, accountID)
+		VALUES ($1, $2, $3, $4, 'initial')`, threadID, provider, accountID, credT0)
 }
 
 func (f *credFixture) assigned(threadID string) map[string]string {

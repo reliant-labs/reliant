@@ -142,8 +142,11 @@ func (s *Sweeper) sweepMember(ctx context.Context, gm core.GrantMember) (int64, 
 	}
 	var before time.Time
 	switch {
-	case m.OrgID != gm.OrgID:
-		// An answer about another org says nothing about this one.
+	case m.OrgID != gm.OrgID && (m.Member || m.OrgID != ""):
+		// An answer about another org says nothing about this one. A
+		// negative may name no org at all (control-plane answers an
+		// unknown or deleted user with an empty answer): that is still
+		// "no member" of the org asked about.
 		return 0, nil
 	case !m.Member:
 		// No member: every grant made before the question is from a
