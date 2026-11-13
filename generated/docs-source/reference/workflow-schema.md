@@ -40,7 +40,7 @@ Defines a complete workflow with nodes, edges, inputs, and outputs.
 | `requires` | WorkflowRequirements | No | - |
 | `secrets` | map[string]SecretDeclaration | No | - |
 | `permissions` | string[] | No | - |
-| `attention` | WorkflowAttention | No | - |
+| `attention` | WorkflowAttention | No | *Explicit human-attention incident correlation for root unattended launch runs, independent of lifecycle and outcome. Absent preserves legacy behavior. See WorkflowAttention below.* |
 
 ---
 
@@ -84,6 +84,22 @@ A trigger admission policy (`concurrency:`), not a worker task limit. Pooled per
 | `waiting` | enum | No | *What happens to waiting firings: `fifo` (the default) keeps every one, oldest first; `latest` keeps only the newest waiting firing per key, and each older one it replaces is recorded skipped with the detail "superseded" (never failed). Running runs are never touched.* |
 | `key` | string | No | *With `waiting: latest` only: a template over `trigger`, like a webhook dedupe_key, naming the group of waiting firings that replace each other, e.g. `'{{ trigger.payload.attributes.repository }}'`. Unset: one group for the whole workflow. max_running still bounds the whole workflow. A firing whose key does not render waits FIFO and is never superseded.* |
 | `per_member` | integer | No | *Scales the cap with the trigger's machine pool: this many runs for each member that can take work (installed, synced with the pool's catalog, not failed or removed), so adding a machine raises throughput with no workflow edit. A trigger on one machine, or on none, counts as a pool of one.* |
+
+---
+
+## WorkflowAttention
+
+Correlates incidents within one owner and project, never across them. Failures remain failed and emit failure events. Only explicit on_success: resolved closes an incident; a key-only observer's success does not. Example: `attention: {key: 'repo:{{ inputs.repo }}:pr:{{ inputs.pr }}', on_start: recovering, recovery_timeout: 30m, on_success: resolved}`.
+
+### Fields
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `key` | string | Yes | *Required literal or template over finalized inputs only. Evaluated once before graph execution; must produce a nonempty string of at most 512 bytes. Invalid dynamic keys fail visibly with legacy attention as a fail-safe.* |
+| `on_start` | string | No | *Absent, recovering, or action_required. Recovering requires recovery_timeout. Only an actually started recovery run suppresses attention.* |
+| `recovery_timeout` | string | No | *Go duration in [1s, 24h], allowed only with on_start: recovering. Fixed from run start; retries never extend it. Expiry escalates through the durable inbox read, without a push notification.* |
+| `on_success` | string | No | *Absent, resolved, or action_required. No implicit resolution on success. A recovery finishing without explicit successful resolution escalates.* |
+| `on_failure` | string | No | *Absent (defaults to action_required), or action_required. Crashes, cancellation, and unsuccessful outcomes never resolve an incident.* |
 
 ---
 

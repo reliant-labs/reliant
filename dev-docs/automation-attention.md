@@ -79,9 +79,10 @@ repair attempts uses `on_success: action_required`, not `resolved`; separate
 resolution into another correlated workflow if successful terminal branches
 need different attention meanings.
 
-The SDK producer is delivered before the application consumer, following
-`sdk/go/README.md`. The dependency-blocked consumer draft requires the producer
-to land, the root SDK pin to be bumped to that main commit, and scoped checks
-rerun without a local Go workspace before it is ready. No local SDK replacement
-is committed. Combined-tree tests using a temporary workspace prove the
-implementation, not that the old published SDK pin supports it.
+The SDK producer landed in PR #2715 at main commit
+`5d22b0058fbf95480d4b329e1af2584d27b3fefe`, following `sdk/go/README.md`.
+The application consumer pins the published module
+`v0.0.0-20261113190648-5d22b0058fbf` and is verified with `GOWORK=off`:
+no local workspace, SDK replacement, or temporary module-graph override.
+Earlier combined-tree checks used a temporary workspace while waiting for the
+producer; those checks are not the final published-pin proof.

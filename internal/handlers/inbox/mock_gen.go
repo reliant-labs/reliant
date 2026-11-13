@@ -73,7 +73,7 @@ func (m *MockOrgLister) ListMyOrganizations(ctx context.Context, jwt string) ([]
 var _ OrgLister = (*MockOrgLister)(nil)
 
 // forge:section MockRepository
-// forge:hash=a5d30f76a2b27632cc87c8bdd929e57236b7fd58b2101e87d0bd67fdc1472eb7
+// forge:hash=deadbfca4c097b49f05b8ee81d4cb68d4f98c8a8b06e6a5764890f6ad9317766
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -112,12 +112,15 @@ type MockRepository struct {
 	ListInboxPendingFunc                    func(context.Context, string) ([]*core.InboxPending, error)
 	HasRejectedOrgKeysFunc                  func(context.Context) (bool, error)
 	ListRejectedOrgKeysInFunc               func(context.Context, []string) ([]core.ProviderAccount, error)
+	ListAttentionIncidentsFunc              func(context.Context, string) ([]*core.AttentionIncident, error)
+	AttentionManagedChatsFunc               func(context.Context, string, []string) (map[string]bool, error)
 	ListDismissedInboxItemIDsFunc           func(context.Context, string, []string) (map[string]bool, error)
 	DismissInboxItemsFunc                   func(context.Context, string, []string, time.Time) error
 	RestoreInboxItemsFunc                   func(context.Context, string, []string) error
 	ListTriggersFunc                        func(context.Context, core.TriggerFilters) ([]*core.Trigger, error)
 	RecentTriggerOutcomesFunc               func(context.Context, string, []string, int) (map[string][]*core.TriggerEventWithRun, error)
 	FiringsSinceLastSuccessFunc             func(context.Context, string, []string, int) (map[string][]*core.TriggerEventWithRun, error)
+	FiringsSinceLastUnmanagedSuccessFunc    func(context.Context, string, []string, int) (map[string][]*core.TriggerEventWithRun, error)
 	ListTriggerRegistrationsFunc            func(context.Context, string, []string) (map[string]*core.TriggerRegistration, error)
 	GetDaemonFunc                           func(context.Context, string) (*db.Daemon, error)
 	ListDaemonsByUserIDFunc                 func(context.Context, string) ([]*db.Daemon, error)
@@ -386,6 +389,24 @@ func (m *MockRepository) ListRejectedOrgKeysIn(ctx context.Context, orgIDs []str
 	return nil, contractkit.MockNotSet("MockRepository", "ListRejectedOrgKeysIn")
 }
 
+// ListAttentionIncidents records the call and delegates to ListAttentionIncidentsFunc when set.
+func (m *MockRepository) ListAttentionIncidents(ctx context.Context, userID string) ([]*core.AttentionIncident, error) {
+	m.Recorder.Record("ListAttentionIncidents", ctx, userID)
+	if m.ListAttentionIncidentsFunc != nil {
+		return m.ListAttentionIncidentsFunc(ctx, userID)
+	}
+	return nil, contractkit.MockNotSet("MockRepository", "ListAttentionIncidents")
+}
+
+// AttentionManagedChats records the call and delegates to AttentionManagedChatsFunc when set.
+func (m *MockRepository) AttentionManagedChats(ctx context.Context, userID string, chatIDs []string) (map[string]bool, error) {
+	m.Recorder.Record("AttentionManagedChats", ctx, userID, chatIDs)
+	if m.AttentionManagedChatsFunc != nil {
+		return m.AttentionManagedChatsFunc(ctx, userID, chatIDs)
+	}
+	return nil, contractkit.MockNotSet("MockRepository", "AttentionManagedChats")
+}
+
 // ListDismissedInboxItemIDs records the call and delegates to ListDismissedInboxItemIDsFunc when set.
 func (m *MockRepository) ListDismissedInboxItemIDs(ctx context.Context, userID string, itemIDs []string) (map[string]bool, error) {
 	m.Recorder.Record("ListDismissedInboxItemIDs", ctx, userID, itemIDs)
@@ -438,6 +459,15 @@ func (m *MockRepository) FiringsSinceLastSuccess(ctx context.Context, userID str
 		return m.FiringsSinceLastSuccessFunc(ctx, userID, triggerIDs, perTrigger)
 	}
 	return nil, contractkit.MockNotSet("MockRepository", "FiringsSinceLastSuccess")
+}
+
+// FiringsSinceLastUnmanagedSuccess records the call and delegates to FiringsSinceLastUnmanagedSuccessFunc when set.
+func (m *MockRepository) FiringsSinceLastUnmanagedSuccess(ctx context.Context, userID string, triggerIDs []string, perTrigger int) (map[string][]*core.TriggerEventWithRun, error) {
+	m.Recorder.Record("FiringsSinceLastUnmanagedSuccess", ctx, userID, triggerIDs, perTrigger)
+	if m.FiringsSinceLastUnmanagedSuccessFunc != nil {
+		return m.FiringsSinceLastUnmanagedSuccessFunc(ctx, userID, triggerIDs, perTrigger)
+	}
+	return nil, contractkit.MockNotSet("MockRepository", "FiringsSinceLastUnmanagedSuccess")
 }
 
 // ListTriggerRegistrations records the call and delegates to ListTriggerRegistrationsFunc when set.
