@@ -23,6 +23,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/errclass"
 	"github.com/reliant-labs/reliant/internal/grpc/interceptors"
+	"github.com/reliant-labs/reliant/internal/orgpolicy"
 )
 
 // The daemon-gateway's daemon-facing listener, as forge components: a
@@ -158,6 +159,9 @@ type DaemonListenerDeps struct {
 	// so authz decides org resources against live membership. nil is a
 	// deployment with no orgs (authz.NoOrgs): owner-only.
 	Membership authz.Membership
+	// Policies is put on every request's context beside Membership
+	// (orgpolicy.WithResolver). nil is a deployment with no org policies.
+	Policies *orgpolicy.Resolver
 }
 
 // NewDaemonListener builds the daemon listener; it binds nothing until it
@@ -197,7 +201,9 @@ func NewDaemonListener(deps DaemonListenerDeps) (*DaemonListener, error) {
 		Chain:  deps.Chain.Chain,
 		Routes: deps.Routes,
 		Logger: deps.Logger,
-		Edge:   func(h http.Handler) http.Handler { return withMembership(deps.Membership, securityHeaders(h)) },
+		Edge: func(h http.Handler) http.Handler {
+			return withMembership(deps.Membership, deps.Policies, securityHeaders(h))
+		},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("daemon listener: %w", err)

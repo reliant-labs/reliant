@@ -46,6 +46,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/machinepool"
 	"github.com/reliant-labs/reliant/internal/natsutil"
+	"github.com/reliant-labs/reliant/internal/orgpolicy"
 	"github.com/reliant-labs/reliant/internal/orgs"
 	"github.com/reliant-labs/reliant/internal/runs"
 	"github.com/reliant-labs/reliant/internal/temporal"
@@ -634,6 +635,9 @@ type TemporalWorkerDeps struct {
 	// Membership decides org resources in every activity (authz); the org
 	// resolver.
 	Membership *orgs.Resolver
+	// Policies is the org policy resolver every activity carries
+	// (orgpolicy).
+	Policies *orgpolicy.Resolver
 }
 
 // HostedActions is the worker's hosted HTTP action executor: a separate
@@ -730,6 +734,7 @@ func NewTemporalWorker(d TemporalWorkerDeps) (*workersetup.Worker, error) {
 		ConfigProvider:         d.ConfigProvider,
 		TriggerLauncher:        d.Launcher,
 		Membership:             d.Membership,
+		Policies:               d.Policies,
 		IntegrationCredentials: creds,
 		HostedActions:          hostedActions,
 		SecretResolver:         secretResolver,

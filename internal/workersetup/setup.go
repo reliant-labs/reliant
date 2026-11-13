@@ -37,6 +37,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/handlers"
 
 	"github.com/reliant-labs/reliant/internal/authz"
+	"github.com/reliant-labs/reliant/internal/orgpolicy"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/interceptor"
@@ -87,6 +88,12 @@ type Config struct {
 	// or a trigger fire decides org resources against live membership as an
 	// API request does. nil is a deployment with no orgs: owner-only.
 	Membership authz.Membership
+
+	// Policies is on every activity's context beside Membership
+	// (orgpolicy.WithResolver), so an enforcement point in a tool, a launch
+	// or a trigger fire reads the run's org policy. nil is a deployment with
+	// no org policies.
+	Policies *orgpolicy.Resolver
 
 	// TriggerPollers looks up a polled integration's poll function. nil
 	// registers the poll workflow without its activity: a poll that reaches
@@ -361,7 +368,7 @@ func workerOptions(cfg *Config, onFatalError func(error), gomaxprocs int) worker
 	return worker.Options{
 		// Every activity's context derives from it: authz reads membership
 		// there (Config.Membership).
-		BackgroundActivityContext: authz.WithMembership(context.Background(), membership),
+		BackgroundActivityContext: orgpolicy.WithResolver(authz.WithMembership(context.Background(), membership), cfg.Policies),
 		// How Worker.Run learns the worker died; see temporalWorker.
 		OnFatalError:                 onFatalError,
 		StickyScheduleToStartTimeout: 5 * time.Second,

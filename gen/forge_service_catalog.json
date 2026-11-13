@@ -49,6 +49,7 @@
         "ModelEndpoint",
         "NATSConn",
         "OrgCredentialSweep",
+        "OrgPolicyResolver",
         "OrgProviderAccount",
         "OrgResolver",
         "PackageCommands",
@@ -416,6 +417,7 @@
         "JetStream",
         "ManagedReconciler",
         "NATSConn",
+        "OrgPolicyResolver",
         "OrgResolver",
         "Pprof",
         "StateDerivation",
@@ -460,6 +462,7 @@
         "IntegrationSettings",
         "LedgerRetention",
         "NATSConn",
+        "OrgPolicyResolver",
         "OrgResolver",
         "PauseService",
         "PayloadStore",
@@ -50946,6 +50949,18 @@
       "implementation_candidates": []
     },
     {
+      "id": "OrgPolicyResolver",
+      "name": "OrgPolicyResolver",
+      "kind": "provider",
+      "type": "*github.com/reliant-labs/reliant/internal/orgpolicy.Resolver",
+      "source": {
+        "path": "internal/app/providers.go",
+        "symbol": "NewOrgPolicyResolver"
+      },
+      "methods": [],
+      "implementation_candidates": []
+    },
+    {
       "id": "OrgProviderAccount",
       "name": "OrgProviderAccount",
       "kind": "component",
@@ -52461,6 +52476,19 @@
     },
     {
       "consumer": "OrgCredentialSweep",
+      "field": "Authority",
+      "interface": "github.com/reliant-labs/reliant/internal/tokenauthority.Authority",
+      "methods": [],
+      "candidates": [
+        "TokenAuthority"
+      ],
+      "providers": [
+        "TokenAuthority"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "OrgPolicyResolver",
       "field": "Authority",
       "interface": "github.com/reliant-labs/reliant/internal/tokenauthority.Authority",
       "methods": [],
