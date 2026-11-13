@@ -56,7 +56,7 @@ func (m *MockOrgResolver) ListScope(ctx context.Context, userID string, requeste
 var _ OrgResolver = (*MockOrgResolver)(nil)
 
 // forge:section MockRepository
-// forge:hash=25063562e65c6b4033819c76edd324a23c3bf00be54a2ab5d7b0aaf9a30b8d09
+// forge:hash=3f4fb967ecb6cdae2539d526637af13db6a06a3c35e37616b435adb199c93f8f
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -77,6 +77,8 @@ type MockRepository struct {
 	SetProjectForgeNameFunc                   func(context.Context, string, string, string) (bool, error)
 	TouchProjectFunc                          func(context.Context, string, string) error
 	DeleteProjectFunc                         func(context.Context, string, string) error
+	ProjectOrgMoveBlockersFunc                func(context.Context, string) (*core.ProjectOrgMoveBlockers, error)
+	ProjectOrgMoveEffectsFunc                 func(context.Context, string, string) (*core.ProjectOrgMoveEffects, error)
 	UpsertProjectDaemonFunc                   func(context.Context, string, string, string, *string) error
 	RecordObservedProjectDaemonFunc           func(context.Context, string, string, string, *string) (bool, error)
 	UpsertQueuedProjectDaemonFunc             func(context.Context, string, string, string, *string, string) error
@@ -198,6 +200,24 @@ func (m *MockRepository) DeleteProject(ctx context.Context, id string, userID st
 		return m.DeleteProjectFunc(ctx, id, userID)
 	}
 	return contractkit.MockNotSet("MockRepository", "DeleteProject")
+}
+
+// ProjectOrgMoveBlockers records the call and delegates to ProjectOrgMoveBlockersFunc when set.
+func (m *MockRepository) ProjectOrgMoveBlockers(ctx context.Context, projectID string) (*core.ProjectOrgMoveBlockers, error) {
+	m.Recorder.Record("ProjectOrgMoveBlockers", ctx, projectID)
+	if m.ProjectOrgMoveBlockersFunc != nil {
+		return m.ProjectOrgMoveBlockersFunc(ctx, projectID)
+	}
+	return nil, contractkit.MockNotSet("MockRepository", "ProjectOrgMoveBlockers")
+}
+
+// ProjectOrgMoveEffects records the call and delegates to ProjectOrgMoveEffectsFunc when set.
+func (m *MockRepository) ProjectOrgMoveEffects(ctx context.Context, projectID string, toOrgID string) (*core.ProjectOrgMoveEffects, error) {
+	m.Recorder.Record("ProjectOrgMoveEffects", ctx, projectID, toOrgID)
+	if m.ProjectOrgMoveEffectsFunc != nil {
+		return m.ProjectOrgMoveEffectsFunc(ctx, projectID, toOrgID)
+	}
+	return nil, contractkit.MockNotSet("MockRepository", "ProjectOrgMoveEffects")
 }
 
 // UpsertProjectDaemon records the call and delegates to UpsertProjectDaemonFunc when set.
