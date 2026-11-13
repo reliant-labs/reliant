@@ -2578,7 +2578,11 @@ func (a *CallLLMActivity) getAvailableTools(ctx context.Context, chat *db.Chat, 
 	if projectScopedToolsFactory != nil {
 		mcpToolSet = projectScopedToolsFactory.GetMCPToolSet(toolRuntime)
 	}
-	mcpTools := mcpToolSet.Tools
+	// An org's agents are offered only the MCP servers its policy allows
+	// (org-policies §4.5), before access is resolved: a disallowed server's
+	// tools are never in the model's context, never load_tool-able and never
+	// in a tag:mcp expansion.
+	mcpTools := mcpToolsAllowedByOrg(ctx, chatOrgID(chat), mcpToolSet.Tools)
 	mcpToolNames := toolNames(mcpTools)
 
 	// The node's declaration: what it is handed, and what load_tool may

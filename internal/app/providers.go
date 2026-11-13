@@ -275,6 +275,7 @@ func NewOrgPolicyResolver(d OrgPolicyResolverDeps) (*orgpolicy.Resolver, error) 
 	// The switches are the process's whether or not it has policies: with
 	// none, every point admits everything anyway.
 	orgpolicy.SetProcessEnforcement(orgpolicy.PointIntegrations, orgpolicy.ParseEnforcement(d.Enforcement.GetIntegrations()))
+	orgpolicy.SetProcessEnforcement(orgpolicy.PointMCP, orgpolicy.ParseEnforcement(d.Enforcement.GetMcp()))
 	src, hosted := d.Authority.(orgpolicy.Source)
 	if !hosted {
 		orgpolicy.SetProcessResolver(nil)

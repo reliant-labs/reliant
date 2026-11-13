@@ -91,6 +91,14 @@ message OrgPolicyEnforcementConfig {
     allowed_values: ["off", "audit", "enforce"]
     description: "How the org integrations policy applies: off, audit (count, never refuse) or enforce"
   }];
+  // MCP servers (§4.5): which servers' tools an org's agents are offered
+  // (call_llm) and may call (the tool executor).
+  string mcp = 4 [(forge.v1.config) = {
+    env_var: "RELIANT_ORGS_POLICY_ENFORCEMENT_MCP"
+    default_value: "audit"
+    allowed_values: ["off", "audit", "enforce"]
+    description: "How the org MCP server policy applies: off, audit (count, never refuse) or enforce"
+  }];
 }
 
 // NetworkConfig is the network reach of the dials a user steers from a server

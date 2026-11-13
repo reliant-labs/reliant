@@ -14,26 +14,40 @@ import (
 	"github.com/reliant-labs/reliant/pkg/config"
 )
 
-const orgPolicyIntegrationsEnv = "RELIANT_ORGS_POLICY_ENFORCEMENT_INTEGRATIONS"
+const (
+	orgPolicyIntegrationsEnv = "RELIANT_ORGS_POLICY_ENFORCEMENT_INTEGRATIONS"
+	orgPolicyMCPEnv          = "RELIANT_ORGS_POLICY_ENFORCEMENT_MCP"
+)
 
-// installedIntegrationsSwitch boots role's ServerProcessConfig from the
-// environment as it stands, installs it the way the process does
-// (app.NewOrgPolicyResolver, built at boot by every server role), and returns
-// the platform switch the integrations enforcement points then read.
-func installedIntegrationsSwitch(t *testing.T, role string) orgpolicy.Enforcement {
+// orgPolicySwitchEnv is each enforcement point's switch variable.
+var orgPolicySwitchEnv = map[orgpolicy.Point]string{
+	orgpolicy.PointIntegrations: orgPolicyIntegrationsEnv,
+	orgpolicy.PointMCP:          orgPolicyMCPEnv,
+}
+
+// installedSwitch boots role's ServerProcessConfig from the environment as it
+// stands, installs it the way the process does (app.NewOrgPolicyResolver,
+// built at boot by every server role), and returns the platform switch the
+// enforcement points of point then read.
+func installedSwitch(t *testing.T, role string, point orgpolicy.Point) orgpolicy.Enforcement {
 	t.Helper()
 	cmd, _, err := NewRootCmd().Find([]string{"server", role})
 	require.NoError(t, err)
 	server, err := config.LoadServerProcessConfig(cmd)
 	require.NoError(t, err)
-	prev := orgpolicy.EnforcementOf(orgpolicy.PointIntegrations)
+	prev := map[orgpolicy.Point]orgpolicy.Enforcement{}
+	for p := range orgPolicySwitchEnv {
+		prev[p] = orgpolicy.EnforcementOf(p)
+	}
 	t.Cleanup(func() {
-		orgpolicy.SetProcessEnforcement(orgpolicy.PointIntegrations, prev)
+		for p, e := range prev {
+			orgpolicy.SetProcessEnforcement(p, e)
+		}
 		orgpolicy.SetProcessResolver(nil)
 	})
 	_, err = app.NewOrgPolicyResolver(app.OrgPolicyResolverDeps{Enforcement: server.GetOrgPolicyEnforcement()})
 	require.NoError(t, err)
-	return orgpolicy.EnforcementOf(orgpolicy.PointIntegrations)
+	return orgpolicy.EnforcementOf(point)
 }
 
 // TestOrgPolicyEnforcementSwitchReachesTheProcess pins the integrations
@@ -66,13 +80,15 @@ func TestOrgPolicyEnforcementSwitchReachesTheProcess(t *testing.T) {
 		t.Run(tc.selector, func(t *testing.T) {
 			var env map[string]any
 			require.NoError(t, kcleval.Select(context.Background(), fixture, tc.selector, &env, project))
-			got, ok := env[orgPolicyIntegrationsEnv]
-			require.True(t, ok, "the %s role's projected env has no %s: %v", tc.role, orgPolicyIntegrationsEnv, env)
-			require.Equal(t, string(tc.want), got)
+			for point, name := range orgPolicySwitchEnv {
+				got, ok := env[name]
+				require.True(t, ok, "the %s role's projected env has no %s: %v", tc.role, name, env)
+				require.Equal(t, string(tc.want), got)
 
-			isolateServerAPIConfigEnv(t)
-			t.Setenv(orgPolicyIntegrationsEnv, got.(string))
-			require.Equal(t, tc.want, installedIntegrationsSwitch(t, tc.role))
+				isolateServerAPIConfigEnv(t)
+				t.Setenv(name, got.(string))
+				require.Equal(t, tc.want, installedSwitch(t, tc.role, point), "%s", point)
+			}
 		})
 	}
 }
@@ -82,16 +98,18 @@ func TestOrgPolicyEnforcementSwitchReachesTheProcess(t *testing.T) {
 // the real wiring.
 func TestOrgPolicyEnforcementSwitchIsAuditByDefault(t *testing.T) {
 	for _, role := range []string{"api", "worker", "gateway"} {
-		t.Run(role, func(t *testing.T) {
-			isolateServerAPIConfigEnv(t)
-			t.Setenv(orgPolicyIntegrationsEnv, "")
-			require.Equal(t, orgpolicy.EnforcementAudit, installedIntegrationsSwitch(t, role))
+		for point, name := range orgPolicySwitchEnv {
+			t.Run(role+"/"+string(point), func(t *testing.T) {
+				isolateServerAPIConfigEnv(t)
+				t.Setenv(name, "")
+				require.Equal(t, orgpolicy.EnforcementAudit, installedSwitch(t, role, point))
 
-			t.Setenv(orgPolicyIntegrationsEnv, "enforce")
-			require.Equal(t, orgpolicy.EnforcementEnforce, installedIntegrationsSwitch(t, role))
+				t.Setenv(name, "enforce")
+				require.Equal(t, orgpolicy.EnforcementEnforce, installedSwitch(t, role, point))
 
-			t.Setenv(orgPolicyIntegrationsEnv, "off")
-			require.Equal(t, orgpolicy.EnforcementOff, installedIntegrationsSwitch(t, role))
-		})
+				t.Setenv(name, "off")
+				require.Equal(t, orgpolicy.EnforcementOff, installedSwitch(t, role, point))
+			})
+		}
 	}
 }
