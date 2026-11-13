@@ -22,9 +22,11 @@ import (
 	"github.com/reliant-labs/reliant/internal/checkoutstate"
 	"github.com/reliant-labs/reliant/internal/daemonerr"
 	"github.com/reliant-labs/reliant/internal/daemonplacement"
+	"github.com/reliant-labs/reliant/internal/daemonpolicy"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/orgpolicy"
 	"github.com/reliant-labs/reliant/internal/projectcheckout"
 	"github.com/reliant-labs/reliant/internal/telemetry"
 	"github.com/reliant-labs/reliant/internal/terminal"
@@ -290,6 +292,40 @@ func (c terminalWSConfig) place(ctx context.Context, router toolexec.DaemonRoute
 	return p, nil
 }
 
+// orgStamp is the org policy stamp of a terminal opened for this chat,
+// project or workspace (daemonpolicy.OrgStamp; control-plane
+// docs/design/org-policies.md §5.4): the org's forced `credentials: none`
+// when its machines rule is enforced, else nil. The org is the chat's, else
+// the project's (the workspace's project when only it is named).
+func (c terminalWSConfig) orgStamp(ctx context.Context, projectID, worktreeID, chatID string) map[string]interface{} {
+	if c.checkouts == nil {
+		return nil
+	}
+	org := ""
+	if chatID != "" {
+		if chat, err := c.checkouts.GetChat(ctx, chatID); err == nil && chat != nil && chat.OrgID != nil {
+			org = *chat.OrgID
+		}
+	}
+	if org == "" && projectID == "" && worktreeID != "" {
+		if wt, err := c.checkouts.GetWorktree(ctx, worktreeID); err == nil && wt != nil {
+			projectID = wt.ProjectID
+		}
+	}
+	if org == "" && projectID != "" {
+		if project, err := c.checkouts.GetProject(ctx, projectID); err == nil && project != nil && project.OrgID != nil {
+			org = *project.OrgID
+		}
+	}
+	d := orgpolicy.ForceCredentialsNone(ctx, org)
+	d.Record(ctx, "terminal", true)
+	if !d.Enforced {
+		return nil
+	}
+	stamp := &daemonpolicy.OrgStamp{OrgID: org, Version: d.Version, Credentials: daemonpolicy.CredentialsNone}
+	return stamp.ContextValue()
+}
+
 // isMainCheckout reports whether worktreeID names the project's main checkout
 // ("" is the main checkout too). A branch workspace, or one whose row cannot
 // be read, is not.
@@ -527,6 +563,13 @@ func TerminalWSHandler(router toolexec.DaemonRouter, validator auth.TokenValidat
 		}
 		if worktreeID != "" {
 			createReq["worktree_id"] = worktreeID
+		}
+		// The org of the work the terminal is opened for may force
+		// `credentials: none` on its machines; a daemon that reads the stamp
+		// then starts the shell without credentials (one that predates it
+		// ignores the key).
+		if stamp := cfg.orgStamp(ctx, projectID, worktreeID, chatID); stamp != nil {
+			createReq[daemonpolicy.OrgStampContextKey] = stamp
 		}
 		payload, err := json.Marshal(createReq)
 		if err != nil {

@@ -129,6 +129,24 @@ func (e *LocalToolExecutor) executeTool(
 
 	var tool tools.Tool
 
+	// The run's org stamp (daemonpolicy.OrgStamp), from the worker that
+	// enforces the org's policy. Whatever runs this call honours it: it is
+	// carried on ctx for what starts MCP servers (mcp.Manager), and an MCP
+	// tool of a server the org does not allow is refused here, before its
+	// server is started. No stamp: today's behaviour exactly.
+	stamp := daemonpolicy.OrgStampFrom(contextMap)
+	ctx = daemonpolicy.WithOrgStamp(ctx, stamp)
+	if !stamp.MCPToolAllowed(toolName) {
+		msg := fmt.Sprintf("Your organization does not allow the MCP server of %s for its agents.", toolName)
+		return &ExecutionResult{
+			Success:      false,
+			IsError:      true,
+			Content:      msg,
+			ErrorMessage: "refused by the organization's MCP policy",
+			ErrorCode:    ErrorCodeOrgPolicy,
+		}
+	}
+
 	// Extract context fields
 	chatID, _ := contextMap["chat_id"].(string)
 	thread, _ := contextMap["thread"].(string)
@@ -200,7 +218,7 @@ func (e *LocalToolExecutor) executeTool(
 		// on every command this tool builds, here on the worker and on a
 		// machine that reads the stamp: the tool reaches a command only
 		// through this client.
-		if daemonpolicy.OrgStampFrom(contextMap).CredentialsForced() {
+		if stamp.CredentialsForced() {
 			daemonClient = daemon.ForceCredentialsNone(daemonClient)
 		}
 		toolContext = toolContext.WithDaemon(daemonClient)

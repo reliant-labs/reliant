@@ -5,6 +5,8 @@ import (
 	"os"
 	"os/exec"
 	"runtime"
+
+	"github.com/reliant-labs/reliant/internal/daemonpolicy"
 )
 
 // GetDefaultShell returns the default shell for the current OS
@@ -120,6 +122,18 @@ func GetShellEnv(workingDir string) []string {
 	}
 
 	return env
+}
+
+// credentialsNoneShellEnv is a shell environment with no credential in it:
+// daemonpolicy.WithoutCredentials over env (the allowlist a `credentials:
+// none` command gets, git's credential helpers reset), plus the terminal
+// settings GetShellEnv adds that the allowlist does not keep.
+func credentialsNoneShellEnv(env []string) []string {
+	out := daemonpolicy.WithoutCredentials(env, nil)
+	if runtime.GOOS != "windows" {
+		out = append(out, "PROMPT_EOL_MARK=")
+	}
+	return out
 }
 
 // GetHomeDir returns the user's home directory in a cross-platform way

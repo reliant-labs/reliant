@@ -3,7 +3,10 @@
 package daemonpolicy
 
 import (
+	"context"
 	"encoding/json"
+	"slices"
+	"strings"
 )
 
 // OrgStampContextKey is the key of a daemon-bound tool request's context map
@@ -46,6 +49,32 @@ type OrgStampMCP struct {
 	// AllowedServers are server names as in mcp__<server>__<tool>. Empty
 	// (without AllowAll) admits none.
 	AllowedServers []string `json:"allowed_servers"`
+}
+
+// MCPServerAllowed reports whether s lets the run start or use the MCP
+// server named server. A stamp without an MCP rule allows every server.
+func (s *OrgStamp) MCPServerAllowed(server string) bool {
+	if s == nil || s.MCP == nil || s.MCP.AllowAll {
+		return true
+	}
+	return slices.Contains(s.MCP.AllowedServers, server)
+}
+
+// MCPToolAllowed reports whether s lets the run call the tool named name.
+// Only an MCP tool (mcp__<server>__<tool>) can be refused; it is allowed
+// when it belongs to an allowed server. Matching on the "mcp__<server>__"
+// prefix of each allowed server, rather than splitting the name, keeps a
+// server whose own name contains "__" from being mistaken for another.
+func (s *OrgStamp) MCPToolAllowed(name string) bool {
+	if s == nil || s.MCP == nil || s.MCP.AllowAll || !strings.HasPrefix(name, "mcp__") {
+		return true
+	}
+	for _, server := range s.MCP.AllowedServers {
+		if strings.HasPrefix(name, "mcp__"+server+"__") {
+			return true
+		}
+	}
+	return false
 }
 
 // CredentialsForced reports whether s forces `credentials: none`. A nil
@@ -100,4 +129,25 @@ func OrgStampFrom(contextMap map[string]interface{}) *OrgStamp {
 		return nil
 	}
 	return &s
+}
+
+type orgStampKey struct{}
+
+// WithOrgStamp returns ctx carrying s, so code below the request edge (the
+// MCP manager starting a project's servers, a runtime that forwards it to a
+// machine) honours it. A stamp that asks for nothing is not carried.
+func WithOrgStamp(ctx context.Context, s *OrgStamp) context.Context {
+	if s.Empty() {
+		return ctx
+	}
+	return context.WithValue(ctx, orgStampKey{}, s)
+}
+
+// OrgStampFromContext is the stamp WithOrgStamp put on ctx, else nil.
+func OrgStampFromContext(ctx context.Context) *OrgStamp {
+	if ctx == nil {
+		return nil
+	}
+	s, _ := ctx.Value(orgStampKey{}).(*OrgStamp)
+	return s
 }
