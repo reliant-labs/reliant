@@ -34,7 +34,6 @@
 // ResolveGoneOrgs) purges nothing.
 //
 //forge:exclude-contract: one concrete Sweeper over consumer-declared seams (the repo, control-plane's two answers), driven by internal/app's OrgCredentialSweep; no second implementation to substitute
-//forge:not-a-component: built by internal/app's OrgCredentialSweep, never a node of the composition graph
 package orgcredentials
 
 import (
