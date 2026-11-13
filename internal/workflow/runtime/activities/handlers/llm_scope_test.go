@@ -3,8 +3,10 @@ package handlers
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -16,49 +18,118 @@ import (
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 )
 
-// The scope of an LLM call (org-provider-accounts §4.1) is read off the chat
-// row at the activity edge and reaches every account read the call makes.
-// Every trigger predates the unattended-funding stamp (P11), so an unattended
-// run may still draw on every source (UnattendedAnySource).
+// The scope of an LLM call (org-provider-accounts §4.1) is decided at the
+// activity edge, from the chat row, its agent.start_run lineage and whether a
+// person has taken a turn in it, and reaches every account read the call
+// makes. Every trigger predates the unattended-funding stamp (P11), so an
+// unattended run may still draw on every source (UnattendedAnySource).
 
-func TestChatScope_ReadFromTheChatRow(t *testing.T) {
+// attendanceStore is an in-memory AttendanceStore.
+type attendanceStore struct {
+	chats   map[string]*db.Chat
+	parents map[string]string // agent.start_run chat -> parent_chat_id
+	turns   map[string]time.Time
+	err     error // returned by every read when set
+}
+
+func (s *attendanceStore) GetChat(_ context.Context, id string) (*db.Chat, error) {
+	if s.err != nil {
+		return nil, s.err
+	}
+	if c, ok := s.chats[id]; ok {
+		return c, nil
+	}
+	return nil, errors.New("chat not found")
+}
+
+func (s *attendanceStore) GetTriggerEventByChat(_ context.Context, kind core.TriggerEventKind, chatID string) (*core.TriggerEvent, error) {
+	if s.err != nil {
+		return nil, s.err
+	}
+	parent, ok := s.parents[chatID]
+	if !ok || kind != core.TriggerEventKindAgentStartRun {
+		return nil, core.ErrTriggerEventNotFound
+	}
+	return &core.TriggerEvent{Kind: kind, ChatID: &chatID, Payload: map[string]any{"parent_chat_id": parent}}, nil
+}
+
+func (s *attendanceStore) ChatPersonTurnAt(_ context.Context, chatID string) (*time.Time, error) {
+	if s.err != nil {
+		return nil, s.err
+	}
+	if at, ok := s.turns[chatID]; ok {
+		return &at, nil
+	}
+	return nil, nil
+}
+
+func chatOf(id, kind string, trigger *string) *db.Chat {
+	return &db.Chat{ID: id, UserID: "u1", OrgID: strPtr("o1"), LaunchKind: kind, TriggerID: trigger}
+}
+
+func TestChatAttendance(t *testing.T) {
+	scheduled := string(core.TriggerEventKindSchedule)
+	started := string(core.TriggerEventKindAgentStartRun)
 	for _, tc := range []struct {
-		name string
-		chat *db.Chat
-		want drivers.Scope
+		name  string
+		chat  *db.Chat
+		store *attendanceStore
+		want  bool
 	}{
-		{"a chat with no org (pre-org backlog) is personal",
-			&db.Chat{UserID: "u1", LaunchKind: string(core.TriggerEventKindChatStart)},
-			drivers.PersonalScope("u1")},
-		{"a person's chat in an org is attended",
-			&db.Chat{UserID: "u1", OrgID: strPtr("o1"), LaunchKind: string(core.TriggerEventKindChatStart)},
-			drivers.Scope{UserID: "u1", OrgID: "o1", Attended: true}},
-		{"a scheduled trigger's run is unattended",
-			&db.Chat{UserID: "u1", OrgID: strPtr("o1"), LaunchKind: string(core.TriggerEventKindSchedule), TriggerID: strPtr("t1")},
-			drivers.Scope{UserID: "u1", OrgID: "o1", Attended: false, UnattendedAnySource: true}},
+		{"a person's chat is attended", chatOf("c", string(core.TriggerEventKindChatStart), nil), nil, true},
+		{"Run now of a workflow is attended", chatOf("c", string(core.TriggerEventKindManualRun), nil), nil, true},
+		{"a chat that predates launch events is attended", chatOf("c", "", nil), nil, true},
+		{"an unattended kind with no stored trigger is attended", chatOf("c", scheduled, nil), nil, true},
+		{"a scheduled trigger's run is unattended", chatOf("c", scheduled, strPtr("t1")), &attendanceStore{}, false},
 		{"a webhook trigger's run is unattended",
-			&db.Chat{UserID: "u1", OrgID: strPtr("o1"), LaunchKind: string(core.TriggerEventKindWebhook), TriggerID: strPtr("t1")},
-			drivers.Scope{UserID: "u1", OrgID: "o1", Attended: false, UnattendedAnySource: true}},
-		{"Run now of a workflow is attended",
-			&db.Chat{UserID: "u1", OrgID: strPtr("o1"), LaunchKind: string(core.TriggerEventKindManualRun)},
-			drivers.Scope{UserID: "u1", OrgID: "o1", Attended: true}},
-		{"an unattended kind with no stored trigger is attended",
-			&db.Chat{UserID: "u1", OrgID: strPtr("o1"), LaunchKind: string(core.TriggerEventKindSchedule)},
-			drivers.Scope{UserID: "u1", OrgID: "o1", Attended: true}},
-		{"a chat that predates launch events is attended",
-			&db.Chat{UserID: "u1", OrgID: strPtr("o1")},
-			drivers.Scope{UserID: "u1", OrgID: "o1", Attended: true}},
+			chatOf("c", string(core.TriggerEventKindWebhook), strPtr("t1")), &attendanceStore{}, false},
+		{"I2: a trigger's chat a person took a turn in is attended",
+			chatOf("c", scheduled, strPtr("t1")), &attendanceStore{turns: map[string]time.Time{"c": time.Now()}}, true},
+		{"I1: a run a person's chat started is attended",
+			chatOf("child", started, nil), &attendanceStore{
+				chats:   map[string]*db.Chat{"root": chatOf("root", string(core.TriggerEventKindChatStart), nil)},
+				parents: map[string]string{"child": "root"},
+			}, true},
+		{"I1: a run a trigger's run started is unattended, at any depth",
+			chatOf("grandchild", started, nil), &attendanceStore{
+				chats: map[string]*db.Chat{
+					"child": chatOf("child", started, nil),
+					"root":  chatOf("root", scheduled, strPtr("t1")),
+				},
+				parents: map[string]string{"grandchild": "child", "child": "root"},
+			}, false},
+		{"I1+I2: a sub-agent of a trigger's chat a person took a turn in is attended",
+			chatOf("child", started, nil), &attendanceStore{
+				chats:   map[string]*db.Chat{"root": chatOf("root", scheduled, strPtr("t1"))},
+				parents: map[string]string{"child": "root"},
+				turns:   map[string]time.Time{"root": time.Now()},
+			}, true},
+		{"an agent-started run with no launch event fails closed",
+			chatOf("child", started, nil), &attendanceStore{}, false},
+		{"an agent-started run whose parent is gone fails closed",
+			chatOf("child", started, nil), &attendanceStore{parents: map[string]string{"child": "gone"}}, false},
+		{"a lineage cycle fails closed",
+			chatOf("a", started, nil), &attendanceStore{
+				chats:   map[string]*db.Chat{"a": chatOf("a", started, nil), "b": chatOf("b", started, nil)},
+				parents: map[string]string{"a": "b", "b": "a"},
+			}, false},
+		{"a failed read fails closed",
+			chatOf("c", scheduled, strPtr("t1")), &attendanceStore{err: errors.New("db down")}, false},
+		{"no store fails closed", chatOf("c", scheduled, strPtr("t1")), nil, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			assert.Equal(t, tc.want, chatScope(tc.chat))
-			spec := llmCallSpec{UserID: tc.chat.UserID, OrgID: chatOrgID(tc.chat), Attended: chatAttended(tc.chat),
-				UnattendedAnySource: chatUnattendedAnySource(tc.chat)}
-			assert.Equal(t, tc.want, spec.scope(), "a spec built from the row scopes as chatScope does")
+			var store AttendanceStore
+			if tc.store != nil {
+				store = tc.store
+			}
+			who := chatAttendance(context.Background(), store, tc.chat)
+			assert.Equal(t, tc.want, who.attended)
+			assert.Equal(t, !tc.want, who.anySource, "until P11's stamp, an unattended run keeps every source")
 		})
 	}
 	t.Run("no chat is the person's own", func(t *testing.T) {
 		assert.Equal(t, "", chatOrgID(nil))
-		assert.True(t, chatAttended(nil))
+		assert.True(t, chatAttendance(context.Background(), nil, nil).attended)
 	})
 }
 
@@ -124,7 +195,8 @@ func TestResolveLLMCall_EveryAccountReadTakesTheSpecsScope(t *testing.T) {
 func TestResolveCompactionModel_ReadsTheSpecsScope(t *testing.T) {
 	lookups := recordLookups(t, driversWith(apiKeyAccount("a", "alice@acme.com", 0)))
 	chat := &db.Chat{UserID: "u1", OrgID: strPtr("o1"), LaunchKind: string(core.TriggerEventKindSchedule), TriggerID: strPtr("t1")}
-	_, _, _ = resolveCompactionModelForCall(context.Background(), nil, llmCallSpec{UserID: chat.UserID, OrgID: chatOrgID(chat), Attended: chatAttended(chat)})
+	_, _, _ = resolveCompactionModelForCall(context.Background(), nil, llmCallSpec{UserID: chat.UserID, OrgID: chatOrgID(chat),
+		Attended: chatAttendance(context.Background(), &attendanceStore{}, chat).attended})
 	assert.Equal(t, []drivers.Scope{{UserID: "u1", OrgID: "o1", Attended: false}}, lookups.all())
 }
 

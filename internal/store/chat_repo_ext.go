@@ -770,3 +770,28 @@ func chatPresetsToColumn(m map[string]string) *string {
 // bind or scan.
 type ChatExtra struct {
 }
+
+// RecordChatPersonTurn records that userID, a person, sent a message into chatID now
+// (chat_person_turns): from this turn on its calls are attended (org-provider-accounts §11.1).
+func RecordChatPersonTurn(ctx context.Context, db orm.Context, chatID, userID string, at time.Time) error {
+	_, err := db.Bun().NewRaw(`INSERT INTO chat_person_turns (chat_id, user_id, at) VALUES (?0, ?1, ?2)
+		ON CONFLICT (chat_id) DO UPDATE SET user_id = EXCLUDED.user_id, at = EXCLUDED.at`,
+		chatID, userID, at.UTC()).Exec(ctx)
+	if err != nil {
+		return fmt.Errorf("record a person's turn in the chat: %w", err)
+	}
+	return nil
+}
+
+// ChatPersonTurnAt returns when a person last sent a message into chatID, nil when nobody has.
+func ChatPersonTurnAt(ctx context.Context, db orm.Context, chatID string) (*time.Time, error) {
+	var at []time.Time
+	if err := db.Bun().NewRaw(`SELECT at FROM chat_person_turns WHERE chat_id = ?`, chatID).Scan(ctx, &at); err != nil {
+		return nil, fmt.Errorf("read a person's turn in the chat: %w", err)
+	}
+	if len(at) == 0 {
+		return nil, nil
+	}
+	t := at[0].UTC()
+	return &t, nil
+}

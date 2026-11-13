@@ -265,6 +265,7 @@ func (s *Service) SendMessage(
 		return replayResponse(chat, early), nil
 	}
 
+	s.recordPersonTurn(ctx, userID, chat)
 	s.wakeDaemonForAttendedTurn(ctx, userID, chat)
 
 	if chat.Activity != nil && reliantv1.ChatActivity(*chat.Activity) == reliantv1.ChatActivity_CHAT_ACTIVITY_WAITING_FOR_DAEMON {
@@ -1053,4 +1054,28 @@ func (s *Service) SendMessage(
 		// row is still queued, and this run's first turn drains it.
 		Queued: lateRunThread != "",
 	}), nil
+}
+
+// recordPersonTurn marks a chat a stored trigger or an agent launched as
+// attended from this send on (org-provider-accounts §11.1, I2): the person who
+// sent it is there to be asked, so its calls follow the chat rules rather than
+// an unattended run's org-funded-only sources. A chat a person started needs
+// no mark.
+//
+// Only the chat's owner, signed in as a person, takes a turn: a credential an
+// agent or a script can hold (the CLI login, an agent's access token) never
+// makes a run attended, since attended calls may spend on the owner's own
+// accounts. A failed write is logged: the chat then stays unattended, the
+// narrower scope.
+func (s *Service) recordPersonTurn(ctx context.Context, userID string, chat *db.Chat) {
+	kind := core.TriggerEventKind(chat.LaunchKind)
+	if !(chat.TriggerID != nil && kind.Unattended()) && kind != core.TriggerEventKindAgentStartRun {
+		return
+	}
+	if userID != chat.UserID || auth.RequirePerson(ctx, "take a turn in the chat") != nil {
+		return
+	}
+	if err := s.deps.Repo.RecordChatPersonTurn(ctx, chat.ID, userID); err != nil {
+		logging.WarnContext(ctx, "Failed to record a person's turn in the chat; it stays unattended", "chatID", chat.ID, "error", err)
+	}
 }
