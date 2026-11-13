@@ -10,6 +10,13 @@
 -- CONCURRENTLY cannot run in a transaction block, so this is the only
 -- statement in the file.
 --
+-- Post-deploy verification (prod): the index exists and is valid (true):
+--   reliant forge db query prod --database reliant --confirm-env prod \
+--     --reason "verify provider_accounts_attributed index" \
+--     "SELECT indisvalid FROM pg_index WHERE indexrelid = 'provider_accounts_attributed'::regclass"
+-- An interrupted CONCURRENTLY build leaves an INVALID index; IF NOT EXISTS
+-- would then skip it, so drop it (DROP INDEX CONCURRENTLY provider_accounts_attributed) and redeploy.
+--
 -- Rollback: none needed. An extra index changes no result; the previous
 -- release ignores it.
 CREATE INDEX CONCURRENTLY IF NOT EXISTS provider_accounts_attributed ON public.provider_accounts USING btree (attributed_org_id) WHERE attributed_org_id IS NOT NULL;

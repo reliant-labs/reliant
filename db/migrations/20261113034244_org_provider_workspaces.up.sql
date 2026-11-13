@@ -13,6 +13,15 @@
 --
 -- UNIQUE (provider, external_org_id): one workspace pays for one Reliant org.
 -- bound_by_user_id is attribution only. Nothing writes this table yet.
+--
+-- Post-deploy verification (prod): the table exists and is empty, since
+-- nothing writes it in this release (0):
+--   reliant forge db query prod --database reliant --confirm-env prod \
+--     --reason "verify org_provider_workspaces" "SELECT count(*) FROM org_provider_workspaces"
+--
+-- Rollback: none needed. The previous release never names the table; it stays
+-- in place, unread. Its unique index is built with the table, which is new
+-- and empty, so the build blocks nothing.
 CREATE TABLE org_provider_workspaces (
     org_id           text NOT NULL,
     provider         text NOT NULL CHECK (provider IN ('claude', 'codex')),

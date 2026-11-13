@@ -14,6 +14,15 @@
 -- COUNTS AND IDS ONLY, like llm_call_usage: TestLLMUsageTablesHoldNoContent
 -- lists these columns exactly. A member's rows go with their account (account
 -- purge). Nothing writes this table yet.
+--
+-- Post-deploy verification (prod): the table exists and is empty, since
+-- nothing writes it in this release (0):
+--   reliant forge db query prod --database reliant --confirm-env prod \
+--     --reason "verify llm_org_usage_daily" "SELECT count(*) FROM llm_org_usage_daily"
+--
+-- Rollback: none needed. The previous release never names the table; it stays
+-- in place, unread. Its one index is built in this file because the table is
+-- new and empty, so the build blocks nothing.
 CREATE TABLE llm_org_usage_daily (
     day                date NOT NULL,
     org_id             text NOT NULL,

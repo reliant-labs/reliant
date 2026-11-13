@@ -35,6 +35,8 @@
 -- (person, org): identity 'managed' (today's) or 'managed:<org_id>' (G0's per-org
 -- managed key, not written yet). DROP and ADD are one ALTER TABLE: one lock, and
 -- no instant without the constraint.
+--
+-- Post-deploy verification and rollback: see the _validate file that follows.
 SET LOCAL lock_timeout = '5s';
 
 ALTER TABLE provider_accounts

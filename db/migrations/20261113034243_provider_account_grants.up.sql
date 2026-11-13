@@ -17,6 +17,15 @@
 -- index read; the store writes it from the account row. user_id is the
 -- grantee, granted_by_user_id the admin who granted it (attribution only).
 -- Nothing writes this table yet.
+--
+-- Post-deploy verification (prod): the table exists and is empty, since
+-- nothing writes it in this release (0):
+--   reliant forge db query prod --database reliant --confirm-env prod \
+--     --reason "verify provider_account_grants" "SELECT count(*) FROM provider_account_grants"
+--
+-- Rollback: none needed. The previous release never names the table; it stays
+-- in place, unread. Its one index is built in this file because the table is
+-- new and empty, so the build blocks nothing.
 CREATE TABLE provider_account_grants (
     account_id         text NOT NULL REFERENCES provider_accounts(id) ON DELETE CASCADE,
     org_id             text NOT NULL,

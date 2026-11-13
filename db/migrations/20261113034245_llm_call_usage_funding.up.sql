@@ -20,6 +20,8 @@
 -- not a rewrite. The CHECK is added NOT VALID, so the lock is held only for
 -- the catalog change; 20261113034246_llm_call_usage_funding_validate validates
 -- the existing rows (all '') in its own transaction.
+--
+-- Post-deploy verification and rollback: see the _validate file that follows.
 SET LOCAL lock_timeout = '5s';
 ALTER TABLE llm_call_usage ADD COLUMN funding text NOT NULL DEFAULT '';
 ALTER TABLE llm_call_usage ADD CONSTRAINT llm_call_usage_funding_check
