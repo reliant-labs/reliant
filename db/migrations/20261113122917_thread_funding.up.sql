@@ -1,7 +1,7 @@
 -- forge:backward-compatible — adds a new table the previous release never reads or writes.
 
 -- Migration: thread_funding
--- Created: 2026-11-13T10:26:11Z
+-- Created: 2026-11-13T12:29:17Z
 --
 -- Who paid for a thread's calls since its account last changed: the funding
 -- class (llm_call_usage.funding's values), the org of the run, and the account

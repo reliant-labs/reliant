@@ -1,7 +1,7 @@
 -- forge:backward-compatible — adds a new table the previous release never reads or writes.
 
 -- Migration: chat_personal_funding
--- Created: 2026-11-13T05:59:01Z
+-- Created: 2026-11-13T12:29:09Z
 --
 -- One chat's question "continue on your own account?" and its answer
 -- (control-plane docs/design/org-provider-accounts.md §10). Before a chat in an
