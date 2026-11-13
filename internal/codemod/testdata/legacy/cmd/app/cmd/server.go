@@ -1,0 +1,61 @@
+// yours: scaffolded once, never touched again — forge will not overwrite this file
+//
+// THE ALL-SERVICES COMMAND — four decisions, and nothing else.
+//
+// `app server` is the monolith entrypoint: it declares, by naming typed
+// accessors, that THIS process mounts every service and supervises every
+// worker and operator. There is no invariant ceremony left in here to move to
+// a library — the shared pipeline is Serve() in serve.go and pkg/serverkit
+// beneath it. What remains is the ServeSpec, and every field of it is a
+// choice you may want to make differently:
+//
+//   - Mount: MountAll mounts every service. Point it at a
+//     (*app.Components).Mount<Svc> method value to carve this process down to
+//     a subset without adding a subcommand.
+//   - Workers / Operators: AllWorkers / AllOperators supervise everything.
+//     Return a filtered slice to keep a component's code in the binary but
+//     out of this process's supervision.
+//   - RequireComplete: true fails BOOT when a declared service is not
+//     mounted. That is fail-closed against a half-wired server, and it is
+//     correct precisely because this command claims to mount everything —
+//     which is why a subset mount must turn it off, or it would refuse to
+//     start by design.
+//
+// There is deliberately NO `server <subset>` string-selected path. To run a
+// single service, use its dedicated typed subcommand
+// (cmd/app/cmd/services/<name>.go), which names the
+// (*app.Components).Mount<Svc> method DIRECTLY — so there is no name->func
+// lookup table anywhere on the run path and a typo is a compile error rather
+// than an empty mount at runtime.
+package cmd
+
+import (
+	"github.com/spf13/cobra"
+
+	"example.com/app/internal/app"
+	"example.com/app/pkg/config"
+)
+
+func newServerCmd(deps Deps) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "server",
+		Args:  cobra.NoArgs,
+		Short: "Start the HTTP/Connect server (all services)",
+		Long:  "Start the HTTP/Connect server: every service is mounted and all workers/operators run. To run a single service, use its typed subcommand.",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			deps.Cmd = cmd
+			// The all-services process composes ITSELF: the typed MountAll method
+			// expression, AllWorkers + AllOperators naming every supervised
+			// component directly, and RequireComplete turning on the boot-time
+			// mount-completeness gate.
+			return Serve(cmd.Context(), deps, ServeSpec{
+				Mount:           (*app.Components).MountAll,
+				Workers:         (*app.Components).AllWorkers,
+				Operators:       (*app.Components).AllOperators,
+				RequireComplete: true,
+			})
+		},
+	}
+	config.RegisterFlags(cmd)
+	return cmd
+}

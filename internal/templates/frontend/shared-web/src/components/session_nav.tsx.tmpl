@@ -1,0 +1,257 @@
+{{if eq .Platform "nextjs"}}"use client";
+
+{{end}}// yours: scaffolded once, never touched again — forge will not overwrite this file
+// SessionNav; owned scaffold. See `forge skill load auth`.
+/**
+ * SessionNav — the user menu: who is signed in, the theme, and a way out.
+ * Drop into your header:
+ *
+ *   import { SessionNav } from "@/components/session_nav";
+ *   <header><SessionNav /></header>
+ *
+ * Reads the app's auth state through `useAuth()`, which answers from THIS
+ * APP'S API (GET /auth/session) — not from an identity provider the browser
+ * talks to. There is no second session store and no auth endpoint of its
+ * own: what this renders and what your RPCs authenticate as are the same
+ * session by construction, because both ride the one HttpOnly cookie.
+ *
+ * There is nothing to configure here and no provider to select. The server
+ * holds the issuer, the client id and the tokens; the browser holds an
+ * opaque cookie it cannot even read. So this file looks the same whether
+ * your IdP is the dev one or a production issuer.
+ *
+ * `identity` is PRESENTATION ONLY — a name, an address and a picture to
+ * render. Never gate anything on it: the server validates the real token on
+ * every request, and a caller who edits this component changes the UI and
+ * nothing else.
+ *
+ * Built from forge's UI library (`Avatar`, `DropdownMenu`), so the menu
+ * semantics — role="menu", arrow keys, Home/End, typeahead, Escape and Tab
+ * closing with focus back on the trigger — are the library's, not this
+ * file's.
+ *
+ * ── Adding items ──────────────────────────────────────────────────────
+ *
+ * Append a group to `groups` below. A page you have, linked:
+ *
+ *   { items: [{ label: "Account", href: "/account", icon: <UserRound /> }] },
+ *
+ * (`src/components/passkeys-panel.tsx` is a ready account panel for a
+ * deployment that offers passkeys; mount it on a page of your own and link
+ * that page here.) Keep "Sign out" last.
+ */
+import { LogOut, Monitor, Moon, Sun } from "lucide-react";
+import { useEffect, useState, useSyncExternalStore } from "react";
+
+import { ThemeToggle } from "@/components/theme-toggle";
+import Avatar from "@/components/ui/avatar";
+import DropdownMenu from "@/components/ui/dropdown_menu";
+import { useAuth } from "@/lib/auth/use-auth";
+import { useTheme } from "@/lib/theme/use-theme";
+
+import type { MenuGroup } from "@/components/ui/dropdown_menu";
+import type { Identity } from "@/lib/auth/native-login";
+
+/**
+ * A store that never changes, for the hydration flag below.
+ *
+ * Module scope, not inline: `useSyncExternalStore` re-subscribes whenever
+ * `subscribe` changes identity, so a fresh arrow per render would tear down
+ * and re-establish the subscription on every render.
+ */
+const subscribeToNothing = () => () => {};
+
+/**
+ * The identity as GET /auth/session sends it: `Identity` plus the `picture`
+ * claim (an http(s) URL) when the issuer has one.
+ */
+type SessionIdentity = Identity & { picture?: string };
+
+/**
+ * What to call the person, in order of preference: their name, their
+ * address, and — only when the issuer told us nothing else — a generic
+ * "Signed in" with the subject id as the small print. A raw subject id is a
+ * database key, not something to greet anyone with.
+ */
+function describe(identity: Identity) {
+  const name = identity.name?.trim() ?? "";
+  const email = identity.email?.trim() ?? "";
+  const primary = name || email;
+  return {
+    primary: primary || "Signed in",
+    // The second line of the menu header: the address under a name, or the
+    // subject id when there is nothing else to tell two accounts apart.
+    secondary: name && email ? email : primary ? "" : (identity.subject ?? ""),
+    // Initials come from the name, else the address's local part split on
+    // its separators ("jane.doe@…" → "JD"). Undefined draws the person glyph.
+    initialsFrom:
+      name ||
+      email
+        .split("@")[0]
+        ?.replace(/[._+-]+/g, " ")
+        .trim() ||
+      undefined,
+    // The menu's accessible name. A screen reader inside a role="menu" reads
+    // items, not the header above them, so who the menu belongs to is said
+    // here too.
+    menuLabel: primary
+      ? `Signed in as ${name && email ? `${name}, ${email}` : primary}`
+      : "Account",
+  };
+}
+
+/**
+ * The picture claim, once it has actually loaded — undefined until then and
+ * forever if it fails. An <img> pointed straight at the claim shows a broken
+ * image when the URL is unreachable from the browser (an issuer on a private
+ * network serves its avatars there too); preloading means the initials stay
+ * up until there is a real picture to replace them.
+ */
+function useLoadedPicture(src: string | undefined): string | undefined {
+  const [loaded, setLoaded] = useState<string>();
+  useEffect(() => {
+    if (!src) return;
+    let live = true;
+    const img = new Image();
+    img.onload = () => {
+      if (live) setLoaded(src);
+    };
+    img.src = src;
+    return () => {
+      live = false;
+    };
+  }, [src]);
+  return src && loaded === src ? src : undefined;
+}
+
+const THEME_ITEMS = [
+  { value: "light", label: "Light", Icon: Sun },
+  { value: "dark", label: "Dark", Icon: Moon },
+  { value: "system", label: "System", Icon: Monitor },
+] as const;
+
+export function SessionNav() {
+  const { identity, isAuthenticated, isLoading, logout } = useAuth();
+  const { theme, setTheme } = useTheme();
+  const picture = useLoadedPicture((identity as SessionIdentity).picture);
+
+  // `useSyncExternalStore` answers "am I on the client yet?" without a state
+  // update: the server snapshot is false, the client snapshot is true, and
+  // React swaps them on mount.
+  const hydrated = useSyncExternalStore(
+    subscribeToNothing,
+    () => true,
+    () => false,
+  );
+
+  // The placeholder until the session is known — on the server, on the
+  // client's hydrating render (the two must match, or React discards the
+  // server tree and mounts a second copy of the app), and while GET
+  // /auth/session is in flight. Avatar-sized, so nothing in the header moves
+  // when the menu replaces it.
+  if (!hydrated || isLoading) {
+    return (
+      <div
+        aria-hidden
+        className="h-8 w-8 animate-pulse rounded-full bg-surface-muted motion-reduce:animate-none sm:w-32"
+      />
+    );
+  }
+
+  // Signed out: the theme is still the visitor's to choose, so the compact
+  // toggle stands in for the menu that would otherwise hold it.
+  //
+  // The route guard has already redirected this visitor to sign in, so a
+  // "Sign in" button here is unreachable in the gated app — and where it IS
+  // reachable (a public route you added to the guard's publicPaths), a
+  // control in the corner of the chrome is the wrong way to offer sign-in
+  // anyway: link to /auth/sign-in from the page itself, where you can say
+  // why.
+  if (!isAuthenticated) {
+    return <ThemeToggle />;
+  }
+
+  const who = describe(identity);
+
+  const groups: MenuGroup[] = [
+    {
+      label: "Theme",
+      selection: "single",
+      // Open after a choice: the theme applies at once, so the menu doubles
+      // as a preview — try each, keep one.
+      items: THEME_ITEMS.map(({ value, label, Icon }) => ({
+        label,
+        icon: <Icon className="h-4 w-4" strokeWidth={1.75} />,
+        checked: theme === value,
+        keepOpen: true,
+        onClick: () => setTheme(value),
+      })),
+    },
+    {
+      items: [
+        {
+          label: "Sign out",
+          icon: <LogOut className="h-4 w-4" strokeWidth={1.75} />,
+          onClick: () => void logout(),
+        },
+      ],
+    },
+  ];
+
+  return (
+    <DropdownMenu
+      align="right"
+      label={who.menuLabel}
+      menuClassName="w-64 max-w-[calc(100vw-1rem)]"
+      header={
+        <div className="flex items-center gap-3">
+          <span aria-hidden className="shrink-0">
+            <Avatar size="md" name={who.initialsFrom} src={picture} alt="" />
+          </span>
+          <div className="min-w-0">
+            <p className="truncate text-sm font-medium text-ink" title={who.primary}>
+              {who.primary}
+            </p>
+            {who.secondary ? (
+              <p
+                className={`truncate text-xs text-ink-muted ${identity.email ? "" : "font-mono"}`}
+                title={who.secondary}
+              >
+                {who.secondary}
+              </p>
+            ) : null}
+          </div>
+        </div>
+      }
+      groups={groups}
+      trigger={(props) => (
+        <button
+          {...props}
+          type="button"
+          // The visible name, plus what the control is: the accessible name
+          // must contain the visible text (WCAG 2.5.3), and below `sm` the
+          // name is hidden and this is all there is.
+          aria-label={`${who.primary}, account menu`}
+          className="group flex min-w-0 items-center gap-2 rounded-full p-1.5 text-ink-muted transition-colors hover:bg-surface-muted hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent aria-expanded:bg-surface-muted aria-expanded:text-ink sm:p-1 sm:pr-2.5"
+        >
+          <span aria-hidden className="shrink-0">
+            <Avatar size="sm" name={who.initialsFrom} src={picture} alt="" />
+          </span>
+          <span className="hidden max-w-[10rem] truncate text-sm font-medium text-ink sm:block">
+            {who.primary}
+          </span>
+          <svg
+            aria-hidden
+            viewBox="0 0 16 16"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={1.75}
+            className="hidden h-3.5 w-3.5 shrink-0 transition-transform group-aria-expanded:rotate-180 motion-reduce:transition-none sm:block"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" d="M4 6l4 4 4-4" />
+          </svg>
+        </button>
+      )}
+    />
+  );
+}
