@@ -181,7 +181,7 @@ func TestOwnerAwareWritesReachTheOrgsAccount(t *testing.T) {
 	_, err = repo.PatchOwnedProviderAccount(ctx, core.OrgAccountOwner("org-2"), org.ID, core.AccountPatch{NeedsReauth: &reason})
 	assert.ErrorIs(t, err, core.ErrProviderAccountNotFound, "another org cannot mark it")
 
-	until := time.Now().Add(time.Hour).UTC().Truncate(time.Second)
+	until := time.Date(2030, 1, 2, 3, 0, 0, 0, time.UTC) // fixed, and later than the bench's own observed_at
 	require.NoError(t, repo.BenchAccount(ctx, owner, org.ID, until, "", false))
 	assert.ErrorIs(t, repo.BenchAccount(ctx, core.UserAccountOwner("member"), org.ID, until, "", false), core.ErrProviderAccountNotFound)
 	assert.ErrorIs(t, repo.BenchAccount(ctx, core.UserAccountOwner("org:org-1"), org.ID, until, "", false), core.ErrProviderAccountNotFound)
@@ -193,7 +193,7 @@ func TestOwnerAwareWritesReachTheOrgsAccount(t *testing.T) {
 	assert.True(t, l.LimitedUntil.Equal(until))
 
 	require.NoError(t, repo.UpsertAccountLimitSnapshot(ctx, core.LimitState{
-		AccountID: org.ID, UserID: owner.Key(), Status: "allowed", ObservedAt: time.Now().Add(2 * time.Hour),
+		AccountID: org.ID, UserID: owner.Key(), Status: "allowed", ObservedAt: until.Add(time.Hour),
 	}))
 	l, err = repo.GetAccountLimits(ctx, org.ID)
 	require.NoError(t, err)

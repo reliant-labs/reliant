@@ -21,15 +21,17 @@ import (
 type markerFake struct {
 	store  *routerFake
 	marked []string
+	owners []core.AccountOwner // the owner each mark named, in order
 	err    error
 }
 
 // MarkNeedsSignIn mirrors the real store: the account stops being offered.
-func (m *markerFake) MarkNeedsSignIn(_ context.Context, _ core.AccountOwner, accountID, _ string) error {
+func (m *markerFake) MarkNeedsSignIn(_ context.Context, owner core.AccountOwner, accountID, _ string) error {
 	if m.err != nil {
 		return m.err
 	}
 	m.marked = append(m.marked, accountID)
+	m.owners = append(m.owners, owner)
 	return nil
 }
 

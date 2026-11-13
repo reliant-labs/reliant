@@ -521,7 +521,7 @@ func TestPurge_KeepsTheOrgProviderAccountsAnAdminCreated(t *testing.T) {
 		VALUES ('acct-org', 'org:org-1', 'org', 'org-1', 'selected', $1, 'anthropic', 'api_key', 'key:org', 0, '\x01')`, admin)
 	mustExec(t, rawDB, `INSERT INTO provider_account_grants (account_id, org_id, user_id, granted_by_user_id)
 		VALUES ('acct-org', 'org-1', $1, $1), ('acct-org', 'org-1', 'member-2', $1)`, admin)
-	mustExec(t, rawDB, `INSERT INTO provider_account_limits (account_id, user_id, observed_at) VALUES ('acct-org', 'org:org-1', now())`)
+	mustExec(t, rawDB, `INSERT INTO provider_account_limits (account_id, user_id, observed_at) VALUES ('acct-org', 'org:org-1', '2026-11-13T00:00:00Z')`)
 
 	if _, err := accountpurge.Purge(ctx, rawDB, admin); err != nil {
 		t.Fatalf("Purge: %v", err)
