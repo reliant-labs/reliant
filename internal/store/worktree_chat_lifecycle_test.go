@@ -68,6 +68,10 @@ func TestListWorktreeIDsWithRunningChat(t *testing.T) {
 	require.Empty(t, got)
 }
 
+// A thread spawned into its own workspace holds that workspace while its OWN
+// run is pending, active or paused; its parent chat's runs hold only the chat's
+// workspace (bug 94324f76: an orchestrator chat that always runs held every
+// sub-agent workspace forever).
 func TestRunningChatExcludesSpawnedThreadWorkspaceOverride(t *testing.T) {
 	for _, status := range []core.WorkflowStatus{core.Pending(), core.Active(), core.Paused()} {
 		t.Run(fmt.Sprint(status), func(t *testing.T) {
@@ -80,7 +84,13 @@ func TestRunningChatExcludesSpawnedThreadWorkspaceOverride(t *testing.T) {
 			mustExecConv(t, env, `INSERT INTO threads (id, chat_id, created_at, origin, status, worktree_id) VALUES ('spawn-child', $1, NOW(), 'spawn', 2, $2)`, chat.ID, child.ID)
 			got, err := env.Repo.ListWorktreeIDsWithRunningChat(ctx, []string{*chat.WorktreeID, child.ID})
 			require.NoError(t, err)
-			require.Equal(t, map[string]bool{*chat.WorktreeID: true, child.ID: true}, got)
+			require.Equal(t, map[string]bool{*chat.WorktreeID: true}, got, "the parent chat's run holds only the chat's workspace")
+
+			wf := newWorkflow("spawn-child", chat.ID, ptr("wf-parent"), status, time.Now().UTC())
+			require.NoError(t, env.Repo.CreateWorkflow(ctx, wf))
+			got, err = env.Repo.ListWorktreeIDsWithRunningChat(ctx, []string{*chat.WorktreeID, child.ID})
+			require.NoError(t, err)
+			require.Equal(t, map[string]bool{*chat.WorktreeID: true, child.ID: true}, got, "the spawned thread's own run holds its workspace")
 		})
 	}
 }

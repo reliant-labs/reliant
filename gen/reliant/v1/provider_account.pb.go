@@ -193,6 +193,67 @@ func (UsageSource) EnumDescriptor() ([]byte, []int) {
 	return file_reliant_v1_provider_account_proto_rawDescGZIP(), []int{2}
 }
 
+// ProviderAccountFunding is who pays for an account, derived from the row and
+// never stored on it (org-provider-accounts §2).
+type ProviderAccountFunding int32
+
+const (
+	ProviderAccountFunding_PROVIDER_ACCOUNT_FUNDING_UNSPECIFIED ProviderAccountFunding = 0
+	// The person's own subscription, API key or local model: they pay.
+	ProviderAccountFunding_PROVIDER_ACCOUNT_FUNDING_PERSONAL ProviderAccountFunding = 1
+	// An API key an org owns: the org pays, on its own provider bill.
+	ProviderAccountFunding_PROVIDER_ACCOUNT_FUNDING_ORG_KEY ProviderAccountFunding = 2
+	// The person's sign-in to a team workspace the org pays for (a seat).
+	ProviderAccountFunding_PROVIDER_ACCOUNT_FUNDING_ORG_SEAT ProviderAccountFunding = 3
+	// The managed Reliant key minted in an org: the org's Reliant credits.
+	ProviderAccountFunding_PROVIDER_ACCOUNT_FUNDING_ORG_WALLET ProviderAccountFunding = 4
+)
+
+// Enum value maps for ProviderAccountFunding.
+var (
+	ProviderAccountFunding_name = map[int32]string{
+		0: "PROVIDER_ACCOUNT_FUNDING_UNSPECIFIED",
+		1: "PROVIDER_ACCOUNT_FUNDING_PERSONAL",
+		2: "PROVIDER_ACCOUNT_FUNDING_ORG_KEY",
+		3: "PROVIDER_ACCOUNT_FUNDING_ORG_SEAT",
+		4: "PROVIDER_ACCOUNT_FUNDING_ORG_WALLET",
+	}
+	ProviderAccountFunding_value = map[string]int32{
+		"PROVIDER_ACCOUNT_FUNDING_UNSPECIFIED": 0,
+		"PROVIDER_ACCOUNT_FUNDING_PERSONAL":    1,
+		"PROVIDER_ACCOUNT_FUNDING_ORG_KEY":     2,
+		"PROVIDER_ACCOUNT_FUNDING_ORG_SEAT":    3,
+		"PROVIDER_ACCOUNT_FUNDING_ORG_WALLET":  4,
+	}
+)
+
+func (x ProviderAccountFunding) Enum() *ProviderAccountFunding {
+	p := new(ProviderAccountFunding)
+	*p = x
+	return p
+}
+
+func (x ProviderAccountFunding) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (ProviderAccountFunding) Descriptor() protoreflect.EnumDescriptor {
+	return file_reliant_v1_provider_account_proto_enumTypes[3].Descriptor()
+}
+
+func (ProviderAccountFunding) Type() protoreflect.EnumType {
+	return &file_reliant_v1_provider_account_proto_enumTypes[3]
+}
+
+func (x ProviderAccountFunding) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use ProviderAccountFunding.Descriptor instead.
+func (ProviderAccountFunding) EnumDescriptor() ([]byte, []int) {
+	return file_reliant_v1_provider_account_proto_rawDescGZIP(), []int{3}
+}
+
 type PersonalFundingQuestion_Reason int32
 
 const (
@@ -233,11 +294,11 @@ func (x PersonalFundingQuestion_Reason) String() string {
 }
 
 func (PersonalFundingQuestion_Reason) Descriptor() protoreflect.EnumDescriptor {
-	return file_reliant_v1_provider_account_proto_enumTypes[3].Descriptor()
+	return file_reliant_v1_provider_account_proto_enumTypes[4].Descriptor()
 }
 
 func (PersonalFundingQuestion_Reason) Type() protoreflect.EnumType {
-	return &file_reliant_v1_provider_account_proto_enumTypes[3]
+	return &file_reliant_v1_provider_account_proto_enumTypes[4]
 }
 
 func (x PersonalFundingQuestion_Reason) Number() protoreflect.EnumNumber {
@@ -288,11 +349,11 @@ func (x PersonalFundingQuestion_State) String() string {
 }
 
 func (PersonalFundingQuestion_State) Descriptor() protoreflect.EnumDescriptor {
-	return file_reliant_v1_provider_account_proto_enumTypes[4].Descriptor()
+	return file_reliant_v1_provider_account_proto_enumTypes[5].Descriptor()
 }
 
 func (PersonalFundingQuestion_State) Type() protoreflect.EnumType {
-	return &file_reliant_v1_provider_account_proto_enumTypes[4]
+	return &file_reliant_v1_provider_account_proto_enumTypes[5]
 }
 
 func (x PersonalFundingQuestion_State) Number() protoreflect.EnumNumber {
@@ -337,11 +398,11 @@ func (x ResolvePersonalFundingChoiceRequest_Choice) String() string {
 }
 
 func (ResolvePersonalFundingChoiceRequest_Choice) Descriptor() protoreflect.EnumDescriptor {
-	return file_reliant_v1_provider_account_proto_enumTypes[5].Descriptor()
+	return file_reliant_v1_provider_account_proto_enumTypes[6].Descriptor()
 }
 
 func (ResolvePersonalFundingChoiceRequest_Choice) Type() protoreflect.EnumType {
-	return &file_reliant_v1_provider_account_proto_enumTypes[5]
+	return &file_reliant_v1_provider_account_proto_enumTypes[6]
 }
 
 func (x ResolvePersonalFundingChoiceRequest_Choice) Number() protoreflect.EnumNumber {
@@ -470,7 +531,14 @@ type ProviderAccount struct {
 	// True while one of the plan's usage windows is used up but the provider
 	// keeps serving the account, paid from credits (a ChatGPT workspace's or
 	// purchased Codex credits). The account is not limited.
-	UsingCredits  bool `protobuf:"varint,21,opt,name=using_credits,json=usingCredits,proto3" json:"using_credits,omitempty"`
+	UsingCredits bool `protobuf:"varint,21,opt,name=using_credits,json=usingCredits,proto3" json:"using_credits,omitempty"`
+	// Who pays for the account (control-plane docs/design/org-provider-accounts.md
+	// §2). A server that predates it leaves it UNSPECIFIED: read that as the
+	// person's own.
+	Funding ProviderAccountFunding `protobuf:"varint,22,opt,name=funding,proto3,enum=reliant.v1.ProviderAccountFunding" json:"funding,omitempty"`
+	// The org that pays for it: the org that owns an ORG_KEY, or the org a
+	// person's ORG_SEAT or ORG_WALLET is attributed to. Unset for PERSONAL.
+	FundingOrgId  *string `protobuf:"bytes,23,opt,name=funding_org_id,json=fundingOrgId,proto3,oneof" json:"funding_org_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -650,6 +718,20 @@ func (x *ProviderAccount) GetUsingCredits() bool {
 		return x.UsingCredits
 	}
 	return false
+}
+
+func (x *ProviderAccount) GetFunding() ProviderAccountFunding {
+	if x != nil {
+		return x.Funding
+	}
+	return ProviderAccountFunding_PROVIDER_ACCOUNT_FUNDING_UNSPECIFIED
+}
+
+func (x *ProviderAccount) GetFundingOrgId() string {
+	if x != nil && x.FundingOrgId != nil {
+		return *x.FundingOrgId
+	}
+	return ""
 }
 
 type ListProviderAccountsRequest struct {
@@ -1633,7 +1715,7 @@ const file_reliant_v1_provider_account_proto_rawDesc = "" +
 	"\x0elength_seconds\x18\x05 \x01(\x03R\rlengthSecondsB\x10\n" +
 	"\x0e_used_fractionB\f\n" +
 	"\n" +
-	"_resets_at\"\x8e\b\n" +
+	"_resets_at\"\x8a\t\n" +
 	"\x0fProviderAccount\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1a\n" +
 	"\bprovider\x18\x02 \x01(\tR\bprovider\x122\n" +
@@ -1659,7 +1741,10 @@ const file_reliant_v1_provider_account_proto_rawDesc = "" +
 	"usageError\x88\x01\x01\x12\x1d\n" +
 	"\n" +
 	"created_at\x18\x14 \x01(\tR\tcreatedAt\x12#\n" +
-	"\rusing_credits\x18\x15 \x01(\bR\fusingCreditsB\b\n" +
+	"\rusing_credits\x18\x15 \x01(\bR\fusingCredits\x12<\n" +
+	"\afunding\x18\x16 \x01(\x0e2\".reliant.v1.ProviderAccountFundingR\afunding\x12)\n" +
+	"\x0efunding_org_id\x18\x17 \x01(\tH\n" +
+	"R\ffundingOrgId\x88\x01\x01B\b\n" +
 	"\x06_emailB\x14\n" +
 	"\x12_organization_nameB\a\n" +
 	"\x05_planB\x0f\n" +
@@ -1669,7 +1754,8 @@ const file_reliant_v1_provider_account_proto_rawDesc = "" +
 	"\x0f_limited_windowB\x17\n" +
 	"\x15_needs_sign_in_reasonB\x14\n" +
 	"\x12_usage_observed_atB\x0e\n" +
-	"\f_usage_error\"\x1d\n" +
+	"\f_usage_errorB\x11\n" +
+	"\x0f_funding_org_id\"\x1d\n" +
 	"\x1bListProviderAccountsRequest\"W\n" +
 	"\x1cListProviderAccountsResponse\x127\n" +
 	"\baccounts\x18\x01 \x03(\v2\x1b.reliant.v1.ProviderAccountR\baccounts\"\x8a\x01\n" +
@@ -1765,7 +1851,13 @@ const file_reliant_v1_provider_account_proto_rawDesc = "" +
 	"\x18USAGE_SOURCE_UNSPECIFIED\x10\x00\x12\x18\n" +
 	"\x14USAGE_SOURCE_HEADERS\x10\x01\x12\x1a\n" +
 	"\x16USAGE_SOURCE_USAGE_API\x10\x02\x12\x1c\n" +
-	"\x18USAGE_SOURCE_LIMIT_ERROR\x10\x032\xe4\f\n" +
+	"\x18USAGE_SOURCE_LIMIT_ERROR\x10\x03*\xdf\x01\n" +
+	"\x16ProviderAccountFunding\x12(\n" +
+	"$PROVIDER_ACCOUNT_FUNDING_UNSPECIFIED\x10\x00\x12%\n" +
+	"!PROVIDER_ACCOUNT_FUNDING_PERSONAL\x10\x01\x12$\n" +
+	" PROVIDER_ACCOUNT_FUNDING_ORG_KEY\x10\x02\x12%\n" +
+	"!PROVIDER_ACCOUNT_FUNDING_ORG_SEAT\x10\x03\x12'\n" +
+	"#PROVIDER_ACCOUNT_FUNDING_ORG_WALLET\x10\x042\xe4\f\n" +
 	"\x16ProviderAccountService\x12k\n" +
 	"\x14ListProviderAccounts\x12'.reliant.v1.ListProviderAccountsRequest\x1a(.reliant.v1.ListProviderAccountsResponse\"\x00\x12\xbc\x01\n" +
 	"\x15UpdateProviderAccount\x12(.reliant.v1.UpdateProviderAccountRequest\x1a).reliant.v1.UpdateProviderAccountResponse\"N\xa2\xbb\x18J:H\n" +
@@ -1797,76 +1889,78 @@ func file_reliant_v1_provider_account_proto_rawDescGZIP() []byte {
 	return file_reliant_v1_provider_account_proto_rawDescData
 }
 
-var file_reliant_v1_provider_account_proto_enumTypes = make([]protoimpl.EnumInfo, 6)
+var file_reliant_v1_provider_account_proto_enumTypes = make([]protoimpl.EnumInfo, 7)
 var file_reliant_v1_provider_account_proto_msgTypes = make([]protoimpl.MessageInfo, 21)
 var file_reliant_v1_provider_account_proto_goTypes = []any{
 	(ProviderAccountStatus)(0),                      // 0: reliant.v1.ProviderAccountStatus
 	(ProviderAuthKind)(0),                           // 1: reliant.v1.ProviderAuthKind
 	(UsageSource)(0),                                // 2: reliant.v1.UsageSource
-	(PersonalFundingQuestion_Reason)(0),             // 3: reliant.v1.PersonalFundingQuestion.Reason
-	(PersonalFundingQuestion_State)(0),              // 4: reliant.v1.PersonalFundingQuestion.State
-	(ResolvePersonalFundingChoiceRequest_Choice)(0), // 5: reliant.v1.ResolvePersonalFundingChoiceRequest.Choice
-	(*UsageWindow)(nil),                             // 6: reliant.v1.UsageWindow
-	(*ProviderAccount)(nil),                         // 7: reliant.v1.ProviderAccount
-	(*ListProviderAccountsRequest)(nil),             // 8: reliant.v1.ListProviderAccountsRequest
-	(*ListProviderAccountsResponse)(nil),            // 9: reliant.v1.ListProviderAccountsResponse
-	(*UpdateProviderAccountRequest)(nil),            // 10: reliant.v1.UpdateProviderAccountRequest
-	(*UpdateProviderAccountResponse)(nil),           // 11: reliant.v1.UpdateProviderAccountResponse
-	(*ReorderProviderAccountsRequest)(nil),          // 12: reliant.v1.ReorderProviderAccountsRequest
-	(*ReorderProviderAccountsResponse)(nil),         // 13: reliant.v1.ReorderProviderAccountsResponse
-	(*DeleteProviderAccountRequest)(nil),            // 14: reliant.v1.DeleteProviderAccountRequest
-	(*DeleteProviderAccountResponse)(nil),           // 15: reliant.v1.DeleteProviderAccountResponse
-	(*AddProviderAPIKeyRequest)(nil),                // 16: reliant.v1.AddProviderAPIKeyRequest
-	(*AddProviderAPIKeyResponse)(nil),               // 17: reliant.v1.AddProviderAPIKeyResponse
-	(*RefreshProviderAccountUsageRequest)(nil),      // 18: reliant.v1.RefreshProviderAccountUsageRequest
-	(*RefreshProviderAccountUsageResponse)(nil),     // 19: reliant.v1.RefreshProviderAccountUsageResponse
-	(*GetChatProviderAccountRequest)(nil),           // 20: reliant.v1.GetChatProviderAccountRequest
-	(*GetChatProviderAccountResponse)(nil),          // 21: reliant.v1.GetChatProviderAccountResponse
-	(*PersonalFundingQuestion)(nil),                 // 22: reliant.v1.PersonalFundingQuestion
-	(*GetPersonalFundingQuestionRequest)(nil),       // 23: reliant.v1.GetPersonalFundingQuestionRequest
-	(*GetPersonalFundingQuestionResponse)(nil),      // 24: reliant.v1.GetPersonalFundingQuestionResponse
-	(*ResolvePersonalFundingChoiceRequest)(nil),     // 25: reliant.v1.ResolvePersonalFundingChoiceRequest
-	(*ResolvePersonalFundingChoiceResponse)(nil),    // 26: reliant.v1.ResolvePersonalFundingChoiceResponse
+	(ProviderAccountFunding)(0),                     // 3: reliant.v1.ProviderAccountFunding
+	(PersonalFundingQuestion_Reason)(0),             // 4: reliant.v1.PersonalFundingQuestion.Reason
+	(PersonalFundingQuestion_State)(0),              // 5: reliant.v1.PersonalFundingQuestion.State
+	(ResolvePersonalFundingChoiceRequest_Choice)(0), // 6: reliant.v1.ResolvePersonalFundingChoiceRequest.Choice
+	(*UsageWindow)(nil),                             // 7: reliant.v1.UsageWindow
+	(*ProviderAccount)(nil),                         // 8: reliant.v1.ProviderAccount
+	(*ListProviderAccountsRequest)(nil),             // 9: reliant.v1.ListProviderAccountsRequest
+	(*ListProviderAccountsResponse)(nil),            // 10: reliant.v1.ListProviderAccountsResponse
+	(*UpdateProviderAccountRequest)(nil),            // 11: reliant.v1.UpdateProviderAccountRequest
+	(*UpdateProviderAccountResponse)(nil),           // 12: reliant.v1.UpdateProviderAccountResponse
+	(*ReorderProviderAccountsRequest)(nil),          // 13: reliant.v1.ReorderProviderAccountsRequest
+	(*ReorderProviderAccountsResponse)(nil),         // 14: reliant.v1.ReorderProviderAccountsResponse
+	(*DeleteProviderAccountRequest)(nil),            // 15: reliant.v1.DeleteProviderAccountRequest
+	(*DeleteProviderAccountResponse)(nil),           // 16: reliant.v1.DeleteProviderAccountResponse
+	(*AddProviderAPIKeyRequest)(nil),                // 17: reliant.v1.AddProviderAPIKeyRequest
+	(*AddProviderAPIKeyResponse)(nil),               // 18: reliant.v1.AddProviderAPIKeyResponse
+	(*RefreshProviderAccountUsageRequest)(nil),      // 19: reliant.v1.RefreshProviderAccountUsageRequest
+	(*RefreshProviderAccountUsageResponse)(nil),     // 20: reliant.v1.RefreshProviderAccountUsageResponse
+	(*GetChatProviderAccountRequest)(nil),           // 21: reliant.v1.GetChatProviderAccountRequest
+	(*GetChatProviderAccountResponse)(nil),          // 22: reliant.v1.GetChatProviderAccountResponse
+	(*PersonalFundingQuestion)(nil),                 // 23: reliant.v1.PersonalFundingQuestion
+	(*GetPersonalFundingQuestionRequest)(nil),       // 24: reliant.v1.GetPersonalFundingQuestionRequest
+	(*GetPersonalFundingQuestionResponse)(nil),      // 25: reliant.v1.GetPersonalFundingQuestionResponse
+	(*ResolvePersonalFundingChoiceRequest)(nil),     // 26: reliant.v1.ResolvePersonalFundingChoiceRequest
+	(*ResolvePersonalFundingChoiceResponse)(nil),    // 27: reliant.v1.ResolvePersonalFundingChoiceResponse
 }
 var file_reliant_v1_provider_account_proto_depIdxs = []int32{
 	1,  // 0: reliant.v1.ProviderAccount.auth_kind:type_name -> reliant.v1.ProviderAuthKind
 	0,  // 1: reliant.v1.ProviderAccount.status:type_name -> reliant.v1.ProviderAccountStatus
-	6,  // 2: reliant.v1.ProviderAccount.windows:type_name -> reliant.v1.UsageWindow
+	7,  // 2: reliant.v1.ProviderAccount.windows:type_name -> reliant.v1.UsageWindow
 	2,  // 3: reliant.v1.ProviderAccount.usage_source:type_name -> reliant.v1.UsageSource
-	7,  // 4: reliant.v1.ListProviderAccountsResponse.accounts:type_name -> reliant.v1.ProviderAccount
-	7,  // 5: reliant.v1.UpdateProviderAccountResponse.account:type_name -> reliant.v1.ProviderAccount
-	7,  // 6: reliant.v1.ReorderProviderAccountsResponse.accounts:type_name -> reliant.v1.ProviderAccount
-	7,  // 7: reliant.v1.AddProviderAPIKeyResponse.account:type_name -> reliant.v1.ProviderAccount
-	7,  // 8: reliant.v1.RefreshProviderAccountUsageResponse.account:type_name -> reliant.v1.ProviderAccount
-	7,  // 9: reliant.v1.GetChatProviderAccountResponse.account:type_name -> reliant.v1.ProviderAccount
-	3,  // 10: reliant.v1.PersonalFundingQuestion.reason:type_name -> reliant.v1.PersonalFundingQuestion.Reason
-	4,  // 11: reliant.v1.PersonalFundingQuestion.state:type_name -> reliant.v1.PersonalFundingQuestion.State
-	22, // 12: reliant.v1.GetPersonalFundingQuestionResponse.question:type_name -> reliant.v1.PersonalFundingQuestion
-	5,  // 13: reliant.v1.ResolvePersonalFundingChoiceRequest.choice:type_name -> reliant.v1.ResolvePersonalFundingChoiceRequest.Choice
-	22, // 14: reliant.v1.ResolvePersonalFundingChoiceResponse.question:type_name -> reliant.v1.PersonalFundingQuestion
-	8,  // 15: reliant.v1.ProviderAccountService.ListProviderAccounts:input_type -> reliant.v1.ListProviderAccountsRequest
-	10, // 16: reliant.v1.ProviderAccountService.UpdateProviderAccount:input_type -> reliant.v1.UpdateProviderAccountRequest
-	12, // 17: reliant.v1.ProviderAccountService.ReorderProviderAccounts:input_type -> reliant.v1.ReorderProviderAccountsRequest
-	14, // 18: reliant.v1.ProviderAccountService.DeleteProviderAccount:input_type -> reliant.v1.DeleteProviderAccountRequest
-	16, // 19: reliant.v1.ProviderAccountService.AddProviderAPIKey:input_type -> reliant.v1.AddProviderAPIKeyRequest
-	18, // 20: reliant.v1.ProviderAccountService.RefreshProviderAccountUsage:input_type -> reliant.v1.RefreshProviderAccountUsageRequest
-	20, // 21: reliant.v1.ProviderAccountService.GetChatProviderAccount:input_type -> reliant.v1.GetChatProviderAccountRequest
-	23, // 22: reliant.v1.ProviderAccountService.GetPersonalFundingQuestion:input_type -> reliant.v1.GetPersonalFundingQuestionRequest
-	25, // 23: reliant.v1.ProviderAccountService.ResolvePersonalFundingChoice:input_type -> reliant.v1.ResolvePersonalFundingChoiceRequest
-	9,  // 24: reliant.v1.ProviderAccountService.ListProviderAccounts:output_type -> reliant.v1.ListProviderAccountsResponse
-	11, // 25: reliant.v1.ProviderAccountService.UpdateProviderAccount:output_type -> reliant.v1.UpdateProviderAccountResponse
-	13, // 26: reliant.v1.ProviderAccountService.ReorderProviderAccounts:output_type -> reliant.v1.ReorderProviderAccountsResponse
-	15, // 27: reliant.v1.ProviderAccountService.DeleteProviderAccount:output_type -> reliant.v1.DeleteProviderAccountResponse
-	17, // 28: reliant.v1.ProviderAccountService.AddProviderAPIKey:output_type -> reliant.v1.AddProviderAPIKeyResponse
-	19, // 29: reliant.v1.ProviderAccountService.RefreshProviderAccountUsage:output_type -> reliant.v1.RefreshProviderAccountUsageResponse
-	21, // 30: reliant.v1.ProviderAccountService.GetChatProviderAccount:output_type -> reliant.v1.GetChatProviderAccountResponse
-	24, // 31: reliant.v1.ProviderAccountService.GetPersonalFundingQuestion:output_type -> reliant.v1.GetPersonalFundingQuestionResponse
-	26, // 32: reliant.v1.ProviderAccountService.ResolvePersonalFundingChoice:output_type -> reliant.v1.ResolvePersonalFundingChoiceResponse
-	24, // [24:33] is the sub-list for method output_type
-	15, // [15:24] is the sub-list for method input_type
-	15, // [15:15] is the sub-list for extension type_name
-	15, // [15:15] is the sub-list for extension extendee
-	0,  // [0:15] is the sub-list for field type_name
+	3,  // 4: reliant.v1.ProviderAccount.funding:type_name -> reliant.v1.ProviderAccountFunding
+	8,  // 5: reliant.v1.ListProviderAccountsResponse.accounts:type_name -> reliant.v1.ProviderAccount
+	8,  // 6: reliant.v1.UpdateProviderAccountResponse.account:type_name -> reliant.v1.ProviderAccount
+	8,  // 7: reliant.v1.ReorderProviderAccountsResponse.accounts:type_name -> reliant.v1.ProviderAccount
+	8,  // 8: reliant.v1.AddProviderAPIKeyResponse.account:type_name -> reliant.v1.ProviderAccount
+	8,  // 9: reliant.v1.RefreshProviderAccountUsageResponse.account:type_name -> reliant.v1.ProviderAccount
+	8,  // 10: reliant.v1.GetChatProviderAccountResponse.account:type_name -> reliant.v1.ProviderAccount
+	4,  // 11: reliant.v1.PersonalFundingQuestion.reason:type_name -> reliant.v1.PersonalFundingQuestion.Reason
+	5,  // 12: reliant.v1.PersonalFundingQuestion.state:type_name -> reliant.v1.PersonalFundingQuestion.State
+	23, // 13: reliant.v1.GetPersonalFundingQuestionResponse.question:type_name -> reliant.v1.PersonalFundingQuestion
+	6,  // 14: reliant.v1.ResolvePersonalFundingChoiceRequest.choice:type_name -> reliant.v1.ResolvePersonalFundingChoiceRequest.Choice
+	23, // 15: reliant.v1.ResolvePersonalFundingChoiceResponse.question:type_name -> reliant.v1.PersonalFundingQuestion
+	9,  // 16: reliant.v1.ProviderAccountService.ListProviderAccounts:input_type -> reliant.v1.ListProviderAccountsRequest
+	11, // 17: reliant.v1.ProviderAccountService.UpdateProviderAccount:input_type -> reliant.v1.UpdateProviderAccountRequest
+	13, // 18: reliant.v1.ProviderAccountService.ReorderProviderAccounts:input_type -> reliant.v1.ReorderProviderAccountsRequest
+	15, // 19: reliant.v1.ProviderAccountService.DeleteProviderAccount:input_type -> reliant.v1.DeleteProviderAccountRequest
+	17, // 20: reliant.v1.ProviderAccountService.AddProviderAPIKey:input_type -> reliant.v1.AddProviderAPIKeyRequest
+	19, // 21: reliant.v1.ProviderAccountService.RefreshProviderAccountUsage:input_type -> reliant.v1.RefreshProviderAccountUsageRequest
+	21, // 22: reliant.v1.ProviderAccountService.GetChatProviderAccount:input_type -> reliant.v1.GetChatProviderAccountRequest
+	24, // 23: reliant.v1.ProviderAccountService.GetPersonalFundingQuestion:input_type -> reliant.v1.GetPersonalFundingQuestionRequest
+	26, // 24: reliant.v1.ProviderAccountService.ResolvePersonalFundingChoice:input_type -> reliant.v1.ResolvePersonalFundingChoiceRequest
+	10, // 25: reliant.v1.ProviderAccountService.ListProviderAccounts:output_type -> reliant.v1.ListProviderAccountsResponse
+	12, // 26: reliant.v1.ProviderAccountService.UpdateProviderAccount:output_type -> reliant.v1.UpdateProviderAccountResponse
+	14, // 27: reliant.v1.ProviderAccountService.ReorderProviderAccounts:output_type -> reliant.v1.ReorderProviderAccountsResponse
+	16, // 28: reliant.v1.ProviderAccountService.DeleteProviderAccount:output_type -> reliant.v1.DeleteProviderAccountResponse
+	18, // 29: reliant.v1.ProviderAccountService.AddProviderAPIKey:output_type -> reliant.v1.AddProviderAPIKeyResponse
+	20, // 30: reliant.v1.ProviderAccountService.RefreshProviderAccountUsage:output_type -> reliant.v1.RefreshProviderAccountUsageResponse
+	22, // 31: reliant.v1.ProviderAccountService.GetChatProviderAccount:output_type -> reliant.v1.GetChatProviderAccountResponse
+	25, // 32: reliant.v1.ProviderAccountService.GetPersonalFundingQuestion:output_type -> reliant.v1.GetPersonalFundingQuestionResponse
+	27, // 33: reliant.v1.ProviderAccountService.ResolvePersonalFundingChoice:output_type -> reliant.v1.ResolvePersonalFundingChoiceResponse
+	25, // [25:34] is the sub-list for method output_type
+	16, // [16:25] is the sub-list for method input_type
+	16, // [16:16] is the sub-list for extension type_name
+	16, // [16:16] is the sub-list for extension extendee
+	0,  // [0:16] is the sub-list for field type_name
 }
 
 func init() { file_reliant_v1_provider_account_proto_init() }
@@ -1886,7 +1980,7 @@ func file_reliant_v1_provider_account_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_reliant_v1_provider_account_proto_rawDesc), len(file_reliant_v1_provider_account_proto_rawDesc)),
-			NumEnums:      6,
+			NumEnums:      7,
 			NumMessages:   21,
 			NumExtensions: 0,
 			NumServices:   1,

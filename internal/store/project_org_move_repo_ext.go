@@ -529,21 +529,26 @@ func moveProjectOrgTriggers(ctx context.Context, db orm.Context, move *core.Proj
 	return nil
 }
 
-// restampMovedTriggerFunding is where the move re-stamps each moved trigger's
-// unattended funding for the target org (org-provider-accounts.md §11.3 and
-// the P8 row of §14): the triggers were paused by the move and re-enabled
-// under the target's rules, so their stamp is the target's — org_only when the
-// target has two or more live members, else any, and any when the count is
-// unknown — as if they were created there. triggers.unattended_funding arrives
-// with P11, which fills this in (and adds the target's member count to
-// core.ProjectOrgMoveCommit); until then there is no stamp to write.
+// restampMovedTriggerFunding re-stamps each moved trigger's unattended
+// funding for the target org (org-provider-accounts.md §11.3 and the P8 row
+// of §14): the triggers were paused by the move and are re-enabled under the
+// target's rules, so their stamp is the target's, as if they were created
+// there: org_only when it has two or more live members, else any, and any when
+// the count is unknown (c.TargetLiveMembersKnown false).
 //
 // It runs inside the move's transaction, after every trigger of the project is
 // restamped and paused (moveProjectOrgTriggers), so an error rolls the whole
 // move back. It is a variable only so the move's test pins that call
-// (TestMoveProjectOrgCallsTheTriggerFundingSeam); P11 replaces the body, not
-// the call.
-var restampMovedTriggerFunding = func(context.Context, orm.Context, core.ProjectOrgMoveCommit, *core.ProjectOrgMove) error {
+// (TestMoveProjectOrgCallsTheTriggerFundingSeam).
+var restampMovedTriggerFunding = func(ctx context.Context, db orm.Context, c core.ProjectOrgMoveCommit, move *core.ProjectOrgMove) error {
+	stamp := core.UnattendedFundingAny
+	if c.TargetLiveMembersKnown && c.TargetLiveMembers >= 2 {
+		stamp = core.UnattendedFundingOrgOnly
+	}
+	if _, err := db.Bun().NewRaw(`UPDATE triggers SET unattended_funding = ?0 WHERE project_id = ?1 AND org_id = ?2`,
+		string(stamp), move.ProjectID, move.ToOrgID).Exec(ctx); err != nil {
+		return fmt.Errorf("re-stamp the moved triggers' unattended funding: %w", err)
+	}
 	return nil
 }
 

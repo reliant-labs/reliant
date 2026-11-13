@@ -2,6 +2,7 @@ package provider_account_test
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -10,10 +11,13 @@ import (
 	"github.com/stretchr/testify/require"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/accesstokenclient"
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	provider_account "github.com/reliant-labs/reliant/internal/handlers/provider_account"
+	"github.com/reliant-labs/reliant/internal/llm/drivers"
 	"github.com/reliant-labs/reliant/internal/llm/models"
 )
 
@@ -359,7 +363,111 @@ func TestGetChatProviderAccountFollowsTheAccountThatServedTheLastReply(t *testin
 	assert.Equal(t, codex.ID, chipAccount())
 }
 
+// fixedNow is the clock of the org-account tests: no assertion depends on the wall clock.
+var fixedNow = time.Date(2026, 11, 13, 12, 0, 0, 0, time.UTC)
+
+// orgMembers is the control-plane answer the routing loader (drivers.OrgMembership) reads: who is
+// a live member of which org, with what role, since when.
+type orgMembers map[string]accesstokenclient.OrgMembership // by "<org>/<user>"
+
+func (m orgMembers) Membership(_ context.Context, userID, orgID string) (accesstokenclient.OrgMembership, bool, error) {
+	got, ok := m[orgID+"/"+userID]
+	if !ok {
+		return accesstokenclient.OrgMembership{OrgID: orgID}, true, nil
+	}
+	return got, true, nil
+}
+
+func (orgMembers) DefaultOrg(context.Context, string) (string, error) { return "", nil }
+
+// A chat of an org that runs on one of the org's own keys shows that key as any member of the
+// org sees it: its provider, label and status, and that the org pays, never its key hint. Only a
+// key the chat's owner may use in the org now counts, by the rule routing applies: a stale
+// assignment to a key of an org they left, or one they were never granted, names nothing.
+func TestGetChatProviderAccountNamesTheOrgKeyItRunsOn(t *testing.T) {
+	e := newEnv(t)
+	const user, orgID = "u-org-chip", "acme"
+	// The API server puts control-plane's membership on the context: user is a member of acme.
+	ctx := authz.WithMembership(as(user), memberOf{orgID: orgID, userID: user})
+	members := orgMembers{orgID + "/" + user: {OrgID: orgID, Member: true, Role: "member", MemberSince: fixedNow.Add(-24 * time.Hour)}}
+	drivers.InitializeOrgMembership(members)
+	t.Cleanup(func() { drivers.InitializeOrgMembership(nil) })
+
+	owner := core.OrgAccountOwner(orgID)
+	n := 0
+	// chatOnOrgKey makes a chat of acme whose root thread is assigned a new acme key with access.
+	chatOnOrgKey := func(access string) (chatID string, acct core.ProviderAccount) {
+		t.Helper()
+		n++
+		chatID = fmt.Sprintf("chat-org-chip-%d", n)
+		require.NoError(t, e.repo.CreateChat(ctx, &db.Chat{
+			ID: chatID, Title: "t", ProjectID: "test-project", UserID: user, OrgID: ptr(orgID),
+			CreatedAt: fixedNow, UpdatedAt: fixedNow, LastActive: fixedNow,
+		}))
+		_, err := e.repo.CreateThread(ctx, &db.Thread{ID: chatID, ChatID: chatID, CreatedAt: fixedNow})
+		require.NoError(t, err)
+		key := fmt.Sprintf("sk-ant-org-chip-key-%d-a1b2", n)
+		acct, _, err = e.repo.UpsertProviderAccount(ctx, core.AccountUpsert{
+			Owner: owner, OrgAccess: access, CreatedByUserID: "admin",
+			Provider: "anthropic", AuthKind: core.AuthKindAPIKey,
+			IdentityKey: core.APIKeyIdentityKey(owner.Key(), "anthropic", key), KeyHint: core.KeyHint(key),
+			Secrets: core.AccountSecrets{Secret: key},
+		})
+		require.NoError(t, err)
+		_, err = e.repo.SetThreadAssignment(ctx, core.Assignment{ThreadID: chatID, Provider: "anthropic", AccountID: acct.ID, AssignedAt: fixedNow, Reason: "initial"}, "")
+		require.NoError(t, err)
+		return chatID, acct
+	}
+	get := func(chatID string) *pb.ProviderAccount {
+		t.Helper()
+		resp, err := e.svc.GetChatProviderAccount(ctx, connect.NewRequest(&pb.GetChatProviderAccountRequest{ChatId: chatID}))
+		require.NoError(t, err)
+		return resp.Msg.GetAccount()
+	}
+
+	// A key open to every member: shown as a member sees it.
+	everyone, everyoneKey := chatOnOrgKey(core.OrgAccessMembers)
+	got := get(everyone)
+	require.NotNil(t, got)
+	assert.Equal(t, everyoneKey.ID, got.Id)
+	assert.Equal(t, pb.ProviderAccountFunding_PROVIDER_ACCOUNT_FUNDING_ORG_KEY, got.Funding)
+	assert.Equal(t, orgID, got.GetFundingOrgId())
+	assert.Equal(t, "anthropic", got.Provider)
+	assert.NotEmpty(t, got.Label)
+	assert.NotContains(t, got.Label, everyoneKey.KeyHint, "a member never sees the key hint")
+	assert.Empty(t, got.GetMaskedKey(), "a member never sees the key hint")
+
+	// A key for owners and admins only, and one for selected people the caller was not granted:
+	// neither is theirs to use, so neither is named.
+	admins, _ := chatOnOrgKey(core.OrgAccessAdmins)
+	assert.Nil(t, get(admins), "a member is not shown an admins-only key")
+	selected, selectedKey := chatOnOrgKey(core.OrgAccessSelected)
+	assert.Nil(t, get(selected), "a member without a grant is not shown the key")
+	// Granted in their current membership, it is theirs.
+	require.NoError(t, e.repo.SetOrgAccountGrants(ctx, orgID, selectedKey.ID, []string{user}, "admin"))
+	require.NotNil(t, get(selected))
+
+	// Removed from the org: the stale assignments name nothing, whatever the key's access.
+	drivers.InitializeOrgMembership(orgMembers{})
+	assert.Nil(t, get(everyone), "a non-member is not shown the org's key")
+	assert.Nil(t, get(selected), "a non-member is not shown a key they were granted")
+
+	// The person's own chats elsewhere never reach the org's accounts.
+	drivers.InitializeOrgMembership(members)
+	personalChat, root := seedChat(t, e.repo, user)
+	_, err := e.repo.SetThreadAssignment(ctx, core.Assignment{ThreadID: root, Provider: "anthropic", AccountID: everyoneKey.ID, AssignedAt: fixedNow, Reason: "initial"}, "")
+	require.NoError(t, err)
+	assert.Nil(t, get(personalChat), "a chat with no org names no org account")
+}
+
 func ptr[T any](v T) *T { return &v }
+
+// memberOf is a Membership in which userID is a member of orgID and nobody else is of anything.
+type memberOf struct{ orgID, userID string }
+
+func (m memberOf) IsMember(_ context.Context, userID, orgID string) (bool, bool, error) {
+	return userID == m.userID && orgID == m.orgID, true, nil
+}
 
 // seedChat creates a chat for user with the root thread every real chat has (its id is the chat's).
 func seedChat(t *testing.T, repo *db.Repo, user string) (chatID, rootThreadID string) {

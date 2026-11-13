@@ -15,6 +15,10 @@
  * continues there until the limited provider's earliest reset, and the chat's
  * policy is untouched. With several accounts on the limited provider the card
  * also names the one that comes back first.
+ *
+ * In a chat of an org that waits to ask whether it may use the person's own
+ * account (org-provider-accounts §10), "Waiting for Acme's accounts · Review"
+ * reopens that question.
  */
 
 import { useEffect, useState } from "react";
@@ -30,6 +34,7 @@ import {
   type UsageLimitWait,
 } from "@/lib/usageLimitWait";
 import * as chatActions from "../../hooks/chat-actions";
+import { FundingReviewLink } from "./PersonalFundingPrompt";
 
 interface UsageLimitWaitNoteProps {
   chatId: string;
@@ -75,6 +80,7 @@ export function UsageLimitWaitNote({ chatId, wait, onStop }: UsageLimitWaitNoteP
       <span className="text-xs tabular-nums text-muted-foreground" data-testid="usage-limit-resume-line">
         · {usageLimitResumeLine(wait, now)}
       </span>
+      <FundingReviewLink chatId={chatId} />
       {earliest && (
         <span className="text-xs text-muted-foreground" data-testid="usage-limit-earliest-account">
           · {earliest.account.label} is back {formatResumeTime(earliest.resetsAt, now)}

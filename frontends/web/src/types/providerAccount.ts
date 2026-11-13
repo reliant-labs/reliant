@@ -8,6 +8,7 @@
 import { Code, ConnectError } from "@connectrpc/connect";
 
 import {
+  ProviderAccountFunding,
   ProviderAccountStatus,
   ProviderAuthKind,
   UsageSource,
@@ -18,6 +19,13 @@ import {
 export type AccountStatus = "available" | "limited" | "paused" | "needs_sign_in";
 export type AccountAuthKind = "oauth" | "api_key" | "device" | "managed";
 export type UsageSourceKind = "headers" | "usage_api" | "limit_error" | "unknown";
+/**
+ * Who pays (control-plane docs/design/org-provider-accounts.md §2): the person,
+ * an org's own API key, the person's seat in a team workspace an org pays for,
+ * or the Reliant key minted in an org. A server that predates it says
+ * "personal".
+ */
+export type AccountFunding = "personal" | "org_key" | "org_seat" | "org_wallet";
 
 export interface UsageWindow {
   /** "5h", "7d", "7d_opus", "primary", … */
@@ -59,6 +67,10 @@ export interface ProviderAccount {
    */
   usingCredits?: boolean;
   createdAt: string;
+  /** Who pays; absent is the person ("personal"). */
+  funding?: AccountFunding;
+  /** The org that pays, for every funding but "personal". */
+  fundingOrgId?: string;
 }
 
 const STATUS_FROM_PROTO: Record<ProviderAccountStatus, AccountStatus> = {
@@ -75,6 +87,14 @@ const AUTH_KIND_FROM_PROTO: Record<ProviderAuthKind, AccountAuthKind> = {
   [ProviderAuthKind.API_KEY]: "api_key",
   [ProviderAuthKind.DEVICE]: "device",
   [ProviderAuthKind.MANAGED]: "managed",
+};
+
+const FUNDING_FROM_PROTO: Record<ProviderAccountFunding, AccountFunding> = {
+  [ProviderAccountFunding.UNSPECIFIED]: "personal",
+  [ProviderAccountFunding.PERSONAL]: "personal",
+  [ProviderAccountFunding.ORG_KEY]: "org_key",
+  [ProviderAccountFunding.ORG_SEAT]: "org_seat",
+  [ProviderAccountFunding.ORG_WALLET]: "org_wallet",
 };
 
 const USAGE_SOURCE_FROM_PROTO: Record<UsageSource, UsageSourceKind> = {
@@ -117,6 +137,8 @@ export function accountFromProto(a: ProtoProviderAccount): ProviderAccount {
     usageError: a.usageError || undefined,
     usingCredits: a.usingCredits || undefined,
     createdAt: a.createdAt,
+    funding: FUNDING_FROM_PROTO[a.funding] === "personal" ? undefined : FUNDING_FROM_PROTO[a.funding],
+    fundingOrgId: a.fundingOrgId || undefined,
   };
 }
 

@@ -14,6 +14,7 @@ import { ChatThinkingIndicator } from "./ChatThinkingIndicator";
 import { ChatMachineNoticeLine } from "./ChatMachineNotice";
 import { QueuedForMachineNote } from "./QueuedForMachineNote";
 import { UsageLimitWaitNote } from "./UsageLimitWaitNote";
+import { PersonalFundingPrompt } from "./PersonalFundingPrompt";
 import { usageLimitWaitOf } from "@/lib/usageLimitWait";
 import { ChatMessagesContainer } from "./ChatMessagesContainer";
 import { ScrollToBottomButton } from "./ScrollToBottomButton";
@@ -936,6 +937,10 @@ export const ChatPresenter = memo(function ChatPresenter({
                 <StatusSlotItem id="org-moved">
                   <OrgMovedBanner chatOrgId={currentChat?.orgId} chatUserId={currentChat?.userId} />
                 </StatusSlotItem>
+                {/* "Continue on your own account?": a chat of an org asks before it spends the person's money */}
+                {chatId && currentChat?.orgId && !isViewer && (
+                  <PersonalFundingPrompt chatId={chatId} waiting={usageLimitWait !== undefined} focused={isFocused} />
+                )}
                 {noMachine && chatId ? (
                   <StatusSlotItem id="no-machine">
                     <NoMachineComposerHint chatId={chatId} />

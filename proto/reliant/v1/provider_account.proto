@@ -85,7 +85,9 @@ service ProviderAccountService {
     };
   }
   // GetChatProviderAccount returns the account the chat's root thread is
-  // currently using for its provider; unset when none is assigned yet.
+  // currently using for its provider; unset when none is assigned yet. An
+  // account the chat's org owns is returned as a member of the org sees it
+  // (provider, label and status, with funding ORG_KEY): never its key hint.
   rpc GetChatProviderAccount(GetChatProviderAccountRequest) returns (GetChatProviderAccountResponse) {}
 
   // GetPersonalFundingQuestion returns the chat's open question "continue on
@@ -195,6 +197,27 @@ message ProviderAccount {
   // keeps serving the account, paid from credits (a ChatGPT workspace's or
   // purchased Codex credits). The account is not limited.
   bool using_credits = 21;
+  // Who pays for the account (control-plane docs/design/org-provider-accounts.md
+  // §2). A server that predates it leaves it UNSPECIFIED: read that as the
+  // person's own.
+  ProviderAccountFunding funding = 22;
+  // The org that pays for it: the org that owns an ORG_KEY, or the org a
+  // person's ORG_SEAT or ORG_WALLET is attributed to. Unset for PERSONAL.
+  optional string funding_org_id = 23;
+}
+
+// ProviderAccountFunding is who pays for an account, derived from the row and
+// never stored on it (org-provider-accounts §2).
+enum ProviderAccountFunding {
+  PROVIDER_ACCOUNT_FUNDING_UNSPECIFIED = 0;
+  // The person's own subscription, API key or local model: they pay.
+  PROVIDER_ACCOUNT_FUNDING_PERSONAL = 1;
+  // An API key an org owns: the org pays, on its own provider bill.
+  PROVIDER_ACCOUNT_FUNDING_ORG_KEY = 2;
+  // The person's sign-in to a team workspace the org pays for (a seat).
+  PROVIDER_ACCOUNT_FUNDING_ORG_SEAT = 3;
+  // The managed Reliant key minted in an org: the org's Reliant credits.
+  PROVIDER_ACCOUNT_FUNDING_ORG_WALLET = 4;
 }
 
 message ListProviderAccountsRequest {}
