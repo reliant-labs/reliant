@@ -224,6 +224,13 @@ func (i ActingIdentity) OrOwner() ActingIdentity {
 // It stays paused until the creator, a member again, resumes it.
 const TriggerPausedCreatorLeftOrg = "creator_left_org"
 
+// TriggerPausedOrgPolicy is Trigger.PausedReason of a trigger the system
+// paused because one of its org's admin policies refused its unattended run
+// (a model the org does not allow, a spend cap reached): every later fire
+// would meet the same verdict. It stays paused until its owner resumes it
+// (control-plane docs/design/org-policies.md §5.1).
+const TriggerPausedOrgPolicy = "org_policy"
+
 // Trigger is a stored trigger definition. UserID is the owner, and the
 // identity every run it launches executes as.
 type Trigger struct {

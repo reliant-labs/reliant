@@ -794,7 +794,10 @@ message Trigger {
   // Read-only: why Reliant paused the trigger itself, while `enabled` is
   // false. "creator_left_org": a firing was refused because the trigger's
   // creator, whose identity its runs execute as, is no longer a member of
-  // its organization; it fires again once they rejoin and resume it. Empty
+  // its organization; it fires again once they rejoin and resume it.
+  // "org_policy": one of its organization's admin policies refused its run
+  // (a model the org does not allow, a spend cap reached); it fires again
+  // once its owner resumes it. Empty
   // when the trigger is enabled or a person paused it. Clients show an
   // unknown value as a plain pause.
   string paused_reason = 36;

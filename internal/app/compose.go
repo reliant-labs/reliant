@@ -152,6 +152,14 @@ func (g *Graph) newOrgResolver() (*orgs.Resolver, error) {
 	})
 }
 
+func (g *Graph) newOrgPolicyWatcher() (*OrgPolicyWatcher, error) {
+	return NewOrgPolicyWatcher(OrgPolicyWatcherDeps{
+		Policies: g.OrgPolicyResolver(),
+		DB:       g.Database(),
+		Temporal: g.TemporalClient(),
+	})
+}
+
 func (g *Graph) newOrgPolicyResolver() (*orgpolicy.Resolver, error) {
 	return NewOrgPolicyResolver(OrgPolicyResolverDeps{
 		Authority: g.TokenAuthority(),

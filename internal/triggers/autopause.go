@@ -44,6 +44,9 @@ const (
 	creatorLeftOrgDetail       = "the trigger's creator is no longer a member of its organization, so it was paused; it fires again once they rejoin and resume it"
 	creatorLeftOrgNoPause      = "the trigger's creator is no longer a member of its organization"
 	creatorLeftOrgPausedDetail = "trigger is paused: its creator is no longer a member of its organization"
+	// orgPolicyPausedDetail is a fire of a trigger paused because an org
+	// policy refused its run (core.TriggerPausedOrgPolicy).
+	orgPolicyPausedDetail = "trigger is paused: one of its organization's policies refused its run; resume it once the policy allows it"
 )
 
 // Refuse pauses t, whose firing was refused because its creator left its
@@ -108,8 +111,11 @@ func pausedReason(t *core.Trigger) string {
 
 // pausedDetail is why a fire of a paused trigger is skipped.
 func pausedDetail(t *core.Trigger) string {
-	if t.PausedReason == core.TriggerPausedCreatorLeftOrg {
+	switch t.PausedReason {
+	case core.TriggerPausedCreatorLeftOrg:
 		return creatorLeftOrgPausedDetail
+	case core.TriggerPausedOrgPolicy:
+		return orgPolicyPausedDetail
 	}
 	return "trigger is disabled"
 }
