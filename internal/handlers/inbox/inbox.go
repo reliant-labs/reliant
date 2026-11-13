@@ -208,8 +208,12 @@ const inboxReadTimeout = 15 * time.Second
 // slice of the pool, not N. The read runs on a context detached from the
 // first caller's cancellation (so one caller giving up does not fail the
 // others) with its own deadline. Callers only read the result.
+//
+// The read is shared only within one authorization class (sharedReadKey): what
+// it returns depends on the credential as well as the user, so a session's
+// read is never handed to an access token's call, nor the reverse.
 func (s *Service) sharedRead(ctx context.Context, userID string) (*inboxReads, error) {
-	v, err, _ := s.inboxReads.Do(userID, func() (any, error) {
+	v, err, _ := s.inboxReads.Do(sharedReadKey(ctx, userID), func() (any, error) {
 		rctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), inboxReadTimeout)
 		defer cancel()
 		return s.readInbox(rctx, userID)
@@ -218,6 +222,16 @@ func (s *Service) sharedRead(ctx context.Context, userID string) (*inboxReads, e
 		return nil, err
 	}
 	return v.(*inboxReads), nil
+}
+
+// sharedReadKey is the class of callers whose reads are interchangeable: the
+// same user, through the same kind of credential (only a person hears of an
+// org's rejected keys, orgKeyItems) bound to the same org (a credential bound
+// to an org reads only that org's rows, authz.WithCredentialOrg). Anything
+// readInbox decides by beyond the user belongs here.
+func sharedReadKey(ctx context.Context, userID string) string {
+	bound, _, _ := authz.CredentialRefusal(ctx)
+	return userID + "\x00" + strconv.Itoa(int(auth.CredentialFromContext(ctx))) + "\x00" + bound
 }
 
 // readLimiter hands out inboxReadConcurrency tokens, one per read holding a

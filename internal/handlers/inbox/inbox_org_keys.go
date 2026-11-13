@@ -52,7 +52,14 @@ type adminOrgsEntry struct {
 // local rows: an owner or admin with nothing of their own in the org still hears of it. Nothing
 // is asked while no org has a rejected key. An outage, a machine credential (which has no orgs to
 // list) and a deployment with no control plane show nothing (fail closed).
+//
+// Only a person is told, and that is decided first, before adminOrgs is consulted: administering
+// an org is human-only (orgs.RequireOrgAdmin), and the cache is keyed by user alone, so an agent
+// holding the admin's CLI login or an API token must not read what the admin's session warmed.
 func (s *Service) orgKeyItems(ctx context.Context, userID string) ([]*reliantv1.InboxItem, error) {
+	if orgs.RequirePerson(ctx, "see an organization's rejected API keys") != nil {
+		return nil, nil
+	}
 	jwt := callerJWT(ctx)
 	if s.deps.MyOrgs == nil || jwt == "" {
 		return nil, nil
