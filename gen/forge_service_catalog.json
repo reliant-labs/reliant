@@ -53343,6 +53343,15 @@
     },
     {
       "consumer": "Project",
+      "field": "MoveFacts",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/project.MoveFacts",
+      "methods": [],
+      "candidates": [],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "Project",
       "field": "Moves",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/project.MoveStarter",
       "methods": [],
@@ -54428,6 +54437,14 @@
     {
       "code": "binding_unresolved",
       "component": "Project.ControlPlane",
+      "source": {
+        "path": "internal/handlers/project/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "Project.MoveFacts",
       "source": {
         "path": "internal/handlers/project/service.go",
         "symbol": "New"

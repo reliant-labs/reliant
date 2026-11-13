@@ -14,7 +14,7 @@ import (
 )
 
 // forge:section MockService
-// forge:hash=97e4b2820e8ef9102e6ec82d4d3fad75790fcd5f8c1603eb6837ef6d26d10b8c
+// forge:hash=1465f369cd41e459cc78f6034f8cc142800bbdf94bb603670d2ce82b10538ffc
 
 // MockService is a test mock for the Service interface.
 //
@@ -42,6 +42,7 @@ type MockService struct {
 	PrepareProjectOrgMoveFunc        func(context.Context, ProjectOrgMoveStep, string) (int, error)
 	AbortProjectOrgMoveFunc          func(context.Context, ProjectOrgMoveStep) error
 	RecordProjectOrgMoveFunc         func(context.Context, ProjectOrgMoveStep, string, map[string]int64) error
+	PreviewProjectOrgMoveFunc        func(context.Context, ProjectOrgMovePreviewQuery) (*ProjectOrgMovePreview, error)
 }
 
 // MintLLMKey records the call and delegates to MintLLMKeyFunc when set.
@@ -204,6 +205,15 @@ func (m *MockService) RecordProjectOrgMove(ctx context.Context, s ProjectOrgMove
 		return m.RecordProjectOrgMoveFunc(ctx, s, projectName, counts)
 	}
 	return contractkit.MockNotSet("MockService", "RecordProjectOrgMove")
+}
+
+// PreviewProjectOrgMove records the call and delegates to PreviewProjectOrgMoveFunc when set.
+func (m *MockService) PreviewProjectOrgMove(ctx context.Context, q ProjectOrgMovePreviewQuery) (*ProjectOrgMovePreview, error) {
+	m.Recorder.Record("PreviewProjectOrgMove", ctx, q)
+	if m.PreviewProjectOrgMoveFunc != nil {
+		return m.PreviewProjectOrgMoveFunc(ctx, q)
+	}
+	return nil, contractkit.MockNotSet("MockService", "PreviewProjectOrgMove")
 }
 
 // Compile-time check.

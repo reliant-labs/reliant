@@ -1243,6 +1243,8 @@ func (g *Graph) newProject() (*project.Service, error) {
 		// in the rollback target (orgs.project_moves_enabled).
 		OrgRollout: ProjectOrgRollout(g.ApiServerConfig),
 		Moves:      projectOrgMoveStarter{c: g.TemporalClient().Client},
+		// The preview's control-plane facts; nil shows them as unknown.
+		MoveFacts: ProjectOrgMoveFacts(g.ServerProcessConfig.GetControlPlane()),
 	})
 }
 

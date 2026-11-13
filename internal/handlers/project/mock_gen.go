@@ -634,3 +634,29 @@ func (m *MockMoveStarter) StartProjectOrgMove(ctx context.Context, moveID string
 
 // Compile-time check.
 var _ MoveStarter = (*MockMoveStarter)(nil)
+
+// forge:section MockMoveFacts
+// forge:hash=04e80ff1586f82310da9b50a7c690d5ef010a9bc6b89854527b2a863fcefa74d
+
+// MockMoveFacts is a test mock for the MoveFacts interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockMoveFacts.<Method>Func not set" error.
+type MockMoveFacts struct {
+	contractkit.Recorder
+	PreviewProjectOrgMoveFunc func(context.Context, controlplane.ProjectOrgMovePreviewQuery) (*controlplane.ProjectOrgMovePreview, error)
+}
+
+// PreviewProjectOrgMove records the call and delegates to PreviewProjectOrgMoveFunc when set.
+func (m *MockMoveFacts) PreviewProjectOrgMove(ctx context.Context, q controlplane.ProjectOrgMovePreviewQuery) (*controlplane.ProjectOrgMovePreview, error) {
+	m.Recorder.Record("PreviewProjectOrgMove", ctx, q)
+	if m.PreviewProjectOrgMoveFunc != nil {
+		return m.PreviewProjectOrgMoveFunc(ctx, q)
+	}
+	return nil, contractkit.MockNotSet("MockMoveFacts", "PreviewProjectOrgMove")
+}
+
+// Compile-time check.
+var _ MoveFacts = (*MockMoveFacts)(nil)

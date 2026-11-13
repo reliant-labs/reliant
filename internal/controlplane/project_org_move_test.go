@@ -15,6 +15,49 @@ import (
 	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
 )
 
+// The preview's wire contract: control-plane's protojson names in and out,
+// with an unset target_funded staying unknown, and an older control plane
+// without the rpc (404) reporting it unsupported.
+func TestPreviewProjectOrgMove_SpeaksControlPlanesWireContract(t *testing.T) {
+	var body map[string]any
+	answer := `{"secretAccessToRevoke":2,"hostedHttpGrantsToRevoke":1,"hostedProjectsStaying":["shop"],"targetFunded":false,"machines":[{"daemonId":"d-1","inTargetOrg":true},{"daemonId":"d-2"}]}`
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != projectOrgMovePreviewPath {
+			http.NotFound(w, r)
+			return
+		}
+		raw, _ := io.ReadAll(r.Body)
+		_ = json.Unmarshal(raw, &body)
+		_, _ = w.Write([]byte(answer))
+	}))
+	defer srv.Close()
+	c := New(Deps{ControlPlane: &configv1.ControlPlaneConfig{Url: srv.URL}, Sign: signWith("s")})
+	q := ProjectOrgMovePreviewQuery{ProjectID: "p-1", FromOrgID: "acme", ToOrgID: "globex", ActorUserID: "u-1",
+		ForgeProjectName: "shop", DaemonIDs: []string{"d-1", "d-2"}}
+
+	p, err := c.PreviewProjectOrgMove(context.Background(), q)
+	require.NoError(t, err)
+	assert.Equal(t, map[string]any{
+		"projectId": "p-1", "fromOrgId": "acme", "toOrgId": "globex", "actorUserId": "u-1",
+		"forgeProjectName": "shop", "daemonIds": []any{"d-1", "d-2"},
+	}, body)
+	assert.Equal(t, 3, p.SecretAccessToRevoke, "secret access and legacy grants together")
+	assert.Equal(t, []string{"shop"}, p.HostedProjectsStaying)
+	require.NotNil(t, p.TargetFunded)
+	assert.False(t, *p.TargetFunded)
+	assert.Equal(t, map[string]bool{"d-1": true, "d-2": false}, p.InTargetOrg)
+
+	answer = `{}`
+	p, err = c.PreviewProjectOrgMove(context.Background(), q)
+	require.NoError(t, err)
+	assert.Nil(t, p.TargetFunded, "unset is unknown, not false")
+
+	old := httptest.NewServer(http.NotFoundHandler())
+	defer old.Close()
+	_, err = New(Deps{ControlPlane: &configv1.ControlPlaneConfig{Url: old.URL}, Sign: signWith("s")}).PreviewProjectOrgMove(context.Background(), q)
+	require.ErrorIs(t, err, ErrProjectOrgMoveUnsupported)
+}
+
 // The wire contract with control-plane's ProjectOrgMoveInternalService
 // (proto/services/project_org_move_internal/v1 there): the paths, the
 // internal-service bearer, and the protojson field names.
