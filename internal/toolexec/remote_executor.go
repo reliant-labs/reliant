@@ -10,6 +10,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/reliant-labs/reliant/internal/daemon"
+	"github.com/reliant-labs/reliant/internal/daemonpolicy"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/nomachine"
@@ -191,12 +192,15 @@ func (e *RemoteExecutor) ExecuteTool(ctx context.Context, req *ToolRequest) (*To
 	if refusal := refuseMCPByOrgPolicy(ctx, req, startTime); refusal != nil {
 		return refusal, nil
 	}
-	// ... and the MCP rule it enforces rides to the daemon (§5.4), on a copy
-	// so the caller's request is never rewritten under it.
-	if stamp := orgpolicy.EnforcedMCPStamp(ctx, req.OrgID); stamp != nil {
-		stamped := *req
-		stamped.mcpStamp = stamp
-		req = &stamped
+	// The rules the run's org enforces ride to the daemon in one stamp
+	// (§5.4), and its machines policy applies once, before the call is
+	// placed: every tool request of a run reaches a machine through here. On
+	// a copy, so the caller's request is never rewritten under it.
+	stamped := *req
+	req = &stamped
+	req.orgStamp = mcpOrgStamp(orgpolicy.EnforcedMCPStamp(ctx, req.OrgID))
+	if refusal := e.applyMachinePolicy(ctx, req, startTime); refusal != nil {
+		return refusal, nil
 	}
 
 	// A tool call rides out a short disconnect of its daemon — a gateway
@@ -421,7 +425,10 @@ func (req *ToolRequest) toolContextMap() map[string]interface{} {
 	if sel := req.DaemonSelector; sel != nil && (sel.ID != "" || sel.Name != "") {
 		contextMap[RunMachineContextKey] = map[string]interface{}{"id": sel.ID, "name": sel.Name}
 	}
-	if stamp := orgPolicyStampValue(req); stamp != nil {
+	// Server-built from the org's policy (refuseMCPByOrgPolicy,
+	// applyMachinePolicy), never from tool input; absent when no rule is
+	// enforced.
+	if stamp := req.orgStamp.ContextValue(); stamp != nil {
 		contextMap[OrgPolicyContextKey] = stamp
 	}
 	return contextMap

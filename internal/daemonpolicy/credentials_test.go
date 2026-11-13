@@ -264,3 +264,30 @@ func TestCredentialsNone_KeepsTheAgentShellMarker(t *testing.T) {
 		t.Errorf("%s must never be classified as a credential", AgentShellEnv)
 	}
 }
+
+// A caller's env cannot hand a credentials-none command a credential, even on
+// a daemon that predates the field and applies env alone: credential names
+// and secret-shaped values are dropped before the neutral assignments.
+func TestNeutralizeEnvDropsCallerCredentials(t *testing.T) {
+	env := NeutralizeEnv(map[string]string{
+		"AWS_SECRET_ACCESS_KEY":          "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+		"GOOGLE_APPLICATION_CREDENTIALS": "/home/u/.gcp/key.json",
+		"RELIANT_TOKEN":                  "rlat_abcdefghijklmnop",
+		"OPENAI_API_KEY":                 "sk-abcdefghijklmnopqrstuvwxyz",
+		"PROXY":                          "https://user:hunter2@proxy.example:8080",
+		"GH_TOKEN":                       "ghp_from_caller",
+		"KEEP":                           "1",
+		"RELIANT_CHAT_ID":                "chat-1",
+	})
+	for _, gone := range []string{"AWS_SECRET_ACCESS_KEY", "GOOGLE_APPLICATION_CREDENTIALS", "RELIANT_TOKEN", "OPENAI_API_KEY", "PROXY"} {
+		if v, ok := env[gone]; ok {
+			t.Errorf("%s survived as %q", gone, v)
+		}
+	}
+	if env["GH_TOKEN"] != "" {
+		t.Errorf("GH_TOKEN = %q, want the neutral empty value", env["GH_TOKEN"])
+	}
+	if env["KEEP"] != "1" || env["RELIANT_CHAT_ID"] != "chat-1" {
+		t.Errorf("a plain variable was dropped: %v", env)
+	}
+}

@@ -220,6 +220,25 @@ func WithoutCredentials(inherited []string, extra map[string]string) []string {
 	return out
 }
 
+// NeutralizeEnv is own without a credential, with NeutralEnv laid over it.
+// A variable of own that carries or locates a credential (by name: a token,
+// a key, a cloud or Reliant credential; or by value: a provider key, a JWT,
+// URL userinfo) is dropped, exactly as StripCredentials drops it from a
+// request's env, and every neutral assignment wins over a value own gives the
+// same name. So a caller's (or a model's) env cannot hand a command a
+// credential even on a daemon that predates `credentials: none` and applies
+// env alone; own's other variables pass through.
+func NeutralizeEnv(own map[string]string) map[string]string {
+	env := NeutralEnv()
+	for k, v := range own {
+		if _, neutral := env[k]; neutral || isCredentialEnv(k) || looksSecret(k, v) {
+			continue
+		}
+		env[k] = v
+	}
+	return env
+}
+
 // NeutralEnv is WithoutCredentials as assignments a caller can send in a
 // request's env. A daemon that predates the request's `credentials` field
 // ignores the field but applies env, so the common vectors (tokens, the git

@@ -62,8 +62,9 @@ func savedDefinition(existing *core.Trigger) (*pb.TriggerDefinition, error) {
 
 // approvalMode is the owner's automation-approvals setting for a change to
 // project (and, when an update moves the activation, the stricter of the two
-// projects' settings).
-func (s *Service) approvalMode(ctx context.Context, user, project string, existing *core.Trigger) (automationpolicy.ApprovalMode, error) {
+// projects' settings), raised to the floor of the org the activation belongs
+// to (row, and existing's when it is another), never lowered by it.
+func (s *Service) approvalMode(ctx context.Context, user, project string, row, existing *core.Trigger) (automationpolicy.ApprovalMode, error) {
 	settings, err := s.deps.Repo.ListSettingsByKey(ctx, user, automationpolicy.ApprovalSettingKey)
 	if err != nil {
 		return "", tools.RefuseActivation("automation approval settings could not be read", svcerr.Wrap(err))
@@ -72,7 +73,35 @@ func (s *Service) approvalMode(ctx context.Context, user, project string, existi
 	if existing != nil && existing.ProjectID != project {
 		projects = append(projects, existing.ProjectID)
 	}
-	return automationpolicy.ResolveApprovalMode(settings, projects...), nil
+	mode := automationpolicy.ResolveApprovalMode(settings, projects...)
+	return automationpolicy.WithOrgFloor(ctx, mode, s.activationOrgs(ctx, user, project, row, existing)...), nil
+}
+
+// activationOrgs are the orgs whose approval floor governs a change: the
+// activation's (row's, existing's when that differs). A new activation has no
+// org yet, which its write decides (triggerOrg); it is decided the same way
+// here. One that cannot be decided is refused by the write, so it floors
+// nothing here.
+func (s *Service) activationOrgs(ctx context.Context, user, project string, row, existing *core.Trigger) []string {
+	var orgs []string
+	add := func(org *string) {
+		if org != nil && *org != "" && (len(orgs) == 0 || orgs[0] != *org) {
+			orgs = append(orgs, *org)
+		}
+	}
+	for _, t := range []*core.Trigger{row, existing} {
+		if t != nil {
+			add(t.OrgID)
+		}
+	}
+	if len(orgs) == 0 && project != "" {
+		if p, err := s.deps.Repo.GetProjectWithUserCheck(ctx, project, user); err == nil {
+			if org, err := s.triggerOrg(ctx, user, "", p); err == nil {
+				add(org)
+			}
+		}
+	}
+	return orgs
 }
 
 // savedCapabilities are the powers a saved activation holds now: its own
@@ -294,7 +323,7 @@ func (s *Service) prepareAgentActivationDecided(ctx context.Context, user, opera
 	// under on_capability_change, only one that widens what the activation
 	// can do (automationpolicy.Decide). The decision is recomputed inside the
 	// apply transaction, so it binds as tightly as the card's hash.
-	mode, err := s.approvalMode(ctx, user, def.ProjectId, existing)
+	mode, err := s.approvalMode(ctx, user, def.ProjectId, row, existing)
 	if err != nil {
 		return nil, tools.ActivationPreview{}, none, err
 	}

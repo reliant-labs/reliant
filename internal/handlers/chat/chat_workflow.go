@@ -167,6 +167,10 @@ func (s *Service) UpdateWorkflowParams(
 		}), nil
 	}
 
+	// An edit of other params still holds an auto run to its org's mode
+	// floor (withLiveModeFloor).
+	stateUpdate = s.withLiveModeFloor(ctx, userID, chat, workflowName, stateUpdate)
+
 	// The chat's own edit. Whether or not a run is live to receive it, it is
 	// the chat's choice from now on, so it is stored: the next send from any
 	// device, and the next run, start from it. A live run is moved off a

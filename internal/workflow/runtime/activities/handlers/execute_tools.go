@@ -213,6 +213,7 @@ func (tec *toolExecutionContext) buildToolRequest() *toolexec.ToolRequest {
 		WorktreeID:       tec.worktree.ID,
 		OrgID:            chatOrgID(tec.chat),
 		WorktreeDaemonID: tec.worktree.DaemonID,
+		OrgID:            ptrValue(tec.chat.OrgID),
 		Thread:           tec.thread,
 		MessageID:        "",                     // Not required - tool calls can be ephemeral
 		ProjectPath:      tec.checkout.main.Path, // the project's checkout on the machine running the call
