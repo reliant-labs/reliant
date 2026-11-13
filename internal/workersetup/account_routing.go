@@ -83,6 +83,7 @@ func accountRouting(repo AccountRoutingStore, recorder handlers.AccountLimitReco
 		DriverFor:             accountDriverFor,
 		Recorder:              recorder,
 		Credentials:           credentialMarker{repo: repo},
+		Funding:               repo,
 	}
 }
 

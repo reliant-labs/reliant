@@ -40,11 +40,24 @@ const (
 	OnLimitFallback OnLimit = "fallback"
 )
 
+// Funding is whose accounts a chat in an org uses first. The empty value
+// inherits the person's per-org setting.
+type Funding string
+
+const (
+	FundingInherit       Funding = ""
+	FundingOrgFirst      Funding = "org_first"
+	FundingPersonalFirst Funding = "personal_first"
+	FundingOrgOnly       Funding = "org_only"
+)
+
 // ProviderPolicy is stored and returned, never interpreted here.
 type ProviderPolicy struct {
 	OnLimit OnLimit `json:"on_limit,omitempty"`
 	// FallbackModel is "<model>@<driver>".
 	FallbackModel string `json:"fallback_model,omitempty"`
+	// Funding is the chat's funding order (org-provider-accounts §4.4).
+	Funding Funding `json:"funding,omitempty"`
 }
 
 // Selection is one chat's record.

@@ -43,4 +43,14 @@ type AccountRoutingStore interface {
 	ClearOtherThreadAssignments(ctx context.Context, userID, threadID, provider string) error
 	AccountCredentialStore
 	GetSettingValue(ctx context.Context, userID, key string) (string, bool)
+	// The chat's question before it moves from its org's accounts to the
+	// person's own (org-provider-accounts §10).
+	GetChatPersonalFunding(ctx context.Context, chatID string) (*core.PersonalFunding, error)
+	AskPersonalFunding(ctx context.Context, q core.PersonalFunding, now time.Time) (bool, error)
+	GrantPersonalFunding(ctx context.Context, q core.PersonalFunding, now time.Time) error
+	ClearPersonalFunding(ctx context.Context, chatID string) (bool, error)
+	MarkPersonalFundingAnnounced(ctx context.Context, chatID string) (bool, error)
+	ProviderAccountOrgs(ctx context.Context, accountID string) (ownerOrg, attributedOrg string, found bool, err error)
+	ListThreadAssignments(ctx context.Context, threadID string) ([]core.Assignment, error)
+	LatestServingAccount(ctx context.Context, threadID string) (string, error)
 }

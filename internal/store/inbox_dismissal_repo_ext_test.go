@@ -126,6 +126,50 @@ func TestInboxQueries(t *testing.T) {
 	}
 }
 
+// A personal-funding question is listed to its asker while it is unanswered,
+// keyed by the chat and when it asked; an answered one, another person's and
+// an archived chat's are not.
+func TestInboxListsPersonalFundingQuestion(t *testing.T) {
+	env := storetest.New(t)
+	ctx := context.Background()
+	at := time.Now().UTC().Truncate(time.Microsecond).Add(-time.Hour)
+	for _, id := range []string{"pf-asked", "pf-answered", "pf-other", "pf-archived"} {
+		if err := store.InsertChat(ctx, env.ORM, convChat(id, at)); err != nil {
+			t.Fatalf("InsertChat(%s): %v", id, err)
+		}
+	}
+	if err := env.Repo.UpdateChatState(ctx, "pf-archived", core.ChatStateArchived, "test"); err != nil {
+		t.Fatalf("archive: %v", err)
+	}
+	put := func(chatID, userID, state string) {
+		t.Helper()
+		if err := store.PutChatPersonalFunding(ctx, env.ORM, core.PersonalFunding{
+			ChatID: chatID, UserID: userID, OrgID: "org-1", State: state, Reason: core.PersonalFundingLimited,
+			Model: "claude-opus", AskedAt: at, UpdatedAt: at,
+		}); err != nil {
+			t.Fatalf("PutChatPersonalFunding(%s): %v", chatID, err)
+		}
+	}
+	put("pf-asked", storetest.SeedUserID, core.PersonalFundingAsked)
+	put("pf-answered", storetest.SeedUserID, core.PersonalFundingKeepWaiting)
+	put("pf-other", "someone-else", core.PersonalFundingAsked)
+	put("pf-archived", storetest.SeedUserID, core.PersonalFundingAsked)
+
+	got, err := store.ListInboxPending(ctx, env.ORM, storetest.SeedUserID)
+	if err != nil {
+		t.Fatalf("ListInboxPending: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("ListInboxPending = %v; want only pf-asked", convInboxKeys(got))
+	}
+	p := got[0]
+	wantKey := "pf-asked@" + at.Format("20060102T150405.000000")
+	if p.Kind != core.InboxPendingPersonalFunding || p.ChatID != "pf-asked" || p.ItemKey != wantKey ||
+		p.Text1 != core.PersonalFundingLimited || p.Text2 != "claude-opus" || !p.WaitingSince.Equal(at) {
+		t.Fatalf("ListInboxPending[0] = %+v; want the personal funding question keyed %s", p, wantKey)
+	}
+}
+
 func convInboxKeys(items []*core.InboxPending) []string {
 	out := make([]string, len(items))
 	for i, it := range items {

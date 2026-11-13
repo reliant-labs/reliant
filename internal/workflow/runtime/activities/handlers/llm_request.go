@@ -42,6 +42,14 @@ type llmCallSpec struct {
 	// authority. A call with no chat leaves them unset: the personal scope.
 	OrgID    string
 	Attended bool
+	// ChatID is the chat the call is for: whose funding question (§10) it
+	// reads and writes. Empty for a call with no chat.
+	ChatID string
+	// TurnStart reports that the call begins a turn (its history ends with a
+	// person's or an agent's message, not a tool result). Only a turn start
+	// moves a thread up to a better tier (§4.5, D6).
+	TurnStart bool
+
 	// UnattendedAnySource lifts the org-funded-only rule of an unattended run
 	// whose automation may use any source (drivers.Scope.UnattendedAnySource),
 	// read through chatUnattendedAnySource.
@@ -233,6 +241,15 @@ type resolvedLLMCall struct {
 	// its usage row is recorded against.
 	OrgID string
 
+	// FundingNotice is a transcript notice the call owes about who pays for
+	// it (the person's own account in place of the org's, or the org's
+	// again); "" when none.
+	FundingNotice string
+
+	// plan is the funding plan the call was routed under, for the refusal
+	// path's question (§10).
+	plan fundingPlan
+
 	// TagCompactionThreshold is the tag preference's compaction threshold, 0
 	// when none applied. The caller uses it only when neither the node arg
 	// nor the model value set one.
@@ -295,6 +312,8 @@ func resolveLLMCallOnce(ctx context.Context, resolver drivers.DriverResolver, sp
 	var providerDriver string
 	var localTransport http.RoundTripper
 	var routingDrivers models.AvailableDrivers
+	var plan fundingPlan
+	var fundingNotice string
 	effectiveTemperature := spec.Temperature
 	effectiveThinkingLevel := spec.ThinkingLevel
 	var tagCompactionThreshold int32
@@ -356,6 +375,10 @@ func resolveLLMCallOnce(ctx context.Context, resolver drivers.DriverResolver, sp
 		if lerr != nil {
 			return nil, lerr
 		}
+		// Who pays (§4.4, §10): the person's order for the org, a lease they
+		// granted, and the thread kept on its provider mid-turn.
+		plan = spec.Routing.fundingPlanFor(ctx, spec, availableDrivers)
+		availableDrivers = spec.Routing.applyFundingPlan(ctx, spec, plan, availableDrivers)
 		routingDrivers = availableDrivers
 		availableProviders := slices.DeleteFunc(configuredProviderIDs(availableDrivers), func(p string) bool {
 			return slices.Contains(spec.ExcludeProviders, p)
@@ -501,14 +524,23 @@ func resolveLLMCallOnce(ctx context.Context, resolver drivers.DriverResolver, sp
 	var account *routedAccount
 	if localTransport == nil && resolver == nil && providerDriver != "" && !drivers.ReplayMode.Enabled {
 		var rerr error
-		account, rerr = routeAccount(ctx, spec, routingDrivers, providerDriver, definitionID(definition))
+		upgrade := spec.TurnStart || (plan.question != nil && plan.question.State != core.PersonalFundingUsePersonal)
+		account, rerr = routeAccount(ctx, spec, routingDrivers, providerDriver, definitionID(definition), upgrade)
 		if rerr != nil {
 			// Every account is limited: refuse here, with no provider call, the
 			// way the provider would have, carrying the facts to decide on.
 			return nil, spec.Routing.usageLimitFailure(ctx, rerr, usageLimitContext{
 				Scope: spec.scope(), ThreadID: spec.ThreadID, Driver: models.DriverID(providerDriver),
 				ModelID: definitionID(definition), Policy: spec.Failover,
+				ChatID: spec.ChatID, Plan: plan,
+				OrgFundedLimited: limitedTierIsOrgFunded(routingDrivers.Accounts[models.DriverID(providerDriver)], definitionID(definition)),
 			})
+		}
+		// Before any provider call: does this call move the chat from the
+		// org's accounts to the person's own without their say (§10.1)?
+		var ferr error
+		if fundingNotice, ferr = spec.Routing.checkPersonalFunding(ctx, spec, plan, routingDrivers, account, providerDriver, definitionID(definition)); ferr != nil {
+			return nil, ferr
 		}
 	}
 	if localTransport != nil {
@@ -572,6 +604,8 @@ func resolveLLMCallOnce(ctx context.Context, resolver drivers.DriverResolver, sp
 		ThinkingLevel:  effectiveThinkingLevel,
 		Temperature:    effectiveTemperature,
 		OrgID:          spec.OrgID,
+		FundingNotice:  fundingNotice,
+		plan:           plan,
 
 		TagCompactionThreshold: tagCompactionThreshold,
 	}, nil

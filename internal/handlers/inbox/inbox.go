@@ -62,13 +62,16 @@ const (
 	// A marked worktree's id names the worktree and the mark: a new mark
 	// after a cancel is a new item (markedItemID).
 	inboxWorktreeMarkedPrefix = "worktree_marked:"
+	// A chat asking before it uses the person's own AI account in place of
+	// its org's: the chat and when it asked.
+	inboxPersonalFundingPrefix = "personal_funding:"
 )
 
 var inboxItemPrefixes = []string{
 	inboxApprovalPrefix, inboxQuestionPrefix, inboxWaitingForMachinePrefix,
 	inboxFailingPrefix, inboxLaunchFailedPrefix, inboxStoragePrefix,
 	inboxNeedsSetupPrefix, inboxRecoveryPrefix, inboxRunPausedPrefix, inboxDefinitionBrokenPrefix,
-	inboxWorktreeReclaimPrefix, inboxWorktreeMarkedPrefix,
+	inboxWorktreeReclaimPrefix, inboxWorktreeMarkedPrefix, inboxPersonalFundingPrefix,
 }
 
 // maxInboxDismissBatch bounds one Dismiss/Restore call ("Dismiss all" on a
@@ -361,7 +364,8 @@ func recoveryInboxItem(row *core.WorktreeRecovery) *reliantv1.InboxItem {
 func inboxItemBlocks(it *reliantv1.InboxItem) bool {
 	switch it.Kind {
 	case reliantv1.InboxItemKind_INBOX_ITEM_KIND_APPROVAL,
-		reliantv1.InboxItemKind_INBOX_ITEM_KIND_WAITING_FOR_MACHINE:
+		reliantv1.InboxItemKind_INBOX_ITEM_KIND_WAITING_FOR_MACHINE,
+		reliantv1.InboxItemKind_INBOX_ITEM_KIND_PERSONAL_FUNDING:
 		return true
 	case reliantv1.InboxItemKind_INBOX_ITEM_KIND_QUESTION:
 		return !it.GetQuestion().GetAsync()
@@ -780,6 +784,9 @@ func inboxItemFromPending(p *core.InboxPending) *reliantv1.InboxItem {
 		item.Payload = &reliantv1.InboxItem_AutomationLaunchFailed{AutomationLaunchFailed: &reliantv1.InboxAutomationLaunchFailed{
 			Reason: p.Text1, EventId: p.ItemKey, ConsecutiveFailures: p.Int1,
 		}}
+	case core.InboxPendingPersonalFunding:
+		item.Kind = reliantv1.InboxItemKind_INBOX_ITEM_KIND_PERSONAL_FUNDING
+		item.ItemId = inboxPersonalFundingPrefix + p.ItemKey
 	case core.InboxPendingRunPaused:
 		item.Kind = reliantv1.InboxItemKind_INBOX_ITEM_KIND_AUTOMATION_RUN_PAUSED
 		item.ItemId = inboxRunPausedPrefix + p.ItemKey

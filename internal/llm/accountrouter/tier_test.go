@@ -127,3 +127,25 @@ func TestTier_BalanceReadsOrgAccountUsage(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "org-2", res.Account.AccountID)
 }
+
+// At a turn start (Request.Upgrade) a thread on a usable account of a worse
+// tier moves up to the better tier, with reason org_available; without it the
+// thread stays (D6).
+func TestTier_UpgradeAtTurnStart(t *testing.T) {
+	s := newStore()
+	s.assign("th", "claude", "mine")
+	rq := req("th", tiered("seat", 0, models.TierFirst), tiered("mine", 0, models.TierSecond))
+	rq.Upgrade = true
+	res, err := newRouter(t, s, first).Assign(context.Background(), rq)
+	require.NoError(t, err)
+	assert.Equal(t, "seat", res.Account.AccountID)
+	assert.Equal(t, ReasonOrgAvailable, res.Reason)
+	require.NotNil(t, res.Previous)
+	assert.Equal(t, "mine", res.Previous.AccountID)
+
+	// Already on the best usable tier: Upgrade changes nothing.
+	again, err := newRouter(t, s, first).Assign(context.Background(), rq)
+	require.NoError(t, err)
+	assert.Equal(t, "seat", again.Account.AccountID)
+	assert.False(t, again.Changed)
+}

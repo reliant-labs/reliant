@@ -342,7 +342,7 @@ export type ScenarioRpcHandlers =
   }
 
   // forge:section reliant.v1.ProviderAccountService
-  // forge:hash=36e4d35c8af2ee7e7867a210677edaaf5e932233bfd517808a845487d554a3a9
+  // forge:hash=6b5164b41ffb139ca15bfe62d532797c1a39e2937c004d4737c6656e3b042a52
   & {
     "reliant.v1.ProviderAccountService/ListProviderAccounts"?: (req: import("@/gen/reliant/v1/provider_account_pb").ListProviderAccountsRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/provider_account_pb").ListProviderAccountsResponseSchema>>;
     "reliant.v1.ProviderAccountService/UpdateProviderAccount"?: (req: import("@/gen/reliant/v1/provider_account_pb").UpdateProviderAccountRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/provider_account_pb").UpdateProviderAccountResponseSchema>>;
@@ -351,6 +351,8 @@ export type ScenarioRpcHandlers =
     "reliant.v1.ProviderAccountService/AddProviderAPIKey"?: (req: import("@/gen/reliant/v1/provider_account_pb").AddProviderAPIKeyRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/provider_account_pb").AddProviderAPIKeyResponseSchema>>;
     "reliant.v1.ProviderAccountService/RefreshProviderAccountUsage"?: (req: import("@/gen/reliant/v1/provider_account_pb").RefreshProviderAccountUsageRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/provider_account_pb").RefreshProviderAccountUsageResponseSchema>>;
     "reliant.v1.ProviderAccountService/GetChatProviderAccount"?: (req: import("@/gen/reliant/v1/provider_account_pb").GetChatProviderAccountRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/provider_account_pb").GetChatProviderAccountResponseSchema>>;
+    "reliant.v1.ProviderAccountService/GetPersonalFundingQuestion"?: (req: import("@/gen/reliant/v1/provider_account_pb").GetPersonalFundingQuestionRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/provider_account_pb").GetPersonalFundingQuestionResponseSchema>>;
+    "reliant.v1.ProviderAccountService/ResolvePersonalFundingChoice"?: (req: import("@/gen/reliant/v1/provider_account_pb").ResolvePersonalFundingChoiceRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/provider_account_pb").ResolvePersonalFundingChoiceResponseSchema>>;
   }
 
   // forge:section reliant.v1.QuestionService

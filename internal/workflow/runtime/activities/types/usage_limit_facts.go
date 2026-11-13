@@ -57,6 +57,9 @@ type FailoverPolicy struct {
 	// PreferredAccount maps a driver id to the account (id, email or label) the
 	// run prefers on it.
 	PreferredAccount map[string]string `json:"preferred_account,omitempty"`
+	// Funding is the chat's funding order (RunProviderPolicy.Funding); "" is
+	// the person's per-org setting.
+	Funding string `json:"funding,omitempty"`
 }
 
 // FallbackReturn tells the first call_llm after a cross-provider fallback

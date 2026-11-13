@@ -1,0 +1,462 @@
+// Copyright (c) 2025 Reliant Labs
+package handlers
+
+import (
+	"context"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/llm/models"
+	"github.com/reliant-labs/reliant/internal/llm/ratelimit"
+	"github.com/reliant-labs/reliant/internal/models/message"
+	"github.com/reliant-labs/reliant/internal/orgfunding"
+	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
+)
+
+// §10 of control-plane docs/design/org-provider-accounts.md on the server:
+// before a chat in an org moves from the org's accounts to the person's own,
+// it asks; with nobody to answer it waits; nothing but the person's answer (or
+// their remembered preference) spends their money.
+
+// fundingFake is an in-memory PersonalFundingStore with the row semantics of
+// the real one (one question per chat).
+type fundingFake struct {
+	mu          sync.Mutex
+	rows        map[string]*core.PersonalFunding
+	asks        int
+	assignments map[string][]core.Assignment
+	orgs        map[string][2]string // account -> {owner org, attributed org}
+	serving     map[string]string    // thread -> account
+}
+
+func newFundingFake() *fundingFake {
+	return &fundingFake{rows: map[string]*core.PersonalFunding{}, assignments: map[string][]core.Assignment{},
+		orgs: map[string][2]string{}, serving: map[string]string{}}
+}
+
+func (f *fundingFake) GetChatPersonalFunding(_ context.Context, chatID string) (*core.PersonalFunding, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if r, ok := f.rows[chatID]; ok {
+		c := *r
+		return &c, nil
+	}
+	return nil, nil
+}
+
+func (f *fundingFake) AskPersonalFunding(_ context.Context, q core.PersonalFunding, now time.Time) (bool, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if cur, ok := f.rows[q.ChatID]; ok && cur.State != core.PersonalFundingUsePersonal && cur.Reason == q.Reason && cur.Model == q.Model {
+		return false, nil
+	}
+	q.State, q.AskedAt = core.PersonalFundingAsked, now
+	f.rows[q.ChatID] = &q
+	f.asks++
+	return true, nil
+}
+
+func (f *fundingFake) GrantPersonalFunding(_ context.Context, q core.PersonalFunding, now time.Time) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	q.State, q.AnsweredAt = core.PersonalFundingUsePersonal, &now
+	f.rows[q.ChatID] = &q
+	return nil
+}
+
+func (f *fundingFake) ClearPersonalFunding(_ context.Context, chatID string) (bool, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	_, ok := f.rows[chatID]
+	delete(f.rows, chatID)
+	return ok, nil
+}
+
+func (f *fundingFake) MarkPersonalFundingAnnounced(_ context.Context, chatID string) (bool, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	r, ok := f.rows[chatID]
+	if !ok || r.Announced || r.State != core.PersonalFundingUsePersonal {
+		return false, nil
+	}
+	r.Announced = true
+	return true, nil
+}
+
+func (f *fundingFake) ProviderAccountOrgs(_ context.Context, accountID string) (string, string, bool, error) {
+	o, ok := f.orgs[accountID]
+	return o[0], o[1], ok, nil
+}
+
+func (f *fundingFake) ListThreadAssignments(_ context.Context, threadID string) ([]core.Assignment, error) {
+	return f.assignments[threadID], nil
+}
+
+func (f *fundingFake) LatestServingAccount(_ context.Context, threadID string) (string, error) {
+	return f.serving[threadID], nil
+}
+
+func (f *fundingFake) answer(chatID, state string, until *time.Time) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	r := f.rows[chatID]
+	r.State, r.LeaseUntil, r.Announced = state, until, false
+}
+
+func (f *fundingFake) row(chatID string) *core.PersonalFunding {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if r, ok := f.rows[chatID]; ok {
+		c := *r
+		return &c
+	}
+	return nil
+}
+
+const fundOrg = "org-acme"
+
+func acmeKey(id string) models.AccountConfig {
+	a := apiKeyAccount(id, id, 0)
+	a.AccountOrgID, a.Tier, a.Funding = fundOrg, models.TierFirst, models.FundingOrgKey
+	return a
+}
+
+func personal(a models.AccountConfig) models.AccountConfig {
+	a.Funding = models.FundingPersonal
+	return a
+}
+
+func myCodex(id string) models.AccountConfig {
+	a := claudeAccount(id, id+"@me.com", 0)
+	a.DriverID = "codex"
+	return personal(a)
+}
+
+// tiered is driversWith plus the rank the loader would compute.
+func tiered(accts ...models.AccountConfig) models.AvailableDrivers {
+	avail := driversWith(accts...)
+	rank := map[models.DriverID]models.AccountTier{}
+	any := false
+	for d, list := range avail.Accounts {
+		best := models.TierSecond
+		for _, a := range list {
+			if a.Tier < best {
+				best = a.Tier
+			}
+		}
+		rank[d] = best
+		any = any || best == models.TierFirst
+	}
+	if any {
+		avail.DriverRank = rank
+	}
+	return avail
+}
+
+type fundingEnv struct {
+	*routingEnv
+	store    *fundingFake
+	settings fakeSettings
+}
+
+func newFundingEnv(t *testing.T, onLimit orgfunding.OnOrgLimit, order orgfunding.Order) *fundingEnv {
+	t.Helper()
+	env := &fundingEnv{routingEnv: newRoutingEnv(t), store: newFundingFake(), settings: fakeSettings{}}
+	if onLimit != "" || order != "" {
+		env.settings[orgfunding.SettingKey] = orgfunding.Settings{}.With(fundOrg, orgfunding.Preference{Order: order, OnOrgLimit: onLimit}, nil).Value()
+	}
+	env.routing.Funding, env.routing.Settings = env.store, env.settings
+	return env
+}
+
+func (e *fundingEnv) resolve(t *testing.T, thread, selector string, mutate ...func(*llmCallSpec)) (*resolvedLLMCall, error) {
+	t.Helper()
+	spec := llmCallSpec{UserID: "u1", OrgID: fundOrg, Attended: true, ChatID: "chat-1", SessionID: "chat-1", ThreadID: thread,
+		Selector: models.ModelSelector{ID: selector}, Routing: e.routing, TurnStart: true}
+	for _, m := range mutate {
+		m(&spec)
+	}
+	return resolveLLMCall(context.Background(), nil, spec)
+}
+
+// isWait reports a refusal the workflow waits out (a usage-limit failure with
+// no alternative and no fallback): never a failed turn.
+func isWait(t *testing.T, err error) {
+	t.Helper()
+	var failure *types.UsageLimitFailure
+	require.ErrorAs(t, err, &failure, "a wait, not a failure: %v", err)
+	assert.False(t, failure.Facts.AlternativeAccount)
+	assert.Empty(t, failure.Facts.FallbackModel)
+	var ule *ratelimit.UsageLimitError
+	require.ErrorAs(t, err, &ule)
+}
+
+// Case 3 (unserved): the org gave the person an Anthropic key; the model the
+// turn asks for is Codex's, which only the person's own account serves.
+func TestPersonalFunding_UnservedModel(t *testing.T) {
+	avail := tiered(acmeKey("acme-key"), myCodex("my-codex"))
+	for _, tc := range []struct {
+		name    string
+		onLimit orgfunding.OnOrgLimit
+		wantRun bool
+		asked   bool
+	}{
+		{"ask (the default) asks and waits", "", false, true},
+		{"wait waits without asking", orgfunding.OnOrgLimitWait, false, false},
+		{"use_personal goes on, with a notice", orgfunding.OnOrgLimitUsePersonal, true, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			withAvailableDrivers(t, avail)
+			env := newFundingEnv(t, tc.onLimit, "")
+			res, err := env.resolve(t, "root", "gpt-5.6-sol")
+			if tc.wantRun {
+				require.NoError(t, err)
+				assert.Equal(t, "my-codex", res.Account.Config.AccountID)
+				assert.Contains(t, res.FundingNotice, "do not serve this model")
+				assert.Contains(t, res.FundingNotice, "Settings → Providers")
+				assert.Equal(t, core.PersonalFundingUsePersonal, env.store.row("chat-1").State)
+				assert.Equal(t, core.PersonalFundingUnserved, env.store.row("chat-1").Reason)
+				return
+			}
+			isWait(t, err)
+			assert.NotContains(t, env.built, "my-codex", "no provider call on the person's account")
+			if tc.asked {
+				q := env.store.row("chat-1")
+				require.NotNil(t, q)
+				assert.Equal(t, core.PersonalFundingAsked, q.State)
+				assert.Equal(t, core.PersonalFundingUnserved, q.Reason)
+				assert.Equal(t, "gpt-5.6-sol", q.Model)
+				assert.Equal(t, "codex", q.PersonalProvider)
+			} else {
+				assert.Nil(t, env.store.row("chat-1"))
+			}
+		})
+	}
+}
+
+// An unanswered question waits, at every retry and every thread of the chat
+// (a sub-agent never prompts on its own and never fails): one question.
+// An old client's Resume is just another retry, and keeps waiting.
+func TestPersonalFunding_UnansweredWaitsOneQuestionPerChat(t *testing.T) {
+	withAvailableDrivers(t, tiered(acmeKey("acme-key"), myCodex("my-codex")))
+	env := newFundingEnv(t, "", "")
+	for _, thread := range []string{"root", "root", "sub-agent-1", "sub-agent-2", "root"} {
+		_, err := env.resolve(t, thread, "gpt-5.6-sol", func(s *llmCallSpec) { s.TurnStart = thread == "root" })
+		isWait(t, err)
+	}
+	assert.Equal(t, 1, env.store.asks, "one question for the chat")
+
+	// The person answers: every thread goes on, and says so once.
+	env.store.answer("chat-1", core.PersonalFundingUsePersonal, nil)
+	for i, thread := range []string{"root", "sub-agent-1"} {
+		res, err := env.resolve(t, thread, "gpt-5.6-sol")
+		require.NoError(t, err)
+		assert.Equal(t, "my-codex", res.Account.Config.AccountID)
+		if i == 0 {
+			assert.Contains(t, res.FundingNotice, "do not serve this model", "the first call under the answer says so")
+		} else {
+			assert.Empty(t, res.FundingNotice, "once for the chat")
+		}
+	}
+	// The unserved answer lasts while the chat keeps the model; another model
+	// asks again.
+	withAvailableDrivers(t, tiered(acmeKey("acme-key"), myCodex("my-codex")))
+	_, err := env.resolve(t, "root", "gpt-5.5@codex", func(s *llmCallSpec) { s.Selector.ID = "gpt-5.5" })
+	if err != nil {
+		isWait(t, err)
+	}
+}
+
+// No question when nothing of the org's is being replaced: the person has no
+// org-funded account in the org; they picked their own provider explicitly;
+// their order for the org is personal_first; the call names no org.
+func TestPersonalFunding_NoQuestion(t *testing.T) {
+	t.Run("the org gave the person nothing", func(t *testing.T) {
+		withAvailableDrivers(t, tiered(myCodex("my-codex")))
+		env := newFundingEnv(t, "", "")
+		res, err := env.resolve(t, "root", "gpt-5.6-sol")
+		require.NoError(t, err)
+		assert.Equal(t, "my-codex", res.Account.Config.AccountID)
+		assert.Empty(t, res.FundingNotice)
+		assert.Nil(t, env.store.row("chat-1"))
+	})
+	t.Run("an explicit pick of the person's provider is the consent", func(t *testing.T) {
+		withAvailableDrivers(t, tiered(acmeKey("acme-key"), myCodex("my-codex")))
+		env := newFundingEnv(t, "", "")
+		res, err := env.resolve(t, "root", "gpt-5.6-sol@codex")
+		require.NoError(t, err)
+		assert.Equal(t, "my-codex", res.Account.Config.AccountID)
+		assert.Nil(t, env.store.row("chat-1"))
+	})
+	t.Run("personal_first", func(t *testing.T) {
+		withAvailableDrivers(t, tiered(acmeKey("acme-key"), myCodex("my-codex")))
+		env := newFundingEnv(t, "", orgfunding.OrderPersonalFirst)
+		_, err := env.resolve(t, "root", "gpt-5.6-sol")
+		require.NoError(t, err)
+		assert.Nil(t, env.store.row("chat-1"))
+	})
+	t.Run("a call that names no org", func(t *testing.T) {
+		withAvailableDrivers(t, tiered(acmeKey("acme-key"), myCodex("my-codex")))
+		env := newFundingEnv(t, "", "")
+		_, err := env.resolve(t, "root", "gpt-5.6-sol", func(s *llmCallSpec) { s.OrgID = "" })
+		require.NoError(t, err)
+		assert.Nil(t, env.store.row("chat-1"))
+	})
+}
+
+// org_only (the chat's order, or the policy-forced value) never uses the
+// person's own account and never asks: it waits, an explicit pick included.
+func TestPersonalFunding_OrgOnlyWaitsWithoutAsking(t *testing.T) {
+	withAvailableDrivers(t, tiered(acmeKey("acme-key"), myCodex("my-codex")))
+	for _, sel := range []string{"gpt-5.6-sol", "gpt-5.6-sol@codex"} {
+		env := newFundingEnv(t, orgfunding.OnOrgLimitUsePersonal, "")
+		_, err := env.resolve(t, "root", sel, func(s *llmCallSpec) { s.Failover.Funding = types.FundingOrgOnly })
+		isWait(t, err)
+		assert.Nil(t, env.store.row("chat-1"), "%s: org_only never asks", sel)
+	}
+}
+
+// Case 2 (unusable): the thread was on the org's key, which is gone from the
+// candidates (revoked, paused, grant withdrawn); the person's own account of
+// another provider serves the model.
+func TestPersonalFunding_UnusableOrgAccount(t *testing.T) {
+	for _, tc := range []struct {
+		onLimit orgfunding.OnOrgLimit
+		run     bool
+	}{{"", false}, {orgfunding.OnOrgLimitWait, false}, {orgfunding.OnOrgLimitUsePersonal, true}} {
+		withAvailableDrivers(t, tiered(personal(claudeAccount("my-claude", "me@me.com", 0))))
+		env := newFundingEnv(t, tc.onLimit, "")
+		env.store.assignments["root"] = []core.Assignment{{ThreadID: "root", Provider: "anthropic", AccountID: "revoked-key"}}
+		env.store.orgs["revoked-key"] = [2]string{fundOrg, ""}
+		res, err := env.resolve(t, "root", routeModel)
+		if tc.run {
+			require.NoError(t, err)
+			assert.Equal(t, "my-claude", res.Account.Config.AccountID)
+			assert.Contains(t, res.FundingNotice, "unavailable")
+			continue
+		}
+		isWait(t, err)
+		if tc.onLimit == "" {
+			require.NotNil(t, env.store.row("chat-1"))
+			assert.Equal(t, core.PersonalFundingUnusable, env.store.row("chat-1").Reason)
+		}
+	}
+}
+
+// Case 1 (limited): every org key serving the model is limited and the
+// person's own account could serve now.
+func TestPersonalFunding_LimitedOrgTier(t *testing.T) {
+	reset := time.Now().Add(2 * time.Hour).UTC().Truncate(time.Second)
+	for _, tc := range []struct {
+		onLimit orgfunding.OnOrgLimit
+		lease   bool
+		asked   bool
+	}{{"", false, true}, {orgfunding.OnOrgLimitWait, false, false}, {orgfunding.OnOrgLimitUsePersonal, true, false}} {
+		withAvailableDrivers(t, tiered(acmeKey("acme-key"), personal(claudeAccount("my-claude", "me@me.com", 0))))
+		env := newFundingEnv(t, tc.onLimit, "")
+		env.routing.Store.(*routerFake).bench("acme-key", reset, "five_hour")
+		_, err := env.resolve(t, "root", routeModel)
+		var failure *types.UsageLimitFailure
+		require.ErrorAs(t, err, &failure, "a limited org tier is a usage-limit refusal")
+		assert.Equal(t, tc.lease, failure.Facts.AlternativeAccount, "use_personal retries at once on the person's account")
+		q := env.store.row("chat-1")
+		switch {
+		case tc.lease:
+			require.NotNil(t, q)
+			assert.Equal(t, core.PersonalFundingUsePersonal, q.State)
+			require.NotNil(t, q.LeaseUntil)
+			assert.True(t, q.LeaseUntil.Equal(reset), "the lease lasts until the org's reset")
+			// The retry goes to the person's account.
+			res, err := env.resolve(t, "root", routeModel)
+			require.NoError(t, err)
+			assert.Equal(t, "my-claude", res.Account.Config.AccountID)
+		case tc.asked:
+			require.NotNil(t, q)
+			assert.Equal(t, core.PersonalFundingAsked, q.State)
+			assert.Equal(t, core.PersonalFundingLimited, q.Reason)
+			require.NotNil(t, q.OrgResetAt)
+		default:
+			assert.Nil(t, q)
+		}
+	}
+}
+
+// The lease ends at the org's reset: the first call after it is the org's
+// again, the question row is cleared and the chat says so.
+func TestPersonalFunding_LeaseReturnsAtReset(t *testing.T) {
+	now := time.Date(2030, 1, 2, 3, 0, 0, 0, time.UTC)
+	orig := fundingNow
+	fundingNow = func() time.Time { return now }
+	t.Cleanup(func() { fundingNow = orig })
+
+	withAvailableDrivers(t, tiered(acmeKey("acme-key"), personal(claudeAccount("my-claude", "me@me.com", 0))))
+	env := newFundingEnv(t, "", "")
+	until := now.Add(time.Hour)
+	env.store.rows["chat-1"] = &core.PersonalFunding{ChatID: "chat-1", UserID: "u1", OrgID: fundOrg,
+		State: core.PersonalFundingUsePersonal, Reason: core.PersonalFundingLimited, Model: routeModel, LeaseUntil: &until}
+
+	res, err := env.resolve(t, "root", routeModel)
+	require.NoError(t, err)
+	assert.Equal(t, "my-claude", res.Account.Config.AccountID, "during the lease")
+
+	now = until.Add(time.Second)
+	res, err = env.resolve(t, "root-2", routeModel)
+	require.NoError(t, err)
+	assert.Equal(t, "acme-key", res.Account.Config.AccountID, "after the reset, the org's again")
+	assert.Equal(t, orgAccountsBackNotice(), res.FundingNotice)
+	assert.Nil(t, env.store.row("chat-1"))
+}
+
+// An automation stamped "any" has nobody to ask: its owner's stamp is the
+// consent, so it goes on without a question.
+func TestPersonalFunding_UnattendedAnyGoesOn(t *testing.T) {
+	withAvailableDrivers(t, tiered(acmeKey("acme-key"), myCodex("my-codex")))
+	env := newFundingEnv(t, "", "")
+	res, err := env.resolve(t, "root", "gpt-5.6-sol", func(s *llmCallSpec) { s.Attended, s.UnattendedAnySource = false, true })
+	require.NoError(t, err)
+	assert.Equal(t, "my-codex", res.Account.Config.AccountID)
+	assert.Equal(t, core.PersonalFundingUsePersonal, env.store.row("chat-1").State)
+}
+
+// Without a question store (a worker built without one) a call that would
+// replace the org's account with the person's waits: it never spends.
+func TestPersonalFunding_NoStoreNeverSpends(t *testing.T) {
+	withAvailableDrivers(t, tiered(acmeKey("acme-key"), myCodex("my-codex")))
+	env := newFundingEnv(t, orgfunding.OnOrgLimitUsePersonal, "")
+	env.routing.Funding = nil
+	res, err := env.resolve(t, "root", "gpt-5.6-sol")
+	// Without the store the plan is inactive: the call routes as P5a does.
+	if err == nil {
+		assert.Equal(t, "my-codex", res.Account.Config.AccountID)
+	}
+}
+
+// Mid-turn the thread stays on its provider; a better tier is taken up at the
+// next turn start only (D6), with a notice.
+func TestPersonalFunding_UpgradeOnlyAtTurnStart(t *testing.T) {
+	withAvailableDrivers(t, tiered(acmeKey("acme-key"), personal(claudeAccount("my-claude", "me@me.com", 0))))
+	env := newFundingEnv(t, "", "")
+	env.store.serving["root"] = "my-claude"
+
+	res, err := env.resolve(t, "root", routeModel, func(s *llmCallSpec) { s.TurnStart = false })
+	require.NoError(t, err)
+	assert.Equal(t, "my-claude", res.Account.Config.AccountID, "between tool steps the thread keeps its provider")
+
+	res, err = env.resolve(t, "root", routeModel)
+	require.NoError(t, err)
+	assert.Equal(t, "acme-key", res.Account.Config.AccountID, "at the turn start it moves up to the org's account")
+	assert.Contains(t, res.FundingNotice, "for this chat from now on")
+}
+
+func TestHistoryStartsTurn(t *testing.T) {
+	msg := func(role message.MessageRole) message.Message { return message.Message{Role: role} }
+	assert.True(t, historyStartsTurn([]message.Message{msg(message.User)}))
+	assert.True(t, historyStartsTurn([]message.Message{msg(message.Assistant), msg(message.Agent), msg(message.System)}))
+	assert.False(t, historyStartsTurn([]message.Message{msg(message.User), msg(message.Assistant), msg(message.Tool)}))
+	assert.False(t, historyStartsTurn(nil))
+}
