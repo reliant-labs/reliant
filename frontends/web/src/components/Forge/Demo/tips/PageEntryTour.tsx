@@ -27,6 +27,9 @@ import { isLegacyDemoTourLink } from "@/components/Onboarding/legacyDemoTour";
 import { cn } from "@/lib/utils";
 import { DemoCorner, useConsoleDrawerOpen } from "../DemoCorner";
 import { demoSession } from "../demoSession";
+import { demoViewMode, useDemoViewMode } from "../approachable/viewMode";
+import { isSimplePage } from "../approachable/simpleNav";
+import { consolePageOf } from "../../Console/paths";
 import { PageAgentHelp } from "./DemoTips";
 import { DEMO_TIPS } from "./tipCopy";
 import { demoDetailOf, demoTipKey, isDemoSectionPage, type DemoTipKey } from "./tipKeys";
@@ -47,6 +50,10 @@ export function PageEntryTour() {
   const visit = demoPageVisit(location.pathname, search);
   const mobile = useMediaQuery(PHONE);
   const drawerOpen = useConsoleDrawerOpen();
+  const viewMode = useDemoViewMode();
+  // A simple-view page says what it is in its own first sentence: no tip card or "?" on it.
+  const consolePage = consolePageOf(location.pathname)?.page;
+  if (viewMode === "simple" && consolePage && isSimplePage(consolePage, search)) return null;
   // A guided tour owns the page, except an old trace-less deep link, which
   // keeps its page card (isLegacyDemoTourLink).
   if (!key || (search.tour && !isLegacyDemoTourLink(search)) || drawerOpen) return null;
@@ -56,7 +63,8 @@ export function PageEntryTour() {
 
 function VisitTour({ tipKey, section }: { tipKey: DemoTipKey; section: boolean }) {
   // A section's first visit this session: open by itself. A reload, coming back, or a sub-page does not.
-  const [open, setOpen] = useState(() => section && !demoSession.hasSeenTip(tipKey));
+  // The simple view is calm: no card opens by itself there; "?" still explains the page.
+  const [open, setOpen] = useState(() => section && demoViewMode() === "advanced" && !demoSession.hasSeenTip(tipKey));
   // Opened from "?": the reader asked, so the page may scroll to the tip's anchor.
   const [requested, setRequested] = useState(false);
   const restoreFocus = useRef(false);

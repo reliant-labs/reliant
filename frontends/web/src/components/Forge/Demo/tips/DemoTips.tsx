@@ -12,7 +12,15 @@ import { DemoScreenActions } from "../DemoScreenActions";
 export function DemoTips() { return <><DemoScreenActions /><PageEntryTour /></>; }
 
 /** Secondary information is disclosed by click, tap or keyboard, never hover only. */
+/** Pages whose own "put an agent on it" card (approachable/AgentCards) replaces this disclosure. */
+const AGENT_CARD_PAGES: readonly DemoTipKey[] = ["errors", "alerts", "traces", "releases", "release"];
+
 export function PageAgentHelp({ tipKey }: { tipKey: DemoTipKey }) {
+  if (AGENT_CARD_PAGES.includes(tipKey)) return null;
+  return <AgentHelpDisclosure tipKey={tipKey} />;
+}
+
+function AgentHelpDisclosure({ tipKey }: { tipKey: DemoTipKey }) {
   const tip = DEMO_TIPS[tipKey];
   const [open, setOpen] = useState(false);
   const trigger = useRef<HTMLButtonElement>(null);

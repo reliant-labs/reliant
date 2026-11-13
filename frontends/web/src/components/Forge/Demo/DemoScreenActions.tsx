@@ -15,7 +15,9 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { useLocation, useNavigate } from "@tanstack/react-router";
+import { Moon, Sun } from "lucide-react";
 import Button from "@/components/forge-ui/button";
+import { applyThemeMode, type ThemeMode } from "@/lib/themeMode";
 import { parseTourParam } from "@/components/Onboarding/tourParam";
 import { trackEvent } from "@/lib/analytics";
 import { PRIVACY_POLICY_URL } from "@/lib/privacyLinks";
@@ -75,6 +77,32 @@ export function DemoDrawerActions() {
   );
 }
 
+/** Light or dark, for this browser (the same `appearance.theme` key demo.html reads before paint). */
+function ThemeToggle() {
+  const [dark, setDark] = useState(() => document.documentElement.classList.contains("dark"));
+  return (
+    <button
+      type="button"
+      aria-label={dark ? "Use the light theme" : "Use the dark theme"}
+      title={dark ? "Light theme" : "Dark theme"}
+      onClick={() => {
+        const next: ThemeMode = dark ? "light" : "dark";
+        try {
+          localStorage.setItem("appearance.theme", next);
+        } catch {
+          // Private mode: the theme lasts for the visit.
+        }
+        applyThemeMode(next);
+        setDark(!dark);
+      }}
+      className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-ink-muted hover:bg-ink/5 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      data-testid="demo-theme-toggle"
+    >
+      {dark ? <Sun className="h-5 w-5" aria-hidden="true" /> : <Moon className="h-5 w-5" aria-hidden="true" />}
+    </button>
+  );
+}
+
 export function DemoScreenActions() {
   const [host, setHost] = useState<HTMLElement | null>(null);
   const drawerOpen = useConsoleDrawerOpen();
@@ -106,6 +134,7 @@ export function DemoScreenActions() {
       <div className="flex shrink-0 items-center gap-3">
         {!tourOpen && <TakeTheTourButton className="max-md:hidden" />}
         <span className="max-md:hidden"><InstallForgeLink placement="banner">Install Forge</InstallForgeLink></span>
+        <ThemeToggle />
         <SignUpButton placement="banner" size="md" />
       </div>
     </nav>,host,

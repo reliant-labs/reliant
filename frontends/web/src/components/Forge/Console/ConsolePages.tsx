@@ -37,6 +37,7 @@ import { DeployStatusUnread, deployStatusUnread } from "./DeployStatusUnread";
 import { DashboardsPage } from "../Observability/Dashboards/DashboardsPages";
 import { MetricsExplorerPage } from "../Observability/Metrics/MetricsExplorerPage";
 import { ObservabilityHost } from "./ObservabilityHost";
+import { useConsoleNavExtras } from "./consoleNavExtras";
 import { OBS_NAV_LABELS } from "./paths";
 
 // ── Shared pieces ───────────────────────────────────────────────────────────
@@ -149,6 +150,7 @@ function NothingDeployed({ what, about }: { what: string; about: string }) {
  */
 export function ObservabilityViewPage() {
   const { page } = useForgeConsole();
+  const { title: titleOverride } = useConsoleNavExtras();
   if (page.kind !== "obs-view") return null;
   if (page.view === "dashboards") return <DashboardsPage />;
   if (page.view === "metrics") {
@@ -161,7 +163,7 @@ export function ObservabilityViewPage() {
   }
   return (
     <Page testId={`console-${page.view}`}>
-      <Header title={OBS_NAV_LABELS[page.view]} />
+      <Header title={titleOverride?.(page) ?? OBS_NAV_LABELS[page.view]} />
       <ObservabilityHost key={page.view} view={page.view} />
     </Page>
   );

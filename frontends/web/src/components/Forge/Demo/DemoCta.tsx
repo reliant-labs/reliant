@@ -26,7 +26,7 @@ import { cn } from "@/lib/utils";
 import { InstallForgeSheet } from "./InstallForgeSheet";
 
 /** Where a CTA sits: the landing UTM's `utm_content`, and analytics' `placement`. */
-export type DemoCtaPlacement = "banner" | "corner" | "end_card" | "page_card" | "toast" | "tour_intro";
+export type DemoCtaPlacement = "banner" | "corner" | "end_card" | "page_card" | "toast" | "tour_intro" | "agent_sheet" | "landing";
 
 /** Where Sign up goes from `placement`. */
 export function signupHref(placement: DemoCtaPlacement): string {

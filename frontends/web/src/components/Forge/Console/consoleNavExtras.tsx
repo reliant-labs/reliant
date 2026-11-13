@@ -8,16 +8,36 @@
  *
  * `lead.active` means the open page is the lead's own, not a console page: its
  * row is the current one, and the breadcrumb names it.
+ *
+ * The public demo's simple view (Forge/Demo/approachable) also replaces the
+ * nav rows, the breadcrumb and, for a few pages, the page itself; each hook
+ * returns null to keep the console's own.
  */
 
 import { createContext, useContext, type ReactNode } from "react";
+
+import type { SidebarNavItem } from "@/components/forge-ui/sidebar_layout";
+
+import type { ConsolePage } from "./paths";
 
 export interface ConsoleNavExtras {
   lead?: { label: string; href: string; icon?: ReactNode; active: boolean };
   /** Shown in the nav on a phone (the drawer) only. */
   drawerAppendix?: ReactNode;
+  /** Shown under the nav rows at every width (the demo's view switch). */
+  navAppendix?: ReactNode;
   /** The scope control's environments in this order (names it omits keep theirs, after). */
   envOrder?: readonly string[];
+  /** Hide the top bar's environment scope (the demo's simple view shows production only). */
+  hideScope?: boolean;
+  /** Other nav rows for `page`, or null for the console's own. */
+  nav?: (page: ConsolePage, alertsFiring: number) => { items: SidebarNavItem[]; footer: SidebarNavItem[] } | null;
+  /** Another breadcrumb trail for `page` (after the project), or null for the console's own. */
+  crumbs?: (page: ConsolePage) => { label: string; href?: string }[] | null;
+  /** Another page title for an Observability view, or null for the console's own. */
+  title?: (page: ConsolePage) => string | null;
+  /** Another page body for `page` (it may wrap the console's own, `children`), or null to keep it. */
+  page?: (page: ConsolePage, children: ReactNode) => ReactNode | null;
 }
 
 const ConsoleNavExtrasContext = createContext<ConsoleNavExtras>({});
