@@ -538,7 +538,9 @@ func TestOnlyAddingIsGated(t *testing.T) {
 		_, err := c.run(ctx, e.svc, f)
 		switch c.name {
 		case "AddOrgProviderAPIKey", "BindOrgProviderWorkspace":
-			requireRefused(t, err, connect.CodeFailedPrecondition, "", c.name)
+			// The refusal names its reason, so a client says "not enabled here" without
+			// reading the message.
+			requireRefused(t, err, connect.CodeFailedPrecondition, org_provider_account.ReasonProviderAccountsDisabled, c.name)
 		default:
 			require.NoError(t, err, "%s is never gated", c.name)
 		}
@@ -626,7 +628,7 @@ func TestBindNeedsTheSeatsGate(t *testing.T) {
 	f := e.seed()
 	ctx := e.person(adminID)
 	_, err := e.svc.BindOrgProviderWorkspace(ctx, connect.NewRequest(&pb.BindOrgProviderWorkspaceRequest{OrgId: org, AccountId: f.ownTeam}))
-	requireRefused(t, err, connect.CodeFailedPrecondition, "")
+	requireRefused(t, err, connect.CodeFailedPrecondition, org_provider_account.ReasonProviderSeatsDisabled)
 	assert.Zero(t, e.seats.CallCount("MatchWorkspace"))
 	_, err = e.svc.AddOrgProviderAPIKey(ctx, connect.NewRequest(&pb.AddOrgProviderAPIKeyRequest{
 		OrgId: org, Provider: "openai", Label: "Ops", ApiKey: "sk-openai-org-seats-gate-0001", Access: pb.OrgProviderAccountAccess_ORG_PROVIDER_ACCOUNT_ACCESS_MEMBERS,

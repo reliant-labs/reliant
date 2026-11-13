@@ -22,6 +22,10 @@ import (
 type Store interface {
 	ListProviderAccounts(ctx context.Context, userID string) ([]core.ProviderAccount, error)
 	ListAccountLimits(ctx context.Context, userID string) (map[string]core.LimitState, error)
+	// An org's own accounts, for the account a chat of that org is using (GetChatProviderAccount).
+	ListOwnedProviderAccounts(ctx context.Context, owner core.AccountOwner) ([]core.ProviderAccount, error)
+	ListOwnedAccountLimits(ctx context.Context, owner core.AccountOwner) (map[string]core.LimitState, error)
+	ListMemberAccountGrants(ctx context.Context, orgID, userID string) (map[string]time.Time, error)
 	UpsertProviderAccount(ctx context.Context, u core.AccountUpsert) (core.ProviderAccount, bool, error)
 	PatchProviderAccount(ctx context.Context, userID, accountID string, p core.AccountPatch) (core.ProviderAccount, error)
 	ReorderProviderAccounts(ctx context.Context, userID, provider string, orderedIDs []string) error

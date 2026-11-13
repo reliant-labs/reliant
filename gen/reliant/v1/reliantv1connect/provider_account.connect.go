@@ -89,7 +89,9 @@ type ProviderAccountServiceClient interface {
 	// returns the stored state with throttled = true.
 	RefreshProviderAccountUsage(context.Context, *connect.Request[v1.RefreshProviderAccountUsageRequest]) (*connect.Response[v1.RefreshProviderAccountUsageResponse], error)
 	// GetChatProviderAccount returns the account the chat's root thread is
-	// currently using for its provider; unset when none is assigned yet.
+	// currently using for its provider; unset when none is assigned yet. An
+	// account the chat's org owns is returned as a member of the org sees it
+	// (provider, label and status, with funding ORG_KEY): never its key hint.
 	GetChatProviderAccount(context.Context, *connect.Request[v1.GetChatProviderAccountRequest]) (*connect.Response[v1.GetChatProviderAccountResponse], error)
 	// GetPersonalFundingQuestion returns the chat's open question "continue on
 	// your own account?" (control-plane docs/design/org-provider-accounts.md
@@ -263,7 +265,9 @@ type ProviderAccountServiceHandler interface {
 	// returns the stored state with throttled = true.
 	RefreshProviderAccountUsage(context.Context, *connect.Request[v1.RefreshProviderAccountUsageRequest]) (*connect.Response[v1.RefreshProviderAccountUsageResponse], error)
 	// GetChatProviderAccount returns the account the chat's root thread is
-	// currently using for its provider; unset when none is assigned yet.
+	// currently using for its provider; unset when none is assigned yet. An
+	// account the chat's org owns is returned as a member of the org sees it
+	// (provider, label and status, with funding ORG_KEY): never its key hint.
 	GetChatProviderAccount(context.Context, *connect.Request[v1.GetChatProviderAccountRequest]) (*connect.Response[v1.GetChatProviderAccountResponse], error)
 	// GetPersonalFundingQuestion returns the chat's open question "continue on
 	// your own account?" (control-plane docs/design/org-provider-accounts.md

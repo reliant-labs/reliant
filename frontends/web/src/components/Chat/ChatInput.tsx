@@ -107,6 +107,7 @@ const EMPTY_WORKFLOW_TAG_INFO: WorkflowTagInfo = { groupTags: {}, groupUIs: {} }
 import { findPinnedModel } from "../../lib/modelId";
 import { ComposerModelName } from "./ComposerModelName";
 import { AccountUsageChip } from "./AccountUsageChip";
+import { FundingBadge } from "./FundingBadge";
 import {
   beginQueuedSend,
   endQueuedSend,
@@ -2168,7 +2169,8 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
                         </div>
                       ))}
 
-                      <div {...toolProps("account")}>
+                      <div {...toolProps("account")} className="flex items-center gap-1.5">
+                        <FundingBadge chatId={chatId} />
                         <AccountUsageChip chatId={chatId} />
                       </div>
 

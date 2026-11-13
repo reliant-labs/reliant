@@ -70,6 +70,7 @@ import { QuestionPrompt, type QuestionAnswer } from "../Chat/QuestionPrompt";
 import { askUserQuestionItems } from "../Chat/askUserUtils";
 import { formatBytes } from "@/lib/formatBytes";
 import { consumerSummary, heavyRefused, pressuredVolume, reclaimSummary, volumeUsage } from "@/lib/machineDisk";
+import { driverDisplayName } from "@/hooks/catalog-models";
 import { isUnownedStorage, StorageAction, totalHeldBytes } from "./StorageAction";
 import { reclaimDetail, WorktreeReclaimAction } from "./WorktreeReclaimAction";
 import { MarkedWorktreeAction, markedDetail, markedTitle } from "./MarkedWorktreeAction";
@@ -479,6 +480,10 @@ function KindIcon({ kind }: { kind: InboxItemKind }) {
       return <FolderX className={cn(className, "text-warning-ink")} aria-label="Worktrees proposed for removal" />;
     case InboxItemKind.WORKTREE_MARKED:
       return <FolderX className={className} aria-label="Worktree marked to be reclaimed" />;
+    case InboxItemKind.PERSONAL_FUNDING:
+      return <HelpCircle className={cn(className, "text-warning-ink")} aria-label="Asks to use your own AI account" />;
+    case InboxItemKind.ORG_PROVIDER_KEY_REJECTED:
+      return <AlertTriangle className={cn(className, "text-destructive-ink")} aria-label="Organization AI key rejected" />;
     default:
       return <CheckCircle2 className={className} aria-hidden="true" />;
   }
@@ -499,6 +504,7 @@ export function subjectName(item: InboxItemData): string {
     return `${machineName(item.payload.value.daemonName, item.payload.value.daemonId)} worktrees`;
   }
   if (item.payload.case === "worktreeMarked") return item.payload.value.name || "Worktree";
+  if (item.payload.case === "orgProviderKeyRejected") return item.payload.value.label || "Organization AI key";
   return item.chatTitle || item.triggerName || "Untitled run";
 }
 
@@ -671,6 +677,13 @@ function rowDetail(item: InboxItemData): { node: ReactNode; title: string } | nu
         .join(" · ");
       return text ? { node: text, title: text } : null;
     }
+    case "orgProviderKeyRejected": {
+      const { provider, keyHint, reason } = payload.value;
+      const text = [provider ? `${driverDisplayName(provider)} key` : "Key", keyHint ? `…${keyHint}` : "", reason ? `rejected: ${reason}` : "rejected by the provider"]
+        .filter(Boolean)
+        .join(" · ");
+      return { node: text, title: `${text}. Members' chats route around it until an owner or admin rotates or removes it.` };
+    }
     case "automationRunPaused": {
       // Why it paused; while it waits it holds its automation's slot.
       const reason = payload.value.reason;
@@ -780,6 +793,14 @@ interface InlineActionProps {
 function InlineAction({ item, expanded, onToggle }: InlineActionProps) {
   const { payload } = item;
   const mobile = useSurface() === "mobile";
+  if (item.kind === InboxItemKind.PERSONAL_FUNDING && item.chatId) {
+    // Opening the chat opens its question (Chat/PersonalFundingPrompt).
+    return (
+      <RunLink chatId={item.chatId} className={actionButtonClass}>
+        Review
+      </RunLink>
+    );
+  }
   switch (payload.case) {
     case "approval":
       // Approve and Deny are in the expansion, under what is approved.
@@ -849,6 +870,12 @@ function InlineAction({ item, expanded, onToggle }: InlineActionProps) {
       );
     case "worktreeMarked":
       return <MarkedWorktreeAction item={payload.value} />;
+    case "orgProviderKeyRejected":
+      return (
+        <a href="/settings/org-ai-accounts" className={actionButtonClass}>
+          Fix key
+        </a>
+      );
     case "automationRunPaused":
       return item.chatId ? (
         <RunLink chatId={item.chatId} className={actionButtonClass}>

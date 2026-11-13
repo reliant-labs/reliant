@@ -21184,6 +21184,16 @@
             {
               "name": "using_credits",
               "kind": "bool"
+            },
+            {
+              "name": "funding",
+              "kind": "enum",
+              "type_name": "reliant.v1.ProviderAccountFunding"
+            },
+            {
+              "name": "funding_org_id",
+              "kind": "string",
+              "optional": true
             }
           ],
           "reliant.v1.ReleaseOrgProviderSeatRequest": [
@@ -21373,6 +21383,13 @@
             "ORG_PROVIDER_ACCOUNT_ACCESS_ADMINS",
             "ORG_PROVIDER_ACCOUNT_ACCESS_SELECTED"
           ],
+          "reliant.v1.ProviderAccountFunding": [
+            "PROVIDER_ACCOUNT_FUNDING_UNSPECIFIED",
+            "PROVIDER_ACCOUNT_FUNDING_PERSONAL",
+            "PROVIDER_ACCOUNT_FUNDING_ORG_KEY",
+            "PROVIDER_ACCOUNT_FUNDING_ORG_SEAT",
+            "PROVIDER_ACCOUNT_FUNDING_ORG_WALLET"
+          ],
           "reliant.v1.ProviderAccountStatus": [
             "PROVIDER_ACCOUNT_STATUS_UNSPECIFIED",
             "PROVIDER_ACCOUNT_STATUS_AVAILABLE",
@@ -21401,6 +21418,13 @@
             2,
             3
           ],
+          "reliant.v1.ProviderAccountFunding": [
+            0,
+            1,
+            2,
+            3,
+            4
+          ],
           "reliant.v1.ProviderAccountStatus": [
             0,
             1,
@@ -21426,6 +21450,10 @@
           "reliant.v1.OrgProviderAccountAccess": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
             "GoName": "OrgProviderAccountAccess"
+          },
+          "reliant.v1.ProviderAccountFunding": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "ProviderAccountFunding"
           },
           "reliant.v1.ProviderAccountStatus": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
@@ -27719,6 +27747,16 @@
             {
               "name": "using_credits",
               "kind": "bool"
+            },
+            {
+              "name": "funding",
+              "kind": "enum",
+              "type_name": "reliant.v1.ProviderAccountFunding"
+            },
+            {
+              "name": "funding_org_id",
+              "kind": "string",
+              "optional": true
             }
           ],
           "reliant.v1.RefreshProviderAccountUsageRequest": [
@@ -27863,6 +27901,13 @@
             "STATE_USE_PERSONAL",
             "STATE_KEEP_WAITING"
           ],
+          "reliant.v1.ProviderAccountFunding": [
+            "PROVIDER_ACCOUNT_FUNDING_UNSPECIFIED",
+            "PROVIDER_ACCOUNT_FUNDING_PERSONAL",
+            "PROVIDER_ACCOUNT_FUNDING_ORG_KEY",
+            "PROVIDER_ACCOUNT_FUNDING_ORG_SEAT",
+            "PROVIDER_ACCOUNT_FUNDING_ORG_WALLET"
+          ],
           "reliant.v1.ProviderAccountStatus": [
             "PROVIDER_ACCOUNT_STATUS_UNSPECIFIED",
             "PROVIDER_ACCOUNT_STATUS_AVAILABLE",
@@ -27902,6 +27947,13 @@
             2,
             3
           ],
+          "reliant.v1.ProviderAccountFunding": [
+            0,
+            1,
+            2,
+            3,
+            4
+          ],
           "reliant.v1.ProviderAccountStatus": [
             0,
             1,
@@ -27936,6 +27988,10 @@
           "reliant.v1.PersonalFundingQuestion.State": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
             "GoName": "PersonalFundingQuestion_State"
+          },
+          "reliant.v1.ProviderAccountFunding": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "ProviderAccountFunding"
           },
           "reliant.v1.ProviderAccountStatus": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
@@ -33538,6 +33594,16 @@
             {
               "name": "using_credits",
               "kind": "bool"
+            },
+            {
+              "name": "funding",
+              "kind": "enum",
+              "type_name": "reliant.v1.ProviderAccountFunding"
+            },
+            {
+              "name": "funding_org_id",
+              "kind": "string",
+              "optional": true
             }
           ],
           "reliant.v1.ProviderStatus": [
@@ -34254,6 +34320,13 @@
             "STATUS_DENIED",
             "STATUS_ERROR"
           ],
+          "reliant.v1.ProviderAccountFunding": [
+            "PROVIDER_ACCOUNT_FUNDING_UNSPECIFIED",
+            "PROVIDER_ACCOUNT_FUNDING_PERSONAL",
+            "PROVIDER_ACCOUNT_FUNDING_ORG_KEY",
+            "PROVIDER_ACCOUNT_FUNDING_ORG_SEAT",
+            "PROVIDER_ACCOUNT_FUNDING_ORG_WALLET"
+          ],
           "reliant.v1.ProviderAccountStatus": [
             "PROVIDER_ACCOUNT_STATUS_UNSPECIFIED",
             "PROVIDER_ACCOUNT_STATUS_AVAILABLE",
@@ -34322,6 +34395,13 @@
             4,
             5
           ],
+          "reliant.v1.ProviderAccountFunding": [
+            0,
+            1,
+            2,
+            3,
+            4
+          ],
           "reliant.v1.ProviderAccountStatus": [
             0,
             1,
@@ -34381,6 +34461,10 @@
           "reliant.v1.PollCopilotDeviceAuthResponse.Status": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
             "GoName": "PollCopilotDeviceAuthResponse_Status"
+          },
+          "reliant.v1.ProviderAccountFunding": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "ProviderAccountFunding"
           },
           "reliant.v1.ProviderAccountStatus": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",

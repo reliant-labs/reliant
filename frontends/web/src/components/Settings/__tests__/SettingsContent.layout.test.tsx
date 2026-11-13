@@ -24,6 +24,7 @@ vi.mock("../BrowserSettings", () => ({ BrowserSettings: () => <div data-testid="
 vi.mock("../TokenSettings", () => ({ TokenSettings: () => <div data-testid="section">tokens</div> }));
 vi.mock("../cloud/members/MembersPage", () => ({ MembersPage: () => <div data-testid="section">member-permissions</div> }));
 vi.mock("../cloud/policies/PoliciesPage", () => ({ PoliciesPage: () => <div data-testid="section">policies</div> }));
+vi.mock("../cloud/aiAccounts/OrgAIAccountsPage", () => ({ OrgAIAccountsPage: () => <div data-testid="section">org-ai-accounts</div> }));
 vi.mock("../GitConnectionsSettings", () => ({ GitConnectionsSettings: () => <div data-testid="section">git-connections</div> }));
 vi.mock("../IntegrationsSettings", () => ({ IntegrationsSettings: () => <div data-testid="section">integrations</div> }));
 vi.mock("../PromptsSettings", () => ({ PromptsSettings: () => <div data-testid="section">prompts</div> }));

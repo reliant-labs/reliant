@@ -46,6 +46,7 @@ type scopeOrigin struct {
 
 var scopeOrigins = []scopeOrigin{
 	{"internal/llm/drivers/scope.go: PersonalScope: Scope{}", "the personal scope's own constructor"},
+	{"internal/llm/drivers/org_accounts.go: UsableOrgAccounts: Scope{}", "the chat's org and owner, read from the chat row, to show which org key serves it (never routes)"},
 
 	// The activity edge: the run's org and attendance, read from the chat row.
 	{"internal/workflow/runtime/activities/handlers/llm_request.go: llmCallSpec.scope: PersonalScope", "a call with no org: no chat, or a chat that predates orgs (§4.1)"},
