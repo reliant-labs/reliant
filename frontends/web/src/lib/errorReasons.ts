@@ -180,6 +180,11 @@ export const ERROR_REASONS = [
   "invite_rate_limited",
   /** CreateOrganization: the slug is taken. */
   "slug_taken",
+  // ── control-plane: org policies (OrgPolicyService; docs/design/org-policies.md §3.2) ──
+  /** UpdateOrgPolicy (InvalidArgument): validation refused the document; PreviewOrgPolicy lists why. */
+  "policy_invalid",
+  /** UpdateOrgPolicy (FailedPrecondition): someone saved a newer version since the editor read theirs. */
+  "policy_version_conflict",
 ] as const;
 
 export type ErrorReason = (typeof ERROR_REASONS)[number];
