@@ -417,7 +417,7 @@ function WorkloadHeader({
 
   // Run state: what the platform says, else the server's verdict.
   const runState = observed ? runStateOf(observed) : null;
-  const suspended = summary?.health === "suspended" || runState?.kind === "stopped" || runState?.kind === "billing";
+  const suspended = summary?.health === "suspended" || runState?.kind === "stopped" || runState?.kind === "billing" || runState?.kind === "expired";
   const deploymentId = observed?.deployment_id || "";
   const canRunState = !actions.unavailableReason && !!deploymentId && !isJob;
   const restartBlocked = actions.unavailableReason ?? (suspended ? "Start it first: a stopped workload has no pods to restart." : null);
