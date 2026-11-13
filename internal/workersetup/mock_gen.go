@@ -136,7 +136,7 @@ func (m *MockAccountCredentialStore) PatchOwnedProviderAccount(ctx context.Conte
 var _ AccountCredentialStore = (*MockAccountCredentialStore)(nil)
 
 // forge:section MockAccountRoutingStore
-// forge:hash=04840decdc501c2abce03a038ee8421d2c23d5413563067f1f4dffb9e871693d
+// forge:hash=11a5e576b91c4b83e874068b5ca562f3abd837089cec5397ff019b95e92ecd1a
 
 // MockAccountRoutingStore is a test mock for the AccountRoutingStore interface.
 //
@@ -157,6 +157,7 @@ type MockAccountRoutingStore struct {
 	ThreadFundingFunc                func(context.Context, string) (string, string, string, bool, error)
 	RecordThreadFundingFunc          func(context.Context, string, string, string, string) error
 	ChatFundingOrderFunc             func(context.Context, string) (string, error)
+	ChatPersonPickDriverFunc         func(context.Context, string, string) (string, error)
 	ListThreadAssignmentsFunc        func(context.Context, string) ([]core.Assignment, error)
 	LatestServingAccountFunc         func(context.Context, string) (string, error)
 	GetThreadAssignmentFunc          func(context.Context, string, string) (*core.Assignment, error)
@@ -264,6 +265,15 @@ func (m *MockAccountRoutingStore) ChatFundingOrder(ctx context.Context, chatID s
 		return m.ChatFundingOrderFunc(ctx, chatID)
 	}
 	return "", contractkit.MockNotSet("MockAccountRoutingStore", "ChatFundingOrder")
+}
+
+// ChatPersonPickDriver records the call and delegates to ChatPersonPickDriverFunc when set.
+func (m *MockAccountRoutingStore) ChatPersonPickDriver(ctx context.Context, chatID string, orgID string) (string, error) {
+	m.Recorder.Record("ChatPersonPickDriver", ctx, chatID, orgID)
+	if m.ChatPersonPickDriverFunc != nil {
+		return m.ChatPersonPickDriverFunc(ctx, chatID, orgID)
+	}
+	return "", contractkit.MockNotSet("MockAccountRoutingStore", "ChatPersonPickDriver")
 }
 
 // ListThreadAssignments records the call and delegates to ListThreadAssignmentsFunc when set.

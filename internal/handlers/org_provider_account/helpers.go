@@ -19,6 +19,14 @@ import (
 // manageAction names what an admin-only rpc does, for the refusal message.
 const manageAction = "manage an organization's AI accounts"
 
+// ReasonProviderAccountsDisabled is the x-forge-error-reason of adding an org account or binding
+// a workspace while the deployment has not enabled org accounts (orgs.provider_accounts_enabled).
+const ReasonProviderAccountsDisabled = "org_provider_accounts_disabled"
+
+// ReasonProviderSeatsDisabled is the x-forge-error-reason of binding a workspace while the
+// deployment has not enabled org-paid seats (orgs.provider_workspace_seats_enabled).
+const ReasonProviderSeatsDisabled = "org_provider_seats_disabled"
+
 // maxLabelRunes bounds an account's label, as for a person's (provider_account).
 const maxLabelRunes = 80
 
@@ -97,8 +105,8 @@ func (s *Service) gated() error {
 	if s.addingEnabled() {
 		return nil
 	}
-	return svcerr.Wrap(svcerr.FailedPrecondition(
-		"adding organization AI accounts is not enabled on this deployment"))
+	return svcerr.Wrap(svcerr.WithReason(svcerr.FailedPrecondition(
+		"adding organization AI accounts is not enabled on this deployment"), ReasonProviderAccountsDisabled))
 }
 
 // seatsGated refuses a bind while the deployment has not enabled org-paid seats
@@ -108,8 +116,8 @@ func (s *Service) seatsGated() error {
 	if s.deps.OrgRollout != nil && s.deps.OrgRollout.GetProviderWorkspaceSeatsEnabled() {
 		return nil
 	}
-	return svcerr.Wrap(svcerr.FailedPrecondition(
-		"paying for members' provider workspace seats is not enabled on this deployment"))
+	return svcerr.Wrap(svcerr.WithReason(svcerr.FailedPrecondition(
+		"paying for members' provider workspace seats is not enabled on this deployment"), ReasonProviderSeatsDisabled))
 }
 
 // label validates an org account's label: required, at most maxLabelRunes.
@@ -204,6 +212,7 @@ func (v orgView) proto(a core.ProviderAccount) *pb.OrgProviderAccount {
 			Id: full.Id, Provider: full.Provider, ProviderDisplayName: full.ProviderDisplayName,
 			AuthKind: full.AuthKind, Label: memberLabel(a), Priority: full.Priority, Status: full.Status,
 			LimitedUntil: full.LimitedUntil, CreatedAt: full.CreatedAt,
+			Funding: full.Funding, FundingOrgId: full.FundingOrgId,
 		}
 		return out
 	}

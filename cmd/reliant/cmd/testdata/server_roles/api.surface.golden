@@ -61,6 +61,8 @@ RELIANT_OAUTH_*_CLIENT_ID kind=map flag="" default="" required=false optional=fa
 RELIANT_OAUTH_*_CLIENT_SECRET kind=map flag="" default="" required=false optional=true sensitive=true allowed=[] aliases=[]
 RELIANT_ORGS_CONNECTIONS_ENABLED kind=bool flag="" default="" required=false optional=false sensitive=false allowed=[] aliases=[]
 RELIANT_ORGS_GITHUB_INSTALLATION_TRIGGERS_ENABLED kind=bool flag="" default="" required=false optional=false sensitive=false allowed=[] aliases=[]
+RELIANT_ORGS_POLICY_ENFORCEMENT_INTEGRATIONS kind=string flag="" default="audit" required=false optional=false sensitive=false allowed=[off audit enforce] aliases=[]
+RELIANT_ORGS_POLICY_ENFORCEMENT_MCP kind=string flag="" default="audit" required=false optional=false sensitive=false allowed=[off audit enforce] aliases=[]
 RELIANT_ORGS_PROJECT_MOVES_ENABLED kind=bool flag="" default="" required=false optional=false sensitive=false allowed=[] aliases=[]
 RELIANT_ORGS_PROVIDER_ACCOUNTS_ENABLED kind=bool flag="" default="" required=false optional=false sensitive=false allowed=[] aliases=[]
 RELIANT_ORGS_PROVIDER_WORKSPACE_SEATS_ENABLED kind=bool flag="" default="" required=false optional=false sensitive=false allowed=[] aliases=[]

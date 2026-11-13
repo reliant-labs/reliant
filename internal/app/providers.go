@@ -259,6 +259,10 @@ func NewOrgResolver(d OrgResolverDeps) (*orgs.Resolver, error) {
 // policies.
 type OrgPolicyResolverDeps struct {
 	Authority tokenauthority.Authority
+	// Enforcement is the platform's switch per enforcement point
+	// (ServerProcessConfig org_policy_enforcement: off, audit or enforce);
+	// nil is every point's default, audit.
+	Enforcement *configv1.OrgPolicyEnforcementConfig
 }
 
 // NewOrgPolicyResolver is the deployment's org policy resolver
@@ -268,6 +272,10 @@ type OrgPolicyResolverDeps struct {
 // answers "no policy" for every org. It is also the process's (the background
 // of loops no listener or activity wraps).
 func NewOrgPolicyResolver(d OrgPolicyResolverDeps) (*orgpolicy.Resolver, error) {
+	// The switches are the process's whether or not it has policies: with
+	// none, every point admits everything anyway.
+	orgpolicy.SetProcessEnforcement(orgpolicy.PointIntegrations, orgpolicy.ParseEnforcement(d.Enforcement.GetIntegrations()))
+	orgpolicy.SetProcessEnforcement(orgpolicy.PointMCP, orgpolicy.ParseEnforcement(d.Enforcement.GetMcp()))
 	src, hosted := d.Authority.(orgpolicy.Source)
 	if !hosted {
 		orgpolicy.SetProcessResolver(nil)

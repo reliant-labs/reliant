@@ -53,6 +53,13 @@ func (s *Service) recordSelection(
 	binding ...*string,
 ) (*chatselection.Selection, error) {
 	patch := s.launcher().SelectionPatch(ctx, userID, chat.ProjectID, workflowName, sent)
+	// The root model this request chose, before any automatic substitution
+	// below: only that, unsubstituted, can be a person's pick.
+	_, sentRootModel := patch["model"]
+	rootMoved := false
+	for _, sub := range moved {
+		rootMoved = rootMoved || sub.Input == "model"
+	}
 	if len(moved) > 0 {
 		stored, _ := s.selections().Get(ctx, chat.ID)
 		applyMovesToPatch(patch, stored, effective, moved)
@@ -61,9 +68,13 @@ func (s *Service) recordSelection(
 		return nil, nil
 	}
 	before, _ := s.selections().Get(ctx, chat.ID)
+	bound := len(binding) > 0 && binding[0] != nil
+	if sentRootModel || bound {
+		ctx = personPickContext(ctx, userID, chat, !rootMoved)
+	}
 	var sel *chatselection.Selection
 	var err error
-	if len(binding) > 0 && binding[0] != nil {
+	if bound {
 		sel, err = s.deps.Repo.MutateChatSelection(ctx, chat.ID, func(cur *chatselection.Selection) (*chatselection.Selection, error) {
 			if expectedVersion > 0 && (cur == nil || cur.Version != expectedVersion) {
 				return nil, chatselection.ErrVersionConflict
@@ -106,6 +117,21 @@ func (s *Service) recordSelection(
 		s.announceSelection(ctx, userID, chat, sel)
 	}
 	return sel, nil
+}
+
+// personPickContext is ctx marked so the selection write records the chat's
+// root model and provider switch as its owner's pick (db.WithPersonPick):
+// the one named provider that is consent to spend their own account in the
+// chat's org, for the root's calls (org-provider-accounts §4.4, §10). Only
+// the request's own choice counts (chosen: no automatic substitution moved
+// the root model), made by the chat's owner signed in as a person, in a chat
+// with an org. Any other write leaves ctx as it is: it records nothing, and
+// the version it advances voids the pick it supersedes.
+func personPickContext(ctx context.Context, userID string, chat *db.Chat, chosen bool) context.Context {
+	if !chosen || chat.OrgID == nil || *chat.OrgID == "" || userID != chat.UserID || auth.RequirePerson(ctx, "pick the chat's model") != nil {
+		return ctx
+	}
+	return db.WithPersonPick(ctx, db.PersonPick{UserID: userID, OrgID: *chat.OrgID})
 }
 
 // applyMovesToPatch writes each moved model input's value (from effective) into

@@ -669,3 +669,35 @@ func ClearWorkspaceAttributions(ctx context.Context, db orm.Context, orgID, prov
 // bind or scan.
 type ProviderAccountExtra struct {
 }
+
+// HasRejectedOrgKeys reports whether any org-owned account needs attention (a key the provider
+// rejected, until it is rotated): a probe on the partial index provider_accounts_org_needs_attention,
+// so an inbox read with nothing to report asks no one about anything.
+func HasRejectedOrgKeys(ctx context.Context, db orm.Context) (bool, error) {
+	var ids []string
+	if err := db.Bun().NewRaw(`SELECT id FROM provider_accounts
+		WHERE owner_kind = 'org' AND needs_reauth_at IS NOT NULL LIMIT 1`).Scan(ctx, &ids); err != nil {
+		return false, err
+	}
+	return len(ids) > 0, nil
+}
+
+// ListRejectedOrgKeysIn returns the org-owned accounts of orgIDs that need attention, metadata
+// only, by (org, provider, priority).
+func ListRejectedOrgKeysIn(ctx context.Context, db orm.Context, orgIDs []string) ([]core.ProviderAccount, error) {
+	if len(orgIDs) == 0 {
+		return nil, nil
+	}
+	var rows []*ProviderAccount
+	if err := db.Bun().NewSelect().Model(&rows).ExcludeColumn(providerAccountSealedColumns...).
+		Where("owner_kind = ?", core.AccountOwnerOrg).Where("needs_reauth_at IS NOT NULL").
+		Where("org_id IN (?)", bun.List(orgIDs)).
+		Order("org_id", "provider", "priority").Scan(ctx); err != nil {
+		return nil, err
+	}
+	out := make([]core.ProviderAccount, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, providerAccountToCore(r))
+	}
+	return out, nil
+}

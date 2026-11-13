@@ -85,6 +85,16 @@ type Service interface {
 	// It is for reads. A call that mutates is refused, and an acting identity
 	// is not honoured: a read keeps the user's own access.
 	ForUser(userID string) httpaction.CredentialSource
+
+	// AdmitIntegration applies the run's org's integrations policy to a use
+	// of integrationID (control-plane docs/design/org-policies.md §4.3),
+	// before any credential is chosen: httpaction's runner calls it for every
+	// catalog action (httpaction.IntegrationGate), whatever authenticates it.
+	// It returns the typed refusal (failed_precondition, reason
+	// integration_not_allowed) or nil, and a context marking the use judged,
+	// so the credential resolution below it does not count it twice. A
+	// process with no resolver, or a call with no run, is not judged.
+	AdmitIntegration(ctx context.Context, runID, integrationID string) (context.Context, error)
 }
 
 // Resolver resolves saved connections. *connections.Resolver satisfies it.

@@ -14,6 +14,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/nomachine"
 	"github.com/reliant-labs/reliant/internal/observability"
+	"github.com/reliant-labs/reliant/internal/orgpolicy"
 )
 
 // daemonCancelPushTimeout bounds the detached "stop that tool" push sent when a
@@ -183,6 +184,19 @@ func (e *RemoteExecutor) ExecuteTool(ctx context.Context, req *ToolRequest) (*To
 
 	if e.serverExecutor == nil {
 		return nil, fmt.Errorf("server executor not configured: wiring bug — all tools require server-side execution")
+	}
+
+	// An MCP tool the run's org does not allow is refused before dispatch:
+	// a name the model invented, or a call carried across a policy change.
+	if refusal := refuseMCPByOrgPolicy(ctx, req, startTime); refusal != nil {
+		return refusal, nil
+	}
+	// ... and the MCP rule it enforces rides to the daemon (§5.4), on a copy
+	// so the caller's request is never rewritten under it.
+	if stamp := orgpolicy.EnforcedMCPStamp(ctx, req.OrgID); stamp != nil {
+		stamped := *req
+		stamped.mcpStamp = stamp
+		req = &stamped
 	}
 
 	// A tool call rides out a short disconnect of its daemon — a gateway
@@ -406,6 +420,9 @@ func (req *ToolRequest) toolContextMap() map[string]interface{} {
 	}
 	if sel := req.DaemonSelector; sel != nil && (sel.ID != "" || sel.Name != "") {
 		contextMap[RunMachineContextKey] = map[string]interface{}{"id": sel.ID, "name": sel.Name}
+	}
+	if stamp := orgPolicyStampValue(req); stamp != nil {
+		contextMap[OrgPolicyContextKey] = stamp
 	}
 	return contextMap
 }

@@ -292,3 +292,14 @@ func (s *accountStore) ReleaseOrgSeat(ctx context.Context, orgID, accountID, rel
 		return store.InsertOrgSeatRelease(ctx, s.db, orgID, accountID, releasedBy, s.now())
 	})
 }
+
+// HasRejectedOrgKeys reports whether any org-owned API key needs attention (store.HasRejectedOrgKeys).
+func (r *Repo) HasRejectedOrgKeys(ctx context.Context) (bool, error) {
+	return store.HasRejectedOrgKeys(ctx, r.ORM())
+}
+
+// ListRejectedOrgKeysIn returns the rejected org-owned API keys of orgIDs; the inbox lists them to
+// those orgs' owners and admins.
+func (r *Repo) ListRejectedOrgKeysIn(ctx context.Context, orgIDs []string) ([]core.ProviderAccount, error) {
+	return store.ListRejectedOrgKeysIn(ctx, r.ORM(), orgIDs)
+}

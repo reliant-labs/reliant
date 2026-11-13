@@ -48,6 +48,7 @@ type OrgGitHubApps interface {
 // *connections.Service implements it.
 type Connections interface {
 	ListIntegrations() []connections.Integration
+	OrgIntegrationPolicies(ctx context.Context, userID, orgID string, integrationIDs []string) (map[string]connections.IntegrationPolicy, error)
 	List(ctx context.Context, userID, integrationID string) ([]*core.Connection, error)
 	ListOrg(ctx context.Context, userID, orgID, integrationID string) ([]*core.Connection, error)
 	Get(ctx context.Context, userID, id string) (*core.Connection, error)

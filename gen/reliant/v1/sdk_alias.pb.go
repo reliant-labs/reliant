@@ -174,12 +174,14 @@ type (
 	InboxItem_AutomationLaunchFailed         = sdk.InboxItem_AutomationLaunchFailed
 	InboxItem_AutomationNeedsSetup           = sdk.InboxItem_AutomationNeedsSetup
 	InboxItem_AutomationRunPaused            = sdk.InboxItem_AutomationRunPaused
+	InboxItem_OrgProviderKeyRejected         = sdk.InboxItem_OrgProviderKeyRejected
 	InboxItem_Question                       = sdk.InboxItem_Question
 	InboxItem_Recovery                       = sdk.InboxItem_Recovery
 	InboxItem_Storage                        = sdk.InboxItem_Storage
 	InboxItem_WaitingForMachine              = sdk.InboxItem_WaitingForMachine
 	InboxItem_WorktreeMarked                 = sdk.InboxItem_WorktreeMarked
 	InboxItem_WorktreeReclaim                = sdk.InboxItem_WorktreeReclaim
+	InboxOrgProviderKeyRejected              = sdk.InboxOrgProviderKeyRejected
 	InboxQuestion                            = sdk.InboxQuestion
 	InboxRefusedAutomation                   = sdk.InboxRefusedAutomation
 	InboxStorage                             = sdk.InboxStorage
@@ -544,6 +546,7 @@ const (
 	InboxItemKind_INBOX_ITEM_KIND_AUTOMATION_LAUNCH_FAILED                     = sdk.InboxItemKind_INBOX_ITEM_KIND_AUTOMATION_LAUNCH_FAILED
 	InboxItemKind_INBOX_ITEM_KIND_AUTOMATION_NEEDS_SETUP                       = sdk.InboxItemKind_INBOX_ITEM_KIND_AUTOMATION_NEEDS_SETUP
 	InboxItemKind_INBOX_ITEM_KIND_AUTOMATION_RUN_PAUSED                        = sdk.InboxItemKind_INBOX_ITEM_KIND_AUTOMATION_RUN_PAUSED
+	InboxItemKind_INBOX_ITEM_KIND_ORG_PROVIDER_KEY_REJECTED                    = sdk.InboxItemKind_INBOX_ITEM_KIND_ORG_PROVIDER_KEY_REJECTED
 	InboxItemKind_INBOX_ITEM_KIND_PERSONAL_FUNDING                             = sdk.InboxItemKind_INBOX_ITEM_KIND_PERSONAL_FUNDING
 	InboxItemKind_INBOX_ITEM_KIND_QUESTION                                     = sdk.InboxItemKind_INBOX_ITEM_KIND_QUESTION
 	InboxItemKind_INBOX_ITEM_KIND_RECOVERY                                     = sdk.InboxItemKind_INBOX_ITEM_KIND_RECOVERY

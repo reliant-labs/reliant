@@ -267,6 +267,9 @@ var purgeSteps = []step{
 	// A chat's question before it uses the person's own account (§10): it names
 	// their account's label. Chats cascade it too; this covers a chat kept.
 	{"chat_personal_funding", `DELETE FROM chat_personal_funding WHERE user_id = $1`},
+	// The person's pick of a chat's root provider, their consent to spend
+	// their own account there: it goes with them. Chats cascade it too.
+	{"chat_person_picks", `DELETE FROM chat_person_picks WHERE user_id = $1`},
 
 	// The durable first-session marker (app_first_session analytics): when the
 	// user first used the app. No users table cascades it.
