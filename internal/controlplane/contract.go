@@ -174,6 +174,17 @@ type Service interface {
 	// writes nothing. Errors as the steps above; a control plane that
 	// predates it is ErrProjectOrgMoveUnsupported.
 	PreviewProjectOrgMove(ctx context.Context, q ProjectOrgMovePreviewQuery) (*ProjectOrgMovePreview, error)
+
+	// NotifyOrgKeyRejected emails orgID's owners and admins that a provider
+	// rejected one of the org's own API keys (OrgNotifyInternalService
+	// .NotifyOrgAdmins; control-plane docs/design/org-provider-accounts.md
+	// §4.7), signed with this process's internal-service identity. The
+	// control plane renders a fixed template, resolves the recipients and
+	// sends once per incident; deduplicated reports a repeat. Errors:
+	// ErrOrgNotifyUnsupported when the control plane has no such service or
+	// this adapter cannot sign; otherwise a *ProjectOrgMoveError carrying
+	// control-plane's code and reason.
+	NotifyOrgKeyRejected(ctx context.Context, n OrgKeyRejectedNotice) (deduplicated bool, err error)
 }
 
 // Deps configures the adapter.

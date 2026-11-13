@@ -651,6 +651,15 @@ type TemporalWorkerDeps struct {
 	Triggers *WorkerTrigger
 }
 
+// orgAdminNotifier is the control plane as the worker's notifier of an org's
+// admins, nil without one (a nil interface, never a nil client in one).
+func orgAdminNotifier(d TemporalWorkerDeps) workersetup.OrgAdminNotifier {
+	if d.Router == nil || d.Router.ControlPlane == nil {
+		return nil
+	}
+	return d.Router.ControlPlane
+}
+
 // orgMembers is the resolver as orgmove's Members, nil for a deployment with
 // no orgs (a nil *orgs.Resolver would be a non-nil interface).
 func orgMembers(r *orgs.Resolver) orgmove.Members {
@@ -773,6 +782,7 @@ func NewTemporalWorker(d TemporalWorkerDeps) (*workersetup.Worker, error) {
 		OrgMoves:               moves,
 		StopNudges:             nudges,
 		AccountLimits:          d.Recorder.Recorder,
+		OrgAdmins:              orgAdminNotifier(d),
 		TemporalClient:         d.Temporal.Client,
 		Database:               d.DB,
 		StreamingHub:           d.Streaming.Hub,
