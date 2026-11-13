@@ -113,3 +113,57 @@ func TestOrgProviderAccountsGateIsOffByDefault(t *testing.T) {
 	require.True(t, app.APIOrgProviderAccounts(api))
 	require.NoError(t, addOrgProviderAccountThrough(t, api))
 }
+
+// TestOrgProviderWorkspaceSeatsGateReachesTheConfig pins the later of the two
+// gates, orgs.provider_workspace_seats_enabled, the same way: off at the schema
+// default, in dev and demo, and even where org accounts are on; set, it loads
+// on. Binding a workspace and attributing a seat read nothing else.
+func TestOrgProviderWorkspaceSeatsGateReachesTheConfig(t *testing.T) {
+	testkit.Slow(t, "evaluates deploy/kcl through `forge kcl eval`",
+		testkit.Inputs("deploy/kcl/**"))
+
+	const fixture = "deploy/kcl/testdata/org_provider_accounts_gate.k"
+	const name = "RELIANT_ORGS_PROVIDER_WORKSPACE_SEATS_ENABLED"
+	project := kcleval.Options{ProjectDir: "../../..", Binary: pinnedForge(t)}
+	for _, tc := range []struct {
+		selector string
+		wantEnv  string
+	}{
+		{"gate_default", "false"},
+		{"dev_api", "false"},
+		{"demo_api", "false"},
+		{"gate_on", "false"},
+		{"seats_on", "true"},
+	} {
+		t.Run(tc.selector, func(t *testing.T) {
+			var env map[string]any
+			require.NoError(t, kcleval.Select(context.Background(), fixture, tc.selector, &env, project))
+			got, ok := env[name]
+			require.True(t, ok, "the api server's projected env has no %s: %v", name, env)
+			require.Equal(t, tc.wantEnv, got)
+
+			isolateServerAPIConfigEnv(t)
+			t.Setenv(name, got.(string))
+			cmd, _, err := NewRootCmd().Find([]string{"server", "api"})
+			require.NoError(t, err)
+			api, err := config.LoadApiServerConfig(cmd)
+			require.NoError(t, err)
+			require.Equal(t, tc.wantEnv == "true", api.GetOrgs().GetProviderWorkspaceSeatsEnabled())
+		})
+	}
+}
+
+// The fast half: unset, as every env ships, the seats gate loads off; set, on.
+func TestOrgProviderWorkspaceSeatsGateIsOffByDefault(t *testing.T) {
+	isolateServerAPIConfigEnv(t)
+	cmd, _, err := NewRootCmd().Find([]string{"server", "api"})
+	require.NoError(t, err)
+	api, err := config.LoadApiServerConfig(cmd)
+	require.NoError(t, err)
+	require.False(t, api.GetOrgs().GetProviderWorkspaceSeatsEnabled())
+
+	t.Setenv("RELIANT_ORGS_PROVIDER_WORKSPACE_SEATS_ENABLED", "true")
+	api, err = config.LoadApiServerConfig(cmd)
+	require.NoError(t, err)
+	require.True(t, api.GetOrgs().GetProviderWorkspaceSeatsEnabled())
+}

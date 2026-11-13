@@ -157,6 +157,8 @@ func TestOrgCredentialHoldersAreWhatThePurgeClears(t *testing.T) {
 	f.orgKey("k-grant-host", "o-key")
 	f.grant("k-grant-host", "o-grant", "member", credT0)
 	f.workspace("o-ws", "claude-org-uuid")
+	f.personal("p-released", "member", "", "")
+	f.exec(`INSERT INTO org_seat_releases (org_id, account_id, released_by_user_id) VALUES ('o-release', 'p-released', 'admin')`)
 	f.exec(`INSERT INTO connections (id, owner_kind, user_id, org_id, integration_id, auth_kind, name, status)
 		VALUES ('c-conn', 'org', 'admin', 'o-conn', 'slack', 'api_key', 'Bot', 'active')`)
 	f.oauthFlow("flow", "o-flow")
@@ -180,7 +182,7 @@ func TestOrgCredentialHoldersAreWhatThePurgeClears(t *testing.T) {
 			after = page[len(page)-1]
 		}
 	}
-	all := []string{"o-conn", "o-flow", "o-grant", "o-key", "o-seat", "o-vault", "o-ws"}
+	all := []string{"o-conn", "o-flow", "o-grant", "o-key", "o-release", "o-seat", "o-vault", "o-ws"}
 	require.Equal(t, all, holders())
 	for _, org := range all {
 		_, err := store.PurgeOrgCredentials(ctx, f.env.ORM, org)
@@ -206,6 +208,8 @@ func TestPurgeOrgCredentials_RemovesTheOrgsAndOnlyTheOrgs(t *testing.T) {
 		f.orgConnection("c-"+org, org)
 		f.personal("seat-"+org, "member", org, "workspace")
 		f.personal("managed-"+org, "member", org, "managed")
+		f.personal("released-"+org, "member", "", "")
+		f.exec(`INSERT INTO org_seat_releases (org_id, account_id, released_by_user_id) VALUES ($1, $2, 'admin')`, org, "released-"+org)
 	}
 	f.personal("mine", "member", "", "")
 	// A thread on each org's key: the gone one's assignment cascades.
@@ -222,8 +226,9 @@ func TestPurgeOrgCredentials_RemovesTheOrgsAndOnlyTheOrgs(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, core.OrgCredentialsPurged{
 		ProviderAccounts: 1, Grants: 1, Workspaces: 1, Attributions: 1, ManagedKeys: 1,
-		Connections: 1, ConnectionEvents: 1, OAuthFlows: 1, VaultKeys: 1,
+		Connections: 1, ConnectionEvents: 1, OAuthFlows: 1, VaultKeys: 1, SeatReleases: 1,
 	}, purged)
+	assert.Equal(t, 1, f.count(`SELECT count(*) FROM org_seat_releases WHERE org_id = 'org-live'`), "the live org keeps its releases")
 
 	assert.Equal(t, 0, f.count(`SELECT count(*) FROM provider_accounts WHERE org_id = 'org-gone' OR attributed_org_id = 'org-gone'`))
 	assert.Equal(t, 0, f.count(`SELECT count(*) FROM provider_accounts WHERE id = 'managed-org-gone'`), "the gone org's managed key is deleted")

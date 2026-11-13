@@ -181,7 +181,7 @@ func (w *Watchdog) Check(ctx context.Context) {
 		}
 	default:
 		if !w.inconclusive {
-			logging.Warn("forkwatch: a probe could not tell whether this machine can start processes; health unchanged",
+			logging.WarnContext(ctx, "forkwatch: a probe could not tell whether this machine can start processes; health unchanged",
 				"error", err)
 		}
 		w.inconclusive = true
@@ -193,10 +193,10 @@ func (w *Watchdog) Check(ctx context.Context) {
 		return
 	}
 	if degraded {
-		logging.Warn("forkwatch: this machine cannot start processes; reporting it degraded",
+		logging.WarnContext(ctx, "forkwatch: this machine cannot start processes; reporting it degraded",
 			"refused_in_a_row", refusedN, "error", err, "reason", reason)
 	} else {
-		logging.Info("forkwatch: this machine can start processes again; reporting it healthy")
+		logging.InfoContext(ctx, "forkwatch: this machine can start processes again; reporting it healthy")
 	}
 	select {
 	case w.changed <- struct{}{}:

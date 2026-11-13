@@ -91,6 +91,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/orgs"
 	"github.com/reliant-labs/reliant/internal/queueddelivery"
 	"github.com/reliant-labs/reliant/internal/runs"
+	"github.com/reliant-labs/reliant/internal/seatmatch"
 	"github.com/reliant-labs/reliant/internal/servergateway"
 	"github.com/reliant-labs/reliant/internal/temporal/claimcheck"
 	"github.com/reliant-labs/reliant/internal/tokenauthority"
@@ -1305,6 +1306,7 @@ func (g *Graph) newSettings() (*settings.Service, error) {
 		},
 		GitHubIdentity: settings.FetchGitHubUser,
 		ChatWaker:      g.Chat(),
+		Seats:          g.Seatmatch(),
 	})
 }
 
@@ -1440,6 +1442,7 @@ func (g *Graph) newOrgProviderAccount() (*org_provider_account.Service, error) {
 		Store:       g.Database(),
 		ValidateKey: keyvalidate.Validate,
 		OrgRollout:  g.ApiServerConfig.GetOrgs(), // NewOrgProviderAccount sets the same, from the config it is given
+		Seats:       g.Seatmatch(),
 	})
 }
 
@@ -1449,4 +1452,21 @@ func (g *Graph) newOrgCredentialSweep() (*OrgCredentialSweep, error) {
 		DB:        g.Database(),
 		Authority: g.TokenAuthority(),
 	})
+}
+
+// newSeatmatch constructs the seatmatch package (internal/seatmatch).
+func (g *Graph) newSeatmatch() (seatmatch.Service, error) {
+	svc, err := seatmatch.New(seatmatch.Deps{
+		Logger:  g.Log,
+		Config:  g.Cfg,
+		Store:   g.Database(),
+		Members: g.OrgResolver(),
+		// Attributing seats is off until every replica and the rollback target honour a
+		// seat's org (orgs.provider_workspace_seats_enabled).
+		Rollout: g.ApiServerConfig.GetOrgs(),
+	})
+	if err != nil {
+		return nil, err
+	}
+	return seatmatch.NewServiceWithForgeMiddleware(svc), nil
 }

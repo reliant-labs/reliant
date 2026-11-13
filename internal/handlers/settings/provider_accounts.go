@@ -91,6 +91,16 @@ func (s *Service) connectAccount(ctx context.Context, in signIn) (signInResult, 
 		}
 	}
 
+	// A sign-in in a workspace the person's org pays for is the org's seat (org-provider-accounts
+	// §3.4). Matching is best effort: a failure leaves the account as it was, and the next
+	// sign-in, or a bind of the workspace, matches it.
+	if s.deps.Seats != nil {
+		if _, err := s.deps.Seats.MatchAccount(ctx, in.userID, acct.ID); err != nil {
+			logging.WarnContext(ctx, "Failed to match a sign-in to an org's workspace binding",
+				"provider", in.provider, "account_id", acct.ID, "error", err)
+		}
+	}
+
 	res := signInResult{created: created}
 	if target != nil && acct.ID != target.ID {
 		msg := fmt.Sprintf("You signed in as %s, not %s — saved as a separate account", acct.DisplayLabel(), target.DisplayLabel())

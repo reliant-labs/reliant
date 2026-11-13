@@ -19,6 +19,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm/drivers/codex"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/copilot"
 	"github.com/reliant-labs/reliant/internal/llm/providerusage"
+	"github.com/reliant-labs/reliant/internal/seatmatch"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -385,4 +386,61 @@ func managedKey(t *testing.T, ctx context.Context, repo *db.Repo, userID string)
 		}
 	}
 	return ""
+}
+
+// A sign-in in a workspace the person's org pays for becomes the org's seat (org-provider-accounts
+// §3.4), through the real matcher over the real store; a matcher that fails never fails the
+// sign-in.
+func TestCompleteClaudeOAuth_SignInInABoundWorkspaceIsTheOrgsSeat(t *testing.T) {
+	repo, cleanup := db.SetupTestDB(t)
+	defer cleanup()
+	ctx := isolationContext("oauth-claude-seat")
+	_, _, err := repo.BindOrgProviderWorkspace(context.Background(), core.OrgProviderWorkspace{
+		OrgID: "org-acme", Provider: "claude", ExternalOrgID: "ws-team", DisplayName: "Acme", BoundByUserID: "admin",
+	})
+	require.NoError(t, err)
+	matcher, err := seatmatch.New(seatmatch.Deps{
+		Store: repo,
+		Members: &seatmatch.MockMembers{IsMemberFunc: func(_ context.Context, userID, orgID string) (bool, bool, error) {
+			return userID == "oauth-claude-seat" && orgID == "org-acme", true, nil
+		}},
+		Rollout: &seatmatch.MockRollout{GetProviderWorkspaceSeatsEnabledFunc: func() bool { return true }},
+	})
+	require.NoError(t, err)
+	login := &claudeLogin{acct: "alice", org: "ws-team", email: "alice@example.com"}
+	svc := newTestService(t, Deps{
+		Repo: repo,
+		ExchangeClaudeCode: func(code, verifier, redirect, state string) (*claude.ClaudeTokens, error) {
+			return &claude.ClaudeTokens{
+				AccessToken: "access-" + login.acct + "-" + login.org, RefreshToken: "refresh-" + login.acct,
+				ExpiresAt: time.Now().Add(time.Hour), AccountUUID: login.acct, AccountEmail: login.email,
+				OrganizationUUID: login.org, OrganizationName: "Org " + login.org,
+			}, nil
+		},
+		Seats: matcher,
+	})
+
+	team, err := svc.CompleteClaudeOAuth(ctx, oauthRequestClaude(""))
+	require.NoError(t, err)
+	login.org = "ws-personal"
+	personal, err := svc.CompleteClaudeOAuth(ctx, oauthRequestClaude(""))
+	require.NoError(t, err)
+	byID := map[string]core.ProviderAccount{}
+	for _, a := range accountsOfProvider(t, ctx, repo, "oauth-claude-seat", "claude") {
+		byID[a.ID] = a
+	}
+	assert.Equal(t, "org-acme", byID[team.Msg.Account.Id].AttributedOrgID, "the Team sign-in is the org's seat")
+	assert.Equal(t, core.AttributionWorkspace, byID[team.Msg.Account.Id].AttributionSource)
+	assert.Empty(t, byID[personal.Msg.Account.Id].AttributedOrgID, "the same login's personal org stays the person's")
+
+	// A matcher that fails leaves the account as it was and the sign-in succeeds.
+	failing := newTestService(t, Deps{
+		Repo: repo, ExchangeClaudeCode: svc.deps.ExchangeClaudeCode,
+		Seats: &seatmatch.MockService{MatchAccountFunc: func(context.Context, string, string) (seatmatch.Outcome, error) {
+			return seatmatch.Unchanged, errors.New("control plane unavailable")
+		}},
+	})
+	login.org = "ws-team"
+	_, err = failing.CompleteClaudeOAuth(ctx, oauthRequestClaude(""))
+	require.NoError(t, err)
 }

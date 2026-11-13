@@ -74,6 +74,7 @@ SELECT org_id FROM (
     UNION SELECT attributed_org_id FROM provider_accounts WHERE attributed_org_id > ?0
     UNION SELECT org_id FROM provider_account_grants WHERE org_id > ?0
     UNION SELECT org_id FROM org_provider_workspaces WHERE org_id > ?0
+    UNION SELECT org_id FROM org_seat_releases WHERE org_id > ?0
     UNION SELECT org_id FROM connections WHERE owner_kind = 'org' AND org_id > ?0
     UNION SELECT org_id FROM oauth_flows WHERE org_id > ?0
     UNION SELECT tenant_id FROM vault_keys WHERE tenant_kind = 'org' AND tenant_id > ?0
@@ -117,6 +118,9 @@ WHERE attributed_org_id = ?0`,
 		func(p *core.OrgCredentialsPurged) *int64 { return &p.Attributions }},
 	{"org_provider_workspaces", `DELETE FROM org_provider_workspaces WHERE org_id = ?0`,
 		func(p *core.OrgCredentialsPurged) *int64 { return &p.Workspaces }},
+	// The seats its admins released: with its bindings gone they guard nothing.
+	{"org_seat_releases", `DELETE FROM org_seat_releases WHERE org_id = ?0`,
+		func(p *core.OrgCredentialsPurged) *int64 { return &p.SeatReleases }},
 	// Its connections (org-sharing §7): pending connects, then the audit
 	// rows, then the rows. Secrets cascade; a trigger bound to one is
 	// unbound (ON DELETE SET NULL).

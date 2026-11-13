@@ -326,10 +326,10 @@ func TestUnbindAndReleaseClearOnlyTheirSeats(t *testing.T) {
 	assert.ErrorIs(t, repo.UnbindOrgProviderWorkspace(ctx, "org-1", "claude", "ws-a"), core.ErrProviderWorkspaceNotFound)
 	assert.ErrorIs(t, repo.UnbindOrgProviderWorkspace(ctx, "org-2", "claude", "ws-b"), core.ErrProviderWorkspaceNotFound, "another org's binding")
 
-	assert.ErrorIs(t, repo.ReleaseOrgSeat(ctx, "org-1", managed.ID), core.ErrOrgSeatNotFound, "the managed key is never released")
-	assert.ErrorIs(t, repo.ReleaseOrgSeat(ctx, "org-1", otherOrg.ID), core.ErrOrgSeatNotFound, "another org's seat")
-	require.NoError(t, repo.ReleaseOrgSeat(ctx, "org-1", approved.ID))
+	assert.ErrorIs(t, repo.ReleaseOrgSeat(ctx, "org-1", managed.ID, "ada"), core.ErrOrgSeatNotFound, "the managed key is never released")
+	assert.ErrorIs(t, repo.ReleaseOrgSeat(ctx, "org-1", otherOrg.ID, "ada"), core.ErrOrgSeatNotFound, "another org's seat")
+	require.NoError(t, repo.ReleaseOrgSeat(ctx, "org-1", approved.ID, "ada"))
 	assert.Empty(t, attribution(approved.ID))
 	assert.Equal(t, "org-1", attribution(seatB.ID))
-	assert.ErrorIs(t, repo.ReleaseOrgSeat(ctx, "org-1", approved.ID), core.ErrOrgSeatNotFound, "already released")
+	assert.ErrorIs(t, repo.ReleaseOrgSeat(ctx, "org-1", approved.ID, "ada"), core.ErrOrgSeatNotFound, "already released")
 }
