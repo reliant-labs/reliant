@@ -86,8 +86,14 @@ func (l *ledger) store() *orgmove.MockStore {
 		GetProjectFunc: func(context.Context, string) (*core.Project, error) {
 			return &core.Project{ID: "p-1", Name: "shop"}, nil
 		},
-		ListProjectTriggersPausedByFunc: func(context.Context, string, string) ([]*core.Trigger, error) {
-			return append([]*core.Trigger(nil), l.paused...), nil
+		ListProjectTriggersPausedByFunc: func(_ context.Context, _ string, reason string) ([]*core.Trigger, error) {
+			var out []*core.Trigger
+			for _, t := range l.paused {
+				if t.PausedReason == reason {
+					out = append(out, t)
+				}
+			}
+			return out, nil
 		},
 		ListProjectTriggersResumedSinceFunc: func(context.Context, string, time.Time) ([]*core.Trigger, error) {
 			return append([]*core.Trigger(nil), l.resumed...), nil
@@ -172,7 +178,7 @@ func movedLedger(paused ...string) *ledger {
 	m.State = core.ProjectOrgMoveStateMoved
 	l := newLedger(m)
 	for _, id := range paused {
-		l.paused = append(l.paused, &core.Trigger{ID: id})
+		l.paused = append(l.paused, &core.Trigger{ID: id, PausedReason: core.TriggerPausedOrgMove})
 	}
 	return l
 }
@@ -205,7 +211,13 @@ func newService(t *testing.T, l *ledger, cp *orgmove.MockControlPlane, tr *orgmo
 // that check out turned back on, and the move completed with its counts.
 func TestSaga_CommitsRecordsAndResumes(t *testing.T) {
 	l := newLedger(move())
-	l.paused = []*core.Trigger{{ID: "t-ok"}, {ID: "t-setup"}}
+	l.paused = []*core.Trigger{
+		{ID: "t-ok", PausedReason: core.TriggerPausedOrgMove},
+		{ID: "t-setup", PausedReason: core.TriggerPausedOrgMove},
+		// Its source-org connection binding was cleared: never resumed by
+		// the move, and counted as staying paused.
+		{ID: "t-rebind", PausedReason: core.TriggerPausedOrgMoveSetup},
+	}
 	var calls cpCalls
 	f := &flakyTriggers{l: l, ok: map[string]bool{"t-ok": true}}
 	runSaga(t, newService(t, l, controlPlane(&calls, nil), f.mock()))
@@ -215,7 +227,7 @@ func TestSaga_CommitsRecordsAndResumes(t *testing.T) {
 	assert.Equal(t, 4, m.Counts.SecretEntriesRevoked)
 	assert.Equal(t, 3, m.Counts.Chats)
 	assert.Equal(t, 1, m.Counts.TriggersReenabled)
-	assert.Contains(t, m.Detail, "1 triggers stay paused")
+	assert.Contains(t, m.Detail, "2 triggers stay paused", "the one that needs setup and the one to bind again")
 	assert.Equal(t, cpCalls{prepare: 1, record: 1}, calls)
 }
 

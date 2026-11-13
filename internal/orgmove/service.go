@@ -253,15 +253,21 @@ func (s *service) ResumeTriggers(ctx context.Context, moveID string) error {
 	if len(retry) > 0 {
 		return fmt.Errorf("turn the moved triggers back on: %w", errors.Join(retry...))
 	}
-	stayed, err := s.deps.Store.ListProjectTriggersPausedBy(ctx, m.ProjectID, core.TriggerPausedOrgMove)
-	if err != nil {
-		return err
+	// What stays paused: those that did not check out, and those whose
+	// binding to the source org's connection the commit cleared.
+	stayed := 0
+	for _, reason := range []string{core.TriggerPausedOrgMove, core.TriggerPausedOrgMoveSetup} {
+		left, err := s.deps.Store.ListProjectTriggersPausedBy(ctx, m.ProjectID, reason)
+		if err != nil {
+			return err
+		}
+		stayed += len(left)
 	}
 	counts := m.Counts
 	counts.TriggersReenabled = len(resumed)
 	detail := ""
-	if len(stayed) > 0 {
-		detail = fmt.Sprintf("%d triggers stay paused until they are set up in the target organization", len(stayed))
+	if stayed > 0 {
+		detail = fmt.Sprintf("%d triggers stay paused until they are set up in the target organization", stayed)
 	}
 	if _, err := s.deps.Store.TransitionProjectOrgMove(ctx, moveID,
 		[]core.ProjectOrgMoveState{core.ProjectOrgMoveStateMoved}, core.ProjectOrgMoveStateCompleted, detail, &counts); err != nil &&
