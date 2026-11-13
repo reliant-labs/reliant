@@ -53092,6 +53092,15 @@
     },
     {
       "consumer": "Inbox",
+      "field": "MyOrgs",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/inbox.OrgLister",
+      "methods": [],
+      "candidates": [],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "Inbox",
       "field": "Orgs",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/inbox.OrgResolver",
       "methods": [],
@@ -54428,6 +54437,14 @@
       "component": "DaemonRegistry.Names",
       "source": {
         "path": "internal/handlers/daemon_registry/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "Inbox.MyOrgs",
+      "source": {
+        "path": "internal/handlers/inbox/service.go",
         "symbol": "New"
       }
     },
