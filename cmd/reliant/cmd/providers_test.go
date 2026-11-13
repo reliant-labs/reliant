@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"flag"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -57,6 +58,8 @@ type fakeProviderAccounts struct {
 	accounts []*reliantv1.ProviderAccount
 	question *reliantv1.PersonalFundingQuestion
 	reads    int
+	// read, when set, is signalled (without blocking) on every question read.
+	read chan struct{}
 }
 
 func (f *fakeProviderAccounts) ListProviderAccounts(context.Context, *connect.Request[reliantv1.ListProviderAccountsRequest]) (*connect.Response[reliantv1.ListProviderAccountsResponse], error) {
@@ -67,6 +70,12 @@ func (f *fakeProviderAccounts) GetPersonalFundingQuestion(context.Context, *conn
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.reads++
+	if f.read != nil {
+		select {
+		case f.read <- struct{}{}:
+		default:
+		}
+	}
 	return connect.NewResponse(&reliantv1.GetPersonalFundingQuestionResponse{Question: f.question}), nil
 }
 
@@ -127,7 +136,7 @@ func newProvidersHarness(t *testing.T) *providersHarness {
 	mux.Handle(p3, h3)
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
-	loginFor(t, srv.URL, "rlat_test000000000000000000000000000")
+	loginFor(t, srv.URL, fakeLoginToken)
 	t.Setenv(envServerURL, srv.URL)
 	return h
 }
@@ -259,26 +268,26 @@ func TestWorkflowFundingJSON(t *testing.T) {
 // run starts waiting on the question (a new asked_at), and the run keeps
 // waiting. It reads only, so it cannot spend the person's own account.
 func TestFundingWatchPrintsOneLinePerQuestion(t *testing.T) {
-	f := &fakeProviderAccounts{}
+	f := &fakeProviderAccounts{read: make(chan struct{}, 1)}
 	f.setQuestion(askedQuestion())
 	var out syncBuffer
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	go func() {
-		watchFundingQuestion(ctx, f, "chat-1", &out, time.Millisecond)
+		watchFundingQuestion(ctx, f, "chat-1", &out, time.Microsecond)
 		close(done)
 	}()
-	waitFor(t, func() bool { f.mu.Lock(); defer f.mu.Unlock(); return f.reads >= 5 })
+	waitFor(t, f, func() bool { f.mu.Lock(); defer f.mu.Unlock(); return f.reads >= 5 })
 	q := askedQuestion()
 	q.AskedAt = "2026-11-13T13:00:00Z" // asked again later
 	f.setQuestion(q)
-	waitFor(t, func() bool { return strings.Count(out.String(), "\n") >= 2 })
+	waitFor(t, f, func() bool { return strings.Count(out.String(), "\n") >= 2 })
 	// Answered: the question is gone, and later reads print nothing more.
 	f.mu.Lock()
 	f.question = nil
 	after := f.reads
 	f.mu.Unlock()
-	waitFor(t, func() bool { f.mu.Lock(); defer f.mu.Unlock(); return f.reads >= after+3 })
+	waitFor(t, f, func() bool { f.mu.Lock(); defer f.mu.Unlock(); return f.reads >= after+3 })
 	cancel()
 	<-done
 	lines := strings.Split(strings.TrimRight(out.String(), "\n"), "\n")
@@ -307,13 +316,42 @@ func (s *syncBuffer) String() string {
 	return s.b.String()
 }
 
-func waitFor(t *testing.T, ok func() bool) {
+// waitFor blocks until ok holds, re-checking each time the watcher reads the
+// question (f.read is signalled on every read), so nothing depends on a clock.
+// A watcher that stopped reading fails the test by the go test timeout.
+func waitFor(t *testing.T, f *fakeProviderAccounts, ok func() bool) {
 	t.Helper()
-	deadline := time.Now().Add(2 * time.Second)
 	for !ok() {
-		if time.Now().After(deadline) {
-			t.Fatal("timed out")
+		<-f.read
+	}
+}
+
+// The follow's diagnostics come from several goroutines (the SDK's log, the
+// hooks, the funding watcher) into one stderr that may be any io.Writer: the
+// locked writer keeps each write whole. Run under -race to see a bare
+// bytes.Buffer fail.
+func TestFollowDiagnosticsAreSerialized(t *testing.T) {
+	var buf bytes.Buffer
+	w := &lockedWriter{w: &buf}
+	var wg sync.WaitGroup
+	const writers, lines = 8, 200
+	for i := range writers {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for range lines {
+				fmt.Fprintf(w, "writer-%d\n", i)
+			}
+		}()
+	}
+	wg.Wait()
+	got := strings.Split(strings.TrimRight(buf.String(), "\n"), "\n")
+	if len(got) != writers*lines {
+		t.Fatalf("want %d whole lines, got %d", writers*lines, len(got))
+	}
+	for _, l := range got {
+		if !strings.HasPrefix(l, "writer-") || len(l) != len("writer-0") {
+			t.Fatalf("interleaved line %q", l)
 		}
-		time.Sleep(time.Millisecond)
 	}
 }

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -144,20 +145,24 @@ type followSettings struct {
 // then the matching hooks. The exit code, the false-green verdict and gate
 // reconciliation are the SDK engine's.
 func followExecution(cmd *cobra.Command, client *reliant.Client, executionID string, set followSettings) (reliant.FollowResult, error) {
-	set.opts.Log = cmd.ErrOrStderr()
+	// Every diagnostic of the follow goes through one serialized writer: the
+	// SDK's log, the hooks' output and the funding watcher write from
+	// different goroutines, and cmd's stderr may be any io.Writer.
+	stderr := &lockedWriter{w: cmd.ErrOrStderr()}
+	set.opts.Log = stderr
 	f, err := client.Runs.FollowSession(cmd.Context(), executionID, set.opts)
 	if err != nil {
 		return reliant.FollowResult{}, err
 	}
 	defer f.Close()
-	stopFunding := startFundingWatch(cmd.Context(), set.funding, executionID, cmd.ErrOrStderr())
+	stopFunding := startFundingWatch(cmd.Context(), set.funding, executionID, stderr)
 	defer stopFunding()
 
-	runner := &execfollow.HookRunner{Stderr: cmd.ErrOrStderr()}
+	runner := &execfollow.HookRunner{Stderr: stderr}
 	for ev := range f.Events() {
 		line, err := json.Marshal(ev)
 		if err != nil {
-			fmt.Fprintf(cmd.ErrOrStderr(), "reliant: failed to encode event: %v\n", err)
+			fmt.Fprintf(stderr, "reliant: failed to encode event: %v\n", err)
 			continue
 		}
 		if set.out != nil {
@@ -170,4 +175,17 @@ func followExecution(cmd *cobra.Command, client *reliant.Client, executionID str
 		runner.Run(cmd.Context(), set.hooks, ev, line)
 	}
 	return f.Wait()
+}
+
+// lockedWriter serializes writes to w, so lines written from several
+// goroutines never interleave or race.
+type lockedWriter struct {
+	mu sync.Mutex
+	w  io.Writer
+}
+
+func (l *lockedWriter) Write(p []byte) (int, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.w.Write(p)
 }
