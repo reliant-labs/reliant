@@ -23,6 +23,7 @@ import {
   useSetChatVisibility,
 } from "@/hooks/sharing-service-hooks_gen";
 import { useMembers } from "@/components/Settings/cloud/members/useMembers";
+import { memberNamesBySubject } from "@/services/controlPlane/members";
 import { hasControlPlane } from "@/services/controlPlane/config";
 
 /** How long a burst of feed rows may wait before the list is re-read. */
@@ -94,24 +95,6 @@ export function useOrgFeed(orgId: string | null): void {
       if (timer) clearTimeout(timer);
     };
   }, [client, orgId]);
-}
-
-/**
- * Display names by the id this app keys a person's records by: a chat's
- * `userId` is their sign-in subject, which the roster carries as
- * `externalId` (its `userId` is control-plane's own id, which matches
- * nothing here). The name they set, else their email. A control plane that
- * predates `externalId` names nobody, and the callers say "the person who
- * shared it" instead.
- */
-export function memberNamesBySubject(
-  members: Iterable<{ externalId: string; name: string; email: string }>,
-): Map<string, string> {
-  const names = new Map<string, string>();
-  for (const m of members) {
-    if (m.externalId) names.set(m.externalId, m.name || m.email);
-  }
-  return names;
 }
 
 /**

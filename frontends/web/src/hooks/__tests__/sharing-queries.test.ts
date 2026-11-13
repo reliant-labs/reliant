@@ -12,7 +12,8 @@ import { describe, expect, it, vi } from "vitest";
 import { OrgUpdateSchema, OrgUpdateType } from "@/gen/reliant/v1/streaming_pb";
 import { chatKeys } from "@/hooks/chat-queries";
 import { sharingServiceKeys } from "@/hooks/sharing-service-hooks_gen";
-import { applyOrgUpdates, memberNamesBySubject } from "@/hooks/sharing-queries";
+import { applyOrgUpdates } from "@/hooks/sharing-queries";
+import { memberNamesBySubject } from "@/services/controlPlane/members";
 
 function invalidated(updates: Parameters<typeof applyOrgUpdates>[1]) {
   const client = new QueryClient();
