@@ -12,6 +12,8 @@ import (
 
 	controlplanev1 "github.com/reliant-labs/reliant/gen/controlplane/controlplane/v1"
 	"github.com/reliant-labs/reliant/internal/accesstokenclient"
+	"github.com/reliant-labs/reliant/internal/llm/tools"
+	"github.com/reliant-labs/reliant/internal/mcp"
 	"github.com/reliant-labs/reliant/internal/orgpolicy"
 )
 
@@ -33,6 +35,9 @@ func (p acmeAllowsGitHubMCP) ResolveOrgPolicy(_ context.Context, orgID string) (
 		Mode: controlplanev1.OrgPolicyMode_ORG_POLICY_MODE_ENFORCE, AllowedServers: []string{"github"},
 	}}}, nil
 }
+
+// fixedStart is the start time handed to a refusal; nothing asserts on it.
+var fixedStart = time.Date(2026, 11, 13, 12, 0, 0, 0, time.UTC)
 
 func setMCPEnforcement(t *testing.T, e orgpolicy.Enforcement) {
 	t.Helper()
@@ -139,7 +144,7 @@ func TestExecuteTool_OrgPolicyUnreadableUnderEnforce(t *testing.T) {
 func TestExecuteTool_OrgPolicyMCPRuleIgnoresOtherTools(t *testing.T) {
 	setMCPEnforcement(t, orgpolicy.EnforcementEnforce)
 	ctx := orgpolicy.WithResolver(context.Background(), orgpolicy.New(acmeAllowsGitHubMCP{}))
-	assert.Nil(t, refuseMCPByOrgPolicy(ctx, mcpCall("acme", "shell"), time.Now()))
+	assert.Nil(t, refuseMCPByOrgPolicy(ctx, mcpCall("acme", "shell"), fixedStart))
 }
 
 // The enforced MCP rule rides to the daemon in the context map (§5.4); an
@@ -166,4 +171,53 @@ func TestExecuteTool_StampsTheEnforcedMCPRuleIntoTheContextMap(t *testing.T) {
 	assert.Nil(t, stampOf(t, orgpolicy.EnforcementAudit, "acme"), "audit stamps nothing")
 	assert.Nil(t, stampOf(t, orgpolicy.EnforcementEnforce, "globex"), "no policy stamps nothing")
 	assert.Nil(t, stampOf(t, orgpolicy.EnforcementEnforce, ""), "no org stamps nothing")
+}
+
+// tightening is org acme's policy before and after an admin's edit: no MCP
+// rule (v1), then only the "github" server (v2).
+type tightening struct{ tightened bool }
+
+func (p *tightening) ResolveOrgPolicy(_ context.Context, orgID string) (accesstokenclient.OrgPolicy, error) {
+	if orgID != "acme" || !p.tightened {
+		return accesstokenclient.OrgPolicy{Version: 1}, nil
+	}
+	return accesstokenclient.OrgPolicy{Version: 2, Policy: &controlplanev1.OrgPolicy{Mcp: &controlplanev1.McpPolicy{
+		Mode: controlplanev1.OrgPolicyMode_ORG_POLICY_MODE_ENFORCE, AllowedServers: []string{"github"},
+	}}}, nil
+}
+
+// A real tool of a server named github__evil is named
+// mcp__github__evil__exfiltrate, which also reads as github's tool
+// evil__exfiltrate. With only github allowed it is refused at execution: a
+// name is admitted only when every server it could belong to is allowed. The
+// call was issued (offered and planned) before the policy tightened and runs
+// after: the tightened policy refuses it before it reaches the daemon.
+func TestExecuteTool_OrgPolicyRefusesAnAmbiguousNameAcrossATightening(t *testing.T) {
+	setMCPEnforcement(t, orgpolicy.EnforcementEnforce)
+	evil, err := tools.NewMCPToolAdapter("github__evil", mcp.Tool{Name: "exfiltrate"})
+	require.NoError(t, err)
+	require.Equal(t, "mcp__github__evil__exfiltrate", evil.Name())
+
+	src := &tightening{}
+	before := orgpolicy.WithResolver(context.Background(), orgpolicy.New(src))
+	exec, router := policyExecutor()
+	res, err := exec.ExecuteTool(before, mcpCall("acme", evil.Name()))
+	require.NoError(t, err)
+	require.True(t, res.RanOnDaemon, "before the edit there is no MCP rule")
+	require.Equal(t, evil.Name(), router.tool)
+
+	src.tightened = true
+	after := orgpolicy.WithResolver(context.Background(), orgpolicy.New(src))
+	exec, router = policyExecutor()
+	res, err = exec.ExecuteTool(after, mcpCall("acme", evil.Name()))
+	require.NoError(t, err)
+	assert.Equal(t, ErrorCodeMCPServerNotAllowed, res.ErrorCode)
+	assert.Empty(t, router.tool, "github__evil's tool reached the daemon")
+
+	// github's own tool still runs.
+	exec, router = policyExecutor()
+	res, err = exec.ExecuteTool(after, mcpCall("acme", "mcp__github__create_issue"))
+	require.NoError(t, err)
+	assert.True(t, res.RanOnDaemon)
+	assert.Equal(t, "mcp__github__create_issue", router.tool)
 }

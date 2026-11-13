@@ -23,32 +23,57 @@ const mcpToolPrefix = "mcp__"
 
 // MCPToolAdmission is what doc's mcp section says about the MCP tool
 // toolName (mcp__<server>__<tool>). No section, or a name that is not an MCP
-// tool's, governs nothing; allow_all admits every server; otherwise the tool
-// is admitted only when it is a tool OF a listed server, so an empty list
-// admits none.
+// tool's, governs nothing; allow_all admits every server; otherwise a name is
+// admitted only when EVERY server it could belong to is listed, so an empty
+// list admits none.
 //
-// A server's name may itself contain "__", so a tool name is never split to
-// find its server: it is admitted when it begins with mcp__<allowed>__ and
-// names a tool after that. A name no allowed server accounts for (one the
-// model invented, a server renamed since) is refused. Where the server is
-// known exactly (an offered tool's adapter), MCPServerAdmission is exact.
+// A name does not say which server it belongs to: a server's name, and a
+// tool's, may contain "__", so mcp__github__evil__x is github's tool evil__x
+// or github__evil's tool x, and the daemon runs whichever it has. Every split
+// of the name into mcp__<server>__<tool> (both non-empty) is a server it could
+// be; one that is not listed refuses the name. Fail closed: a name is never
+// admitted on the strength of the one split that happens to be allowed. Where
+// the server is known exactly (an offered tool's adapter), MCPServerAdmission
+// is exact.
 func MCPToolAdmission(doc *controlplanev1.OrgPolicy, toolName string) Admission {
 	sec := doc.GetMcp()
 	if sec == nil || !strings.HasPrefix(toolName, mcpToolPrefix) {
 		return Admission{}
 	}
 	adm := Admission{Governed: true, Admitted: sec.GetAllowAll(), Mode: sec.GetMode()}
-	for _, server := range sec.GetAllowedServers() {
-		server = strings.TrimSpace(server)
-		if server == "" {
-			continue
-		}
-		if tool, ok := strings.CutPrefix(toolName, mcpToolPrefix+server+"__"); ok && tool != "" {
-			adm.Admitted = true
-			break
+	if adm.Admitted {
+		return adm
+	}
+	servers := mcpServersOf(toolName)
+	if len(servers) == 0 {
+		return adm
+	}
+	for _, server := range servers {
+		if !MCPServerAdmission(doc, server).Admitted {
+			return adm
 		}
 	}
+	adm.Admitted = true
 	return adm
+}
+
+// mcpServersOf is every server an MCP tool name could belong to: the <server>
+// of each split of the name into mcp__<server>__<tool>, both non-empty.
+func mcpServersOf(toolName string) []string {
+	rest := strings.TrimPrefix(toolName, mcpToolPrefix)
+	var servers []string
+	for i := 0; i < len(rest); {
+		j := strings.Index(rest[i:], "__")
+		if j < 0 {
+			break
+		}
+		cut := i + j
+		if server, tool := rest[:cut], rest[cut+2:]; server != "" && tool != "" {
+			servers = append(servers, server)
+		}
+		i = cut + 1
+	}
+	return servers
 }
 
 // MCPServerAdmission is what doc's mcp section says about the server named
