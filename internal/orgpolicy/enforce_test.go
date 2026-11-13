@@ -196,3 +196,29 @@ func TestJudge_AUseJudgedUpstreamIsNotCountedAgain(t *testing.T) {
 		t.Fatalf("below: %+v %v; a judged use is still refused", again, err)
 	}
 }
+
+// Raw HTTP stays outside the policy even while the policy cannot be read
+// under enforce: it is admitted without asking control-plane at all.
+func TestJudgeIntegration_GenericHTTPDuringAPolicyOutage(t *testing.T) {
+	withSwitch(t, PointIntegrations, EnforcementEnforce)
+	src := &countingOutage{}
+	ctx := WithResolver(context.Background(), New(src))
+	d, err := JudgeIntegration(ctx, "org-a", GenericHTTPIntegrationID, false)
+	if err != nil || d.Denied || d.Refused {
+		t.Fatalf("http during an outage: %+v, %v", d, err)
+	}
+	if src.calls != 0 {
+		t.Fatalf("the policy source was asked %d times for raw HTTP", src.calls)
+	}
+	if _, err := JudgeIntegration(ctx, "org-a", "github", false); !IsUnavailable(err) {
+		t.Fatalf("a governed integration under the same outage: %v, want ErrUnavailable", err)
+	}
+}
+
+// countingOutage is a control plane that cannot be asked, counting the asks.
+type countingOutage struct{ calls int }
+
+func (c *countingOutage) ResolveOrgPolicy(context.Context, string) (accesstokenclient.OrgPolicy, error) {
+	c.calls++
+	return accesstokenclient.OrgPolicy{}, errors.New("control plane unreachable")
+}

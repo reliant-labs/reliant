@@ -42,8 +42,13 @@ func IntegrationAdmission(doc *controlplanev1.OrgPolicy, integrationID string) A
 }
 
 // JudgeIntegration decides a use of integrationID in orgID's runs (Judge, at
-// PointIntegrations).
+// PointIntegrations). The generic HTTP integration is admitted before any
+// policy is read: it is outside the policy, so not even a policy outage
+// under enforce may refuse it.
 func JudgeIntegration(ctx context.Context, orgID, integrationID string, quiet bool) (Decision, error) {
+	if strings.TrimSpace(integrationID) == GenericHTTPIntegrationID {
+		return Decision{Point: PointIntegrations, OrgID: orgID, Subject: integrationID, Reason: ReasonIntegrationNotAllowed}, nil
+	}
 	return Judge(ctx, PointIntegrations, orgID, integrationID, ReasonIntegrationNotAllowed, quiet,
 		func(doc *controlplanev1.OrgPolicy) Admission { return IntegrationAdmission(doc, integrationID) })
 }
