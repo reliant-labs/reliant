@@ -100,7 +100,7 @@ func (m *MockAccountAssignmentStore) RecentAssignmentCounts(ctx context.Context,
 var _ AccountAssignmentStore = (*MockAccountAssignmentStore)(nil)
 
 // forge:section MockAccountCredentialStore
-// forge:hash=38e4f4c76c71836ed2a3cb71b9b46aac1ad39e38269062d8e6f678279b098f73
+// forge:hash=05b05464b2d0d2a3945e1dfd67a772cb941c43c89bbf16eaa1b4334e7dc6707c
 
 // MockAccountCredentialStore is a test mock for the AccountCredentialStore interface.
 //
@@ -110,23 +110,23 @@ var _ AccountAssignmentStore = (*MockAccountAssignmentStore)(nil)
 // "MockAccountCredentialStore.<Method>Func not set" error.
 type MockAccountCredentialStore struct {
 	contractkit.Recorder
-	PatchProviderAccountFunc func(context.Context, string, string, core.AccountPatch) (core.ProviderAccount, error)
+	PatchOwnedProviderAccountFunc func(context.Context, core.AccountOwner, string, core.AccountPatch) (core.ProviderAccount, error)
 }
 
-// PatchProviderAccount records the call and delegates to PatchProviderAccountFunc when set.
-func (m *MockAccountCredentialStore) PatchProviderAccount(ctx context.Context, userID string, accountID string, p core.AccountPatch) (core.ProviderAccount, error) {
-	m.Recorder.Record("PatchProviderAccount", ctx, userID, accountID, p)
-	if m.PatchProviderAccountFunc != nil {
-		return m.PatchProviderAccountFunc(ctx, userID, accountID, p)
+// PatchOwnedProviderAccount records the call and delegates to PatchOwnedProviderAccountFunc when set.
+func (m *MockAccountCredentialStore) PatchOwnedProviderAccount(ctx context.Context, owner core.AccountOwner, accountID string, p core.AccountPatch) (core.ProviderAccount, error) {
+	m.Recorder.Record("PatchOwnedProviderAccount", ctx, owner, accountID, p)
+	if m.PatchOwnedProviderAccountFunc != nil {
+		return m.PatchOwnedProviderAccountFunc(ctx, owner, accountID, p)
 	}
-	return *new(core.ProviderAccount), contractkit.MockNotSet("MockAccountCredentialStore", "PatchProviderAccount")
+	return *new(core.ProviderAccount), contractkit.MockNotSet("MockAccountCredentialStore", "PatchOwnedProviderAccount")
 }
 
 // Compile-time check.
 var _ AccountCredentialStore = (*MockAccountCredentialStore)(nil)
 
 // forge:section MockAccountRoutingStore
-// forge:hash=0b25bc2d3eb0b2e6e741d2390a216607c53af6c2478d0b61249676ea96ca39ba
+// forge:hash=41c71a59bedda540dda221c74150dc16f040daf60f38b342b835c474d439c263
 
 // MockAccountRoutingStore is a test mock for the AccountRoutingStore interface.
 //
@@ -142,7 +142,7 @@ type MockAccountRoutingStore struct {
 	SetThreadAssignmentFunc         func(context.Context, core.Assignment, string) (bool, error)
 	ListAccountLimitsFunc           func(context.Context, string) (map[string]core.LimitState, error)
 	RecentAssignmentCountsFunc      func(context.Context, []string, time.Time) (map[string]int, error)
-	PatchProviderAccountFunc        func(context.Context, string, string, core.AccountPatch) (core.ProviderAccount, error)
+	PatchOwnedProviderAccountFunc   func(context.Context, core.AccountOwner, string, core.AccountPatch) (core.ProviderAccount, error)
 }
 
 // ClearOtherThreadAssignments records the call and delegates to ClearOtherThreadAssignmentsFunc when set.
@@ -199,13 +199,13 @@ func (m *MockAccountRoutingStore) RecentAssignmentCounts(ctx context.Context, ac
 	return nil, contractkit.MockNotSet("MockAccountRoutingStore", "RecentAssignmentCounts")
 }
 
-// PatchProviderAccount records the call and delegates to PatchProviderAccountFunc when set.
-func (m *MockAccountRoutingStore) PatchProviderAccount(ctx context.Context, userID string, accountID string, p core.AccountPatch) (core.ProviderAccount, error) {
-	m.Recorder.Record("PatchProviderAccount", ctx, userID, accountID, p)
-	if m.PatchProviderAccountFunc != nil {
-		return m.PatchProviderAccountFunc(ctx, userID, accountID, p)
+// PatchOwnedProviderAccount records the call and delegates to PatchOwnedProviderAccountFunc when set.
+func (m *MockAccountRoutingStore) PatchOwnedProviderAccount(ctx context.Context, owner core.AccountOwner, accountID string, p core.AccountPatch) (core.ProviderAccount, error) {
+	m.Recorder.Record("PatchOwnedProviderAccount", ctx, owner, accountID, p)
+	if m.PatchOwnedProviderAccountFunc != nil {
+		return m.PatchOwnedProviderAccountFunc(ctx, owner, accountID, p)
 	}
-	return *new(core.ProviderAccount), contractkit.MockNotSet("MockAccountRoutingStore", "PatchProviderAccount")
+	return *new(core.ProviderAccount), contractkit.MockNotSet("MockAccountRoutingStore", "PatchOwnedProviderAccount")
 }
 
 // Compile-time check.

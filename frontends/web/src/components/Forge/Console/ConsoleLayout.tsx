@@ -31,6 +31,7 @@ import { Outlet, useLocation, useNavigate, useParams, useSearch } from "@tanstac
 import SkeletonLoader from "@/components/forge-ui/skeleton_loader";
 import { useForgeRoster } from "@/hooks/forge-queries";
 import { useDashboard, useDashboardIndex } from "@/hooks/dashboard-queries";
+import { displayTitle, hubOf, hubTabLabel } from "../Observability/Dashboards/dashboardHubs";
 import { useAlerts, useObservabilityOrg } from "@/hooks/observability-queries";
 import { useTitleBarChrome } from "@/hooks/useTitleBarChrome";
 import { getParentRouteNavigateOptions } from "@/lib/routeParent";
@@ -148,14 +149,20 @@ export function ConsoleLayout() {
   const starred = useMemo(
     () =>
       (dashboards.data?.dashboards ?? []).flatMap((d) =>
-        d.starred && d.ref.kind !== "template" ? [{ title: d.title, dashKind: d.ref.kind, key: d.ref.key }] : []
+        d.starred && d.ref.kind !== "template" ? [{ title: displayTitle(d.title, forgeProject), dashKind: d.ref.kind, key: d.ref.key }] : []
       ),
-    [dashboards.data]
+    [dashboards.data, forgeProject]
   );
-  const dashboardTitle =
-    page.kind === "dashboard"
-      ? dashboards.data?.dashboards.find((d) => d.ref.kind === page.dashKind && d.ref.key === page.key)?.title
-      : undefined;
+  // A hub's tab is named by the hub and the tab ("Product analytics · Users"); anything else by its title, less the project prefix.
+  const dashboardTitle = useMemo(() => {
+    if (page.kind !== "dashboard" || !dashboards.data) return undefined;
+    const ref = { kind: page.dashKind, key: page.key };
+    const hub = hubOf(dashboards.data.dashboards, ref, forgeProject);
+    const tab = hub && hubTabLabel(hub, ref);
+    if (hub && tab) return `${hub.title} · ${tab}`;
+    const title = dashboards.data.dashboards.find((d) => d.ref.kind === page.dashKind && d.ref.key === page.key)?.title;
+    return title === undefined ? undefined : displayTitle(title, forgeProject);
+  }, [page, dashboards.data, forgeProject]);
 
   // The open dashboard's own scope (the same cached read the page makes): a
   // platform dashboard is not per environment, and the control must not imply it is.

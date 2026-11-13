@@ -14,6 +14,7 @@ import (
 	"go.temporal.io/sdk/temporal"
 
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/llm"
 	"github.com/reliant-labs/reliant/internal/llm/accountrouter"
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
@@ -119,18 +120,23 @@ type recorderFake struct {
 	benched   []string
 	failBench bool
 	observed  []string
+	// observedOwners and benchOwners are the owners each call named, in order.
+	observedOwners []core.AccountOwner
+	benchOwners    []core.AccountOwner
 }
 
-func (r *recorderFake) For(_, accountID string) ratelimit.Observer {
+func (r *recorderFake) For(owner core.AccountOwner, accountID string) ratelimit.Observer {
 	r.observed = append(r.observed, accountID)
+	r.observedOwners = append(r.observedOwners, owner)
 	return nopObserver{}
 }
 
-func (r *recorderFake) Bench(_ context.Context, _, accountID string, until time.Time, window string) (time.Time, error) {
+func (r *recorderFake) Bench(_ context.Context, owner core.AccountOwner, accountID string, until time.Time, window string) (time.Time, error) {
 	if r.failBench {
 		return until, errors.New("store down")
 	}
 	r.benched = append(r.benched, accountID)
+	r.benchOwners = append(r.benchOwners, owner)
 	r.store.bench(accountID, until, window)
 	return until, nil
 }
