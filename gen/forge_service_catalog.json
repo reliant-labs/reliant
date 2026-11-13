@@ -2922,8 +2922,8 @@
           ],
           "reliant.v1.UnattendedFunding": [
             "UNATTENDED_FUNDING_UNSPECIFIED",
-            "UNATTENDED_FUNDING_ORG_ONLY",
-            "UNATTENDED_FUNDING_ANY"
+            "UNATTENDED_FUNDING_ANY",
+            "UNATTENDED_FUNDING_ORG_ONLY"
           ],
           "reliant.v1.WorkflowState": [
             "WORKFLOW_STATE_UNSPECIFIED",
@@ -43338,8 +43338,8 @@
           ],
           "reliant.v1.UnattendedFunding": [
             "UNATTENDED_FUNDING_UNSPECIFIED",
-            "UNATTENDED_FUNDING_ORG_ONLY",
-            "UNATTENDED_FUNDING_ANY"
+            "UNATTENDED_FUNDING_ANY",
+            "UNATTENDED_FUNDING_ORG_ONLY"
           ],
           "reliant.v1.WorkflowState": [
             "WORKFLOW_STATE_UNSPECIFIED",

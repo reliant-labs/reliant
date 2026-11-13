@@ -316,37 +316,46 @@ func (ActingIdentity) EnumDescriptor() ([]byte, []int) {
 
 // UnattendedFunding is which AI accounts the runs a trigger fires may spend
 // (control-plane docs/design/org-provider-accounts.md §11.3). A trigger's run
-// has nobody behind it to ask, so in an organization it is stamped when it is
-// created: ORG_ONLY when the org has two or more live members, ANY otherwise.
-// A trigger that predates the stamp reads as ANY, which is how every trigger
-// ran before it.
+// has nobody behind it to ask, so in an organization each trigger is stamped
+// when it is created: ORG_ONLY when the org has two or more live members, ANY
+// otherwise (and ANY when the member count is unknown).
+//
+// On a read (Trigger.unattended_funding) a server that knows the stamp always
+// sets ANY or ORG_ONLY, the stored value. A trigger stored before the stamp
+// existed, or one with no org, reads ANY: that is how it runs. So
+// UNSPECIFIED on a read means only that the server predates the field; show
+// it as ANY.
+//
+// On a write (TriggerDefinition, EnableWorkflowRequest) UNSPECIFIED means the
+// default rule: a new trigger is stamped from the org's shape as above, and
+// an existing one keeps its stored value, so a client that predates the field
+// never changes it.
 type UnattendedFunding int32
 
 const (
-	// On create or enable: stamp from the org's shape. On update: unchanged.
-	// On a Trigger read: never returned.
+	// Read: the server predates the field. Write: the default rule.
 	UnattendedFunding_UNATTENDED_FUNDING_UNSPECIFIED UnattendedFunding = 0
+	// ANY: every source the owner's own runs may use, as before the stamp.
+	// Loosening an ORG_ONLY trigger to this is refused, with reason
+	// "org_only_automation", in an org with two or more live members.
+	UnattendedFunding_UNATTENDED_FUNDING_ANY UnattendedFunding = 1
 	// ORG_ONLY: only the org's own sources (its API keys granted to the owner,
 	// and its Reliant credits), never the owner's personal accounts or a seat.
 	// The owner can always tighten a trigger to this.
-	UnattendedFunding_UNATTENDED_FUNDING_ORG_ONLY UnattendedFunding = 1
-	// ANY: every source the owner's own runs may use. Loosening an ORG_ONLY
-	// trigger to this is refused with reason "org_only_automation" in an org
-	// with two or more live members.
-	UnattendedFunding_UNATTENDED_FUNDING_ANY UnattendedFunding = 2
+	UnattendedFunding_UNATTENDED_FUNDING_ORG_ONLY UnattendedFunding = 2
 )
 
 // Enum value maps for UnattendedFunding.
 var (
 	UnattendedFunding_name = map[int32]string{
 		0: "UNATTENDED_FUNDING_UNSPECIFIED",
-		1: "UNATTENDED_FUNDING_ORG_ONLY",
-		2: "UNATTENDED_FUNDING_ANY",
+		1: "UNATTENDED_FUNDING_ANY",
+		2: "UNATTENDED_FUNDING_ORG_ONLY",
 	}
 	UnattendedFunding_value = map[string]int32{
 		"UNATTENDED_FUNDING_UNSPECIFIED": 0,
-		"UNATTENDED_FUNDING_ORG_ONLY":    1,
-		"UNATTENDED_FUNDING_ANY":         2,
+		"UNATTENDED_FUNDING_ANY":         1,
+		"UNATTENDED_FUNDING_ORG_ONLY":    2,
 	}
 )
 
@@ -1582,9 +1591,10 @@ type Trigger struct {
 	// when the trigger is enabled or a person paused it. Clients show an
 	// unknown value as a plain pause.
 	PausedReason string `protobuf:"bytes,36,opt,name=paused_reason,json=pausedReason,proto3" json:"paused_reason,omitempty"`
-	// Which AI accounts the trigger's runs may spend (UnattendedFunding). A
-	// trigger with no org, or one that predates the stamp, reads ANY. A server
-	// that predates the field leaves it UNSPECIFIED: show that as ANY.
+	// Which AI accounts the trigger's runs may spend: always ANY or ORG_ONLY,
+	// the stored value (ANY for a trigger with no org or one stored before the
+	// stamp). UNSPECIFIED only from a server that predates the field: show it
+	// as ANY.
 	UnattendedFunding UnattendedFunding `protobuf:"varint,37,opt,name=unattended_funding,json=unattendedFunding,proto3,enum=reliant.v1.UnattendedFunding" json:"unattended_funding,omitempty"`
 	unknownFields     protoimpl.UnknownFields
 	sizeCache         protoimpl.SizeCache
@@ -2646,10 +2656,10 @@ type TriggerDefinition struct {
 	// for a trigger whose owner cannot push to a repository it writes to the
 	// write fails when it happens (never silently as the owner).
 	ActingIdentity ActingIdentity `protobuf:"varint,25,opt,name=acting_identity,json=actingIdentity,proto3,enum=reliant.v1.ActingIdentity" json:"acting_identity,omitempty"`
-	// Which AI accounts the trigger's runs may spend. UNSPECIFIED stamps it
-	// from the org's shape on create and keeps the stored value on update, so a
-	// client that predates the field never changes it. A server that predates
-	// the field ignores it.
+	// Which AI accounts the trigger's runs may spend. UNSPECIFIED is the default
+	// rule: stamped from the org's shape on create, the stored value kept on
+	// update, so a client that predates the field never changes it. A server
+	// that predates the field ignores it.
 	UnattendedFunding UnattendedFunding `protobuf:"varint,27,opt,name=unattended_funding,json=unattendedFunding,proto3,enum=reliant.v1.UnattendedFunding" json:"unattended_funding,omitempty"`
 	unknownFields     protoimpl.UnknownFields
 	sizeCache         protoimpl.SizeCache
@@ -5723,9 +5733,9 @@ const file_reliant_v1_trigger_proto_rawDesc = "" +
 	"\x15ACTING_IDENTITY_OWNER\x10\x01\x12\x17\n" +
 	"\x13ACTING_IDENTITY_APP\x10\x02*t\n" +
 	"\x11UnattendedFunding\x12\"\n" +
-	"\x1eUNATTENDED_FUNDING_UNSPECIFIED\x10\x00\x12\x1f\n" +
-	"\x1bUNATTENDED_FUNDING_ORG_ONLY\x10\x01\x12\x1a\n" +
-	"\x16UNATTENDED_FUNDING_ANY\x10\x02*\x81\x01\n" +
+	"\x1eUNATTENDED_FUNDING_UNSPECIFIED\x10\x00\x12\x1a\n" +
+	"\x16UNATTENDED_FUNDING_ANY\x10\x01\x12\x1f\n" +
+	"\x1bUNATTENDED_FUNDING_ORG_ONLY\x10\x02*\x81\x01\n" +
 	"\x14TriggerOverlapPolicy\x12&\n" +
 	"\"TRIGGER_OVERLAP_POLICY_UNSPECIFIED\x10\x00\x12\x1f\n" +
 	"\x1bTRIGGER_OVERLAP_POLICY_SKIP\x10\x01\x12 \n" +
