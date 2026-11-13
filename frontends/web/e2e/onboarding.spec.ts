@@ -1,4 +1,4 @@
-import { test, expect, type Page, type Route } from '@playwright/test';
+import { test, expect, type Locator, type Page, type Route } from '@playwright/test';
 
 // ---------------------------------------------------------------------------
 // Current onboarding model (see web/src/components/OnboardingFlow/stepConfig.ts)
@@ -293,6 +293,16 @@ async function gotoOnboardingWithPlan(page: Page, plan: Record<string, unknown>)
 // Tests
 // ---------------------------------------------------------------------------
 
+// The Compute step leads with the free answer (#2657): "Your own computer" is
+// preselected and the hosted machines fold into one disclosure under it. Pick a
+// hosted machine the way a user does: open the disclosure, pick a size. The
+// footer then offers "Continue with <size>".
+async function chooseHostedMachine(dialog: Locator) {
+  await dialog.getByTestId('compute-cloud-toggle').click();
+  await dialog.locator('#compute-cloud-options').getByRole('button').first().click();
+  await expect(dialog.getByRole('button', { name: /^Continue with / })).toBeVisible();
+}
+
 test.describe('Onboarding Flow', () => {
   test.beforeEach(async ({ page }) => {
     await mockGrpcRoutes(page);
@@ -307,7 +317,10 @@ test.describe('Onboarding Flow', () => {
 
     // First step is Compute — verify the heading is visible.
     await expect(dialog.getByRole('heading', { name: 'Choose your machine' })).toBeVisible();
-    await expect(dialog.getByRole('button', { name: /^Continue with / })).toBeVisible();
+    // Both answers are on offer: the free one, preselected (#2657), and the
+    // hosted machines one click away.
+    await expect(dialog.getByRole('button', { name: /^Your own computer/ })).toBeVisible();
+    await expect(dialog.getByTestId('compute-cloud-toggle')).toBeVisible();
   });
 
   test('landing on / redirects a not-yet-onboarded user to /onboarding', async ({ page }) => {
@@ -370,6 +383,7 @@ test.describe('Onboarding Flow', () => {
     await gotoOnboarding(page);
     const dialog = page.getByRole('dialog', { name: 'Onboarding setup' });
 
+    await chooseHostedMachine(dialog);
     await dialog.getByRole('button', { name: /^Continue with / }).click();
 
     await expect(dialog.getByText('Which AI should Reliant use?')).toBeVisible({ timeout: 10_000 });
@@ -384,7 +398,7 @@ test.describe('Onboarding Flow', () => {
     await gotoOnboarding(page);
     const dialog = page.getByRole('dialog', { name: 'Onboarding setup' });
 
-    await dialog.getByRole('button', { name: 'Use your own computer' }).click();
+    await dialog.getByRole('button', { name: /^Your own computer/ }).click();
 
     // Stays on the compute step (URL keeps no `compute` plan field) — the
     // local-daemon instructions render below the machine list rather than
@@ -567,6 +581,7 @@ test.describe('Onboarding Flow', () => {
     // First step (compute): no Back button.
     await expect(dialog.getByRole('button', { name: /Back/i })).not.toBeVisible();
 
+    await chooseHostedMachine(dialog);
     await dialog.getByRole('button', { name: /^Continue with / }).click();
     await expect(dialog.getByText('Which AI should Reliant use?')).toBeVisible({ timeout: 10_000 });
 
@@ -651,18 +666,23 @@ test.describe('Onboarding – Compute with no billing (the new-user default)', (
 
     // No longer dead: an ineligible cloud choice records itself and routes
     // to the checkout step, so the button stays enabled rather than absent.
+    await chooseHostedMachine(dialog);
     await expect(dialog.getByRole('button', { name: /^Continue with / })).toBeEnabled();
 
     // A code still skips the checkout step, so it stays on offer too.
     await expect(dialog.getByRole('button', { name: /Have a coupon code/i })).toBeEnabled();
 
     // And the self-hosted path — which needs no billing at all — is still here.
-    await expect(dialog.getByRole('button', { name: 'Use your own computer' })).toBeEnabled();
+    await expect(dialog.getByRole('button', { name: /^Your own computer/ })).toBeEnabled();
   });
 
   test('no control on the Compute step is disabled', async ({ page }) => {
     await gotoOnboarding(page);
     const dialog = page.getByRole('dialog', { name: 'Onboarding setup' });
+    // The hosted path, as an unbilled user sees it once they pick it. (The
+    // preselected free path's footer is the pending "Waiting for your computer
+    // to connect…" indicator, disabled by design until a daemon pairs.)
+    await chooseHostedMachine(dialog);
     await dialog.getByRole('button', { name: /Have a coupon code/i }).waitFor();
 
     // A disabled control here is the whole defect, in any form.
@@ -679,6 +699,9 @@ test.describe('Onboarding – Compute with no billing (the new-user default)', (
     await gotoOnboarding(page);
     const dialog = page.getByRole('dialog', { name: 'Onboarding setup' });
 
+    // The coupon field belongs to the hosted path: a compute coupon buys
+    // machine time, so it is absent while the free answer is selected.
+    await chooseHostedMachine(dialog);
     await dialog.getByRole('button', { name: /Have a coupon code/i }).click();
 
     await expect(dialog.getByPlaceholder(/Enter code/i)).toBeVisible();
@@ -900,6 +923,7 @@ test.describe('Onboarding – Navigation Edge Cases', () => {
     await gotoOnboarding(page);
     const dialog = page.getByRole('dialog', { name: 'Onboarding setup' });
 
+    await chooseHostedMachine(dialog);
     await dialog.getByRole('button', { name: /^Continue with / }).dblclick();
 
     // Lands on Model, not further — a double-fire would otherwise race two
@@ -930,6 +954,7 @@ test.describe('Onboarding – Navigation Edge Cases', () => {
     await gotoOnboarding(page);
     const dialog = page.getByRole('dialog', { name: 'Onboarding setup' });
 
+    await chooseHostedMachine(dialog);
     await dialog.getByRole('button', { name: /^Continue with / }).click();
     await expect(dialog.getByText('Which AI should Reliant use?')).toBeVisible({ timeout: 10_000 });
 
@@ -938,7 +963,7 @@ test.describe('Onboarding – Navigation Edge Cases', () => {
       timeout: 5_000,
     });
 
-    await dialog.getByRole('button', { name: 'Use your own computer' }).click();
+    await dialog.getByRole('button', { name: /^Your own computer/ }).click();
     await expect(
       dialog.getByText('Download / install', { exact: true }),
     ).toBeVisible({ timeout: 5_000 });
