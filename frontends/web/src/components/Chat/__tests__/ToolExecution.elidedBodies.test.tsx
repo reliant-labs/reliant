@@ -193,6 +193,25 @@ describe("a tool row whose bodies the transcript left out", () => {
     expect(getContentBlockBodies.mock.calls[0][0]).toMatchObject({ blockIds: ["call-1"] });
   });
 
+  it("never shows a viewer a result that arrived whole in the transcript", async () => {
+    // Not relying on the server's elision: an inline body is withheld too,
+    // and nothing is fetched for it.
+    openChat.value = { viewerAccess: true };
+    collapsed.value = false;
+    render(
+      <ToolExecution
+        toolCall={{ id: "tc-inline", name: "shell", input: { command: "env" }, finished: true, durableStatus: ToolCallStatus.COMPLETED }}
+        toolResult={{ name: "shell", content: "SECRET=hunter2", is_error: false }}
+        chatId="chat-1"
+      />,
+    );
+
+    expect(await screen.findByTestId("tool-result-withheld")).toBeInTheDocument();
+    expect(screen.queryByText(/hunter2/)).toBeNull();
+    expect(screen.queryByTestId("tool-body-error")).toBeNull();
+    expect(getContentBlockBodies).not.toHaveBeenCalled();
+  });
+
   it("shows a large output's display body first, then the whole output on request", async () => {
     serveBodies({ "res-1": { content: "HEAD … TAIL", truncated: true, originalSize: 120_000n } });
     render(renderRow());
