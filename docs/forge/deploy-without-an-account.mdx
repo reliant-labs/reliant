@@ -1,6 +1,7 @@
 ---
-title: "Deploy without an account"
-description: "How to deploy a static site, a Vite or Next.js app, or a Go API with Postgres with no account: forge env deploy prod --claimable, the claim link, the limits and the exit codes"
+title: "Deploy a Vite or Next.js app without an account"
+sidebarTitle: "Deploy without an account"
+description: "Deploy a Vite or Next.js app, static site or Go API with no account or signup: forge env deploy prod --claimable returns a live URL and a claim link. Limits and exit codes"
 ---
 
 Any coding agent that can run a shell command can put a project online with no Reliant account, token or card. `forge env deploy prod --claimable` builds the project, publishes it to [Reliant hosting](/forge/hosting) under a temporary anonymous identity, and prints a live URL and a **claim link**. The deploy stays online for 72 hours. If someone opens the claim link and signs up (free) in that time, the deploy becomes theirs.

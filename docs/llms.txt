@@ -1,0 +1,138 @@
+# Reliant
+
+> Reliant runs coding agents on your computer or a cloud machine. Forge is its open-source Go + React framework and deploy platform for AI-written code. Start with the Forge pages below; the full page index follows.
+
+## Forge: start here
+
+- [Deploy a Vite or Next.js app without an account](https://docs.reliantlabs.io/forge/deploy-without-an-account.md): `npx -y @reliantlabs/forge@latest env deploy prod --claimable` puts a Vite or Next.js static app live with no account and prints a live URL plus a claim link. Limits and exit codes.
+- [Forge MCP server: deploy from Claude Code, Cursor, Codex](https://docs.reliantlabs.io/forge/observability/agents.md): `claude mcp add forge -- npx -y @reliantlabs/forge mcp` lets an agent deploy, lint, generate and read telemetry. The tools and every config: https://github.com/reliant-labs/forge/blob/main/docs/mcp.md
+- [forge start: the first command to run](https://docs.reliantlabs.io/reference/cli.md#reliant-forge-start): `forge start` prints the one next command for the directory you are in (deploy the app already there, or create one); `forge start app` goes from an empty directory to authored protos. Run it first.
+- [Forge overview](https://docs.reliantlabs.io/forge/overview.md): What forge is: a Go + React framework with tests, environments, hosting and monitoring from the first commit.
+- [Forge quick start](https://docs.reliantlabs.io/forge/quick-start.md): From a prompt to a deployed URL.
+- [Lint AI-generated code](https://docs.reliantlabs.io/forge/linting/overview.md): What forge lint checks and why it matters more when an agent writes the code.
+- [Querying with forge obs](https://docs.reliantlabs.io/forge/observability/forge-obs.md): `forge obs check` judges a deploy with exit codes 0, 1, 2 and 8.
+
+## All pages
+
+- [Quick Start](https://docs.reliantlabs.io/getting-started/quick-start.md): Get up and running with Reliant in minutes
+- [Installation](https://docs.reliantlabs.io/getting-started/installation.md): Use Reliant in the browser, or install the desktop app on macOS, Windows or Linux
+- [Key Concepts](https://docs.reliantlabs.io/getting-started/concepts.md): Understand the core terminology of Reliant and Forge
+- [Workflows Overview](https://docs.reliantlabs.io/workflows/overview.md): Understanding how workflows power Reliant's AI capabilities
+- [Workflow Control](https://docs.reliantlabs.io/workflows/workflow-control.md): Pause, resume, steer and update parameters while workflows run
+- [Branching](https://docs.reliantlabs.io/features/branching.md): Explore alternative paths without losing your conversation history
+- [Workspaces](https://docs.reliantlabs.io/features/worktrees.md): Isolated checkouts for parallel work: creating, branching into, archiving and cleaning up workspaces
+- [Git Integration](https://docs.reliantlabs.io/features/git-integration.md): Commit, push and open pull requests from a chat, and what needs the GitHub CLI
+- [Threads](https://docs.reliantlabs.io/features/threads.md): Understanding conversation structure, sub-agent isolation, and thread modes
+- [Sub-agents](https://docs.reliantlabs.io/workflows/spawn.md): Delegate tasks to sub-workflows from within an agent
+- [Excluding automatic saved memories](https://docs.reliantlabs.io/workflows/ambient-memory.md): Opt out of ambient memory injection without claiming full model context isolation
+- [Attachments](https://docs.reliantlabs.io/features/attachments.md): Pass files and images into workflows — as inputs, thread context, or saved messages
+- [Run project commands](https://docs.reliantlabs.io/features/processes.md): Run commands discovered from package.json, Makefile, and Taskfile from the Processes tab
+- [Built-in workflows](https://docs.reliantlabs.io/guides/overview.md): The workflows that ship with Reliant, what each is for, and how to choose one
+- [Get It Right](https://docs.reliantlabs.io/guides/get-it-right.md): An implement, check and review loop for changes in a complex existing codebase
+- [Best of Three](https://docs.reliantlabs.io/guides/best-of-three.md): Three agents implement the same task in separate workspaces; a reviewer picks the best or combines them
+- [Autopilot](https://docs.reliantlabs.io/guides/autopilot.md): Five built-in workflows that review pull requests, security-review them, work issues, answer review feedback and take your alerts and errors on call, on your GitHub repositories, and never merge
+- [Create a Workflow](https://docs.reliantlabs.io/guides/create-a-workflow.md): Describe what you want to automate and let Reliant scope, build and test the workflow with you
+- [Import from Claude Code / Cursor](https://docs.reliantlabs.io/guides/import.md): Bring instructions, MCP servers, rules and commands from another coding tool into Reliant
+- [Machines](https://docs.reliantlabs.io/machines/overview.md): Where your code lives and your commands run: your own computer or a Reliant cloud machine
+- [Your own computer](https://docs.reliantlabs.io/machines/your-computer.md): Run a Reliant daemon on a computer you own with the reliant CLI
+- [Cloud machines & plans](https://docs.reliantlabs.io/machines/cloud.md): Compute sizes, included hours, and how cloud machines wake and suspend
+- [Choosing a machine in workflows](https://docs.reliantlabs.io/machines/choosing.md): How Reliant decides which machine runs a chat or a workflow, and how to pin one with daemon:
+- [The reliant command line](https://docs.reliantlabs.io/cli/overview.md): What the reliant CLI is for, how it decides which server and credential to use, and where it keeps its files
+- [Sign in and tokens](https://docs.reliantlabs.io/cli/sign-in.md): Sign the reliant CLI in, sign in on a machine with no browser, and create tokens for scripts and CI
+- [Run a machine from the terminal](https://docs.reliantlabs.io/cli/run-a-machine.md): Turn a workstation, server or Raspberry Pi into a Reliant machine with reliant daemon, keep it running, and check that it is healthy
+- [Workflows from the terminal](https://docs.reliantlabs.io/cli/workflows.md): Validate and test a workflow next to your code, then run it, supervise it and put it on a schedule with reliant workflow
+- [Preview a running app](https://docs.reliantlabs.io/cli/previews.md): Get the browser URL for a dev server running on a machine with reliant preview-url, and decide who can open it
+- [Scripting and CI](https://docs.reliantlabs.io/cli/scripting.md): Use the reliant CLI from scripts and CI: credentials without a browser, JSON output, exit codes, and event hooks
+- [SDKs: Reliant from your own code](https://docs.reliantlabs.io/sdk/overview.md): What the Go and TypeScript SDKs are for, which credentials they use, what they deliberately cannot do, and how they are versioned
+- [Go SDK](https://docs.reliantlabs.io/sdk/go.md): Start a run and follow it to a verdict, list runs, answer a question, fire a trigger, call a webhook and handle errors, with Reliant's Go client
+- [TypeScript SDK](https://docs.reliantlabs.io/sdk/typescript.md): Connect a frontend to Reliant, stream a chat live with resume, send messages safely, and fold the stream into state with the pure reducer
+- [SDK API reference](https://docs.reliantlabs.io/sdk/reference.md): Every remote procedure in Reliant's public API, which Go SDK method wraps it, and what the SDK deliberately leaves out
+- [Automations](https://docs.reliantlabs.io/automations/overview.md): Start workflow runs on a schedule, from a webhook, from an app event, or when another workflow finishes
+- [Schedules](https://docs.reliantlabs.io/automations/schedules.md): Run a workflow on a cron expression or a fixed interval
+- [Webhooks](https://docs.reliantlabs.io/automations/webhooks.md): Start a run when something POSTs to a URL Reliant gives the automation
+- [Workflow events](https://docs.reliantlabs.io/automations/workflow-events.md): Start a run when another of your workflows finishes, fails or blocks
+- [No-machine runs](https://docs.reliantlabs.io/automations/no-machine-runs.md): Automations that run on Reliant's servers alone, with no computer of yours involved
+- [Integrations](https://docs.reliantlabs.io/integrations/overview.md): Connect GitHub, Gmail, Slack, Twilio and any HTTP API so workflows can act on them and react to them
+- [GitHub](https://docs.reliantlabs.io/integrations/github.md): Act on repositories, issues and pull requests, and start runs when they change
+- [Gmail](https://docs.reliantlabs.io/integrations/gmail.md): Send, search and read email, and start a run when new mail arrives
+- [Slack](https://docs.reliantlabs.io/integrations/slack.md): Post and read messages as the Reliant bot, and start runs from messages, mentions and reactions
+- [HTTP](https://docs.reliantlabs.io/integrations/http.md): Call any public API from a workflow
+- [Twilio (SMS and WhatsApp)](https://docs.reliantlabs.io/integrations/twilio.md): Send texts and WhatsApp messages from a workflow, and start a workflow when one of your numbers receives one
+- [Creating Custom Workflows](https://docs.reliantlabs.io/workflows/custom-workflows.md): Build your own workflows to automate multi-step tasks and enforce processes
+- [Presets](https://docs.reliantlabs.io/workflows/presets.md): Reusable parameter bundles that configure workflow behavior
+- [Multi-Agent Patterns](https://docs.reliantlabs.io/workflows/patterns.md): Techniques for customizing agents, building pipelines, and coordinating multiple agents
+- [Router Nodes](https://docs.reliantlabs.io/workflows/routing.md): Use an LLM to route between candidate workflows or nodes within the same workflow
+- [Testing Workflows](https://docs.reliantlabs.io/workflows/testing.md): Validate workflow structure and test runtime behavior before deploying
+- [Workflow lint](https://docs.reliantlabs.io/workflows/lint.md): Rules that catch a workflow that validates but misbehaves when nobody is watching
+- [Workflow Examples](https://docs.reliantlabs.io/examples/workflow-snippets.md): Copy-and-adapt patterns and complete workflow examples
+- [Improve Reliant itself](https://docs.reliantlabs.io/guides/self-improvement.md): How agents turn what they learn into memories, skills and workflows that make the next run better
+- [AI Providers](https://docs.reliantlabs.io/settings/api-keys.md): Connect Reliant AI, a provider subscription, your own API key, or a local model
+- [Model Configuration](https://docs.reliantlabs.io/settings/model-config.md): Configure model selection preferences and add custom models
+- [Memories & Context](https://docs.reliantlabs.io/settings/memories.md): Configure persistent context files that inform every conversation
+- [Skills](https://docs.reliantlabs.io/features/skills.md): Reusable agent instructions that customize how Reliant works
+- [MCP Servers](https://docs.reliantlabs.io/settings/mcp-servers.md): Extend Reliant with Model Context Protocol servers for additional capabilities
+- [Billing, wallet & Reliant AI](https://docs.reliantlabs.io/account/billing.md): What you can buy, how Reliant AI credit works, the service fee on top-ups, and auto-recharge
+- [Observability billing & limits](https://docs.reliantlabs.io/account/observability-billing.md): The included allowance, ingest pricing, spend caps, retention and query fair use for Reliant hosting
+- [Privacy & Security: what leaves your machine](https://docs.reliantlabs.io/help/privacy.md): Where your code, prompts and chats go when you use Reliant, what we store, what your model provider sees, and how to delete it
+- [Node Types Reference](https://docs.reliantlabs.io/reference/nodes.md): Auto-generated API reference for workflow node type Input/Output schemas
+- [Types Reference](https://docs.reliantlabs.io/reference/types.md): Reference documentation for workflow config types and output helper types
+- [Workflow Schema Reference](https://docs.reliantlabs.io/reference/workflow-schema.md): Top-level workflow, edge, and edge-case schema reference
+- [CEL Expressions Reference](https://docs.reliantlabs.io/reference/cel-expressions.md): Complete reference for CEL (Common Expression Language) in Reliant workflows
+- [Models Reference](https://docs.reliantlabs.io/reference/models.md): Available AI models and their capabilities
+- [Tools Quick Reference](https://docs.reliantlabs.io/reference/tools.md): Auto-generated quick reference for all tools (tags, names, descriptions)
+- [Scenario Schema](https://docs.reliantlabs.io/reference/scenario-schema.md): Reference documentation for workflow testing scenarios
+- [LLM Integration Guide](https://docs.reliantlabs.io/reference/llm-guide.md): Understanding how Reliant interacts with language models
+- [CLI Reference](https://docs.reliantlabs.io/reference/cli.md): Complete reference for all Reliant CLI commands, flags, and options
+- [FAQ](https://docs.reliantlabs.io/help/faq.md): Answers to common questions
+- [Troubleshooting](https://docs.reliantlabs.io/help/troubleshooting.md): Quick fixes for common issues
+- [Feedback & Support](https://docs.reliantlabs.io/help/feedback.md): Get help and connect with the Reliant team
+- [Architecture Overview](https://docs.reliantlabs.io/architecture/overview.md): High-level architecture of the Reliant cloud service
+- [Server Components](https://docs.reliantlabs.io/architecture/distributed.md): The API server, worker and gateway that make up the Reliant cloud service
+- [Changelog](https://docs.reliantlabs.io/changelog.md): Release notes and version history
+- [License FAQ](https://docs.reliantlabs.io/license-faq.md): Frequently asked questions about Reliant's Business Source License
+- [Forge: Go + React framework for AI-written code](https://docs.reliantlabs.io/forge/overview.md): Forge is an open-source Go and React framework and deploy platform for AI coding agents: tests, dev/staging/prod environments, hosting and monitoring from the first commit
+- [Forge quick start: build and deploy a Go + React app](https://docs.reliantlabs.io/forge/quick-start.md): From a prompt to a deployed URL: build an app with Reliant and Forge, run it locally, and ship it to Reliant hosting. No account? Deploy with forge env deploy prod --claimable
+- [Deploy a Vite or Next.js app without an account](https://docs.reliantlabs.io/forge/deploy-without-an-account.md): Deploy a Vite or Next.js app, static site or Go API with no account or signup: forge env deploy prod --claimable returns a live URL and a claim link. Limits and exit codes
+- [Project anatomy](https://docs.reliantlabs.io/forge/project-anatomy.md): Where each kind of code goes in a forge project, and which files forge regenerates versus which are yours
+- [Adding a feature](https://docs.reliantlabs.io/forge/adding-features.md): The everyday loop in a forge project: services, RPCs, entities, migrations, generate, lint and tests
+- [Two sources of truth](https://docs.reliantlabs.io/forge/concepts/two-sources-of-truth.md): Proto is the API and SQL migrations are the schema. What forge generate projects from them, how an RPC becomes CRUD, and how to opt out
+- [Contracts and dependency injection](https://docs.reliantlabs.io/forge/concepts/contracts-and-injection.md): How forge wires a project: contract.go, generated mocks, Deps and validateDeps, providers.go, and how compose.go is reconciled
+- [Middleware and the request path](https://docs.reliantlabs.io/forge/concepts/middleware-and-request-path.md): The interceptor chain every RPC passes through: tracing, recovery, request IDs, logging, metrics, deadlines, fail-closed auth, validation, and how errors reach the client
+- [The config system](https://docs.reliantlabs.io/forge/concepts/config-system.md): How settings are declared in a proto message, loaded with a fixed precedence, validated at startup, and supplied per environment from KCL and the secret store
+- [Generated vs yours](https://docs.reliantlabs.io/forge/concepts/generated-vs-yours.md): How forge marks the files it writes, how it detects hand edits, how generated files merge in plain git, and the commands that move a file between forge and you
+- [Environments & deploys](https://docs.reliantlabs.io/forge/environments-and-deploys.md): Where to find how a forge project declares its environments, what a deploy produces, how releases are promoted, and how to deploy things forge did not write
+- [Environments](https://docs.reliantlabs.io/forge/deploy/environments.md): How a forge project declares where it runs: workloads declared once, bound to a runtime per environment, and the commands that show you what an environment is
+- [What gets deployed](https://docs.reliantlabs.io/forge/deploy/what-gets-deployed.md): The objects a forge environment produces: what Reliant hosting runs for you, and the Kubernetes objects forge renders for each workload kind on a cluster you operate
+- [Releases and promotion](https://docs.reliantlabs.io/forge/deploy/releases-and-promotion.md): How forge builds once and promotes by digest: releases as OCI bundles, the append-only ledger, plans and approvals, deploy exit codes, signing, and the opt-in health gate
+- [Self-hosted delivery](https://docs.reliantlabs.io/forge/deploy/self-hosted-delivery.md): Deploy to a cluster you run, with no control plane: direct apply by default, or opt in to a Flux that forge installs in your cluster with applier = flux
+- [Escape hatches](https://docs.reliantlabs.io/forge/deploy/escape-hatches.md): How to change what forge renders, build or deploy things forge never compiled, and turn parts of forge off, without fighting the generator
+- [Hosting on Reliant](https://docs.reliantlabs.io/forge/hosting.md): What Reliant hosting runs for a forge project, what it costs, what a queued deploy means, and what it refuses
+- [Secrets](https://docs.reliantlabs.io/forge/secrets.md): Setting secrets for a hosted environment, how they reach your workloads, and why you can never read one back
+- [Custom domains](https://docs.reliantlabs.io/forge/custom-domains.md): Serve your project on a hostname you own — the DNS records to publish, why the TXT record exists, and how long each step takes
+- [Forge sign-in](https://docs.reliantlabs.io/forge/sign-in.md): Hosted Forge commands use your Reliant sign-in, on your computer and on cloud machines
+- [Observability](https://docs.reliantlabs.io/forge/observability.md): Every forge app records logs, traces and metrics at each boundary from the first commit, and gives you and your agents commands to read them locally and on Reliant hosting
+- [What every boundary records](https://docs.reliantlabs.io/forge/observability/signals.md): The logs, traces and metrics a forge app produces at each boundary (inbound RPCs, component calls, the database, outbound HTTP and the browser), and how they join into one trace
+- [Where the telemetry goes](https://docs.reliantlabs.io/forge/observability/where-it-goes.md): Where logs, traces, metrics and browser errors land in local development and on Reliant hosting: the local ClickStack, .forge/logs, the browser console mirror, the hosted store, retention and opting out
+- [Querying with forge obs](https://docs.reliantlabs.io/forge/observability/forge-obs.md): Ask a running forge environment what happened from the command line: forge obs check judges a deploy with exit codes 0, 1, 2 and 8, and status, issue, trace, logs and db query find the cause
+- [Hosted dashboards, alerts and issues](https://docs.reliantlabs.io/forge/observability/dashboards-and-alerts.md): The dashboards forge generates, the default alerts, how errors are grouped into issues, and how source maps and session replay work on Reliant hosting
+- [Health probes and graceful shutdown](https://docs.reliantlabs.io/forge/observability/health-and-shutdown.md): The /healthz and /readyz endpoints every forge process serves, how a process reports what it is waiting for while it boots, and how a rollout drains a replica without dropping requests
+- [Forge MCP server: deploy from Claude Code, Cursor, Codex](https://docs.reliantlabs.io/forge/observability/agents.md): Run forge as an MCP server (forge mcp) so Claude Code, Cursor or Codex can deploy your app, lint, generate and read telemetry, with skills, exit codes and per-worktree environments
+- [Lint AI-generated code: what forge lint checks](https://docs.reliantlabs.io/forge/linting/overview.md): What forge lint runs, how to read its output, where it runs, how to silence a rule, and why it matters more when an agent writes the code
+- [Linting: new rules warn before they gate](https://docs.reliantlabs.io/forge/linting/rollout.md): How a new or tightened forge lint rule warns for one release before it fails your build, how your forge_version pin decides, and how to gate early or stay in the grace period
+- [Lint rule index](https://docs.reliantlabs.io/forge/linting/rules-index.md): Every rule forge lint can grade, grouped by lane, with a one-sentence description of the bug each one catches
+- [Lint rules: migrations](https://docs.reliantlabs.io/forge/linting/rules-migrations.md): The migration-safety rules: what each one prevents, a bad migration and its fix, and severity
+- [Lint rules: conventions, contracts and Deps](https://docs.reliantlabs.io/forge/linting/rules-conventions.md): The proto, handler, Deps and package-contract rules: what each prevents, a bad example and its fix, and severity
+- [Lint rules: schema markers and write policy](https://docs.reliantlabs.io/forge/linting/rules-schema-and-writes.md): The rules that check forge: markers in SQL, proto and Go, and the rules that catch columns nothing ever writes
+- [Lint rules: deploy, secrets and the composition graph](https://docs.reliantlabs.io/forge/linting/rules-deploy-and-secrets.md): The rules that read your deploy/kcl environments, the secrets they declare, the composition graph and commit policy: what each prevents, with examples and severity
+- [Lint rules: tracing, tests, generated files and ownership](https://docs.reliantlabs.io/forge/linting/rules-tracing-and-tests.md): The rules that keep a request in one trace, keep slow tests out of the fast tier, stop hand-edits to generated files, and check lockfiles and scaffold markers
+- [Troubleshooting](https://docs.reliantlabs.io/forge/troubleshooting.md): What to check when a forge project does not generate, start, deploy or report as expected
+- [Forge through Reliant](https://docs.reliantlabs.io/cli/forge.md): reliant forge runs the Forge built into your reliant binary, signed in as you, and refuses to build or rewrite a project that pins a different Forge
+
+## Optional
+
+- [Main Site](https://reliantlabs.io)
+- [GitHub](https://github.com/reliant-labs/reliant)
+- [Slack](https://join.slack.com/t/reliant-pn51441/shared_invite/zt-4c7wet6o2-W_Tksw80LaRGxZqUz9GQdA)
+
+
+This documentation is built and hosted on [Mintlify](https://mintlify.com), a developer documentation platform.
