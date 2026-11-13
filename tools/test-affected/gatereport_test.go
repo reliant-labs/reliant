@@ -20,7 +20,7 @@ func TestMergeGateBudgetContract(t *testing.T) {
 	if err = json.Unmarshal(b, &got); err != nil {
 		t.Fatal(err)
 	}
-	want := gateBudgets{Wall: 300, Steps: map[string]int{"plan": 25, "npm-r": 60, "pnpm-frontends-web": 60, "npm-electron": 60, "npm-tools-protoc-gen-es": 15, "generate": 60, "prewarm": 60, "docs": 60, "plan-2": 20, "build": 45, "test": 120, "typecheck": 120, "lint": 60, "proto": 15, "vet": 60, "migsafety": 10, "migorder": 15}}
+	want := gateBudgets{Wall: 300, Steps: map[string]int{"plan": 25, "npm-r": 60, "pnpm-frontends-web": 60, "npm-electron": 60, "npm-tools-protoc-gen-es": 15, "generate": 60, "prewarm": 60, "docs": 60, "plan-2": 20, "build": 45, "test": 120, "typecheck": 120, "demo": 150, "lint": 60, "proto": 15, "vet": 60, "migsafety": 10, "migorder": 15}}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("budget changed: got %+v want %+v; fix slow checks or move them to the release gate; do not raise the 300s target", got, want)
 	}
@@ -106,6 +106,7 @@ run_plan=$1
 gofull=false
 queue=0
 skip_lint=0
+skip_vet=0
 quarter=2
 pids=()
 phase() { printf 'phase: %s\n' "$1"; shift; "$@"; }
@@ -141,7 +142,7 @@ func TestMergeGateCoverageAndWiring(t *testing.T) {
 		return string(b)
 	}
 	merge, release := read("scripts/merge-gate.sh"), read("scripts/release-gate.sh")
-	for _, s := range []string{"plan -json", "-lanes \"$test_lanes\" -p", "test_lanes=go,electron", "phase docs gen_docs", "task generate:docs", "phase proto env CI_BASE=\"$base\" CI_QUEUE_ENTRY=\"$queue\" bash -c 'task proto:lint && scripts/check-compat.sh proto'", "phase migsafety env CI_BASE=\"$base\" CI_QUEUE_ENTRY=\"$queue\" bash -c", "scripts/check-compat.sh migrations", "phase vet", "gate-report", "summary.md"} {
+	for _, s := range []string{"plan -json", "-lanes \"$test_lanes\" -web-full reached -p", "phase demo demo_build", "--optional-deps-guard", "phase docs gen_docs", "task generate:docs", "phase proto env CI_BASE=\"$base\" CI_QUEUE_ENTRY=\"$queue\" bash -c 'task proto:lint && scripts/check-compat.sh proto'", "phase migsafety env CI_BASE=\"$base\" CI_QUEUE_ENTRY=\"$queue\" bash -c", "scripts/check-compat.sh migrations", "phase vet", "gate-report", "summary.md"} {
 		if !strings.Contains(merge, s) {
 			t.Errorf("merge missing %s", s)
 		}

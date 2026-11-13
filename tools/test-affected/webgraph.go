@@ -79,6 +79,70 @@ type WebGraph struct {
 	Text map[string]string
 	// Walkers are tests that read whole trees.
 	Walkers []string
+	// Demo is the forge demo bundle's module graph: every file reachable
+	// from demoEntry, each module that has a demo twin replaced by the twin
+	// (the original is kept as a member but not followed). Nil when the
+	// entry does not exist: then the plan cannot narrow the demo lane.
+	Demo map[string]bool
+}
+
+// demoEntry is the forge demo bundle's entry module (demo.html loads it;
+// frontends/web/vite.config.ts's demo target builds it).
+const demoEntry = "frontends/web/src/demoBundle/main.tsx"
+
+// demoTwin mirrors twinOf in frontends/web/vite-plugin-demo-bundle.ts: the demo
+// build replaces a module x.<ext> that has a sibling x.demo.<ext> (or
+// x.demo.ts, x.demo.tsx) with that sibling, for every importer.
+func demoTwin(f string, exists map[string]bool) (string, bool) {
+	ext := path.Ext(f)
+	switch ext {
+	case ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".mts", ".cts":
+	default:
+		return "", false
+	}
+	stem := strings.TrimSuffix(f, ext)
+	if strings.HasSuffix(stem, ".demo") {
+		return "", false
+	}
+	for _, e := range []string{ext, ".ts", ".tsx"} {
+		if exists[stem+".demo"+e] {
+			return stem + ".demo" + e, true
+		}
+	}
+	return "", false
+}
+
+// demoGraph is the closure of demoEntry over deps, with demo twins
+// substituted. Like the test graph it over-approximates: every quoted
+// specifier is an edge, so a file in it may never reach the bundle, but a
+// file the bundle contains is never missing from it.
+func demoGraph(deps map[string][]string, exists map[string]bool) map[string]bool {
+	if !exists[demoEntry] {
+		return nil
+	}
+	in := map[string]bool{demoEntry: true}
+	queue := []string{demoEntry}
+	for len(queue) > 0 {
+		f := queue[0]
+		queue = queue[1:]
+		for _, d := range deps[f] {
+			if in[d] {
+				continue
+			}
+			in[d] = true
+			// The original is a member (an edit to it is an edit to what a
+			// demo importer resolves through), but the bundle holds its twin.
+			if twin, ok := demoTwin(d, exists); ok {
+				if !in[twin] {
+					in[twin] = true
+					queue = append(queue, twin)
+				}
+				continue
+			}
+			queue = append(queue, d)
+		}
+	}
+	return in
 }
 
 // BuildWebGraph scans the frontends/web/ sources under root. files is every tracked or
@@ -140,6 +204,7 @@ func BuildWebGraph(files []string, read func(string) (string, bool)) *WebGraph {
 			}
 		}
 	}
+	wg.Demo = demoGraph(deps, exists)
 	for f := range wg.Reach {
 		sort.Strings(wg.Reach[f])
 	}
