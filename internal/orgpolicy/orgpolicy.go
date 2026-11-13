@@ -17,12 +17,16 @@
 // An answer is trusted for CacheTTL (30 s, the membership cache's bound), so
 // an admin's tightening reaches a run within CacheTTL plus its next decision
 // point. "No policy" is an answer like any other and is cached the same way.
-// A newer version is never replaced by an older one.
+// A newer version is never replaced by an older one: once a versioned policy
+// is known, an older answer, or a control plane that no longer has the rpc,
+// is a failed confirmation (below), never a fresh answer.
 //
 // ── WHEN CONTROL-PLANE CANNOT BE REACHED (D10) ───────────────────────
 //
 // The last good answer for the org keeps serving for up to Grace (10 min)
-// after it was fetched, marked Stale. Past that, Resolve FAILS CLOSED with
+// after it was last CONFIRMED, marked Stale. A failed fetch, an older version
+// than the one held, and (once a versioned policy is known) a control plane
+// without the rpc all fail to confirm it. Past that, Resolve FAILS CLOSED with
 // ErrUnavailable: the caller refuses the work retryably, never runs it
 // unconstrained. An org whose last answer was "no policy" is no exception:
 // within Grace it is still "no policy"; beyond it, it is unknown.
@@ -31,8 +35,9 @@
 //
 // A self-hosted deployment has no orgs and no policies: its Resolver is nil,
 // and a nil *Resolver answers "no policy" for every org. A control plane that
-// predates the rpc answers the same way (ErrUnsupported is "no policy"), the
-// pre-policy behaviour an old control plane implies (§7).
+// predates the rpc answers the same way (ErrUnsupported is "no policy") while
+// no versioned policy is known for the org, the pre-policy behaviour an old
+// control plane implies (§7).
 //
 // ── ON THE CONTEXT ────────────────────────────────────────────────────
 //
@@ -214,21 +219,25 @@ func (r *Resolver) fetch(ctx context.Context, orgID string, e *entry) (Policy, e
 	defer r.mu.Unlock()
 	e.inflight = nil
 	r.evictLocked(now, e)
+	known := !e.fetched.IsZero() && e.policy.Version > 0
 	switch {
+	case err == nil && known && got.Version < e.policy.Version:
+		// Versions only move forward. An answer older than the policy held
+		// confirms nothing: it is a failed confirmation, like an outage, so
+		// the held document keeps its fetched time and Grace runs out on it.
+		err = fmt.Errorf("control-plane answered version %d of a policy already known at version %d", got.Version, e.policy.Version)
 	case err == nil:
 		p := Policy{OrgID: orgID, Version: got.Version, Doc: got.Policy}
 		if p.Doc == nil {
 			p.Doc = &controlplanev1.OrgPolicy{}
 		}
-		// Versions only move forward: an answer older than the one held
-		// (a reply overtaken by a newer one) confirms nothing newer.
-		if !e.fetched.IsZero() && p.Version < e.policy.Version {
-			p = e.policy
-		}
 		e.policy, e.fetched, e.failed, e.retryAt = p, now, nil, time.Time{}
 		return p, nil
-	case errors.Is(err, accesstokenclient.ErrUnsupported):
-		// A control plane without the rpc has no policies (§7).
+	case errors.Is(err, accesstokenclient.ErrUnsupported) && !known:
+		// A control plane without the rpc has no policies (§7), as long as
+		// none is known. Once a versioned policy was read, the rpc going
+		// away (a control plane rolled back) is a failed confirmation below,
+		// never a silent "no policy".
 		e.policy, e.fetched, e.failed, e.retryAt = none(orgID), now, nil, time.Time{}
 		return e.policy, nil
 	case ctx.Err() != nil:

@@ -68,7 +68,12 @@ var userScopedReads = map[string]string{
 	// The account loader counts a grant only for a live member of the org,
 	// and only when it postdates their current membership (internal/llm/
 	// drivers, org-provider-accounts §3.3).
-	"ListMemberAccountGrants":      readCallersFilter,
+	"ListMemberAccountGrants": readCallersFilter,
+	// A project's moves span two orgs: ProjectService decides each with
+	// canReadMove (its owner or actor through authz.CanReadOwn on either org,
+	// or authz.RequireOrgAdmin of either), the list and a retried request alike.
+	"ListProjectOrgMoves":          readCallersFilter,
+	"FindProjectOrgMoveByRequest":  readCallersFilter,
 	"ListUnlaunchedTriggerEvents":  readCallersFilter,
 	"ListWorktreeRecoveries":       readCallersFilter,
 	"SearchChats":                  readCallersFilter,

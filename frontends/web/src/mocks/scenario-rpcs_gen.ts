@@ -311,7 +311,7 @@ export type ScenarioRpcHandlers =
   }
 
   // forge:section reliant.v1.ProjectService
-  // forge:hash=7c54acdd95380106349f9b50cd28dc15205ee596139feb48669f5f092a0bc724
+  // forge:hash=2e7e6a27ed635879a8218dd5f63ff80c1430148217aca32641f98b57eecf9a06
   & {
     "reliant.v1.ProjectService/CreateProject"?: (req: import("@/gen/reliant/v1/project_pb").CreateProjectRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/project_pb").CreateProjectResponseSchema>>;
     "reliant.v1.ProjectService/ListProjects"?: (req: import("@/gen/reliant/v1/project_pb").ListProjectsRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/project_pb").ListProjectsResponseSchema>>;
@@ -340,6 +340,9 @@ export type ScenarioRpcHandlers =
     "reliant.v1.ProjectService/DetachProjectFromDaemon"?: (req: import("@/gen/reliant/v1/project_pb").DetachProjectFromDaemonRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/project_pb").DetachProjectFromDaemonResponseSchema>>;
     "reliant.v1.ProjectService/RecloneProjectOnDaemon"?: (req: import("@/gen/reliant/v1/project_pb").RecloneProjectOnDaemonRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/project_pb").RecloneProjectOnDaemonResponseSchema>>;
     "reliant.v1.ProjectService/PreviewProjectOrgMove"?: (req: import("@/gen/reliant/v1/project_pb").PreviewProjectOrgMoveRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/project_pb").PreviewProjectOrgMoveResponseSchema>>;
+    "reliant.v1.ProjectService/MoveProjectToOrg"?: (req: import("@/gen/reliant/v1/project_pb").MoveProjectToOrgRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/project_pb").MoveProjectToOrgResponseSchema>>;
+    "reliant.v1.ProjectService/GetProjectOrgMove"?: (req: import("@/gen/reliant/v1/project_pb").GetProjectOrgMoveRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/project_pb").GetProjectOrgMoveResponseSchema>>;
+    "reliant.v1.ProjectService/ListProjectOrgMoves"?: (req: import("@/gen/reliant/v1/project_pb").ListProjectOrgMovesRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/project_pb").ListProjectOrgMovesResponseSchema>>;
   }
 
   // forge:section reliant.v1.ProviderAccountService

@@ -589,6 +589,7 @@ func (g *Graph) newTemporalWorker() (*workersetup.Worker, error) {
 		Membership: g.OrgResolver(),
 		// ... and the org policy resolver beside it (orgpolicy).
 		Policies: g.OrgPolicyResolver(),
+		Triggers: g.WorkerTrigger(),
 	})
 }
 
@@ -1237,6 +1238,10 @@ func (g *Graph) newProject() (*project.Service, error) {
 		Router:       g.APIDaemonRouter().NATSDaemonRouter,
 		ControlPlane: hostedControlPlane(g.ServerProcessConfig.GetControlPlane()),
 		Orgs:         g.OrgResolver(),
+		// Moving a project is off until control-plane's half is in prod and
+		// in the rollback target (orgs.project_moves_enabled).
+		OrgRollout: ProjectOrgRollout(g.ApiServerConfig),
+		Moves:      projectOrgMoveStarter{c: g.TemporalClient().Client},
 	})
 }
 

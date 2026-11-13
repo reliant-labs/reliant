@@ -307,3 +307,99 @@ func reasonOf(err error) string {
 	}
 	return ce.Meta().Get(svcerr.ReasonHeader)
 }
+
+// unsupported is a control plane without the rpc.
+var unsupported = fmt.Errorf("%w: ResolveOrgPolicy: unimplemented", accesstokenclient.ErrUnsupported)
+
+// failsToConfirm drives r on c through Grace of the v4 fetched at fetched,
+// while every later fetch fails to confirm it: each answer within Grace is the
+// held v4, Stale; past Grace the org's work fails closed.
+func failsToConfirm(t *testing.T, r *Resolver, c *clock, fetched time.Time) {
+	t.Helper()
+	start := c.now()
+	for c.now().Add(retryAfter).Before(fetched.Add(Grace)) {
+		c.advance(retryAfter)
+		p, err := r.Resolve(context.Background(), "org-a")
+		if err != nil || p.Version != 4 || !p.Stale || p.None() {
+			t.Fatalf("at +%s: %+v, %v; want the held v4, stale", c.now().Sub(start), p, err)
+		}
+	}
+	c.advance(2 * retryAfter)
+	if _, err := r.Resolve(context.Background(), "org-a"); !IsUnavailable(err) {
+		t.Fatalf("past grace: err = %v, want unavailable", err)
+	}
+}
+
+// Once a versioned policy is known, a control plane without the rpc (rolled
+// back) is a failed confirmation, never "no policy": the held document serves,
+// stale, until Grace runs out, then the org's work fails closed.
+func TestUnsupportedAfterAKnownPolicyFailsClosed(t *testing.T) {
+	t.Parallel()
+	src := &scripted{replies: []reply{{version: 4, doc: machines}, {err: unsupported}}}
+	r, c := newResolver(src)
+	fetched := c.now()
+	mustResolve(t, r, "org-a")
+	c.advance(CacheTTL - retryAfter)
+	failsToConfirm(t, r, c, fetched)
+}
+
+// Answers older than the policy held, repeated beyond Grace, confirm nothing:
+// the held document keeps its fetched time and the org's work fails closed.
+func TestRepeatedOlderVersionsFailClosedBeyondGrace(t *testing.T) {
+	t.Parallel()
+	src := &scripted{replies: []reply{{version: 4, doc: machines}, {version: 2}}}
+	r, c := newResolver(src)
+	fetched := c.now()
+	mustResolve(t, r, "org-a")
+	c.advance(CacheTTL - retryAfter)
+	failsToConfirm(t, r, c, fetched)
+}
+
+// perOrg answers each org with its own policy and records who was asked.
+type perOrg struct {
+	mu    sync.Mutex
+	asked []string
+}
+
+func (s *perOrg) ResolveOrgPolicy(_ context.Context, orgID string) (accesstokenclient.OrgPolicy, error) {
+	s.mu.Lock()
+	s.asked = append(s.asked, orgID)
+	s.mu.Unlock()
+	if orgID == "org-a" {
+		return accesstokenclient.OrgPolicy{Version: 9, Policy: machines}, nil
+	}
+	return accesstokenclient.OrgPolicy{}, nil
+}
+
+// The cache is partitioned by org: org A's policy is never served for org B,
+// fresh or stale, and asking about one org never answers another.
+func TestCacheIsPartitionedByOrg(t *testing.T) {
+	t.Parallel()
+	src := &perOrg{}
+	r, c := newResolver(src)
+	if p := mustResolve(t, r, "org-a"); p.Version != 9 || p.OrgID != "org-a" {
+		t.Fatalf("org-a = %+v", p)
+	}
+	if p := mustResolve(t, r, "org-b"); !p.None() || p.Version != 0 || p.OrgID != "org-b" {
+		t.Fatalf("org-b = %+v; org-a's policy leaked into it", p)
+	}
+	// From the cache too.
+	if p := mustResolve(t, r, "org-b"); !p.None() {
+		t.Fatalf("cached org-b = %+v", p)
+	}
+	if len(src.asked) != 2 || src.asked[0] != "org-a" || src.asked[1] != "org-b" {
+		t.Fatalf("asked %v, want org-a then org-b once each", src.asked)
+	}
+	// An org never answered is not answered from another org's entry, even
+	// while org-a's is held stale through an outage.
+	r2, c2 := newResolver(&scripted{replies: []reply{{version: 9, doc: machines}, {err: errDown}}})
+	mustResolve(t, r2, "org-a")
+	c2.advance(CacheTTL)
+	if p := mustResolve(t, r2, "org-a"); !p.Stale || p.Version != 9 {
+		t.Fatalf("org-a in the outage = %+v", p)
+	}
+	if p, err := r2.Resolve(context.Background(), "org-b"); err == nil || p.Version == 9 {
+		t.Fatalf("org-b in the outage = %+v, %v; want unavailable, never org-a's policy", p, err)
+	}
+	_ = c
+}

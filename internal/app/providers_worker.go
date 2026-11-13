@@ -46,6 +46,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/machinepool"
 	"github.com/reliant-labs/reliant/internal/natsutil"
+	"github.com/reliant-labs/reliant/internal/orgmove"
 	"github.com/reliant-labs/reliant/internal/orgpolicy"
 	"github.com/reliant-labs/reliant/internal/orgs"
 	"github.com/reliant-labs/reliant/internal/runs"
@@ -430,17 +431,24 @@ func NewWorkerTrigger(d WorkerTriggerDeps) (*WorkerTrigger, error) {
 	if githubAccess != nil {
 		access = map[string]trigger.IntegrationAccess{ghaccess.IntegrationID: gitHubAccess{githubAccess}}
 	}
+	// An org's linked GitHub App installations: a moved trigger bound to
+	// one resumes only when its new org has it linked (ResumeAfterOrgMove).
+	apps, err := gitTokens(d.ControlPlane)
+	if err != nil {
+		return nil, fmt.Errorf("trigger service: %w", err)
+	}
 	svc, err := trigger.New(trigger.Deps{
-		Logger:       d.Logger,
-		Config:       d.Config,
-		Repo:         repo,
-		Syncer:       syncer,
-		Fires:        fires,
-		ControlPlane: hostedControlPlane(d.ControlPlane),
-		Access:       access,
-		Integrations: d.Integrations.Config,
-		Sealer:       d.Vault,
-		Catalog:      d.Pollers,
+		OrgGitHubApps: apps,
+		Logger:        d.Logger,
+		Config:        d.Config,
+		Repo:          repo,
+		Syncer:        syncer,
+		Fires:         fires,
+		ControlPlane:  hostedControlPlane(d.ControlPlane),
+		Access:        access,
+		Integrations:  d.Integrations.Config,
+		Sealer:        d.Vault,
+		Catalog:       d.Pollers,
 		Intake: triggers.NewIntake(repo, temporalClient, v2workflow.SharedTaskQueue).
 			WithWorkflows(triggers.LaunchWorkflows{Repo: repo}).
 			WithPoolCatalogs(machinepool.Catalogs{R: repo}).
@@ -638,6 +646,32 @@ type TemporalWorkerDeps struct {
 	// Policies is the org policy resolver every activity carries
 	// (orgpolicy).
 	Policies *orgpolicy.Resolver
+	// Triggers turns a moved project's triggers back on in their new org
+	// (orgmove's ResumeTriggers step).
+	Triggers *WorkerTrigger
+}
+
+// workerOrgMoves is the steps of a project's move to another org on this
+// worker: nil, so the activities are not registered, without a control plane
+// signed as the internal service (it cannot Prepare, Abort or Record) or the
+// trigger service.
+func workerOrgMoves(d TemporalWorkerDeps) (orgmove.Service, error) {
+	if d.Router == nil || d.Router.ControlPlane == nil || d.Triggers == nil || d.Triggers.Service == nil {
+		return nil, nil
+	}
+	if ControlPlaneEndpoint(d.ControlPlane).InternalServiceSecret == "" {
+		return nil, nil
+	}
+	svc, err := orgmove.New(orgmove.Deps{
+		Logger:       slog.Default(),
+		Store:        d.DB,
+		ControlPlane: d.Router.ControlPlane,
+		Triggers:     d.Triggers.Service,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return orgmove.NewServiceWithForgeMiddleware(svc), nil
 }
 
 // HostedActions is the worker's hosted HTTP action executor: a separate
@@ -721,7 +755,12 @@ func NewTemporalWorker(d TemporalWorkerDeps) (*workersetup.Worker, error) {
 		slog.Default().Warn("stop nudges are DISABLED on this worker: pause and interrupt reach running activities on their next heartbeat",
 			"subject", stopnudge.Subject, "error", err)
 	}
+	moves, err := workerOrgMoves(d)
+	if err != nil {
+		return nil, err
+	}
 	worker, _, err := workersetup.NewWorker(&workersetup.Config{
+		OrgMoves:               moves,
 		StopNudges:             nudges,
 		AccountLimits:          d.Recorder.Recorder,
 		TemporalClient:         d.Temporal.Client,
