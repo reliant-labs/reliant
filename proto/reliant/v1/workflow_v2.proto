@@ -2198,6 +2198,28 @@ message Workflow {
   // and writes it into the outgoing request. A child workflow (a ref) declares
   // its own secrets.
   map<string, SecretDeclaration> secrets = 22;
+  // Attention correlates human action independently of lifecycle and outcome.
+  // Only root unattended launch runs apply it. Absent preserves legacy behavior.
+  WorkflowAttention attention = 23;
+}
+
+// WorkflowAttention declares explicit transitions for one owner/project incident.
+// Failures remain failed and still emit failure events. No implicit resolution:
+// a key-only observer opens attention on failure but success does not clear it.
+message WorkflowAttention {
+  // Required literal or template over finalized inputs, evaluated exactly once
+  // before graph execution. Must render a nonempty string of at most 512 bytes.
+  string key = 1;
+  // Absent, recovering, or action_required. Recovering needs recovery_timeout.
+  string on_start = 2;
+  // Go duration in [1s, 24h], allowed only with on_start: recovering. A fixed
+  // lease from immutable run start, never extended by activity retry.
+  string recovery_timeout = 3;
+  // Absent, resolved, or action_required. Only explicit resolved closes an
+  // incident on successful completion; crashes/cancellation can never resolve.
+  string on_success = 4;
+  // Absent (defaults to action_required), or action_required.
+  string on_failure = 5;
 }
 
 // SecretDeclaration says where a secret lives.

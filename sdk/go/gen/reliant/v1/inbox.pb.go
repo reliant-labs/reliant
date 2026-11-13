@@ -1023,6 +1023,12 @@ type InboxAutomationFailing struct {
 	Health *TriggerHealth         `protobuf:"bytes,1,opt,name=health,proto3" json:"health,omitempty"`
 	// The run to open: the newest launched firing's chat, when it still exists.
 	LastRunChatId *string `protobuf:"bytes,2,opt,name=last_run_chat_id,json=lastRunChatId,proto3,oneof" json:"last_run_chat_id,omitempty"`
+	// Set for attention-managed incidents; absent/empty retains legacy behavior.
+	IncidentKey    string `protobuf:"bytes,3,opt,name=incident_key,json=incidentKey,proto3" json:"incident_key,omitempty"`
+	AttentionState string `protobuf:"bytes,4,opt,name=attention_state,json=attentionState,proto3" json:"attention_state,omitempty"`
+	// unsuccessful, execution_error, or recovery_expired when known.
+	FailureClass  string `protobuf:"bytes,5,opt,name=failure_class,json=failureClass,proto3" json:"failure_class,omitempty"`
+	Detail        string `protobuf:"bytes,6,opt,name=detail,proto3" json:"detail,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1067,6 +1073,34 @@ func (x *InboxAutomationFailing) GetHealth() *TriggerHealth {
 func (x *InboxAutomationFailing) GetLastRunChatId() string {
 	if x != nil && x.LastRunChatId != nil {
 		return *x.LastRunChatId
+	}
+	return ""
+}
+
+func (x *InboxAutomationFailing) GetIncidentKey() string {
+	if x != nil {
+		return x.IncidentKey
+	}
+	return ""
+}
+
+func (x *InboxAutomationFailing) GetAttentionState() string {
+	if x != nil {
+		return x.AttentionState
+	}
+	return ""
+}
+
+func (x *InboxAutomationFailing) GetFailureClass() string {
+	if x != nil {
+		return x.FailureClass
+	}
+	return ""
+}
+
+func (x *InboxAutomationFailing) GetDetail() string {
+	if x != nil {
+		return x.Detail
 	}
 	return ""
 }
@@ -2031,10 +2065,14 @@ const file_reliant_v1_inbox_proto_rawDesc = "" +
 	"\x16InboxWaitingForMachine\x12\x1b\n" +
 	"\tdaemon_id\x18\x01 \x01(\tR\bdaemonId\x12\x1f\n" +
 	"\vdaemon_name\x18\x02 \x01(\tR\n" +
-	"daemonName\"\x8e\x01\n" +
+	"daemonName\"\x97\x02\n" +
 	"\x16InboxAutomationFailing\x121\n" +
 	"\x06health\x18\x01 \x01(\v2\x19.reliant.v1.TriggerHealthR\x06health\x12,\n" +
-	"\x10last_run_chat_id\x18\x02 \x01(\tH\x00R\rlastRunChatId\x88\x01\x01B\x13\n" +
+	"\x10last_run_chat_id\x18\x02 \x01(\tH\x00R\rlastRunChatId\x88\x01\x01\x12!\n" +
+	"\fincident_key\x18\x03 \x01(\tR\vincidentKey\x12'\n" +
+	"\x0fattention_state\x18\x04 \x01(\tR\x0eattentionState\x12#\n" +
+	"\rfailure_class\x18\x05 \x01(\tR\ffailureClass\x12\x16\n" +
+	"\x06detail\x18\x06 \x01(\tR\x06detailB\x13\n" +
 	"\x11_last_run_chat_id\"\xab\x01\n" +
 	"\x1fInboxAutomationDefinitionBroken\x12B\n" +
 	"\n" +
