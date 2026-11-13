@@ -19,6 +19,12 @@ import (
 
 type key struct{ userID, orgID string }
 
+// t0 is the tests' fixed "now": every sweep is given it as its clock, and
+// every fixture time is relative to it.
+var t0 = time.Date(2026, 11, 13, 12, 0, 0, 0, time.UTC)
+
+func fixedNow() time.Time { return t0 }
+
 // membership answers from a table; an absent pair is a non-member.
 type membership struct {
 	answers map[key]accesstokenclient.OrgMembership
@@ -123,7 +129,7 @@ func TestSweepStaleGrants_KeepsOnlyGrantsOfTheCurrentMembership(t *testing.T) {
 	ctx := context.Background()
 	f.orgKey("k1", "org-a")
 	f.orgKey("k2", "org-a")
-	rejoined := time.Date(2026, 11, 12, 9, 0, 0, 0, time.UTC)
+	rejoined := t0.Add(-24 * time.Hour)
 	before, after := rejoined.Add(-time.Hour), rejoined.Add(time.Hour)
 	f.grant("k1", "org-a", "rejoiner", before) // the first membership's: void
 	f.grant("k2", "org-a", "rejoiner", after)  // made after the rejoin: counts
@@ -137,16 +143,16 @@ func TestSweepStaleGrants_KeepsOnlyGrantsOfTheCurrentMembership(t *testing.T) {
 		{"old-cp", "org-a"}:    {OrgID: "org-a", Member: true, Role: "member"},
 		{"elsewhere", "org-a"}: {OrgID: "org-b", Member: true, Role: "member", MemberSince: after},
 	}}
-	// "late" is no member when asked, and is granted again while the answer is
-	// in flight: a rejoin and a grant the sweep must not judge on that answer.
+	// "late" is no member when asked (at t0), and is granted again just after:
+	// a rejoin and a grant the sweep must not judge on that answer.
 	regranted := false
 	m.during = func(userID, _ string) {
 		if userID == "late" && !regranted {
 			regranted = true
-			f.grant("k2", "org-a", "late", time.Now().Add(time.Second))
+			f.grant("k2", "org-a", "late", t0.Add(time.Second))
 		}
 	}
-	s := orgcredentials.New(orgcredentials.Deps{Store: f.env.Repo, Membership: m, GoneOrgs: &goneOrgs{}})
+	s := orgcredentials.New(orgcredentials.Deps{Store: f.env.Repo, Membership: m, GoneOrgs: &goneOrgs{}, Now: fixedNow})
 
 	n, err := s.SweepStaleGrants(ctx)
 	require.NoError(t, err)
@@ -164,9 +170,9 @@ func TestSweepStaleGrants_SweepsEveryPage(t *testing.T) {
 	f := newFixture(t)
 	f.orgKey("k1", "org-a")
 	for i := range 450 {
-		f.grant("k1", "org-a", fmt.Sprintf("u%03d", i), time.Now().Add(-time.Hour))
+		f.grant("k1", "org-a", fmt.Sprintf("u%03d", i), t0.Add(-time.Hour))
 	}
-	s := orgcredentials.New(orgcredentials.Deps{Store: f.env.Repo, Membership: &membership{}, GoneOrgs: &goneOrgs{}})
+	s := orgcredentials.New(orgcredentials.Deps{Store: f.env.Repo, Membership: &membership{}, GoneOrgs: &goneOrgs{}, Now: fixedNow})
 	n, err := s.SweepStaleGrants(context.Background())
 	require.NoError(t, err)
 	assert.EqualValues(t, 450, n)
@@ -183,10 +189,10 @@ func TestSweepStaleGrants_DeletesNothingItCannotJudge(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			f := newFixture(t)
 			f.orgKey("k1", "org-a")
-			f.grant("k1", "org-a", "a-first", time.Now().Add(-time.Hour))
-			f.grant("k1", "org-a", "b-second", time.Now().Add(-time.Hour))
+			f.grant("k1", "org-a", "a-first", t0.Add(-time.Hour))
+			f.grant("k1", "org-a", "b-second", t0.Add(-time.Hour))
 			m := &membership{errs: map[key]error{{"a-first", "org-a"}: err}}
-			s := orgcredentials.New(orgcredentials.Deps{Store: f.env.Repo, Membership: m, GoneOrgs: &goneOrgs{}})
+			s := orgcredentials.New(orgcredentials.Deps{Store: f.env.Repo, Membership: m, GoneOrgs: &goneOrgs{}, Now: fixedNow})
 			_, got := s.SweepStaleGrants(context.Background())
 			if name == "unsupported" {
 				assert.NoError(t, got)

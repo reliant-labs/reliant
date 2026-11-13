@@ -18,6 +18,9 @@ import (
 // docs/design/org-provider-accounts.md §3.3, §6): the stale-grant sweep's
 // reads and delete, and the gone-org purge.
 
+// credT0 is the fixed time every fixture here is stamped with.
+var credT0 = time.Date(2026, 11, 13, 12, 0, 0, 0, time.UTC)
+
 type credFixture struct {
 	t   *testing.T
 	env *storetest.Env
@@ -101,7 +104,7 @@ func TestListProviderAccountGrantMembers_PagesDistinctPairsInOrder(t *testing.T)
 	f.orgKey("k-a1", "org-a")
 	f.orgKey("k-a2", "org-a")
 	f.orgKey("k-b", "org-b")
-	now := time.Now().UTC()
+	now := credT0
 	f.grant("k-a1", "org-a", "u1", now)
 	f.grant("k-a2", "org-a", "u1", now) // the same member twice: one pair
 	f.grant("k-a1", "org-a", "u2", now)
@@ -152,7 +155,7 @@ func TestOrgCredentialHoldersAreWhatThePurgeClears(t *testing.T) {
 	f.orgKey("k-key", "o-key")
 	f.personal("p-seat", "member", "o-seat", "workspace")
 	f.orgKey("k-grant-host", "o-key")
-	f.grant("k-grant-host", "o-grant", "member", time.Now())
+	f.grant("k-grant-host", "o-grant", "member", credT0)
 	f.workspace("o-ws", "claude-org-uuid")
 	f.exec(`INSERT INTO connections (id, owner_kind, user_id, org_id, integration_id, auth_kind, name, status)
 		VALUES ('c-conn', 'org', 'admin', 'o-conn', 'slack', 'api_key', 'Bot', 'active')`)
@@ -195,7 +198,7 @@ func TestOrgCredentialHoldersAreWhatThePurgeClears(t *testing.T) {
 func TestPurgeOrgCredentials_RemovesTheOrgsAndOnlyTheOrgs(t *testing.T) {
 	f := newCredFixture(t)
 	ctx := context.Background()
-	now := time.Now().UTC()
+	now := credT0
 	for _, org := range []string{"org-gone", "org-live"} {
 		f.orgKey("k-"+org, org)
 		f.grant("k-"+org, org, "member", now)

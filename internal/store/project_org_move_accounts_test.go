@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/orm"
@@ -33,7 +32,7 @@ const (
 
 func (f *credFixture) mvProject(id string) {
 	f.t.Helper()
-	now := time.Now().UTC()
+	now := credT0
 	org := mvSrc
 	require.NoError(f.t, f.env.Repo.CreateProject(context.Background(), &db.Project{
 		ID: id, Name: id, Path: "/tmp/" + id, UserID: mvOwner, OrgID: &org,
@@ -46,7 +45,7 @@ func (f *credFixture) mvProject(id string) {
 func (f *credFixture) mvChat(id, projectID string) {
 	f.t.Helper()
 	ctx := context.Background()
-	now := time.Now().UTC()
+	now := credT0
 	org := mvSrc
 	require.NoError(f.t, f.env.Repo.CreateChat(ctx, &db.Chat{
 		ID: id, Title: id, ProjectID: projectID, UserID: mvOwner, OrgID: &org,
@@ -60,7 +59,7 @@ func (f *credFixture) mvTrigger(id, projectID string) {
 	f.t.Helper()
 	config, err := json.Marshal(core.ScheduleConfig{Cron: []string{"0 9 * * 1-5"}, Timezone: "UTC", Overlap: core.ScheduleOverlapSkip})
 	require.NoError(f.t, err)
-	now := time.Now().UTC()
+	now := credT0
 	org := mvSrc
 	require.NoError(f.t, f.env.Repo.CreateTrigger(context.Background(), &core.Trigger{
 		ID: id, UserID: mvOwner, ProjectID: projectID, Name: id, Kind: core.TriggerKindSchedule,
