@@ -552,14 +552,18 @@ func orgBoundConnections(ctx context.Context, db orm.Context, triggers []*core.T
 }
 
 // boundToOrgInstallation reports whether a trigger listens through an org's
-// GitHub App installation (core.ActivationInstallationKey in its config).
+// GitHub App installation (core.IntegrationConfig.Installation). It only
+// reads the binding: the gated bind stays its one writer.
 func boundToOrgInstallation(t *core.Trigger) bool {
-	var cfg map[string]any
+	// Only the one key is decoded, so another trigger kind's config shape
+	// cannot fail the read.
+	var cfg struct {
+		Installation string `json:"installation"`
+	}
 	if json.Unmarshal(t.Config, &cfg) != nil {
 		return false
 	}
-	installation, _ := cfg[core.ActivationInstallationKey].(string)
-	return installation != ""
+	return cfg.Installation != ""
 }
 
 const projectOrgMoveCountsSQL = `
