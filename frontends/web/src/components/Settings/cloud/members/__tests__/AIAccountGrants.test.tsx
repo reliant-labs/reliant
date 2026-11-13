@@ -39,8 +39,9 @@ const member = (externalId: string, name: string): OrgMember => ({
 });
 const members = [member("u-dana", "Dana"), member("u-eli", "Eli")];
 
+let qc: QueryClient;
 function renderGrid() {
-  const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+  qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
   return render(
     <QueryClientProvider client={qc}>
       <AIAccountGrants org={org} members={members} />
@@ -108,7 +109,7 @@ describe("AIAccountGrants", () => {
   it("shows nothing to a member", async () => {
     mocks.isAdmin = false;
     const { container } = renderGrid();
-    await new Promise((r) => setTimeout(r, 20));
+    await waitFor(() => expect(qc.getQueryCache().getAll().every((q) => q.state.status === "success")).toBe(true));
     expect(container).toBeEmptyDOMElement();
   });
 });

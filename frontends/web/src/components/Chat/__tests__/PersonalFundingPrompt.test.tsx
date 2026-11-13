@@ -12,7 +12,7 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { create } from "@bufbuild/protobuf";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { setTransport } from "@/lib/connect";
 import { mockTransport } from "@/lib/test-utils";
@@ -54,7 +54,10 @@ vi.mock("sonner", () => ({ toast: { success: vi.fn(), info: vi.fn(), error: vi.f
 
 import { PersonalFundingPrompt, FundingReviewLink } from "../PersonalFundingPrompt";
 
-const reset = new Date(Date.now() + 2 * 3600_000);
+// A fixed clock (only Date is faked, so the queries' timers run): the reset is
+// two hours after it, on the same day in every time zone the CI runs in.
+const NOW = new Date("2026-11-13T10:00:00Z");
+const reset = new Date(NOW.getTime() + 2 * 3600_000);
 
 function question(reason: PersonalFundingQuestion_Reason, extra: Record<string, unknown> = {}) {
   return create(PersonalFundingQuestionSchema, {
@@ -81,7 +84,13 @@ function renderPrompt() {
   );
 }
 
+afterEach(() => {
+  vi.useRealTimers();
+});
+
 beforeEach(() => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(NOW);
   mocks.resolve.mockReset();
   usePersonalFundingPrompt.setState({ openFor: null, closed: {} });
   settingsSync.updateCache(ORG_FUNDING_KEY, "");
@@ -182,9 +191,7 @@ describe("PersonalFundingPrompt", () => {
   it("shows nothing for a chat with no question, or one already answered", async () => {
     mocks.question = question(PersonalFundingQuestion_Reason.LIMITED, { state: PersonalFundingQuestion_State.USE_PERSONAL });
     renderPrompt();
-    await act(async () => {
-      await new Promise((r) => setTimeout(r, 20));
-    });
+    await waitFor(() => expect(qc.getQueryCache().getAll().every((q) => q.state.status === "success")).toBe(true));
     expect(screen.queryByTestId("personal-funding-prompt")).toBeNull();
     expect(screen.queryByTestId("funding-review")).toBeNull();
   });

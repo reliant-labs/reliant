@@ -9,6 +9,7 @@ import (
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/llm/drivers"
 )
 
 // GetChatProviderAccount returns the account the chat's root thread is using now: the one that
@@ -59,13 +60,16 @@ func (s *Service) GetChatProviderAccount(
 	now := time.Now()
 	render := func(acct core.ProviderAccount) *pb.ProviderAccount { return proto(acct, limits, now) }
 	// A chat of an org may run on one of the org's own accounts: it is looked up there too, and
-	// shown as a member sees it (never its key hint).
+	// shown as a member sees it (never its key hint). Only the accounts the caller may use in the
+	// org now count, by the rule routing applies (a live member the account's audience admits):
+	// a stale assignment to a key they lost, or of an org they left, names nothing.
 	if chat.OrgID != nil && *chat.OrgID != "" {
 		owner := core.OrgAccountOwner(*chat.OrgID)
 		orgAccounts, err := s.deps.Store.ListOwnedProviderAccounts(ctx, owner)
 		if err != nil {
 			return nil, svcerr.Wrap(err)
 		}
+		orgAccounts = drivers.UsableOrgAccounts(ctx, s.deps.Store, userID, *chat.OrgID, orgAccounts)
 		if len(orgAccounts) > 0 {
 			orgLimits, err := s.deps.Store.ListOwnedAccountLimits(ctx, owner)
 			if err != nil {

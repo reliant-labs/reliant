@@ -5,7 +5,7 @@
  * account the org pays for, and is absent on the person's own.
  */
 
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -44,12 +44,17 @@ describe("FundingBadge", () => {
   beforeEach(() => {
     setTransport(mockTransport({ "ProviderAccountService.GetChatProviderAccount": () => ({ account: mocks.account }) }));
   });
-  const renderBadge = () =>
-    render(
-      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+  let qc: QueryClient;
+  const renderBadge = () => {
+    qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    return render(
+      <QueryClientProvider client={qc}>
         <FundingBadge chatId="chat-1" />
       </QueryClientProvider>,
     );
+  };
+  /** The chat's account has been read (the badge decided on an answer, not on a pending read). */
+  const answered = () => waitFor(() => expect(qc.getQueryCache().getAll().every((q) => q.state.status === "success")).toBe(true));
 
   it("shows the org's key a chat runs on", async () => {
     mocks.account = { id: "k1", provider: "anthropic", providerDisplayName: "Anthropic API", label: "Acme prod", funding: ProviderAccountFunding.ORG_KEY, fundingOrgId: "org-a" };
@@ -60,7 +65,7 @@ describe("FundingBadge", () => {
   it("is absent on the person's own account", async () => {
     mocks.account = { id: "p1", provider: "claude", providerDisplayName: "Claude subscription", label: "me", funding: ProviderAccountFunding.PERSONAL };
     renderBadge();
-    await new Promise((r) => setTimeout(r, 20));
+    await answered();
     expect(screen.queryByTestId("funding-badge")).toBeNull();
   });
 });
