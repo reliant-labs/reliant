@@ -53,6 +53,11 @@ type Deps struct {
 	// Temporal — refuses MoveProjectToOrg.
 	// forge:optional-dep
 	Moves MoveStarter
+	// MoveFacts is control-plane's half of PreviewProjectOrgMove, signed as
+	// the internal service. Nil (self-hosted, or no internal-service
+	// identity) previews those facts as unknown.
+	// forge:optional-dep
+	MoveFacts MoveFacts
 }
 
 // validateDeps returns an error if any required Deps field is nil. The

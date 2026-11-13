@@ -114,12 +114,16 @@ export function effectLines(e: ProjectOrgMoveEffects | undefined, fromName: stri
     lines.push(`${plural(e.secretAccessToRevoke, "secret-access entry", "secret-access entries")} of ${fromName} for this project ${e.secretAccessToRevoke === 1 ? "is" : "are"} revoked.`);
   }
   if (e.forgeProjectName) {
+    // Control-plane says whether the source hosts a deployment of that name;
+    // without its answer, say what happens if it does.
+    const staying = e.hostedProjectsStaying.includes(e.forgeProjectName);
     lines.push(
-      `It deploys as ${e.forgeProjectName}: a hosted deployment of that name stays in ${fromName}, and the next deploy goes to ${toName}.`,
+      !e.controlPlaneEffectsKnown
+        ? `It deploys as ${e.forgeProjectName}: a hosted deployment of that name stays in ${fromName}, and the next deploy goes to ${toName}.`
+        : staying
+          ? `It deploys as ${e.forgeProjectName}: its hosted deployment stays in ${fromName}, and the next deploy goes to ${toName}.`
+          : `It deploys as ${e.forgeProjectName}, which ${fromName} does not host; the next deploy goes to ${toName}.`,
     );
-  }
-  if (e.hostedProjectsStaying.length > 0) {
-    lines.push(`Hosted projects that stay in ${fromName}: ${e.hostedProjectsStaying.join(", ")}.`);
   }
   if (e.machines.length > 0) {
     const elsewhere = e.machines.filter((m) => m.inTargetOrg === false).length;

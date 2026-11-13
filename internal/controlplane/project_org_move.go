@@ -21,6 +21,7 @@ const (
 	projectOrgMovePreparePath = "/controlplane.v1.ProjectOrgMoveInternalService/PrepareProjectOrgMove"
 	projectOrgMoveAbortPath   = "/controlplane.v1.ProjectOrgMoveInternalService/AbortProjectOrgMove"
 	projectOrgMoveRecordPath  = "/controlplane.v1.ProjectOrgMoveInternalService/RecordProjectOrgMove"
+	projectOrgMovePreviewPath = "/controlplane.v1.ProjectOrgMoveInternalService/PreviewProjectOrgMove"
 )
 
 // Reasons control-plane refuses a move step for (x-forge-error-reason).
@@ -101,6 +102,69 @@ func (c *client) RecordProjectOrgMove(ctx context.Context, s ProjectOrgMoveStep,
 	}
 	in["counts"] = wire
 	return c.projectOrgMoveCall(ctx, projectOrgMoveRecordPath, in, nil)
+}
+
+// ProjectOrgMovePreviewQuery is a move being previewed: no move id yet.
+type ProjectOrgMovePreviewQuery struct {
+	ProjectID, FromOrgID, ToOrgID string
+	// ActorUserID is the person asking, the project's owner.
+	ActorUserID string
+	// ForgeProjectName is the forge project the project deploys as; "" for
+	// none.
+	ForgeProjectName string
+	// DaemonIDs are the machines the project uses (at most 200).
+	DaemonIDs []string
+}
+
+// ProjectOrgMovePreview is what control-plane holds that the move would
+// touch (PreviewProjectOrgMove).
+type ProjectOrgMovePreview struct {
+	// SecretAccessToRevoke counts the source org's secret-access entries for
+	// the project, legacy hosted-use grants included: what Prepare revokes.
+	SecretAccessToRevoke int
+	// HostedProjectsStaying are the source org's hosted projects the project
+	// deploys as; they stay in the source org.
+	HostedProjectsStaying []string
+	// TargetFunded is whether the target org can pay for the next run; nil
+	// when control-plane could not tell.
+	TargetFunded *bool
+	// InTargetOrg is, for each machine control-plane knows an org for,
+	// whether that org is the target. Others are absent (unknown).
+	InTargetOrg map[string]bool
+}
+
+// PreviewProjectOrgMove reads what control-plane holds that the move would
+// touch. It checks q.ActorUserID's authority as PrepareProjectOrgMove does.
+// A control plane that predates the rpc is ErrProjectOrgMoveUnsupported.
+func (c *client) PreviewProjectOrgMove(ctx context.Context, q ProjectOrgMovePreviewQuery) (*ProjectOrgMovePreview, error) {
+	in := map[string]any{
+		"projectId": q.ProjectID, "fromOrgId": q.FromOrgID, "toOrgId": q.ToOrgID,
+		"actorUserId": q.ActorUserID, "forgeProjectName": q.ForgeProjectName,
+		"daemonIds": append([]string{}, q.DaemonIDs...),
+	}
+	var out struct {
+		SecretAccessToRevoke     int      `json:"secretAccessToRevoke"`
+		HostedHTTPGrantsToRevoke int      `json:"hostedHttpGrantsToRevoke"`
+		HostedProjectsStaying    []string `json:"hostedProjectsStaying"`
+		TargetFunded             *bool    `json:"targetFunded"`
+		Machines                 []struct {
+			DaemonID    string `json:"daemonId"`
+			InTargetOrg bool   `json:"inTargetOrg"`
+		} `json:"machines"`
+	}
+	if err := c.projectOrgMoveCall(ctx, projectOrgMovePreviewPath, in, &out); err != nil {
+		return nil, err
+	}
+	p := &ProjectOrgMovePreview{
+		SecretAccessToRevoke:  out.SecretAccessToRevoke + out.HostedHTTPGrantsToRevoke,
+		HostedProjectsStaying: out.HostedProjectsStaying,
+		TargetFunded:          out.TargetFunded,
+		InTargetOrg:           make(map[string]bool, len(out.Machines)),
+	}
+	for _, m := range out.Machines {
+		p.InTargetOrg[m.DaemonID] = m.InTargetOrg
+	}
+	return p, nil
 }
 
 func moveStepJSON(s ProjectOrgMoveStep) map[string]any {
