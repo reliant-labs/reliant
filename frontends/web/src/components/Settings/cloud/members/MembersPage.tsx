@@ -9,6 +9,10 @@
  *                are presets of grants, and a grant can be edited one at a time
  *   Activity     who created, invited, joined, left, was removed or changed
  *                role (admins and owners)
+ *   Automations  the automations and saved workflows of people who left, to
+ *                adopt, offer to a member, or fork (admins and owners;
+ *                OrphanedAutomations). A member offered one sees it on the
+ *                Members tab (TriggerOffers).
  *
  * Membership administration is gated on the caller's ROLE in the org (admin or
  * owner), never on a grant; only an owner touches owners. The controls a
@@ -33,10 +37,12 @@ import { MemberPermissions } from "../MemberPermissions";
 import { InviteDialog } from "./InviteDialog";
 import { MemberRoster } from "./MemberRoster";
 import { MembershipActivity } from "./MembershipActivity";
+import { OrphanedAutomations } from "./OrphanedAutomations";
 import { PendingInvitations } from "./PendingInvitations";
 import { LeaveOrganization } from "./LeaveOrganization";
 import { useMembers } from "./useMembers";
 import { SeatCount } from "./SeatCount";
+import { TriggerOffers } from "./TriggerOffers";
 
 export function MembersPage() {
   const { active, isLoading } = useActiveOrg();
@@ -53,7 +59,7 @@ export function MembersPage() {
   return <OrgMembersPage key={active.id} org={active} />;
 }
 
-type TabId = "members" | "permissions" | "activity";
+type TabId = "members" | "permissions" | "activity" | "automations";
 
 function OrgMembersPage({ org }: { org: MyOrg }) {
   const isAdmin = canAdministerMembers(org.role);
@@ -61,11 +67,12 @@ function OrgMembersPage({ org }: { org: MyOrg }) {
   const [inviteOpen, setInviteOpen] = useState(false);
   const members = useMembers(org.id);
   const seats = members.data?.pages[0]?.seats ?? null;
+  const roster = members.data?.pages.flatMap((p) => p.members) ?? [];
 
   const tabs = [
     { id: "members", label: "Members" },
     { id: "permissions", label: "Permissions" },
-    ...(isAdmin ? [{ id: "activity", label: "Activity" }] : []),
+    ...(isAdmin ? [{ id: "activity", label: "Activity" }, { id: "automations", label: "Automations" }] : []),
   ];
 
   return (
@@ -87,13 +94,15 @@ function OrgMembersPage({ org }: { org: MyOrg }) {
 
       {tab === "members" && (
         <div className="space-y-6">
+          <TriggerOffers org={org} members={roster} />
           <MemberRoster org={org} query={members} />
           {isAdmin && <PendingInvitations org={org} />}
           <LeaveOrganization org={org} />
         </div>
       )}
       {tab === "permissions" && <MemberPermissions embedded />}
-      {tab === "activity" && isAdmin && <MembershipActivity org={org} members={members.data?.pages.flatMap((p) => p.members) ?? []} />}
+      {tab === "activity" && isAdmin && <MembershipActivity org={org} members={roster} />}
+      {tab === "automations" && isAdmin && <OrphanedAutomations org={org} members={roster} />}
 
       {isAdmin && <InviteDialog open={inviteOpen} onClose={() => setInviteOpen(false)} org={org} seats={seats} />}
     </div>
