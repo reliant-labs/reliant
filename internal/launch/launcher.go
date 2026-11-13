@@ -59,6 +59,9 @@ type Launcher struct {
 	threads   ThreadCreator
 	taskQueue string
 	pinner    ChatPinner
+	// sources reads an org-accounts-only launch's sources
+	// (checkOrgAccountsOnly); nil is drivers.LookupAvailableDrivers.
+	sources orgSources
 }
 
 // ChatPinner decides which machine a chat that names none runs on, so the
@@ -395,6 +398,9 @@ func (l *Launcher) launchNew(ctx context.Context, ev Event, spec Spec, seed seed
 	// Build and validate workflow inputs BEFORE creating chat
 	initialData, err := l.buildInputs(ctx, userID, chat, workflowName, spec.CatalogPin, spec.Presets, spec.Params)
 	if err != nil {
+		return nil, err
+	}
+	if err := l.checkOrgAccountsOnly(ctx, spec, chat, initialData); err != nil {
 		return nil, err
 	}
 
@@ -756,7 +762,11 @@ func (l *Launcher) launchPending(ctx context.Context, ev Event, spec Spec, seed 
 	}
 	{
 		_, presets, _ := effectiveStart(chat, spec)
-		if _, err := l.buildInputs(ctx, userID, &checked, workflowName, spec.CatalogPin, presets, spec.Params); err != nil {
+		inputs, err := l.buildInputs(ctx, userID, &checked, workflowName, spec.CatalogPin, presets, spec.Params)
+		if err != nil {
+			return nil, err
+		}
+		if err := l.checkOrgAccountsOnly(ctx, spec, &checked, inputs); err != nil {
 			return nil, err
 		}
 	}
