@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/authz"
+	"github.com/reliant-labs/reliant/internal/chatproto"
 	"github.com/reliant-labs/reliant/internal/ptr"
 
 	"connectrpc.com/connect"
@@ -31,6 +32,9 @@ func (s *Service) ListStepExecutions(
 	req *connect.Request[reliantv1.ListStepExecutionsRequest],
 ) (*connect.Response[reliantv1.ListStepExecutionsResponse], error) {
 	userID := auth.MustGetUserID(ctx)
+	// Serves viewers of a shared chat, without what a step produced
+	// (chatproto.ElideStepsForViewer).
+	ctx = authz.WithViewerReads(ctx)
 
 	if req.Msg.ChatId == "" {
 		return nil, svcerr.InvalidArgument("chat_id is required")
@@ -41,7 +45,8 @@ func (s *Service) ListStepExecutions(
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}
-	if !authz.CanReadChat(ctx, userID, chat) {
+	access, denied := authz.ReadChatAccess(ctx, userID, chat)
+	if denied != nil {
 		return nil, svcerr.NotFound("chat")
 	}
 
@@ -58,6 +63,9 @@ func (s *Service) ListStepExecutions(
 	executions := make([]*reliantv1.StepExecution, len(rows))
 	for i, row := range rows {
 		executions[i] = stepExecutionRecordToProto(row)
+	}
+	if access.Viewer() {
+		chatproto.ElideStepsForViewer(executions)
 	}
 	return connect.NewResponse(&reliantv1.ListStepExecutionsResponse{
 		StepExecutions: executions,

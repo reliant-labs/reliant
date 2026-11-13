@@ -86,6 +86,41 @@ type Connection struct {
 	DeletedAt       *time.Time
 }
 
+// ConnectionOwner is who a connection belongs to: a person (Kind
+// ConnectionOwnerUser, ID their user id) or an organization (Kind
+// ConnectionOwnerOrg, ID its org id). Every store read that takes one scopes
+// to that owner in SQL, so an org's connection is never read as a person's,
+// even its creator's, nor a person's as an org's.
+type ConnectionOwner struct {
+	Kind string
+	ID   string
+}
+
+// UserConnectionOwner is the owner of userID's personal connections.
+func UserConnectionOwner(userID string) ConnectionOwner {
+	return ConnectionOwner{Kind: ConnectionOwnerUser, ID: userID}
+}
+
+// OrgConnectionOwner is the owner of orgID's connections.
+func OrgConnectionOwner(orgID string) ConnectionOwner {
+	return ConnectionOwner{Kind: ConnectionOwnerOrg, ID: orgID}
+}
+
+// Owner is who c belongs to. An org row's user_id is only the admin who
+// created it (attribution), never its owner.
+func (c *Connection) Owner() ConnectionOwner {
+	if c.OwnerKind == ConnectionOwnerOrg {
+		// The schema's CHECK guarantees an org id; were it ever missing, the
+		// empty id matches no row rather than falling back to the creator.
+		var org string
+		if c.OrgID != nil {
+			org = *c.OrgID
+		}
+		return OrgConnectionOwner(org)
+	}
+	return UserConnectionOwner(c.UserID)
+}
+
 // ConnectionSecret is one sealed field of a connection.
 type ConnectionSecret struct {
 	ConnectionID string
@@ -126,6 +161,9 @@ type OAuthFlow struct {
 	// the client that started the flow can finish it.
 	ReturnTo  string
 	ExpiresAt time.Time
+	// OrgID is the organization the flow connects for (an org-owned
+	// connection), or "" for the user's own.
+	OrgID string
 }
 
 // ConnectionUpdate is what a successful (re)authorization writes onto an

@@ -83,6 +83,22 @@ type Service interface {
 	// ErrNotConnected / ErrNeedsReconnect (the user has no usable GitHub token
 	// to prove push access with). Anything else is transient.
 	MintInstallationToken(ctx context.Context, req InstallationRequest) (InstallationToken, error)
+
+	// ListOrgGitHubInstallations lists the GitHub App installations an org
+	// has linked (control-plane OrganizationService.LinkGitHubAppInstallation):
+	// ids and account names, no credential. The caller decides who may see
+	// them (a live member of the org). A control plane from before org
+	// installations answers Unimplemented, which is an *RPCError.
+	ListOrgGitHubInstallations(ctx context.Context, orgID string) ([]OrgInstallation, error)
+}
+
+// OrgInstallation is one GitHub App installation linked to an org.
+type OrgInstallation struct {
+	InstallationID int64
+	AccountLogin   string
+	AccountType    string
+	// Suspended: GitHub reports it suspended, so nothing is minted through it.
+	Suspended bool
 }
 
 // InstallationRequest names what an installation token is for.
@@ -96,6 +112,12 @@ type InstallationRequest struct {
 	// Permissions narrows the token (issues, pull_requests, contents ->
 	// read|write). Empty means control-plane's default: all three at write.
 	Permissions map[string]string
+	// OrgID, when set, mints through the org's own linked installation only:
+	// the repository's installation must be linked to the org
+	// (ErrAppNotLinked) and the user a live member of it (ErrNotOrgMember).
+	// The user's push access gates it exactly as without it. Empty is any
+	// installation of the App, as before org installations.
+	OrgID string
 }
 
 // InstallationToken is a minted installation token and who it speaks as.
@@ -113,6 +135,9 @@ type InstallationToken struct {
 	ActingForLogin string
 	// Repository is "owner/name" as the token is scoped.
 	Repository string
+	// InstallationID is the App installation the token was minted through.
+	// Zero from a control plane that does not report it.
+	InstallationID int64
 }
 
 // Signer mints the internal-service bearer for each call.
@@ -150,6 +175,11 @@ var (
 	// ErrOwnerCannotPush: the user the automation acts for does not have push
 	// access to the repository.
 	ErrOwnerCannotPush = svcerr.WithClass(errors.New("gitcredentialclient: the owner cannot push to the repository"), svcerr.ClassUser)
+	// ErrAppNotLinked: a mint for an org found the repository's installation
+	// not linked to that org (or suspended); an org admin links it.
+	ErrAppNotLinked = svcerr.WithClass(errors.New("gitcredentialclient: the repository's GitHub App installation is not linked to the organization"), svcerr.ClassUser)
+	// ErrNotOrgMember: a mint for an org whose user is not a live member.
+	ErrNotOrgMember = svcerr.WithClass(errors.New("gitcredentialclient: the user is not a member of the organization"), svcerr.ClassUser)
 )
 
 // User errors too, for the same reason as the App outcomes above.

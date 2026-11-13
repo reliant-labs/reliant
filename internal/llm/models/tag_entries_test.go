@@ -359,7 +359,7 @@ func TestClone_CarriesTagEntriesIndependently(t *testing.T) {
 
 	require.NoError(t, cloned.applyUserTags(map[string][]TagEntry{TagPowerful: {{Model: "gpt-5.5"}}}))
 	assert.Equal(t, "gpt-5.5", cloned.TagEntries(TagPowerful)[0].Model)
-	assert.Equal(t, "claude-5.1-fable", original.TagEntries(TagPowerful)[0].Model)
+	assert.Equal(t, "claude-5.2-fable", original.TagEntries(TagPowerful)[0].Model)
 }
 
 // ClampThinkingLevel walks DOWN to the nearest supported level rather than

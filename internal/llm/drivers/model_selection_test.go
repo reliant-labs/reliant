@@ -118,10 +118,10 @@ func TestValidateModelSelector_EmptySelector(t *testing.T) {
 	// Empty selector is valid - will use default at runtime
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, "test-user")
 
-	err := ValidateModelSelector(ctx, "test-user", models.ModelSelector{})
+	err := ValidateModelSelector(ctx, PersonalScope("test-user"), models.ModelSelector{})
 	assert.NoError(t, err, "Empty selector should be valid")
 
-	err = ValidateModelSelector(ctx, "test-user", map[string]interface{}{})
+	err = ValidateModelSelector(ctx, PersonalScope("test-user"), map[string]interface{}{})
 	assert.NoError(t, err, "Empty map should be valid")
 }
 
@@ -139,7 +139,7 @@ func TestValidateModelSelector_LocalModelNeedsNoAPIKey(t *testing.T) {
 		"bare @local id":      {ID: "qwen3:latest@local"},
 	} {
 		t.Run(name, func(t *testing.T) {
-			assert.NoError(t, ValidateModelSelector(ctx, "user-with-no-keys", sel))
+			assert.NoError(t, ValidateModelSelector(ctx, PersonalScope("user-with-no-keys"), sel))
 		})
 	}
 }
@@ -156,7 +156,7 @@ func TestValidateModelSelector_NoAPIKeysConfigured(t *testing.T) {
 		ID: "claude-sonnet-4-20250514",
 	}
 
-	err := ValidateModelSelector(ctx, "user-with-no-keys", selector)
+	err := ValidateModelSelector(ctx, PersonalScope("user-with-no-keys"), selector)
 
 	// We expect an error because no API keys are configured in test context
 	// The exact error depends on whether the test environment has any keys
@@ -171,19 +171,19 @@ func TestValidateModelSelector_NonEmptySelectorReturnsError(t *testing.T) {
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, "test-user")
 
 	// Test with an actual model ID
-	err := ValidateModelSelector(ctx, "test-user", models.ModelSelector{
+	err := ValidateModelSelector(ctx, PersonalScope("test-user"), models.ModelSelector{
 		ID: "claude-sonnet-4-20250514",
 	})
 	require.Error(t, err, "Should fail when no API keys are configured")
 
 	// Test with map format (how inputs typically come from workflow params)
-	err = ValidateModelSelector(ctx, "test-user", map[string]interface{}{
+	err = ValidateModelSelector(ctx, PersonalScope("test-user"), map[string]interface{}{
 		"id": "claude-sonnet-4-20250514",
 	})
 	require.Error(t, err, "Should fail with map format when no API keys")
 
 	// Test with tags
-	err = ValidateModelSelector(ctx, "test-user", models.ModelSelector{
+	err = ValidateModelSelector(ctx, PersonalScope("test-user"), models.ModelSelector{
 		Tags: []string{"flagship"},
 	})
 	require.Error(t, err, "Should fail with tags when no API keys")
@@ -197,7 +197,7 @@ func TestValidateModelSelector_ErrorMessageGuidance(t *testing.T) {
 		ID: "claude-sonnet-4-20250514",
 	}
 
-	err := ValidateModelSelector(ctx, "test-user", selector)
+	err := ValidateModelSelector(ctx, PersonalScope("test-user"), selector)
 	require.Error(t, err)
 
 	// Error should mention Settings or API key - guiding user to fix the issue

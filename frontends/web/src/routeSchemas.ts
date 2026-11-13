@@ -12,6 +12,7 @@
  */
 
 import { z } from "zod";
+import { START_VALUES } from "./components/Apps/appStart";
 import type { LaunchPlan } from "./components/OnboardingFlow/types";
 import { DASHBOARD_GROUPS } from "./components/Forge/Observability/Dashboards/dashboardGroups";
 import { COMPARE_MODES, REFRESH_INTERVALS } from "./components/Forge/Observability/Dashboards/dashboardModel";
@@ -167,11 +168,12 @@ export const indexSearchSchema = z.object({
   devForceShow: z.boolean().optional(),
   "onboarding-credits": z.string().optional(),
   tour: tourParam,
-  // `?start=app` opens the new chat with the app-building composer
-  // (components/Apps/appStart.ts): onboarding's "Build an app" and every
-  // other "build an app" entry land here. NewChatView applies it once and
-  // drops it.
-  start: z.enum(["app"]).optional(),
+  // `?start=` opens the new chat with a starter in the composer
+  // (components/Apps/appStart.ts): `app` is the app-building composer every
+  // "build an app" entry lands on; `repo` and `chat` are the first messages
+  // onboarding offers on finishing. HomeNewChat applies it and drops it once
+  // the chat is created.
+  start: z.enum(START_VALUES).optional(),
 });
 
 export const authSearchSchema = z.object({

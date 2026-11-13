@@ -32,6 +32,9 @@ vi.mock("@/hooks/useOnboardingQueries", () => ({
   useCloudEligibility: () => ({ eligible: true, reason: "", isLoading: false }),
 }));
 vi.mock("@tanstack/react-router", () => ({ useNavigate: () => vi.fn() }));
+vi.mock("@/hooks/useDaemonStatus", () => ({
+  useDaemonStatus: () => ({ daemons: [], activeDaemon: undefined, loading: false, unreachable: false, refresh: vi.fn() }),
+}));
 vi.mock("@/hooks", () => ({
   useCodexOAuth: () => ({ reset: vi.fn(), start: vi.fn(), cancel: vi.fn(), isRunning: false }),
   useClaudeOAuth: () => ({ reset: vi.fn(), start: vi.fn(), cancel: vi.fn(), isRunning: false }),

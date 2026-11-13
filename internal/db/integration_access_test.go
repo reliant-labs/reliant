@@ -246,3 +246,40 @@ func TestReplaceIntegrationAccessIsMonotonic(t *testing.T) {
 	assert.EqualValues(t, 1, n, "the older grant is pruned; the newer one stays")
 	assert.Equal(t, []string{tr.ID}, routedIDs(t, repo, "github", "100", "1", older))
 }
+
+// A trigger bound to one of its org's GitHub App installations takes only that
+// installation's events, and still only while its owner can see the
+// repository: binding narrows, it never widens. An unbound trigger is
+// unchanged, routing on every installation its owner's access covers.
+func TestAccessRoutingABoundTriggerTakesOnlyItsInstallation(t *testing.T) {
+	t.Parallel()
+
+	repo := NewTestRepo(t)
+	ctx := context.Background()
+	now := time.Now().UTC()
+	bind := func(tr *core.Trigger, installation string) {
+		cfg, err := json.Marshal(core.IntegrationConfig{Integration: "github", Events: []string{"issues.opened"}, Installation: installation})
+		require.NoError(t, err)
+		_, err = repo.DB.DB(ctx).ExecContext(ctx, `UPDATE triggers SET config = $1 WHERE id = $2`, cfg, tr.ID)
+		require.NoError(t, err)
+	}
+	// Alice sees repo 1 in installation 100 and repo 9 in installation 200;
+	// Bob only repo 9 in 200.
+	bound := accessTrigger(t, repo, "alice", "github", true, nil)
+	bind(bound, "100")
+	unbound := accessTrigger(t, repo, "alice", "github", true, nil)
+	bobBound := accessTrigger(t, repo, "bob", "github", true, nil)
+	bind(bobBound, "100")
+	require.NoError(t, repo.ReplaceIntegrationAccess(ctx, "alice", "github", "11", now, []core.IntegrationAccessGrant{
+		{AccountKey: "100", ResourceKey: "1"}, {AccountKey: "200", ResourceKey: "9"},
+	}))
+	require.NoError(t, repo.ReplaceIntegrationAccess(ctx, "bob", "github", "22", now, []core.IntegrationAccessGrant{
+		{AccountKey: "200", ResourceKey: "9"},
+	}))
+	fresh := now.Add(-time.Minute)
+
+	assert.ElementsMatch(t, []string{bound.ID, unbound.ID}, routedIDs(t, repo, "github", "100", "1", fresh),
+		"the bound trigger takes its installation's events; bob's, bound to 100 too, cannot see repo 1")
+	assert.Equal(t, []string{unbound.ID}, routedIDs(t, repo, "github", "200", "9", fresh),
+		"another installation's event reaches neither bound trigger, though both owners can see the repository")
+}

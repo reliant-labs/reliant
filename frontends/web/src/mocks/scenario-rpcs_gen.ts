@@ -47,6 +47,16 @@ export type ScenarioRpcHandlers =
     "reliant.v1.AttachmentService/DeleteAttachment"?: (req: import("@/gen/reliant/v1/attachment_pb").DeleteAttachmentRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/attachment_pb").DeleteAttachmentResponseSchema>>;
   }
 
+  // forge:section reliant.v1.AutomationTakeoverService
+  // forge:hash=a5a401c745e5c5d07b8ca21ec4ff915b048945f954c53ac046f0b66571b40571
+  & {
+    "reliant.v1.AutomationTakeoverService/ListOrphanedAutomations"?: (req: import("@/gen/reliant/v1/automation_takeover_pb").ListOrphanedAutomationsRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/automation_takeover_pb").ListOrphanedAutomationsResponseSchema>>;
+    "reliant.v1.AutomationTakeoverService/AdoptTrigger"?: (req: import("@/gen/reliant/v1/automation_takeover_pb").AdoptTriggerRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/automation_takeover_pb").AdoptTriggerResponseSchema>>;
+    "reliant.v1.AutomationTakeoverService/AcceptTriggerOffer"?: (req: import("@/gen/reliant/v1/automation_takeover_pb").AcceptTriggerOfferRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/automation_takeover_pb").AcceptTriggerOfferResponseSchema>>;
+    "reliant.v1.AutomationTakeoverService/ListTriggerOffers"?: (req: import("@/gen/reliant/v1/automation_takeover_pb").ListTriggerOffersRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/automation_takeover_pb").ListTriggerOffersResponseSchema>>;
+    "reliant.v1.AutomationTakeoverService/RevokeTriggerOffer"?: (req: import("@/gen/reliant/v1/automation_takeover_pb").RevokeTriggerOfferRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/automation_takeover_pb").RevokeTriggerOfferResponseSchema>>;
+  }
+
   // forge:section reliant.v1.BackgroundService
   // forge:hash=5c39d350f5df18c8854bf92fe03a87a39596798059c81d6278144e4dd71e72f8
   & {
@@ -245,6 +255,22 @@ export type ScenarioRpcHandlers =
     "reliant.v1.ModelEndpointService/TestModelEndpoint"?: (req: import("@/gen/reliant/v1/model_endpoint_pb").TestModelEndpointRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/model_endpoint_pb").TestModelEndpointResponseSchema>>;
   }
 
+  // forge:section reliant.v1.OrgProviderAccountService
+  // forge:hash=b9cf7bde366109b7ecd93cf0a4f1605ccbc0e19b7bf2321351b1eed139105cc4
+  & {
+    "reliant.v1.OrgProviderAccountService/ListOrgProviderAccounts"?: (req: import("@/gen/reliant/v1/org_provider_account_pb").ListOrgProviderAccountsRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/org_provider_account_pb").ListOrgProviderAccountsResponseSchema>>;
+    "reliant.v1.OrgProviderAccountService/AddOrgProviderAPIKey"?: (req: import("@/gen/reliant/v1/org_provider_account_pb").AddOrgProviderAPIKeyRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/org_provider_account_pb").AddOrgProviderAPIKeyResponseSchema>>;
+    "reliant.v1.OrgProviderAccountService/RotateOrgProviderAPIKey"?: (req: import("@/gen/reliant/v1/org_provider_account_pb").RotateOrgProviderAPIKeyRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/org_provider_account_pb").RotateOrgProviderAPIKeyResponseSchema>>;
+    "reliant.v1.OrgProviderAccountService/UpdateOrgProviderAccount"?: (req: import("@/gen/reliant/v1/org_provider_account_pb").UpdateOrgProviderAccountRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/org_provider_account_pb").UpdateOrgProviderAccountResponseSchema>>;
+    "reliant.v1.OrgProviderAccountService/ReorderOrgProviderAccounts"?: (req: import("@/gen/reliant/v1/org_provider_account_pb").ReorderOrgProviderAccountsRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/org_provider_account_pb").ReorderOrgProviderAccountsResponseSchema>>;
+    "reliant.v1.OrgProviderAccountService/SetOrgProviderAccountGrants"?: (req: import("@/gen/reliant/v1/org_provider_account_pb").SetOrgProviderAccountGrantsRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/org_provider_account_pb").SetOrgProviderAccountGrantsResponseSchema>>;
+    "reliant.v1.OrgProviderAccountService/DeleteOrgProviderAccount"?: (req: import("@/gen/reliant/v1/org_provider_account_pb").DeleteOrgProviderAccountRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/org_provider_account_pb").DeleteOrgProviderAccountResponseSchema>>;
+    "reliant.v1.OrgProviderAccountService/ListOrgProviderWorkspaces"?: (req: import("@/gen/reliant/v1/org_provider_account_pb").ListOrgProviderWorkspacesRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/org_provider_account_pb").ListOrgProviderWorkspacesResponseSchema>>;
+    "reliant.v1.OrgProviderAccountService/BindOrgProviderWorkspace"?: (req: import("@/gen/reliant/v1/org_provider_account_pb").BindOrgProviderWorkspaceRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/org_provider_account_pb").BindOrgProviderWorkspaceResponseSchema>>;
+    "reliant.v1.OrgProviderAccountService/UnbindOrgProviderWorkspace"?: (req: import("@/gen/reliant/v1/org_provider_account_pb").UnbindOrgProviderWorkspaceRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/org_provider_account_pb").UnbindOrgProviderWorkspaceResponseSchema>>;
+    "reliant.v1.OrgProviderAccountService/ReleaseOrgProviderSeat"?: (req: import("@/gen/reliant/v1/org_provider_account_pb").ReleaseOrgProviderSeatRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/org_provider_account_pb").ReleaseOrgProviderSeatResponseSchema>>;
+  }
+
   // forge:section reliant.v1.PackageCommandsService
   // forge:hash=3f70e08889d40328b3aa7716cc9e55bc2feb1071ba48fe9b928b14cfad376320
   & {
@@ -407,6 +433,15 @@ export type ScenarioRpcHandlers =
     "reliant.v1.SettingsService/GetConfigHealth"?: (req: import("@/gen/reliant/v1/settings_pb").GetConfigHealthRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/settings_pb").GetConfigHealthResponseSchema>>;
   }
 
+  // forge:section reliant.v1.SharingService
+  // forge:hash=a8c4f56f818e2a3f9f646bae16f6e4a5798d2b9e41bf83c009fe1aaf0215c160
+  & {
+    "reliant.v1.SharingService/SetChatVisibility"?: (req: import("@/gen/reliant/v1/sharing_pb").SetChatVisibilityRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/sharing_pb").SetChatVisibilityResponseSchema>>;
+    "reliant.v1.SharingService/SetProjectVisibility"?: (req: import("@/gen/reliant/v1/sharing_pb").SetProjectVisibilityRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/sharing_pb").SetProjectVisibilityResponseSchema>>;
+    "reliant.v1.SharingService/ListSharedChats"?: (req: import("@/gen/reliant/v1/sharing_pb").ListSharedChatsRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/sharing_pb").ListSharedChatsResponseSchema>>;
+    "reliant.v1.SharingService/ListSharedProjects"?: (req: import("@/gen/reliant/v1/sharing_pb").ListSharedProjectsRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/sharing_pb").ListSharedProjectsResponseSchema>>;
+  }
+
   // forge:section reliant.v1.SystemService
   // forge:hash=e9a645cb50f9bc2987208791fc7f32dd03395669ad296a2dce5dfe1f04bb6a4a
   & {
@@ -494,7 +529,7 @@ export type ScenarioRpcHandlers =
   }
 
   // forge:section reliant.v1.WorkflowService
-  // forge:hash=9bbd09c36dbacb6c894b3cc789546f46ed64698072e17a0aa6727722a11f90d9
+  // forge:hash=2b6c7a368305b9fb24059b5b5712f1447b8e33d92f5d30996af9a5e553f8bb86
   & {
     "reliant.v1.WorkflowService/ListWorkflows"?: (req: import("@/gen/reliant/v1/workflow_pb").ListWorkflowsRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/workflow_pb").ListWorkflowsResponseSchema>>;
     "reliant.v1.WorkflowService/SaveWorkflow"?: (req: import("@/gen/reliant/v1/workflow_pb").SaveWorkflowRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/workflow_pb").SaveWorkflowResponseSchema>>;
@@ -507,6 +542,7 @@ export type ScenarioRpcHandlers =
     "reliant.v1.WorkflowService/CopyWorkflow"?: (req: import("@/gen/reliant/v1/workflow_pb").CopyWorkflowRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/workflow_pb").CopyWorkflowResponseSchema>>;
     "reliant.v1.WorkflowService/CreateWorkflowDraft"?: (req: import("@/gen/reliant/v1/workflow_pb").CreateWorkflowDraftRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/workflow_pb").CreateWorkflowDraftResponseSchema>>;
     "reliant.v1.WorkflowService/SetWorkflowStatus"?: (req: import("@/gen/reliant/v1/workflow_pb").SetWorkflowStatusRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/workflow_pb").SetWorkflowStatusResponseSchema>>;
+    "reliant.v1.WorkflowService/ForkOrphanedWorkflow"?: (req: import("@/gen/reliant/v1/workflow_pb").ForkOrphanedWorkflowRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/workflow_pb").ForkOrphanedWorkflowResponseSchema>>;
   }
 
   // forge:section reliant.v1.WorktreeService

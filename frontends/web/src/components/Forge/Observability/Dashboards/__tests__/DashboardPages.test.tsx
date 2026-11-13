@@ -44,8 +44,8 @@ describe("organization dashboard routes without deployments", () => {
     const api = createFixtureApi();
     api.listDashboards = vi.fn().mockResolvedValue({ dashboards: [builtin], canWrite: false });
     renderWithApi(api, <DashboardsPage />);
-    // The list lands, its built-in section first.
-    expect(await screen.findByTestId("dashboards-group-builtin")).toHaveTextContent("Organization costs");
+    // The list lands, with the built-in's card.
+    expect(await screen.findByTestId("dashboards-hubs")).toHaveTextContent("Organization costs");
     expect(screen.getByTestId("observability-no-envs")).toBeInTheDocument();
   });
 
@@ -57,7 +57,7 @@ describe("organization dashboard routes without deployments", () => {
     const api = createFixtureApi();
     api.listDashboards = vi.fn().mockResolvedValue({ dashboards: [builtin], canWrite: false });
     renderWithApi(api, <DashboardsPage />);
-    expect(await screen.findByTestId("dashboards-group-builtin")).toHaveTextContent("Organization costs");
+    expect(await screen.findByTestId("dashboards-hubs")).toHaveTextContent("Organization costs");
     expect(screen.queryByTestId("observability-no-envs")).not.toBeInTheDocument();
     expect(screen.getByTestId("forge-cloud-unreachable")).toBeInTheDocument();
     fireEvent.click(screen.getByTestId("obs-environments-retry"));
@@ -84,7 +84,7 @@ describe("organization dashboard routes without deployments", () => {
     const api = createFixtureApi();
     api.listDashboards = vi.fn().mockResolvedValue({ dashboards: [builtin], canWrite: false });
     renderWithApi(api, <DashboardsPage />);
-    expect(await screen.findByTestId("dashboards-group-builtin")).toBeInTheDocument();
+    expect(await screen.findByTestId("dashboards-hubs")).toBeInTheDocument();
     expect(screen.queryByTestId("observability-no-envs")).not.toBeInTheDocument();
   });
 });

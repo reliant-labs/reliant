@@ -20,11 +20,10 @@ import (
 	"github.com/reliant-labs/reliant/internal/logging"
 )
 
-// BuildAvailableDrivers creates an AvailableDrivers struct from configured API keys
-// and local provider configuration.
-// userID is required to fetch API keys from the database.
-func BuildAvailableDrivers(ctx context.Context, repo AvailabilityStore, userID string) (models.AvailableDrivers, error) {
-	return buildAvailableDrivers(ctx, repo, userID, AccountAvailabilityClient)
+// BuildAvailableDrivers creates an AvailableDrivers struct from the accounts
+// scope may draw on (see Scope). scope.UserID is required.
+func BuildAvailableDrivers(ctx context.Context, repo AvailabilityStore, scope Scope) (models.AvailableDrivers, error) {
+	return buildAvailableDrivers(ctx, repo, scope, AccountAvailabilityClient)
 }
 
 // AccountAvailabilityClient builds the credentialed client whose account
@@ -36,8 +35,8 @@ var AccountAvailabilityClient func(ctx context.Context, driverID models.DriverID
 
 // buildAvailableDrivers is BuildAvailableDrivers with the availability client
 // builder injected, so tests never reach a provider's real catalog endpoint.
-func buildAvailableDrivers(ctx context.Context, repo AvailabilityStore, userID string, build clientBuilder) (models.AvailableDrivers, error) {
-	accounts, unavailable, err := configuredAccounts(ctx, repo, userID)
+func buildAvailableDrivers(ctx context.Context, repo AvailabilityStore, scope Scope, build clientBuilder) (models.AvailableDrivers, error) {
+	accounts, unavailable, err := configuredAccounts(ctx, repo, scope)
 	if err != nil {
 		return models.AvailableDrivers{}, err
 	}
@@ -68,7 +67,12 @@ func usableAPIKey(key string) bool {
 // priority order. Paused accounts and accounts needing sign-in are left out; limited ones are
 // in (being limited is the account router's business, not resolution's). unavailable names the
 // providers whose every account needs the user to sign in again, with the reason to show.
-func configuredAccounts(ctx context.Context, repo AvailabilityStore, userID string) (map[models.DriverID][]models.AccountConfig, map[models.DriverID]string, error) {
+//
+// This is the one loader every scope goes through. It reads only the person's own accounts
+// (scope.UserID) for every scope: org-owned accounts and org-paid seats do not exist yet, and
+// when they do they are added here, from scope.OrgID and scope.Attended, so no caller changes.
+func configuredAccounts(ctx context.Context, repo AvailabilityStore, scope Scope) (map[models.DriverID][]models.AccountConfig, map[models.DriverID]string, error) {
+	userID := scope.UserID
 	if userID == "" {
 		// Per reliant.md: no fallback paths, error out when things aren't set properly
 		return nil, nil, fmt.Errorf("userID is required to fetch provider accounts from database")
@@ -133,6 +137,14 @@ func configuredAccounts(ctx context.Context, repo AvailabilityStore, userID stri
 // accountDriverConfig shapes one stored account into the credential material its driver needs.
 // ok is false for an account that cannot serve anything (no usable secret, or an expired OAuth
 // session with no refresh token to recover it).
+// orgOwnerID is the org that owns an account, or "" for a person's own.
+func orgOwnerID(owner core.AccountOwner) string {
+	if owner.IsOrg() {
+		return owner.ID
+	}
+	return ""
+}
+
 func accountDriverConfig(ctx context.Context, userID string, acct *core.AccountWithSecrets) (models.DriverConfig, bool) {
 	driverID := models.DriverID(acct.Provider)
 	secret := strings.TrimSpace(acct.Secrets.Secret)
@@ -145,6 +157,7 @@ func accountDriverConfig(ctx context.Context, userID string, acct *core.AccountW
 		AccountID:        acct.ID,
 		AccountLabel:     acct.DisplayLabel(),
 		AccountEmail:     acct.Email,
+		AccountOrgID:     orgOwnerID(acct.Owner()),
 		AccountUUID:      acct.ExternalAccountID,
 		OrganizationUUID: acct.OrganizationID,
 	}

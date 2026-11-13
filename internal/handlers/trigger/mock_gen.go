@@ -76,7 +76,7 @@ func (m *MockOrgResolver) ListScope(ctx context.Context, userID string, requeste
 var _ OrgResolver = (*MockOrgResolver)(nil)
 
 // forge:section MockRepository
-// forge:hash=4bc4c9540f41e5952751af2709b77c4cfafae27bc497181ab7f5f1234d9d3c50
+// forge:hash=133562d3c81395ffcdb77adaa6788b6f456386156cffb046d8440543a55c90f3
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -97,6 +97,7 @@ type MockRepository struct {
 	UpdateTriggerFunc                  func(context.Context, *core.Trigger) error
 	CreateTriggerInOrgFunc             func(context.Context, *core.Trigger, ...db.OrgRead) error
 	UpdateTriggerInOrgFunc             func(context.Context, *core.Trigger, ...db.OrgRead) error
+	AdoptTriggerFunc                   func(context.Context, *core.Trigger, string, string, ...db.OrgRead) error
 	DeleteTriggerFunc                  func(context.Context, string) error
 	SetTriggerEnabledFunc              func(context.Context, string, bool) error
 	SetTriggerWebhookSecretFunc        func(context.Context, string, []byte) error
@@ -224,6 +225,15 @@ func (m *MockRepository) UpdateTriggerInOrg(ctx context.Context, t *core.Trigger
 		return m.UpdateTriggerInOrgFunc(ctx, t, reads...)
 	}
 	return contractkit.MockNotSet("MockRepository", "UpdateTriggerInOrg")
+}
+
+// AdoptTrigger records the call and delegates to AdoptTriggerFunc when set.
+func (m *MockRepository) AdoptTrigger(ctx context.Context, t *core.Trigger, previousOwner string, offerID string, reads ...db.OrgRead) error {
+	m.Recorder.Record("AdoptTrigger", ctx, t, previousOwner, offerID, reads)
+	if m.AdoptTriggerFunc != nil {
+		return m.AdoptTriggerFunc(ctx, t, previousOwner, offerID, reads...)
+	}
+	return contractkit.MockNotSet("MockRepository", "AdoptTrigger")
 }
 
 // DeleteTrigger records the call and delegates to DeleteTriggerFunc when set.

@@ -32,6 +32,9 @@ type fakeInstallations struct {
 	mu    sync.Mutex
 	asked []gitcredentialclient.InstallationRequest
 	err   error
+	// installationID is the installation the token reports it was minted
+	// through.
+	installationID int64
 }
 
 func (f *fakeInstallations) MintInstallationToken(_ context.Context, req gitcredentialclient.InstallationRequest) (gitcredentialclient.InstallationToken, error) {
@@ -45,6 +48,7 @@ func (f *fakeInstallations) MintInstallationToken(_ context.Context, req gitcred
 	return gitcredentialclient.InstallationToken{
 		Token: gitcredentialclient.NewToken("ghs_bot_token_5d8e", &exp), ExpiresAt: exp,
 		BotLogin: "reliant-labs[bot]", ActingForLogin: "alice", Repository: req.Owner + "/" + req.Repo,
+		InstallationID: f.installationID,
 	}, nil
 }
 

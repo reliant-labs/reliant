@@ -65,8 +65,10 @@ existing codebase with its own stack.
 - **1:** the release regressed. Run the document's `suggested[]` commands
   (`reliant forge obs issue <id>`, …), fix, redeploy, check again.
 - **2:** the check could not prove the release good. Report "not proven good",
-  never "passed".
-- **8:** not enough data yet. Check again later.
+  never "passed". `reason_code` `low_traffic` or `thin_baseline` means too few
+  requests in a window that has closed: final for this promotion, so do not
+  poll it (a quiet env lowers `release_health.min_requests`).
+- **8:** `--wait` ran out before the after window closed. Check again later.
 
 `reliant forge obs status <env>` answers "what is wrong now". For rows, use
 `reliant forge db query <env> … --confirm-env <env> --reason "<why>"`; it needs

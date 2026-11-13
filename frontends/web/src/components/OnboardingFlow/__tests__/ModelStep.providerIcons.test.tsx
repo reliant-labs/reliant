@@ -5,6 +5,9 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ModelStep } from "../steps/ModelStep";
 import type { LaunchPlan } from "../types";
 
+vi.mock("@/hooks/useDaemonStatus", () => ({
+  useDaemonStatus: () => ({ daemons: [], activeDaemon: undefined, loading: false, unreachable: false, refresh: vi.fn() }),
+}));
 vi.mock("@/hooks/useCloudBillingQueries", () => ({
   useWalletOverview: () => ({ data: { wallet: { balanceUsdNanos: 0n } }, isLoading: false }),
   useCloudEligibility: () => ({ data: { eligible: false }, isLoading: false }),
@@ -38,19 +41,20 @@ describe("ModelStep — provider tiles", () => {
     const marks = [...container.querySelectorAll("[data-provider-logo]")].map((el) =>
       el.getAttribute("data-provider-logo"),
     );
+    // Bring-your-own first (API keys, with no machine), Reliant credit last.
     expect(marks).toEqual([
-      "reliant",
+      "anthropic",
+      "openai",
+      "openrouter",
       "claude",
       "codex",
       "antigravity",
       "copilot",
-      "anthropic",
-      "openai",
-      "openrouter",
+      "reliant",
     ]);
     expect(marks).not.toContain("fallback");
     // The names stay: the mark is decoration.
-    for (const name of ["Reliant", "Claude subscription", "Codex (ChatGPT)", "Antigravity", "GitHub Copilot", "Anthropic API", "OpenAI", "OpenRouter"]) {
+    for (const name of ["Reliant credit", "Claude subscription", "Codex (ChatGPT)", "Antigravity", "GitHub Copilot", "Anthropic API", "OpenAI", "OpenRouter"]) {
       expect(screen.getByRole("button", { name })).toBeInTheDocument();
     }
   });

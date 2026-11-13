@@ -34,7 +34,8 @@ func CheckMediaAvailable(ctx context.Context, userID string, modality models.Mod
 	if err != nil {
 		return nil
 	}
-	availableDrivers := GetAvailableDrivers(ctx, userID)
+	// Media tools carry no run scope yet: the person's own accounts.
+	availableDrivers := GetAvailableDrivers(ctx, PersonalScope(userID))
 	registry = registry.WithAvailability(availableDrivers.Availability)
 	providers := mediaProviders(availableDrivers, modality)
 	if len(providers) == 0 {
@@ -63,7 +64,8 @@ func mediaBaseTag(modality models.Modality) string {
 func resolveMediaModel(ctx context.Context, userID string, selector models.ModelSelector, modality models.Modality) (*models.ResolvedModel, models.AvailableDrivers, error) {
 	selector.RequireOutputModality = modality
 
-	availableDrivers := GetAvailableDrivers(ctx, userID)
+	// Media generation carries no run scope yet: the person's own accounts.
+	availableDrivers := GetAvailableDrivers(ctx, PersonalScope(userID))
 	providers := mediaProviders(availableDrivers, modality)
 
 	registry, err := models.GetRegistry()

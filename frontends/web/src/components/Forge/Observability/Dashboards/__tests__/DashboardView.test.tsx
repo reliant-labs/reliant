@@ -84,7 +84,7 @@ describe("a release dashboard", () => {
     const { onCall, navigateTo } = renderDashboard(ref("release", "checkout"));
     expect(await screen.findByRole("heading", { level: 1, name: "Checkout funnel" })).toBeInTheDocument();
     expect(screen.getByTestId("dashboard-readonly-note")).toHaveTextContent("Declared in your repo at deploy/observability/dashboards/checkout.json");
-    expect(screen.getByTestId("dashboard-header")).toHaveTextContent("Shipped in v1.8.2");
+    expect(screen.getByTestId("dashboard-source")).toHaveTextContent("Shipped in v1.8.2");
     expect(screen.queryByTestId("dashboard-promote-open")).not.toBeInTheDocument();
     await waitFor(() => expect(calls(onCall, "RecordDashboardView")).toHaveLength(1));
 
@@ -294,11 +294,11 @@ describe("variables, compare, refresh, share, full screen", () => {
     const user = userEvent.setup();
     const { onCall, current } = renderDashboard(ref("workspace", "checkout-latency"));
     await screen.findByTestId("dashboard-grid");
-    await user.click(screen.getByRole("checkbox", { name: "Release markers" }));
-    await user.click(screen.getByRole("checkbox", { name: "Alert bands" }));
+    await user.click(screen.getByTestId("dashboard-view-options"));
+    await user.click(screen.getByRole("checkbox", { name: /Release markers/ }));
+    await user.click(screen.getByRole("checkbox", { name: /Alert bands/ }));
     expect(current()).toMatchObject({ releases: false, alerts: false });
-    await user.click(screen.getByTestId("dashboard-metrics"));
-    await user.click(screen.getByRole("menuitemcheckbox", { name: /p95 latency by route/ }));
+    await user.click(within(screen.getByTestId("dashboard-metrics")).getByRole("checkbox", { name: /p95 latency by route/ }));
     expect(current().hiddenPanels).toContain("latency-by-route");
     expect(screen.queryByTestId("dashboard-panel-latency-by-route")).not.toBeInTheDocument();
     expect(calls(onCall, "SaveDashboard")).toHaveLength(0);

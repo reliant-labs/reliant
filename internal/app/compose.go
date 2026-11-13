@@ -35,6 +35,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/handlers/account"
 	"github.com/reliant-labs/reliant/internal/handlers/approval"
 	"github.com/reliant-labs/reliant/internal/handlers/attachment"
+	"github.com/reliant-labs/reliant/internal/handlers/automation_takeover"
 	"github.com/reliant-labs/reliant/internal/handlers/background"
 	"github.com/reliant-labs/reliant/internal/handlers/catalog"
 	"github.com/reliant-labs/reliant/internal/handlers/chat"
@@ -48,6 +49,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/handlers/mcp"
 	"github.com/reliant-labs/reliant/internal/handlers/message"
 	"github.com/reliant-labs/reliant/internal/handlers/model_endpoint"
+	"github.com/reliant-labs/reliant/internal/handlers/org_provider_account"
 	"github.com/reliant-labs/reliant/internal/handlers/package_commands"
 	"github.com/reliant-labs/reliant/internal/handlers/plan"
 	"github.com/reliant-labs/reliant/internal/handlers/preset"
@@ -58,6 +60,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/handlers/run"
 	"github.com/reliant-labs/reliant/internal/handlers/scenario"
 	"github.com/reliant-labs/reliant/internal/handlers/settings"
+	"github.com/reliant-labs/reliant/internal/handlers/sharing"
 	streaminghandler "github.com/reliant-labs/reliant/internal/handlers/streaming"
 	"github.com/reliant-labs/reliant/internal/handlers/system"
 	"github.com/reliant-labs/reliant/internal/handlers/task"
@@ -701,6 +704,9 @@ func (g *Graph) newAPIConnections() (*APIConnections, error) {
 		AppOrigins:   g.ApiServerConfig.GetCorsAllowedOrigins(),
 		ControlPlane: g.ServerProcessConfig.GetControlPlane(),
 		DB:           g.Database(),
+		// Off until every replica and the rollback target read org
+		// connections (org-sharing.md §9, D13).
+		OrgConnections: APIOrgConnections(g.ApiServerConfig),
 	})
 }
 
@@ -877,45 +883,48 @@ func (g *Graph) newPayloadGC() (*PayloadGC, error) {
 // service the API listener mounts, with each one's mount options.
 func (g *Graph) newUserRoutes() (*UserRoutes, error) {
 	return NewUserRoutes(UserRoutesDeps{
-		Account:         g.Account(),
-		Approval:        g.Approval(),
-		Attachment:      g.Attachment(),
-		Background:      g.Background(),
-		Connection:      g.Connection(),
-		Worktree:        g.Worktree(),
-		Chat:            g.Chat(),
-		Run:             g.Run(),
-		Trigger:         g.Trigger(),
-		Catalog:         g.Catalog(),
-		Connector:       g.Connector(),
-		Daemon:          g.Daemon(),
-		DaemonRegistry:  g.DaemonRegistry(),
-		FileSystem:      g.FileSystem(),
-		Forge:           g.Forge(),
-		Inbox:           g.Inbox(),
-		MCP:             g.MCP(),
-		Message:         g.Message(),
-		ModelEndpoint:   g.ModelEndpoint(),
-		PackageCommands: g.PackageCommands(),
-		Task:            g.Task(),
-		Plan:            g.Plan(),
-		Preset:          g.Preset(),
-		Project:         g.Project(),
-		ProviderAccount: g.ProviderAccount(),
-		Question:        g.Question(),
-		Repo:            g.Repo(),
-		Scenario:        g.Scenario(),
-		Settings:        g.Settings(),
-		Streaming:       g.Streaming(),
-		System:          g.System(),
-		Terminal:        g.Terminal(),
-		Token:           g.Token(),
-		ToolCall:        g.ToolCall(),
-		Workflow:        g.Workflow(),
-		Logger:          g.Log,
-		Options:         apiMountOptions(g.ApiServerConfig.GetDisableForgeApi()),
-		Usage:           g.Usage(),
-		WorktreeReclaim: g.WorktreeReclaim(),
+		Account:            g.Account(),
+		Approval:           g.Approval(),
+		Attachment:         g.Attachment(),
+		Background:         g.Background(),
+		Connection:         g.Connection(),
+		Worktree:           g.Worktree(),
+		Chat:               g.Chat(),
+		Run:                g.Run(),
+		Trigger:            g.Trigger(),
+		Catalog:            g.Catalog(),
+		Connector:          g.Connector(),
+		Daemon:             g.Daemon(),
+		DaemonRegistry:     g.DaemonRegistry(),
+		FileSystem:         g.FileSystem(),
+		Forge:              g.Forge(),
+		Inbox:              g.Inbox(),
+		MCP:                g.MCP(),
+		Message:            g.Message(),
+		ModelEndpoint:      g.ModelEndpoint(),
+		PackageCommands:    g.PackageCommands(),
+		Task:               g.Task(),
+		Plan:               g.Plan(),
+		Preset:             g.Preset(),
+		Project:            g.Project(),
+		ProviderAccount:    g.ProviderAccount(),
+		Question:           g.Question(),
+		Repo:               g.Repo(),
+		Scenario:           g.Scenario(),
+		Settings:           g.Settings(),
+		Streaming:          g.Streaming(),
+		System:             g.System(),
+		Terminal:           g.Terminal(),
+		Token:              g.Token(),
+		ToolCall:           g.ToolCall(),
+		Workflow:           g.Workflow(),
+		Logger:             g.Log,
+		Options:            apiMountOptions(g.ApiServerConfig.GetDisableForgeApi()),
+		Usage:              g.Usage(),
+		WorktreeReclaim:    g.WorktreeReclaim(),
+		Sharing:            g.Sharing(),
+		AutomationTakeover: g.AutomationTakeover(),
+		OrgProviderAccount: g.OrgProviderAccount(),
 	})
 }
 
@@ -966,11 +975,22 @@ func (g *Graph) newBackground() (*background.Service, error) {
 
 // newConnection constructs the connection handler (internal/handlers/connection).
 func (g *Graph) newConnection() (*connection.Service, error) {
-	return connection.New(connection.Deps{
-		Logger:      g.Log,
-		Config:      g.Cfg,
-		Connections: g.APIConnections().Service,
-	})
+	deps := connection.Deps{
+		Logger:        g.Log,
+		Config:        g.Cfg,
+		Connections:   g.APIConnections().Service,
+		OrgGitHubApps: nil, // optional — no provider
+	}
+	// The org's linked GitHub App installations, from control-plane: none
+	// when self-hosted.
+	apps, err := gitTokens(g.ServerProcessConfig.GetControlPlane())
+	if err != nil {
+		return nil, err
+	}
+	if apps != nil {
+		deps.OrgGitHubApps = apps
+	}
+	return connection.New(deps)
 }
 
 // newWorktree constructs the worktree handler (internal/handlers/worktree).
@@ -1025,6 +1045,12 @@ func (g *Graph) newRun() (*run.Service, error) {
 func (g *Graph) newTrigger() (*trigger.Service, error) {
 	in := g.TriggerInbound()
 	syncer, fires := trigger.TemporalBackend(g.TemporalClient().Client, g.Database(), v2workflow.SharedTaskQueue, in.Registry.IsPolled)
+	// An org's linked GitHub App installations, from control-plane: nil when
+	// self-hosted, which refuses binding a trigger to one.
+	apps, err := gitTokens(g.ServerProcessConfig.GetControlPlane())
+	if err != nil {
+		return nil, err
+	}
 	return trigger.New(trigger.Deps{
 		Logger:       g.Log,
 		Config:       g.Cfg,
@@ -1042,6 +1068,10 @@ func (g *Graph) newTrigger() (*trigger.Service, error) {
 		Alerting:     alertingProvisioner(g.TriggerAlerting()),
 		Drafter:      automationDrafter(g.TemporalClient().Client, v2workflow.SharedTaskQueue),
 		Orgs:         g.OrgResolver(),
+		// A nil gitcredentialclient.Service converts to a nil interface.
+		OrgGitHubApps: apps,
+		// Binding is off until every replica and the rollback target honour it.
+		OrgRollout: TriggerOrgRollout(g.ApiServerConfig),
 	})
 }
 
@@ -1279,6 +1309,7 @@ func (g *Graph) newStreaming() (*streaminghandler.Service, error) {
 		Deltas:      g.StreamingHub().Hub,
 		UserUpdates: g.UserUpdateHub(),
 		ChatUpdates: g.ChatUpdateHub(),
+		Orgs:        g.OrgResolver(),
 	})
 }
 
@@ -1362,5 +1393,44 @@ func (g *Graph) newWorktreeReclaim() (*worktree_reclaim.Service, error) {
 func (g *Graph) newChatUpdateHeadsBackfill() (*ChatUpdateHeadsBackfill, error) {
 	return NewChatUpdateHeadsBackfill(ChatUpdateHeadsBackfillDeps{
 		DB: g.Database(),
+	})
+}
+
+// newSharing constructs the sharing handler (internal/handlers/sharing):
+// read-only sharing of chats and projects with their org's live members.
+func (g *Graph) newSharing() (*sharing.Service, error) {
+	return sharing.New(sharing.Deps{
+		Logger: g.Log,
+		Config: g.Cfg,
+		Repo:   g.Database(),
+		Orgs:   g.OrgResolver(),
+	})
+}
+
+// newAutomationTakeover constructs the automation-takeover handler
+// (internal/handlers/automation_takeover): an org admin's takeover of a
+// departed member's automations. It decides who may take a trigger; the
+// trigger handler does the adopting, re-validating it as its new owner.
+func (g *Graph) newAutomationTakeover() (*automation_takeover.Service, error) {
+	return automation_takeover.New(automation_takeover.Deps{
+		Logger:   g.Log,
+		Config:   g.Cfg,
+		Repo:     g.Database(),
+		Triggers: g.Trigger(),
+		Now:      nil, // optional — no provider
+	})
+}
+
+// newOrgProviderAccount constructs the org-provider-account handler
+// (internal/handlers/org_provider_account). Adding an org account or binding a
+// workspace is gated by ApiServerConfig orgs.provider_accounts_enabled
+// (NewOrgProviderAccount); nothing else it does is.
+func (g *Graph) newOrgProviderAccount() (*org_provider_account.Service, error) {
+	return NewOrgProviderAccount(g.ApiServerConfig, org_provider_account.Deps{
+		Logger:      g.Log,
+		Config:      g.Cfg,
+		Store:       g.Database(),
+		ValidateKey: keyvalidate.Validate,
+		OrgRollout:  g.ApiServerConfig.GetOrgs(), // NewOrgProviderAccount sets the same, from the config it is given
 	})
 }

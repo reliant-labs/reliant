@@ -12,6 +12,7 @@ import (
 	reliantv1connect "github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/connections"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/gitcredentialclient"
 	"github.com/reliant-labs/reliant/pkg/config"
 )
 
@@ -26,6 +27,21 @@ type Deps struct {
 	// broker and the audit trail. The handlers validate the wire, extract
 	// the caller, convert and map errors; no rpc returns a secret value.
 	Connections Connections
+
+	// OrgGitHubApps lists the GitHub App installations an org has linked at
+	// control-plane, which ListConnections shows the org's members as the
+	// org's GitHub connections (org-sharing.md §7.1). Unset (self-hosted, no
+	// control plane) shows none.
+	//
+	// forge:optional-dep
+	OrgGitHubApps OrgGitHubApps
+}
+
+// OrgGitHubApps is the slice of control-plane's git credential service that
+// names an org's linked installations. gitcredentialclient's client satisfies
+// it.
+type OrgGitHubApps interface {
+	ListOrgGitHubInstallations(ctx context.Context, orgID string) ([]gitcredentialclient.OrgInstallation, error)
 }
 
 // Connections is the slice of *connections.Service the handlers serve.
@@ -33,15 +49,24 @@ type Deps struct {
 type Connections interface {
 	ListIntegrations() []connections.Integration
 	List(ctx context.Context, userID, integrationID string) ([]*core.Connection, error)
+	ListOrg(ctx context.Context, userID, orgID, integrationID string) ([]*core.Connection, error)
 	Get(ctx context.Context, userID, id string) (*core.Connection, error)
 	CreateAPIKey(ctx context.Context, p connections.CreateAPIKeyParams) (*core.Connection, error)
 	StartOAuth(ctx context.Context, p connections.StartParams) (string, error)
-	CompleteOAuth(ctx context.Context, userID, state, code string) (*connections.Completion, error)
+	CompleteOAuthFlow(ctx context.Context, p connections.CompleteParams) (*connections.Completion, error)
 	Test(ctx context.Context, userID, id string) (*connections.TestResult, error)
 	Rename(ctx context.Context, userID, id, name string) (*core.Connection, error)
 	SetDefault(ctx context.Context, userID, id string) (*core.Connection, error)
 	Delete(ctx context.Context, userID, id string) error
 	Events(ctx context.Context, userID, id string, limit int, beforeID int64) ([]core.ConnectionEvent, error)
+
+	// An org's own connections (owner_org_id on the request).
+	GetOrg(ctx context.Context, userID, orgID, id string) (*core.Connection, error)
+	TestOrg(ctx context.Context, userID, orgID, id string) (*connections.TestResult, error)
+	RenameOrg(ctx context.Context, userID, orgID, id, name string) (*core.Connection, error)
+	SetDefaultOrg(ctx context.Context, userID, orgID, id string) (*core.Connection, error)
+	DeleteOrg(ctx context.Context, userID, orgID, id string) error
+	EventsOrg(ctx context.Context, userID, orgID, id string, limit int, beforeID int64) ([]core.ConnectionEvent, error)
 }
 
 // validateDeps returns an error if any required Deps field is nil. The

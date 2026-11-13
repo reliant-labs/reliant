@@ -1218,6 +1218,7 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 		modelSelector.Tags = protoModel.GetTags()
 		modelSelector.Providers = protoModel.GetProviders()
 	}
+	modelSelector = agentTurnSelector(modelSelector)
 	// While the thread is on a fallback model (its own provider hit a usage
 	// limit and the chat allows another), that model replaces the selector.
 	// The workflow only sets it inside the lease, so this needs no clock.
@@ -1312,6 +1313,8 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 	// registry resolution and probes the resolver for its model.
 	resolved, err := resolveLLMCall(ctx, a.driverResolver, llmCallSpec{
 		UserID:            chat.UserID,
+		OrgID:             chatOrgID(chat),
+		Attended:          chatAttended(chat),
 		SessionID:         chat.ID,
 		Selector:          modelSelector,
 		RunProviders:      rtx.ProviderPreference,
@@ -2098,7 +2101,7 @@ streamLoop:
 	if streamInterrupted {
 		usageErr = nil
 	}
-	a.recordLLMCallUsage(ctx, chat, usageProvider(resolved, driver), resolvedModelID, llmLatencyMs, streamState.usage, streamErr, streamInterrupted, streamState.retries)
+	a.recordLLMCallUsage(ctx, chat, usageProvider(resolved, driver), resolvedModelID, usageAccountID(resolved), llmLatencyMs, streamState.usage, streamErr, streamInterrupted, streamState.retries)
 	a.logLLMUsage(ctx, chat, driver, llmLatencyMs, streamState.usage, usageErr, shape, shapeDiff)
 	a.trackLLMCallCompleted(ctx, chat, driver, rtx.WorkflowID, rtx.StepID, llmLatencyMs, streamState.usage, usageErr)
 
@@ -2141,7 +2144,7 @@ streamLoop:
 			return nil, stalled
 		}
 		failedCall := usageLimitContext{
-			UserID: chat.UserID, ThreadID: thread, Driver: models.DriverID(resolved.ProviderDriver),
+			Scope: chatScope(chat), ThreadID: thread, Driver: models.DriverID(resolved.ProviderDriver),
 			ModelID: definitionID(resolved.Definition), Account: resolved.Account, Policy: rtx.Failover,
 		}
 		return nil, a.routing.providerFailure(ctx, streamErr, failedCall)

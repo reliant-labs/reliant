@@ -8,7 +8,7 @@
  * as raw JSON.
  */
 import { describe, expect, it } from "vitest";
-import { describeKeyError } from "../onboardingErrors";
+import { describeKeyError, oauthErrorCode } from "../onboardingErrors";
 
 const OPENROUTER_402 =
   'Validation failed: POST "https://openrouter.ai/api/v1/responses": 402 Payment Required ' +
@@ -60,5 +60,26 @@ describe("describeKeyError", () => {
       code: "key_validation_failed",
       message: "Validation failed: dial tcp: i/o timeout",
     });
+  });
+});
+
+describe("oauthErrorCode", () => {
+  it("keeps a code the sign-in hooks declare", () => {
+    expect(oauthErrorCode("timeout")).toBe("oauth_timeout");
+    expect(oauthErrorCode("token_exchange_failed")).toBe("oauth_token_exchange_failed");
+    expect(oauthErrorCode("denied")).toBe("oauth_denied");
+  });
+
+  it("never sends a hook value outside the closed list, whatever text it carries", () => {
+    for (const leaked of [
+      "user@example.com rejected",
+      "sk-ant-api03-secret",
+      "",
+      undefined,
+      null,
+      42,
+    ]) {
+      expect(oauthErrorCode(leaked)).toBe("oauth_unknown");
+    }
   });
 });

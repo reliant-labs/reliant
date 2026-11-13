@@ -354,6 +354,11 @@ type OrgMembership struct {
 	OrgID string
 	// Member reports whether the user is a live member of OrgID.
 	Member bool
+	// Role is the member's role in OrgID: "owner", "admin" or "member". ""
+	// when Member is false, and "" from a control plane that predates the
+	// field: a caller reads "" as "unknown" and refuses
+	// anything only an admin may do.
+	Role string
 }
 
 // ErrUnsupported reports a control plane that predates the rpc asked for. A
@@ -366,6 +371,7 @@ func (c *Client) ResolveOrgMembership(ctx context.Context, userID, orgID string)
 	var out struct {
 		OrgID  string `json:"orgId"`
 		Member bool   `json:"member"`
+		Role   string `json:"role"`
 	}
 	body := map[string]any{"userId": userID}
 	if orgID != "" {
@@ -377,7 +383,12 @@ func (c *Client) ResolveOrgMembership(ctx context.Context, userID, orgID string)
 		}
 		return OrgMembership{}, err
 	}
-	return OrgMembership{OrgID: out.OrgID, Member: out.Member}, nil
+	m := OrgMembership{OrgID: out.OrgID, Member: out.Member}
+	if out.Member {
+		// A role is only ever a member's: never carry one on a negative.
+		m.Role = out.Role
+	}
+	return m, nil
 }
 
 // isUnsupported is a control plane without the method: Connect's

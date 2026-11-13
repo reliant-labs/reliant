@@ -329,6 +329,27 @@ describe('MachinesSection', () => {
       })
     })
 
+    it.each([managedDaemon, { ...externalDaemon, name: 'My laptop' }])(
+      'reserves vertical clearance for the default badge and build in a $daemonType row',
+      async (daemon) => {
+        mocks.listDaemons.mockResolvedValue({
+          daemons: [{ ...daemon, isDefault: true, version: 'v1.2.3' }],
+        })
+        renderSection()
+
+        const badge = await screen.findByText('Default')
+        const nameLine = badge.parentElement!
+        // A real flex line centers badge and name without inline baseline lift.
+        expect(nameLine).toHaveClass('flex', 'items-center')
+        expect(nameLine).toHaveTextContent(daemon.name!)
+        // DataTable provides only a minimum height. Both lines need padding;
+        // centering alone still leaves a two-line name against the row border.
+        expect(nameLine.parentElement).toHaveClass('block', 'py-2')
+        expect(screen.getByText('v1.2.3').parentElement).toBe(nameLine.parentElement)
+        expect(screen.getByText('v1.2.3')).toHaveClass('block')
+      },
+    )
+
     it('names the icon-only delete button', async () => {
       mocks.listDaemons.mockResolvedValue({ daemons: [managedDaemon] })
       renderSection()

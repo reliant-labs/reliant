@@ -144,6 +144,18 @@ enum ConnectionStatus {
   CONNECTION_STATUS_REVOKED = 3;
 }
 
+// ConnectionOwnerKind is who a connection belongs to.
+enum ConnectionOwnerKind {
+  // A server that predates org connections sends this; read it as USER.
+  CONNECTION_OWNER_KIND_UNSPECIFIED = 0;
+  // The caller's own: only they use it, and only they manage it.
+  CONNECTION_OWNER_KIND_USER = 1;
+  // An organization's (org_id): any live member may use it in that org's
+  // runs, naming it explicitly; only the org's admins and owners manage it.
+  // A reference that names only an integration never falls back to it.
+  CONNECTION_OWNER_KIND_ORG = 2;
+}
+
 // Connection is metadata only. There is deliberately no field that could hold
 // a credential.
 message Connection {
@@ -173,6 +185,11 @@ message Connection {
   // address. Empty when the integration does not say.
   // It is what a trigger's "Only from: Me" allowlists.
   string sender_id = 16;
+  // Who the connection belongs to. An org connection's other fields describe
+  // the org's account (its Slack bot, its API key), not the caller's.
+  ConnectionOwnerKind owner_kind = 17;
+  // The organization of an org connection; empty for a personal one.
+  string org_id = 18;
 }
 
 // Integration is one catalog integration a connection can be made to.
@@ -216,6 +233,11 @@ message ListConnectionsRequest {
   // IntegrationId keeps only that integration's connections. Unset (or empty)
   // lists every integration's.
   optional string integration_id = 1;
+  // OrgId adds that organization's connections (owner_kind ORG) to the
+  // caller's own, for a caller who is a live member of it
+  // (PERMISSION_DENIED otherwise). Unset lists only the caller's own, as
+  // before this field existed.
+  optional string org_id = 2;
 }
 message ListConnectionsResponse {
   repeated Connection connections = 1;
@@ -223,6 +245,11 @@ message ListConnectionsResponse {
 
 message GetConnectionRequest {
   string id = 1;
+  // OwnerOrgId, when set, makes this about a connection of that
+  // organization (owner_kind ORG) instead of the caller's own. Any live member of it may read one.
+  // It is never filled in for the caller (it is not org_id, which the web
+  // app fills with the active org): acting on an org's account is explicit.
+  optional string owner_org_id = 2;
 }
 message GetConnectionResponse {
   Connection connection = 1;
@@ -249,6 +276,12 @@ message CreateApiKeyConnectionRequest {
   map<string, string> fields = 4 [debug_redact = true];
   // Values for the integration's connection_params. Not secret.
   map<string, string> params = 5;
+  // OwnerOrgId, when set, makes this about a connection of that
+  // organization (owner_kind ORG) instead of the caller's own. Only an owner or admin of it, signed in to the app as a person, may.
+  // The deployment must enable org connections (orgs.connections_enabled).
+  // It is never filled in for the caller (it is not org_id, which the web
+  // app fills with the active org): acting on an org's account is explicit.
+  optional string owner_org_id = 6;
 }
 message CreateApiKeyConnectionResponse {
   Connection connection = 1;
@@ -269,6 +302,14 @@ message StartOAuthRequest {
   // the callback relays the code because consent runs in the system browser.
   // Empty for a web app, whose request Origin decides instead.
   string loopback_redirect = 6;
+  // OwnerOrgId, when set, makes this about a connection of that
+  // organization (owner_kind ORG) instead of the caller's own. A new connection, or with reconnect_id a
+  // reconnect of one of the org's. Only an owner or admin of it, signed in to the app as a person, may. The same person must
+  // finish the flow, and must still be an owner or admin then. The
+  // deployment must enable org connections (orgs.connections_enabled).
+  // It is never filled in for the caller (it is not org_id, which the web
+  // app fills with the active org): acting on an org's account is explicit.
+  optional string owner_org_id = 7;
 }
 message StartOAuthResponse {
   string authorize_url = 1;
@@ -285,6 +326,11 @@ message CompleteOAuthResponse {
 
 message TestConnectionRequest {
   string id = 1;
+  // OwnerOrgId, when set, makes this about a connection of that
+  // organization (owner_kind ORG) instead of the caller's own. Only an owner or admin of it, signed in to the app as a person, may.
+  // It is never filled in for the caller (it is not org_id, which the web
+  // app fills with the active org): acting on an org's account is explicit.
+  optional string owner_org_id = 2;
 }
 message TestConnectionResponse {
   bool ok = 1;
@@ -299,6 +345,11 @@ message TestConnectionResponse {
 message RenameConnectionRequest {
   string id = 1;
   string name = 2;
+  // OwnerOrgId, when set, makes this about a connection of that
+  // organization (owner_kind ORG) instead of the caller's own. Only an owner or admin of it, signed in to the app as a person, may.
+  // It is never filled in for the caller (it is not org_id, which the web
+  // app fills with the active org): acting on an org's account is explicit.
+  optional string owner_org_id = 3;
 }
 message RenameConnectionResponse {
   Connection connection = 1;
@@ -306,6 +357,12 @@ message RenameConnectionResponse {
 
 message SetDefaultConnectionRequest {
   string id = 1;
+  // OwnerOrgId, when set, makes this about a connection of that
+  // organization (owner_kind ORG) instead of the caller's own. Only an owner or admin of it, signed in to the app as a person, may. The org's default is what a
+  // picker offers first; an unnamed reference never falls back to it.
+  // It is never filled in for the caller (it is not org_id, which the web
+  // app fills with the active org): acting on an org's account is explicit.
+  optional string owner_org_id = 2;
 }
 message SetDefaultConnectionResponse {
   Connection connection = 1;
@@ -313,6 +370,11 @@ message SetDefaultConnectionResponse {
 
 message DeleteConnectionRequest {
   string id = 1;
+  // OwnerOrgId, when set, makes this about a connection of that
+  // organization (owner_kind ORG) instead of the caller's own. Only an owner or admin of it, signed in to the app as a person, may.
+  // It is never filled in for the caller (it is not org_id, which the web
+  // app fills with the active org): acting on an org's account is explicit.
+  optional string owner_org_id = 2;
 }
 message DeleteConnectionResponse {}
 
@@ -328,6 +390,10 @@ message ConnectionEvent {
   // "user:<id>", "worker", or "trigger:<id>".
   string actor = 7;
   string at = 8;
+  // The person the event is attributed to: who acted, also on an org's
+  // connection (the member whose run used it), so an org admin can tell who
+  // used the org's account.
+  string user_id = 9;
 }
 
 message ListConnectionEventsRequest {
@@ -335,6 +401,12 @@ message ListConnectionEventsRequest {
   int32 limit = 2;
   // Return events older than this id; unset (or 0) for the newest page.
   optional int64 before_id = 3;
+  // OwnerOrgId, when set, makes this about a connection of that
+  // organization (owner_kind ORG) instead of the caller's own. Only an owner or admin of it, signed in to the app as a person, may. They see every member's use
+  // of it (ConnectionEvent.user_id).
+  // It is never filled in for the caller (it is not org_id, which the web
+  // app fills with the active org): acting on an org's account is explicit.
+  optional string owner_org_id = 4;
 }
 message ListConnectionEventsResponse {
   repeated ConnectionEvent events = 1;

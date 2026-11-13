@@ -282,9 +282,17 @@ func GetTriggerWebhookCredentials(ctx context.Context, db orm.Context, id string
 // The kind is not here: an activation whose declaration changed kind is
 // broken (its connection or webhook token belongs to the old kind), never
 // re-projected. An id that is not an activation is core.ErrTriggerNotFound.
+//
+// The org GitHub App installation an activation is bound to (config
+// "installation") is the activation's, not the declaration's: the write keeps
+// the row's CURRENT binding and ignores any in p. The UPDATE reads config at
+// the row version it writes, so a binding committed after the reconciler
+// read its snapshot is neither dropped nor overwritten with the old one.
 func SetTriggerProjection(ctx context.Context, db orm.Context, id string, p core.TriggerProjection) error {
+	cfg := string(triggerConfigJSON(p.Config))
 	res, err := db.Bun().NewUpdate().Model((*Trigger)(nil)).
-		Set("config = ?", string(triggerConfigJSON(p.Config))).
+		Set(projectionConfigSQL, cfg, cfg, core.ActivationInstallationKey, core.ActivationInstallationKey,
+			core.ActivationInstallationKey, core.ActivationInstallationKey, cfg).
 		Set("filter = ?", p.Filter).
 		Set("updated_at = NOW()").
 		Where("id = ?", id).
@@ -302,6 +310,16 @@ func SetTriggerProjection(ctx context.Context, db orm.Context, id string, p core
 	}
 	return nil
 }
+
+// projectionConfigSQL is the new config: the projection without any
+// "installation", plus the row's own "installation" when it has one. A
+// projection that is not an object is stored as it is.
+// Its placeholders: the projection twice, core.ActivationInstallationKey four
+// times, the projection.
+const projectionConfigSQL = `config = CASE WHEN jsonb_typeof(?::jsonb) = 'object'
+	THEN (?::jsonb - ?::text) || CASE WHEN jsonb_typeof(config -> ?::text) = 'string'
+		THEN jsonb_build_object(?::text, config -> ?::text) ELSE '{}'::jsonb END
+	ELSE ?::jsonb END`
 
 // ListAllWorkflowTriggerActivations lists every activation of a declared
 // trigger, for the periodic reconcile.
@@ -322,7 +340,11 @@ func ListAllWorkflowTriggerActivations(ctx context.Context, db orm.Context) ([]*
 // listIntegrationTriggersSQL is every ENABLED integration trigger for one
 // integration, with its connection's routing identity. The inner join drops
 // triggers whose connection is gone, revoked or belongs to someone else: an
-// event can only reach a trigger through its own owner's live connection.
+// event can only reach a trigger through its own owner's live personal
+// connection, or through a live connection of the trigger's own org
+// (control-plane docs/design/org-sharing.md §7). Whether the trigger's owner
+// is still a member of that org is the firing's check (CreatorLeftOrg), as
+// for every org trigger.
 // Status is returned rather than filtered so a caller can tell needs_reauth
 // apart.
 var listIntegrationTriggersSQL = `SELECT ` + columnsOf[Trigger]("t") + `,
@@ -331,8 +353,8 @@ var listIntegrationTriggersSQL = `SELECT ` + columnsOf[Trigger]("t") + `,
 FROM triggers t
 JOIN connections c
 	ON c.id = t.connection_id
-	AND c.user_id = t.user_id
-	AND c.owner_kind = 'user'
+	AND ((c.owner_kind = 'user' AND c.user_id = t.user_id)
+		OR (c.owner_kind = 'org' AND c.org_id = t.org_id))
 	AND c.deleted_at IS NULL
 WHERE t.kind = 'integration'
 	AND t.enabled
@@ -371,7 +393,11 @@ func ListIntegrationTriggers(ctx context.Context, db orm.Context, integration st
 // is only trusted while recently confirmed. A trigger that names a connection
 // must name its own owner's live one; one with no connection (a delegated
 // authority, e.g. GitHub via control-plane) is routed on access alone. The
-// model is in 20261005061008_integration_event_access.sql.
+// model is in 20261005061008_integration_event_access.sql. An org trigger may
+// name a connection of its own org instead; the event still reaches it only
+// on its owner's own access. A trigger bound to one of its org's GitHub App
+// installations (config "installation") takes only that installation's
+// events (?1 is the event's account: the installation id).
 var listAccessRoutedTriggersSQL = `SELECT ` + columnsOf[Trigger]("t") + `
 FROM triggers t
 JOIN integration_event_access a
@@ -385,9 +411,12 @@ LEFT JOIN connections c
 WHERE t.kind = 'integration'
 	AND t.enabled
 	AND t.config ->> 'integration' = ?0::text
+	AND (t.config ->> '` + core.ActivationInstallationKey + `' IS NULL OR t.config ->> '` + core.ActivationInstallationKey + `' = ?1::text)
 	AND (
 		t.connection_id IS NULL
-		OR (c.id IS NOT NULL AND c.user_id = t.user_id AND c.owner_kind = 'user'
+		OR (c.id IS NOT NULL
+			AND ((c.owner_kind = 'user' AND c.user_id = t.user_id)
+				OR (c.owner_kind = 'org' AND c.org_id = t.org_id))
 			AND c.deleted_at IS NULL AND c.status = 'active')
 	)
 ORDER BY t.id`

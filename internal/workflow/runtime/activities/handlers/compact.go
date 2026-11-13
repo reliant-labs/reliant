@@ -310,7 +310,7 @@ func (a *GenerateTitleActivity) Execute(ctx context.Context, input GenerateTitle
 		logging.WarnContext(ctx, "[GenerateTitle] LLM generation exhausted, writing truncated first message",
 			"chatID", input.ChatID, "titleLen", len(generatedTitle))
 	} else {
-		generatedTitle, err = a.generateTitleForChat(ctx, chat.UserID, chat.ID, input.FirstMessage)
+		generatedTitle, err = a.generateTitleForChat(ctx, chat, input.FirstMessage)
 		if err != nil {
 			attempt := int32(1)
 			func() {
@@ -409,6 +409,8 @@ func (a *CompactActivity) generateCompactionSummaryOnProvider(ctx context.Contex
 	temperature := 0.3
 	spec := llmCallSpec{
 		UserID:      chat.UserID,
+		OrgID:       chatOrgID(chat),
+		Attended:    chatAttended(chat),
 		SessionID:   chat.ID, // Use chat ID as thread ID for Anthropic
 		Temperature: &temperature,
 		// The summary is a request over this thread's own prefix, so it goes to
@@ -437,7 +439,7 @@ func (a *CompactActivity) generateCompactionSummaryOnProvider(ctx context.Contex
 	// Pick the summarization model. With an injected resolver (tests) the
 	// resolver supplies its own driver/model, mirroring CallLLM.
 	if a.driverResolver == nil {
-		selector, reason, err := resolveCompactionModelForCall(ctx, chat.UserID, summarizeWith, spec)
+		selector, reason, err := resolveCompactionModelForCall(ctx, summarizeWith, spec)
 		if err != nil {
 			return "", err
 		}
@@ -511,7 +513,7 @@ func (a *CompactActivity) generateCompactionSummaryOnProvider(ctx context.Contex
 			continue
 		}
 		return "", a.routing.providerFailure(ctx, fmt.Errorf("failed to generate summary: %w", err), usageLimitContext{
-			UserID: chat.UserID, ThreadID: thread, Driver: models.DriverID(resolved.ProviderDriver),
+			Scope: spec.scope(), ThreadID: thread, Driver: models.DriverID(resolved.ProviderDriver),
 			ModelID: definitionID(resolved.Definition), Account: resolved.Account, Policy: failover,
 		})
 	}
@@ -530,8 +532,8 @@ func (a *CompactActivity) generateCompactionSummaryOnProvider(ctx context.Contex
 //
 // The tier list remains the fallback for nodes that declare no model and for
 // an agent model that no longer resolves against the user's providers.
-func resolveCompactionModelForCall(ctx context.Context, userID string, preferred *reliantv1.ModelSelector, spec llmCallSpec) (models.ModelSelector, string, error) {
-	availableDrivers := getAvailableDrivers(ctx, userID)
+func resolveCompactionModelForCall(ctx context.Context, preferred *reliantv1.ModelSelector, spec llmCallSpec) (models.ModelSelector, string, error) {
+	availableDrivers := getAvailableDrivers(ctx, spec.scope())
 	availableProviders := configuredProviderIDs(availableDrivers)
 	registry := models.MustGetRegistry().WithAvailability(availableDrivers.Availability)
 	if spec.ChatProvider != "" {
@@ -635,14 +637,16 @@ func titleModelFallbackSelector() models.ModelSelector {
 	}
 }
 
-// generateTitle generates a concise, meaningful title using the LLM
+// generateTitle generates a concise, meaningful title using the LLM, for no
+// chat: on the person's own accounts, recorded against no chat.
 func (a *GenerateTitleActivity) generateTitle(ctx context.Context, userID, firstMessage string) (string, error) {
-	return a.generateTitleForChat(ctx, userID, "", firstMessage)
+	return a.generateTitleForChat(ctx, &db.Chat{UserID: userID}, firstMessage)
 }
 
-// generateTitleForChat is generateTitle for a known chat, which the usage
-// ledger records the title request against.
-func (a *GenerateTitleActivity) generateTitleForChat(ctx context.Context, userID, chatID, firstMessage string) (string, error) {
+// generateTitleForChat is generateTitle for a known chat: the request is
+// scoped to the chat's org, and the usage ledger records it against the chat.
+func (a *GenerateTitleActivity) generateTitleForChat(ctx context.Context, chat *db.Chat, firstMessage string) (string, error) {
+	userID, chatID := chat.UserID, chat.ID
 	if firstMessage == "" {
 		return "", fmt.Errorf("first message is empty")
 	}
@@ -652,6 +656,8 @@ func (a *GenerateTitleActivity) generateTitleForChat(ctx context.Context, userID
 	maxTokens := int64(256)
 	spec := llmCallSpec{
 		UserID:      userID,
+		OrgID:       chatOrgID(chat),
+		Attended:    chatAttended(chat),
 		Temperature: &temperature,
 		// Room for a tool_use block wrapping the title, not just a bare
 		// string: a tighter cap truncates the arguments JSON mid-object and
@@ -804,7 +810,7 @@ func (a *GenerateTitleActivity) requestTitle(ctx context.Context, meter *usageMe
 	response, err := meter.streamAndAccumulate(a.routing.observe(ctx, spec.UserID, resolved.Account), resolved, prompt, messages, []tools.Tool{titleTool})
 	if err != nil {
 		return "", a.routing.providerFailure(ctx, fmt.Errorf("failed to generate title: %w", err), usageLimitContext{
-			UserID: spec.UserID, Driver: models.DriverID(resolved.ProviderDriver),
+			Scope: spec.scope(), Driver: models.DriverID(resolved.ProviderDriver),
 			ModelID: definitionID(resolved.Definition), Account: resolved.Account,
 		})
 	}

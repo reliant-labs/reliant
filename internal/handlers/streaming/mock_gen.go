@@ -19,7 +19,7 @@ import (
 )
 
 // forge:section MockRepository
-// forge:hash=ce52d4b37411e8e0041726a0b560a7864c4cb9f6bc9564295e386b145f185479
+// forge:hash=e790b285fedc4c733da1440343862c209ace454893531e5e1416b34e85c2866e
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -39,6 +39,8 @@ type MockRepository struct {
 	GetUserUpdatesSinceFunc                                  func(context.Context, string, int64, int) ([]db.UserUpdate, error)
 	GetProjectFunc                                           func(context.Context, string) (*db.Project, error)
 	GetWorkflowDraftFunc                                     func(context.Context, string) (*db.WorkflowDraft, error)
+	LatestOrgUpdateSequenceFunc                              func(context.Context, string) (int64, error)
+	OrgUpdatesSinceFunc                                      func(context.Context, string, int64, int) ([]core.OrgUpdate, error)
 	ListThreadsByConversationFunc                            func(context.Context, string) ([]*db.Thread, error)
 	CountMessagesInChatFunc                                  func(context.Context, string) (int, error)
 	ListRecentTranscriptSiblingMessagesFunc                  func(context.Context, string, string, int64, int) ([]*db.Message, error)
@@ -179,6 +181,24 @@ func (m *MockRepository) GetWorkflowDraft(ctx context.Context, id string) (*db.W
 		return m.GetWorkflowDraftFunc(ctx, id)
 	}
 	return nil, contractkit.MockNotSet("MockRepository", "GetWorkflowDraft")
+}
+
+// LatestOrgUpdateSequence records the call and delegates to LatestOrgUpdateSequenceFunc when set.
+func (m *MockRepository) LatestOrgUpdateSequence(ctx context.Context, orgID string) (int64, error) {
+	m.Recorder.Record("LatestOrgUpdateSequence", ctx, orgID)
+	if m.LatestOrgUpdateSequenceFunc != nil {
+		return m.LatestOrgUpdateSequenceFunc(ctx, orgID)
+	}
+	return 0, contractkit.MockNotSet("MockRepository", "LatestOrgUpdateSequence")
+}
+
+// OrgUpdatesSince records the call and delegates to OrgUpdatesSinceFunc when set.
+func (m *MockRepository) OrgUpdatesSince(ctx context.Context, orgID string, sinceSeq int64, limit int) ([]core.OrgUpdate, error) {
+	m.Recorder.Record("OrgUpdatesSince", ctx, orgID, sinceSeq, limit)
+	if m.OrgUpdatesSinceFunc != nil {
+		return m.OrgUpdatesSinceFunc(ctx, orgID, sinceSeq, limit)
+	}
+	return nil, contractkit.MockNotSet("MockRepository", "OrgUpdatesSince")
 }
 
 // ListThreadsByConversation records the call and delegates to ListThreadsByConversationFunc when set.

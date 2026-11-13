@@ -23,12 +23,39 @@ export type OnboardingErrorCode =
   | "key_data_policy"
   /** Validation failed for a reason not classified above; the message is the provider's. */
   | "key_validation_failed"
-  /** A subscription sign-in failed; the suffix is the OAuth hook's own errorCode. */
-  | `oauth_${string}`
+  /** A subscription sign-in failed; the suffix is one of OAUTH_ERROR_CODES (oauthErrorCode). */
+  | `oauth_${OAuthErrorSuffix}`
+  /** A subscription sign-in failed with a code the hooks do not declare. */
+  | "oauth_unknown"
   /** A subscription sign-in threw instead of returning a result. */
   | "oauth_exception"
   /** Finish was reached with no compute chosen. */
   | "compute_missing";
+
+/**
+ * Every errorCode the subscription sign-in hooks declare (lib/*-oauth.ts),
+ * except `cancelled`, which is never reported. The list is closed: a hook value
+ * outside it, whatever text it carries, is reported as `oauth_unknown`.
+ */
+const OAUTH_ERROR_CODES = [
+  "pkce_generation_failed",
+  "timeout",
+  "state_mismatch",
+  "token_exchange_failed",
+  "daemon_error",
+  "start_failed",
+  "denied",
+  "poll_error",
+] as const;
+
+type OAuthErrorSuffix = (typeof OAUTH_ERROR_CODES)[number];
+
+/** The opaque code for a failed subscription sign-in, from the hook's errorCode. */
+export function oauthErrorCode(hookCode: unknown): OnboardingErrorCode {
+  return (OAUTH_ERROR_CODES as readonly unknown[]).includes(hookCode)
+    ? `oauth_${hookCode as OAuthErrorSuffix}`
+    : "oauth_unknown";
+}
 
 export interface OnboardingFailure {
   code: OnboardingErrorCode;

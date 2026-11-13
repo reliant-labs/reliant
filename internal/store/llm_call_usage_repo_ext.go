@@ -90,6 +90,9 @@ type LLMCallUsageRecord struct {
 	LatencyMs        int64
 	Attempt          int32
 	CreatedAt        time.Time
+	// AccountID is the provider account that served the call
+	// (provider_accounts.id); "" when the call was not routed to one.
+	AccountID string
 }
 
 // RecordLLMCallUsage writes one provider request and folds it into its day's
@@ -135,12 +138,13 @@ func RecordLLMCallUsage(ctx context.Context, db orm.Context, rec LLMCallUsageRec
 	}
 
 	res, err := db.Bun().NewRaw(`INSERT INTO llm_call_usage (id, user_id, org_id, chat_id, run_id, provider, model, auth_mode, purpose,
-		input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, outcome, error_class, latency_ms, attempt, created_at)
-		VALUES (?0, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)
+		input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, outcome, error_class, latency_ms, attempt, created_at,
+		account_id)
+		VALUES (?0, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)
 		ON CONFLICT (id, attempt) DO NOTHING`,
 		rec.ID, rec.UserID, rec.OrgID, rec.ChatID, rec.RunID, rec.Provider, rec.Model, rec.AuthMode, rec.Purpose,
 		rec.InputTokens, rec.OutputTokens, rec.CacheReadTokens, rec.CacheWriteTokens, rec.Outcome, rec.ErrorClass,
-		rec.LatencyMs, rec.Attempt, rec.CreatedAt).Exec(ctx)
+		rec.LatencyMs, rec.Attempt, rec.CreatedAt, rec.AccountID).Exec(ctx)
 	if err != nil {
 		return false, fmt.Errorf("insert llm call usage %s: %w", rec.ID, err)
 	}

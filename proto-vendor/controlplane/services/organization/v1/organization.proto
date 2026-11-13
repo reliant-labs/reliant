@@ -235,7 +235,134 @@ service OrganizationService {
       }
     };
   }
+
+  // --- The org's GitHub App installations (docs/design/org-sharing.md §7.1) ---
+  //
+  // An org admin links a Reliant GitHub App installation to the org, so the
+  // org's runs may write to its repositories as the App's bot
+  // (GitCredentialInternalService.MintInstallationToken with org_id). Linking
+  // grants nobody new access: every mint still requires the acting member's
+  // OWN push access to the repository. An installation is linked to at most
+  // one org. Human callers only (reason "human_only"); admin or owner, read
+  // fresh, to link or unlink; any member to list.
+
+  // StartGitHubAppInstall returns the GitHub URL that installs the App (or
+  // lets the caller pick an existing installation) carrying a signed state
+  // that names this org and the caller. GitHub sends the browser back to the
+  // App's setup URL with installation_id and that state, which the client
+  // passes to LinkGitHubAppInstallation. FAILED_PRECONDITION
+  // "github_app_not_configured" when the deployment has no App.
+  rpc StartGitHubAppInstall(StartGitHubAppInstallRequest) returns (StartGitHubAppInstallResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {none: "returns a signed link and changes nothing; LinkGitHubAppInstallation records the link"}
+    };
+  }
+
+  // LinkGitHubAppInstallation links installation_id to the org the signed
+  // state names. The caller must be the person the state was issued to, and
+  // STILL an admin or owner of that org (read now, not when the link was
+  // issued); the installation must be one the caller's own GitHub account can
+  // reach. Errors: INVALID_ARGUMENT "github_install_state_invalid" (a
+  // tampered, expired or someone else's state); PERMISSION_DENIED
+  // "admin_required" / "not_org_member"; FAILED_PRECONDITION
+  // "github_installation_not_visible" (the caller's GitHub account cannot see
+  // it), "github_installation_linked_elsewhere" (another org has it), or the
+  // git credential reasons when the caller has not connected GitHub.
+  rpc LinkGitHubAppInstallation(LinkGitHubAppInstallationRequest) returns (LinkGitHubAppInstallationResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {
+        verb: "link_github_app"
+        target: {
+          kind: "github_installation"
+          id: "response.installation.installation_id"
+          label: "response.installation.account_login"
+        }
+        scope: "response.installation.org_id"
+      }
+    };
+  }
+
+  // ListGitHubAppInstallations lists the installations linked to the org. Any
+  // member may call it.
+  rpc ListGitHubAppInstallations(ListGitHubAppInstallationsRequest) returns (ListGitHubAppInstallationsResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+    };
+  }
+
+  // UnlinkGitHubAppInstallation removes the link: the org's runs can no
+  // longer mint bot tokens through it. The installation itself stays on
+  // GitHub. Admin or owner. Unlinking one that is not linked to the org is
+  // NOT_FOUND.
+  rpc UnlinkGitHubAppInstallation(UnlinkGitHubAppInstallationRequest) returns (UnlinkGitHubAppInstallationResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {
+        verb: "unlink_github_app"
+        target: {
+          kind: "github_installation"
+          id: "installation_id"
+        }
+        scope: "org_id"
+      }
+    };
+  }
 }
+
+// GitHubAppInstallation is a GitHub App installation linked to an org.
+message GitHubAppInstallation {
+  // GitHub's installation id.
+  int64 installation_id = 1;
+  string org_id = 2;
+  // The GitHub account the App is installed on, and its kind
+  // ("Organization" or "User").
+  string account_login = 3;
+  string account_type = 4;
+  // Who linked it (users.id).
+  string linked_by_user_id = 5;
+  google.protobuf.Timestamp linked_at = 6;
+  // Set while GitHub reports the installation suspended; no token is minted
+  // through it then.
+  google.protobuf.Timestamp suspended_at = 7;
+}
+
+message StartGitHubAppInstallRequest {
+  string org_id = 1 [(buf.validate.field).required = true];
+}
+message StartGitHubAppInstallResponse {
+  // github.com/apps/<slug>/installations/new?state=...
+  string install_url = 1;
+}
+
+message LinkGitHubAppInstallationRequest {
+  // installation_id and state, as GitHub passed them to the setup URL.
+  int64 installation_id = 1 [(buf.validate.field).int64.gt = 0];
+  string state = 2 [
+    (buf.validate.field).string.min_len = 1,
+    debug_redact = true
+  ];
+  // Optional: when set it must be the org the state names.
+  optional string org_id = 3;
+}
+message LinkGitHubAppInstallationResponse {
+  GitHubAppInstallation installation = 1;
+}
+
+message ListGitHubAppInstallationsRequest {
+  string org_id = 1 [(buf.validate.field).required = true];
+}
+message ListGitHubAppInstallationsResponse {
+  repeated GitHubAppInstallation installations = 1;
+}
+
+message UnlinkGitHubAppInstallationRequest {
+  string org_id = 1 [(buf.validate.field).required = true];
+  int64 installation_id = 2 [(buf.validate.field).int64.gt = 0];
+}
+message UnlinkGitHubAppInstallationResponse {}
 
 // OrgMember is one member of an org, as its roster shows them.
 message OrgMember {
@@ -250,6 +377,10 @@ message OrgMember {
   // True for the org's founding, accountable owner (organizations.owner_id).
   // It confers no authority; role does.
   bool is_founder = 7;
+  // The member's sign-in subject (the identity provider's `sub`): the id
+  // reliant keys a person's chats and projects by, where user_id is this
+  // service's own. It identifies; it authorizes nothing.
+  string external_id = 8;
 }
 
 // SeatUsage is how many of the org's seats are taken.

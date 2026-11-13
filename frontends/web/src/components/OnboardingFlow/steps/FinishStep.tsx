@@ -59,8 +59,8 @@ export function FinishStep({ plan, updatePlan, onBack }: StepProps) {
   }, []);
 
   const goToChat = useCallback(() => {
-    void leaveOnboarding("completed_cloud_gate_continue", navigate);
-  }, [navigate]);
+    void leaveOnboarding("completed_cloud_gate_continue", navigate, plan.intent);
+  }, [navigate, plan.intent]);
 
   if (commit) {
     return (

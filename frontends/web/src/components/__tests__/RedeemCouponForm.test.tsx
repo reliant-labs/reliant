@@ -190,3 +190,57 @@ describe("RedeemCouponForm — account_required", () => {
     expect(screen.queryByTestId("link-identity-modal")).toBeNull();
   });
 });
+
+describe("RedeemCouponForm — says why a code was refused", () => {
+  const reasoned = (message: string, code: Code, reason: string) =>
+    new ConnectError(message, code, new Headers({ "x-forge-error-reason": reason }));
+
+  async function submitAndFail(err: unknown) {
+    render(<RedeemCouponForm variant="open" />);
+    await userEvent.type(screen.getByLabelText(/coupon code/i), "SPRING25");
+    await userEvent.click(screen.getByRole("button", { name: /redeem/i }));
+    const opts = mutate.mock.calls[0][1] as { onError?: (e: unknown) => void };
+    act(() => opts.onError?.(err));
+  }
+
+  it.each([
+    ["invalid", reasoned("that coupon code isn't valid", Code.NotFound, "coupon_not_found"), /isn't valid/i],
+    ["expired", reasoned("that coupon has expired", Code.FailedPrecondition, "coupon_expired"), /expired/i],
+    ["already used", reasoned("you've already redeemed that coupon", Code.AlreadyExists, "coupon_already_redeemed"), /already redeemed/i],
+    ["fully redeemed", reasoned("that coupon has been fully redeemed", Code.ResourceExhausted, "coupon_exhausted"), /fully redeemed/i],
+  ])("shows the reason a code is %s, as an alert tied to the field", async (_name, err, expected) => {
+    await submitAndFail(err);
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent(expected);
+    expect(screen.getByLabelText(/coupon code/i)).toHaveAttribute("aria-invalid", "true");
+    expect(screen.getByLabelText(/coupon code/i)).toHaveAttribute("aria-describedby", "coupon-code-error");
+  });
+
+  it("an unreachable server says it could not check, rather than showing nothing", async () => {
+    await submitAndFail(new ConnectError("internal", Code.Internal));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(/couldn't check/i);
+  });
+
+  it("a refusal that needs an email still leaves a line behind after the modal is dismissed", async () => {
+    await submitAndFail(
+      new ConnectError(
+        "sign in with an email account to redeem a compute coupon",
+        Code.FailedPrecondition,
+        new Headers({ "x-forge-error-reason": "account_required" }),
+      ),
+    );
+    await userEvent.click(await screen.findByText("dismiss"));
+
+    expect(screen.getByRole("alert")).toHaveTextContent(/needs an account with an email/i);
+  });
+
+  it("a new attempt clears the last refusal", async () => {
+    await submitAndFail(reasoned("that coupon has expired", Code.FailedPrecondition, "coupon_expired"));
+    expect(await screen.findByRole("alert")).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: /redeem/i }));
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+});

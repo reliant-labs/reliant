@@ -11,10 +11,10 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/analytics"
+	"github.com/reliant-labs/reliant/internal/chatproto"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/launch"
 	"github.com/reliant-labs/reliant/internal/logging"
-	"github.com/reliant-labs/reliant/internal/runstateproto"
 	rtemporal "github.com/reliant-labs/reliant/internal/temporal"
 )
 
@@ -146,74 +146,9 @@ func inputsDiffer(current, incoming map[string]interface{}) bool {
 	return false
 }
 
-// chatToProto converts a db.Chat to proto Chat
-// chatToProto converts a db.Chat to proto Chat
-// NOTE: model/temperature/max_tokens are no longer stored on chat - they are workflow input params
-// NOTE: WorkflowStatus comes from JOIN with workflows table (see GetChat query)
+// chatToProto is the chat as its owner reads it (chatproto.Chat).
 func chatToProto(c *db.Chat) *reliantv1.Chat {
-	proto := &reliantv1.Chat{
-		Id:              c.ID,
-		UserId:          c.UserID,
-		Title:           c.Title,
-		ProjectId:       c.ProjectID,
-		OrgId:           c.OrgID,
-		State:           c.State,
-		CreatedAt:       c.CreatedAt.Format(time.RFC3339),
-		UpdatedAt:       c.UpdatedAt.Format(time.RFC3339),
-		LastActive:      c.LastActive.Format(time.RFC3339),
-		SelectedPresets: c.SelectedPresets,
-	}
-	if c.WorktreeID != nil {
-		proto.WorktreeId = c.WorktreeID
-	}
-	if c.WorkflowName != nil {
-		proto.WorkflowName = c.WorkflowName
-	}
-	if c.WorkflowID != nil {
-		proto.WorkflowId = c.WorkflowID
-	}
-	if c.RunID != nil {
-		proto.RunId = c.RunID
-	}
-	if c.LastMessageAt != nil {
-		formatted := c.LastMessageAt.Format(time.RFC3339)
-		proto.LastMessageAt = &formatted
-	}
-	// Activity is the computed activity from chats_with_activity view
-	if c.Activity != nil {
-		proto.Activity = reliantv1.ChatActivity(*c.Activity)
-	}
-	proto.Unread = c.Unread
-	if c.ActiveDaemonID != nil {
-		proto.ActiveDaemonId = c.ActiveDaemonID
-	}
-	proto.NoMachine = c.NoMachine
-	proto.WorkingThreads = int32(c.WorkingThreads)
-	if c.UsageLimitResumesAt != nil {
-		resumes := c.UsageLimitResumesAt.UTC().Format(time.RFC3339)
-		proto.UsageLimitResumesAt = &resumes
-		proto.UsageLimitProbing = c.UsageLimitProbing
-		if c.UsageLimitProvider != "" {
-			provider := c.UsageLimitProvider
-			proto.UsageLimitProvider = &provider
-		}
-	}
-	// The root run's lifecycle: the web decides paused/pending from these, and
-	// a pending state is what tells it to StartChat rather than SendMessage.
-	proto.WorkflowState = runstateproto.State(c.RootStatus.State)
-	proto.WorkflowStopReason = runstateproto.StopReason(c.RootStatus.StopReason)
-	if c.LaunchKind != "" {
-		proto.LaunchKind = &c.LaunchKind
-	}
-	proto.Origin = c.Origin
-	if c.TriggerID != nil {
-		proto.TriggerId = c.TriggerID
-	}
-	if c.AdoptedAt != nil {
-		adopted := c.AdoptedAt.Format(time.RFC3339)
-		proto.AdoptedAt = &adopted
-	}
-	return proto
+	return chatproto.Chat(c)
 }
 
 // displayStyleProtoToInt32Ptr converts a proto DisplayStyle pointer to an *int32 for the database.

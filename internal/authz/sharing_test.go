@@ -44,6 +44,10 @@ func person(ctx context.Context) context.Context {
 // decisions is every decision the sharing table pins, for one row kind.
 type decisions struct{ read, write, viewer bool }
 
+// viewerOf is a read decision's "reads as a viewer": allowed, and not the
+// owner's.
+func viewerOf(a Access, err error) bool { return err == nil && a == AccessViewer }
+
 func chatDecisions(ctx context.Context, caller string, shared bool) []decisions {
 	vis := core.VisibilityPrivate
 	if shared {
@@ -53,8 +57,8 @@ func chatDecisions(ctx context.Context, caller string, shared bool) []decisions 
 	c := &core.Chat{UserID: "bob", OrgID: &acme, Visibility: vis}
 	r := &core.ChatRow{UserID: "bob", OrgID: &acme, Visibility: vis}
 	return []decisions{
-		{CanReadChat(ctx, caller, c), CanWriteChat(ctx, caller, c), IsViewer(ctx, caller, c)},
-		{CanReadChat(ctx, caller, r), CanWriteChat(ctx, caller, r), IsViewer(ctx, caller, r)},
+		{CanReadChat(ctx, caller, c), CanWriteChat(ctx, caller, c), viewerOf(ReadChatAccess(ctx, caller, c))},
+		{CanReadChat(ctx, caller, r), CanWriteChat(ctx, caller, r), viewerOf(ReadChatAccess(ctx, caller, r))},
 	}
 }
 
@@ -65,7 +69,7 @@ func projectDecisions(ctx context.Context, caller string, shared bool) []decisio
 	}
 	acme := "acme"
 	p := &core.Project{UserID: "bob", OrgID: &acme, Visibility: vis}
-	return []decisions{{CanReadProject(ctx, caller, p), CanWriteProject(ctx, caller, p), IsProjectViewer(ctx, caller, p)}}
+	return []decisions{{CanReadProject(ctx, caller, p), CanWriteProject(ctx, caller, p), viewerOf(ReadProjectAccess(ctx, caller, p))}}
 }
 
 // The viewer table: {owner, viewer, non-member, removed member, machine-bound,
@@ -121,7 +125,7 @@ func TestSharingDecisionTable(t *testing.T) {
 func TestSharedRowWithoutAnOrgIsOwnerOnly(t *testing.T) {
 	ctx := person(WithMembership(context.Background(), live))
 	c := &core.Chat{UserID: "bob", Visibility: core.VisibilityOrg}
-	if CanReadChat(ctx, "alice", c) || IsViewer(ctx, "alice", c) || !CanReadChat(ctx, "bob", c) {
+	if CanReadChat(ctx, "alice", c) || viewerOf(ReadChatAccess(ctx, "alice", c)) || !CanReadChat(ctx, "bob", c) {
 		t.Fatal("an org-less shared chat must read as the owner's alone")
 	}
 	unknown := &core.Chat{UserID: "bob", OrgID: strp("acme"), Visibility: "members"}
@@ -254,7 +258,7 @@ func TestSharedReadNeedsAViewerServingSite(t *testing.T) {
 	ctx := WithCredentialKind(WithMembership(context.Background(), live), CredentialKindPerson)
 	c := &core.Chat{UserID: "bob", OrgID: strp("acme"), Visibility: core.VisibilityOrg}
 	p := &core.Project{UserID: "bob", OrgID: strp("acme"), Visibility: core.VisibilityOrg}
-	if CanReadChat(ctx, "alice", c) || IsViewer(ctx, "alice", c) || CanReadProject(ctx, "alice", p) || IsProjectViewer(ctx, "alice", p) {
+	if CanReadChat(ctx, "alice", c) || viewerOf(ReadChatAccess(ctx, "alice", c)) || CanReadProject(ctx, "alice", p) || viewerOf(ReadProjectAccess(ctx, "alice", p)) {
 		t.Fatal("a site that does not serve viewers admitted one")
 	}
 	if !CanReadChat(ctx, "bob", c) || !CanReadProject(ctx, "bob", p) {
@@ -262,5 +266,32 @@ func TestSharedReadNeedsAViewerServingSite(t *testing.T) {
 	}
 	if !CanReadChat(WithViewerReads(ctx), "alice", c) || !CanReadProject(WithViewerReads(ctx), "alice", p) {
 		t.Fatal("a viewer-serving site must admit the viewer")
+	}
+}
+
+// ReadChatAccess / ReadProjectAccess are the read decision with its shape: the
+// owner's access, a viewer's, or a refusal. Access's zero value is shaped as a
+// viewer's, so a site that forgot to set it fails closed.
+func TestReadAccess(t *testing.T) {
+	ctx := WithViewerReads(person(WithMembership(context.Background(), live)))
+	c := &core.Chat{UserID: "bob", OrgID: strp("acme"), Visibility: core.VisibilityOrg}
+	p := &core.Project{UserID: "bob", OrgID: strp("acme"), Visibility: core.VisibilityOrg}
+	for _, tc := range []struct {
+		caller string
+		want   Access
+	}{{"bob", AccessOwner}, {"alice", AccessViewer}} {
+		if got, err := ReadChatAccess(ctx, tc.caller, c); err != nil || got != tc.want {
+			t.Errorf("chat, %s: %v %v, want %v", tc.caller, got, err, tc.want)
+		}
+		if got, err := ReadProjectAccess(ctx, tc.caller, p); err != nil || got != tc.want {
+			t.Errorf("project, %s: %v %v, want %v", tc.caller, got, err, tc.want)
+		}
+	}
+	private := &core.Chat{UserID: "bob", OrgID: strp("acme"), Visibility: core.VisibilityPrivate}
+	if got, err := ReadChatAccess(ctx, "alice", private); err == nil || got != AccessNone {
+		t.Errorf("a private chat read by another: %v %v, want a refusal", got, err)
+	}
+	if !AccessNone.Viewer() || !AccessViewer.Viewer() || AccessOwner.Viewer() {
+		t.Error("only the owner's access is shaped as the owner's")
 	}
 }
