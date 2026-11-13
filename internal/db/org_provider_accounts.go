@@ -207,3 +207,9 @@ func (s *accountStore) UnbindOrgProviderWorkspace(ctx context.Context, orgID, pr
 		return err
 	})
 }
+
+// ListRejectedOrgKeysNear returns the rejected org-owned keys of the orgs userID has a footprint
+// in (store.ListRejectedOrgKeysNear); the inbox lists them to the org's owners and admins.
+func (r *Repo) ListRejectedOrgKeysNear(ctx context.Context, userID string) ([]core.ProviderAccount, error) {
+	return store.ListRejectedOrgKeysNear(ctx, r.ORM(), userID)
+}

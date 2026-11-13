@@ -17,6 +17,9 @@ import (
 // OrgResolver answers ListInbox's org question. *orgs.Resolver is one.
 type OrgResolver interface {
 	ListScope(ctx context.Context, userID, requested string, stamp orgs.Backfill) (*core.OrgScope, error)
+	// Role is userID's role in orgID (orgs.Resolver.Role): who is told of the org's rejected
+	// API keys. ok is false when it is unknown; err is an outage.
+	Role(ctx context.Context, userID, orgID string) (role string, ok bool, err error)
 }
 
 // Repository is the slice of *db.Repo the inbox handlers use. It
@@ -36,6 +39,9 @@ type Repository interface {
 	AssignUnassignedOrg(ctx context.Context, userID, orgID string) error
 
 	ListInboxPending(ctx context.Context, userID string) ([]*core.InboxPending, error)
+	// ListRejectedOrgKeysNear is the rejected org-owned API keys of the orgs userID has a
+	// footprint in; the inbox lists them to those orgs' owners and admins.
+	ListRejectedOrgKeysNear(ctx context.Context, userID string) ([]core.ProviderAccount, error)
 	ListDismissedInboxItemIDs(ctx context.Context, userID string, itemIDs []string) (map[string]bool, error)
 	DismissInboxItems(ctx context.Context, userID string, itemIDs []string, at time.Time) error
 	RestoreInboxItems(ctx context.Context, userID string, itemIDs []string) error

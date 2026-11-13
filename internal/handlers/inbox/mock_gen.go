@@ -20,7 +20,7 @@ import (
 )
 
 // forge:section MockOrgResolver
-// forge:hash=de49ea553ac3affc78dee48d88d23e434fe61885569007e1ca203c127a37d422
+// forge:hash=107b0fccef80f2de2c14468360c3ec224eaef698fa2dbab383339c7ebcb51f0e
 
 // MockOrgResolver is a test mock for the OrgResolver interface.
 //
@@ -31,6 +31,7 @@ import (
 type MockOrgResolver struct {
 	contractkit.Recorder
 	ListScopeFunc func(context.Context, string, string, orgs.Backfill) (*core.OrgScope, error)
+	RoleFunc      func(context.Context, string, string) (string, bool, error)
 }
 
 // ListScope records the call and delegates to ListScopeFunc when set.
@@ -42,11 +43,20 @@ func (m *MockOrgResolver) ListScope(ctx context.Context, userID string, requeste
 	return nil, contractkit.MockNotSet("MockOrgResolver", "ListScope")
 }
 
+// Role records the call and delegates to RoleFunc when set.
+func (m *MockOrgResolver) Role(ctx context.Context, userID string, orgID string) (string, bool, error) {
+	m.Recorder.Record("Role", ctx, userID, orgID)
+	if m.RoleFunc != nil {
+		return m.RoleFunc(ctx, userID, orgID)
+	}
+	return "", false, contractkit.MockNotSet("MockOrgResolver", "Role")
+}
+
 // Compile-time check.
 var _ OrgResolver = (*MockOrgResolver)(nil)
 
 // forge:section MockRepository
-// forge:hash=3c931c174eb00469864bd1142fc909e5207fb43021521f84c23c79b9896794e9
+// forge:hash=039ca3d864751ca1f3f9ee815ee9f0f4da044ceb89b52d361b2a4eee8e1762b5
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -83,6 +93,7 @@ type MockRepository struct {
 	WorkflowSourceDiagnosticFunc            func(context.Context, string, string, string) (string, error)
 	AssignUnassignedOrgFunc                 func(context.Context, string, string) error
 	ListInboxPendingFunc                    func(context.Context, string) ([]*core.InboxPending, error)
+	ListRejectedOrgKeysNearFunc             func(context.Context, string) ([]core.ProviderAccount, error)
 	ListDismissedInboxItemIDsFunc           func(context.Context, string, []string) (map[string]bool, error)
 	DismissInboxItemsFunc                   func(context.Context, string, []string, time.Time) error
 	RestoreInboxItemsFunc                   func(context.Context, string, []string) error
@@ -337,6 +348,15 @@ func (m *MockRepository) ListInboxPending(ctx context.Context, userID string) ([
 		return m.ListInboxPendingFunc(ctx, userID)
 	}
 	return nil, contractkit.MockNotSet("MockRepository", "ListInboxPending")
+}
+
+// ListRejectedOrgKeysNear records the call and delegates to ListRejectedOrgKeysNearFunc when set.
+func (m *MockRepository) ListRejectedOrgKeysNear(ctx context.Context, userID string) ([]core.ProviderAccount, error) {
+	m.Recorder.Record("ListRejectedOrgKeysNear", ctx, userID)
+	if m.ListRejectedOrgKeysNearFunc != nil {
+		return m.ListRejectedOrgKeysNearFunc(ctx, userID)
+	}
+	return nil, contractkit.MockNotSet("MockRepository", "ListRejectedOrgKeysNear")
 }
 
 // ListDismissedInboxItemIDs records the call and delegates to ListDismissedInboxItemIDsFunc when set.

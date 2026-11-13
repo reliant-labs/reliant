@@ -174,12 +174,14 @@ type (
 	InboxItem_AutomationLaunchFailed         = sdk.InboxItem_AutomationLaunchFailed
 	InboxItem_AutomationNeedsSetup           = sdk.InboxItem_AutomationNeedsSetup
 	InboxItem_AutomationRunPaused            = sdk.InboxItem_AutomationRunPaused
+	InboxItem_OrgProviderKeyRejected         = sdk.InboxItem_OrgProviderKeyRejected
 	InboxItem_Question                       = sdk.InboxItem_Question
 	InboxItem_Recovery                       = sdk.InboxItem_Recovery
 	InboxItem_Storage                        = sdk.InboxItem_Storage
 	InboxItem_WaitingForMachine              = sdk.InboxItem_WaitingForMachine
 	InboxItem_WorktreeMarked                 = sdk.InboxItem_WorktreeMarked
 	InboxItem_WorktreeReclaim                = sdk.InboxItem_WorktreeReclaim
+	InboxOrgProviderKeyRejected              = sdk.InboxOrgProviderKeyRejected
 	InboxQuestion                            = sdk.InboxQuestion
 	InboxRefusedAutomation                   = sdk.InboxRefusedAutomation
 	InboxStorage                             = sdk.InboxStorage
@@ -273,6 +275,7 @@ type (
 	ProjectConfigSnapshot                    = sdk.ProjectConfigSnapshot
 	ProjectDiscovery                         = sdk.ProjectDiscovery
 	ProviderPolicy                           = sdk.ProviderPolicy
+	ProviderPolicy_Funding                   = sdk.ProviderPolicy_Funding
 	ProviderPolicy_OnLimit                   = sdk.ProviderPolicy_OnLimit
 	PruneWorktreesRequest                    = sdk.PruneWorktreesRequest
 	PruneWorktreesResponse                   = sdk.PruneWorktreesResponse
@@ -543,6 +546,8 @@ const (
 	InboxItemKind_INBOX_ITEM_KIND_AUTOMATION_LAUNCH_FAILED                     = sdk.InboxItemKind_INBOX_ITEM_KIND_AUTOMATION_LAUNCH_FAILED
 	InboxItemKind_INBOX_ITEM_KIND_AUTOMATION_NEEDS_SETUP                       = sdk.InboxItemKind_INBOX_ITEM_KIND_AUTOMATION_NEEDS_SETUP
 	InboxItemKind_INBOX_ITEM_KIND_AUTOMATION_RUN_PAUSED                        = sdk.InboxItemKind_INBOX_ITEM_KIND_AUTOMATION_RUN_PAUSED
+	InboxItemKind_INBOX_ITEM_KIND_ORG_PROVIDER_KEY_REJECTED                    = sdk.InboxItemKind_INBOX_ITEM_KIND_ORG_PROVIDER_KEY_REJECTED
+	InboxItemKind_INBOX_ITEM_KIND_PERSONAL_FUNDING                             = sdk.InboxItemKind_INBOX_ITEM_KIND_PERSONAL_FUNDING
 	InboxItemKind_INBOX_ITEM_KIND_QUESTION                                     = sdk.InboxItemKind_INBOX_ITEM_KIND_QUESTION
 	InboxItemKind_INBOX_ITEM_KIND_RECOVERY                                     = sdk.InboxItemKind_INBOX_ITEM_KIND_RECOVERY
 	InboxItemKind_INBOX_ITEM_KIND_STORAGE                                      = sdk.InboxItemKind_INBOX_ITEM_KIND_STORAGE
@@ -566,6 +571,10 @@ const (
 	PlanStatus_PLAN_STATUS_IN_PROGRESS                                         = sdk.PlanStatus_PLAN_STATUS_IN_PROGRESS
 	PlanStatus_PLAN_STATUS_PENDING                                             = sdk.PlanStatus_PLAN_STATUS_PENDING
 	PlanStatus_PLAN_STATUS_UNSPECIFIED                                         = sdk.PlanStatus_PLAN_STATUS_UNSPECIFIED
+	ProviderPolicy_FUNDING_ORG_FIRST                                           = sdk.ProviderPolicy_FUNDING_ORG_FIRST
+	ProviderPolicy_FUNDING_ORG_ONLY                                            = sdk.ProviderPolicy_FUNDING_ORG_ONLY
+	ProviderPolicy_FUNDING_PERSONAL_FIRST                                      = sdk.ProviderPolicy_FUNDING_PERSONAL_FIRST
+	ProviderPolicy_FUNDING_UNSPECIFIED                                         = sdk.ProviderPolicy_FUNDING_UNSPECIFIED
 	ProviderPolicy_ON_LIMIT_FALLBACK                                           = sdk.ProviderPolicy_ON_LIMIT_FALLBACK
 	ProviderPolicy_ON_LIMIT_UNSPECIFIED                                        = sdk.ProviderPolicy_ON_LIMIT_UNSPECIFIED
 	ProviderPolicy_ON_LIMIT_WAIT                                               = sdk.ProviderPolicy_ON_LIMIT_WAIT
@@ -723,6 +732,8 @@ var (
 	OutputStreamType_value               = sdk.OutputStreamType_value
 	PlanStatus_name                      = sdk.PlanStatus_name
 	PlanStatus_value                     = sdk.PlanStatus_value
+	ProviderPolicy_Funding_name          = sdk.ProviderPolicy_Funding_name
+	ProviderPolicy_Funding_value         = sdk.ProviderPolicy_Funding_value
 	ProviderPolicy_OnLimit_name          = sdk.ProviderPolicy_OnLimit_name
 	ProviderPolicy_OnLimit_value         = sdk.ProviderPolicy_OnLimit_value
 	QuestionStatus_name                  = sdk.QuestionStatus_name

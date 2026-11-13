@@ -611,3 +611,29 @@ func ClearWorkspaceAttributions(ctx context.Context, db orm.Context, orgID, prov
 // bind or scan.
 type ProviderAccountExtra struct {
 }
+
+// ListRejectedOrgKeysNear returns the org-owned accounts that need attention (a key the provider
+// rejected, until it is rotated) of the orgs userID has a footprint in: a project of theirs in
+// the org, a grant to one of its accounts, a seat it pays for, or a key they added. Metadata
+// only, by (org, provider, priority). Whether userID may see them (an owner or admin) is the
+// caller's to decide; the footprint only bounds how many orgs it has to ask about.
+func ListRejectedOrgKeysNear(ctx context.Context, db orm.Context, userID string) ([]core.ProviderAccount, error) {
+	if userID == "" {
+		return nil, nil
+	}
+	var rows []*ProviderAccount
+	if err := db.Bun().NewSelect().Model(&rows).ExcludeColumn(providerAccountSealedColumns...).
+		Where("owner_kind = ?", core.AccountOwnerOrg).Where("needs_reauth_at IS NOT NULL").
+		Where(`(org_id IN (SELECT org_id FROM projects WHERE user_id = ?0 AND org_id IS NOT NULL)
+			OR org_id IN (SELECT org_id FROM provider_account_grants WHERE user_id = ?0)
+			OR org_id IN (SELECT attributed_org_id FROM provider_accounts WHERE user_id = ?0 AND attributed_org_id IS NOT NULL)
+			OR created_by_user_id = ?0)`, userID).
+		Order("org_id", "provider", "priority").Scan(ctx); err != nil {
+		return nil, err
+	}
+	out := make([]core.ProviderAccount, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, providerAccountToCore(r))
+	}
+	return out, nil
+}
