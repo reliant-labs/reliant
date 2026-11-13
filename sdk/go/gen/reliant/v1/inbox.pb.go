@@ -83,6 +83,13 @@ const (
 	// KeepMarkedWorktree cancels it, ReclaimMarkedWorktreeNow skips the wait.
 	// Informational: nothing has to be done to keep a worktree that is used.
 	InboxItemKind_INBOX_ITEM_KIND_WORKTREE_MARKED InboxItemKind = 13
+	// A chat in an org asks before it moves from the org's AI accounts to the
+	// person's own (control-plane docs/design/org-provider-accounts.md §10):
+	// the org's accounts are rate-limited, unusable, or serve none of the
+	// chat's model, and the person's own account could. The chat waits until
+	// the person answers (ProviderAccountService.ResolvePersonalFundingChoice).
+	// One item per chat per question. Blocks a live run.
+	InboxItemKind_INBOX_ITEM_KIND_PERSONAL_FUNDING InboxItemKind = 14
 )
 
 // Enum value maps for InboxItemKind.
@@ -101,6 +108,7 @@ var (
 		11: "INBOX_ITEM_KIND_AUTOMATION_DEFINITION_BROKEN",
 		12: "INBOX_ITEM_KIND_WORKTREE_RECLAIM",
 		13: "INBOX_ITEM_KIND_WORKTREE_MARKED",
+		14: "INBOX_ITEM_KIND_PERSONAL_FUNDING",
 	}
 	InboxItemKind_value = map[string]int32{
 		"INBOX_ITEM_KIND_UNSPECIFIED":                  0,
@@ -116,6 +124,7 @@ var (
 		"INBOX_ITEM_KIND_AUTOMATION_DEFINITION_BROKEN": 11,
 		"INBOX_ITEM_KIND_WORKTREE_RECLAIM":             12,
 		"INBOX_ITEM_KIND_WORKTREE_MARKED":              13,
+		"INBOX_ITEM_KIND_PERSONAL_FUNDING":             14,
 	}
 )
 
@@ -369,7 +378,9 @@ type InboxItem struct {
 	// current failure episode, so repeated failures stay one item and a new
 	// episode is a new item. A needs-setup item embeds the automation and the
 	// set of inputs it is missing, so dismissing it holds until a workflow edit
-	// makes it miss something new.
+	// makes it miss something new. A personal-funding item ("personal_funding:")
+	// embeds the chat id and when the chat asked, so a later question is a new
+	// item.
 	ItemId string `protobuf:"bytes,2,opt,name=item_id,json=itemId,proto3" json:"item_id,omitempty"`
 	// The chat the item belongs to. Empty for automation failure kinds that have
 	// no run.
@@ -2617,7 +2628,7 @@ const file_reliant_v1_inbox_proto_rawDesc = "" +
 	"\vworktree_id\x18\x01 \x01(\tR\n" +
 	"worktreeId\x12;\n" +
 	"\aoutcome\x18\x02 \x01(\x0e2!.reliant.v1.CleanupStorageOutcomeR\aoutcome\x12\x18\n" +
-	"\amessage\x18\x03 \x01(\tR\amessage*\x9e\x04\n" +
+	"\amessage\x18\x03 \x01(\tR\amessage*\xc4\x04\n" +
 	"\rInboxItemKind\x12\x1f\n" +
 	"\x1bINBOX_ITEM_KIND_UNSPECIFIED\x10\x00\x12\x1c\n" +
 	"\x18INBOX_ITEM_KIND_APPROVAL\x10\x01\x12\x1c\n" +
@@ -2632,7 +2643,8 @@ const file_reliant_v1_inbox_proto_rawDesc = "" +
 	"\x120\n" +
 	",INBOX_ITEM_KIND_AUTOMATION_DEFINITION_BROKEN\x10\v\x12$\n" +
 	" INBOX_ITEM_KIND_WORKTREE_RECLAIM\x10\f\x12#\n" +
-	"\x1fINBOX_ITEM_KIND_WORKTREE_MARKED\x10\r\"\x04\b\x06\x10\x06*\x1cINBOX_ITEM_KIND_RUN_FINISHED*\x8b\x01\n" +
+	"\x1fINBOX_ITEM_KIND_WORKTREE_MARKED\x10\r\x12$\n" +
+	" INBOX_ITEM_KIND_PERSONAL_FUNDING\x10\x0e\"\x04\b\x06\x10\x06*\x1cINBOX_ITEM_KIND_RUN_FINISHED*\x8b\x01\n" +
 	"\x15CleanupStorageOutcome\x12'\n" +
 	"#CLEANUP_STORAGE_OUTCOME_UNSPECIFIED\x10\x00\x12$\n" +
 	" CLEANUP_STORAGE_OUTCOME_ACCEPTED\x10\x01\x12#\n" +

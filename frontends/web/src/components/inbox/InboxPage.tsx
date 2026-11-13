@@ -71,6 +71,7 @@ const SECTION_TITLE: Record<InboxItemKind, string> = {
   [InboxItemKind.AUTOMATION_DEFINITION_BROKEN]: "Broken workflow definitions",
   [InboxItemKind.WORKTREE_RECLAIM]: "Worktrees proposed for removal",
   [InboxItemKind.WORKTREE_MARKED]: "Worktrees marked to be reclaimed",
+  [InboxItemKind.PERSONAL_FUNDING]: "Chats asking to use your own AI account",
 };
 
 /** Section the items by kind, in kind (priority) order, keeping each kind's server order. */
