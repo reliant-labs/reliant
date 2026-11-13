@@ -474,6 +474,7 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant project`](#reliant-project) | Manage Reliant projects |
 | [`reliant project create`](#reliant-project-create) | Create a project and print its ID |
 | [`reliant project list`](#reliant-project-list) | List your projects |
+| [`reliant project move`](#reliant-project-move) | Move a project to another organization |
 | [`reliant server`](#reliant-server) | Run cloud server components |
 | [`reliant server api`](#reliant-server-api) | Run the stateless HTTP + gRPC API server |
 | [`reliant server gateway`](#reliant-server-gateway) | Run the daemon connection gateway |
@@ -20268,6 +20269,7 @@ reliant project
 |---------|-------------|
 | [`create`](#reliant-project-create) | Create a project and print its ID |
 | [`list`](#reliant-project-list) | List your projects |
+| [`move`](#reliant-project-move) | Move a project to another organization |
 
 **Flags:**
 
@@ -20325,6 +20327,36 @@ reliant project list [flags]
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
 | `--json` | `bool` | - | Output in JSON format |
+
+---
+
+### reliant project move
+
+Move a project to another organization
+
+Moves a project, with its chats, runs and automations, to another organization
+you belong to. <project> is the project's id, name or path.
+
+The command first shows what the move does, as the app's preview does, and
+what running work refuses it. --dry-run stops there. Otherwise it asks you to
+type the project's name, unless --yes is given.
+
+A move is a person's decision: the server accepts it only from someone signed
+in to the Reliant app. The CLI login is an access token any agent's shell can
+use, so where the server refuses it, the command tells you to move the project
+in the app (Settings → Projects → Danger zone).
+
+```
+reliant project move <project> --to-org <org-id> [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--dry-run` | `bool` | - | Show what the move would do, and move nothing |
+| `--to-org` | `string` | - | Id of the organization to move the project to |
+| `--yes` | `bool` | - | Move without asking to type the project's name |
 
 ---
 

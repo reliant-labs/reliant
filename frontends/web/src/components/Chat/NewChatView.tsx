@@ -66,6 +66,7 @@ import {
 import { ResumeDaemonPill } from "./ResumeDaemonPill";
 import { OomKillBanner } from "./OomKillBanner";
 import { DiskPressureBanner } from "./DiskPressureBanner";
+import { MachineHealthBanner } from "./MachineHealthBanner";
 import { toast } from "sonner";
 import { cn } from "../../lib/utils";
 import Tooltip from "../forge-ui/tooltip";
@@ -767,6 +768,7 @@ export function NewChatView({
 
       {/* OOM banner — machine ran out of memory recently (cloud daemons) */}
       <OomKillBanner />
+      <MachineHealthBanner />
       <DiskPressureBanner />
 
       {/* Message Input - Collapsible when not focused */}

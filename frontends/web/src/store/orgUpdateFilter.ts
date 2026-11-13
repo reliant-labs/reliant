@@ -34,9 +34,21 @@ export function isOtherOrgUpdate(
 ): boolean {
   if (!activeOrgId) return false;
   if (openChatId && update.chat_id === openChatId) return false;
+  if (crossesOrgs(update)) return false;
   const org =
     update.org_id ||
     (update.chat_id ? lookup.chatOrg(update.chat_id) : undefined) ||
     (update.project_id ? lookup.projectOrg(update.project_id) : undefined);
   return !!org && org !== activeOrgId;
+}
+
+/**
+ * An update about something that left one org for another: a project moved
+ * with its chats, runs and triggers (refetch `project_org_moved`). It names the
+ * org the project went to, but the org it left is stale too, so it is kept
+ * whichever of the two is active; the lists it re-reads answer for the active
+ * org alone.
+ */
+function crossesOrgs(update: UserUpdate): boolean {
+  return update.data?.type === "project_org_moved";
 }

@@ -556,7 +556,8 @@ func (s *Service) failingAutomations(ctx context.Context, lim readLimiter, userI
 // server does not know) reaches the owner on their next look, not on the
 // activation's next fire, which for a weekly schedule or a rare webhook may
 // be days away or never. Either item leaves the list the moment its cause is
-// gone. A paused automation is the person's choice and not nagged about.
+// gone. A paused automation is the person's choice and not nagged about; one
+// a project move paused is listed until it is set up again (movePausedItem).
 //
 // Resolving a declaration may read the workflow store, one workflow after
 // another, so the whole loop holds one of lim's tokens.
@@ -587,6 +588,10 @@ func (s *Service) declarationItems(ctx context.Context, stored []*core.Trigger) 
 	var out []*reliantv1.InboxItem
 	broken := &brokenDefinitions{byKey: map[string]*reliantv1.InboxItem{}}
 	for _, t := range stored {
+		if item := movePausedItem(t); item != nil {
+			out = append(out, item)
+			continue
+		}
 		if !t.Enabled {
 			continue
 		}

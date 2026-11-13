@@ -65,6 +65,10 @@ type Deps struct {
 	// leaves them to their own resets.
 	// forge:optional-dep
 	ChatWaker ChatWaker
+	// Seats is the binding matcher (internal/seatmatch): a sign-in in a workspace a member's org
+	// pays for becomes the org's seat. Nil leaves every sign-in personal.
+	// forge:optional-dep
+	Seats SeatMatcher
 }
 
 // validateDeps returns an error if any required Deps field is nil. The

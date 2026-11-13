@@ -2,6 +2,7 @@ import { useCallback, useEffect } from "react";
 import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { DaemonStatus } from "../gen/reliant/v1/daemon_registry_pb";
 import { logger } from "../lib/logger";
+import { heartbeatHealthDisagrees } from "../lib/machineHealth";
 import {
   cachedDaemonList,
   daemonListQuery,
@@ -45,12 +46,24 @@ const lastContradictionRead = new Map<string, number>();
  * Throttled per daemon, so a registry that keeps disagreeing costs one read
  * per window rather than one per 15s heartbeat. A list nobody has loaded is
  * left alone: its first reader's fetch answers.
+ *
+ * healthState is the heartbeat's `health_state` ("ok" | "degraded"): one
+ * that disagrees with the cached machine's health re-reads the list the same
+ * way, so a machine that can no longer start processes shows it at once.
  */
-export function reconcileDaemonHeartbeat(queryClient: QueryClient, daemonId: string, now = Date.now()): void {
+export function reconcileDaemonHeartbeat(
+  queryClient: QueryClient,
+  daemonId: string,
+  now = Date.now(),
+  healthState?: unknown,
+): void {
   const list = cachedDaemonList(queryClient);
   if (!list) return;
   const daemon = list.find((d) => d.daemonId === daemonId);
-  if (daemon && (daemon.status === DaemonStatus.ACTIVE || daemon.status === DaemonStatus.IDLE)) return;
+  // A connected machine whose heartbeat says it became degraded, or
+  // recovered, is stale in the list too (lib/machineHealth).
+  const connected = daemon && (daemon.status === DaemonStatus.ACTIVE || daemon.status === DaemonStatus.IDLE);
+  if (connected && !heartbeatHealthDisagrees(daemon, healthState)) return;
   const last = lastContradictionRead.get(daemonId);
   if (last !== undefined && now - last < HEARTBEAT_CONTRADICTION_REFETCH_MS) return;
   lastContradictionRead.set(daemonId, now);

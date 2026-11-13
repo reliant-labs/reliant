@@ -709,7 +709,7 @@ function routeUserUpdates(
           noteDaemonHeartbeat(data.daemon_id as string);
           // Proof the daemon is attached right now: a cached list that
           // says otherwise is re-read (throttled).
-          reconcileDaemonHeartbeat(queryClient, data.daemon_id as string);
+          reconcileDaemonHeartbeat(queryClient, data.daemon_id as string, Date.now(), data.health_state);
         }
         // detected_ports is present (possibly empty) on real heartbeats and
         // absent on synthetic connection events — only update when carried,
@@ -1413,6 +1413,16 @@ function handleRefetch(update: UserUpdate) {
     // reads it from the daemon list, and the picker lists the models.
     invalidateDaemonList(queryClient);
     void useGlobalDataStore.getState().refetchModels();
+    return;
+  }
+  if (rawType === "project_org_moved") {
+    // A project moved to another org with its chats, runs and triggers: every
+    // list that follows the active org is stale, in both orgs.
+    streamInvalidation.invalidate(STREAM_INVALIDATED_SCOPES.projects);
+    streamInvalidation.invalidate(STREAM_INVALIDATED_SCOPES.chats);
+    streamInvalidation.invalidate(STREAM_INVALIDATED_SCOPES.runs);
+    streamInvalidation.invalidate(STREAM_INVALIDATED_SCOPES.triggers);
+    streamInvalidation.invalidate(STREAM_INVALIDATED_SCOPES.inbox);
     return;
   }
   const refetchType = rawType as RefetchType | undefined;

@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 )
 
@@ -112,4 +113,56 @@ func TestRunMachineStatus_NilRouter(t *testing.T) {
 	var nilMachine *RunMachine
 	_, err = nilMachine.MachineStatus(context.Background(), "u")
 	require.Error(t, err)
+}
+
+// healthStatusRouter is a statusRouter that also reports the attached
+// machine's health.
+type healthStatusRouter struct {
+	statusRouter
+	health db.MachineHealth
+	err    error
+}
+
+func (r *healthStatusRouter) MachineHealth(context.Context, string, *DaemonSelector) (db.MachineHealth, error) {
+	return r.health, r.err
+}
+
+// A connected machine whose daemon reports it degraded is connected AND
+// degraded, with the daemon's reason; a healthy, unreported or unreadable
+// health is just connected, as before health existed (reliant#1919).
+func TestRunMachineStatus_ConnectedMachineHealth(t *testing.T) {
+	cases := []struct {
+		name   string
+		router DaemonRouter
+		want   tools.MachineStatus
+	}{
+		{
+			name: "degraded",
+			router: &healthStatusRouter{statusRouter: statusRouter{online: true}, health: db.MachineHealth{
+				State: db.MachineHealthDegraded, Code: "process_table_full", Reason: "process table is full"}},
+			want: tools.MachineStatus{Connected: true, Degraded: true, HealthReason: "process table is full"},
+		},
+		{
+			name:   "healthy",
+			router: &healthStatusRouter{statusRouter: statusRouter{online: true}, health: db.MachineHealth{State: db.MachineHealthOK}},
+			want:   tools.MachineStatus{Connected: true},
+		},
+		{
+			name:   "not reported (an old daemon)",
+			router: &healthStatusRouter{statusRouter: statusRouter{online: true}},
+			want:   tools.MachineStatus{Connected: true},
+		},
+		{
+			name:   "health read fails",
+			router: &healthStatusRouter{statusRouter: statusRouter{online: true}, err: errors.New("db down")},
+			want:   tools.MachineStatus{Connected: true},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := NewRunMachine(tc.router).MachineStatus(context.Background(), "u")
+			require.NoError(t, err)
+			assert.Equal(t, tc.want, got)
+		})
+	}
 }

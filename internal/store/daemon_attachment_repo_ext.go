@@ -61,8 +61,8 @@ import (
 // reaper) stay bun-formatted.
 
 // UpsertDaemonAttachment writes the lease a new stream session holds. A
-// re-attachment resets memory telemetry and detected ports: a new stream is
-// a fresh daemon session. It reports whether it wrote: another user's lease
+// re-attachment resets memory telemetry, detected ports and health: a new
+// stream is a fresh daemon session. It reports whether it wrote: another user's lease
 // is replaceable only by the daemon row's owner (which heals a lease a past
 // hijack left behind), so a refusal writes nothing.
 func UpsertDaemonAttachment(ctx context.Context, db orm.Context, att *core.DaemonAttachment) (bool, error) {
@@ -84,7 +84,11 @@ func UpsertDaemonAttachment(ctx context.Context, db orm.Context, att *core.Daemo
 			memory_used_bytes = 0,
 			memory_limit_bytes = 0,
 			memory_pressure = FALSE,
-			detected_ports = '[]'
+			detected_ports = '[]',
+			health_state = '',
+			health_code = '',
+			health_reason = '',
+			health_since = NULL
 		WHERE daemon_attachment.user_id = EXCLUDED.user_id
 		   OR EXISTS (SELECT 1 FROM daemons d WHERE d.id = EXCLUDED.daemon_id AND d.user_id = EXCLUDED.user_id)`,
 		att.DaemonID, att.UserID, string(att.Source), att.PodIP, att.PodPort, att.AttachedAt, att.LastStreamActivity,
@@ -146,6 +150,19 @@ func SetDaemonAttachmentPorts(ctx context.Context, db orm.Context, daemonID stri
 	row := &DaemonAttachment{DaemonID: daemonID, DetectedPorts: &s}
 	return ignoreNoRows(UpdateDaemonAttachmentMasked(ctx, db, row,
 		[]string{DaemonAttachmentFieldDetectedPorts}, crud.NoReadBack()))
+}
+
+// SetDaemonAttachmentHealth records a heartbeat's machine health on the
+// lease. A no-op when there is no lease.
+func SetDaemonAttachmentHealth(ctx context.Context, db orm.Context, daemonID string, h core.MachineHealth) error {
+	row := &DaemonAttachment{DaemonID: daemonID, HealthState: string(h.State), HealthCode: h.Code, HealthReason: h.Reason}
+	if !h.Since.IsZero() {
+		since := h.Since
+		row.HealthSince = &since
+	}
+	return ignoreNoRows(UpdateDaemonAttachmentMasked(ctx, db, row,
+		[]string{DaemonAttachmentFieldHealthState, DaemonAttachmentFieldHealthCode, DaemonAttachmentFieldHealthReason, DaemonAttachmentFieldHealthSince},
+		crud.NoReadBack()))
 }
 
 // ReleaseDaemonAttachment deletes the lease a stream session created when it
@@ -276,13 +293,14 @@ func listDaemonAttachments(ctx context.Context, db orm.Context, filter func(*bun
 		}
 		out[i] = daemonAttachmentToCore(row.DaemonID, row.UserID, row.Source, row.PodIP, podPort,
 			row.AttachedAt, row.LastStreamActivity, row.MemoryUsedBytes, row.MemoryLimitBytes, row.MemoryPressure, detected,
-			core.DaemonBuild{Version: row.BuildVersion, Commit: row.BuildCommit, CommitTimeUnix: row.BuildCommitTimeUnix, ForgeVersion: row.BuildForgeVersion})
+			core.DaemonBuild{Version: row.BuildVersion, Commit: row.BuildCommit, CommitTimeUnix: row.BuildCommitTimeUnix, ForgeVersion: row.BuildForgeVersion},
+			machineHealth(row.HealthState, row.HealthCode, row.HealthReason, row.HealthSince))
 	}
 	return out, nil
 }
 
 // daemonAttachmentColumns is the column list scanDaemonAttachments reads, in order.
-const daemonAttachmentColumns = `daemon_id, user_id, source, pod_ip, pod_port, attached_at, last_stream_activity, memory_used_bytes, memory_limit_bytes, memory_pressure, detected_ports, build_version, build_commit, build_commit_time_unix, build_forge_version`
+const daemonAttachmentColumns = `daemon_id, user_id, source, pod_ip, pod_port, attached_at, last_stream_activity, memory_used_bytes, memory_limit_bytes, memory_pressure, detected_ports, build_version, build_commit, build_commit_time_unix, build_forge_version, health_state, health_code, health_reason, health_since`
 
 func scanDaemonAttachments(rows *sql.Rows) ([]*core.DaemonAttachment, error) {
 	defer rows.Close()
@@ -296,9 +314,12 @@ func scanDaemonAttachments(rows *sql.Rows) ([]*core.DaemonAttachment, error) {
 			used, limit                        int64
 			pressure                           bool
 			build                              core.DaemonBuild
+			healthState, healthCode, healthWhy string
+			healthSince                        sql.NullTime
 		)
 		if err := rows.Scan(&daemonID, &userID, &source, &podIP, &podPort, &attachedAt, &lastActivity, &used, &limit, &pressure, &detected,
-			&build.Version, &build.Commit, &build.CommitTimeUnix, &build.ForgeVersion); err != nil {
+			&build.Version, &build.Commit, &build.CommitTimeUnix, &build.ForgeVersion,
+			&healthState, &healthCode, &healthWhy, &healthSince); err != nil {
 			return nil, fmt.Errorf("scanning attachment: %w", err)
 		}
 		var ip *string
@@ -310,8 +331,12 @@ func scanDaemonAttachments(rows *sql.Rows) ([]*core.DaemonAttachment, error) {
 			v := int(podPort.Int64)
 			port = &v
 		}
+		var since *time.Time
+		if healthSince.Valid {
+			since = &healthSince.Time
+		}
 		out = append(out, daemonAttachmentToCore(daemonID, userID, core.DaemonAttachmentSource(source), ip, port,
-			attachedAt, lastActivity, used, limit, pressure, detected, build))
+			attachedAt, lastActivity, used, limit, pressure, detected, build, machineHealth(healthState, healthCode, healthWhy, since)))
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("iterating attachments: %w", err)
@@ -322,17 +347,26 @@ func scanDaemonAttachments(rows *sql.Rows) ([]*core.DaemonAttachment, error) {
 // daemonAttachmentToCore builds the lease record. detected_ports is JSON; a decode
 // failure degrades to "no ports" rather than failing the liveness read.
 func daemonAttachmentToCore(daemonID, userID string, source core.DaemonAttachmentSource, podIP *string, podPort *int,
-	attachedAt, lastActivity time.Time, used, limit int64, pressure bool, detected string, build core.DaemonBuild) *core.DaemonAttachment {
+	attachedAt, lastActivity time.Time, used, limit int64, pressure bool, detected string, build core.DaemonBuild, health core.MachineHealth) *core.DaemonAttachment {
 	att := &core.DaemonAttachment{
 		DaemonID: daemonID, UserID: userID, Source: source, PodIP: podIP, PodPort: podPort,
 		AttachedAt: attachedAt, LastStreamActivity: lastActivity,
 		MemoryUsedBytes: used, MemoryLimitBytes: limit, MemoryPressure: pressure,
-		Build: build,
+		Build: build, Health: health,
 	}
 	if detected != "" && detected != "[]" {
 		_ = json.Unmarshal([]byte(detected), &att.DetectedPorts)
 	}
 	return att
+}
+
+// machineHealth builds the stored health.
+func machineHealth(state, code, reason string, since *time.Time) core.MachineHealth {
+	h := core.MachineHealth{State: core.MachineHealthState(state), Code: code, Reason: reason}
+	if since != nil {
+		h.Since = *since
+	}
+	return h
 }
 
 // ignoreNoRows turns a missing row into success.

@@ -29,3 +29,7 @@ gate_default = config_gen.workloadEnvMap(_process(config_gen.ApiServerConfig {})
 dev_api = config_gen.workloadEnvMap(devcfg.reliant_process, workloads.api_server)
 demo_api = config_gen.workloadEnvMap(democfg.reliant_process, workloads.api_server)
 gate_on = config_gen.workloadEnvMap(_process(config_gen.ApiServerConfig {orgs = {provider_accounts_enabled = True}}), workloads.api_server)
+# The workspace-seats gate (orgs.provider_workspace_seats_enabled) is separate
+# and later: it waits for the routing that honours a seat's org to be in the
+# rollback target too.
+seats_on = config_gen.workloadEnvMap(_process(config_gen.ApiServerConfig {orgs = {provider_accounts_enabled = True, provider_workspace_seats_enabled = True}}), workloads.api_server)

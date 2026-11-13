@@ -345,4 +345,31 @@ message OrgsConfig {
     env_var: "RELIANT_ORGS_PROVIDER_ACCOUNTS_ENABLED"
     description: "Let org owners and admins add org-owned AI provider accounts and bind provider workspaces"
   }];
+
+  // Lets a project's owner move it, with its chats, runs and triggers, to
+  // another org (control-plane docs/design/org-project-move.md). Off by
+  // default: turn it on only once control-plane's ProjectOrgMoveInternalService
+  // is in prod and in the release a rollback would return to, and every
+  // worker runs the ProjectOrgMove workflow. Off, MoveProjectToOrg is refused;
+  // previewing a move, and reading the moves already made, are not gated.
+  bool project_moves_enabled = 4 [(forge.v1.config) = {
+    env_var: "RELIANT_ORGS_PROJECT_MOVES_ENABLED"
+    description: "Let a project's owner move it to another org they belong to"
+  }];
+
+  // Lets an org pay for its members' own sign-ins: binding a provider
+  // workspace, and the matcher that makes a member's sign-in in a bound
+  // workspace one of the org's seats (control-plane
+  // docs/design/org-provider-accounts.md §3.4, §14 "Rollout gates"). Off by
+  // default. A release before org-provider-accounts P5 ignores a seat's org,
+  // so after a rollback to it a seat would serve its holder's other orgs and
+  // personal chats too: turn it on only once P5 is in every API server and
+  // worker AND in the release a rollback would return to. Binding a workspace
+  // needs provider_accounts_enabled as well. Off, a binding is refused and
+  // nothing is attributed; unbinding a workspace, releasing a seat and
+  // clearing a seat no binding covers are never gated.
+  bool provider_workspace_seats_enabled = 5 [(forge.v1.config) = {
+    env_var: "RELIANT_ORGS_PROVIDER_WORKSPACE_SEATS_ENABLED"
+    description: "Let orgs bind provider workspaces and pay for members' sign-ins in them as seats"
+  }];
 }
