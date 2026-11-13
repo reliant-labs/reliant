@@ -12,6 +12,7 @@ import { BranchesSection } from "./BranchesSection";
 import { BrowserSettings } from "./BrowserSettings";
 import { TokenSettings } from "./TokenSettings";
 import { MembersPage } from "./cloud/members/MembersPage";
+import { PoliciesPage } from "./cloud/policies/PoliciesPage";
 import { GitConnectionsSettings } from "./GitConnectionsSettings";
 import { IntegrationsSettings } from "./IntegrationsSettings";
 import type { SettingsSection } from "./SettingsNavigation";
@@ -90,6 +91,8 @@ export function SettingsContent({ activeSection }: SettingsContentProps) {
         return <TokenSettings />;
       case "member-permissions":
         return <MembersPage />;
+      case "policies":
+        return <PoliciesPage />;
       case "git-connections":
         return <GitConnectionsSettings />;
       case "integrations":

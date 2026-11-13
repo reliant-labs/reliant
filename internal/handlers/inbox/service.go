@@ -33,6 +33,11 @@ type Deps struct {
 	// *orgs.Resolver) is a deployment with no orgs: org_id is ignored.
 	// forge:optional-dep
 	Orgs OrgResolver
+	// MyOrgs lists the caller's live org memberships, with their role in each, from the control
+	// plane, as the caller: who is told of an org's rejected API keys. nil (self-hosted, no
+	// control plane) lists none.
+	// forge:optional-dep
+	MyOrgs OrgLister
 }
 
 // validateDeps returns an error if any required Deps field is nil. The
@@ -58,6 +63,8 @@ type Service struct {
 	storageCache sync.Map
 	// inboxReads shares one user's concurrent ListInbox reads (sharedRead).
 	inboxReads singleflight.Group
+	// adminOrgs holds each user's administered orgs (adminOrgIDs) for adminOrgsTTL.
+	adminOrgs sync.Map
 }
 
 // New creates a new inbox service instance with the supplied Deps.

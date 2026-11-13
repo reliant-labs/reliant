@@ -71,7 +71,7 @@ var inboxItemPrefixes = []string{
 	inboxApprovalPrefix, inboxQuestionPrefix, inboxWaitingForMachinePrefix,
 	inboxFailingPrefix, inboxLaunchFailedPrefix, inboxStoragePrefix,
 	inboxNeedsSetupPrefix, inboxRecoveryPrefix, inboxRunPausedPrefix, inboxDefinitionBrokenPrefix,
-	inboxWorktreeReclaimPrefix, inboxWorktreeMarkedPrefix, inboxPersonalFundingPrefix,
+	inboxWorktreeReclaimPrefix, inboxWorktreeMarkedPrefix, inboxPersonalFundingPrefix, inboxOrgKeyRejectedPrefix,
 }
 
 // maxInboxDismissBatch bounds one Dismiss/Restore call ("Dismiss all" on a
@@ -108,7 +108,7 @@ func (s *Service) ListInbox(
 		return nil, err
 	}
 
-	read, err := s.sharedRead(ctx, userID)
+	read, err := s.sharedRead(withCallerJWT(ctx, auth.BearerToken(req.Header().Get("Authorization"))), userID)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list inbox"))
 	}
@@ -118,7 +118,7 @@ func (s *Service) ListInbox(
 	}
 	// The read may be shared with concurrent calls (sharedRead): this
 	// response gets its own copies.
-	for _, shared := range [][]*reliantv1.InboxItem{read.failing, read.storage, read.declarations, read.recovery} {
+	for _, shared := range [][]*reliantv1.InboxItem{read.failing, read.storage, read.declarations, read.recovery, read.orgKeys} {
 		for _, it := range shared {
 			items = append(items, proto.CloneOf(it))
 		}
@@ -192,6 +192,8 @@ type inboxReads struct {
 	// declaration: needs-setup and broken (declarationItems).
 	declarations []*reliantv1.InboxItem
 	recovery     []*reliantv1.InboxItem
+	// orgKeys are the rejected API keys of the orgs the caller administers.
+	orgKeys []*reliantv1.InboxItem
 	// orgs is the org of each chat, project ("chat:<id>", "project:<id>")
 	// and trigger ("trigger:<id>") the items are about, nil for one with no
 	// org yet: what ListInbox's org scope decides an item by (itemOrg).
@@ -209,8 +211,12 @@ const inboxReadTimeout = 15 * time.Second
 // slice of the pool, not N. The read runs on a context detached from the
 // first caller's cancellation (so one caller giving up does not fail the
 // others) with its own deadline. Callers only read the result.
+//
+// The read is shared only within one authorization class (sharedReadKey): what
+// it returns depends on the credential as well as the user, so a session's
+// read is never handed to an access token's call, nor the reverse.
 func (s *Service) sharedRead(ctx context.Context, userID string) (*inboxReads, error) {
-	v, err, _ := s.inboxReads.Do(userID, func() (any, error) {
+	v, err, _ := s.inboxReads.Do(sharedReadKey(ctx, userID), func() (any, error) {
 		rctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), inboxReadTimeout)
 		defer cancel()
 		return s.readInbox(rctx, userID)
@@ -219,6 +225,16 @@ func (s *Service) sharedRead(ctx context.Context, userID string) (*inboxReads, e
 		return nil, err
 	}
 	return v.(*inboxReads), nil
+}
+
+// sharedReadKey is the class of callers whose reads are interchangeable: the
+// same user, through the same kind of credential (only a person hears of an
+// org's rejected keys, orgKeyItems) bound to the same org (a credential bound
+// to an org reads only that org's rows, authz.WithCredentialOrg). Anything
+// readInbox decides by beyond the user belongs here.
+func sharedReadKey(ctx context.Context, userID string) string {
+	bound, _, _ := authz.CredentialRefusal(ctx)
+	return userID + "\x00" + strconv.Itoa(int(auth.CredentialFromContext(ctx))) + "\x00" + bound
 }
 
 // readLimiter hands out inboxReadConcurrency tokens, one per read holding a
@@ -300,6 +316,15 @@ func (s *Service) readInbox(ctx context.Context, userID string) (*inboxReads, er
 		})
 		// Disk state is advisory; a failure here must not blank the whole inbox.
 		advisory("Failed to compute storage inbox items", err)
+		return nil
+	})
+	g.Go(func() error {
+		err := lim.do(gctx, func() (err error) {
+			out.orgKeys, err = s.orgKeyItems(gctx, userID)
+			return err
+		})
+		// Advisory: an admin also sees a key's state in the org's settings.
+		advisory("Failed to list the rejected keys of the caller's orgs for inbox", err)
 		return nil
 	})
 	// Recoveries are durable catalog entries, NOT machine storage observations.
