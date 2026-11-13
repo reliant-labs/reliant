@@ -61,9 +61,12 @@ func randomCCH() string {
 // persisted on message.Message, and read next turn. That plumbing lives outside
 // internal/llm/drivers/anthropic; until it exists we omit just this segment rather
 // than send a stale/fabricated req_ id.
-func claudeCodeBillingHeader(profile claudeCodeProfile) string {
+//
+// firstUserText feeds only a profile with no captured billingVersion, whose
+// cc_version suffix is derived from it (claudeCodeProfile.ccVersion).
+func claudeCodeBillingHeader(profile claudeCodeProfile, firstUserText string) string {
 	header := fmt.Sprintf("x-anthropic-billing-header: cc_version=%s; cc_entrypoint=cli; cch=%s;",
-		profile.billingVersion, randomCCH())
+		profile.ccVersion(firstUserText), randomCCH())
 	if profile.billingPromptID {
 		header += fmt.Sprintf(" cc_prompt_id=%s;", uuid.New().String())
 	}
@@ -81,12 +84,12 @@ func claudeCodeBillingHeader(profile claudeCodeProfile) string {
 // blocks; requests are specialized by their USER message, not by varying the base
 // system prompt. This keeps all Reliant→Anthropic traffic shaped like legitimate
 // Claude Code (a 2-block request would be an anomalous fingerprint).
-func claudeCodeBaseSystemBlocks(apiModel string, disableCache bool) []anthropic.TextBlockParam {
+func claudeCodeBaseSystemBlocks(apiModel string, disableCache bool, firstUserText string) []anthropic.TextBlockParam {
 	profile := claudeCodeProfileFor(apiModel)
 
 	blocks := []anthropic.TextBlockParam{
-		{Text: claudeCodeBillingHeader(profile)}, // not cached
-		{Text: ccIdentityPrompt},                 // not cached
+		{Text: claudeCodeBillingHeader(profile, firstUserText)}, // not cached
+		{Text: ccIdentityPrompt},                                // not cached
 	}
 
 	// 2.1.261 only: an extra uncached block before the cached pair.
@@ -118,4 +121,22 @@ func claudeCodeBaseSystemBlocks(apiModel string, disableCache bool) []anthropic.
 
 	blocks = append(blocks, agentBlock, outputBlock)
 	return blocks
+}
+
+// claudeCodeFirstUserText is the text claude-cli fingerprints: the first text
+// block of the first user message ("" when there is none), as in 2.1.321's
+// `function lO(e)`.
+func claudeCodeFirstUserText(messages []anthropic.MessageParam) string {
+	for _, m := range messages {
+		if m.Role != anthropic.MessageParamRoleUser {
+			continue
+		}
+		for _, block := range m.Content {
+			if block.OfText != nil {
+				return block.OfText.Text
+			}
+		}
+		return ""
+	}
+	return ""
 }
