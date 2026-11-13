@@ -1717,7 +1717,7 @@ workerConfigEnvMap = lambda c: WorkerConfig, config_secrets: [str] -> {str: str 
 }
 
 # forge:section process-selector ReliantProcess
-# forge:hash=87a035ee9053469c82852fa7d9936c97e0212e358a52bfb33f7d0f59a259bf85
+# forge:hash=1ba61b7803b75f1d70e9be1625beb7a02e9c8e35529df4123e35c22ccb32d15b
 # The `reliant` binary binds a config per subcommand, so a workload's env is the
 # binary's root config PLUS the config of the subcommand its process runs.
 # ReliantProcess carries the instances (config.k declares one); reliantProcessEnvMap
@@ -1725,7 +1725,7 @@ workerConfigEnvMap = lambda c: WorkerConfig, config_secrets: [str] -> {str: str 
 schema ReliantProcess:
     # Every `reliant` process: the binary-wide root config.
     reliant_config?: ReliantConfig
-    # Every process at or below `reliant auth`, `reliant daemon`, `reliant github`, `reliant machine`, `reliant project`, `reliant trigger`, `reliant workflow`.
+    # Every process at or below `reliant auth`, `reliant daemon`, `reliant github`, `reliant machine`, `reliant project`, `reliant providers`, `reliant trigger`, `reliant workflow`.
     cli_config?: CLIConfig
     # Every process at or below `reliant server`, `reliant db migrate`, `reliant db vault`.
     database_config?: DatabaseConfig
@@ -1775,7 +1775,7 @@ reliantProcessEnvMap = lambda p: ReliantProcess, argv: [str], config_secrets: [s
     _path = _rest[:_flags[0]] if _flags else _rest
     _cmd = "api_server_config" if _path[:2] == ["server", "api"] else "daemon_config" if _path[:2] == ["daemon", "start"] else "daemon_status_config" if _path[:2] == ["daemon", "status"] else "daemon_stop_config" if _path[:2] == ["daemon", "stop"] else "daemon_logs_config" if _path[:2] == ["daemon", "logs"] else "daemon_register_config" if _path[:2] == ["daemon", "register"] else "gateway_config" if _path[:2] == ["server", "gateway"] else "worker_config" if _path[:2] == ["server", "worker"] else "preview_url_config" if _path[:1] == ["preview-url"] else ""
     _root_sensitive: [str] = RELIANT_CONFIG_SENSITIVE_ENV
-    _in_cli_config = any _p in [["auth"], ["daemon"], ["github"], ["machine"], ["project"], ["trigger"], ["workflow"]] { _path[:len(_p)] == _p }
+    _in_cli_config = any _p in [["auth"], ["daemon"], ["github"], ["machine"], ["project"], ["providers"], ["trigger"], ["workflow"]] { _path[:len(_p)] == _p }
     _in_database_config = any _p in [["server"], ["db", "migrate"], ["db", "vault"]] { _path[:len(_p)] == _p }
     _in_server_process_config = any _p in [["server"]] { _path[:len(_p)] == _p }
     _in_vault_maintenance_config = any _p in [["db", "vault"]] { _path[:len(_p)] == _p }
@@ -1784,7 +1784,7 @@ reliantProcessEnvMap = lambda p: ReliantProcess, argv: [str], config_secrets: [s
     assert all _n in config_secrets { _n in _root_sensitive or _n in _sub_sensitive or _n in _cmd_sensitive }, \
         "reliantProcessEnvMap: config_secrets names ${[_n for _n in config_secrets if _n not in _root_sensitive and _n not in _sub_sensitive and _n not in _cmd_sensitive]}, which is not a `sensitive` field of the config(s) a `reliant` process running ${_path} loads. Sensitive fields: ${sorted(_root_sensitive + _sub_sensitive + _cmd_sensitive)}."
     assert p.reliant_config not in [None, Undefined], "reliantProcessEnvMap: every `reliant` process loads ReliantConfig — set `reliant_config` on the ReliantProcess."
-    assert not _in_cli_config or p.cli_config not in [None, Undefined], "reliantProcessEnvMap: this workload runs `reliant ${' '.join(_path)}`, at or below `reliant auth`, `reliant daemon`, `reliant github`, `reliant machine`, `reliant project`, `reliant trigger`, `reliant workflow`, which loads CLIConfig — set `cli_config` on the ReliantProcess."
+    assert not _in_cli_config or p.cli_config not in [None, Undefined], "reliantProcessEnvMap: this workload runs `reliant ${' '.join(_path)}`, at or below `reliant auth`, `reliant daemon`, `reliant github`, `reliant machine`, `reliant project`, `reliant providers`, `reliant trigger`, `reliant workflow`, which loads CLIConfig — set `cli_config` on the ReliantProcess."
     assert not _in_database_config or p.database_config not in [None, Undefined], "reliantProcessEnvMap: this workload runs `reliant ${' '.join(_path)}`, at or below `reliant server`, `reliant db migrate`, `reliant db vault`, which loads DatabaseConfig — set `database_config` on the ReliantProcess."
     assert not _in_server_process_config or p.server_process_config not in [None, Undefined], "reliantProcessEnvMap: this workload runs `reliant ${' '.join(_path)}`, at or below `reliant server`, which loads ServerProcessConfig — set `server_process_config` on the ReliantProcess."
     assert not _in_vault_maintenance_config or p.vault_maintenance_config not in [None, Undefined], "reliantProcessEnvMap: this workload runs `reliant ${' '.join(_path)}`, at or below `reliant db vault`, which loads VaultMaintenanceConfig — set `vault_maintenance_config` on the ReliantProcess."
