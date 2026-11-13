@@ -42,6 +42,24 @@ func (r *Repo) ListOwnedProviderAccounts(ctx context.Context, owner core.Account
 	return r.accounts.ListOwnedProviderAccounts(ctx, owner)
 }
 
+// ListOwnedProviderAccountsWithSecrets opens every account of the owner under the owner's vault
+// tenant. Like ListProviderAccountsWithSecrets, an account that does not open is skipped.
+func (r *Repo) ListOwnedProviderAccountsWithSecrets(ctx context.Context, owner core.AccountOwner) ([]core.AccountWithSecrets, error) {
+	return r.accounts.ListOwnedProviderAccountsWithSecrets(ctx, owner)
+}
+
+// ListOwnedAccountLimits returns the limit state of the owner's accounts.
+func (r *Repo) ListOwnedAccountLimits(ctx context.Context, owner core.AccountOwner) (map[string]core.LimitState, error) {
+	return r.accounts.ListOwnedAccountLimits(ctx, owner)
+}
+
+// ListMemberAccountGrants returns when each of orgID's accounts was granted to userID, by
+// account id. The caller decides whether a grant still counts (control-plane
+// docs/design/org-provider-accounts.md §3.3: only one made in the current membership).
+func (r *Repo) ListMemberAccountGrants(ctx context.Context, orgID, userID string) (map[string]time.Time, error) {
+	return store.ListMemberAccountGrants(ctx, r.ORM(), orgID, userID)
+}
+
 // GetOwnedProviderAccountWithSecrets opens one of the owner's accounts under the owner's vault tenant.
 func (r *Repo) GetOwnedProviderAccountWithSecrets(ctx context.Context, owner core.AccountOwner, accountID string) (*core.AccountWithSecrets, error) {
 	return r.accounts.GetOwnedProviderAccountWithSecrets(ctx, owner, accountID)

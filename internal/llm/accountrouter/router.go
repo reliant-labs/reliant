@@ -192,7 +192,7 @@ func (r *router) Assign(ctx context.Context, req Request) (Result, error) {
 
 func (r *router) Alternatives(ctx context.Context, req Request, exclude string) (bool, Earliest, error) {
 	now := r.now()
-	views := classify(req, r.loadLimits(ctx, req.UserID), now, exclude)
+	views := bestTier(classify(req, r.loadLimits(ctx, req.UserID), now, exclude))
 	var earliest Earliest
 	for _, v := range views {
 		switch v.state {
@@ -210,9 +210,18 @@ func (r *router) Alternatives(ctx context.Context, req Request, exclude string) 
 // choose picks an account for a thread that has none usable. byPreference is
 // true when the caller's preferred account decided it.
 func (r *router) choose(ctx context.Context, req Request, views []accountView, now time.Time) (pick accountView, byPreference bool, err error) {
+	// A preferred account is an explicit choice: it wins whenever it is
+	// usable, whatever its tier.
+	if want := preferredInstance(req); want != "" {
+		for _, v := range views {
+			if v.state == stateOK && matchesInstance(v.cfg, want) {
+				return v, true, nil
+			}
+		}
+	}
 	var usable []accountView
 	var limited []accountView
-	for _, v := range views {
+	for _, v := range bestTier(views) {
 		switch v.state {
 		case stateOK:
 			usable = append(usable, v)
@@ -237,13 +246,6 @@ func (r *router) choose(ctx context.Context, req Request, views []accountView, n
 		return accountView{}, false, all
 	}
 
-	if want := preferredInstance(req); want != "" {
-		for _, v := range usable {
-			if matchesInstance(v.cfg, want) {
-				return v, true, nil
-			}
-		}
-	}
 	if len(usable) == 1 {
 		return usable[0], false, nil
 	}
@@ -251,6 +253,34 @@ func (r *router) choose(ctx context.Context, req Request, views []accountView, n
 		return lowestPriority(usable), false, nil
 	}
 	return r.leastUsed(ctx, req, usable, now), false, nil
+}
+
+// bestTier keeps the views of the best tier (models.AccountConfig.Tier) that
+// has an account able to serve the model, limited or not. Routing never mixes
+// tiers, and never leaves a tier because its accounts are limited: an org's
+// limited accounts make the thread wait for their reset rather than spend the
+// person's own (control-plane docs/design/org-provider-accounts.md §4.3,
+// §4.6). With every account on one tier, it keeps them all.
+func bestTier(views []accountView) []accountView {
+	best, found := models.AccountTier(0), false
+	for _, v := range views {
+		if v.state == stateUnserved {
+			continue
+		}
+		if !found || v.cfg.Tier < best {
+			best, found = v.cfg.Tier, true
+		}
+	}
+	if !found {
+		return views
+	}
+	out := views[:0:0]
+	for _, v := range views {
+		if v.cfg.Tier == best {
+			out = append(out, v)
+		}
+	}
+	return out
 }
 
 // leastUsed returns a uniformly random account from the lowest usage band.

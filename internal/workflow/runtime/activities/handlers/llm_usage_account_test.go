@@ -59,7 +59,74 @@ func TestUsageMeter_RecordsTheServingAccount(t *testing.T) {
 	require.NoError(t, rows.Err())
 	assert.Equal(t, []string{"acct-served", ""}, got, "ordinal 1 was routed, ordinal 2 was not")
 
+	assert.Equal(t, "", usageFunding(nil, "anthropic"))
+	assert.Equal(t, models.FundingLocal, usageFunding(unrouted, "local"))
+
 	assert.Equal(t, "", usageAccountID(nil))
 	assert.Equal(t, "", usageAccountID(unrouted))
 	assert.Equal(t, "acct-served", usageAccountID(routed))
+}
+
+// The ledger row names who paid (llm_call_usage.funding) and the run's org; an
+// org-funded call is also counted in the org's rollup, which an org admin
+// reads, and a personal one never is (org-provider-accounts.md §3.7, §5).
+func TestUsageMeter_RecordsFundingAndTheOrgRollup(t *testing.T) {
+	t.Parallel()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { answered(w) }))
+	defer srv.Close()
+
+	h := NewIdempotencyTestHelper(t)
+	defer h.Cleanup()
+	ctx := context.Background()
+	project := h.CreateTestProject(ctx, "proj-usage-funding", "user-usage-funding")
+	chat := h.CreateTestChat(ctx, "chat-usage-funding", project.ID, project.UserID)
+
+	driver := reliantTestDriver(srv.URL)
+	served := func(id, org, funding string) *resolvedLLMCall {
+		return &resolvedLLMCall{Driver: driver, Model: driver.Model(), OrgID: "org-acme",
+			Account: &routedAccount{Config: models.AccountConfig{Funding: funding,
+				DriverConfig: models.DriverConfig{AccountID: id, AccountOrgID: org}}}}
+	}
+	exec := func(ctx context.Context, _ string) (string, error) {
+		meter := newUsageMeter(h.Repo(), project.UserID, chat.ID, "title")
+		for _, r := range []*resolvedLLMCall{
+			served("org-key", "org-acme", models.FundingOrgKey),
+			served("mine", "", models.FundingPersonal),
+			served("org-key", "org-acme", models.FundingOrgKey),
+		} {
+			if _, err := meter.streamAndAccumulate(ctx, r, nil, nil, nil); err != nil {
+				return "", err
+			}
+		}
+		return "", nil
+	}
+	var suite temporaltest.WorkflowTestSuite
+	env := suite.NewTestActivityEnvironment()
+	env.RegisterActivityWithOptions(exec, activity.RegisterOptions{Name: "MeteredFunding"})
+	_, err := env.ExecuteActivity("MeteredFunding", "x")
+	require.NoError(t, err)
+
+	type row struct{ account, org, funding string }
+	var got []row
+	rows, err := h.DB().QueryContext(ctx, `SELECT account_id, org_id, funding FROM llm_call_usage WHERE chat_id = $1 ORDER BY id`, chat.ID)
+	require.NoError(t, err)
+	defer rows.Close()
+	for rows.Next() {
+		var r row
+		require.NoError(t, rows.Scan(&r.account, &r.org, &r.funding))
+		got = append(got, r)
+	}
+	require.NoError(t, rows.Err())
+	assert.Equal(t, []row{
+		{"org-key", "org-acme", "org_key"}, {"mine", "org-acme", "personal"}, {"org-key", "org-acme", "org_key"},
+	}, got)
+
+	var orgRows, orgCalls int
+	require.NoError(t, h.DB().QueryRowContext(ctx,
+		`SELECT count(*), coalesce(sum(calls), 0) FROM llm_org_usage_daily WHERE org_id = 'org-acme'`).Scan(&orgRows, &orgCalls))
+	assert.Equal(t, 1, orgRows, "one rollup row: the org key, never the personal account")
+	assert.Equal(t, 2, orgCalls)
+	var accountInRollup string
+	require.NoError(t, h.DB().QueryRowContext(ctx, `SELECT account_id FROM llm_org_usage_daily WHERE org_id = 'org-acme'`).Scan(&accountInRollup))
+	assert.Equal(t, "org-key", accountInRollup)
 }

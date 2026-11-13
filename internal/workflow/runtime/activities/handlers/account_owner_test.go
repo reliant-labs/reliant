@@ -58,8 +58,9 @@ func TestRouting_ALimitedOrgKeyIsBenchedForTheOrg(t *testing.T) {
 			other.DriverID = tc.acct.DriverID
 			withAvailableDrivers(t, driversWith(tc.acct, other))
 			env := newRoutingEnv(t)
+			// The run is org-1's: an org key serves only its own org's runs.
 			first, err := resolveLLMCall(context.Background(), nil, llmCallSpec{
-				UserID: "u1", SessionID: "s", ThreadID: "t",
+				UserID: "u1", OrgID: "org-1", Attended: true, SessionID: "s", ThreadID: "t",
 				Selector: models.ModelSelector{ID: routeModel + "@" + string(tc.acct.DriverID)}, Routing: env.routing,
 			})
 			require.NoError(t, err)

@@ -64,7 +64,11 @@ var userScopedReads = map[string]string{
 	"ListTriggers":                         readCallersFilter,
 	// The takeover decides each offer: its offeree and offerer must be live
 	// members of its org, or an admin of it asked (internal/orgtakeover).
-	"ListPendingTriggerOffers":     readCallersFilter,
+	"ListPendingTriggerOffers": readCallersFilter,
+	// The account loader counts a grant only for a live member of the org,
+	// and only when it postdates their current membership (internal/llm/
+	// drivers, org-provider-accounts §3.3).
+	"ListMemberAccountGrants":      readCallersFilter,
 	"ListUnlaunchedTriggerEvents":  readCallersFilter,
 	"ListWorktreeRecoveries":       readCallersFilter,
 	"SearchChats":                  readCallersFilter,

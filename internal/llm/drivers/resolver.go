@@ -267,6 +267,13 @@ func defaultGetDriver(ctx context.Context, scope Scope, preferences models.Prefe
 			lastErr = fmt.Errorf("model %q: no configured driver can serve it (explicitDriver=%q) — is the provider connected and is this binary current?", modelID, explicitDriverID)
 			continue // Try next model in preferences
 		}
+		// The re-check at the driver build (org-provider-accounts §8.1 point 3):
+		// a default account of another org is passed over for the next of the
+		// driver's accounts this scope may use.
+		if driverConfig, found = scopedDefaultAccount(ctx, scope, availableDrivers, driverConfig); !found {
+			lastErr = fmt.Errorf("model %q@%s: no account of the provider may serve this run", modelID, driverConfig.DriverID)
+			continue
+		}
 
 		// The model as the selected provider serves it: a provider may cap the
 		// window or the output below the model-wide figures (Copilot serves
@@ -351,4 +358,18 @@ func GetDriverForAccount(ctx context.Context, userID string, driverConfig models
 	}
 	driverOpts = append(driverOpts, opts...)
 	return GetDriverForModel(model, models.Family(driverConfig.DriverID), driverOpts...)
+}
+
+// scopedDefaultAccount is cfg when CheckAccountScope admits it, else the first of its driver's
+// accounts that it does. ok is false when none does.
+func scopedDefaultAccount(ctx context.Context, scope Scope, avail models.AvailableDrivers, cfg models.DriverConfig) (models.DriverConfig, bool) {
+	if CheckAccountScope(ctx, scope, cfg) == nil {
+		return cfg, true
+	}
+	for _, acct := range avail.Accounts[cfg.DriverID] {
+		if acct.AccountID != cfg.AccountID && CheckAccountScope(ctx, scope, acct.DriverConfig) == nil {
+			return acct.DriverConfig, true
+		}
+	}
+	return cfg, false
 }

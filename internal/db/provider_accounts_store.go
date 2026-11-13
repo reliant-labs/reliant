@@ -175,7 +175,13 @@ func (s *accountStore) ListOwnedProviderAccounts(ctx context.Context, owner core
 }
 
 func (s *accountStore) ListProviderAccountsWithSecrets(ctx context.Context, userID string) ([]core.AccountWithSecrets, error) {
-	rows, err := store.ListOwnerProviderAccountsSealed(ctx, s.db, core.UserAccountOwner(userID))
+	return s.ListOwnedProviderAccountsWithSecrets(ctx, core.UserAccountOwner(userID))
+}
+
+// ListOwnedProviderAccountsWithSecrets opens every account of the owner, each under the owner's
+// tenant. An invalid owner lists nothing.
+func (s *accountStore) ListOwnedProviderAccountsWithSecrets(ctx context.Context, owner core.AccountOwner) ([]core.AccountWithSecrets, error) {
+	rows, err := store.ListOwnerProviderAccountsSealed(ctx, s.db, owner)
 	if err != nil {
 		return nil, err
 	}
@@ -618,6 +624,16 @@ func (s *accountStore) ListAccountLimits(ctx context.Context, userID string) (ma
 		return map[string]core.LimitState{}, nil
 	}
 	return store.ListUserAccountLimits(ctx, s.db, userID)
+}
+
+// ListOwnedAccountLimits returns the limit state of the owner's accounts: an org key's limits
+// are kept under the org's owner key, shared by every member who uses it.
+func (s *accountStore) ListOwnedAccountLimits(ctx context.Context, owner core.AccountOwner) (map[string]core.LimitState, error) {
+	key := owner.Key()
+	if key == "" {
+		return map[string]core.LimitState{}, nil
+	}
+	return store.ListUserAccountLimits(ctx, s.db, key)
 }
 
 // GetAccountLimits returns one account's limit state, or (nil, nil) when it has none. Unlike

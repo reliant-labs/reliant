@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -36,11 +37,17 @@ var AccountAvailabilityClient func(ctx context.Context, driverID models.DriverID
 // buildAvailableDrivers is BuildAvailableDrivers with the availability client
 // builder injected, so tests never reach a provider's real catalog endpoint.
 func buildAvailableDrivers(ctx context.Context, repo AvailabilityStore, scope Scope, build clientBuilder) (models.AvailableDrivers, error) {
-	accounts, unavailable, err := configuredAccounts(ctx, repo, scope)
+	return buildAvailableDriversFor(ctx, repo, currentOrgMembership(), scope, build)
+}
+
+// buildAvailableDriversFor is buildAvailableDrivers with the membership resolver injected.
+func buildAvailableDriversFor(ctx context.Context, repo AvailabilityStore, members OrgMembership, scope Scope, build clientBuilder) (models.AvailableDrivers, error) {
+	accounts, unavailable, err := configuredAccounts(ctx, repo, members, scope)
 	if err != nil {
 		return models.AvailableDrivers{}, err
 	}
 	available := withAccountAvailability(ctx, accounts, build)
+	available.DriverRank = driverRank(available.Accounts)
 	for driverID, reason := range unavailable {
 		if _, ok := available.Accounts[driverID]; ok {
 			continue
@@ -63,15 +70,19 @@ func usableAPIKey(key string) bool {
 	return key != "" && key != "dummy" && key != db.ProviderOAuthMarker
 }
 
-// configuredAccounts loads every usable account of every provider the user has connected, in
+// configuredAccounts loads every usable account scope may draw on (see Scope), per provider:
+// the better tier first, then within a tier a seat before an org key, each in its owner's
 // priority order. Paused accounts and accounts needing sign-in are left out; limited ones are
 // in (being limited is the account router's business, not resolution's). unavailable names the
-// providers whose every account needs the user to sign in again, with the reason to show.
+// providers whose every account of the person's own needs them to sign in again, with the
+// reason to show.
 //
-// This is the one loader every scope goes through. It reads only the person's own accounts
-// (scope.UserID) for every scope: org-owned accounts and org-paid seats do not exist yet, and
-// when they do they are added here, from scope.OrgID and scope.Attended, so no caller changes.
-func configuredAccounts(ctx context.Context, repo AvailabilityStore, scope Scope) (map[models.DriverID][]models.AccountConfig, map[models.DriverID]string, error) {
+// This is the one loader every scope goes through (control-plane
+// docs/design/org-provider-accounts.md §4.1): for person u in org X it returns u's own
+// unattributed accounts, u's accounts attributed to X, and X's own accounts u may use, never an
+// account owned by or attributed to another org. With no org account and no attribution it
+// returns exactly the person's accounts, on one tier, as before orgs.
+func configuredAccounts(ctx context.Context, repo AvailabilityStore, members OrgMembership, scope Scope) (map[models.DriverID][]models.AccountConfig, map[models.DriverID]string, error) {
 	userID := scope.UserID
 	if userID == "" {
 		// Per reliant.md: no fallback paths, error out when things aren't set properly
@@ -87,10 +98,31 @@ func configuredAccounts(ctx context.Context, repo AvailabilityStore, scope Scope
 	}
 	now := time.Now()
 
+	facts := orgMemberFacts(ctx, members, scope)
+	cands := make([]candidate, 0, len(stored))
+	for i := range stored {
+		c, ok := personalCandidate(ctx, scope, facts, &stored[i])
+		if !ok {
+			continue
+		}
+		if l, ok := limits[c.acct.ID]; ok {
+			c.limit = &l
+		}
+		cands = append(cands, c)
+	}
+	cands = append(cands, orgAccountCandidates(ctx, repo, scope, facts)...)
+	// Stable: within a tier and group, the owner's priority order the reads returned.
+	slices.SortStableFunc(cands, func(a, b candidate) int {
+		if a.tier != b.tier {
+			return int(a.tier) - int(b.tier)
+		}
+		return a.group - b.group
+	})
+
 	accounts := make(map[models.DriverID][]models.AccountConfig)
 	needsSignIn := make(map[models.DriverID]bool)
-	for i := range stored {
-		acct := &stored[i]
+	for _, c := range cands {
+		acct := c.acct
 		driverID := models.DriverID(acct.Provider)
 		// A provider is available only if its driver is registered. Credentials for
 		// catalog-only providers (xai, groq, azure, bedrock) must not make their models
@@ -98,14 +130,14 @@ func configuredAccounts(ctx context.Context, repo AvailabilityStore, scope Scope
 		if !hasRegisteredDriver(acct.Provider) {
 			continue
 		}
-		var lim *core.LimitState
-		if l, ok := limits[acct.ID]; ok {
-			lim = &l
-		}
-		status := acct.Status(lim, now)
+		status := acct.Status(c.limit, now)
 		switch status {
 		case core.AccountNeedsSignIn:
-			needsSignIn[driverID] = true
+			// Only the person can sign in again; an org key that needs attention is
+			// the org admins' to fix (§4.7), so it names no reason here.
+			if !acct.Owner().IsOrg() {
+				needsSignIn[driverID] = true
+			}
 			continue
 		case core.AccountPaused:
 			continue
@@ -118,9 +150,11 @@ func configuredAccounts(ctx context.Context, repo AvailabilityStore, scope Scope
 			DriverConfig: cfg,
 			Priority:     acct.Priority,
 			Status:       models.AccountStatus(status),
+			Tier:         c.tier,
+			Funding:      c.funding,
 		}
-		if lim != nil && lim.LimitedUntil != nil && lim.LimitedUntil.After(now) {
-			ac.LimitedUntil = *lim.LimitedUntil
+		if c.limit != nil && c.limit.LimitedUntil != nil && c.limit.LimitedUntil.After(now) {
+			ac.LimitedUntil = *c.limit.LimitedUntil
 		}
 		accounts[driverID] = append(accounts[driverID], ac)
 	}
@@ -134,9 +168,6 @@ func configuredAccounts(ctx context.Context, repo AvailabilityStore, scope Scope
 	return accounts, unavailable, nil
 }
 
-// accountDriverConfig shapes one stored account into the credential material its driver needs.
-// ok is false for an account that cannot serve anything (no usable secret, or an expired OAuth
-// session with no refresh token to recover it).
 // orgOwnerID is the org that owns an account, or "" for a person's own.
 func orgOwnerID(owner core.AccountOwner) string {
 	if owner.IsOrg() {
@@ -145,6 +176,9 @@ func orgOwnerID(owner core.AccountOwner) string {
 	return ""
 }
 
+// accountDriverConfig shapes one stored account into the credential material its driver needs.
+// ok is false for an account that cannot serve anything (no usable secret, or an expired OAuth
+// session with no refresh token to recover it).
 func accountDriverConfig(ctx context.Context, userID string, acct *core.AccountWithSecrets) (models.DriverConfig, bool) {
 	driverID := models.DriverID(acct.Provider)
 	secret := strings.TrimSpace(acct.Secrets.Secret)
@@ -158,6 +192,7 @@ func accountDriverConfig(ctx context.Context, userID string, acct *core.AccountW
 		AccountLabel:     acct.DisplayLabel(),
 		AccountEmail:     acct.Email,
 		AccountOrgID:     orgOwnerID(acct.Owner()),
+		AttributedOrgID:  acct.AttributedOrgID,
 		AccountUUID:      acct.ExternalAccountID,
 		OrganizationUUID: acct.OrganizationID,
 	}

@@ -359,6 +359,17 @@ type OrgMembership struct {
 	// field: a caller reads "" as "unknown" and refuses
 	// anything only an admin may do.
 	Role string
+	// MemberSince is when the member's CURRENT membership of OrgID began (a
+	// rejoin's time, not the first join's). Zero when Member is false and
+	// from a control plane that predates the field (control-plane#2662): a
+	// caller then counts no grant made in the org (fail closed;
+	// docs/design/org-provider-accounts.md §3.3 there).
+	MemberSince time.Time
+	// OrgLiveMembers is how many live members OrgID has, valid only when
+	// OrgLiveMembersKnown (a member's answer from a control plane that has
+	// the field). It only ever chooses a default, never grants anything.
+	OrgLiveMembers      int32
+	OrgLiveMembersKnown bool
 }
 
 // ErrUnsupported reports a control plane that predates the rpc asked for. A
@@ -369,9 +380,11 @@ var ErrUnsupported = errors.New("accesstokenclient: the control plane does not s
 // orgID, or, with orgID "", which org is their default.
 func (c *Client) ResolveOrgMembership(ctx context.Context, userID, orgID string) (OrgMembership, error) {
 	var out struct {
-		OrgID  string `json:"orgId"`
-		Member bool   `json:"member"`
-		Role   string `json:"role"`
+		OrgID          string     `json:"orgId"`
+		Member         bool       `json:"member"`
+		Role           string     `json:"role"`
+		MemberSince    *time.Time `json:"memberSince"`
+		OrgLiveMembers *int32     `json:"orgLiveMembers"`
 	}
 	body := map[string]any{"userId": userID}
 	if orgID != "" {
@@ -385,8 +398,15 @@ func (c *Client) ResolveOrgMembership(ctx context.Context, userID, orgID string)
 	}
 	m := OrgMembership{OrgID: out.OrgID, Member: out.Member}
 	if out.Member {
-		// A role is only ever a member's: never carry one on a negative.
+		// A role, a membership epoch and a member count are only ever a
+		// member's: never carry one on a negative.
 		m.Role = out.Role
+		if out.MemberSince != nil {
+			m.MemberSince = out.MemberSince.UTC()
+		}
+		if out.OrgLiveMembers != nil {
+			m.OrgLiveMembers, m.OrgLiveMembersKnown = *out.OrgLiveMembers, true
+		}
 	}
 	return m, nil
 }
