@@ -53,6 +53,13 @@ func (s *Service) recordSelection(
 	binding ...*string,
 ) (*chatselection.Selection, error) {
 	patch := s.launcher().SelectionPatch(ctx, userID, chat.ProjectID, workflowName, sent)
+	// The root model this request chose, before any automatic substitution
+	// below: only that, unsubstituted, can be a person's pick.
+	_, sentRootModel := patch["model"]
+	rootMoved := false
+	for _, sub := range moved {
+		rootMoved = rootMoved || sub.Input == "model"
+	}
 	if len(moved) > 0 {
 		stored, _ := s.selections().Get(ctx, chat.ID)
 		applyMovesToPatch(patch, stored, effective, moved)
@@ -105,28 +112,35 @@ func (s *Service) recordSelection(
 	if sel != nil && (before == nil || before.Version != sel.Version) {
 		s.announceSelection(ctx, userID, chat, sel)
 	}
-	_, pickedModel := patch["model"]
-	if sel != nil && (pickedModel || len(binding) > 0 && binding[0] != nil) {
-		s.recordPersonPick(ctx, userID, chat, sel)
+	bound := len(binding) > 0 && binding[0] != nil
+	if sel != nil && (sentRootModel || rootMoved || bound) {
+		s.recordPersonPick(ctx, userID, chat, sel, !rootMoved)
 	}
 	return sel, nil
 }
 
-// recordPersonPick records the chat's root model and provider switch, as sel
-// now holds them, as its owner's own pick (chat_person_picks): the one named
-// provider that is consent to spend their own account in the chat's org, for
-// the root's calls (org-provider-accounts §4.4, §10). Only the chat's owner,
-// signed in as a person, picks: a write by a workflow, an agent, the CLI
-// login or a teammate records nothing, and a pick it changes the selection
-// away from no longer counts (ChatPersonPickDriver compares). A chat with no
-// org has nothing to consent to. Best-effort: with no pick the call asks.
-func (s *Service) recordPersonPick(ctx context.Context, userID string, chat *db.Chat, sel *chatselection.Selection) {
-	if chat.OrgID == nil || *chat.OrgID == "" || userID != chat.UserID || auth.RequirePerson(ctx, "pick the chat's model") != nil {
+// recordPersonPick settles the chat's person pick (chat_person_picks) after a
+// write that changed its root model or provider switch: the one named
+// provider that is consent to spend the owner's own account in the chat's
+// org, for the root's calls (org-provider-accounts §4.4, §10).
+//
+// The pick is recorded, as sel now holds it, only for the request's own
+// choice (chosen: no automatic substitution moved the root model) made by
+// the chat's owner signed in as a person, in a chat with an org. Any other
+// such write supersedes an earlier pick, so it is removed: a provider the
+// server substituted, or one a workflow, an agent, the CLI login or a
+// teammate named, is never consent, and never revives an old pick either.
+// Best-effort: with no pick the call asks.
+func (s *Service) recordPersonPick(ctx context.Context, userID string, chat *db.Chat, sel *chatselection.Selection, chosen bool) {
+	if chosen && chat.OrgID != nil && *chat.OrgID != "" && userID == chat.UserID && auth.RequirePerson(ctx, "pick the chat's model") == nil {
+		key, _ := db.RootModelPick(sel.Params)
+		if err := s.deps.Repo.RecordChatPersonPick(ctx, chat.ID, userID, *chat.OrgID, key, sel.ChatProvider); err != nil {
+			logging.WarnContext(ctx, "Failed to record the person's pick for the chat; its calls ask", "chatID", chat.ID, "error", err)
+		}
 		return
 	}
-	key, _ := db.RootModelPick(sel.Params)
-	if err := s.deps.Repo.RecordChatPersonPick(ctx, chat.ID, userID, *chat.OrgID, key, sel.ChatProvider); err != nil {
-		logging.WarnContext(ctx, "Failed to record the person's pick for the chat; its calls ask", "chatID", chat.ID, "error", err)
+	if err := s.deps.Repo.ClearChatPersonPick(ctx, chat.ID); err != nil {
+		logging.WarnContext(ctx, "Failed to clear a superseded pick for the chat", "chatID", chat.ID, "error", err)
 	}
 }
 

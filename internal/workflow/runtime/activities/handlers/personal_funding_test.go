@@ -886,3 +886,71 @@ func TestPersonalFunding_OnlyThePersonsRootPickIsConsent(t *testing.T) {
 		})
 	}
 }
+
+// Case 1 (limited) with the person's own pick: the org's accounts of the
+// picked provider are rate-limited and the person picked that provider for
+// the chat's root. The root's call goes on on their account, asking nothing
+// and granting no lease (promotePickWhileOrgLimited); anything else is as
+// without a pick.
+func TestPersonalFunding_LimitedOrgTierHonoursTheRootPick(t *testing.T) {
+	reset := time.Date(2099, 1, 2, 5, 0, 0, 0, time.UTC)
+	for _, tc := range []struct {
+		name   string
+		pick   string
+		order  orgfunding.Order
+		mutate func(*llmCallSpec)
+		serves bool
+		asked  bool
+	}{
+		{name: "a matching pick serves on the person's account", pick: "claude", serves: true},
+		{name: "a pick of another provider asks", pick: "codex", asked: true},
+		{name: "a sub-agent of the root never gains the pick", pick: "claude", mutate: func(s *llmCallSpec) { s.Descendant = true }, asked: true},
+		{name: "org_only outranks the pick", pick: "claude", order: orgfunding.OrderOrgOnly},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			// The org's key and the person's own account are both Claude's:
+			// the provider the person picked.
+			orgClaude := acmeKey("acme-key")
+			orgClaude.DriverID = "claude"
+			withAvailableDrivers(t, tiered(orgClaude, personal(claudeAccount("my-claude", "me@me.com", 0))))
+			env := newFundingEnv(t, "", tc.order)
+			env.store.personPick = map[string][2]string{"chat-1": {fundOrg, tc.pick}}
+			env.routing.Store.(*routerFake).bench("acme-key", reset, "five_hour")
+			mutate := tc.mutate
+			if mutate == nil {
+				mutate = func(*llmCallSpec) {}
+			}
+			res, err := env.resolve(t, "root", routeModel, mutate)
+			if tc.serves {
+				require.NoError(t, err)
+				assert.Equal(t, "my-claude", res.Account.Config.AccountID, "the picked provider's own account serves")
+				assert.Nil(t, env.store.row("chat-1"), "no question and no lease")
+				return
+			}
+			var failure *types.UsageLimitFailure
+			require.ErrorAs(t, err, &failure, "a limited org tier is a usage-limit refusal")
+			assert.False(t, failure.Facts.AlternativeAccount, "no retry on the person's account")
+			assert.NotContains(t, env.built, "my-claude")
+			q := env.store.row("chat-1")
+			if tc.asked {
+				require.NotNil(t, q)
+				assert.Equal(t, core.PersonalFundingAsked, q.State)
+			} else {
+				assert.Nil(t, q, "no question and no lease")
+			}
+		})
+	}
+}
+
+// A usable org account of the picked provider still serves first: the pick
+// is consent, not a preference over the org's accounts.
+func TestPersonalFunding_RootPickKeepsTheOrgFirst(t *testing.T) {
+	orgClaude := acmeKey("acme-key")
+	orgClaude.DriverID = "claude"
+	withAvailableDrivers(t, tiered(orgClaude, personal(claudeAccount("my-claude", "me@me.com", 0))))
+	env := newFundingEnv(t, "", "")
+	env.store.personPick = map[string][2]string{"chat-1": {fundOrg, "claude"}}
+	res, err := env.resolve(t, "root", routeModel)
+	require.NoError(t, err)
+	assert.Equal(t, "acme-key", res.Account.Config.AccountID)
+}

@@ -60,6 +60,14 @@ func PutChatPersonPick(ctx context.Context, db orm.Context, chatID, userID, orgI
 	return nil
 }
 
+// DeleteChatPersonPickByChat removes chatID's person pick, if it has one.
+func DeleteChatPersonPickByChat(ctx context.Context, db orm.Context, chatID string) error {
+	if _, err := db.Bun().NewRaw(`DELETE FROM chat_person_picks WHERE chat_id = ?`, chatID).Exec(ctx); err != nil {
+		return fmt.Errorf("clear the person's pick for the chat: %w", err)
+	}
+	return nil
+}
+
 // GetChatPersonPick returns chatID's person pick, nil when it has none.
 func GetChatPersonPick(ctx context.Context, db orm.Context, chatID string) (*ChatPersonPick, error) {
 	row := new(ChatPersonPick)

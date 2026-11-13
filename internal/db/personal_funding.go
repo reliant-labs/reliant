@@ -152,6 +152,12 @@ func (r *Repo) RecordChatPersonPick(ctx context.Context, chatID, userID, orgID, 
 	return store.PutChatPersonPick(ctx, r.ORM(), chatID, userID, orgID, modelKey, chatProvider, time.Now())
 }
 
+// ClearChatPersonPick removes chatID's person pick: a later write of its root
+// model or provider switch superseded it.
+func (r *Repo) ClearChatPersonPick(ctx context.Context, chatID string) error {
+	return store.DeleteChatPersonPickByChat(ctx, r.ORM(), chatID)
+}
+
 // ChatPersonPickDriver is the provider a person picked for chatID's root in
 // orgID, the one named provider that is consent to spend their own account
 // there (org-provider-accounts §4.4, §10). It is "" when nobody did, when
