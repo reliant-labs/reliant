@@ -21,7 +21,7 @@ import (
 )
 
 // forge:section MockOrgResolver
-// forge:hash=80683e1618bfe2157cf10a4d37614a5455d0c5b2f176f9dcd766cec1445d5e88
+// forge:hash=4d2cc6317bbaf8446fe92f23a7810192cb935c679f5f297a42c82ae1b35d4ab1
 
 // MockOrgResolver is a test mock for the OrgResolver interface.
 //
@@ -31,10 +31,11 @@ import (
 // "MockOrgResolver.<Method>Func not set" error.
 type MockOrgResolver struct {
 	contractkit.Recorder
-	NamedFunc      func(context.Context, string, string) (string, error)
-	DefaultOrgFunc func(context.Context, string) (string, error)
-	ActingOrgFunc  func(context.Context, string, string) (string, error)
-	ListScopeFunc  func(context.Context, string, string, orgs.Backfill) (*core.OrgScope, error)
+	NamedFunc            func(context.Context, string, string) (string, error)
+	DefaultOrgFunc       func(context.Context, string) (string, error)
+	ActingOrgFunc        func(context.Context, string, string) (string, error)
+	ListScopeFunc        func(context.Context, string, string, orgs.Backfill) (*core.OrgScope, error)
+	LiveMembersFreshFunc func(context.Context, string, string) (int, bool, error)
 }
 
 // Named records the call and delegates to NamedFunc when set.
@@ -71,6 +72,15 @@ func (m *MockOrgResolver) ListScope(ctx context.Context, userID string, requeste
 		return m.ListScopeFunc(ctx, userID, requested, stamp)
 	}
 	return nil, contractkit.MockNotSet("MockOrgResolver", "ListScope")
+}
+
+// LiveMembersFresh records the call and delegates to LiveMembersFreshFunc when set.
+func (m *MockOrgResolver) LiveMembersFresh(ctx context.Context, userID string, orgID string) (int, bool, error) {
+	m.Recorder.Record("LiveMembersFresh", ctx, userID, orgID)
+	if m.LiveMembersFreshFunc != nil {
+		return m.LiveMembersFreshFunc(ctx, userID, orgID)
+	}
+	return 0, false, contractkit.MockNotSet("MockOrgResolver", "LiveMembersFresh")
 }
 
 // Compile-time check.

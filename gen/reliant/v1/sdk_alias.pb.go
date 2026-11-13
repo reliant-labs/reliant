@@ -414,6 +414,7 @@ type (
 	UnadoptChatResponse                      = sdk.UnadoptChatResponse
 	UnarchiveWorktreeRequest                 = sdk.UnarchiveWorktreeRequest
 	UnarchiveWorktreeResponse                = sdk.UnarchiveWorktreeResponse
+	UnattendedFunding                        = sdk.UnattendedFunding
 	UnlaunchedTriggerEvent                   = sdk.UnlaunchedTriggerEvent
 	UnlaunchedTriggerEventOutcome            = sdk.UnlaunchedTriggerEventOutcome
 	UnstageFilesRequest                      = sdk.UnstageFilesRequest
@@ -651,6 +652,9 @@ const (
 	TriggerOverlapPolicy_TRIGGER_OVERLAP_POLICY_ALLOW                          = sdk.TriggerOverlapPolicy_TRIGGER_OVERLAP_POLICY_ALLOW
 	TriggerOverlapPolicy_TRIGGER_OVERLAP_POLICY_SKIP                           = sdk.TriggerOverlapPolicy_TRIGGER_OVERLAP_POLICY_SKIP
 	TriggerOverlapPolicy_TRIGGER_OVERLAP_POLICY_UNSPECIFIED                    = sdk.TriggerOverlapPolicy_TRIGGER_OVERLAP_POLICY_UNSPECIFIED
+	UnattendedFunding_UNATTENDED_FUNDING_ANY                                   = sdk.UnattendedFunding_UNATTENDED_FUNDING_ANY
+	UnattendedFunding_UNATTENDED_FUNDING_ORG_ONLY                              = sdk.UnattendedFunding_UNATTENDED_FUNDING_ORG_ONLY
+	UnattendedFunding_UNATTENDED_FUNDING_UNSPECIFIED                           = sdk.UnattendedFunding_UNATTENDED_FUNDING_UNSPECIFIED
 	UnlaunchedTriggerEventOutcome_UNLAUNCHED_TRIGGER_EVENT_OUTCOME_FAILED      = sdk.UnlaunchedTriggerEventOutcome_UNLAUNCHED_TRIGGER_EVENT_OUTCOME_FAILED
 	UnlaunchedTriggerEventOutcome_UNLAUNCHED_TRIGGER_EVENT_OUTCOME_SKIPPED     = sdk.UnlaunchedTriggerEventOutcome_UNLAUNCHED_TRIGGER_EVENT_OUTCOME_SKIPPED
 	UnlaunchedTriggerEventOutcome_UNLAUNCHED_TRIGGER_EVENT_OUTCOME_UNSPECIFIED = sdk.UnlaunchedTriggerEventOutcome_UNLAUNCHED_TRIGGER_EVENT_OUTCOME_UNSPECIFIED
@@ -764,6 +768,8 @@ var (
 	TriggerKind_value                    = sdk.TriggerKind_value
 	TriggerOverlapPolicy_name            = sdk.TriggerOverlapPolicy_name
 	TriggerOverlapPolicy_value           = sdk.TriggerOverlapPolicy_value
+	UnattendedFunding_name               = sdk.UnattendedFunding_name
+	UnattendedFunding_value              = sdk.UnattendedFunding_value
 	UnlaunchedTriggerEventOutcome_name   = sdk.UnlaunchedTriggerEventOutcome_name
 	UnlaunchedTriggerEventOutcome_value  = sdk.UnlaunchedTriggerEventOutcome_value
 	WorkflowExecutionView_name           = sdk.WorkflowExecutionView_name

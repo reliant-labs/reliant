@@ -660,6 +660,15 @@ func orgAdminNotifier(d TemporalWorkerDeps) workersetup.OrgAdminNotifier {
 	return d.Router.ControlPlane
 }
 
+// orgMembers is the resolver as orgmove's Members, nil for a deployment with
+// no orgs (a nil *orgs.Resolver would be a non-nil interface).
+func orgMembers(r *orgs.Resolver) orgmove.Members {
+	if r == nil {
+		return nil
+	}
+	return r
+}
+
 // workerOrgMoves is the steps of a project's move to another org on this
 // worker: nil, so the activities are not registered, without a control plane
 // signed as the internal service (it cannot Prepare, Abort or Record) or the
@@ -676,6 +685,7 @@ func workerOrgMoves(d TemporalWorkerDeps) (orgmove.Service, error) {
 		Store:        d.DB,
 		ControlPlane: d.Router.ControlPlane,
 		Triggers:     d.Triggers.Service,
+		Members:      orgMembers(d.Membership),
 	})
 	if err != nil {
 		return nil, err

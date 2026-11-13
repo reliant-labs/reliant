@@ -205,6 +205,32 @@ func (m *MockControlPlane) RecordProjectOrgMove(ctx context.Context, s controlpl
 // Compile-time check.
 var _ ControlPlane = (*MockControlPlane)(nil)
 
+// forge:section MockMembers
+// forge:hash=6ed04c002fea60d0e1be3ef158ae0a6575b05bec1a21fc08b750562f6695789e
+
+// MockMembers is a test mock for the Members interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockMembers.<Method>Func not set" error.
+type MockMembers struct {
+	contractkit.Recorder
+	LiveMembersFreshFunc func(context.Context, string, string) (int, bool, error)
+}
+
+// LiveMembersFresh records the call and delegates to LiveMembersFreshFunc when set.
+func (m *MockMembers) LiveMembersFresh(ctx context.Context, userID string, orgID string) (int, bool, error) {
+	m.Recorder.Record("LiveMembersFresh", ctx, userID, orgID)
+	if m.LiveMembersFreshFunc != nil {
+		return m.LiveMembersFreshFunc(ctx, userID, orgID)
+	}
+	return 0, false, contractkit.MockNotSet("MockMembers", "LiveMembersFresh")
+}
+
+// Compile-time check.
+var _ Members = (*MockMembers)(nil)
+
 // forge:section MockTriggers
 // forge:hash=29fd2d9573e4ec21f81e3d2717ef5f0b564bd49f0774c55ac223c31647e91106
 
