@@ -47,6 +47,16 @@ export type ScenarioRpcHandlers =
     "reliant.v1.AttachmentService/DeleteAttachment"?: (req: import("@/gen/reliant/v1/attachment_pb").DeleteAttachmentRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/attachment_pb").DeleteAttachmentResponseSchema>>;
   }
 
+  // forge:section reliant.v1.AutomationTakeoverService
+  // forge:hash=a5a401c745e5c5d07b8ca21ec4ff915b048945f954c53ac046f0b66571b40571
+  & {
+    "reliant.v1.AutomationTakeoverService/ListOrphanedAutomations"?: (req: import("@/gen/reliant/v1/automation_takeover_pb").ListOrphanedAutomationsRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/automation_takeover_pb").ListOrphanedAutomationsResponseSchema>>;
+    "reliant.v1.AutomationTakeoverService/AdoptTrigger"?: (req: import("@/gen/reliant/v1/automation_takeover_pb").AdoptTriggerRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/automation_takeover_pb").AdoptTriggerResponseSchema>>;
+    "reliant.v1.AutomationTakeoverService/AcceptTriggerOffer"?: (req: import("@/gen/reliant/v1/automation_takeover_pb").AcceptTriggerOfferRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/automation_takeover_pb").AcceptTriggerOfferResponseSchema>>;
+    "reliant.v1.AutomationTakeoverService/ListTriggerOffers"?: (req: import("@/gen/reliant/v1/automation_takeover_pb").ListTriggerOffersRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/automation_takeover_pb").ListTriggerOffersResponseSchema>>;
+    "reliant.v1.AutomationTakeoverService/RevokeTriggerOffer"?: (req: import("@/gen/reliant/v1/automation_takeover_pb").RevokeTriggerOfferRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/automation_takeover_pb").RevokeTriggerOfferResponseSchema>>;
+  }
+
   // forge:section reliant.v1.BackgroundService
   // forge:hash=5c39d350f5df18c8854bf92fe03a87a39596798059c81d6278144e4dd71e72f8
   & {
@@ -503,7 +513,7 @@ export type ScenarioRpcHandlers =
   }
 
   // forge:section reliant.v1.WorkflowService
-  // forge:hash=9bbd09c36dbacb6c894b3cc789546f46ed64698072e17a0aa6727722a11f90d9
+  // forge:hash=2b6c7a368305b9fb24059b5b5712f1447b8e33d92f5d30996af9a5e553f8bb86
   & {
     "reliant.v1.WorkflowService/ListWorkflows"?: (req: import("@/gen/reliant/v1/workflow_pb").ListWorkflowsRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/workflow_pb").ListWorkflowsResponseSchema>>;
     "reliant.v1.WorkflowService/SaveWorkflow"?: (req: import("@/gen/reliant/v1/workflow_pb").SaveWorkflowRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/workflow_pb").SaveWorkflowResponseSchema>>;
@@ -516,6 +526,7 @@ export type ScenarioRpcHandlers =
     "reliant.v1.WorkflowService/CopyWorkflow"?: (req: import("@/gen/reliant/v1/workflow_pb").CopyWorkflowRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/workflow_pb").CopyWorkflowResponseSchema>>;
     "reliant.v1.WorkflowService/CreateWorkflowDraft"?: (req: import("@/gen/reliant/v1/workflow_pb").CreateWorkflowDraftRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/workflow_pb").CreateWorkflowDraftResponseSchema>>;
     "reliant.v1.WorkflowService/SetWorkflowStatus"?: (req: import("@/gen/reliant/v1/workflow_pb").SetWorkflowStatusRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/workflow_pb").SetWorkflowStatusResponseSchema>>;
+    "reliant.v1.WorkflowService/ForkOrphanedWorkflow"?: (req: import("@/gen/reliant/v1/workflow_pb").ForkOrphanedWorkflowRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/workflow_pb").ForkOrphanedWorkflowResponseSchema>>;
   }
 
   // forge:section reliant.v1.WorktreeService
