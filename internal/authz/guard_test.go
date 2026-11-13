@@ -26,6 +26,7 @@ var rawComparisonAllowed = map[string]string{
 	"internal/db/repository_impl.go:UpsertDaemon":                                      "re-registration consistency: the same user re-registering the same daemon",
 	"internal/db/personal_funding.go:AskPersonalFunding":                               "matches a stored funding question to the (user, org) it is asked of, so an open question is not re-asked; no caller",
 	"internal/workflow/runtime/activities/handlers/personal_funding.go:fundingPlanFor": "binds a stored funding answer to the (user, org) of the run it was given for; no caller",
+	"internal/handlers/chat/chat_send.go:recordPersonTurn":                             "attendance, not access: only the owner's own turn makes their launched chat spend as an attended run; the send was already authorized",
 	"internal/db/trigger_takeover.go:AdoptTrigger":                                     "compare-and-swap: the locked row still has the owner the adoption decided on, no caller",
 	"internal/db/trigger_takeover.go:CreateTriggerOffer":                               "compare-and-swap: the locked row still has the owner the offer was made for, no caller",
 	"internal/handlers/automation_takeover/takeover.go:offerState":                     "matches a trigger to the owner its offer was made for (adopted or not since), no caller",
