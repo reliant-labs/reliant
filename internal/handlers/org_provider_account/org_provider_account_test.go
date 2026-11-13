@@ -78,6 +78,28 @@ type env struct {
 	keysSeen []string
 	reject   bool
 	seats    *seatmatch.MockService
+	woken    *wakes
+}
+
+// wakes records the org chat wakes the service sent.
+type wakes struct {
+	mu   sync.Mutex
+	orgs []string
+}
+
+func (w *wakes) WakeOrgChats(_ context.Context, orgID, _ string) ([]string, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.orgs = append(w.orgs, orgID)
+	return nil, nil
+}
+
+func (w *wakes) take() []string {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	out := w.orgs
+	w.orgs = nil
+	return out
 }
 
 func newEnv(t *testing.T, enabled bool) *env {
@@ -99,11 +121,12 @@ func newEnvWith(t *testing.T, rollout *configv1.OrgsConfig) *env {
 	r.set("org-2", strayID, orgs.RoleAdmin)
 	e := &env{t: t, repo: repo, roles: r, enabled: enabled, seats: &seatmatch.MockService{
 		MatchWorkspaceFunc: func(context.Context, core.OrgProviderWorkspace) (int, error) { return 0, nil },
-	}}
+	}, woken: &wakes{}}
 	e.svc = org_provider_account.NewTestOrgProviderAccount(t, org_provider_account.WithOrgProviderAccountDeps(org_provider_account.Deps{
 		Store:      repo,
 		OrgRollout: rollout,
 		Seats:      e.seats,
+		ChatWaker:  e.woken,
 		ValidateKey: func(_ context.Context, _ models.Family, key string) (bool, string) {
 			e.keysSeen = append(e.keysSeen, key)
 			if e.reject {
@@ -660,4 +683,52 @@ func TestGrantsNameLiveMembersOnly(t *testing.T) {
 		assert.Equal(t, adminID, g.GrantedByUserId)
 	}
 	assert.ElementsMatch(t, []string{memberID, "olga"}, users)
+}
+
+// Every change that can let an org account serve a chat it could not wakes
+// that org's blocked chats (§11.4: an org_only automation paused for want of
+// an org account goes on when one arrives): adding a key, resuming one,
+// opening its access, granting it and replacing its key. Pausing it, renaming
+// it, granting it to nobody and adding a key the org already holds wake
+// nothing.
+func TestOrgAccountChangesWakeTheOrgsBlockedChats(t *testing.T) {
+	t.Parallel()
+	e := newEnv(t, true)
+	f := e.seed()
+	ctx := e.person(adminID)
+	paused, resumed := true, false
+	name := "renamed"
+	widen := pb.OrgProviderAccountAccess_ORG_PROVIDER_ACCOUNT_ACCESS_SELECTED
+
+	_, err := e.svc.AddOrgProviderAPIKey(ctx, connect.NewRequest(&pb.AddOrgProviderAPIKeyRequest{OrgId: org, Provider: "anthropic", ApiKey: "sk-ant-org-third-key-g7h8", Label: "third"}))
+	require.NoError(t, err)
+	assert.Equal(t, []string{org}, e.woken.take(), "a key added")
+	_, err = e.svc.AddOrgProviderAPIKey(ctx, connect.NewRequest(&pb.AddOrgProviderAPIKeyRequest{OrgId: org, Provider: "anthropic", ApiKey: "sk-ant-org-third-key-g7h8", Label: "third"}))
+	require.NoError(t, err)
+	assert.Empty(t, e.woken.take(), "a key the org already holds adds nothing")
+
+	update := func(m *pb.UpdateOrgProviderAccountRequest) {
+		t.Helper()
+		m.OrgId, m.AccountId = org, f.account
+		_, err := e.svc.UpdateOrgProviderAccount(ctx, connect.NewRequest(m))
+		require.NoError(t, err)
+	}
+	update(&pb.UpdateOrgProviderAccountRequest{Paused: &paused})
+	update(&pb.UpdateOrgProviderAccountRequest{Label: &name})
+	assert.Empty(t, e.woken.take(), "a pause or a rename serves nobody new")
+	update(&pb.UpdateOrgProviderAccountRequest{Paused: &resumed})
+	assert.Equal(t, []string{org}, e.woken.take(), "a key resumed")
+	update(&pb.UpdateOrgProviderAccountRequest{Access: &widen})
+	assert.Equal(t, []string{org}, e.woken.take(), "its access changed")
+
+	_, err = e.svc.SetOrgProviderAccountGrants(ctx, connect.NewRequest(&pb.SetOrgProviderAccountGrantsRequest{OrgId: org, AccountId: f.account}))
+	require.NoError(t, err)
+	assert.Empty(t, e.woken.take(), "granted to nobody")
+	_, err = e.svc.SetOrgProviderAccountGrants(ctx, connect.NewRequest(&pb.SetOrgProviderAccountGrantsRequest{OrgId: org, AccountId: f.account, UserIds: []string{memberID}}))
+	require.NoError(t, err)
+	assert.Equal(t, []string{org}, e.woken.take(), "granted to a member")
+
+	_, err = e.svc.RotateOrgProviderAPIKey(ctx, connect.NewRequest(&pb.RotateOrgProviderAPIKeyRequest{OrgId: org, AccountId: f.account, ApiKey: newKey}))
+	require.NoError(t, err)
+	assert.Equal(t, []string{org}, e.woken.take(), "its key replaced")
 }
