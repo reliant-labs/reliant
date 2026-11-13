@@ -43,13 +43,13 @@ describe("the forge first-run steps", () => {
     expect(step.getAllByText("npx -y @reliantlabs/forge env deploy prod")).toHaveLength(1);
   });
 
-  it("shows the two-command no-login deploy while forge#2163 is unreleased, one command after", () => {
-    expect(CLAIMABLE_DEPLOY_ADOPTS).toBe(false);
-    expect(claimableDeployCommands().map((c) => c.command)).toEqual([
+  it("shows the one-command no-login deploy now that forge v1.5.0 (forge#2163) adopts the app itself", () => {
+    expect(CLAIMABLE_DEPLOY_ADOPTS).toBe(true);
+    expect(claimableDeployCommands().map((c) => c.command)).toEqual(["npx -y @reliantlabs/forge@latest env deploy prod --claimable"]);
+    expect(claimableDeployCommands(false).map((c) => c.command)).toEqual([
       "npx -y @reliantlabs/forge project new --in-place --kind site",
       "npx -y @reliantlabs/forge env deploy prod --claimable",
     ]);
-    expect(claimableDeployCommands(true).map((c) => c.command)).toEqual(["npx -y @reliantlabs/forge env deploy prod --claimable"]);
   });
 
   it("leads with the agent prompt, the landing page's words, and copies it whole", async () => {
@@ -93,9 +93,9 @@ describe("the forge first-run steps", () => {
     }
   });
 
-  it("puts a copy button on the prompt and every command: 1 prompt, 1 MCP, 3 signed-in, 2 no-login", () => {
+  it("puts a copy button on the prompt and every command: 1 prompt, 1 MCP, 3 signed-in, 1 no-login", () => {
     render(<ForgeFirstRun />);
-    expect(screen.getAllByRole("button", { name: /^Copy / })).toHaveLength(7);
+    expect(screen.getAllByRole("button", { name: /^Copy / })).toHaveLength(6);
   });
 
   it("records link clicks by id", () => {

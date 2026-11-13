@@ -22,10 +22,12 @@ export const FORGE_NPX = "npx -y @reliantlabs/forge";
 
 /**
  * forge#2163 makes `env deploy --claimable` adopt a bare Vite or Next.js app
- * itself. Until a release carries it (npm `latest` was 1.4.0 without it), the
- * no-login deploy is two commands. Flip this when forge ships it.
+ * itself, so the no-login deploy is one command. It first shipped in forge
+ * v1.5.0; the one-liner runs `npx …@latest` (as the landing page's Terminal
+ * tab does) so an older cached forge, which needs the adopt step first, is
+ * never the one that runs it.
  */
-export const CLAIMABLE_DEPLOY_ADOPTS = false;
+export const CLAIMABLE_DEPLOY_ADOPTS = true;
 
 /**
  * The prompt for the visitor's own coding agent: run forge through
@@ -72,7 +74,7 @@ export function claimableDeployCommands(adopts: boolean = CLAIMABLE_DEPLOY_ADOPT
   const deploy: FirstRunCommand = {
     id: "claimable_deploy",
     label: adopts ? "Deploy a Vite or Next.js app" : "Deploy",
-    command: `${FORGE_NPX} env deploy prod --claimable`,
+    command: `${FORGE_NPX}${adopts ? "@latest" : ""} env deploy prod --claimable`,
   };
   if (adopts) return [deploy];
   return [
