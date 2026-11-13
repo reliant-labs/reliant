@@ -1,0 +1,86 @@
+# yours: scaffolded once, never touched again — forge will not overwrite this file.
+# This CI workflow is a starting point you own — add jobs, secrets, and steps freely.
+# Deleting it sticks (.forge/scaffolded/); `forge project rescaffold <path>` re-creates it.
+name: E2E Tests
+
+# E2E is expensive (environment stand-up) so it is opt-in on PRs:
+# - Push to main: always run
+# - Pull request: only when labeled `run-e2e`
+# - Manual: always available via workflow_dispatch
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, labeled]
+  workflow_dispatch:
+
+# Cancel the run in progress on a pull request only; on main it always
+# finishes and a newer push supersedes the pending one (ci.yml says why). The
+# event keeps a dispatch out of the push group.
+concurrency:
+  group: e2e-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+# Go version is read from go.mod via setup-go's `go-version-file` input
+# so CI and the project stay in sync without a separate env var that drifts.
+
+jobs:
+  e2e:
+    # Label-gate PRs so routine PRs don't pay the e2e cost. Non-PR events
+    # (push to main, workflow_dispatch) always run.
+    if: ${{ github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'run-e2e') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: "frontends/web/package.json"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: "frontends/web/package.json"
+          cache: "pnpm"
+          cache-dependency-path: "frontends/web/pnpm-lock.yaml"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Install Task
+        uses: arduino/setup-task@v2
+        with:
+          version: 3.x
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install dependencies
+        run: task deps
+
+      - name: Build binary
+        run: task build
+
+      # No "start infrastructure" step: each e2e/<svc> harness (main_test.go)
+      # starts its OWN dependencies from e2e/<svc>/docker-compose.e2e.yml,
+      # builds the binary, runs the service on a free port, and tears it all
+      # down. The root docker-compose.yml is the DEV stack — an air hot-reload
+      # container that compiles from scratch on first start (~2 min cold),
+      # longer than its healthcheck allows, so `up --wait` reported it
+      # unhealthy — and nothing in the e2e suite talks to it.
+      - name: Run E2E tests
+        run: task test:e2e
+        env:
+          E2E: "true"
+
+      - name: Upload test artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-logs
+          path: |
+            e2e/**/*.log
+            /tmp/e2e-*
