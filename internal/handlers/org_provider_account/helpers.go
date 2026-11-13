@@ -86,6 +86,9 @@ func reader(ctx context.Context, orgID string) (userID string, isAdmin bool, err
 
 // addingEnabled is whether the deployment lets an org add accounts and bind workspaces.
 func (s *Service) addingEnabled() bool {
+	if s.deps.OrgRollout == nil {
+		return false
+	}
 	return s.deps.OrgRollout.GetProviderAccountsEnabled()
 }
 
