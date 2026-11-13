@@ -11,6 +11,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/forge/pkg/testkit"
+
 	"github.com/reliant-labs/reliant/internal/cgroupmem"
 )
 
@@ -175,7 +177,9 @@ func TestExecDeadline(t *testing.T) {
 		d.Release()
 		cancel()
 		sleep(time.Hour)
-		time.Sleep(200 * time.Millisecond)
+		// Once the watcher has returned nothing can stop the command, so
+		// what its context says now is final.
+		testkit.Receive(t, "the deadline's watcher to return", d.watched)
 		if err := d.Context().Err(); err != nil {
 			t.Fatalf("released deadline's context is done (%v): an adopted command would be killed", err)
 		}

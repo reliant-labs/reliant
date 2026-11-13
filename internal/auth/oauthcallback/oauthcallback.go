@@ -34,13 +34,14 @@ const (
 	// to receive the result. Local writes, so this is generous by an order of
 	// magnitude; it exists only so a waiter that vanishes cannot hang the owner.
 	waiterDrainBudget = 5 * time.Second
-
-	// shutdownBudget bounds the graceful shutdown that follows. The browser
-	// holds a keep-alive connection open after the callback, and Shutdown waits
-	// for idle connections, so this must be short enough not to stall the
-	// caller — Close() is the fallback when it expires.
-	shutdownBudget = 2 * time.Second
 )
+
+// shutdownBudget bounds the graceful shutdown that follows. The browser
+// holds a keep-alive connection open after the callback, and Shutdown waits
+// for idle connections, so this must be short enough not to stall the
+// caller — Close() is the fallback when it expires. A var so a test can hold
+// the drain open and observe what happens inside it.
+var shutdownBudget = 2 * time.Second
 
 // CallbackConfig describes how to listen for and construct the OAuth redirect URI.
 type CallbackConfig struct {

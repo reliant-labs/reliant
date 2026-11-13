@@ -49,6 +49,9 @@ type ExecDeadline struct {
 
 	released chan struct{}
 	once     sync.Once
+	// watched closes when the watcher returns: after it, nothing can stop
+	// the command any more. Tests wait on it instead of on the clock.
+	watched chan struct{}
 }
 
 // ErrWallClockDeadline is the reason a command was stopped when its timeout
@@ -91,7 +94,7 @@ var ExecWallClock = func() time.Time { return time.Now().Round(0) }
 // timeout, which is what lets Release detach the command from both.
 func StartExecDeadline(parent context.Context, timeout time.Duration) *ExecDeadline {
 	ctx, cancel := context.WithCancelCause(context.WithoutCancel(parent))
-	d := &ExecDeadline{ctx: ctx, cancel: cancel, released: make(chan struct{})}
+	d := &ExecDeadline{ctx: ctx, cancel: cancel, released: make(chan struct{}), watched: make(chan struct{})}
 	// The package knobs are read here, on the caller's goroutine, so the
 	// watcher never reads a var a test may be restoring.
 	wallNow, interval := ExecWallClock, ExecWallClockCheckInterval
@@ -133,6 +136,7 @@ func (d *ExecDeadline) Release() {
 }
 
 func (d *ExecDeadline) watch(parent context.Context, timeout time.Duration, started time.Time, wallNow func() time.Time, wallDeadline time.Time, interval time.Duration) {
+	defer close(d.watched)
 	// Both nil (never ready) when there is no timeout: the command is then
 	// bound only by the caller's context.
 	var monotonic, wallCheck <-chan time.Time

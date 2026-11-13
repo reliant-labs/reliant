@@ -5,6 +5,8 @@ import (
 	"net"
 	"testing"
 	"time"
+
+	"github.com/reliant-labs/forge/pkg/testkit"
 )
 
 // Measure the thing that actually bit the user: how long after CANCEL the
@@ -25,6 +27,14 @@ func TestPortFreedPromptlyAfterCancel(t *testing.T) {
 		return nil
 	}
 	defer func() { openBrowser = orig }()
+	// Hold the drain open for the whole test: the held connection keeps
+	// Shutdown waiting until this expires or the connection closes, which the
+	// deferred c.Close below does once the port has been checked. (net/http
+	// counts a connection that never sent a byte idle after 5s, so the drain
+	// lasts at least that long: the port check below has 5s, not 2s.)
+	prevBudget := shutdownBudget
+	shutdownBudget = time.Minute
+	defer func() { shutdownBudget = prevBudget }()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
@@ -46,22 +56,21 @@ func TestPortFreedPromptlyAfterCancel(t *testing.T) {
 	start := time.Now()
 	cancel()
 
-	// Poll until the port is bindable again.
-	var freed time.Duration
-	for i := 0; i < 200; i++ {
+	// The port must come free while the graceful drain is still running, not
+	// when it ends: the drain waits on the browser's held connection, and a
+	// user clicking Connect again inside it hits EADDRINUSE.
+	testkit.Eventually(t, "the callback port is bindable again after cancel", func() bool {
 		ln, err := net.Listen("tcp", listenAddr(cfg))
-		if err == nil {
-			freed = time.Since(start)
-			_ = ln.Close()
-			break
+		if err != nil {
+			return false
 		}
-		time.Sleep(25 * time.Millisecond)
-	}
-	if freed == 0 {
-		t.Fatal("port never became bindable after cancel")
-	}
-	t.Logf("port bindable %v after cancel", freed)
-	if freed > 1*time.Second {
-		t.Errorf("port held %v after cancel — a user clicking Connect again hits EADDRINUSE", freed)
+		_ = ln.Close()
+		return true
+	})
+	t.Logf("port bindable %v after cancel", time.Since(start))
+	select {
+	case <-done:
+		t.Error("the port came free only once the shutdown drain ended — a user clicking Connect again during it hits EADDRINUSE")
+	default:
 	}
 }
