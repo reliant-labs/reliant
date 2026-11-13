@@ -1323,11 +1323,12 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 	// Resolve model and driver through the shared request-construction path.
 	// When a custom driver resolver is injected (e.g., in tests), it skips
 	// registry resolution and probes the resolver for its model.
+	who := chatAttendance(ctx, a.repo, chat)
 	resolved, err := resolveLLMCall(ctx, a.driverResolver, llmCallSpec{
 		UserID:              chat.UserID,
 		OrgID:               chatOrgID(chat),
-		Attended:            chatAttended(chat),
-		UnattendedAnySource: chatUnattendedAnySource(chat),
+		Attended:            who.attended,
+		UnattendedAnySource: who.anySource,
 		SessionID:           chat.ID,
 		ChatID:              chat.ID,
 		TurnStart:           historyStartsTurn(history),
@@ -2159,7 +2160,7 @@ streamLoop:
 			return nil, stalled
 		}
 		failedCall := usageLimitContext{
-			Scope: chatScope(chat), ThreadID: thread, Driver: models.DriverID(resolved.ProviderDriver),
+			Scope: llmCallSpec{UserID: chat.UserID, OrgID: chatOrgID(chat), Attended: who.attended, UnattendedAnySource: who.anySource}.scope(), ThreadID: thread, Driver: models.DriverID(resolved.ProviderDriver),
 			ModelID: definitionID(resolved.Definition), Account: resolved.Account, Policy: rtx.Failover,
 			ChatID: chat.ID, Plan: resolved.plan,
 		}

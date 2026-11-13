@@ -111,7 +111,7 @@ func (s *Service) resumeFailedQuestionWorkflow(
 	// reads history. Save failures stay non-fatal here (the question is already
 	// resolved and blocking the resume helps nobody); a failed save writes
 	// nothing, and the queued rows are untouched either way.
-	presavedID, saveErr := s.saveIncomingMessages(ctx, req, answerThread, workflowID, systemMessages, marked, true)
+	presavedID, saveErr := s.saveIncomingMessages(ctx, req, chat, answerThread, workflowID, systemMessages, marked, true)
 	if saveErr != nil {
 		logging.WarnContext(ctx, "Failed to save resume messages during question resume", "error", saveErr)
 	}
@@ -233,7 +233,7 @@ func (s *Service) resurrectGhostWorkflow(
 	// Step 3: Save messages BEFORE starting workflow. The DB said running but
 	// Temporal lost the execution. Anything queued in this thread's mailbox is
 	// left there: the resurrected run's first call_llm delivers it.
-	savedMessageID, err := s.saveIncomingMessages(ctx, req, targetThread, workflowID, systemMessages, userContent, hasUserContent)
+	savedMessageID, err := s.saveIncomingMessages(ctx, req, chat, targetThread, workflowID, systemMessages, userContent, hasUserContent)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to save messages"))
 	}
